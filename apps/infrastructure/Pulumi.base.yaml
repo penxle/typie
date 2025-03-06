@@ -1,0 +1,5 @@
+config:
+  aws:defaultTags:
+    tags:
+      pulumi.glitter.rocks/project: infrastructure
+      pulumi.glitter.rocks/stack: base

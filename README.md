@@ -1,2 +1,0 @@
-# glitter
-Glitter

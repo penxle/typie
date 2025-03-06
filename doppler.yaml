@@ -1,0 +1,24 @@
+setup:
+  - path: apps/api
+    project: glitter-api
+    config: dev_local
+
+  - path: apps/collector
+    project: glitter-collector
+    config: dev_local
+
+  - path: apps/intake-api
+    project: glitter-intake-api
+    config: dev_local
+
+  - path: apps/shared
+    project: glitter-shared
+    config: dev
+
+  - path: apps/dashboard
+    project: glitter-dashboard
+    config: dev_local
+
+  - path: apps/website
+    project: glitter-website
+    config: dev_local

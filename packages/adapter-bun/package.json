@@ -1,0 +1,24 @@
+{
+  "name": "@glitter/adapter-bun",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "scripts": {
+    "lint:typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@glitter/lib": "workspace:*",
+    "@glitter/tsconfig": "workspace:*",
+    "@sveltejs/kit": "^2.17.2",
+    "@types/bun": "^1.2.2",
+    "hono": "^4.7.1",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3"
+  }
+}

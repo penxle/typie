@@ -1,0 +1,25 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["NODE_ENV"],
+  "tasks": {
+    "codegen": {
+      "dependsOn": ["^build"],
+      "outputs": [".svelte-kit/**", ".gql/**", "styled-system/**"]
+    },
+    "build": {
+      "dependsOn": ["codegen", "^build"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "dependsOn": ["codegen"],
+      "persistent": true,
+      "cache": false
+    },
+    "lint:svelte": {
+      "dependsOn": ["^codegen", "codegen"]
+    },
+    "lint:typecheck": {
+      "dependsOn": ["codegen"]
+    }
+  }
+}
