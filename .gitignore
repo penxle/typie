@@ -1,0 +1,16 @@
+.DS_Store
+
+node_modules/
+dist/
+.turbo/
+
+.env.local
+
+.svelte-kit/
+.gql/
+styled-system/
+!packages/styled-system/
+
+vite.config.ts.timestamp-*
+
+apps/api/import-files/

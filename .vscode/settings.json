@@ -1,0 +1,21 @@
+{
+  "cSpell.autoFormatConfigFile": true,
+  "cSpell.mergeCSpellSettings": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.formatDocument": "explicit"
+  },
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": false,
+  "eslint.enable": true,
+  "eslint.format.enable": true,
+  "eslint.useFlatConfig": true,
+  "eslint.validate": ["javascript", "typescript", "svelte"],
+  "npm.packageManager": "bun",
+  "prettier.documentSelectors": ["**/*"],
+  "svelte.enable-ts-plugin": true,
+  "svelte.plugin.svelte.defaultScriptLanguage": "ts",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "workbench.activityBar.orientation": "vertical"
+}

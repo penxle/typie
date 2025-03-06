@@ -1,0 +1,33 @@
+{
+  "name": "@glitter/lib",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dayjs": "./src/dayjs/index.ts",
+    "./svelte": "./src/svelte/index.ts",
+    "./vite": {
+      "types": "./src/vite/index.d.ts",
+      "default": "./src/vite/index.js"
+    }
+  },
+  "scripts": {
+    "lint:typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@glitter/tsconfig": "workspace:*",
+    "@sveltejs/kit": "^2.17.2",
+    "@types/bun": "^1.2.2",
+    "dayjs": "^1.11.13",
+    "hono": "^4.7.1",
+    "ipaddr.js": "^2.2.0",
+    "pino": "^9.6.0",
+    "remeda": "^2.20.1",
+    "svelte": "^5.20.1",
+    "svgo": "^3.3.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "xmlbuilder2": "^3.1.1"
+  }
+}

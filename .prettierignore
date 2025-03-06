@@ -1,0 +1,7 @@
+.husky/_/
+
+LICENSE
+docs/*
+!docs/*.md
+
+drizzle/*

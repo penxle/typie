@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "strict": true,
+
+    "target": "esnext",
+    "lib": ["esnext", "dom", "dom.iterable"],
+
+    "module": "esnext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+
+    "jsx": "react-jsx",
+
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  }
+}
