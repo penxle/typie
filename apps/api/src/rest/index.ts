@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { healthz } from './healthz';
 
-export const hono = new Hono();
+export const rest = new Hono();
 
-hono.route('/healthz', healthz);
+rest.route('/healthz', healthz);
