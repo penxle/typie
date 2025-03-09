@@ -1,9 +1,12 @@
+import '@/instrument';
 import '@glitter/lib/dayjs';
+import '@/jobs';
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { env } from '@/env';
-import { hono } from '@/rest';
+import { yoga } from '@/graphql';
+import { rest } from '@/rest';
 
 const app = new Hono();
 
@@ -15,7 +18,8 @@ app.use(
   }),
 );
 
-app.route('/', hono);
+app.route('/', rest);
+app.route('/graphql', yoga);
 
 const server = Bun.serve({
   fetch: app.fetch,
