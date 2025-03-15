@@ -30,6 +30,16 @@ new glitter.Service('api', {
       Statement: [
         {
           Effect: 'Allow',
+          Action: ['s3:GetObject', 's3:PutObject'],
+          Resource: [pulumi.concat(ref.requireOutput('AWS_S3_BUCKET_UPLOADS_ARN'), '/*')],
+        },
+        {
+          Effect: 'Allow',
+          Action: ['s3:PutObject'],
+          Resource: [pulumi.concat(ref.requireOutput('AWS_S3_BUCKET_USERCONTENTS_ARN'), '/*')],
+        },
+        {
+          Effect: 'Allow',
           Action: ['ses:SendEmail'],
           Resource: [ref.getOutput('AWS_SES_EMAIL_IDENTITY'), ref.getOutput('AWS_SES_CONFIGURATION_SET')],
           Condition: {

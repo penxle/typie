@@ -78,7 +78,7 @@ new aws.s3.BucketCorsConfigurationV2('uploads', {
     {
       allowedHeaders: ['*'],
       allowedMethods: ['POST'],
-      allowedOrigins: ['https://glitter.pizza', 'http://localhost:4000'],
+      allowedOrigins: ['https://glitter.im', 'https://glitter.pizza', 'http://localhost:4000'],
     },
   ],
 });
