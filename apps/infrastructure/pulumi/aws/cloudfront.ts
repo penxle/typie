@@ -26,8 +26,9 @@ const createCertificate = (domain: string) => {
 };
 
 export const certificates = {
+  // glitter_im: createCertificate('glitter.im'),
   glitter_pizza: createCertificate('glitter.pizza'),
-  glitter_rocks: createCertificate('glitter.rocks'),
+  glttr_io: createCertificate('glttr.io'),
 };
 
 const s3OriginAccessControl = new aws.cloudfront.OriginAccessControl('s3', {
@@ -151,7 +152,7 @@ const staticResponseHeadersPolicy = new aws.cloudfront.ResponseHeadersPolicy('st
 
 const cdn = new aws.cloudfront.Distribution('cdn', {
   enabled: true,
-  aliases: ['cdn.glitter.rocks'],
+  aliases: ['cdn.glttr.io'],
   httpVersion: 'http2and3',
 
   origins: [
@@ -180,7 +181,7 @@ const cdn = new aws.cloudfront.Distribution('cdn', {
   },
 
   viewerCertificate: {
-    acmCertificateArn: certificates.glitter_rocks.arn,
+    acmCertificateArn: certificates.glttr_io.arn,
     sslSupportMethod: 'sni-only',
     minimumProtocolVersion: 'TLSv1.2_2021',
   },
@@ -188,10 +189,10 @@ const cdn = new aws.cloudfront.Distribution('cdn', {
   waitForDeployment: false,
 });
 
-new aws.route53.Record('cdn.glitter.rocks', {
-  zoneId: zones.glitter_rocks.zoneId,
+new aws.route53.Record('cdn.glttr.io', {
+  zoneId: zones.glttr_io.zoneId,
   type: 'A',
-  name: 'cdn.glitter.rocks',
+  name: 'cdn.glttr.io',
   aliases: [
     {
       name: cdn.domainName,
@@ -203,7 +204,7 @@ new aws.route53.Record('cdn.glitter.rocks', {
 
 const usercontents = new aws.cloudfront.Distribution('usercontents', {
   enabled: true,
-  aliases: ['usercontents.glitter.rocks'],
+  aliases: ['usercontents.glttr.io'],
   httpVersion: 'http2and3',
 
   origins: [
@@ -232,7 +233,7 @@ const usercontents = new aws.cloudfront.Distribution('usercontents', {
   },
 
   viewerCertificate: {
-    acmCertificateArn: certificates.glitter_rocks.arn,
+    acmCertificateArn: certificates.glttr_io.arn,
     sslSupportMethod: 'sni-only',
     minimumProtocolVersion: 'TLSv1.2_2021',
   },
@@ -240,10 +241,10 @@ const usercontents = new aws.cloudfront.Distribution('usercontents', {
   waitForDeployment: false,
 });
 
-new aws.route53.Record('usercontents.glitter.rocks', {
-  zoneId: zones.glitter_rocks.zoneId,
+new aws.route53.Record('usercontents.glttr.io', {
+  zoneId: zones.glttr_io.zoneId,
   type: 'A',
-  name: 'usercontents.glitter.rocks',
+  name: 'usercontents.glttr.io',
   aliases: [
     {
       name: usercontents.domainName,
