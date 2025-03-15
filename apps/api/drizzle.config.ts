@@ -1,6 +1,6 @@
-import type { Config } from 'drizzle-kit';
+import { defineConfig } from 'drizzle-kit';
 
-export default {
+export default defineConfig({
   strict: true,
   verbose: true,
 
@@ -16,4 +16,4 @@ export default {
   tablesFilter: ['!pg_stat_statements', '!pg_stat_statements_info'],
 
   breakpoints: false,
-} satisfies Config;
+});
