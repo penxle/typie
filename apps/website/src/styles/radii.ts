@@ -3,5 +3,5 @@ import { generatePXs } from './helpers';
 
 export const radii = defineTokens.radii({
   ...generatePXs(16),
-  full: { value: '9999px' },
+  full: { value: '50%' },
 });

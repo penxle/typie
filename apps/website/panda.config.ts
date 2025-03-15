@@ -1,10 +1,12 @@
 import { defineConfig } from '@pandacss/dev';
-import { preset } from './src';
+import { preset } from './src/styles';
 
 const prod = process.env.NODE_ENV === 'production';
 
 export default defineConfig({
-  importMap: '@glitter/styled-system',
+  importMap: '$styled-system',
+
+  include: ['./src/**/*.{js,ts,svelte}'],
   outExtension: 'js',
 
   eject: true,

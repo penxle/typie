@@ -8,10 +8,8 @@ import { textStyles } from './text-styles';
 import { tokens } from './tokens';
 import { utilities } from './utilities';
 
-export * as hooks from './hooks';
-
 export const preset = definePreset({
-  name: '@glitter/styled-system/preset',
+  name: '@glitter/website',
   presets: ['@pandacss/preset-base'],
 
   theme: {

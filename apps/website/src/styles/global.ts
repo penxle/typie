@@ -81,20 +81,20 @@ export const globalCss = defineGlobalStyles({
 
 export const globalFontface = defineGlobalFontface({
   SUIT: {
-    src: 'url("https://cdn.glitter.app/fonts/SUIT.woff2") format("woff2-variations")',
+    src: 'url("https://cdn.glttr.io/fonts/SUIT.woff2") format("woff2-variations")',
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
   },
   Pretendard: pretendard.map((range, index) => ({
-    src: `url("https://cdn.glitter.app/fonts/PretendardVariable.subset.${index}.woff2") format("woff2-variations")`,
+    src: `url("https://cdn.glttr.io/fonts/PretendardVariable.subset.${index}.woff2") format("woff2-variations")`,
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
     unicodeRange: range,
   })),
   FiraCode: {
-    src: 'url("https://cdn.glitter.app/fonts/FiraCode.woff2") format("woff2-variations")',
+    src: 'url("https://cdn.glttr.io/fonts/FiraCode.woff2") format("woff2-variations")',
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',

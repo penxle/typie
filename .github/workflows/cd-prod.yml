@@ -69,6 +69,7 @@ jobs:
       matrix:
         app:
           - api
+          - website
 
     concurrency:
       group: prod/${{ matrix.app }}

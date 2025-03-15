@@ -2,3 +2,7 @@ setup:
   - path: apps/api
     project: glitter-api
     config: dev_local
+
+  - path: apps/website
+    project: glitter-website
+    config: dev_local
