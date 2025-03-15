@@ -92,4 +92,10 @@ export default defineConfig([
       'unicorn/filename-case': ['error', { cases: { kebabCase: true, pascalCase: true } }],
     },
   },
+  {
+    files: ['**/pulumi/**/*.ts'],
+    rules: {
+      'unicorn/prefer-spread': 'off',
+    },
+  },
 ]);

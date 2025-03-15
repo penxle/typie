@@ -1,4 +1,6 @@
 import * as aws from '@pulumi/aws';
+import * as pulumi from '@pulumi/pulumi';
+import { buckets } from '$aws/s3';
 import { configurationSet, emailIdentity } from '$aws/ses';
 
 const admin = new aws.iam.Role('admin@team', {
@@ -31,6 +33,16 @@ new aws.iam.UserPolicy('developer@team', {
   policy: {
     Version: '2012-10-17',
     Statement: [
+      {
+        Effect: 'Allow',
+        Action: ['s3:GetObject', 's3:PutObject'],
+        Resource: [pulumi.concat(buckets.uploads.arn, '/*')],
+      },
+      {
+        Effect: 'Allow',
+        Action: ['s3:PutObject'],
+        Resource: [pulumi.concat(buckets.usercontents.arn, '/*')],
+      },
       {
         Effect: 'Allow',
         Action: ['ses:SendEmail'],
