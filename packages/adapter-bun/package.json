@@ -15,10 +15,10 @@
   "devDependencies": {
     "@glitter/lib": "workspace:*",
     "@glitter/tsconfig": "workspace:*",
-    "@sveltejs/kit": "^2.17.2",
-    "@types/bun": "^1.2.2",
-    "hono": "^4.7.1",
-    "tsup": "^8.3.6",
-    "typescript": "^5.7.3"
+    "@sveltejs/kit": "^2.19.1",
+    "@types/bun": "^1.2.5",
+    "hono": "^4.7.4",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2"
   }
 }

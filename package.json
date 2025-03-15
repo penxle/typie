@@ -21,14 +21,14 @@
   },
   "devDependencies": {
     "@glitter/lintconfig": "workspace:*",
-    "cspell": "^8.17.3",
-    "eslint": "^9.20.1",
+    "cspell": "^8.17.5",
+    "eslint": "^9.22.0",
     "husky": "^9.1.7",
-    "lint-staged": "^15.4.3",
-    "prettier": "^3.5.1",
-    "syncpack": "^13.0.2",
-    "turbo": "^2.4.2",
-    "typescript": "^5.7.3"
+    "lint-staged": "^15.5.0",
+    "prettier": "^3.5.3",
+    "syncpack": "^13.0.3",
+    "turbo": "^2.4.4",
+    "typescript": "^5.8.2"
   },
   "packageManager": "bun@1.0.0",
   "trustedDependencies": [

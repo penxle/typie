@@ -1,40 +1,30 @@
-import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
-import imports from 'eslint-plugin-import';
-import importsSort from 'eslint-plugin-simple-import-sort';
+import { defineConfig } from 'eslint/config';
+import import_ from 'eslint-plugin-import';
+import simpleImportSort from 'eslint-plugin-simple-import-sort';
+import svelte from 'eslint-plugin-svelte';
+import unicorn from 'eslint-plugin-unicorn';
 import globals from 'globals';
-import svelteParser from 'svelte-eslint-parser';
+import typescript from 'typescript-eslint';
 import { ignore } from './eslint-ignore.js';
 
-const compat = new FlatCompat();
-
-/** @type {import('eslint').Linter.Config[]} */
 // eslint-disable-next-line import/no-default-export
-export default [
+export default defineConfig([
   { ignores: [ignore] },
   js.configs.recommended,
-  ...compat.extends(
-    'plugin:unicorn/recommended',
-    'plugin:@typescript-eslint/strict',
-    'plugin:@typescript-eslint/stylistic',
-    'plugin:svelte/recommended',
-    'plugin:svelte/prettier',
-  ),
+  unicorn.configs.recommended,
+  typescript.configs.strict,
+  typescript.configs.stylistic,
+  svelte.configs.recommended,
+  svelte.configs.prettier,
   {
     languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
       globals: { ...globals.node, ...globals.browser },
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-        extraFileExtensions: ['.svelte'],
-      },
     },
     linterOptions: {
       reportUnusedDisableDirectives: true,
     },
-    plugins: { import: imports, 'import-sort': importsSort },
+    plugins: { import: import_, 'simple-import-sort': simpleImportSort },
     rules: {
       'no-undef': 'off',
       'object-shorthand': ['error', 'always'],
@@ -45,8 +35,8 @@ export default [
       'import/no-default-export': 'error',
       'import/no-duplicates': 'error',
       'import/no-named-default': 'error',
-      'import-sort/exports': 'error',
-      'import-sort/imports': [
+      'simple-import-sort/exports': 'error',
+      'simple-import-sort/imports': [
         'error',
         {
           groups: [
@@ -64,37 +54,16 @@ export default [
           ],
         },
       ],
-      'svelte/infinite-reactive-loop': 'error',
-      'svelte/no-at-html-tags': 'off',
-      'svelte/no-dupe-on-directives': 'error',
-      'svelte/no-dupe-use-directives': 'error',
-      'svelte/no-reactive-reassign': 'error',
-      'svelte/no-store-async': 'error',
       'svelte/no-target-blank': 'error',
       'svelte/block-lang': ['error', { script: ['ts'] }],
       'svelte/button-has-type': 'error',
-      'svelte/no-reactive-functions': 'error',
-      'svelte/no-reactive-literals': 'error',
-      'svelte/no-useless-mustaches': 'error',
-      'svelte/require-each-key': 'error',
-      'svelte/no-extra-reactive-curlies': 'error',
       'svelte/sort-attributes': 'error',
       'unicorn/catch-error-name': ['error', { name: 'err' }],
-      'unicorn/consistent-function-scoping': 'off',
-      'unicorn/no-array-callback-reference': 'off',
-      'unicorn/no-array-for-each': 'off',
-      'unicorn/no-array-method-this-argument': 'off',
       'unicorn/no-empty-file': 'off',
       'unicorn/no-null': 'off',
-      'unicorn/no-process-exit': 'off',
-      'unicorn/no-useless-undefined': 'off',
-      'unicorn/prefer-code-point': 'off',
-      'unicorn/prefer-global-this': 'off',
       'unicorn/prefer-switch': 'off',
       'unicorn/prefer-ternary': 'off',
-      'unicorn/prefer-top-level-await': 'off',
       'unicorn/prevent-abbreviations': 'off',
-      'unicorn/switch-case-braces': 'off',
     },
   },
   {
@@ -111,29 +80,16 @@ export default [
     },
   },
   {
-    files: ['**/pulumi/**/*'],
-    rules: {
-      'unicorn/prefer-spread': 'off',
-    },
-  },
-  {
-    files: ['**/lib/types/**/*'],
-    rules: {
-      '@typescript-eslint/consistent-indexed-object-style': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-    },
-  },
-  {
-    files: ['**/*.svelte'],
+    files: ['**/*.svelte', '**/*.svelte.[jt]s'],
     languageOptions: {
-      parser: svelteParser,
       parserOptions: {
-        parser: '@typescript-eslint/parser',
+        projectService: true,
+        extraFileExtensions: ['.svelte'],
+        parser: typescript.parser,
       },
     },
     rules: {
       'unicorn/filename-case': ['error', { cases: { kebabCase: true, pascalCase: true } }],
     },
   },
-  ...compat.extends('prettier'),
-];
+]);

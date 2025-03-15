@@ -5,7 +5,7 @@ import { optimize } from 'svgo';
 function hash(str) {
   let hash = 5381;
   for (let i = str.length - 1; i >= 0; i--) {
-    hash = (hash * 33) ^ str.charCodeAt(i);
+    hash = (hash * 33) ^ str.codePointAt(i);
   }
   return hash >>> 0;
 }
