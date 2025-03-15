@@ -7,6 +7,7 @@ const createZone = (domain: string) => {
 };
 
 export const zones = {
+  glitter_im: createZone('glitter.im'),
   glitter_pizza: createZone('glitter.pizza'),
-  glitter_rocks: createZone('glitter.rocks'),
+  glttr_io: createZone('glttr.io'),
 };

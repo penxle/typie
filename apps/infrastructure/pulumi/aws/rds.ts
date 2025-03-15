@@ -88,10 +88,10 @@ const instance = new aws.rds.ClusterInstance('glitter-1', {
 //   applyImmediately: true,
 // });
 
-new aws.route53.Record('db.glitter.rocks', {
-  zoneId: zones.glitter_rocks.zoneId,
+new aws.route53.Record('db.glttr.io', {
+  zoneId: zones.glttr_io.zoneId,
   type: 'CNAME',
-  name: 'db.glitter.rocks',
+  name: 'db.glttr.io',
   records: [cluster.endpoint],
   ttl: 300,
 });

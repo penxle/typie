@@ -35,6 +35,7 @@ const createCertificate = (zoneId: pulumi.Input<string>, domain: string) => {
 };
 
 export const certificates = {
+  // glitter_im: createCertificate(zones.glitter_im.zoneId, 'glitter.im'),
   glitter_pizza: createCertificate(zones.glitter_pizza.zoneId, 'glitter.pizza'),
-  glitter_rocks: createCertificate(zones.glitter_rocks.zoneId, 'glitter.rocks'),
+  glttr_io: createCertificate(zones.glttr_io.zoneId, 'glttr.io'),
 };

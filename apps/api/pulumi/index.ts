@@ -34,8 +34,8 @@ new glitter.Service('api', {
           Resource: [ref.getOutput('AWS_SES_EMAIL_IDENTITY'), ref.getOutput('AWS_SES_CONFIGURATION_SET')],
           Condition: {
             StringEquals: {
-              'ses:FromAddress': 'hello@glitter.rocks',
-              'ses:FromDisplayName': 'Glitter',
+              'ses:FromAddress': 'hello@glitter.im',
+              // 'ses:FromDisplayName': '글리터',
             },
           },
         },
@@ -49,7 +49,7 @@ new glitter.Service('api', {
 
   ingress: {
     domain: {
-      production: 'api.glitter.rocks',
+      production: 'api.glitter.im',
       dev: 'api.glitter.pizza',
     },
 
