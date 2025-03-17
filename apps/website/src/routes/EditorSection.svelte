@@ -36,7 +36,7 @@
   ];
 </script>
 
-<div class={flex({ direction: 'column', align: 'center', gap: '60px', marginTop: '210px', paddingBottom: '82px' })}>
+<div class={flex({ direction: 'column', align: 'center', gap: '60px', marginTop: '210px', paddingX: '20px', paddingBottom: '82px' })}>
   <div class={css({ textAlign: 'center' })}>
     <div class={css({ position: 'relative' })}>
       <h2
@@ -44,14 +44,16 @@
           position: 'relative',
           marginBottom: '30px',
           fontFamily: '[LINESeedKR]',
-          fontSize: '[42px]',
+          fontSize: { base: '28px', md: '[42px]' },
           fontWeight: '[700]',
           zIndex: '1',
         })}
       >
-        창작의 결을 그대로 살리는 에디터
+        창작의 결을
+        <br class={css({ hideFrom: 'md' })} />
+        그대로 살리는 에디터
       </h2>
-      <Underline class={css({ position: 'absolute', bottom: '-6px', left: '0', zIndex: '0', color: '[#B1ACE2]' })} />
+      <Underline class={css({ position: 'absolute', bottom: '-6px', left: '0', zIndex: '0', color: '[#B1ACE2]', hideBelow: 'md' })} />
     </div>
 
     <p>
@@ -62,7 +64,7 @@
   </div>
 
   <div class={css({ position: 'relative', width: 'full', maxWidth: '900px' })}>
-    <div class={grid({ columns: 2, gap: '20px', paddingX: '25px' })}>
+    <div class={grid({ columns: { base: 1, md: 2 }, gap: '20px', md: { paddingX: '25px' } })}>
       {#each cards as { title, description, cardStyle, asset } (title)}
         <div
           class={css(
@@ -76,7 +78,7 @@
             <p>{description}</p>
           </div>
 
-          <svelte:component this={asset} class={css({ marginTop: '50px' })} />
+          <svelte:component this={asset} class={css({ marginTop: '50px', maxWidth: '300px' })} />
         </div>
       {/each}
     </div>

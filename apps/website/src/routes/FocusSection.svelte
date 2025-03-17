@@ -7,13 +7,23 @@
   import { flex } from '$styled-system/patterns';
 </script>
 
-<div class={flex({ justify: 'center', position: 'relative', marginTop: '100px', marginBottom: '180px' })}>
+<div
+  class={flex({
+    justify: 'center',
+    position: 'relative',
+    marginTop: '100px',
+    marginBottom: { base: '100px', md: '180px' },
+    paddingX: '20px',
+  })}
+>
   <BgGradient class={css({ position: 'absolute', top: '0', width: 'full', maxWidth: '900px' })} />
 
   <div class={css({ position: 'relative', zIndex: '1', width: 'full', maxWidth: '900px' })}>
     <div class={flex({ direction: 'column', align: 'center', textAlign: 'center' })}>
       <div class={css({ position: 'relative', width: 'fit' })}>
-        <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>몰입을 돕는 최적의 환경</h2>
+        <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '28px', md: '[42px]' }, fontWeight: '[700]' })}>
+          몰입을 돕는 최적의 환경
+        </h2>
         <Circle
           class={css({
             position: 'absolute',
@@ -22,7 +32,7 @@
             translateY: '-1/2',
             left: '-26px',
             color: '[#F7DE9C]',
-            height: '94px',
+            height: { base: '72px', md: '94px' },
           })}
         />
       </div>
@@ -34,17 +44,27 @@
       </p>
     </div>
 
-    <div class={flex({ align: 'center', gap: '30px', marginTop: '60px', textAlign: 'center', height: '318px' })}>
+    <div
+      class={flex({
+        align: 'center',
+        gap: { base: '16px', md: '30px' },
+        marginTop: '60px',
+        textAlign: 'center',
+        mdDown: { flexDirection: 'column' },
+      })}
+    >
       <div
         class={css({
-          flex: 'none',
+          display: 'flex',
+          flexDirection: 'column',
           borderRadius: '8px',
-          paddingX: '30px',
-          paddingY: '24px',
+          paddingX: { base: '20px', md: '30px' },
+          paddingY: { base: '16px', md: '24px' },
           backgroundColor: '[#000000]',
           color: 'white',
-          width: '460px',
-          height: 'full',
+          width: 'full',
+          maxWidth: '460px',
+          height: { base: '300px', md: '318px' },
         })}
       >
         <!-- prettier-ignore -->
@@ -54,11 +74,20 @@
           <b>하루의 목표 글자 수</b>를 입력하는 트래커 기능
         </p>
 
-        <img class={css({ marginTop: '20px' })} alt="트래커" src={Tracker} />
+        <img class={css({ marginTop: 'auto' })} alt="트래커" src={Tracker} />
       </div>
 
       <div
-        class={css({ borderRadius: '8px', paddingX: '30px', paddingY: '24px', backgroundColor: '[#000000]', color: 'white', size: 'full' })}
+        class={css({
+          borderRadius: '8px',
+          paddingX: { base: '20px', md: '30px' },
+          paddingY: { base: '16px', md: '24px' },
+          backgroundColor: '[#000000]',
+          color: 'white',
+          height: { base: '300px', md: '318px' },
+          width: 'full',
+          maxWidth: { base: '460px', md: '410px' },
+        })}
       >
         <!-- prettier-ignore -->
         <p class={css({ '& > b': { fontWeight: '[600]' } })}>
@@ -67,7 +96,7 @@
           <b>집중 타이머 기능</b>
         </p>
 
-        <Timer class={css({ size: 'full' })} />
+        <Timer class={css({ height: 'full' })} />
       </div>
     </div>
   </div>
