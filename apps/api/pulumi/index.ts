@@ -59,7 +59,7 @@ new glitter.Service('api', {
 
   ingress: {
     domain: {
-      production: 'api.glitter.im',
+      production: 'api.glttr.io',
       dev: 'api.glitter.pizza',
     },
 
