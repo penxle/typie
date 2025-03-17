@@ -1,14 +1,31 @@
 <script lang="ts">
-  import Glitters from '$assets/graphics/glitters.svg?component';
+  import Editor from '$assets/graphics/editor.svg?component';
+  import Glitters from '$assets/graphics/glitters.svg';
   import Logo from '$assets/logos/logo.svg?component';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 </script>
 
-<div class={css({ position: 'relative', backgroundColor: '[#2D2B56]', height: '732px' })}>
-  <Glitters class={css({ size: 'full' })} />
+<div
+  style={`background-image: url("${Glitters}"), linear-gradient(180deg, #15124C 0%, #7C77D6 111.89%)`}
+  class={css({ position: 'relative' })}
+>
+  <div
+    class={css({
+      position: 'absolute',
+      zIndex: '0',
+      bottom: '[-0.2px]',
+      left: '0',
+      right: '0',
+      width: 'full',
+      height: '180px',
+      borderColor: 'transparent',
+      backgroundColor: '[#FFFDF8]',
+      clipPath: 'polygon(0 0, 100% 100%, 0 100%)',
+    })}
+  ></div>
 
-  <div class={flex({ direction: 'column', align: 'center', position: 'absolute', top: '0', left: '0', paddingTop: '37px', width: 'full' })}>
+  <div class={flex({ direction: 'column', align: 'center', position: 'relative', zIndex: '1', paddingTop: '37px', width: 'full' })}>
     <Logo class={css({ height: '32px', color: 'white' })} />
 
     <div class={css({ marginTop: '51px', marginBottom: '40px', color: 'white', textAlign: 'center' })}>
@@ -25,14 +42,17 @@
       class={flex({
         align: 'center',
         gap: '16px',
+        marginBottom: '30px',
         borderWidth: '1px',
         borderColor: '[#d5d5d5]',
         borderRadius: '6px',
         padding: '12px',
         backgroundColor: 'white',
+        width: 'full',
+        maxWidth: '425px',
       })}
     >
-      <input class={css({ fontSize: '14px', fontWeight: '[700]' })} placeholder="이메일 입력" type="email" />
+      <input class={css({ flexGrow: '1', fontSize: '14px', fontWeight: '[700]' })} placeholder="이메일 입력" type="email" />
 
       <button
         class={css({
@@ -42,7 +62,7 @@
           fontSize: '14px',
           fontWeight: '[500]',
           color: 'white',
-          backgroundColor: '[#393a55]',
+          backgroundColor: '[#494682]',
         })}
         type="submit"
       >
@@ -50,17 +70,6 @@
       </button>
     </form>
 
-    <div
-      class={css({
-        marginTop: '30px',
-        borderRadius: '4px',
-        backgroundColor: '[#d5d5d5]',
-        width: '900px',
-        height: '400px',
-        boxShadow: '[2px 4px 12px 2px rgba(0, 0, 0, 0.08)]',
-      })}
-    >
-      에디터
-    </div>
+    <Editor class={css({ marginBottom: '-140px', width: '900px' })} />
   </div>
 </div>
