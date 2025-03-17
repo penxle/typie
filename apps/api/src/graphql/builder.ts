@@ -54,7 +54,7 @@ export const builder = new SchemaBuilder<{
 });
 
 builder.queryType();
-// builder.mutationType();
+builder.mutationType();
 // builder.subscriptionType();
 
 builder.addScalarType('JSON', GraphQLJSON);

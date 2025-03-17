@@ -12,7 +12,7 @@ type PortOneResult<T> = PortOneSuccessResult<T> | PortOneFailureResult;
 type GetPaymentParams = {
   paymentId: string;
 };
-type GetPaymentResult = PortOneResult<{ amount: number }>;
+type GetPaymentResult = PortOneResult<{ amount: { total: number } }>;
 export const getPayment = async (params: GetPaymentParams): Promise<GetPaymentResult> => {
   const resp = await client.payment.getPayment({
     paymentId: params.paymentId,
@@ -26,7 +26,7 @@ export const getPayment = async (params: GetPaymentParams): Promise<GetPaymentRe
 };
 
 const makeSuccessResult = <T>(data: T): PortOneSuccessResult<T> => {
-  return { status: 'succeeded', ...data };
+  return { ...data, status: 'succeeded' };
 };
 
 const makeFailureResult = (error: unknown): PortOneFailureResult => {

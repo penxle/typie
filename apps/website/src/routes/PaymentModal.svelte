@@ -3,9 +3,26 @@
   import mixpanel from 'mixpanel-browser';
   import Star from '$assets/icons/star.svg?component';
   import Logo from '$assets/logos/logo.svg?component';
+  import { graphql } from '$graphql';
   import { Dialog } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+
+  const createPreorderPayment = graphql(`
+    mutation PaymentModal_CreatePreorderPayment_Mutation($input: CreatePreorderPaymentInput!) {
+      createPreorderPayment(input: $input) {
+        id
+      }
+    }
+  `);
+
+  const finalizePreorderPayment = graphql(`
+    mutation PaymentModal_FinalizePreorderPayment_Mutation($input: FinalizePreorderPaymentInput!) {
+      finalizePreorderPayment(input: $input) {
+        id
+      }
+    }
+  `);
 
   type Props = {
     open: boolean;
@@ -16,21 +33,35 @@
 
   let confirmOpen = $state(false);
 
+  let feature = $state('');
   let emailChecked = $state(false);
   let termsChecked = $state(false);
 
   const handleSubmit = async () => {
+    const payment = await createPreorderPayment({
+      email,
+    });
+
     const resp = await PortOne.requestPayment({
       storeId: 'store-e1e69136-38bb-42dd-b226-3c78e03c1ff1',
       channelKey: 'channel-key-6403de1b-8d90-4813-bb8e-0b9a1c094f6b',
-      paymentId: 'asdf', // TODO
+      paymentId: payment.id,
       orderName: '글리터 사전 등록',
-      totalAmount: 100,
+      totalAmount: 4900,
       currency: 'CURRENCY_KRW',
       payMethod: 'CARD',
+      customer: {
+        email,
+      },
     });
 
     if (resp?.code === undefined) {
+      await finalizePreorderPayment({
+        email,
+        paymentId: payment.id,
+        wish: feature,
+      });
+
       mixpanel.track('payment_success', { email });
       confirmOpen = true;
     } else {

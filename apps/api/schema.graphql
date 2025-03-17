@@ -1,4 +1,14 @@
+input CreatePreorderPaymentInput {
+  email: String!
+}
+
 scalar DateTime
+
+input FinalizePreorderPaymentInput {
+  email: String!
+  paymentId: String!
+  wish: String!
+}
 
 """
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
@@ -10,6 +20,26 @@ enum JobState {
   FAILED
   PENDING
   RUNNING
+}
+
+type Mutation {
+  createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
+  finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
+}
+
+type PreorderPayment {
+  id: ID!
+}
+
+enum PreorderPaymentState {
+  COMPLETED
+  FAILED
+  PENDING
+}
+
+type PreorderUser {
+  email: String!
+  id: ID!
 }
 
 type Query {

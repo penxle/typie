@@ -57,6 +57,7 @@ export default defineConfig([
       'svelte/no-target-blank': 'error',
       'svelte/block-lang': ['error', { script: ['ts'] }],
       'svelte/button-has-type': 'error',
+      'svelte/require-store-reactive-access': 'off',
       'svelte/sort-attributes': 'error',
       'unicorn/catch-error-name': ['error', { name: 'err' }],
       'unicorn/no-empty-file': 'off',

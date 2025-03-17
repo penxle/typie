@@ -68,7 +68,7 @@ builder.mutationFields((t) => ({
         throw new GlitterError({ code: 'PAYMENT_FAILED', message: paymentResult.message });
       }
 
-      if (paymentResult.amount !== paymentRequest.amount) {
+      if (paymentResult.amount.total !== paymentRequest.amount) {
         throw new GlitterError({ code: 'PAYMENT_AMOUNT_MISMATCH', message: '결제 금액이 일치하지 않아요' });
       }
 
