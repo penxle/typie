@@ -11,7 +11,7 @@
   const cards = [
     {
       title: '자유로운 편집 디자인',
-      description: '세밀한 자간, 행간 조절과 들여쓰기 등 자유로운 편집 옵션을 제공해요.',
+      description: '세밀한 자간, 행간 조절과 들여쓰기 등\n유연한 편집 옵션을 제공해요.',
       cardStyle: css.raw({ alignItems: 'flex-start', backgroundColor: '[#F3F3F3]' }),
       asset: BubbleMenu,
     },
@@ -23,7 +23,7 @@
     },
     {
       title: '동의어 추천',
-      description: '다양한 표현이 담긴 문장을 원한다면\n스마트한 동의어 추천을 활용해보세요.',
+      description: '다채로운 표현이 담긴 문장을 원한다면\n스마트한 동의어 추천을 활용해보세요.',
       cardStyle: css.raw({ backgroundColor: '[#EBF2EF]' }),
       asset: SynonymSuggestion,
     },

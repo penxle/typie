@@ -92,12 +92,20 @@ export const globalFontface = defineGlobalFontface({
     fontWeight: '700',
     fontDisplay: 'swap',
   },
-  LINESeedKR: {
-    src: 'url("https://cdn.glttr.io/fonts/LINESeedKR-Bd.woff2") format("woff2")',
-    fontStyle: 'normal',
-    fontWeight: '700',
-    fontDisplay: 'swap',
-  },
+  LINESeedKR: [
+    {
+      src: 'url("https://cdn.glttr.io/fonts/LINESeedKR-Rg.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '400',
+      fontDisplay: 'swap',
+    },
+    {
+      src: 'url("https://cdn.glttr.io/fonts/LINESeedKR-Bd.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '700',
+      fontDisplay: 'swap',
+    },
+  ],
   Pretendard: pretendard.map((range, index) => ({
     src: `url("https://cdn.glttr.io/fonts/PretendardVariable.subset.${index}.woff2") format("woff2-variations")`,
     fontStyle: 'normal',

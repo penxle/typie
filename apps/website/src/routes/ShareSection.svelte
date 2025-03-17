@@ -34,6 +34,7 @@
     width: 'full',
     '& > div': {
       marginBottom: { base: '28px', md: '40px' },
+      fontFamily: '[LINESeedKR]',
       fontSize: { base: '18px', md: '28px' },
       fontWeight: '[700]',
     },
