@@ -5,6 +5,7 @@
   import EditorSection from './EditorSection.svelte';
   import FaqSection from './FaqSection.svelte';
   import FocusSection from './FocusSection.svelte';
+  import Footer from './Footer.svelte';
   import HeroSection from './HeroSection.svelte';
   import ShareSection from './ShareSection.svelte';
 </script>
@@ -23,4 +24,6 @@
   <CtaSection />
 
   <FaqSection />
+
+  <Footer />
 </div>
