@@ -150,7 +150,6 @@
         color: 'white',
         backgroundColor: '[#4A2DA0]',
       })}
-      disabled={email.length === 0 || !termsChecked || !termsChecked}
       type="submit"
     >
       4,900원 결제하고 사전 등록하기
@@ -179,7 +178,6 @@
         color: 'white',
         backgroundColor: '[#4A2DA0]',
       })}
-      disabled={email.length === 0 || !termsChecked || !termsChecked}
       type="submit"
     >
       감사합니다. 오픈일에 만나요!
