@@ -26,6 +26,7 @@ penxle
 pulumi
 remeda
 sasl
+sindresorhus
 sslv
 stakater
 tabler

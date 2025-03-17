@@ -15,7 +15,7 @@
   "devDependencies": {
     "@glitter/lib": "workspace:*",
     "@glitter/tsconfig": "workspace:*",
-    "@sveltejs/kit": "^2.19.1",
+    "@sveltejs/kit": "^2.19.2",
     "@types/bun": "^1.2.5",
     "hono": "^4.7.4",
     "tsup": "^8.4.0",
