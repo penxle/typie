@@ -26,7 +26,7 @@ export const globalCss = defineGlobalStyles({
 
     color: 'text.primary',
     backgroundColor: 'background.primary',
-    lineHeight: '1.5',
+    lineHeight: '1.4',
     letterSpacing: '-0.004em',
   },
 
