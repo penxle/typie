@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { Helmet } from '$lib/components';
+  import { page } from '$app/state';
+  import { Dialog, Helmet } from '$lib/components';
   import { css } from '$styled-system/css';
+  import { flex } from '$styled-system/patterns';
   import CtaSection from './CtaSection.svelte';
   import EditorSection from './EditorSection.svelte';
   import FaqSection from './FaqSection.svelte';
@@ -8,6 +10,21 @@
   import Footer from './Footer.svelte';
   import HeroSection from './HeroSection.svelte';
   import ShareSection from './ShareSection.svelte';
+
+  let confirmOpen = $state(false);
+
+  $effect(() => {
+    const message = page.url.searchParams.get('message');
+    if (message) {
+      alert(message);
+    }
+  });
+
+  $effect(() => {
+    if (page.url.searchParams.get('success') === '1') {
+      confirmOpen = true;
+    }
+  });
 </script>
 
 <Helmet
@@ -32,3 +49,24 @@
 
   <Footer />
 </div>
+
+<Dialog bind:open={confirmOpen}>
+  <form class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })} method="dialog">
+    글리터 사전 등록이 완료되었어요!
+
+    <button
+      class={css({
+        borderRadius: '8px',
+        paddingX: '20px',
+        paddingY: '12px',
+        fontSize: '12px',
+        color: 'white',
+        backgroundColor: '[#4A2DA0]',
+        width: 'full',
+      })}
+      type="submit"
+    >
+      감사합니다. 오픈일에 만나요!
+    </button>
+  </form>
+</Dialog>
