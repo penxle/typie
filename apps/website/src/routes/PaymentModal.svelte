@@ -3,6 +3,7 @@
   import mixpanel from 'mixpanel-browser';
   import Star from '$assets/icons/star.svg?component';
   import Logo from '$assets/logos/logo.svg?component';
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { Dialog } from '$lib/components';
   import { css } from '$styled-system/css';
@@ -50,8 +51,13 @@
       totalAmount: 4900,
       currency: 'CURRENCY_KRW',
       payMethod: 'CARD',
+      redirectUrl: `${env.PUBLIC_API_URL}/payment/redirect`,
       customer: {
         email,
+      },
+      customData: {
+        email,
+        wish: feature,
       },
     });
 
