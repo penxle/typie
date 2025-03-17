@@ -7,6 +7,7 @@ const schema = z.object({
   PORTONE_API_SECRET: z.string(),
   PUBLIC_PULUMI_STACK: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
+  WEBSITE_URL: z.string(),
 });
 
 export const env = schema.parse(process.env);
