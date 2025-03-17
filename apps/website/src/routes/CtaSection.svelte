@@ -1,7 +1,12 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import Glitters from '$assets/graphics/glitters.svg';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import PaymentModal from './PaymentModal.svelte';
+
+  let email = $state('');
+  let open = $state(false);
 </script>
 
 <div
@@ -29,8 +34,18 @@
       width: 'full',
       maxWidth: '425px',
     })}
+    onsubmit={(e) => {
+      e.preventDefault();
+      open = true;
+      mixpanel.track('payment_modal_open', { section: 'cta', email });
+    }}
   >
-    <input class={css({ flexGrow: '1', fontSize: '14px', fontWeight: '[700]' })} placeholder="이메일을 입력해주세요" type="email" />
+    <input
+      class={css({ flexGrow: '1', fontSize: '14px', fontWeight: '[700]' })}
+      placeholder="이메일을 입력해주세요"
+      type="email"
+      bind:value={email}
+    />
 
     <button
       class={css({
@@ -48,3 +63,5 @@
     </button>
   </form>
 </div>
+
+<PaymentModal bind:open bind:email />

@@ -17,10 +17,10 @@
     if (dialogEl)
       if (open) {
         dialogEl.showModal();
-        document.body.style.overflow = 'hidden';
+        // document.body.style.overflow = 'hidden';
       } else {
         dialogEl.close();
-        document.body.style.overflow = '';
+        // document.body.style.overflow = '';
       }
   });
 </script>
