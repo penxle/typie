@@ -84,7 +84,7 @@
       }}
     >
       <input
-        class={css({ flexGrow: '1', fontSize: '14px', fontWeight: '[700]' })}
+        class={css({ minWidth: '0', flexGrow: '1', fontSize: '14px', fontWeight: '[700]' })}
         placeholder="이메일을 입력해주세요"
         type="text"
         bind:value={email}
@@ -92,6 +92,7 @@
 
       <button
         class={css({
+          flex: 'none',
           borderRadius: '4px',
           paddingX: '12px',
           paddingY: '8px',
