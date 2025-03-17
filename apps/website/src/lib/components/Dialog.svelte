@@ -67,7 +67,7 @@
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '40px',
+      padding: { base: '20px', md: '40px' },
       width: '[fit-content]',
       margin: 'auto',
       pointerEvents: 'none',
@@ -85,7 +85,8 @@
         padding: '20px',
         pointerEvents: 'auto',
         size: '[fit-content]',
-        width: '720px',
+        width: 'full',
+        maxWidth: '720px',
         maxHeight: '738px',
         overflow: 'hidden',
       })}
