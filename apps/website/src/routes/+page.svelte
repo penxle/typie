@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Helmet } from '$lib/components';
   import { css } from '$styled-system/css';
+  import CtaSection from './CtaSection.svelte';
   import EditorSection from './EditorSection.svelte';
   import FocusSection from './FocusSection.svelte';
   import HeroSection from './HeroSection.svelte';
@@ -17,4 +18,6 @@
   <FocusSection />
 
   <ShareSection />
+
+  <CtaSection />
 </div>
