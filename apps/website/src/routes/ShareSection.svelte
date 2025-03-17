@@ -1,5 +1,6 @@
 <script lang="ts">
   import AgeRestriction from '$assets/graphics/age-restriction.svg?component';
+  import PaperAirplane from '$assets/graphics/paper-airplane.svg?component';
   import PrivatePost from '$assets/graphics/private-post.svg?component';
   import ShareLink from '$assets/graphics/share-link.svg?component';
   import { css } from '$styled-system/css';
@@ -8,7 +9,7 @@
   const cards = [
     {
       title: '링크 공유',
-      description: '링크를 생성해 원하는 독자에게만\n나의 창작물을 공유할 수 있어요.',
+      description: '링크를 전달받은 독자만\n나의 창작물을 볼 수 있어요.',
       asset: ShareLink,
     },
     {
@@ -18,7 +19,7 @@
     },
     {
       title: '연령 제한',
-      description: '창작물 별로 연령 제한을 설정하면\n안전하게 콘텐츠를 제공할 수 있어요.',
+      description: '창작물에 연령 제한을 설정해\n안전하게 콘텐츠를 제공할 수 있어요.',
       asset: AgeRestriction,
     },
   ];
@@ -43,16 +44,17 @@
   });
 </script>
 
-<div class={flex({ direction: 'column', align: 'center', marginY: '161px' })}>
+<div class={flex({ direction: 'column', align: 'center', position: 'relative', paddingTop: '56px', paddingBottom: '180px' })}>
   <div class={css({ textAlign: 'center', width: 'full', maxWidth: '900px' })}>
     <h2 class={css({ marginBottom: '30px', fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>
       원하는 순간, 원하는 독자에게만
     </h2>
+    <PaperAirplane class={css({ position: 'absolute', top: '0', left: '0', width: 'full' })} />
 
     <p>
       링크를 생성하거나 비밀번호를 설정해서 원하는 독자에게만 창작물을 공유할 수 있어요.
       <br />
-      전하고 싶은 만큼만, 원하는 사람에게만 안전하게 공유하세요.
+      전하고 싶은 만큼, 원하는 사람에게만 안전하게 공유하세요.
     </p>
 
     <div class={grid({ columns: 3, gap: '30px', marginTop: '60px', marginBottom: '30px' })}>
@@ -73,7 +75,7 @@
 
           <div>
             <p class={css({ marginBottom: '4px', fontWeight: '[700]' })}>{title}</p>
-            <p class={css({ fontSize: '14px' })}>
+            <p class={css({ fontSize: '14px', whiteSpace: 'pre-line' })}>
               {description}
             </p>
           </div>
