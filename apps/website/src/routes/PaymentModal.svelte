@@ -72,7 +72,7 @@
 
 <Dialog onsubmit={handleSubmit} bind:open>
   <form class={flex({ direction: 'column', gap: '20px' })} method="dialog">
-    <Logo class={css({ height: '24px' })} />
+    <Logo class={css({ marginBottom: '20px', height: '24px' })} />
 
     <div class={flex({ direction: 'column' })}>
       <label class={css({ display: 'flex', alignItems: 'flex-start', gap: '2px', marginBottom: '8px', fontSize: '14px' })} for="email">
@@ -116,32 +116,36 @@
       ></textarea>
     </div>
 
-    <div class={flex({ align: 'center', gap: '3px' })}>
-      <input id="confirmEmail" required type="checkbox" bind:checked={emailChecked} />
-      <label class={css({ fontSize: '14px', cursor: 'pointer' })} for="confirmEmail">
-        연락받을 이메일 주소가 정확한지 확인해주세요
-        <span class={css({ color: '[#ACB2B9]' })}>(필수)</span>
-      </label>
-    </div>
+    <div class={flex({ direction: 'column', gap: '8px' })}>
+      <div class={flex({ align: 'center', gap: '8px' })}>
+        <input id="confirmEmail" required type="checkbox" bind:checked={emailChecked} />
+        <label class={css({ fontSize: '14px', cursor: 'pointer' })} for="confirmEmail">
+          연락받을 이메일 주소가 정확한지 확인해주세요
+          <span class={css({ color: '[#ACB2B9]' })}>(필수)</span>
+        </label>
+      </div>
 
-    <div class={flex({ align: 'center', gap: '3px' })}>
-      <input id="confirmTerms" required type="checkbox" bind:checked={termsChecked} />
-      <label class={css({ fontSize: '14px', cursor: 'pointer' })} for="confirmTerms">
-        <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/terms">이용약관</a>
-        및
-        <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/privacy">
-          개인정보 처리방침
-        </a>
-        동의
-        <span class={css({ color: '[#ACB2B9]' })}>(필수)</span>
-      </label>
+      <div class={flex({ align: 'center', gap: '8px' })}>
+        <input id="confirmTerms" required type="checkbox" bind:checked={termsChecked} />
+        <label class={css({ fontSize: '14px', cursor: 'pointer' })} for="confirmTerms">
+          <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/terms">
+            이용약관
+          </a>
+          및
+          <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/policy">
+            개인정보 처리방침
+          </a>
+          동의
+          <span class={css({ color: '[#ACB2B9]' })}>(필수)</span>
+        </label>
+      </div>
     </div>
 
     <button
       class={css({
         borderRadius: '8px',
         paddingX: '20px',
-        paddingY: '11px',
+        paddingY: '12px',
         fontSize: '12px',
         color: 'white',
         backgroundColor: '[#4A2DA0]',
