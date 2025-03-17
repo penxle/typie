@@ -6,4 +6,5 @@ function createPgEnum<T extends string>(enumName: string, obj: Record<string, T>
 }
 
 export const _JobState = createPgEnum('_job_state', E.JobState);
+export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.PreorderPaymentState);
 export const _UserState = createPgEnum('_user_state', E.UserState);

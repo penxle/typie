@@ -37,4 +37,6 @@ const createObjectRef = <T extends TableConfig>(name: string, table: TableWithId
 //   });
 // };
 
+export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
+export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const User = createObjectRef('User', T.Users);

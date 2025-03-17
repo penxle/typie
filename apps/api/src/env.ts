@@ -3,6 +3,9 @@ import { z } from 'zod';
 const schema = z.object({
   DATABASE_URL: z.string(),
   LISTEN_PORT: z.coerce.number().optional(),
+  PORTONE_API_KEY: z.string(),
+  PORTONE_API_SECRET: z.string(),
+  PUBLIC_PORTONE_STORE_ID: z.string(),
   PUBLIC_PULUMI_STACK: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 });

@@ -22,6 +22,7 @@
         "@aws-sdk/client-ses": "^3.758.0",
         "@glitter/lib": "workspace:*",
         "@paralleldrive/cuid2": "^2.2.2",
+        "@portone/server-sdk": "^0.14.0",
         "@pothos/core": "^4.5.0",
         "@pothos/plugin-dataloader": "^4.3.0",
         "@pothos/plugin-scope-auth": "^4.1.2",
@@ -39,6 +40,7 @@
         "graphql-yoga": "^5.13.1",
         "hono": "^4.7.4",
         "postgres": "^3.4.5",
+        "ts-pattern": "^5.6.2",
         "zod": "^3.24.2",
       },
       "devDependencies": {
@@ -770,6 +772,8 @@
     "@pkgr/core": ["@pkgr/core@0.1.1", "", {}, "sha512-cq8o4cWH0ibXh9VGi5P20Tu9XF/0fFXl9EUinr9QfTM7a7p0oTA4iJRCQWppXR1Pg8dSM0UCItCkPwsk9qWWYA=="],
 
     "@polka/url": ["@polka/url@1.0.0-next.28", "", {}, "sha512-8LduaNlMZGwdZ6qWrKlfa+2M4gahzFkprZiAt2TF8uS0qQgBizKXpXURqvTJ4WtmupWxaLqjRb2UCTe72mu+Aw=="],
+
+    "@portone/server-sdk": ["@portone/server-sdk@0.14.0", "", {}, "sha512-SW+3VxH8w+CRTtPbwHfS4iksGzMGj2khGq+Sv2ADgmp3KGSMjWgWwiBjovvFOJd5RI+oI0sjNLaj6SADO8QT7A=="],
 
     "@pothos/core": ["@pothos/core@4.5.0", "", { "peerDependencies": { "graphql": ">=16.6.0" } }, "sha512-OBktnbaTkcS3pZMGCC2375tNSypsvVRP2SJSjN0VW9MXlJFP9+2lZTNeKyGFndTH5QLbxoLUe3nUSVdkBHMLzA=="],
 
