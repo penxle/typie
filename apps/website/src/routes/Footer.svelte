@@ -33,7 +33,7 @@
   <div class={flex({ direction: 'column', gap: '8px' })}>
     <div class={css({ color: '[#A8A8A8]' })}>All rights reserved ⓒ 2025 PENXLE COMPANY</div>
     <div class={css({ color: '[#636363]' })}>
-      <a class={css({ fontWeight: '[500]', color: '[#3260E1]' })} href="https://glitter.rdbl.io/legal/privacy">개인정보처리방침</a>
+      <a class={css({ fontWeight: '[500]', color: '[#3260E1]' })} href="https://glitter.rdbl.io/legal/policy">개인정보처리방침</a>
       |
       <a class={css({ color: '[#3260E1]' })} href="https://glitter.rdbl.io/legal/terms">이용약관</a>
     </div>

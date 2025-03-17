@@ -98,7 +98,7 @@
       <label class={css({ fontSize: '14px', cursor: 'pointer' })} for="confirmTerms">
         <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/terms">이용약관</a>
         및
-        <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/privacy">
+        <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/policy">
           개인정보 처리방침
         </a>
         동의
