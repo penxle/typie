@@ -3,6 +3,7 @@
   import { css } from '$styled-system/css';
   import CtaSection from './CtaSection.svelte';
   import EditorSection from './EditorSection.svelte';
+  import FaqSection from './FaqSection.svelte';
   import FocusSection from './FocusSection.svelte';
   import HeroSection from './HeroSection.svelte';
   import ShareSection from './ShareSection.svelte';
@@ -20,4 +21,6 @@
   <ShareSection />
 
   <CtaSection />
+
+  <FaqSection />
 </div>
