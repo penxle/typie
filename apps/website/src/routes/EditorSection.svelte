@@ -34,7 +34,7 @@
   ];
 </script>
 
-<div class={flex({ direction: 'column', align: 'center', gap: '60px', marginTop: '190px', paddingBottom: '82px' })}>
+<div class={flex({ direction: 'column', align: 'center', gap: '60px', marginTop: '210px', paddingBottom: '82px' })}>
   <div class={css({ textAlign: 'center' })}>
     <h2 class={css({ marginBottom: '30px', fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>
       틀에 갇히지 않는 자유로운 창작
