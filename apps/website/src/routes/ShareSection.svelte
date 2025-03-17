@@ -45,7 +45,9 @@
 
 <div class={flex({ direction: 'column', align: 'center', marginY: '161px' })}>
   <div class={css({ textAlign: 'center', width: 'full', maxWidth: '900px' })}>
-    <h2 class={css({ marginBottom: '30px', fontSize: '[42px]', fontWeight: '[700]' })}>원하는 순간, 원하는 독자에게만</h2>
+    <h2 class={css({ marginBottom: '30px', fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>
+      원하는 순간, 원하는 독자에게만
+    </h2>
 
     <p>
       링크를 생성하거나 비밀번호를 설정해서 원하는 독자에게만 창작물을 공유할 수 있어요.

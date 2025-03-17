@@ -86,6 +86,18 @@ export const globalFontface = defineGlobalFontface({
     fontWeight: '100 900',
     fontDisplay: 'swap',
   },
+  IBMPlexSansKR: {
+    src: 'url("https://cdn.glttr.io/fonts/IBMPlexSansKR-Bold.woff2") format("woff2")',
+    fontStyle: 'normal',
+    fontWeight: '700',
+    fontDisplay: 'swap',
+  },
+  LINESeedKR: {
+    src: 'url("https://cdn.glttr.io/fonts/LINESeedKR-Bd.woff2") format("woff2")',
+    fontStyle: 'normal',
+    fontWeight: '700',
+    fontDisplay: 'swap',
+  },
   Pretendard: pretendard.map((range, index) => ({
     src: `url("https://cdn.glttr.io/fonts/PretendardVariable.subset.${index}.woff2") format("woff2-variations")`,
     fontStyle: 'normal',

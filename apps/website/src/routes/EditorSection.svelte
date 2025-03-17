@@ -36,7 +36,9 @@
 
 <div class={flex({ direction: 'column', align: 'center', gap: '60px', marginTop: '190px', paddingBottom: '82px' })}>
   <div class={css({ textAlign: 'center' })}>
-    <h2 class={css({ marginBottom: '30px', fontSize: '[42px]', fontWeight: '[700]' })}>틀에 갇히지 않는 자유로운 창작</h2>
+    <h2 class={css({ marginBottom: '30px', fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>
+      틀에 갇히지 않는 자유로운 창작
+    </h2>
 
     <p>
       기본적인 텍스트 편집은 물론, 자간, 행간 조절, 들여쓰기 등 세밀한 옵션으로
