@@ -17,7 +17,7 @@
   trailing={null}
 />
 
-<div class={css({ color: '[#282738]', backgroundColor: '[#FFFDF8]', overflow: 'hidden' })}>
+<div class={css({ wordBreak: 'keep-all', color: '[#282738]', backgroundColor: '[#FFFDF8]', overflow: 'hidden' })}>
   <HeroSection />
 
   <EditorSection />
