@@ -11,6 +11,7 @@ export default {
       '@/*': '../api/src/*',
       '$assets/*': './src/assets/*',
       '$styled-system/*': './styled-system/*',
+      $graphql: '.gql',
     },
     files: {
       hooks: {
