@@ -36,6 +36,8 @@
       <a class={css({ fontWeight: '[500]', color: '[#3260E1]' })} href="https://glitter.rdbl.io/legal/privacy">개인정보처리방침</a>
       |
       <a class={css({ color: '[#3260E1]' })} href="https://glitter.rdbl.io/legal/terms">이용약관</a>
+      |
+      <a href="https://penxle.channel.io/home">고객센터</a>
     </div>
   </div>
 </footer>
