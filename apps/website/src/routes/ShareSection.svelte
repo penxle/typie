@@ -25,16 +25,16 @@
   ];
 
   const cardStyle = css.raw({
-    borderRadius: '16px',
-    paddingTop: '30px',
-    paddingX: '36px',
-    paddingBottom: '40px',
+    borderRadius: { base: '8px', md: '16px' },
+    paddingTop: { base: '20px', md: '30px' },
+    paddingX: { base: '24px', md: '36px' },
+    paddingBottom: { base: '30px', md: '40px' },
     boxShadow: '[0px 4px 8px 2px rgba(0, 0, 0, 0.08)]',
     textAlign: 'left',
     width: 'full',
     '& > div': {
-      marginBottom: '40px',
-      fontSize: '28px',
+      marginBottom: { base: '28px', md: '40px' },
+      fontSize: { base: '18px', md: '28px' },
       fontWeight: '[700]',
     },
     '& > p': {
@@ -44,20 +44,34 @@
   });
 </script>
 
-<div class={flex({ direction: 'column', align: 'center', position: 'relative', paddingTop: '56px', paddingBottom: '180px' })}>
+<div
+  class={flex({
+    direction: 'column',
+    align: 'center',
+    position: 'relative',
+    paddingTop: '56px',
+    paddingX: '20px',
+    paddingBottom: { base: '100px', md: '180px' },
+  })}
+>
   <div class={css({ textAlign: 'center', width: 'full', maxWidth: '900px' })}>
-    <h2 class={css({ marginBottom: '30px', fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>
-      원하는 순간, 원하는 독자에게만
+    <h2 class={css({ marginBottom: '30px', fontFamily: '[LINESeedKR]', fontSize: { base: '28px', md: '[42px]' }, fontWeight: '[700]' })}>
+      원하는 순간,
+      <br class={css({ hideFrom: 'md' })} />
+      원하는 독자에게만
     </h2>
-    <PaperAirplane class={css({ position: 'absolute', top: '0', left: '0', width: 'full' })} />
+    <PaperAirplane class={css({ position: 'absolute', top: '0', left: '0', width: 'full', mdDown: { height: '200px' } })} />
 
     <p>
-      링크를 생성하거나 비밀번호를 설정해서 원하는 독자에게만 창작물을 공유할 수 있어요.
+      링크를 생성하거나 비밀번호를 설정해서 <br class={css({ hideFrom: 'md' })} />
+      원하는 독자에게만 창작물을 공유할 수 있어요.
       <br />
-      전하고 싶은 만큼, 원하는 사람에게만 안전하게 공유하세요.
+      전하고 싶은 만큼, 원하는 사람에게만
+      <br class={css({ hideFrom: 'md' })} />
+      안전하게 공유하세요.
     </p>
 
-    <div class={grid({ columns: 3, gap: '30px', marginTop: '60px', marginBottom: '30px' })}>
+    <div class={grid({ columns: { base: 1, md: 3 }, gap: '30px', marginTop: '60px', marginBottom: '30px' })}>
       {#each cards as { title, description, asset } (title)}
         <div
           class={flex({
@@ -65,6 +79,7 @@
             align: 'center',
             justify: 'center',
             gap: '30px',
+            borderRadius: '8px',
             paddingX: '30px',
             paddingY: '50px',
             backgroundColor: '[#F9FAFB]',
@@ -83,7 +98,7 @@
       {/each}
     </div>
 
-    <div class={flex({ gap: '30px' })}>
+    <div class={flex({ gap: '30px', mdDown: { flexDirection: 'column' } })}>
       <div class={css({ backgroundColor: '[#B1D8CB]' }, cardStyle)}>
         <div>
           공개 할 부분과

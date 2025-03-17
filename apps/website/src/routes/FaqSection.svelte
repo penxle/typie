@@ -36,9 +36,19 @@
   ];
 </script>
 
-<div class={flex({ direction: 'column', align: 'center', paddingTop: '100px', width: 'full', backgroundColor: '[#F9FAFB]' })}>
-  <div class={css({ marginBottom: '80px', textAlign: 'center' })}>
-    <h1 class={css({ fontFamily: '[LINESeedKR]', fontSize: '[32px]', fontWeight: '[700]' })}>자주 묻는 질문들</h1>
+<div
+  class={flex({
+    direction: 'column',
+    align: 'center',
+    paddingTop: { base: '80px', md: '100px' },
+    paddingX: '20px',
+    paddingBottom: '60px',
+    width: 'full',
+    backgroundColor: '[#F9FAFB]',
+  })}
+>
+  <div class={css({ marginBottom: { base: '60px', md: '80px' }, textAlign: 'center' })}>
+    <h1 class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '22px', md: '[32px]' }, fontWeight: '[700]' })}>자주 묻는 질문들</h1>
   </div>
 
   <div class={flex({ direction: 'column', width: 'full', maxWidth: '900px', borderYWidth: '1px', borderYColor: '[#E9E9E9]' })}>

@@ -4,7 +4,17 @@
   import { flex } from '$styled-system/patterns';
 </script>
 
-<div class={flex({ direction: 'column', gap: '20px', padding: '100px', fontSize: '14px', fontWeight: '[400]' })}>
+<footer
+  class={flex({
+    direction: 'column',
+    gap: '20px',
+    paddingX: '20px',
+    paddingY: { base: '40px', md: '100px' },
+    fontSize: '14px',
+    width: 'full',
+    maxWidth: '900px',
+  })}
+>
   <div>
     <Logo class={css({ height: '32px' })} />
   </div>
@@ -19,6 +29,7 @@
       <div>전화 : 02-565-7695</div>
     </div>
   </div>
+
   <div class={flex({ direction: 'column', gap: '8px' })}>
     <div class={css({ color: '[#A8A8A8]' })}>All rights reserved ⓒ 2025 PENXLE COMPANY</div>
     <div class={css({ color: '[#636363]' })}>
@@ -27,4 +38,4 @@
       <a class={css({ color: '[#3260E1]' })} href="https://glitter.rdbl.io/legal/terms">이용약관</a>
     </div>
   </div>
-</div>
+</footer>
