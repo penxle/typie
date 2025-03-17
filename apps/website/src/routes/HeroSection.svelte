@@ -72,7 +72,7 @@
         borderColor: '[#d5d5d5]',
         borderRadius: '6px',
         paddingX: { base: '8px', md: '12px' },
-        paddingY: { base: '4px', md: '8px' },
+        paddingY: { base: '6px', md: '8px' },
         backgroundColor: 'white',
         width: 'full',
         maxWidth: '425px',
