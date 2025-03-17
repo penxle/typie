@@ -4,4 +4,4 @@ LICENSE
 docs/*
 !docs/*.md
 
-drizzle/*
+apps/api/drizzle/*
