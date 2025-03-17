@@ -1,5 +1,6 @@
 import './objects';
 import './enums';
+import './resolvers/preorder';
 import './resolvers/user';
 
 import { dev } from '@/env';

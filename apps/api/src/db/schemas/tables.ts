@@ -27,6 +27,31 @@ export const Jobs = pgTable(
   (t) => [index().on(t.lane, t.state, t.createdAt)],
 );
 
+export const PreorderPayments = pgTable('preorder_payments', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('PP')),
+  email: text('email').notNull(),
+  amount: integer('amount').notNull(),
+  state: E._PreorderPaymentState('state').notNull().default('PENDING'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const PreorderUsers = pgTable('preorder_users', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('PU')),
+  email: text('email').unique().notNull(),
+  wish: text('wish'),
+  preorderPaymentId: text('preorder_payment_id').notNull(),
+  createdAt: datetime('created_at'),
+});
+
 export const Users = pgTable(
   'users',
   {
