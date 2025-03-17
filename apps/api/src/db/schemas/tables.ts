@@ -49,7 +49,9 @@ export const PreorderUsers = pgTable('preorder_users', {
   email: text('email').unique().notNull(),
   wish: text('wish'),
   preorderPaymentId: text('preorder_payment_id').notNull(),
-  createdAt: datetime('created_at'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
 });
 
 export const Users = pgTable(
