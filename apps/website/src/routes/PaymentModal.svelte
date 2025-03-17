@@ -183,17 +183,18 @@
 </Dialog>
 
 <Dialog bind:open={confirmOpen}>
-  <form>
+  <form class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })} method="dialog">
     글리터 사전 등록이 완료되었어요!
 
     <button
       class={css({
         borderRadius: '8px',
         paddingX: '20px',
-        paddingY: '11px',
+        paddingY: '12px',
         fontSize: '12px',
         color: 'white',
         backgroundColor: '[#4A2DA0]',
+        width: 'full',
       })}
       type="submit"
     >

@@ -68,7 +68,7 @@
       alignItems: 'center',
       justifyContent: 'center',
       padding: { base: '20px', md: '40px' },
-      width: '[fit-content]',
+      width: 'full',
       margin: 'auto',
       pointerEvents: 'none',
     })}
@@ -84,7 +84,7 @@
         backgroundColor: 'white',
         padding: '20px',
         pointerEvents: 'auto',
-        size: '[fit-content]',
+        height: '[fit-content]',
         width: 'full',
         maxWidth: '720px',
         maxHeight: '738px',
