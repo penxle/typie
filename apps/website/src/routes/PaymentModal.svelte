@@ -113,6 +113,7 @@
         })}
         placeholder="글리터에 가장 기대하는 기능이 있다면 적어주세요"
         rows="3"
+        bind:value={feature}
       ></textarea>
     </div>
 
@@ -128,11 +129,21 @@
       <div class={flex({ align: 'center', gap: '8px' })}>
         <input id="confirmTerms" required type="checkbox" bind:checked={termsChecked} />
         <label class={css({ fontSize: '14px', cursor: 'pointer' })} for="confirmTerms">
-          <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/terms">
+          <a
+            class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })}
+            href="https://glitter.rdbl.io/legal/terms"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
             이용약관
           </a>
           및
-          <a class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })} href="https://glitter.rdbl.io/legal/policy">
+          <a
+            class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })}
+            href="https://glitter.rdbl.io/legal/policy"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
             개인정보 처리방침
           </a>
           동의
