@@ -85,16 +85,11 @@
         padding: '20px',
         pointerEvents: 'auto',
         size: '[fit-content]',
-        minWidth: '400px',
-        maxWidth: '946px',
+        width: '720px',
         maxHeight: '738px',
         overflow: 'hidden',
       })}
     >
-      <div class={css({ textAlign: 'right' })}>
-        <button onclick={() => (open = false)} type="button">X</button>
-      </div>
-
       <div class={css({ height: 'full', overflowY: 'auto' })}>
         <section class={css({ display: 'contents' })}>
           {@render children()}

@@ -9,14 +9,10 @@
   class={flex({ direction: 'column', align: 'center', paddingTop: '37px', width: 'full', backgroundColor: '[#4A2DA0]' })}
 >
   <div class={css({ marginTop: '56px', marginBottom: '72px', color: 'white', textAlign: 'center' })}>
-    <h1 class={css({ marginBottom: '30px', fontFamily: '[LINESeedKR]', fontSize: '[32px]', fontWeight: '[700]' })}>
-      창작의 결을 그대로 살리는 에디터
-    </h1>
-
-    <p class={css({ fontSize: '20px' })}>
-      몰입해서 쓰고, 유연하게 공유하고,
+    <p class={css({ fontFamily: '[LINESeedKR]', fontSize: '24px', fontWeight: '[700]' })}>
+      지금 얼리버드 특별가로 사전 등록하고
       <br />
-      깔끔하게 정리하는 스마트 에디터, 글리터의 첫 이용자가 되어보세요!
+      글리터의 첫 유저가 되어보세요!
     </p>
   </div>
 
@@ -34,7 +30,7 @@
       maxWidth: '425px',
     })}
   >
-    <input class={css({ flexGrow: '1', fontSize: '14px', fontWeight: '[700]' })} placeholder="이메일 입력" type="email" />
+    <input class={css({ flexGrow: '1', fontSize: '14px', fontWeight: '[700]' })} placeholder="이메일을 입력해주세요" type="email" />
 
     <button
       class={css({
@@ -48,7 +44,7 @@
       })}
       type="submit"
     >
-      사전등록하기
+      사전 등록하기
     </button>
   </form>
 </div>

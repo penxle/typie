@@ -82,6 +82,7 @@
         "@glitter/tsconfig": "workspace:*",
         "@iconify-json/lucide": "^1.2.30",
         "@pandacss/dev": "^0.53.1",
+        "@portone/browser-sdk": "^0.0.13",
         "@pulumi/pulumi": "^3.156.0",
         "@sveltejs/kit": "^2.19.1",
         "@sveltejs/vite-plugin-svelte": "^5.0.3",
@@ -772,6 +773,8 @@
     "@pkgr/core": ["@pkgr/core@0.1.1", "", {}, "sha512-cq8o4cWH0ibXh9VGi5P20Tu9XF/0fFXl9EUinr9QfTM7a7p0oTA4iJRCQWppXR1Pg8dSM0UCItCkPwsk9qWWYA=="],
 
     "@polka/url": ["@polka/url@1.0.0-next.28", "", {}, "sha512-8LduaNlMZGwdZ6qWrKlfa+2M4gahzFkprZiAt2TF8uS0qQgBizKXpXURqvTJ4WtmupWxaLqjRb2UCTe72mu+Aw=="],
+
+    "@portone/browser-sdk": ["@portone/browser-sdk@0.0.13", "", {}, "sha512-B74stKPEYGXoVaBrWnQCPAs8N3bPHsHt5fxcunQmNqmEhWn3KWjXS8D6nkq7O15KljJA1qLOBr6bBH7vDP0kCQ=="],
 
     "@portone/server-sdk": ["@portone/server-sdk@0.14.0", "", {}, "sha512-SW+3VxH8w+CRTtPbwHfS4iksGzMGj2khGq+Sv2ADgmp3KGSMjWgWwiBjovvFOJd5RI+oI0sjNLaj6SADO8QT7A=="],
 

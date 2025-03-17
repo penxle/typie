@@ -1,19 +1,36 @@
 <script lang="ts">
+  import BgGradient from '$assets/graphics/bg-gradient.svg?component';
+  import Circle from '$assets/graphics/circle.svg?component';
   import Timer from '$assets/graphics/timer.svg?component';
   import Tracker from '$assets/graphics/tracker.png';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 </script>
 
-<div class={flex({ justify: 'center', paddingTop: '80px', paddingBottom: '60px', backgroundColor: '[#2D2B56]' })}>
-  <div class={css({ width: 'full', maxWidth: '900px' })}>
-    <div class={css({ textAlign: 'center', color: 'white' })}>
-      <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>몰입을 돕는 최적의 환경 세팅</h2>
+<div class={flex({ justify: 'center', position: 'relative', marginTop: '100px', marginBottom: '180px' })}>
+  <BgGradient class={css({ position: 'absolute', top: '0', width: 'full', maxWidth: '900px' })} />
+
+  <div class={css({ position: 'relative', zIndex: '1', width: 'full', maxWidth: '900px' })}>
+    <div class={flex({ direction: 'column', align: 'center', textAlign: 'center' })}>
+      <div class={css({ position: 'relative', width: 'fit' })}>
+        <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>몰입을 돕는 최적의 환경</h2>
+        <Circle
+          class={css({
+            position: 'absolute',
+            top: '1/2',
+            translate: 'auto',
+            translateY: '-1/2',
+            left: '-26px',
+            color: '[#F7DE9C]',
+            height: '94px',
+          })}
+        />
+      </div>
 
       <p class={css({ marginTop: '30px', fontWeight: '[500]' })}>
         집중 모드와 타이머, 목표치 설정 등으로 방해없이
         <br />
-        오직 글쓰기에 몰입할 수 있는 환경을 만들 수 있어요
+        오직 글쓰기에 몰입할 수 있는 환경을 만들 수 있어요.
       </p>
     </div>
 
@@ -24,26 +41,28 @@
           borderRadius: '8px',
           paddingX: '30px',
           paddingY: '24px',
-          backgroundColor: '[#F3F1F7]',
+          backgroundColor: '[#000000]',
+          color: 'white',
           width: '460px',
           height: 'full',
         })}
       >
+        <!-- prettier-ignore -->
         <p class={css({ '& > b': { fontWeight: '[600]' } })}>
-          <b>작품의 목표 글자 수</b>
-          와
+          <b>작품의 목표 글자 수</b>와
           <br />
-          <b>하루의 목표 글자 수</b>
-          를 입력하는 트래커 기능
+          <b>하루의 목표 글자 수</b>를 입력하는 트래커 기능
         </p>
 
         <img class={css({ marginTop: '20px' })} alt="트래커" src={Tracker} />
       </div>
 
-      <div class={css({ borderRadius: '8px', paddingX: '30px', paddingY: '24px', backgroundColor: '[#F3F1F7]', size: 'full' })}>
+      <div
+        class={css({ borderRadius: '8px', paddingX: '30px', paddingY: '24px', backgroundColor: '[#000000]', color: 'white', size: 'full' })}
+      >
+        <!-- prettier-ignore -->
         <p class={css({ '& > b': { fontWeight: '[600]' } })}>
-          <b>창작에 몰입</b>
-          하는 환경을 조성하는
+          <b>창작에 몰입</b>하는 환경을 조성하는
           <br />
           <b>집중 타이머 기능</b>
         </p>
