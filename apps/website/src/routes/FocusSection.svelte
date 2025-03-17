@@ -8,7 +8,7 @@
 <div class={flex({ justify: 'center', paddingTop: '80px', paddingBottom: '60px', backgroundColor: '[#2D2B56]' })}>
   <div class={css({ width: 'full', maxWidth: '900px' })}>
     <div class={css({ textAlign: 'center', color: 'white' })}>
-      <h2 class={css({ fontSize: '[42px]', fontWeight: '[700]' })}>몰입을 돕는 최적의 환경 세팅</h2>
+      <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: '[42px]', fontWeight: '[700]' })}>몰입을 돕는 최적의 환경 세팅</h2>
 
       <p class={css({ marginTop: '30px', fontWeight: '[500]' })}>
         집중 모드와 타이머, 목표치 설정 등으로 방해없이

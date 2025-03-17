@@ -12,7 +12,7 @@
     <Logo class={css({ height: '32px', color: 'white' })} />
 
     <div class={css({ marginTop: '51px', marginBottom: '40px', color: 'white', textAlign: 'center' })}>
-      <h1 class={css({ marginBottom: '30px', fontSize: '[52px]', fontWeight: '[700]' })}>
+      <h1 class={css({ marginBottom: '30px', fontFamily: '[IBMPlexSansKR]', fontSize: '[52px]', fontWeight: '[700]' })}>
         창작자가 기다려온
         <br />
         글쓰기 앱을 만나보세요
