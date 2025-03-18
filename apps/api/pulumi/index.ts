@@ -44,7 +44,7 @@ new glitter.Service('api', {
           Resource: [ref.getOutput('AWS_SES_EMAIL_IDENTITY'), ref.getOutput('AWS_SES_CONFIGURATION_SET')],
           Condition: {
             StringEquals: {
-              'ses:FromAddress': 'hello@glttr.io',
+              'ses:FromAddress': 'hello@glitter.im',
               // 'ses:FromDisplayName': '글리터',
             },
           },

@@ -12,13 +12,13 @@ export const zones = {
   glttr_io: createZone('glttr.io'),
 };
 
-new aws.route53.Record('glttr.io|txt', {
-  zoneId: zones.glttr_io.zoneId,
+new aws.route53.Record('glitter.im|txt', {
+  zoneId: zones.glitter_im.zoneId,
   type: 'TXT',
-  name: 'glttr.io',
+  name: 'glitter.im',
   records: [
     // spell-checker:disable-next-line
-    'google-site-verification=A464_1vmgr8nj1yaU_VjcAjJspVjB9sLHJloGKBSy7o',
+    'google-site-verification=QXQUl_XRbKvl20qm2ClmqOcRpsdVPQVHd7RT9CLYtsE',
   ],
   ttl: 300,
 });
