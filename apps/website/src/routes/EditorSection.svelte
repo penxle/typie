@@ -12,7 +12,7 @@
     {
       title: '자유로운 편집 디자인',
       description: '세밀한 자간, 행간 조절과 들여쓰기 등\n유연한 편집 옵션을 제공해요.',
-      cardStyle: css.raw({ alignItems: 'flex-start', backgroundColor: '[#F3F3F3]' }),
+      cardStyle: css.raw({ alignItems: 'flex-start', justifyContent: 'space-between', backgroundColor: '[#F3F3F3]' }),
       asset: BubbleMenu,
     },
     {
@@ -42,7 +42,7 @@
       <h2
         class={css({
           position: 'relative',
-          marginBottom: '30px',
+          marginBottom: { base: '16px', md: '30px' },
           fontFamily: '[LINESeedKR]',
           fontSize: { base: '28px', md: '[42px]' },
           fontWeight: '[700]',
@@ -53,7 +53,7 @@
         <br class={css({ hideFrom: 'md' })} />
         그대로 살리는 에디터
       </h2>
-      <Underline class={css({ position: 'absolute', bottom: '-6px', left: '0', zIndex: '0', color: '[#B1ACE2]', hideBelow: 'md' })} />
+      <Underline class={css({ position: 'absolute', bottom: '-8px', left: '-30px', zIndex: '0', color: '[#B1ACE2]', hideBelow: 'md' })} />
     </div>
 
     <p>
@@ -68,7 +68,15 @@
       {#each cards as { title, description, cardStyle, asset } (title)}
         <div
           class={css(
-            { display: 'flex', alignItems: 'flex-end', flexDirection: 'column', borderRadius: '[17px]', padding: '20px', width: 'full' },
+            {
+              display: 'flex',
+              alignItems: 'flex-end',
+              flexDirection: 'column',
+              borderRadius: '[17px]',
+              padding: '20px',
+              width: 'full',
+              mdDown: { height: '300px' },
+            },
             cardStyle,
           )}
         >
@@ -78,7 +86,7 @@
             <p>{description}</p>
           </div>
 
-          <svelte:component this={asset} class={css({ marginTop: '50px', maxWidth: '300px' })} />
+          <svelte:component this={asset} class={css({ marginTop: { base: '30px', md: '50px' }, maxWidth: '300px' })} />
         </div>
       {/each}
     </div>

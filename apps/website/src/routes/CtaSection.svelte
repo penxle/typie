@@ -11,9 +11,9 @@
 
 <div
   style={`background-image: url("${Glitters}")`}
-  class={flex({ direction: 'column', align: 'center', paddingTop: '37px', paddingX: '20px', width: 'full', backgroundColor: '[#4A2DA0]' })}
+  class={flex({ direction: 'column', align: 'center', paddingY: '120px', paddingX: '20px', width: 'full', backgroundColor: '[#4A2DA0]' })}
 >
-  <div class={css({ marginTop: '56px', marginBottom: '72px', color: 'white', textAlign: 'center' })}>
+  <div class={css({ marginBottom: '40px', color: 'white', textAlign: 'center' })}>
     <p class={css({ fontFamily: '[LINESeedKR]', fontSize: '24px', fontWeight: '[700]' })}>
       지금 얼리버드 특별가로
       <br class={css({ hideFrom: 'md' })} />
@@ -27,7 +27,6 @@
     class={flex({
       align: 'center',
       gap: '16px',
-      marginBottom: '90px',
       borderWidth: '1px',
       borderColor: '[#d5d5d5]',
       borderRadius: '6px',

@@ -56,12 +56,21 @@
   })}
 >
   <div class={css({ textAlign: 'center', width: 'full', maxWidth: '900px' })}>
-    <h2 class={css({ marginBottom: '30px', fontFamily: '[LINESeedKR]', fontSize: { base: '28px', md: '[42px]' }, fontWeight: '[700]' })}>
+    <h2
+      class={css({
+        marginBottom: { base: '16px', md: '30px' },
+        fontFamily: '[LINESeedKR]',
+        fontSize: { base: '28px', md: '[42px]' },
+        fontWeight: '[700]',
+      })}
+    >
       원하는 순간,
       <br class={css({ hideFrom: 'md' })} />
       원하는 독자에게만
     </h2>
-    <PaperAirplane class={css({ position: 'absolute', top: '0', left: '0', width: 'full', mdDown: { height: '200px' } })} />
+    <PaperAirplane
+      class={css({ position: 'absolute', top: '0', left: '0', width: 'full', maxHeight: '340px', mdDown: { height: '200px' } })}
+    />
 
     <p>
       링크를 생성하거나 비밀번호를 설정해서 <br class={css({ hideFrom: 'md' })} />
