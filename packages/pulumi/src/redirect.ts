@@ -17,13 +17,13 @@ type RedirectArgs = {
 
   priority: {
     production: pulumi.Input<string>;
-    dev: pulumi.Input<string>;
+    dev?: pulumi.Input<string>;
   };
 
   code: pulumi.Input<301 | 302>;
 
   production: RedirectConfig;
-  dev: RedirectConfig;
+  dev?: RedirectConfig;
 };
 
 export class Redirect extends pulumi.ComponentResource {
@@ -47,52 +47,54 @@ export class Redirect extends pulumi.ComponentResource {
       .with('dev', () => args.priority.dev)
       .run();
 
-    new k8s.networking.v1.Ingress(
-      name,
-      {
-        metadata: {
-          name: args.name,
-          namespace,
-          annotations: {
-            'alb.ingress.kubernetes.io/group.name': 'public-alb',
-            'alb.ingress.kubernetes.io/group.order': priority,
-            'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
-            'pulumi.com/skipAwait': 'true',
+    if (config && priority) {
+      new k8s.networking.v1.Ingress(
+        name,
+        {
+          metadata: {
+            name: args.name,
+            namespace,
+            annotations: {
+              'alb.ingress.kubernetes.io/group.name': 'public-alb',
+              'alb.ingress.kubernetes.io/group.order': priority,
+              'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
+              'pulumi.com/skipAwait': 'true',
 
-            'alb.ingress.kubernetes.io/actions.redirect': pulumi.jsonStringify({
-              type: 'redirect',
-              redirectConfig: {
-                host: config.to.host,
-                path: config.to.path,
-                statusCode: pulumi.interpolate`HTTP_${args.code}`,
-              },
-            }),
+              'alb.ingress.kubernetes.io/actions.redirect': pulumi.jsonStringify({
+                type: 'redirect',
+                redirectConfig: {
+                  host: config.to.host,
+                  path: config.to.path,
+                  statusCode: pulumi.interpolate`HTTP_${args.code}`,
+                },
+              }),
+            },
           },
-        },
-        spec: {
-          ingressClassName: 'alb',
-          rules: [
-            {
-              host: config.from.host,
-              http: {
-                paths: [
-                  {
-                    path: config.from.path ?? '/*',
-                    pathType: 'ImplementationSpecific',
-                    backend: {
-                      service: {
-                        name: 'redirect',
-                        port: { name: 'use-annotation' },
+          spec: {
+            ingressClassName: 'alb',
+            rules: [
+              {
+                host: config.from.host,
+                http: {
+                  paths: [
+                    {
+                      path: config.from.path ?? '/*',
+                      pathType: 'ImplementationSpecific',
+                      backend: {
+                        service: {
+                          name: 'redirect',
+                          port: { name: 'use-annotation' },
+                        },
                       },
                     },
-                  },
-                ],
+                  ],
+                },
               },
-            },
-          ],
+            ],
+          },
         },
-      },
-      { parent: this },
-    );
+        { parent: this },
+      );
+    }
   }
 }
