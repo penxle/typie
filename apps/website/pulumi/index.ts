@@ -29,7 +29,7 @@ new glitter.Service('website', {
 
   ingress: {
     domain: {
-      production: 'glttr.io',
+      production: 'glitter.im',
       dev: 'glitter.pizza',
     },
 
@@ -40,7 +40,7 @@ new glitter.Service('website', {
 
     cloudfront: {
       production: {
-        domainZone: 'glttr.io',
+        domainZone: 'glitter.im',
       },
     },
   },
@@ -55,13 +55,28 @@ new glitter.Redirect('www.website', {
   },
 
   production: {
-    from: { host: 'www.glttr.io' },
-    to: { host: 'glttr.io' },
+    from: { host: 'www.glitter.im' },
+    to: { host: 'glitter.im' },
   },
 
   dev: {
     from: { host: 'www.glitter.pizza' },
     to: { host: 'glitter.pizza' },
+  },
+
+  code: 301,
+});
+
+new glitter.Redirect('glttr.io', {
+  name: 'glttr.io',
+
+  priority: {
+    production: '23',
+  },
+
+  production: {
+    from: { host: 'glttr.io' },
+    to: { host: 'glitter.im' },
   },
 
   code: 301,
