@@ -61,7 +61,7 @@
   })}
 >
   <div class={css({ marginBottom: { base: '60px', md: '80px' }, textAlign: 'center' })}>
-    <h1 class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '22px', md: '[32px]' }, fontWeight: '[700]' })}>자주 묻는 질문들</h1>
+    <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '22px', md: '[32px]' }, fontWeight: '[700]' })}>자주 묻는 질문들</h2>
   </div>
 
   <div class={flex({ direction: 'column', width: 'full', maxWidth: '900px', borderYWidth: '1px', borderYColor: '[#E9E9E9]' })}>
