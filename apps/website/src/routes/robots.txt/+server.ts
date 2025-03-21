@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async () => {
+export const GET: RequestHandler = async (event) => {
   const lines = ['User-agent: *'];
 
   if (env.PUBLIC_PULUMI_STACK === 'prod') {
@@ -9,6 +9,8 @@ export const GET: RequestHandler = async () => {
   } else {
     lines.push('Disallow: /');
   }
+
+  lines.push(`Sitemap: https://${event.url.host}/sitemap.xml`);
 
   return new Response(lines.join('\n'), {
     headers: {

@@ -146,7 +146,7 @@
           및
           <a
             class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })}
-            href="https://glitter.rdbl.io/legal/policy"
+            href="https://glitter.rdbl.io/legal/privacy"
             rel="noopener noreferrer"
             target="_blank"
           >
