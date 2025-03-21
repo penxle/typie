@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { page } from '$app/state';
+
   type Props = {
     type?: string;
     title: string;
@@ -9,6 +11,7 @@
 
   let { type = 'website', title, trailing = '글리터', description, image }: Props = $props();
 
+  const href = $derived(`https://${page.url.host}${page.url.pathname}`);
   const effectiveTitle = $derived(trailing ? `${title}${trailing ? ` · ${trailing}` : ''}` : title);
 </script>
 
@@ -30,7 +33,9 @@
       <meta content="summary" property="twitter:card" />
     {/if}
   {/if}
+  <meta content={href} property="og:url" />
   <meta content="글리터" property="og:site_name" />
   <meta content={type} property="og:type" />
   <meta content="ko_KR" property="og:locale" />
+  <link {href} rel="canonical" />
 </svelte:head>
