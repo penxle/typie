@@ -7,9 +7,10 @@
     trailing?: string | null;
     description?: string;
     image?: string | { src: string; size: 'small' | 'large' };
+    struct?: Record<string, unknown>;
   };
 
-  let { type = 'website', title, trailing = '글리터', description, image }: Props = $props();
+  let { type = 'website', title, trailing = '글리터', description, image, struct }: Props = $props();
 
   const href = $derived(`https://${page.url.host}${page.url.pathname}`);
   const effectiveTitle = $derived(trailing ? `${title}${trailing ? ` · ${trailing}` : ''}` : title);
@@ -38,4 +39,8 @@
   <meta content={type} property="og:type" />
   <meta content="ko_KR" property="og:locale" />
   <link {href} rel="canonical" />
+  {#if struct}
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    {@html '<' + `script type="application/ld+json">${JSON.stringify(struct)}</script>`}
+  {/if}
 </svelte:head>
