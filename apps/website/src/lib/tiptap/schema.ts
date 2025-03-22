@@ -1,4 +1,4 @@
-import { DropCursor, Placeholder, Typography } from './extensions';
+import { Behavior, DropCursor, Placeholder, Typography } from './extensions';
 import { Bold, FontColor, FontFamily, FontSize, Italic, Ruby, Strike, Underline } from './marks';
 import { SlashMenu } from './menus';
 import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
@@ -27,6 +27,7 @@ export const extensions = [
   Underline,
 
   // extensions
+  Behavior,
   DropCursor,
   Placeholder,
   Typography,
