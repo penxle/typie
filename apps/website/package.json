@@ -27,6 +27,7 @@
     "@tiptap/html": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@types/mixpanel-browser": "^2.51.0",
+    "body-scroll-lock-upgrade": "^1.1.0",
     "mixpanel-browser": "^2.61.2",
     "nanoid": "^5.1.5",
     "svelte": "^5.25.2",
