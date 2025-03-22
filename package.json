@@ -5,8 +5,7 @@
   "type": "module",
   "workspaces": [
     "apps/*",
-    "packages/*",
-    "sdks/*"
+    "packages/*"
   ],
   "scripts": {
     "bootstrap": "husky && doppler setup --no-interactive",
