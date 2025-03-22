@@ -10,11 +10,11 @@ export const Behavior = Extension.create({
         const { doc, selection } = editor.state;
         const { $anchor, empty } = selection;
 
-        const pos = $anchor.before(1);
-        const block = $anchor.node(1);
+        const pos = $anchor.before(2);
+        const block = $anchor.node(2);
 
         if (empty && $anchor.parent.isTextblock && $anchor.parent.childCount === 0 && $anchor.parentOffset === 0) {
-          if (!['paragraph', 'bulletList', 'orderedList'].includes(block.type.name) && block.childCount === 0) {
+          if (!['paragraph', 'bullet_list', 'ordered_list'].includes(block.type.name) && block.childCount === 0) {
             return editor.chain().setNodeSelection(pos).deleteSelection().insertContentAt(pos, { type: 'paragraph' }).run();
           }
 
@@ -36,8 +36,8 @@ export const Behavior = Extension.create({
         const { selection } = editor.state;
         const { $anchor, empty } = selection;
 
-        const pos = $anchor.before(1);
-        const block = $anchor.node(1);
+        const pos = $anchor.before(2);
+        const block = $anchor.node(2);
 
         if (
           empty &&
@@ -61,12 +61,18 @@ export const Behavior = Extension.create({
         props: {
           handleClick: (view, pos) => {
             const { state } = view;
+            const { doc } = state;
 
-            const endOfDocument = pos === state.doc.content.size;
-            const lastChildEmptyParagraph = state.doc.lastChild?.type.name === 'paragraph' && state.doc.lastChild?.childCount === 0;
+            const body = doc.child(0);
+            const endOfDocument = pos === doc.content.size;
+            const lastChildEmptyParagraph = body.lastChild?.type.name === 'paragraph' && body.lastChild?.childCount === 0;
 
             if (endOfDocument && !lastChildEmptyParagraph) {
-              this.editor.chain().insertContentAt(pos, { type: 'paragraph' }).setTextSelection(pos).run();
+              this.editor
+                .chain()
+                .insertContentAt(pos - 1, { type: 'paragraph' })
+                .setTextSelection(pos)
+                .run();
             }
           },
         },
