@@ -1,5 +1,6 @@
 import { DropCursor, Placeholder, Typography } from './extensions';
 import { Bold, FontColor, FontFamily, FontSize, Italic, Ruby, Strike, Underline } from './marks';
+import { SlashMenu } from './menus';
 import { BulletList, Doc, Document, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
 
 export const extensions = [
@@ -29,4 +30,7 @@ export const extensions = [
   DropCursor,
   Placeholder,
   Typography,
+
+  // menus
+  SlashMenu,
 ];
