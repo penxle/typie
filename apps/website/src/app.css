@@ -1,1 +1,3 @@
-@layer reset, base, tokens, recipes, utilities;
+@layer reset, base, prose, tokens, recipes, utilities;
+
+@import url(./styles/prose.css) layer(prose);

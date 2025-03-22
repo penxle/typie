@@ -1,0 +1,80 @@
+:root {
+  --prosemirror-color-selection: #90baf8;
+}
+
+.prose {
+  line-height: 1.6;
+
+  /* gray.1000 */
+  caret-color: #09090b;
+
+  & *::selection {
+    background-color: color-mix(in srgb, var(--prosemirror-color-selection) 50%, transparent);
+  }
+
+  & > * + *,
+  & [data-node-view-content-editable] > * + *, /* callout 등 */
+  & [data-node-view-content-editable] > [role='tabpanel'] > * + * /* tabs */ {
+    margin-top: var(--prosemirror-block-gap);
+  }
+
+  &[contenteditable='true'] {
+    & [data-drag-handle] {
+      cursor: grab;
+    }
+  }
+
+  table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  td,
+  th {
+    vertical-align: top;
+    box-sizing: border-box;
+    position: relative;
+  }
+
+  li:not([role='tab']) {
+    margin-top: 4px;
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  :is(ul, ol) :is(ul, ol) li:not([role='tab']):first-child {
+    margin-top: 4px;
+  }
+
+  .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: -1px;
+    bottom: -1px;
+    width: 4px;
+    z-index: 5;
+    background-color: var(--prosemirror-color-selection);
+    cursor: ew-resize;
+    cursor: col-resize;
+  }
+
+  .selectedCell {
+    background-color: color-mix(in srgb, var(--prosemirror-color-selection) 20%, transparent);
+  }
+}
+
+.ProseMirror-hideselection {
+  caret-color: transparent;
+
+  & *::selection {
+    display: none;
+    background-color: transparent;
+  }
+}
+
+.ProseMirror-separator {
+  display: inline-block;
+}

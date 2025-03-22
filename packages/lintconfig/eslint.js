@@ -62,6 +62,7 @@ export default defineConfig([
       'unicorn/catch-error-name': ['error', { name: 'err' }],
       'unicorn/consistent-function-scoping': 'off',
       'unicorn/no-array-callback-reference': 'off',
+      'unicorn/no-array-for-each': 'off',
       'unicorn/no-empty-file': 'off',
       'unicorn/no-null': 'off',
       'unicorn/prefer-switch': 'off',

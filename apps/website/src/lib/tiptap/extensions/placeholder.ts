@@ -35,8 +35,8 @@ export const Placeholder = Extension.create({
             if (currentBodyEmpty || currentParagraphEmpty) {
               decorations.push(
                 createDecoration(
-                  $anchor.pos === 0 ? 0 : $anchor.before(),
-                  $anchor.pos === 0 ? 2 : $anchor.after(),
+                  $anchor.pos === 1 ? 1 : $anchor.before(),
+                  $anchor.pos === 1 ? 3 : $anchor.after(),
                   '내용을 입력하거나 /를 입력해 블록 삽입하기...',
                 ),
               );
