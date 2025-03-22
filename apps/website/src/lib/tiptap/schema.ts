@@ -1,12 +1,12 @@
 import { DropCursor, Placeholder, Typography } from './extensions';
 import { Bold, FontColor, FontFamily, FontSize, Italic, Ruby, Strike, Underline } from './marks';
 import { SlashMenu } from './menus';
-import { BulletList, Doc, Document, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
+import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
 
 export const extensions = [
   // special nodes
   Doc,
-  Document,
+  Body,
   Text,
 
   // nodes
