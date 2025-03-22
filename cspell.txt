@@ -37,4 +37,5 @@ wyhash
 xlarge
 xsmall
 xxlarge
+zeed
 zstd

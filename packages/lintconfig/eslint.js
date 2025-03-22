@@ -60,6 +60,8 @@ export default defineConfig([
       'svelte/require-store-reactive-access': 'off',
       'svelte/sort-attributes': 'error',
       'unicorn/catch-error-name': ['error', { name: 'err' }],
+      'unicorn/consistent-function-scoping': 'off',
+      'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-empty-file': 'off',
       'unicorn/no-null': 'off',
       'unicorn/prefer-switch': 'off',
