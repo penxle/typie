@@ -6,8 +6,6 @@ import type { Range } from '@tiptap/core';
 import type { Node, ResolvedPos } from '@tiptap/pm/model';
 import type { Mappable } from '@tiptap/pm/transform';
 
-const key = new PluginKey('blockSelectionHelper');
-
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
@@ -17,8 +15,8 @@ declare module '@tiptap/core' {
   }
 }
 
-export const BlockSelectionHelper = Extension.create({
-  name: 'blockSelectionHelper',
+export const BlockSelectionExt = Extension.create({
+  name: 'block_selection',
 
   addCommands() {
     return {
@@ -41,7 +39,7 @@ export const BlockSelectionHelper = Extension.create({
         const { $from, $to } = editor.state.selection;
 
         if ($from.start() === $from.pos && $to.end() === $to.pos) {
-          return editor.commands.setBlockSelection({ from: 0, to: editor.state.doc.nodeSize - 2 });
+          return editor.commands.setBlockSelection({ from: 1, to: editor.state.doc.nodeSize - 2 });
         }
 
         return editor.commands.setTextSelection({ from: $from.start(), to: $to.end() });
@@ -52,25 +50,27 @@ export const BlockSelectionHelper = Extension.create({
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key,
+        key: new PluginKey('block_selection'),
         props: {
           decorations: ({ doc, selection }) => {
             if (!this.editor.isEditable || !(selection instanceof BlockSelection) || selection.invisible) {
               return DecorationSet.empty;
             }
 
+            const body = doc.child(0);
             const { from, to } = selection;
             const decorations: Decoration[] = [];
 
-            doc.descendants((node, pos) => {
+            body.forEach((node, offset) => {
               if (node.isInline) {
-                return false;
+                return;
               }
 
-              const isSelected = from <= pos && to >= pos + node.nodeSize;
+              const pos = offset + 1;
 
+              const isSelected = from <= pos && to >= pos + node.nodeSize;
               if (!isSelected) {
-                return false;
+                return;
               }
 
               decorations.push(
@@ -86,7 +86,7 @@ export const BlockSelectionHelper = Extension.create({
                           position: 'absolute',
                           inset: '0',
                           borderRadius: '4px',
-                          backgroundColor: '[var(--prosemirror-color-selection)/14]',
+                          backgroundColor: '[var(--prosemirror-color-selection)/20]',
                           transition: 'common',
                           transitionTimingFunction: 'ease',
                           willChange: 'background-color',
@@ -106,8 +106,6 @@ export const BlockSelectionHelper = Extension.create({
                   ),
                 }),
               );
-
-              return false;
             });
 
             return DecorationSet.create(doc, decorations);

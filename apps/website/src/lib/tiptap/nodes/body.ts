@@ -1,18 +1,18 @@
-import { Node } from '@tiptap/core';
+import { mergeAttributes, Node } from '@tiptap/core';
 import { values } from '../values';
 
-const globalParagraphIndents = values.globalParagraphIndent.map(({ value }) => value);
-type GlobalParagraphIndent = (typeof globalParagraphIndents)[number];
+const paragraphIndents = values.paragraphIndent.map(({ value }) => value);
+type ParagraphIndent = (typeof paragraphIndents)[number];
 
-const globalParagraphSpacings = values.globalParagraphSpacing.map(({ value }) => value);
-type GlobalParagraphSpacing = (typeof globalParagraphSpacings)[number];
+const blockGaps = values.blockGap.map(({ value }) => value);
+type BlockGap = (typeof blockGaps)[number];
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     body: {
-      setGlobalParagraphIndent: (globalParagraphIndent: GlobalParagraphIndent) => ReturnType;
-      setGlobalParagraphSpacing: (globalParagraphSpacing: GlobalParagraphSpacing) => ReturnType;
+      setBodyParagraphIndent: (paragraphIndent: ParagraphIndent) => ReturnType;
+      setBodyBlockGap: (blockGap: BlockGap) => ReturnType;
     };
   }
 }
@@ -23,46 +23,46 @@ export const Body = Node.create({
 
   addAttributes() {
     return {
-      globalParagraphIndent: {
+      paragraphIndent: {
         default: 1,
-        renderHTML: ({ globalParagraphIndent }) => ({
-          style: `--global-paragraph-indent: ${globalParagraphIndent}rem`,
+        renderHTML: ({ paragraphIndent }) => ({
+          style: `--prosemirror-paragraph-indent: ${paragraphIndent}rem`,
         }),
       },
 
-      globalParagraphSpacing: {
+      blockGap: {
         default: 1,
-        renderHTML: ({ globalParagraphSpacing }) => ({
-          style: `--global-paragraph-spacing: ${globalParagraphSpacing}rem`,
+        renderHTML: ({ blockGap }) => ({
+          style: `--prosemirror-block-gap: ${blockGap}rem`,
         }),
       },
     };
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['div', HTMLAttributes, 0];
+    return ['article', mergeAttributes(HTMLAttributes, { class: 'prose' }), 0];
   },
 
   addCommands() {
     return {
-      setGlobalParagraphIndent:
-        (globalParagraphIndent) =>
+      setBodyParagraphIndent:
+        (paragraphIndent) =>
         ({ commands }) => {
-          if (!globalParagraphIndents.includes(globalParagraphIndent)) {
+          if (!paragraphIndents.includes(paragraphIndent)) {
             return false;
           }
 
-          return commands.updateAttributes(this.name, { globalParagraphIndent });
+          return commands.updateAttributes(this.name, { paragraphIndent });
         },
 
-      setGlobalParagraphSpacing:
-        (globalParagraphSpacing) =>
+      setBodyBlockGap:
+        (blockGap) =>
         ({ commands }) => {
-          if (!globalParagraphSpacings.includes(globalParagraphSpacing)) {
+          if (!blockGaps.includes(blockGap)) {
             return false;
           }
 
-          return commands.updateAttributes(this.name, { globalParagraphSpacing });
+          return commands.updateAttributes(this.name, { blockGap });
         },
     };
   },
