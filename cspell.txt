@@ -1,3 +1,4 @@
+*execute
 *init
 *introend
 altinity
