@@ -1,6 +1,7 @@
 import ListIcon from '~icons/lucide/list';
 import ListOrderedIcon from '~icons/lucide/list-ordered';
 import MinusIcon from '~icons/lucide/minus';
+import TextQuoteIcon from '~icons/lucide/text-quote';
 import type { Editor, Range } from '@tiptap/core';
 import type { MenuItem } from './types';
 
@@ -9,17 +10,17 @@ export const chain = (editor: Editor, range: Range) => {
 };
 
 export const menuItems: MenuItem[] = [
-  // {
-  //   id: 'blockquote',
-  //   type: 'blockquote',
-  //   group: 'block',
-  //   name: '인용',
-  //   keywords: ['blockquote'],
-  //   icon: TextQuoteIcon,
-  //   command: ({ editor, range }) => {
-  //     chain(editor, range).setBlockquote().run();
-  //   },
-  // },
+  {
+    id: 'blockquote',
+    type: 'blockquote',
+    group: 'block',
+    name: '인용',
+    keywords: ['blockquote'],
+    icon: TextQuoteIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).setBlockquote().run();
+    },
+  },
   {
     id: 'horizontal-rule',
     type: 'horizontal_rule',
