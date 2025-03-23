@@ -17,6 +17,7 @@ healthz
 iconify
 iframely
 ilike
+indexeddb
 insync
 ipaddr
 karpenter

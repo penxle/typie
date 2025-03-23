@@ -1,10 +1,10 @@
 // spell-checker:ignoreRegExp /createDbId\('[A-Z]{1,4}'/g
 
 import { eq, sql } from 'drizzle-orm';
-import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import * as E from './enums';
 import { createDbId } from './id';
-import { datetime, jsonb } from './types';
+import { bytea, datetime, jsonb } from './types';
 
 export const Embeds = pgTable('embeds', {
   id: text('id')
@@ -72,6 +72,36 @@ export const Jobs = pgTable(
   },
   (t) => [index().on(t.lane, t.state, t.createdAt)],
 );
+
+export const PostContentStates = pgTable('post_content_states', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('PCST')),
+  postId: text('post_id').notNull().unique(),
+  update: bytea('update').notNull(),
+  vector: bytea('vector').notNull(),
+  seq: bigint('seq', { mode: 'bigint' })
+    .notNull()
+    .default(sql`0`),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const PostContentUpdates = pgTable('post_content_updates', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('PCUP')),
+  postId: text('post_id').notNull(),
+  update: bytea('update').notNull(),
+  seq: bigint('seq', { mode: 'bigint' }).notNull().generatedAlwaysAsIdentity(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const PreorderPayments = pgTable('preorder_payments', {
   id: text('id')

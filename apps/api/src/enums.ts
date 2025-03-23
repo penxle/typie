@@ -6,6 +6,14 @@ export const JobState = {
   FAILED: 'FAILED',
 } as const;
 
+export type PostContentSyncKind = keyof typeof PostContentSyncKind;
+export const PostContentSyncKind = {
+  UPDATE: 'UPDATE',
+  VECTOR: 'VECTOR',
+  AWARENESS: 'AWARENESS',
+  HEARTBEAT: 'HEARTBEAT',
+} as const;
+
 export type PreorderPaymentState = keyof typeof PreorderPaymentState;
 export const PreorderPaymentState = {
   PENDING: 'PENDING',
