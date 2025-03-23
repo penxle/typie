@@ -2,6 +2,7 @@ import './enums';
 import './objects';
 import './resolvers/blob';
 import './resolvers/preorder';
+import './resolvers/unfurl';
 import './resolvers/user';
 
 import { dev } from '@/env';

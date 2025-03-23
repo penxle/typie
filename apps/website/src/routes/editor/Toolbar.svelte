@@ -1,5 +1,6 @@
 <script lang="ts">
   import BoldIcon from '~icons/lucide/bold';
+  import FileUpIcon from '~icons/lucide/file-up';
   import GemIcon from '~icons/lucide/gem';
   import ImageIcon from '~icons/lucide/image';
   import ItalicIcon from '~icons/lucide/italic';
@@ -122,6 +123,13 @@
       icon: PaperclipIcon,
       active: editor.current.isActive('file'),
       onclick: () => editor.current.chain().focus().setFile().run(),
+    },
+    {
+      id: 'embed',
+      label: '임베드',
+      icon: FileUpIcon,
+      active: editor.current.isActive('embed'),
+      onclick: () => editor.current.chain().focus().setEmbed().run(),
     },
   ]);
 </script>

@@ -8,6 +8,15 @@ input CreatePreorderPaymentInput {
 
 scalar DateTime
 
+type Embed {
+  description: String
+  html: String
+  id: ID!
+  thumbnailUrl: String
+  title: String
+  url: String!
+}
+
 type File implements Blob {
   id: ID!
   name: String!
@@ -56,6 +65,7 @@ type Mutation {
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  unfurlEmbed(input: UnfurlEmbedInput!): Embed!
 }
 
 input PersistBlobAsFileInput {
@@ -85,6 +95,10 @@ type PreorderUser {
 type Query {
   image(id: ID!): Image!
   me: User
+}
+
+input UnfurlEmbedInput {
+  url: String!
 }
 
 type User {

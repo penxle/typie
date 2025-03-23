@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const schema = z.object({
   DATABASE_URL: z.string(),
+  IFRAMELY_API_KEY: z.string(),
   LISTEN_PORT: z.coerce.number().optional(),
   PORTONE_API_KEY: z.string(),
   PORTONE_API_SECRET: z.string(),
