@@ -6,6 +6,37 @@ import * as E from './enums';
 import { createDbId } from './id';
 import { datetime, jsonb } from './types';
 
+export const Files = pgTable('files', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('FILE')),
+  // userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  format: text('format').notNull(),
+  size: integer('size').notNull(),
+  path: text('path').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const Images = pgTable('images', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('IMG')),
+  // userId: text('user_id').references((): AnyPgColumn => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  format: text('format').notNull(),
+  size: integer('size').notNull(),
+  width: integer('width').notNull(),
+  height: integer('height').notNull(),
+  placeholder: text('placeholder').notNull(),
+  path: text('path').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Jobs = pgTable(
   'jobs',
   {

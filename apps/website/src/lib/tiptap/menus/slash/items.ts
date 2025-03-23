@@ -1,3 +1,4 @@
+import ImageIcon from '~icons/lucide/image';
 import ListIcon from '~icons/lucide/list';
 import ListOrderedIcon from '~icons/lucide/list-ordered';
 import MinusIcon from '~icons/lucide/minus';
@@ -52,6 +53,17 @@ export const menuItems: MenuItem[] = [
     icon: ListOrderedIcon,
     command: ({ editor, range }) => {
       chain(editor, range).toggleOrderedList().run();
+    },
+  },
+  {
+    id: 'image',
+    type: 'image',
+    group: 'media',
+    name: '이미지',
+    keywords: ['image', 'picture'],
+    icon: ImageIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).setImage().run();
     },
   },
 ];
