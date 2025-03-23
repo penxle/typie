@@ -1,8 +1,11 @@
 import { mergeAttributes, Node } from '@tiptap/core';
-import { values } from '../values';
+import { defaultValues, values } from '../values';
 
 const paragraphIndents = values.paragraphIndent.map(({ value }) => value);
 type ParagraphIndent = (typeof paragraphIndents)[number];
+
+const maxWidths = values.maxWidth.map(({ value }) => value);
+type MaxWidth = (typeof maxWidths)[number];
 
 const blockGaps = values.blockGap.map(({ value }) => value);
 type BlockGap = (typeof blockGaps)[number];
@@ -12,6 +15,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     body: {
       setBodyParagraphIndent: (paragraphIndent: ParagraphIndent) => ReturnType;
+      setBodyMaxWidth: (maxWidth: MaxWidth) => ReturnType;
       setBodyBlockGap: (blockGap: BlockGap) => ReturnType;
     };
   }
@@ -24,21 +28,21 @@ export const Body = Node.create({
   addAttributes() {
     return {
       paragraphIndent: {
-        default: 1,
+        default: defaultValues.paragraphIndent,
         renderHTML: ({ paragraphIndent }) => ({
           style: `--prosemirror-paragraph-indent: ${paragraphIndent}rem`,
         }),
       },
 
       maxWidth: {
-        default: 1000,
+        default: defaultValues.maxWidth,
         renderHTML: ({ maxWidth }) => ({
           style: `--prosemirror-max-width: ${maxWidth}px`,
         }),
       },
 
       blockGap: {
-        default: 1,
+        default: defaultValues.blockGap,
         renderHTML: ({ blockGap }) => ({
           style: `--prosemirror-block-gap: ${blockGap}rem`,
         }),
@@ -60,6 +64,16 @@ export const Body = Node.create({
           }
 
           return commands.updateAttributes(this.name, { paragraphIndent });
+        },
+
+      setBodyMaxWidth:
+        (maxWidth) =>
+        ({ commands }) => {
+          if (!maxWidths.includes(maxWidth)) {
+            return false;
+          }
+
+          return commands.updateAttributes(this.name, { maxWidth });
         },
 
       setBodyBlockGap:

@@ -1,5 +1,5 @@
 import { mergeAttributes, Node } from '@tiptap/core';
-import { values } from '$lib/tiptap/values';
+import { defaultValues, values } from '$lib/tiptap/values';
 import { closest } from '$lib/utils';
 import { css } from '$styled-system/css';
 
@@ -33,11 +33,11 @@ export const Paragraph = Node.create({
   addAttributes() {
     return {
       textAlign: {
-        default: 'left',
+        default: defaultValues.textAlign,
         parseHTML: (element) => {
           const textAlign = element.style.textAlign;
           if (!(textAligns as string[]).includes(textAlign)) {
-            return 'left';
+            return defaultValues.textAlign;
           }
 
           return textAlign;
@@ -48,10 +48,10 @@ export const Paragraph = Node.create({
       },
 
       lineHeight: {
-        default: 1.6,
+        default: defaultValues.lineHeight,
         parseHTML: (element) => {
           const lineHeight = Number.parseFloat(element.style.lineHeight);
-          return closest(lineHeight, lineHeights) ?? 1.6;
+          return closest(lineHeight, lineHeights) ?? defaultValues.lineHeight;
         },
         renderHTML: ({ lineHeight }) => ({
           style: `line-height: ${lineHeight}`,
@@ -59,10 +59,10 @@ export const Paragraph = Node.create({
       },
 
       letterSpacing: {
-        default: 0,
+        default: defaultValues.letterSpacing,
         parseHTML: (element) => {
           const letterSpacing = Number.parseFloat(element.style.letterSpacing.replace(/em$/, ''));
-          return closest(letterSpacing, letterSpacings) ?? 0;
+          return closest(letterSpacing, letterSpacings) ?? defaultValues.letterSpacing;
         },
         renderHTML: ({ letterSpacing }) => ({
           style: `letter-spacing: ${letterSpacing}em`,
