@@ -15,6 +15,7 @@ fstype
 glttr
 healthz
 iconify
+iframely
 ilike
 insync
 ipaddr

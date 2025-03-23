@@ -1,7 +1,7 @@
 import { Behavior, BlockSelectionExt, DropCursor, Placeholder, Typography } from './extensions';
 import { Bold, FontColor, FontFamily, FontSize, Italic, Link, Ruby, Strike, Underline } from './marks';
 import { BubbleMenu, FloatingMenu, SlashMenu } from './menus';
-import { Blockquote, File, HorizontalRule, Image } from './node-views';
+import { Blockquote, Embed, File, HorizontalRule, Image } from './node-views';
 import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
 
 export const extensions = [
@@ -30,6 +30,7 @@ export const extensions = [
 
   // node views
   Blockquote,
+  Embed,
   File,
   HorizontalRule,
   Image,

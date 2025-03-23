@@ -41,6 +41,7 @@
         "graphql-scalars": "^1.24.2",
         "graphql-yoga": "^5.13.2",
         "hono": "^4.7.5",
+        "ky": "^1.7.5",
         "postgres": "^3.4.5",
         "query-string": "^9.1.1",
         "sharp": "^0.33.5",

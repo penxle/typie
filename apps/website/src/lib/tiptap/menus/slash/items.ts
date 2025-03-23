@@ -1,3 +1,4 @@
+import FileUpIcon from '~icons/lucide/file-up';
 import ImageIcon from '~icons/lucide/image';
 import ListIcon from '~icons/lucide/list';
 import ListOrderedIcon from '~icons/lucide/list-ordered';
@@ -76,6 +77,17 @@ export const menuItems: MenuItem[] = [
     icon: PaperclipIcon,
     command: ({ editor, range }) => {
       chain(editor, range).setFile().run();
+    },
+  },
+  {
+    id: 'embed',
+    type: 'embed',
+    group: 'media',
+    name: '임베드',
+    keywords: ['embed', 'link'],
+    icon: FileUpIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).setEmbed().run();
     },
   },
 ];
