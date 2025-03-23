@@ -4,6 +4,8 @@ import IconAlignLeft from '~icons/lucide/align-left';
 import IconAlignRight from '~icons/lucide/align-right';
 import IconList from '~icons/lucide/list';
 import IconListOrdered from '~icons/lucide/list-ordered';
+import Blockquote1 from './assets/blockquote/1.svelte';
+import Blockquote2 from './assets/blockquote/2.svelte';
 import HorizontalRule1 from './assets/horizontal-rule/1.svelte';
 import HorizontalRule2 from './assets/horizontal-rule/2.svelte';
 import HorizontalRule3 from './assets/horizontal-rule/3.svelte';
@@ -59,6 +61,11 @@ export const values = {
     { label: '중앙', value: 'center', icon: IconAlignCenter },
     { label: '오른쪽', value: 'right', icon: IconAlignRight },
     { label: '양쪽', value: 'justify', icon: IconAlignJustify },
+  ],
+
+  blockquote: [
+    { label: '인용구 1', type: 'blockquote_1', component: Blockquote1 },
+    { label: '인용구 2', type: 'blockquote_2', component: Blockquote2 },
   ],
 
   horizontalRule: [
