@@ -30,6 +30,13 @@ export const Body = Node.create({
         }),
       },
 
+      maxWidth: {
+        default: 1000,
+        renderHTML: ({ maxWidth }) => ({
+          style: `--prosemirror-max-width: ${maxWidth}px`,
+        }),
+      },
+
       blockGap: {
         default: 1,
         renderHTML: ({ blockGap }) => ({
@@ -40,7 +47,7 @@ export const Body = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['article', mergeAttributes(HTMLAttributes, { class: 'prose' }), 0];
+    return ['div', mergeAttributes(HTMLAttributes, { class: 'prose' }), 0];
   },
 
   addCommands() {
