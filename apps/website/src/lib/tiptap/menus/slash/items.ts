@@ -1,5 +1,6 @@
 import ListIcon from '~icons/lucide/list';
 import ListOrderedIcon from '~icons/lucide/list-ordered';
+import MinusIcon from '~icons/lucide/minus';
 import type { Editor, Range } from '@tiptap/core';
 import type { MenuItem } from './types';
 
@@ -19,17 +20,17 @@ export const menuItems: MenuItem[] = [
   //     chain(editor, range).setBlockquote().run();
   //   },
   // },
-  // {
-  //   id: 'divider',
-  //   type: 'horizontalRule',
-  //   group: 'block',
-  //   name: '구분선',
-  //   keywords: ['divider'],
-  //   icon: MinusIcon,
-  //   command: ({ editor, range }) => {
-  //     chain(editor, range).setHorizontalRule().run();
-  //   },
-  // },
+  {
+    id: 'horizontal-rule',
+    type: 'horizontal_rule',
+    group: 'block',
+    name: '구분선',
+    keywords: ['divider', 'horizontal rule'],
+    icon: MinusIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).setHorizontalRule().run();
+    },
+  },
   {
     id: 'bullet-list',
     type: 'bullet_list',
