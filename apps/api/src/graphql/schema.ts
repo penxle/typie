@@ -1,5 +1,6 @@
-import './objects';
 import './enums';
+import './objects';
+import './resolvers/blob';
 import './resolvers/preorder';
 import './resolvers/user';
 

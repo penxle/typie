@@ -1,13 +1,41 @@
+interface Blob {
+  id: ID!
+}
+
 input CreatePreorderPaymentInput {
   email: String!
 }
 
 scalar DateTime
 
+type File implements Blob {
+  id: ID!
+  name: String!
+  size: Int!
+  url: String!
+}
+
 input FinalizePreorderPaymentInput {
   email: String!
   paymentId: String!
   wish: String!
+}
+
+type Image implements Blob {
+  id: ID!
+  placeholder: String!
+  ratio: Float!
+  url: String!
+}
+
+input IssueBlobUploadUrlInput {
+  filename: String!
+}
+
+type IssueBlobUploadUrlResult {
+  fields: JSON!
+  path: String!
+  url: String!
 }
 
 """
@@ -25,6 +53,18 @@ enum JobState {
 type Mutation {
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
+  issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
+  persistBlobAsFile(input: PersistBlobAsFileInput!): File!
+  persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+}
+
+input PersistBlobAsFileInput {
+  path: String!
+}
+
+input PersistBlobAsImageInput {
+  modification: JSON
+  path: String!
 }
 
 type PreorderPayment {
@@ -43,6 +83,7 @@ type PreorderUser {
 }
 
 type Query {
+  image(id: ID!): Image!
   me: User
 }
 

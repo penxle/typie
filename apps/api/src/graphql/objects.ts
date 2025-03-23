@@ -37,6 +37,11 @@ const createObjectRef = <T extends TableConfig>(name: string, table: TableWithId
 //   });
 // };
 
+export const File = createObjectRef('File', T.Files);
+export const Image = createObjectRef('Image', T.Images);
 export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const User = createObjectRef('User', T.Users);
+
+type BlobShape = { id: string; path: string };
+export const Blob = builder.interfaceRef<BlobShape>('Blob');
