@@ -2,6 +2,7 @@ import ImageIcon from '~icons/lucide/image';
 import ListIcon from '~icons/lucide/list';
 import ListOrderedIcon from '~icons/lucide/list-ordered';
 import MinusIcon from '~icons/lucide/minus';
+import PaperclipIcon from '~icons/lucide/paperclip';
 import TextQuoteIcon from '~icons/lucide/text-quote';
 import type { Editor, Range } from '@tiptap/core';
 import type { MenuItem } from './types';
@@ -64,6 +65,17 @@ export const menuItems: MenuItem[] = [
     icon: ImageIcon,
     command: ({ editor, range }) => {
       chain(editor, range).setImage().run();
+    },
+  },
+  {
+    id: 'file',
+    type: 'file',
+    group: 'media',
+    name: '파일',
+    keywords: ['file', 'attachment'],
+    icon: PaperclipIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).setFile().run();
     },
   },
 ];
