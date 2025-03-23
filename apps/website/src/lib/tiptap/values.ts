@@ -4,6 +4,13 @@ import IconAlignLeft from '~icons/lucide/align-left';
 import IconAlignRight from '~icons/lucide/align-right';
 import IconList from '~icons/lucide/list';
 import IconListOrdered from '~icons/lucide/list-ordered';
+import HorizontalRule1 from './assets/horizontal-rule/1.svelte';
+import HorizontalRule2 from './assets/horizontal-rule/2.svelte';
+import HorizontalRule3 from './assets/horizontal-rule/3.svelte';
+import HorizontalRule4 from './assets/horizontal-rule/4.svelte';
+import HorizontalRule5 from './assets/horizontal-rule/5.svelte';
+import HorizontalRule6 from './assets/horizontal-rule/6.svelte';
+import HorizontalRule7 from './assets/horizontal-rule/7.svelte';
 
 export const values = {
   defaultColor: '#09090B',
@@ -52,6 +59,16 @@ export const values = {
     { label: '중앙', value: 'center', icon: IconAlignCenter },
     { label: '오른쪽', value: 'right', icon: IconAlignRight },
     { label: '양쪽', value: 'justify', icon: IconAlignJustify },
+  ],
+
+  horizontalRule: [
+    { label: '구분선 1', type: 'horizontal_rule_1', component: HorizontalRule1 },
+    { label: '구분선 2', type: 'horizontal_rule_2', component: HorizontalRule2 },
+    { label: '구분선 3', type: 'horizontal_rule_3', component: HorizontalRule3 },
+    { label: '구분선 4', type: 'horizontal_rule_4', component: HorizontalRule4 },
+    { label: '구분선 5', type: 'horizontal_rule_5', component: HorizontalRule5 },
+    { label: '구분선 6', type: 'horizontal_rule_6', component: HorizontalRule6 },
+    { label: '구분선 7', type: 'horizontal_rule_7', component: HorizontalRule7 },
   ],
 
   list: [
