@@ -16,7 +16,7 @@ export const menuItems: MenuItem[] = [
     id: 'blockquote',
     type: 'blockquote',
     group: 'block',
-    name: '인용',
+    name: '인용구',
     keywords: ['blockquote'],
     icon: TextQuoteIcon,
     command: ({ editor, range }) => {
