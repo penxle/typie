@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Editor } from '@tiptap/core';
   import { onMount } from 'svelte';
+  import { Ref } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { Collaboration } from '../extensions/collaboration';
   import { extensions } from '../schema';
@@ -10,7 +11,7 @@
 
   type Props = {
     style?: SystemStyleObject;
-    editor?: Editor;
+    editor?: Ref<Editor>;
     doc?: Y.Doc;
     awareness?: YAwareness.Awareness;
   };
@@ -20,7 +21,7 @@
   let element = $state<HTMLDivElement>();
 
   onMount(() => {
-    editor = new Editor({
+    const e = new Editor({
       element,
       extensions: [...extensions, ...(doc && awareness ? [Collaboration.configure({ doc, awareness })] : [])],
       injectCSS: false,
@@ -30,13 +31,14 @@
         scrollThreshold: { top: 150, bottom: 50, left: 0, right: 0 },
       },
       onTransaction: ({ editor: e }) => {
-        editor = undefined;
-        editor = e;
+        editor = new Ref(e);
       },
     });
 
+    editor = new Ref(e);
+
     return () => {
-      editor?.destroy();
+      editor?.current.destroy();
       editor = undefined;
     };
   });
