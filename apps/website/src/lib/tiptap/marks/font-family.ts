@@ -20,10 +20,10 @@ export const FontFamily = Mark.create({
 
   addAttributes() {
     return {
-      fontFamily: {
+      value: {
         parseHTML: (element) => element.style.fontFamily,
-        renderHTML: ({ fontFamily }) => ({
-          style: `font-family: ${fontFamily}`,
+        renderHTML: ({ value }) => ({
+          style: `font-family: ${value}`,
         }),
       },
     };
@@ -53,13 +53,13 @@ export const FontFamily = Mark.create({
   addCommands() {
     return {
       setFontFamily:
-        (fontFamily) =>
+        (value) =>
         ({ commands }) => {
-          if (!fontFamilies.includes(fontFamily)) {
+          if (!fontFamilies.includes(value)) {
             return false;
           }
 
-          return commands.setMark(this.name, { fontFamily });
+          return commands.setMark(this.name, { value });
         },
 
       unsetFontFamily:

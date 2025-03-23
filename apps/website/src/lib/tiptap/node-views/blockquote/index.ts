@@ -1,5 +1,5 @@
 import { createNodeView } from '$lib/tiptap/lib';
-import { values } from '$lib/tiptap/values';
+import { defaultValues, values } from '$lib/tiptap/values';
 import Component from './Component.svelte';
 
 const blockquotes = values.blockquote.map(({ type }) => type);
@@ -24,7 +24,7 @@ export const Blockquote = createNodeView(Component, {
     return {
       type: {
         isRequired: true,
-        default: blockquotes[0],
+        default: defaultValues.blockquote,
         parseHTML: (element) => {
           const blockquote = element.dataset.type;
 
@@ -32,7 +32,7 @@ export const Blockquote = createNodeView(Component, {
             return blockquote;
           }
 
-          return blockquotes[0];
+          return defaultValues.blockquote;
         },
         renderHTML: ({ type }) => {
           return {

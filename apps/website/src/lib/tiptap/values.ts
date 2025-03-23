@@ -2,8 +2,6 @@ import IconAlignCenter from '~icons/lucide/align-center';
 import IconAlignJustify from '~icons/lucide/align-justify';
 import IconAlignLeft from '~icons/lucide/align-left';
 import IconAlignRight from '~icons/lucide/align-right';
-import IconList from '~icons/lucide/list';
-import IconListOrdered from '~icons/lucide/list-ordered';
 import Blockquote1 from './assets/blockquote/1.svelte';
 import Blockquote2 from './assets/blockquote/2.svelte';
 import HorizontalRule1 from './assets/horizontal-rule/1.svelte';
@@ -15,8 +13,6 @@ import HorizontalRule6 from './assets/horizontal-rule/6.svelte';
 import HorizontalRule7 from './assets/horizontal-rule/7.svelte';
 
 export const values = {
-  defaultColor: '#09090B',
-
   fontFamily: [{ label: '프리텐다드', value: 'Pretendard' }],
 
   fontSize: [
@@ -78,24 +74,17 @@ export const values = {
     { label: '구분선 7', type: 'horizontal_rule_7', component: HorizontalRule7 },
   ],
 
-  list: [
-    {
-      label: '순서 없는 목록',
-      value: 'bullet_list',
-      icon: IconList,
-    },
-    {
-      label: '순서 있는 목록',
-      value: 'ordered_list',
-      icon: IconListOrdered,
-    },
-  ],
-
   paragraphIndent: [
     { label: '없음', value: 0 },
     { label: '0.5칸', value: 0.5 },
     { label: '1칸', value: 1 },
     { label: '2칸', value: 2 },
+  ],
+
+  maxWidth: [
+    { label: '600px', value: 600 },
+    { label: '800px', value: 800 },
+    { label: '1000px', value: 1000 },
   ],
 
   blockGap: [
@@ -104,4 +93,17 @@ export const values = {
     { label: '1줄', value: 1 },
     { label: '2줄', value: 2 },
   ],
+} as const;
+
+export const defaultValues = {
+  fontFamily: 'Pretendard',
+  fontSize: 16,
+  lineHeight: 1.6,
+  letterSpacing: 0,
+  textAlign: 'left',
+  blockquote: 'blockquote_1',
+  horizontalRule: 'horizontal_rule_1',
+  paragraphIndent: 1,
+  maxWidth: 1000,
+  blockGap: 1,
 } as const;

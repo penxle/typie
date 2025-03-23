@@ -17,10 +17,10 @@ export const FontColor = Mark.create({
 
   addAttributes() {
     return {
-      fontColor: {
+      value: {
         parseHTML: (element) => new TinyColor(element.style.color).toHexString(),
-        renderHTML: ({ fontColor }) => ({
-          style: `color: ${fontColor}`,
+        renderHTML: ({ value }) => ({
+          style: `color: ${value}`,
         }),
       },
     };
@@ -37,13 +37,13 @@ export const FontColor = Mark.create({
   addCommands() {
     return {
       setFontColor:
-        (fontColor) =>
+        (value) =>
         ({ commands }) => {
-          if (!fontColor.startsWith('#')) {
+          if (!value.startsWith('#')) {
             return false;
           }
 
-          return commands.setMark(this.name, { fontColor: fontColor.toLowerCase() });
+          return commands.setMark(this.name, { value: value.toLowerCase() });
         },
 
       unsetFontColor:

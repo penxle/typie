@@ -3,12 +3,13 @@ import { values } from '$lib/tiptap/values';
 import { closest } from '$lib/utils';
 
 const fontSizes = values.fontSize.map(({ value }) => value);
+type FontSize = (typeof fontSizes)[number];
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     fontSize: {
-      setFontSize: (fontSize: number) => ReturnType;
+      setFontSize: (fontSize: FontSize) => ReturnType;
       unsetFontSize: () => ReturnType;
     };
   }
@@ -20,13 +21,13 @@ export const FontSize = Mark.create({
 
   addAttributes() {
     return {
-      fontSize: {
+      value: {
         parseHTML: (element) => {
           const fontSize = Number.parseFloat(element.style.fontSize.replace(/rem$/, '')) * 16;
           return closest(fontSize, fontSizes);
         },
-        renderHTML: ({ fontSize }) => ({
-          style: `font-size: ${fontSize / 16}rem`,
+        renderHTML: ({ value }) => ({
+          style: `font-size: ${value / 16}rem`,
         }),
       },
     };
@@ -48,9 +49,9 @@ export const FontSize = Mark.create({
   addCommands() {
     return {
       setFontSize:
-        (fontSize) =>
+        (value) =>
         ({ commands }) => {
-          return commands.setMark(this.name, { fontSize: closest(fontSize, fontSizes) });
+          return commands.setMark(this.name, { value: closest(value, fontSizes) });
         },
 
       unsetFontSize:

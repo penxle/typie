@@ -1,5 +1,5 @@
 import { createNodeView } from '$lib/tiptap/lib';
-import { values } from '$lib/tiptap/values';
+import { defaultValues, values } from '$lib/tiptap/values';
 import Component from './Component.svelte';
 
 const horizontalRules = values.horizontalRule.map(({ type }) => type);
@@ -22,7 +22,7 @@ export const HorizontalRule = createNodeView(Component, {
     return {
       type: {
         isRequired: true,
-        default: horizontalRules[0],
+        default: defaultValues.horizontalRule,
         parseHTML: (element) => {
           const horizontalRule = element.dataset.type;
 
@@ -30,7 +30,7 @@ export const HorizontalRule = createNodeView(Component, {
             return horizontalRule;
           }
 
-          return horizontalRules[0];
+          return defaultValues.horizontalRule;
         },
         renderHTML: ({ type }) => {
           return {
