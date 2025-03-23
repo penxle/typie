@@ -10,6 +10,7 @@
   import MinusIcon from '~icons/lucide/minus';
   import PaperclipIcon from '~icons/lucide/paperclip';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
+  import TableIcon from '~icons/lucide/table';
   import TextQuoteIcon from '~icons/lucide/text-quote';
   import UnderlineIcon from '~icons/lucide/underline';
   import { Icon } from '$lib/components';
@@ -109,6 +110,13 @@
       icon: MinusIcon,
       active: editor.current.isActive('horizontal_rule'),
       onclick: () => editor.current.chain().focus().setHorizontalRule().run(),
+    },
+    {
+      id: 'table',
+      label: '표',
+      icon: TableIcon,
+      active: editor.current.isActive('table'),
+      onclick: () => editor.current.chain().focus().insertTable().run(),
     },
     {
       id: 'image',
