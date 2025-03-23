@@ -30,6 +30,7 @@
     "body-scroll-lock-upgrade": "^1.1.0",
     "es-hangul": "^2.3.2",
     "ky": "^1.7.5",
+    "linkifyjs": "^4.2.0",
     "match-sorter": "^8.0.0",
     "mixpanel-browser": "^2.61.2",
     "nanoid": "^5.1.5",
