@@ -1,12 +1,23 @@
 import { NodeView } from '@tiptap/core';
 import { mount, unmount } from 'svelte';
-import type { DecorationWithType, NodeViewProps, NodeViewRenderer, NodeViewRendererOptions, NodeViewRendererProps } from '@tiptap/core';
+import { Ref } from '$lib/utils';
+import type {
+  DecorationWithType,
+  Editor,
+  NodeViewProps as TiptapNodeViewProps,
+  NodeViewRenderer,
+  NodeViewRendererOptions,
+  NodeViewRendererProps,
+} from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { Decoration, DecorationSource, NodeView as ProseMirrorNodeView } from '@tiptap/pm/view';
 import type { Component } from 'svelte';
 
+export type NodeViewProps = Omit<TiptapNodeViewProps, 'editor'> & {
+  editor: Ref<Editor>;
+};
+
 export type NodeViewComponent = Component<NodeViewProps>;
-export type { NodeViewProps } from '@tiptap/core';
 
 class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorNodeView {
   #element: HTMLElement;
@@ -39,7 +50,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
     context.set('onDragStart', (event: DragEvent) => this.#onDragStart(event));
 
     this.#props = {
-      editor: this.editor,
+      editor: new Ref(this.editor),
       view: this.view,
       node: this.node,
       decorations: this.decorations as DecorationWithType[],
@@ -91,7 +102,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
 
     this.#handleTransaction = () => {
       if (this.#props) {
-        this.#props.editor = this.editor;
+        this.#props.editor = new Ref(this.editor);
       }
     };
 
