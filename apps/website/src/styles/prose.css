@@ -3,6 +3,11 @@
 }
 
 .prose {
+  width: 100%;
+  max-width: var(--prosemirror-max-width);
+
+  height: 100%;
+
   line-height: 1.6;
 
   /* gray.1000 */
@@ -77,4 +82,8 @@
 
 .ProseMirror-separator {
   display: inline-block;
+}
+
+.ProseMirror-dropcursor {
+  background-color: color-mix(in srgb, var(--prosemirror-color-selection) 40%, transparent);
 }

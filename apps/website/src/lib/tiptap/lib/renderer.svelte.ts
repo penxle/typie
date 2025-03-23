@@ -12,7 +12,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
   #element: HTMLElement;
   #contentElement: HTMLElement | null = null;
   #component: Record<string, never>;
-  #props: NodeViewProps = $state({} as NodeViewProps);
+  #props = $state<NodeViewProps>();
 
   #handleSelectionUpdate: () => void;
   #handleTransaction: () => void;
@@ -90,7 +90,9 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
     };
 
     this.#handleTransaction = () => {
-      this.#props.editor = this.editor;
+      if (this.#props) {
+        this.#props.editor = this.editor;
+      }
     };
 
     this.editor.on('selectionUpdate', this.#handleSelectionUpdate);
@@ -114,21 +116,23 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
     this.decorations = decorations;
     this.innerDecorations = innerDecorations;
 
-    this.#props.node = node;
-    this.#props.decorations = decorations as DecorationWithType[];
-    this.#props.innerDecorations = innerDecorations;
+    if (this.#props) {
+      this.#props.node = node;
+      this.#props.decorations = decorations as DecorationWithType[];
+      this.#props.innerDecorations = innerDecorations;
+    }
 
     return true;
   }
 
   selectNode() {
-    if (this.editor.isEditable && this.node.type.spec.selectable !== false) {
+    if (this.editor.isEditable && this.node.type.spec.selectable !== false && this.#props) {
       this.#props.selected = true;
     }
   }
 
   deselectNode() {
-    if (this.editor.isEditable && this.node.type.spec.selectable !== false) {
+    if (this.editor.isEditable && this.node.type.spec.selectable !== false && this.#props) {
       this.#props.selected = false;
     }
   }

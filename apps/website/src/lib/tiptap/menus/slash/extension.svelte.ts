@@ -11,13 +11,7 @@ import type { VirtualElement } from '@floating-ui/dom';
 import type { Range } from '@tiptap/core';
 import type { MenuItem } from './types';
 
-type State =
-  | { active: false }
-  | {
-      active: true;
-      range: Range;
-      items: MenuItem[];
-    };
+type State = { active: false } | { active: true; range: Range; items: MenuItem[] };
 
 export const pluginKey = new PluginKey<State>('slash_menu');
 const pattern = /\/(\S*)/g;

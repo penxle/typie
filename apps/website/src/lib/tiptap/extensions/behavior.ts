@@ -32,26 +32,26 @@ export const Behavior = Extension.create({
         return false;
       },
 
-      Enter: ({ editor }) => {
-        const { selection } = editor.state;
-        const { $anchor, empty } = selection;
+      // Enter: ({ editor }) => {
+      //   const { selection } = editor.state;
+      //   const { $anchor, empty } = selection;
 
-        const pos = $anchor.before(2);
-        const block = $anchor.node(2);
+      //   const pos = $anchor.before(2);
+      //   const block = $anchor.node(2);
 
-        if (
-          empty &&
-          $anchor.parent.isTextblock &&
-          $anchor.parent.childCount === 0 &&
-          $anchor.parentOffset === 0 &&
-          block.type.name !== 'paragraph' &&
-          block.childCount === 0
-        ) {
-          return editor.chain().setNodeSelection(pos).deleteSelection().insertContentAt(pos, { type: 'paragraph' }).run();
-        }
+      //   if (
+      //     empty &&
+      //     $anchor.parent.isTextblock &&
+      //     $anchor.parent.childCount === 0 &&
+      //     $anchor.parentOffset === 0 &&
+      //     block.type.name !== 'paragraph' &&
+      //     block.childCount === 0
+      //   ) {
+      //     return editor.chain().setNodeSelection(pos).deleteSelection().insertContentAt(pos, { type: 'paragraph' }).run();
+      //   }
 
-        return false;
-      },
+      //   return false;
+      // },
     };
   },
 
@@ -64,14 +64,14 @@ export const Behavior = Extension.create({
             const { doc } = state;
 
             const body = doc.child(0);
-            const endOfDocument = pos === doc.content.size;
+            const endOfDocument = pos === doc.content.size - 1;
             const lastChildEmptyParagraph = body.lastChild?.type.name === 'paragraph' && body.lastChild?.childCount === 0;
 
             if (endOfDocument && !lastChildEmptyParagraph) {
               this.editor
                 .chain()
-                .insertContentAt(pos - 1, { type: 'paragraph' })
-                .setTextSelection(pos)
+                .insertContentAt(pos, { type: 'paragraph' })
+                .setTextSelection(pos + 1)
                 .run();
             }
           },

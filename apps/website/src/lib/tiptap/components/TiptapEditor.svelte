@@ -25,16 +25,13 @@
       extensions: [...extensions, ...(doc && awareness ? [Collaboration.configure({ doc, awareness })] : [])],
       injectCSS: false,
       editorProps: {
-        attributes: { class: css(style) },
+        attributes: { class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style) },
         scrollMargin: { top: 150, bottom: 50, left: 0, right: 0 },
         scrollThreshold: { top: 150, bottom: 50, left: 0, right: 0 },
-        handleKeyDown: (_, event) => {
-          // 맥 구름입력기에서 엔터키 입력시 마지막 글자 잘리는 문제 workaround
-          if (editor && event.key === 'Enter') {
-            const s = editor.view.state.selection;
-            editor.commands.setTextSelection(s.to);
-          }
-        },
+      },
+      onTransaction: ({ editor: e }) => {
+        editor = undefined;
+        editor = e;
       },
     });
 
