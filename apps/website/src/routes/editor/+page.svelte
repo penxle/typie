@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as YAwareness from 'y-protocols/awareness';
+  import * as Y from 'yjs';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -7,6 +9,9 @@
   import type { Ref } from '$lib/utils';
 
   let editor = $state<Ref<Editor>>();
+
+  const doc = new Y.Doc();
+  const awareness = new YAwareness.Awareness(doc);
 </script>
 
 <div class={flex({ direction: 'column', alignItems: 'center', gap: '24px', paddingY: '100px', width: 'screen', height: 'screen' })}>
@@ -20,6 +25,6 @@
   {/if}
 
   <div class={css({ width: 'full', flexGrow: 1 })}>
-    <TiptapEditor style={{ height: 'full' }} bind:editor />
+    <TiptapEditor style={{ height: 'full' }} {awareness} {doc} bind:editor />
   </div>
 </div>

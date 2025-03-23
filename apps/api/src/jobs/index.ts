@@ -9,11 +9,11 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, first, Jobs } from '@/db';
 import { JobState } from '@/enums';
 import { dev, env } from '@/env';
-import { TestJob } from './test';
+import { PostContentStateUpdateJob } from './post';
 import type { Transaction } from '@/db';
 import type { JobFn } from './types';
 
-const jobs = [TestJob];
+const jobs = [PostContentStateUpdateJob];
 
 type Jobs = typeof jobs;
 type JobName = Jobs[number]['name'];

@@ -1,5 +1,11 @@
+scalar Binary
+
 interface Blob {
   id: ID!
+}
+
+input CreatePostInput {
+  postId: ID!
 }
 
 input CreatePreorderPaymentInput {
@@ -60,11 +66,13 @@ enum JobState {
 }
 
 type Mutation {
+  createPost(input: CreatePostInput!): Boolean!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
 }
 
@@ -75,6 +83,19 @@ input PersistBlobAsFileInput {
 input PersistBlobAsImageInput {
   modification: JSON
   path: String!
+}
+
+enum PostContentSyncKind {
+  AWARENESS
+  HEARTBEAT
+  UPDATE
+  VECTOR
+}
+
+type PostContentSyncStreamPayload {
+  data: Binary!
+  kind: PostContentSyncKind!
+  postId: ID!
 }
 
 type PreorderPayment {
@@ -95,6 +116,21 @@ type PreorderUser {
 type Query {
   image(id: ID!): Image!
   me: User
+}
+
+type Subscription {
+  postContentSyncStream(postId: ID!): PostContentSyncStreamPayload!
+}
+
+input SyncPostContentInput {
+  data: Binary!
+  kind: PostContentSyncKind!
+  postId: ID!
+}
+
+type SyncPostContentPayload {
+  data: Binary!
+  kind: PostContentSyncKind!
 }
 
 input UnfurlEmbedInput {

@@ -7,6 +7,7 @@ import ZodPlugin from '@pothos/plugin-zod';
 import dayjs from 'dayjs';
 import { GraphQLJSON } from 'graphql-scalars';
 import * as R from 'remeda';
+import { base64 } from 'rfc4648';
 import { GlitterError } from '@/errors';
 import type { Context, UserContext } from '@/context';
 
@@ -55,9 +56,20 @@ export const builder = new SchemaBuilder<{
 
 builder.queryType();
 builder.mutationType();
-// builder.subscriptionType();
+builder.subscriptionType();
 
 builder.addScalarType('JSON', GraphQLJSON);
+
+builder.scalarType('Binary', {
+  serialize: (value) => base64.stringify(value),
+  parseValue: (value) => {
+    if (typeof value === 'string') {
+      return base64.parse(value);
+    }
+
+    throw new Error('Invalid binary value');
+  },
+});
 
 builder.scalarType('DateTime', {
   serialize: (value) => value.toISOString(),
