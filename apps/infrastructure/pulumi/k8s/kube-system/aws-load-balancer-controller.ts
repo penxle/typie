@@ -227,10 +227,10 @@ const serviceAccount = new IAMServiceAccount('aws-load-balancer-controller', {
 });
 // spell-checker:enable
 
-new k8s.helm.v3.Chart('aws-load-balancer-controller', {
+new k8s.helm.v4.Chart('aws-load-balancer-controller', {
   chart: 'aws-load-balancer-controller',
   namespace: 'kube-system',
-  fetchOpts: {
+  repositoryOpts: {
     repo: 'https://aws.github.io/eks-charts',
   },
 

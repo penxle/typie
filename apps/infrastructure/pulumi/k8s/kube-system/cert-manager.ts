@@ -30,10 +30,10 @@ const serviceAccount = new IAMServiceAccount('cert-manager', {
   },
 });
 
-new k8s.helm.v3.Chart('cert-manager', {
+new k8s.helm.v4.Chart('cert-manager', {
   chart: 'cert-manager',
   namespace: 'kube-system',
-  fetchOpts: {
+  repositoryOpts: {
     repo: 'https://charts.jetstack.io',
   },
 

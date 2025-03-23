@@ -164,7 +164,7 @@ new aws.eks.FargateProfile('karpenter', {
   subnetIds: [subnets.private.az1.id, subnets.private.az2.id],
 });
 
-const chart = new k8s.helm.v3.Chart('karpenter', {
+const chart = new k8s.helm.v4.Chart('karpenter', {
   chart: 'oci://public.ecr.aws/karpenter/karpenter',
   namespace: 'kube-system',
 

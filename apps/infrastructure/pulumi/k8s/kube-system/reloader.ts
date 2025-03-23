@@ -1,9 +1,9 @@
 import * as k8s from '@pulumi/kubernetes';
 
-new k8s.helm.v3.Chart('reloader', {
+new k8s.helm.v4.Chart('reloader', {
   chart: 'reloader',
   namespace: 'kube-system',
-  fetchOpts: {
+  repositoryOpts: {
     repo: 'https://stakater.github.io/stakater-charts',
   },
 

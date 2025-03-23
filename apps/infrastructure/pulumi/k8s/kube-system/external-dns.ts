@@ -33,6 +33,7 @@ const serviceAccount = new IAMServiceAccount('external-dns', {
 
 new k8s.helm.v3.Chart('external-dns', {
   chart: 'external-dns',
+  version: '1.15.2',
   namespace: 'kube-system',
   fetchOpts: {
     repo: 'https://kubernetes-sigs.github.io/external-dns',
