@@ -6,6 +6,8 @@
   import { flex } from '$styled-system/patterns';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import AddRowColButton from './AddRowColButton.svelte';
+  import ColHandle from './ColHandle.svelte';
+  import RowHandle from './RowHandle.svelte';
   import { createColGroup } from './utils';
   import type { Node } from '@tiptap/pm/model';
   import type { NodeViewProps } from '../../lib';
@@ -20,6 +22,19 @@
   });
 
   let { node, HTMLAttributes, editor, getPos }: Props = $props();
+
+  const hasSpan = $derived.by(() => {
+    let has = false;
+
+    node.descendants((node) => {
+      if (node.type.name === 'tableCell' && (node.attrs.colspan > 1 || node.attrs.rowspan > 1)) {
+        has = true;
+        return;
+      }
+    });
+
+    return has;
+  });
 
   const { colgroup, tableWidth, tableMinWidth } = $derived(createColGroup(node, 50));
 
@@ -135,7 +150,7 @@
             })}
             role="row"
           >
-            <!-- <RowHandle {editor} {hasSpan} {hoveredRowIndex} {i} tableNode={node} tablePos={getPos()} /> -->
+            <RowHandle {editor} {hasSpan} {hoveredRowIndex} {i} tableNode={node} tablePos={getPos()} />
           </div>
         {/each}
       </div>
@@ -161,7 +176,7 @@
               },
             })}
           >
-            <!-- <ColHandle {editor} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} tablePos={getPos()} /> -->
+            <ColHandle {editor} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} tablePos={getPos()} />
           </div>
         {/each}
       {/if}
