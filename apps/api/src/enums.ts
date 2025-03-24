@@ -21,6 +21,11 @@ export const PreorderPaymentState = {
   FAILED: 'FAILED',
 } as const;
 
+export type SingleSignOnProvider = keyof typeof SingleSignOnProvider;
+export const SingleSignOnProvider = {
+  GOOGLE: 'GOOGLE',
+} as const;
+
 export type UserState = keyof typeof UserState;
 export const UserState = {
   ACTIVE: 'ACTIVE',
