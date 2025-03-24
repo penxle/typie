@@ -56,7 +56,6 @@ builder.mutationFields((t) => ({
         return {
           user: sso.userId,
           accessToken: await createSessionAndReturnAccessToken(sso.userId),
-          isNewUser: false,
         };
       }
 
@@ -90,7 +89,6 @@ builder.mutationFields((t) => ({
       return {
         user: user.id,
         accessToken: await createSessionAndReturnAccessToken(user.id),
-        isNewUser: true,
       };
     },
   }),

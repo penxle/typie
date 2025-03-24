@@ -1,3 +1,8 @@
+input AuthorizeSingleSignOnInput {
+  params: JSON!
+  provider: SingleSignOnProvider!
+}
+
 scalar Binary
 
 interface Blob {
@@ -36,6 +41,11 @@ input FinalizePreorderPaymentInput {
   wish: String!
 }
 
+input GenerateSingleSignOnAuthorizationUrlInput {
+  email: String
+  provider: SingleSignOnProvider!
+}
+
 type Image implements Blob {
   id: ID!
   placeholder: String!
@@ -66,10 +76,13 @@ enum JobState {
 }
 
 type Mutation {
+  authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): UserWithAccessToken!
   createPost(input: CreatePostInput!): Boolean!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
+  generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
+  logout: Boolean!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
@@ -118,6 +131,10 @@ type Query {
   me: User
 }
 
+enum SingleSignOnProvider {
+  GOOGLE
+}
+
 type Subscription {
   postContentSyncStream(postId: ID!): PostContentSyncStreamPayload!
 }
@@ -146,4 +163,9 @@ type User {
 enum UserState {
   ACTIVE
   DEACTIVATED
+}
+
+type UserWithAccessToken {
+  accessToken: String!
+  user: User!
 }
