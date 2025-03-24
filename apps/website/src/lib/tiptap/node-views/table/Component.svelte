@@ -83,133 +83,94 @@
   }
 </script>
 
-<NodeView
-  style={css.raw(
-    {
-      position: 'relative',
-      width: editor.current.isEditable ? 'fit' : 'full',
-    },
-    // 바깥으로 튀어나온 행/열 핸들과 행/열 추가 버튼이 보일 수 있도록 함
-    editor.current.isEditable && {
-      '* + &': {
-        marginTop: '[calc(-10px + var(--prosemirror-block-gap))]',
-      },
-      marginTop: '-10px',
-      paddingTop: '10px',
-      '&:last-child': {
-        marginBottom: '-23px',
-      },
-      marginBottom: '[calc(var(--prosemirror-block-gap) * -1)]',
-      paddingBottom: '23px',
-
-      overflowX: 'auto',
-
-      '.block-selection-decoration &': {
-        marginTop: '0 !important',
-        paddingTop: '0',
-        marginBottom: '0 !important',
-        paddingBottom: '0',
-      },
-    },
-  )}
->
-  <div
-    class={css(
-      {
+<NodeView style={css.raw({ position: 'relative' })}>
+  <table
+    onpointerleave={() => {
+      hoveredRowIndex = null;
+      hoveredColumnIndex = null;
+    }}
+    onpointerover={handlePointerover}
+    {...mergeAttributes(HTMLAttributes, {
+      class: css({
         position: 'relative',
-        width: editor.current.isEditable ? 'fit' : 'full',
-        overflowX: editor.current.isEditable ? 'unset' : 'auto',
-      },
-      editor.current.isEditable && { paddingY: '24px' },
-    )}
+        borderRadius: '4px',
+        borderStyle: 'hidden',
+        outline: '1px solid',
+        outlineOffset: '-1px',
+        outlineColor: 'gray.300',
+      }),
+      style: tableWidth ? `width: ${tableWidth}` : `min-width: ${tableMinWidth}`,
+    })}
   >
-    <table
-      onpointerleave={() => {
-        hoveredRowIndex = null;
-        hoveredColumnIndex = null;
-      }}
-      onpointerover={handlePointerover}
-      {...mergeAttributes(HTMLAttributes, {
-        class: css({
-          position: 'relative',
-          borderRadius: '4px',
-          borderStyle: 'hidden',
-          outline: '1px solid',
-          outlineOffset: '-1px',
-          outlineColor: 'gray.300',
-        }),
-        style: tableWidth ? `width: ${tableWidth}` : `min-width: ${tableMinWidth}`,
-      })}
-    >
-      <colgroup>
-        <!-- @ts-ignore -->
-        {#each cols as col, i (col)}
-          <col bind:this={_colElems[i]} {...col[1]} />
+    <colgroup>
+      {#each cols as col, i (col)}
+        <col bind:this={_colElems[i]} {...col[1]} />
+      {/each}
+    </colgroup>
+    {#if editor.current.isEditable}
+      <!-- svelte-ignore node_invalid_placement_ssr -->
+      <div
+        class={css({
+          position: 'absolute',
+          inset: '0',
+        })}
+        contenteditable={false}
+        role="rowgroup"
+      >
+        {#each rowElems as row, i (row)}
+          <div
+            style:height={`${row.clientHeight}px`}
+            style:top={`${row.offsetTop}px`}
+            class={flex({
+              position: 'absolute',
+              left: '0',
+              width: '18px',
+              height: '24px',
+              translateX: '-1/2',
+              translate: 'auto',
+              zIndex: '10',
+              justifyContent: 'center',
+              alignItems: 'center',
+              pointerEvents: hoveredRowIndex === i ? 'auto' : 'none',
+            })}
+            role="row"
+          >
+            <!-- <RowHandle {editor} {hasSpan} {hoveredRowIndex} {i} tableNode={node} tablePos={getPos()} /> -->
+          </div>
         {/each}
-      </colgroup>
-      {#if editor.current.isEditable}
-        <!-- svelte-ignore node_invalid_placement_ssr -->
-        <div
-          class={css({
-            position: 'absolute',
-            inset: '0',
-          })}
-          contenteditable={false}
-          role="rowgroup"
-        >
-          {#each rowElems as row, i (row)}
-            <div
-              style:height={`${row.clientHeight}px`}
-              style:top={`${row.offsetTop}px`}
-              class={flex({
-                position: 'absolute',
-                left: '0',
-                width: '18px',
-                height: '24px',
-                translateX: '-1/2',
-                translate: 'auto',
-                zIndex: '10',
-                justifyContent: 'center',
-                alignItems: 'center',
-                pointerEvents: hoveredRowIndex === i ? 'auto' : 'none',
-              })}
-              role="row"
-            >
-              <!-- <RowHandle {editor} {hasSpan} {hoveredRowIndex} {i} tableNode={node} tablePos={getPos()} /> -->
-            </div>
-          {/each}
-        </div>
-        {#if colgroupRendered}
-          {#each colElems as col, i (i)}
-            <!-- svelte-ignore node_invalid_placement_ssr -->
-            <div
-              style:left={`${col.offsetLeft}px`}
-              style:width={`${col.clientWidth}px`}
-              class={flex({
-                position: 'absolute',
-                top: '0',
-                width: '24px',
-                height: '18px',
-                translateY: '-1/2',
-                translate: 'auto',
-                zIndex: '10',
-                justifyContent: 'center',
-                alignItems: 'center',
-                pointerEvents: hoveredColumnIndex === i ? 'auto' : 'none',
-                '.block-selection-decoration &': {
-                  display: 'none',
-                },
-              })}
-            >
-              <!-- <ColHandle {editor} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} tablePos={getPos()} /> -->
-            </div>
-          {/each}
-        {/if}
+      </div>
+      {#if colgroupRendered}
+        {#each colElems as col, i (i)}
+          <!-- svelte-ignore node_invalid_placement_ssr -->
+          <div
+            style:left={`${col.offsetLeft}px`}
+            style:width={`${col.clientWidth}px`}
+            class={flex({
+              position: 'absolute',
+              top: '0',
+              width: '24px',
+              height: '18px',
+              translateY: '-1/2',
+              translate: 'auto',
+              zIndex: '10',
+              justifyContent: 'center',
+              alignItems: 'center',
+              pointerEvents: hoveredColumnIndex === i ? 'auto' : 'none',
+              '.block-selection-decoration &': {
+                display: 'none',
+              },
+            })}
+          >
+            <!-- <ColHandle {editor} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} tablePos={getPos()} /> -->
+          </div>
+        {/each}
       {/if}
-      <NodeViewContentEditable as="tbody" />
-      {#if editor.current.isEditable}
-        <AddRowColButton {editor} {isLastColumnHovered} {isLastRowHovered} tableNode={node} tablePos={getPos()} />
-      {/if}
-    </table>
-  </div>
+    {/if}
+
+    <NodeViewContentEditable as="tbody" />
+
+    {#if editor.current.isEditable}
+      <AddRowColButton {editor} {isLastColumnHovered} {isLastRowHovered} tableNode={node} tablePos={getPos()} />
+    {/if}
+  </table>
 </NodeView>
