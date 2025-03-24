@@ -150,3 +150,38 @@ export const Users = pgTable(
       .where(eq(t.state, sql`'ACTIVE'`)),
   ],
 );
+
+export const UserSessions = pgTable(
+  'user_sessions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('USES', { length: 'long' })),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.userId)],
+);
+
+export const UserSingleSignOns = pgTable(
+  'user_single_sign_ons',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('USSO', { length: 'short' })),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id),
+    provider: E._SingleSignOnProvider('provider').notNull(),
+    principal: text('principal').notNull(),
+    email: text('email').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.userId, t.provider)],
+);
