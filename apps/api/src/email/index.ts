@@ -1,6 +1,4 @@
-import { SendEmailCommand } from '@aws-sdk/client-ses';
-import { render } from '@react-email/components';
-import * as aws from '@/external/aws';
+import { resend } from '@/external/resend';
 import type * as React from 'react';
 
 type SendEmailParams = {
@@ -10,22 +8,10 @@ type SendEmailParams = {
 };
 
 export const sendEmail = async ({ subject, recipient, body }: SendEmailParams) => {
-  await aws.ses.send(
-    new SendEmailCommand({
-      Source: '글리터 <hello@glitter.im>',
-      Destination: {
-        ToAddresses: [recipient],
-      },
-      Message: {
-        Subject: {
-          Data: subject,
-        },
-        Body: {
-          Html: {
-            Data: await render(body),
-          },
-        },
-      },
-    }),
-  );
+  await resend.emails.send({
+    from: '글리터 <hello@glitter.im>',
+    to: [recipient],
+    subject,
+    react: body,
+  });
 };
