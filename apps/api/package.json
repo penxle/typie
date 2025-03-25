@@ -42,6 +42,7 @@
     "postgres": "^3.4.5",
     "query-string": "^9.1.1",
     "react-dom": "^19.0.0",
+    "resend": "^4.1.2",
     "rfc4648": "^1.5.4",
     "sharp": "^0.33.5",
     "thumbhash": "^0.1.1",
