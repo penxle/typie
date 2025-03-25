@@ -32,6 +32,7 @@ pulumi
 remeda
 resvg
 sasl
+setex
 sindresorhus
 sslv
 stakater
