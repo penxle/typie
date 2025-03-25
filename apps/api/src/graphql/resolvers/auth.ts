@@ -139,6 +139,8 @@ builder.mutationFields((t) => ({
         return user;
       });
 
+      await redis.del(`auth:email:${input.code}`);
+
       return {
         user: user.id,
         accessToken: await createSessionAndReturnAccessToken(user.id),
