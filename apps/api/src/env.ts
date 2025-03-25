@@ -11,7 +11,6 @@ const schema = z.object({
   LISTEN_PORT: z.coerce.number().optional(),
   NAVER_CLIENT_ID: z.string(),
   NAVER_CLIENT_SECRET: z.string(),
-  PORTONE_API_KEY: z.string(),
   PORTONE_API_SECRET: z.string(),
   PUBLIC_PULUMI_STACK: z.string().optional(),
   REDIS_URL: z.string(),
