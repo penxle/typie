@@ -45,7 +45,6 @@ export const authorizeUser = async (code: string): Promise<ExternalUser> => {
         nickname: string;
         profile_image_url: string;
         is_default_image: boolean;
-        is_default_nickname: boolean;
       };
     };
   };
@@ -65,7 +64,7 @@ export const authorizeUser = async (code: string): Promise<ExternalUser> => {
     provider: SingleSignOnProvider.KAKAO,
     principal: me.id.toString(),
     email: me.kakao_account.email.toLowerCase(),
-    name: me.kakao_account.profile.is_default_nickname ? null : me.kakao_account.profile.nickname,
+    name: me.kakao_account.profile.nickname,
     avatarUrl: me.kakao_account.profile.is_default_image ? null : me.kakao_account.profile.profile_image_url,
   };
 };

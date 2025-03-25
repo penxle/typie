@@ -4,6 +4,6 @@ export type ExternalUser = {
   provider: SingleSignOnProvider;
   principal: string;
   email: string;
-  name: string | null;
+  name: string;
   avatarUrl: string | null;
 };

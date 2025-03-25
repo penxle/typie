@@ -5,6 +5,7 @@ import { bigint, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/
 import * as E from './enums';
 import { createDbId } from './id';
 import { bytea, datetime, jsonb } from './types';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const Embeds = pgTable('embeds', {
   id: text('id')
@@ -25,7 +26,7 @@ export const Files = pgTable('files', {
   id: text('id')
     .primaryKey()
     .$defaultFn(() => createDbId('FILE')),
-  // userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
   format: text('format').notNull(),
   size: integer('size').notNull(),
@@ -39,7 +40,7 @@ export const Images = pgTable('images', {
   id: text('id')
     .primaryKey()
     .$defaultFn(() => createDbId('IMG')),
-  // userId: text('user_id').references((): AnyPgColumn => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  userId: text('user_id').references((): AnyPgColumn => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
   format: text('format').notNull(),
   size: integer('size').notNull(),
@@ -138,6 +139,9 @@ export const Users = pgTable(
       .$defaultFn(() => createDbId('U', { length: 'short' })),
     email: text('email').notNull(),
     name: text('name').notNull(),
+    avatarId: text('avatar_id')
+      .notNull()
+      .references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     state: E._UserState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()

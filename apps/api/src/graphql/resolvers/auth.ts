@@ -1,13 +1,15 @@
 import { and, eq } from 'drizzle-orm';
+import ky from 'ky';
 import { match } from 'ts-pattern';
 import { db, first, firstOrThrow } from '@/db';
-import { Users, UserSessions, UserSingleSignOns } from '@/db/schemas/tables';
+import { Images, Users, UserSessions, UserSingleSignOns } from '@/db/schemas/tables';
 import { SingleSignOnProvider, UserState } from '@/enums';
 import { GlitterError } from '@/errors';
 import { google, kakao, naver } from '@/external/sso';
-import { createAccessToken } from '@/utils/access-token';
+import { createAccessToken, generateRandomAvatar, persistBlobAsImage } from '@/utils';
 import { builder } from '../builder';
 import { User } from '../objects';
+import type { Transaction } from '@/db';
 
 /**
  * * Types
@@ -74,11 +76,20 @@ builder.mutationFields((t) => ({
       }
 
       const user = await db.transaction(async (tx) => {
-        const user = await tx
-          .insert(Users)
-          .values({ email: externalUser.email, name: externalUser.name ?? '이름' })
-          .returning({ id: Users.id })
-          .then(firstOrThrow);
+        let avatar;
+        if (externalUser.avatarUrl) {
+          const blob = await ky(externalUser.avatarUrl).blob();
+          avatar = await persistBlobAsImage({ file: new File([blob], externalUser.avatarUrl) });
+        } else {
+          const file = await generateRandomAvatar();
+          avatar = await persistBlobAsImage({ file });
+        }
+
+        const user = await createUser(tx, {
+          email: externalUser.email,
+          name: externalUser.name,
+          avatarId: avatar.id,
+        });
 
         await tx.insert(UserSingleSignOns).values({
           userId: user.id,
@@ -115,4 +126,13 @@ const createSessionAndReturnAccessToken = async (userId: string) => {
   const session = await db.insert(UserSessions).values({ userId }).returning({ id: UserSessions.id }).then(firstOrThrow);
 
   return await createAccessToken(session.id);
+};
+
+type CreateUserParams = { email: string; name: string; avatarId: string };
+const createUser = async (tx: Transaction, { email, name, avatarId }: CreateUserParams) => {
+  const user = await tx.insert(Users).values({ email, name, avatarId }).returning({ id: Users.id }).then(firstOrThrow);
+
+  await tx.update(Images).set({ userId: user.id }).where(eq(Images.id, avatarId));
+
+  return user;
 };
