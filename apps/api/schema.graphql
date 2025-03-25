@@ -1,3 +1,7 @@
+input AuthorizeSignUpEmailInput {
+  code: String!
+}
+
 input AuthorizeSingleSignOnInput {
   params: JSON!
   provider: SingleSignOnProvider!
@@ -75,16 +79,24 @@ enum JobState {
   RUNNING
 }
 
+input LoginWithEmailInput {
+  email: String!
+  password: String!
+}
+
 type Mutation {
+  authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): UserWithAccessToken!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): UserWithAccessToken!
   createPost(input: CreatePostInput!): Boolean!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
+  loginWithEmail(input: LoginWithEmailInput!): UserWithAccessToken!
   logout: Boolean!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
 }
@@ -129,6 +141,12 @@ type PreorderUser {
 type Query {
   image(id: ID!): Image!
   me: User
+}
+
+input SendSignUpEmailInput {
+  email: String!
+  name: String!
+  password: String!
 }
 
 enum SingleSignOnProvider {

@@ -138,6 +138,7 @@ export const Users = pgTable(
       .primaryKey()
       .$defaultFn(() => createDbId('U', { length: 'short' })),
     email: text('email').notNull(),
+    password: text('password'),
     name: text('name').notNull(),
     avatarId: text('avatar_id')
       .notNull()

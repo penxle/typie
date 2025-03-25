@@ -1,9 +1,14 @@
 import { and, eq } from 'drizzle-orm';
 import ky from 'ky';
+import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
+import { redis } from '@/cache';
 import { db, first, firstOrThrow } from '@/db';
 import { Images, Users, UserSessions, UserSingleSignOns } from '@/db/schemas/tables';
+import { sendEmail } from '@/email';
+import { SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
+import { env } from '@/env';
 import { GlitterError } from '@/errors';
 import { google, kakao, naver } from '@/external/sso';
 import { createAccessToken, generateRandomAvatar, persistBlobAsImage } from '@/utils';
@@ -27,6 +32,120 @@ const UserWithAccessToken = builder.simpleObject('UserWithAccessToken', {
  */
 
 builder.mutationFields((t) => ({
+  loginWithEmail: t.fieldWithInput({
+    type: UserWithAccessToken,
+    input: { email: t.input.string(), password: t.input.string() },
+    resolve: async (_, { input }) => {
+      const email = input.email.toLowerCase();
+
+      const user = await db
+        .select({ id: Users.id, password: Users.password })
+        .from(Users)
+        .where(and(eq(Users.email, email), eq(Users.state, UserState.ACTIVE)))
+        .then(first);
+
+      if (!user) {
+        throw new GlitterError({ code: 'invalid_credentials' });
+      }
+
+      if (!user.password) {
+        throw new GlitterError({ code: 'password_not_set' });
+      }
+
+      if (!(await Bun.password.verify(input.password, user.password))) {
+        throw new GlitterError({ code: 'invalid_credentials' });
+      }
+
+      return {
+        user: user.id,
+        accessToken: await createSessionAndReturnAccessToken(user.id),
+      };
+    },
+  }),
+
+  sendSignUpEmail: t.fieldWithInput({
+    type: 'Boolean',
+    input: { email: t.input.string(), password: t.input.string(), name: t.input.string() },
+    resolve: async (_, { input }) => {
+      const email = input.email.toLowerCase();
+
+      const existingUser = await db
+        .select({ id: Users.id })
+        .from(Users)
+        .where(and(eq(Users.email, email), eq(Users.state, UserState.ACTIVE)))
+        .then(first);
+
+      if (existingUser) {
+        throw new GlitterError({ code: 'user_email_exists' });
+      }
+
+      const code = nanoid();
+
+      await redis.setex(
+        `auth:email:${code}`,
+        24 * 60 * 60,
+        JSON.stringify({
+          email,
+          password: await Bun.password.hash(input.password),
+          name: input.name,
+        }),
+      );
+
+      await sendEmail({
+        recipient: input.email,
+        subject: '[글리터] 이메일 주소를 인증해 주세요',
+        body: SignUpEmail({
+          verificationUrl: `${env.WEBSITE_URL}/auth/email?code=${code}`,
+        }),
+      });
+
+      return true;
+    },
+  }),
+
+  authorizeSignUpEmail: t.fieldWithInput({
+    type: UserWithAccessToken,
+    input: { code: t.input.string() },
+    resolve: async (_, { input }) => {
+      const data = await redis.get(`auth:email:${input.code}`);
+      if (!data) {
+        throw new GlitterError({ code: 'invalid_code' });
+      }
+
+      const { email, password, name } = JSON.parse(data);
+
+      const existingUser = await db
+        .select({ id: Users.id })
+        .from(Users)
+        .where(and(eq(Users.email, email), eq(Users.state, UserState.ACTIVE)))
+        .then(first);
+
+      if (existingUser) {
+        throw new GlitterError({ code: 'user_email_exists' });
+      }
+
+      const user = await db.transaction(async (tx) => {
+        const file = await generateRandomAvatar();
+        const avatar = await persistBlobAsImage({ file });
+
+        const user = await createUser(tx, {
+          email,
+          name,
+          avatarId: avatar.id,
+        });
+
+        await tx.update(Users).set({ password }).where(eq(Users.id, user.id));
+
+        return user;
+      });
+
+      return {
+        user: user.id,
+        accessToken: await createSessionAndReturnAccessToken(user.id),
+      };
+    },
+  }),
+
   generateSingleSignOnAuthorizationUrl: t.fieldWithInput({
     type: 'String',
     input: {
