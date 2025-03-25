@@ -4,7 +4,7 @@ import { db, first, firstOrThrow } from '@/db';
 import { Users, UserSessions, UserSingleSignOns } from '@/db/schemas/tables';
 import { SingleSignOnProvider, UserState } from '@/enums';
 import { GlitterError } from '@/errors';
-import * as google from '@/external/google';
+import { google, kakao, naver } from '@/external/sso';
 import { createAccessToken } from '@/utils/access-token';
 import { builder } from '../builder';
 import { User } from '../objects';
@@ -34,6 +34,8 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }) => {
       return match(input.provider)
         .with(SingleSignOnProvider.GOOGLE, () => google.generateAuthorizationUrl(input.email ?? undefined))
+        .with(SingleSignOnProvider.NAVER, () => naver.generateAuthorizationUrl())
+        .with(SingleSignOnProvider.KAKAO, () => kakao.generateAuthorizationUrl())
         .exhaustive();
     },
   }),
@@ -44,6 +46,8 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }) => {
       const externalUser = await match(input.provider)
         .with(SingleSignOnProvider.GOOGLE, () => google.authorizeUser(input.params.code))
+        .with(SingleSignOnProvider.NAVER, () => naver.authorizeUser(input.params.code))
+        .with(SingleSignOnProvider.KAKAO, () => kakao.authorizeUser(input.params.code))
         .exhaustive();
 
       const sso = await db
@@ -72,7 +76,7 @@ builder.mutationFields((t) => ({
       const user = await db.transaction(async (tx) => {
         const user = await tx
           .insert(Users)
-          .values({ email: externalUser.email, name: externalUser.name })
+          .values({ email: externalUser.email, name: externalUser.name ?? '이름' })
           .returning({ id: Users.id })
           .then(firstOrThrow);
 

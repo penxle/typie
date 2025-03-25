@@ -133,6 +133,8 @@ type Query {
 
 enum SingleSignOnProvider {
   GOOGLE
+  KAKAO
+  NAVER
 }
 
 type Subscription {

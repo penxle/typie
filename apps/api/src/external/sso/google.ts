@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
 import { SingleSignOnProvider } from '@/enums';
 import { env } from '@/env';
+import type { ExternalUser } from './types';
 
 const createOAuthClient = () => {
   return new OAuth2Client({
@@ -18,7 +19,7 @@ export const generateAuthorizationUrl = (email?: string) => {
   });
 };
 
-export const authorizeUser = async (code: string) => {
+export const authorizeUser = async (code: string): Promise<ExternalUser> => {
   const client = createOAuthClient();
 
   const { tokens } = await client.getToken({ code });

@@ -24,6 +24,8 @@ export const PreorderPaymentState = {
 export type SingleSignOnProvider = keyof typeof SingleSignOnProvider;
 export const SingleSignOnProvider = {
   GOOGLE: 'GOOGLE',
+  KAKAO: 'KAKAO',
+  NAVER: 'NAVER',
 } as const;
 
 export type UserState = keyof typeof UserState;
