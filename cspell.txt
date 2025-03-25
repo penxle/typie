@@ -30,6 +30,7 @@ on+
 penxle
 pulumi
 remeda
+resvg
 sasl
 sindresorhus
 sslv
