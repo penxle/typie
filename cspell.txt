@@ -20,6 +20,7 @@ ilike
 indexeddb
 insync
 ipaddr
+kakao
 karpenter
 milli
 natgw
