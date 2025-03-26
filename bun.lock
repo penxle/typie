@@ -87,6 +87,20 @@
         "typescript": "^5.8.2",
       },
     },
+    "apps/literoom": {
+      "name": "@glitter/literoom",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@aws-sdk/client-s3": "^3.772.0",
+        "@glitter/tsconfig": "workspace:*",
+        "@pulumi/aws": "^6.73.0",
+        "@pulumi/pulumi": "^3.157.0",
+        "sharp": "^0.33.5",
+        "tsup": "^8.4.0",
+        "tsx": "^4.19.3",
+        "typescript": "^5.8.2",
+      },
+    },
     "apps/website": {
       "name": "@glitter/website",
       "version": "0.0.1",
@@ -604,6 +618,8 @@
     "@glitter/lib": ["@glitter/lib@workspace:packages/lib"],
 
     "@glitter/lintconfig": ["@glitter/lintconfig@workspace:packages/lintconfig"],
+
+    "@glitter/literoom": ["@glitter/literoom@workspace:apps/literoom"],
 
     "@glitter/pulumi": ["@glitter/pulumi@workspace:packages/pulumi"],
 
