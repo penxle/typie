@@ -5,6 +5,7 @@ altinity
 amazonses
 asof
 buildx
+bullmq
 bytea
 crds
 dmarc
@@ -24,6 +25,7 @@ kakao
 karpenter
 milli
 natgw
+noeviction
 noreferrer
 oidcs
 on+

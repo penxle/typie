@@ -8,3 +8,15 @@ export type JobSpec<N extends string = string, P = unknown> = {
 export const defineJob = <N extends string, P>(name: N, fn: JobFn<P>): JobSpec<N, P> => {
   return { name, fn };
 };
+
+export type CronFn = () => Promise<void>;
+
+export type CronSpec = {
+  name: string;
+  pattern: string;
+  fn: CronFn;
+};
+
+export const defineCron = (name: string, pattern: string, fn: CronFn): CronSpec => {
+  return { name, pattern, fn };
+};

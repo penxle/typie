@@ -1,6 +1,6 @@
 import '@/instrument';
 import '@glitter/lib/dayjs';
-import '@/jobs';
+import '@/mq';
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';

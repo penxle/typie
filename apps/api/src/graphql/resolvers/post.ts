@@ -5,7 +5,7 @@ import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { db, firstOrThrow, PostContentStates, PostContentUpdates } from '@/db';
 import { PostContentSyncKind } from '@/enums';
-import { enqueueJob } from '@/jobs';
+import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import { makeYDoc } from '@/utils';
 import { builder } from '../builder';
@@ -63,9 +63,9 @@ builder.mutationFields((t) => ({
             postId: input.postId,
             update: input.data,
           });
-
-          await enqueueJob(tx, 'post:content:state-update', input.postId);
         });
+
+        await enqueueJob('post:content:state-update', input.postId);
 
         return [];
       } else if (input.kind === PostContentSyncKind.VECTOR) {
