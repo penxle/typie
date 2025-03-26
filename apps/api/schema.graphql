@@ -96,6 +96,8 @@ type Mutation {
   logout: Boolean!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  resetPassword(input: ResetPasswordInput!): Boolean!
+  sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
@@ -141,6 +143,15 @@ type PreorderUser {
 type Query {
   image(id: ID!): Image!
   me: User
+}
+
+input ResetPasswordInput {
+  code: String!
+  password: String!
+}
+
+input SendPasswordResetEmailInput {
+  email: String!
 }
 
 input SendSignUpEmailInput {

@@ -6,7 +6,7 @@ import { redis } from '@/cache';
 import { db, first, firstOrThrow } from '@/db';
 import { Images, Users, UserSessions, UserSingleSignOns } from '@/db/schemas/tables';
 import { sendEmail } from '@/email';
-import { SignUpEmail } from '@/email/templates';
+import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
 import { env } from '@/env';
 import { GlitterError } from '@/errors';
@@ -226,6 +226,66 @@ builder.mutationFields((t) => ({
         user: user.id,
         accessToken: await createSessionAndReturnAccessToken(user.id),
       };
+    },
+  }),
+
+  sendPasswordResetEmail: t.fieldWithInput({
+    type: 'Boolean',
+    input: { email: t.input.string() },
+    resolve: async (_, { input }) => {
+      const email = input.email.toLowerCase();
+
+      const existingUser = await db
+        .select({ id: Users.id })
+        .from(Users)
+        .where(and(eq(Users.email, email), eq(Users.state, UserState.ACTIVE)))
+        .then(first);
+
+      if (!existingUser) {
+        throw new GlitterError({ code: 'user_email_not_found' });
+      }
+
+      const code = nanoid();
+
+      await redis.setex(
+        `auth:reset-password:${code}`,
+        60 * 60,
+        JSON.stringify({
+          email,
+        }),
+      );
+
+      await sendEmail({
+        recipient: input.email,
+        subject: '[글리터] 비밀번호를 재설정해 주세요',
+        body: PasswordResetEmail({
+          resetUrl: `${env.WEBSITE_URL}/auth/reset-password?code=${code}`,
+        }),
+      });
+
+      return true;
+    },
+  }),
+
+  resetPassword: t.fieldWithInput({
+    type: 'Boolean',
+    input: { code: t.input.string(), password: t.input.string() },
+    resolve: async (_, { input }) => {
+      const data = await redis.get(`auth:reset-password:${input.code}`);
+      if (!data) {
+        throw new GlitterError({ code: 'invalid_code' });
+      }
+
+      const { email } = JSON.parse(data);
+
+      await db
+        .update(Users)
+        .set({ password: await Bun.password.hash(input.password) })
+        .where(eq(Users.email, email));
+
+      await redis.del(`auth:reset-password:${input.code}`);
+
+      return true;
     },
   }),
 

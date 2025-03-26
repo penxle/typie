@@ -92,6 +92,10 @@
       >
         {form.state.isLoading ? '처리 중...' : '로그인'}
       </button>
+
+      <div class={css({ textAlign: 'center', marginTop: '8px' })}>
+        <a class={css({ color: 'gray.600', textDecoration: 'underline' })} href="/auth/forgot-password">비밀번호를 잊으셨나요?</a>
+      </div>
     </form>
 
     <div class={flex({ alignItems: 'center', gap: '8px' })}>
