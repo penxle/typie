@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, firstOrThrow, PostContentStates } from '@/db';
+import { db, firstOrThrow, PostContentSnapshots, PostContentStates } from '@/db';
 import { defineJob } from '../types';
 
 export const PostContentStateUpdateJob = defineJob('post:content:state-update', async (postId: string) => {
@@ -44,8 +44,11 @@ export const PostContentStateUpdateJob = defineJob('post:content:state-update', 
 
     await redis.srem(`post:content:updates:${postId}`, ...updates);
 
-    if (Y.equalSnapshots(prevSnapshot, snapshot)) {
-      return;
+    if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
+      await tx.insert(PostContentSnapshots).values({
+        postId,
+        snapshot: Y.encodeSnapshotV2(snapshot),
+      });
     }
   });
 });

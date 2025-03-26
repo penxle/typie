@@ -53,11 +53,41 @@ export const Images = pgTable('images', {
     .default(sql`now()`),
 });
 
+export const Posts = pgTable('posts', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('P', { length: 'short' })),
+  state: E._PostState('state').notNull().default('ACTIVE'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const PostContentSnapshots = pgTable(
+  'post_content_snapshots',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('PCSN')),
+    postId: text('post_id')
+      .notNull()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    snapshot: bytea('snapshot').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.postId, t.createdAt)],
+);
+
 export const PostContentStates = pgTable('post_content_states', {
   id: text('id')
     .primaryKey()
     .$defaultFn(() => createDbId('PCST')),
-  postId: text('post_id').notNull().unique(),
+  postId: text('post_id')
+    .notNull()
+    .unique()
+    .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
   createdAt: datetime('created_at')

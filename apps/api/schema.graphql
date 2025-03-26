@@ -13,10 +13,6 @@ interface Blob {
   id: ID!
 }
 
-input CreatePostInput {
-  postId: ID!
-}
-
 input CreatePreorderPaymentInput {
   email: String!
 }
@@ -87,7 +83,7 @@ input LoginWithEmailInput {
 type Mutation {
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): UserWithAccessToken!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): UserWithAccessToken!
-  createPost(input: CreatePostInput!): Boolean!
+  createPost: Post!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
@@ -112,6 +108,10 @@ input PersistBlobAsImageInput {
   path: String!
 }
 
+type Post {
+  id: ID!
+}
+
 enum PostContentSyncKind {
   AWARENESS
   HEARTBEAT
@@ -123,6 +123,11 @@ type PostContentSyncStreamPayload {
   data: Binary!
   kind: PostContentSyncKind!
   postId: ID!
+}
+
+enum PostState {
+  ACTIVE
+  DELETED
 }
 
 type PreorderPayment {

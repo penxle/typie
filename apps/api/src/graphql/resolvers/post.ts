@@ -4,37 +4,56 @@ import { Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, firstOrThrow, PostContentStates } from '@/db';
+import { db, firstOrThrow, PostContentSnapshots, PostContentStates, Posts } from '@/db';
 import { PostContentSyncKind } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import { makeYDoc } from '@/utils';
 import { builder } from '../builder';
+import { Post } from '../objects';
+
+/**
+ * * Types
+ */
+
+Post.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+  }),
+});
 
 /**
  * * Mutations
  */
 
 builder.mutationFields((t) => ({
-  createPost: t.fieldWithInput({
-    type: 'Boolean',
-    input: { postId: t.input.id() },
-    resolve: async (_, { input }) => {
+  createPost: t.field({
+    type: Post,
+    resolve: async () => {
       const doc = makeYDoc({
         title: null,
         subtitle: null,
         content: {},
       });
 
-      await db.transaction(async (tx) => {
+      const snapshot = Y.snapshot(doc);
+
+      return await db.transaction(async (tx) => {
+        const post = await tx.insert(Posts).values({}).returning().then(firstOrThrow);
+
         await tx.insert(PostContentStates).values({
-          postId: input.postId,
+          postId: post.id,
           update: Y.encodeStateAsUpdateV2(doc),
           vector: Y.encodeStateVector(doc),
         });
-      });
 
-      return true;
+        await tx.insert(PostContentSnapshots).values({
+          postId: post.id,
+          snapshot: Y.encodeSnapshotV2(snapshot),
+        });
+
+        return post;
+      });
     },
   }),
 
