@@ -193,7 +193,17 @@ builder.mutationFields((t) => ({
         .then(first);
 
       if (existingUser) {
-        throw new GlitterError({ code: 'user_email_exists' });
+        await db.insert(UserSingleSignOns).values({
+          userId: existingUser.id,
+          provider: externalUser.provider,
+          principal: externalUser.principal,
+          email: externalUser.email,
+        });
+
+        return {
+          user: existingUser.id,
+          accessToken: await createSessionAndReturnAccessToken(existingUser.id),
+        };
       }
 
       const user = await db.transaction(async (tx) => {
