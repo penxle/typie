@@ -1,9 +1,10 @@
 import dayjs from 'dayjs';
-import { and, eq, gt } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
-import { db, firstOrThrow, PostContentStates, PostContentUpdates } from '@/db';
+import { redis } from '@/cache';
+import { db, firstOrThrow, PostContentStates } from '@/db';
 import { PostContentSyncKind } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
@@ -53,17 +54,14 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }) => {
       if (input.kind === PostContentSyncKind.UPDATE) {
+        const data = base64.stringify(input.data);
+
         pubsub.publish('post:content:sync', input.postId, {
-          kind: input.kind,
-          data: base64.stringify(input.data),
+          kind: PostContentSyncKind.UPDATE,
+          data,
         });
 
-        await db.transaction(async (tx) => {
-          await tx.insert(PostContentUpdates).values({
-            postId: input.postId,
-            update: input.data,
-          });
-        });
+        await redis.sadd(`post:content:updates:${input.postId}`, data);
 
         await enqueueJob('post:content:state-update', input.postId);
 
@@ -76,12 +74,12 @@ builder.mutationFields((t) => ({
         const serverStateVector = state.vector;
 
         return [
-          { kind: 'UPDATE', data: clientMissingUpdate },
-          { kind: 'VECTOR', data: serverStateVector },
+          { kind: PostContentSyncKind.UPDATE, data: clientMissingUpdate },
+          { kind: PostContentSyncKind.VECTOR, data: serverStateVector },
         ] as const;
       } else if (input.kind === PostContentSyncKind.AWARENESS) {
         pubsub.publish('post:content:sync', input.postId, {
-          kind: input.kind,
+          kind: PostContentSyncKind.AWARENESS,
           data: base64.stringify(input.data),
         });
 
@@ -149,15 +147,12 @@ const encoder = new TextEncoder();
 
 export const getLatestPostContentState = async (postId: string) => {
   const state = await db
-    .select({ update: PostContentStates.update, vector: PostContentStates.vector, seq: PostContentStates.seq })
+    .select({ update: PostContentStates.update, vector: PostContentStates.vector })
     .from(PostContentStates)
     .where(eq(PostContentStates.postId, postId))
     .then(firstOrThrow);
 
-  const pendingUpdates = await db
-    .select({ update: PostContentUpdates.update })
-    .from(PostContentUpdates)
-    .where(and(eq(PostContentUpdates.postId, postId), gt(PostContentUpdates.seq, state.seq)));
+  const pendingUpdates = await redis.smembers(`post:content:updates:${postId}`);
 
   if (pendingUpdates.length === 0) {
     return {
@@ -166,7 +161,7 @@ export const getLatestPostContentState = async (postId: string) => {
     };
   }
 
-  const updatedUpdate = Y.mergeUpdatesV2([state.update, ...pendingUpdates.map(({ update }) => update)]);
+  const updatedUpdate = Y.mergeUpdatesV2([state.update, ...pendingUpdates.map((update) => base64.parse(update))]);
   const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
 
   return {
