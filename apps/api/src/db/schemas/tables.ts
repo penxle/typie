@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import { bigint, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import * as E from './enums';
 import { createDbId } from './id';
-import { bytea, datetime, jsonb } from './types';
+import { bytea, datetime } from './types';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const Embeds = pgTable('embeds', {
@@ -52,27 +52,6 @@ export const Images = pgTable('images', {
     .notNull()
     .default(sql`now()`),
 });
-
-export const Jobs = pgTable(
-  'jobs',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId('J', { length: 'long' })),
-    lane: text('lane').notNull(),
-    name: text('name').notNull(),
-    payload: jsonb('payload').notNull(),
-    retries: integer('retries').notNull().default(0),
-    state: E._JobState('state').notNull().default('PENDING'),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-    updatedAt: datetime('updated_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.lane, t.state, t.createdAt)],
-);
 
 export const PostContentStates = pgTable('post_content_states', {
   id: text('id')

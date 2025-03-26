@@ -8,12 +8,20 @@ const subnetGroup = new aws.elasticache.SubnetGroup('private', {
   subnetIds: [subnets.private.az1.id, subnets.private.az2.id],
 });
 
+const parameterGroup = new aws.elasticache.ParameterGroup('glitter', {
+  name: 'glitter-valkey8',
+  family: 'valkey8',
+
+  parameters: [{ name: 'maxmemory-policy', value: 'noeviction' }],
+});
+
 const cluster = new aws.elasticache.ReplicationGroup('glitter', {
   replicationGroupId: 'glitter',
   description: 'Valkey cluster',
 
   engine: 'valkey',
   engineVersion: '8.0',
+  parameterGroupName: parameterGroup.name,
 
   nodeType: 'cache.t4g.micro',
 

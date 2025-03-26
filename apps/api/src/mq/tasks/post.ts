@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { and, desc, eq, gt } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { db, firstOrThrow, PostContentStates, PostContentUpdates } from '@/db';
-import { defineJob } from './types';
+import { defineJob } from '../types';
 
 export const PostContentStateUpdateJob = defineJob('post:content:state-update', async (postId: string) => {
   await db.transaction(async (tx) => {
