@@ -33,9 +33,12 @@ penxle
 pulumi
 remeda
 resvg
+sadd
 sasl
 setex
 sindresorhus
+smembers
+srem
 sslv
 stakater
 tabler

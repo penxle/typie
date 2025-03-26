@@ -1,7 +1,7 @@
 // spell-checker:ignoreRegExp /createDbId\('[A-Z]{1,4}'/g
 
 import { eq, sql } from 'drizzle-orm';
-import { bigint, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import * as E from './enums';
 import { createDbId } from './id';
 import { bytea, datetime } from './types';
@@ -60,25 +60,10 @@ export const PostContentStates = pgTable('post_content_states', {
   postId: text('post_id').notNull().unique(),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
-  seq: bigint('seq', { mode: 'bigint' })
-    .notNull()
-    .default(sql`0`),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
   updatedAt: datetime('updated_at')
-    .notNull()
-    .default(sql`now()`),
-});
-
-export const PostContentUpdates = pgTable('post_content_updates', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId('PCUP')),
-  postId: text('post_id').notNull(),
-  update: bytea('update').notNull(),
-  seq: bigint('seq', { mode: 'bigint' }).notNull().generatedAlwaysAsIdentity(),
-  createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
 });
