@@ -40,6 +40,7 @@ const createObjectRef = <T extends TableConfig>(name: string, table: TableWithId
 export const Embed = createObjectRef('Embed', T.Embeds);
 export const File = createObjectRef('File', T.Files);
 export const Image = createObjectRef('Image', T.Images);
+export const Post = createObjectRef('Post', T.Posts);
 export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const User = createObjectRef('User', T.Users);

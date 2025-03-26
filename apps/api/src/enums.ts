@@ -6,6 +6,12 @@ export const JobState = {
   FAILED: 'FAILED',
 } as const;
 
+export type PostState = keyof typeof PostState;
+export const PostState = {
+  ACTIVE: 'ACTIVE',
+  DELETED: 'DELETED',
+} as const;
+
 export type PostContentSyncKind = keyof typeof PostContentSyncKind;
 export const PostContentSyncKind = {
   UPDATE: 'UPDATE',
