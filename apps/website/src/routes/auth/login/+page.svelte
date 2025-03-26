@@ -87,10 +87,10 @@
 
       <button
         class={css({ backgroundColor: '[#000000]', color: '[#FFFFFF]', padding: '12px', borderRadius: '4px', fontWeight: '[500]' })}
-        disabled={form.isLoading}
+        disabled={form.state.isLoading}
         type="submit"
       >
-        {form.isLoading ? '처리 중...' : '로그인'}
+        {form.state.isLoading ? '처리 중...' : '로그인'}
       </button>
     </form>
 
