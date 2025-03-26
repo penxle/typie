@@ -30,7 +30,8 @@ type CreateFormReturn<T, D extends Partial<T>> = {
   handleSubmit: (event: SubmitEvent) => Promise<void>;
   fields: FormFields<T, D>;
   errors: FormFieldErrors<T>;
-} & FormState;
+  state: FormState;
+};
 
 export const createForm = <T extends Record<string, unknown>, D extends Partial<T>>(
   options: CreateFormOptions<T, D>,
@@ -95,7 +96,7 @@ export const createForm = <T extends Record<string, unknown>, D extends Partial<
     fields,
     errors,
     handleSubmit,
-    ...formState,
+    state: formState,
   });
 
   return form;
