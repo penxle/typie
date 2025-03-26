@@ -41,7 +41,10 @@
     formData.append('Content-Type', file.type);
     formData.append('file', file);
 
-    await ky.post(url, { body: formData });
+    await ky.post(url, {
+      body: formData,
+      timeout: false,
+    });
 
     return path;
   };
