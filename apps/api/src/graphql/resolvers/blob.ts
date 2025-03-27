@@ -59,7 +59,7 @@ builder.queryFields((t) => ({
  */
 
 builder.mutationFields((t) => ({
-  issueBlobUploadUrl: t.fieldWithInput({
+  issueBlobUploadUrl: t.withAuth({ session: true }).fieldWithInput({
     type: t.builder.simpleObject('IssueBlobUploadUrlResult', {
       fields: (t) => ({
         path: t.string(),
@@ -68,7 +68,7 @@ builder.mutationFields((t) => ({
       }),
     }),
     input: { filename: t.input.string() },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
       const ext = path.extname(input.filename);
       const key = `${aws.createFragmentedS3ObjectKey()}${ext}`;
 
@@ -81,7 +81,7 @@ builder.mutationFields((t) => ({
         ],
         Fields: {
           'x-amz-meta-name': encodeURIComponent(input.filename),
-          // 'x-amz-meta-user-id': ctx.session.userId,
+          'x-amz-meta-user-id': ctx.session.userId,
         },
         Expires: 60 * 5, // 5 minutes
       });
@@ -94,10 +94,10 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  persistBlobAsFile: t.fieldWithInput({
+  persistBlobAsFile: t.withAuth({ session: true }).fieldWithInput({
     type: File,
     input: { path: t.input.string() },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
       const head = await aws.s3.send(
         new HeadObjectCommand({
           Bucket: 'glitter-uploads',
@@ -108,48 +108,44 @@ builder.mutationFields((t) => ({
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const fileName = head.Metadata!.name;
 
-      return await db.transaction(async (tx) => {
-        /* eslint-disable @typescript-eslint/no-non-null-assertion */
-        const file = await tx
-          .insert(Files)
-          .values({
-            // userId: ctx.session.userId,
-            name: decodeURIComponent(fileName),
-            size: head.ContentLength!,
-            format: head.ContentType!,
-            path: input.path,
-          })
-          .returning()
-          .then(firstOrThrow);
-        /* eslint-enable @typescript-eslint/no-non-null-assertion */
+      await aws.s3.send(
+        new CopyObjectCommand({
+          Bucket: 'glitter-usercontents',
+          Key: `files/${input.path}`,
+          CopySource: `glitter-uploads/${input.path}`,
+          MetadataDirective: 'REPLACE',
+          ContentType: head.ContentType,
+          ContentDisposition: `attachment; filename="${fileName}"`,
+          Metadata: {
+            name: fileName,
+            'user-id': ctx.session.userId,
+          },
+        }),
+      );
 
-        await aws.s3.send(
-          new CopyObjectCommand({
-            Bucket: 'glitter-usercontents',
-            Key: `files/${input.path}`,
-            CopySource: `glitter-uploads/${input.path}`,
-            MetadataDirective: 'REPLACE',
-            ContentType: head.ContentType,
-            ContentDisposition: `attachment; filename="${fileName}"`,
-            Metadata: {
-              name: fileName,
-              // 'user-id': ctx.session.userId,
-            },
-          }),
-        );
-
-        return file;
-      });
+      /* eslint-disable @typescript-eslint/no-non-null-assertion */
+      return await db
+        .insert(Files)
+        .values({
+          userId: ctx.session.userId,
+          name: decodeURIComponent(fileName),
+          size: head.ContentLength!,
+          format: head.ContentType!,
+          path: input.path,
+        })
+        .returning()
+        .then(firstOrThrow);
+      /* eslint-enable @typescript-eslint/no-non-null-assertion */
     },
   }),
 
-  persistBlobAsImage: t.fieldWithInput({
+  persistBlobAsImage: t.withAuth({ session: true }).fieldWithInput({
     type: Image,
     input: {
       path: t.input.string(),
       modification: t.input.field({ type: 'JSON', required: false }),
     },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
       const object = await aws.s3.send(
         new GetObjectCommand({
           Bucket: 'glitter-uploads',
@@ -199,40 +195,36 @@ builder.mutationFields((t) => ({
         .toBuffer({ resolveWithObject: true });
       const placeholder = rgbaToThumbHash(raw.info.width, raw.info.height, raw.data);
 
-      return await db.transaction(async (tx) => {
-        /* eslint-disable @typescript-eslint/no-non-null-assertion */
-        const image = await tx
-          .insert(Images)
-          .values({
-            // userId: ctx.session.userId,
-            name: decodeURIComponent(object.Metadata!.name),
-            size: data.length,
-            format: mimetype,
-            width: info.width!,
-            height: info.height!,
-            path: input.path,
-            placeholder: base64.stringify(placeholder),
-          })
-          .returning()
-          .then(firstOrThrow);
-        /* eslint-enable @typescript-eslint/no-non-null-assertion */
+      await aws.s3.send(
+        new PutObjectCommand({
+          Bucket: 'glitter-usercontents',
+          Key: `images/${input.path}`,
+          Body: data,
+          ContentType: mimetype,
+          Metadata: {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            name: object.Metadata!.name,
+            'user-id': ctx.session.userId,
+          },
+        }),
+      );
 
-        await aws.s3.send(
-          new PutObjectCommand({
-            Bucket: 'glitter-usercontents',
-            Key: `images/${input.path}`,
-            Body: data,
-            ContentType: mimetype,
-            Metadata: {
-              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-              name: object.Metadata!.name,
-              // 'user-id': ctx.session.userId,
-            },
-          }),
-        );
-
-        return image;
-      });
+      /* eslint-disable @typescript-eslint/no-non-null-assertion */
+      return await db
+        .insert(Images)
+        .values({
+          userId: ctx.session.userId,
+          name: decodeURIComponent(object.Metadata!.name),
+          size: data.length,
+          format: mimetype,
+          width: info.width!,
+          height: info.height!,
+          path: input.path,
+          placeholder: base64.stringify(placeholder),
+        })
+        .returning()
+        .then(firstOrThrow);
+      /* eslint-enable @typescript-eslint/no-non-null-assertion */
     },
   }),
 }));

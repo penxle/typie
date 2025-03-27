@@ -24,10 +24,10 @@ Embed.implement({
  */
 
 builder.mutationFields((t) => ({
-  unfurlEmbed: t.fieldWithInput({
+  unfurlEmbed: t.withAuth({ session: true }).fieldWithInput({
     type: Embed,
     input: { url: t.input.string({ validate: { url: true } }) },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
       const embed = await db.select().from(Embeds).where(eq(Embeds.url, input.url)).then(first);
       if (embed) {
         return embed;
@@ -38,6 +38,7 @@ builder.mutationFields((t) => ({
       return await db
         .insert(Embeds)
         .values({
+          userId: ctx.session.userId,
           type: meta.type,
           url: input.url,
           title: meta.title,
