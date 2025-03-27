@@ -7,6 +7,7 @@ import { redis } from '@/cache';
 import { db, firstOrThrow, PostContentSnapshots, PostContentStates, Posts } from '@/db';
 import { PostContentSyncKind } from '@/enums';
 import { enqueueJob } from '@/mq';
+import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { makeYDoc } from '@/utils';
 import { builder } from '../builder';
@@ -30,10 +31,14 @@ builder.mutationFields((t) => ({
   createPost: t.field({
     type: Post,
     resolve: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const node = schema.topNodeType.createAndFill()!;
+      const content = node.toJSON();
+
       const doc = makeYDoc({
         title: null,
         subtitle: null,
-        content: {},
+        content,
       });
 
       const snapshot = Y.snapshot(doc);
