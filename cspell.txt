@@ -36,6 +36,7 @@ resvg
 sadd
 sasl
 setex
+shiki
 sindresorhus
 smembers
 srem

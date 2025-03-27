@@ -1,3 +1,5 @@
+import CodeIcon from '~icons/lucide/code';
+import CodeXmlIcon from '~icons/lucide/code-xml';
 import FileUpIcon from '~icons/lucide/file-up';
 import ImageIcon from '~icons/lucide/image';
 import ListIcon from '~icons/lucide/list';
@@ -100,6 +102,28 @@ export const menuItems: MenuItem[] = [
     icon: FileUpIcon,
     command: ({ editor, range }) => {
       chain(editor, range).setEmbed().run();
+    },
+  },
+  {
+    id: 'code-block',
+    type: 'code_block',
+    group: 'code',
+    name: '코드 블록',
+    keywords: ['code'],
+    icon: CodeIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).setCodeBlock().run();
+    },
+  },
+  {
+    id: 'html-block',
+    type: 'html_block',
+    group: 'code',
+    name: 'HTML 블록',
+    keywords: ['html'],
+    icon: CodeXmlIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).setHtmlBlock().run();
     },
   },
 ];

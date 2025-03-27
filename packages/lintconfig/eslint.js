@@ -63,6 +63,7 @@ export default defineConfig([
       'unicorn/consistent-function-scoping': 'off',
       'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-array-for-each': 'off',
+      'unicorn/no-array-method-this-argument': 'off',
       'unicorn/no-empty-file': 'off',
       'unicorn/no-null': 'off',
       'unicorn/prefer-switch': 'off',
