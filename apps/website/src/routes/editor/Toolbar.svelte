@@ -1,5 +1,7 @@
 <script lang="ts">
   import BoldIcon from '~icons/lucide/bold';
+  import CodeIcon from '~icons/lucide/code';
+  import CodeXmlIcon from '~icons/lucide/code-xml';
   import FileUpIcon from '~icons/lucide/file-up';
   import GemIcon from '~icons/lucide/gem';
   import ImageIcon from '~icons/lucide/image';
@@ -138,6 +140,20 @@
       icon: FileUpIcon,
       active: editor.current.isActive('embed'),
       onclick: () => editor.current.chain().focus().setEmbed().run(),
+    },
+    {
+      id: 'code-block',
+      label: '코드 블록',
+      icon: CodeIcon,
+      active: editor.current.isActive('code_block'),
+      onclick: () => editor.current.chain().focus().setCodeBlock().run(),
+    },
+    {
+      id: 'html-block',
+      label: 'HTML 블록',
+      icon: CodeXmlIcon,
+      active: editor.current.isActive('html_block'),
+      onclick: () => editor.current.chain().focus().setHtmlBlock().run(),
     },
   ]);
 </script>
