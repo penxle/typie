@@ -21,6 +21,7 @@ import { Post } from '../objects';
 Post.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
+    order: t.expose('order', { type: 'Binary' }),
   }),
 });
 
