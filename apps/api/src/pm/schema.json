@@ -1,0 +1,89 @@
+{
+  "nodes": {
+    "paragraph": {
+      "content": "inline*",
+      "group": "block",
+      "attrs": { "textAlign": { "default": "left" }, "lineHeight": { "default": 1.6 }, "letterSpacing": { "default": 0 } },
+      "parseDOM": [{ "tag": "p" }]
+    },
+    "doc": { "content": "body" },
+    "body": {
+      "content": "block+",
+      "attrs": { "paragraphIndent": { "default": 1 }, "maxWidth": { "default": 1000 }, "blockGap": { "default": 1 } }
+    },
+    "text": { "group": "inline", "inline": true },
+    "bullet_list": { "content": "list_item+", "group": "block list", "parseDOM": [{ "tag": "ul" }] },
+    "hard_break": { "group": "inline", "inline": true, "selectable": false, "linebreakReplacement": true, "parseDOM": [{ "tag": "br" }] },
+    "list_item": { "content": "paragraph{1,2} list*", "defining": true, "parseDOM": [{ "tag": "li" }] },
+    "ordered_list": { "content": "list_item+", "group": "block list", "parseDOM": [{ "tag": "ol" }] },
+    "blockquote": {
+      "content": "paragraph+",
+      "group": "block",
+      "defining": true,
+      "attrs": { "type": { "default": "blockquote_1" } },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=blockquote]" }]
+    },
+    "embed": {
+      "group": "block",
+      "draggable": true,
+      "attrs": {
+        "id": { "default": null },
+        "url": { "default": null },
+        "title": { "default": null },
+        "description": { "default": null },
+        "thumbnailUrl": { "default": null },
+        "html": { "default": null }
+      },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=embed]" }]
+    },
+    "file": {
+      "group": "block",
+      "attrs": { "id": { "default": null }, "name": { "default": null }, "size": { "default": null }, "url": { "default": null } },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=file]" }]
+    },
+    "horizontal_rule": {
+      "group": "block",
+      "attrs": { "type": { "default": "horizontal_rule_1" } },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=horizontal_rule]" }]
+    },
+    "image": {
+      "group": "block",
+      "draggable": true,
+      "attrs": {
+        "id": { "default": null },
+        "url": { "default": null },
+        "ratio": { "default": null },
+        "placeholder": { "default": null },
+        "proportion": { "default": 1 }
+      },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=image]" }]
+    },
+    "table": {
+      "tableRole": "table",
+      "content": "table_row+",
+      "group": "block",
+      "isolating": true,
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=table]" }, { "tag": "table" }]
+    },
+    "table_cell": {
+      "tableRole": "cell",
+      "content": "block+",
+      "isolating": true,
+      "attrs": { "colspan": { "default": 1 }, "rowspan": { "default": 1 }, "colwidth": { "default": null } },
+      "parseDOM": [{ "tag": "td" }]
+    },
+    "table_row": { "tableRole": "row", "content": "table_cell+", "parseDOM": [{ "tag": "tr" }] }
+  },
+  "marks": {
+    "font_color": { "attrs": { "value": { "default": null } }, "parseDOM": [{ "tag": "span" }] },
+    "font_family": { "attrs": { "value": { "default": null } }, "parseDOM": [{ "tag": "span" }] },
+    "font_size": { "attrs": { "value": { "default": null } }, "parseDOM": [{ "tag": "span" }] },
+    "ruby": { "inclusive": false, "attrs": { "text": { "default": null } }, "parseDOM": [{ "tag": "span[data-ruby]" }] },
+    "bold": { "parseDOM": [{ "tag": "b" }] },
+    "italic": { "parseDOM": [{ "tag": "i" }] },
+    "link": { "inclusive": false, "attrs": { "href": { "default": null }, "auto": { "default": false } }, "parseDOM": [{ "tag": "a" }] },
+    "strike": { "parseDOM": [{ "tag": "s" }] },
+    "underline": { "parseDOM": [{ "tag": "u" }] }
+  },
+  "topNode": "doc"
+}

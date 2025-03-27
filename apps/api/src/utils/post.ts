@@ -1,4 +1,7 @@
+import { Node } from '@tiptap/pm/model';
+import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
+import { schema } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
 
 type MakeYDocParams = {
@@ -6,14 +9,15 @@ type MakeYDocParams = {
   subtitle?: string | null;
   content: JSONContent;
 };
-export const makeYDoc = ({ title, subtitle }: MakeYDocParams) => {
+export const makeYDoc = ({ title, subtitle, content }: MakeYDocParams) => {
+  const node = Node.fromJSON(schema, content);
   const doc = new Y.Doc();
 
   doc.getText('title').insert(0, title ?? '');
   doc.getText('subtitle').insert(0, subtitle ?? '');
 
-  doc.getXmlFragment('content');
-  // prosemirrorJSONToYXmlFragment(content, fragment);
+  const fragment = doc.getXmlFragment('content');
+  prosemirrorToYXmlFragment(node, fragment);
 
   return doc;
 };
