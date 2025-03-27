@@ -7,21 +7,6 @@ import { createDbId } from './id';
 import { bytea, datetime } from './types';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
-export const Embeds = pgTable('embeds', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId('EMBD')),
-  url: text('url').notNull().unique(),
-  type: text('type').notNull(),
-  title: text('title'),
-  description: text('description'),
-  html: text('html'),
-  thumbnailUrl: text('thumbnail_url'),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
-
 export const Files = pgTable('files', {
   id: text('id')
     .primaryKey()
@@ -55,6 +40,22 @@ export const Folders = pgTable(
   },
   (t) => [unique().on(t.userId, t.parentId, t.order).nullsNotDistinct()],
 );
+
+export const Embeds = pgTable('embeds', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('EMBD')),
+  userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  url: text('url').notNull().unique(),
+  type: text('type').notNull(),
+  title: text('title'),
+  description: text('description'),
+  html: text('html'),
+  thumbnailUrl: text('thumbnail_url'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const Images = pgTable('images', {
   id: text('id')
@@ -184,7 +185,7 @@ export const UserSessions = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('USES', { length: 'long' })),
+      .$defaultFn(() => createDbId('USES')),
     userId: text('user_id')
       .notNull()
       .references(() => Users.id),
@@ -200,7 +201,7 @@ export const UserSingleSignOns = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('USSO', { length: 'short' })),
+      .$defaultFn(() => createDbId('USSO')),
     userId: text('user_id')
       .notNull()
       .references(() => Users.id),
@@ -211,5 +212,5 @@ export const UserSingleSignOns = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [uniqueIndex().on(t.userId, t.provider)],
+  (t) => [unique().on(t.userId, t.provider), unique().on(t.provider, t.principal)],
 );
