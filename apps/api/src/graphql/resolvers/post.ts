@@ -1,10 +1,11 @@
 import dayjs from 'dayjs';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
+import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, firstOrThrow, PostContentSnapshots, PostContentStates, Posts } from '@/db';
+import { db, first, firstOrThrow, PostContentSnapshots, PostContentStates, Posts } from '@/db';
 import { PostContentSyncKind } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
@@ -28,9 +29,10 @@ Post.implement({
  */
 
 builder.mutationFields((t) => ({
-  createPost: t.field({
+  createPost: t.withAuth({ session: true }).fieldWithInput({
     type: Post,
-    resolve: async () => {
+    input: { folderId: t.input.id({ required: false }) },
+    resolve: async (_, { input }, ctx) => {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const node = schema.topNodeType.createAndFill()!;
       const content = node.toJSON();
@@ -43,8 +45,24 @@ builder.mutationFields((t) => ({
 
       const snapshot = Y.snapshot(doc);
 
+      const last = await db
+        .select({ order: Posts.order })
+        .from(Posts)
+        .where(and(eq(Posts.userId, ctx.session.userId), input.folderId ? eq(Posts.folderId, input.folderId) : isNull(Posts.folderId)))
+        .orderBy(desc(Posts.order))
+        .limit(1)
+        .then(first);
+
       return await db.transaction(async (tx) => {
-        const post = await tx.insert(Posts).values({}).returning().then(firstOrThrow);
+        const post = await tx
+          .insert(Posts)
+          .values({
+            userId: ctx.session.userId,
+            folderId: input.folderId,
+            order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
+          })
+          .returning()
+          .then(firstOrThrow);
 
         await tx.insert(PostContentStates).values({
           postId: post.id,
@@ -62,7 +80,7 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  syncPostContent: t.fieldWithInput({
+  syncPostContent: t.withAuth({ session: true }).fieldWithInput({
     type: [
       builder.simpleObject('SyncPostContentPayload', {
         fields: (t) => ({
@@ -120,7 +138,7 @@ builder.mutationFields((t) => ({
  */
 
 builder.subscriptionFields((t) => ({
-  postContentSyncStream: t.field({
+  postContentSyncStream: t.withAuth({ session: true }).field({
     type: builder.simpleObject('PostContentSyncStreamPayload', {
       fields: (t) => ({
         postId: t.id(),
@@ -168,6 +186,7 @@ builder.subscriptionFields((t) => ({
  */
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 export const getLatestPostContentState = async (postId: string) => {
   const state = await db

@@ -1,7 +1,7 @@
 // spell-checker:ignoreRegExp /createDbId\('[A-Z]{1,4}'/g
 
 import { eq, sql } from 'drizzle-orm';
-import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
 import * as E from './enums';
 import { createDbId } from './id';
 import { bytea, datetime } from './types';
@@ -36,6 +36,26 @@ export const Files = pgTable('files', {
     .default(sql`now()`),
 });
 
+export const Folders = pgTable(
+  'folders',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('F', { length: 'short' })),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    parentId: text('parent_id').references((): AnyPgColumn => Folders.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    state: E._FolderState('state').notNull().default('ACTIVE'),
+    order: bytea('order').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.userId, t.parentId, t.order).nullsNotDistinct()],
+);
+
 export const Images = pgTable('images', {
   id: text('id')
     .primaryKey()
@@ -53,15 +73,24 @@ export const Images = pgTable('images', {
     .default(sql`now()`),
 });
 
-export const Posts = pgTable('posts', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId('P', { length: 'short' })),
-  state: E._PostState('state').notNull().default('ACTIVE'),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const Posts = pgTable(
+  'posts',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('P', { length: 'short' })),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    folderId: text('folder_id').references(() => Folders.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    state: E._PostState('state').notNull().default('ACTIVE'),
+    order: bytea('order').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.userId, t.folderId, t.order).nullsNotDistinct()],
+);
 
 export const PostContentSnapshots = pgTable(
   'post_content_snapshots',

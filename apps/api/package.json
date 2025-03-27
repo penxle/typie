@@ -30,6 +30,7 @@
     "bullmq": "^5.44.4",
     "dayjs": "^1.11.13",
     "drizzle-orm": "^0.41.0",
+    "fractional-indexing-jittered": "^0.9.1",
     "google-auth-library": "^9.15.1",
     "graphql": "^16.10.0",
     "graphql-scalars": "^1.24.2",

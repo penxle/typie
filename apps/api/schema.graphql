@@ -13,6 +13,10 @@ interface Blob {
   id: ID!
 }
 
+input CreatePostInput {
+  folderId: ID
+}
+
 input CreatePreorderPaymentInput {
   email: String!
 }
@@ -39,6 +43,11 @@ input FinalizePreorderPaymentInput {
   email: String!
   paymentId: String!
   wish: String!
+}
+
+enum FolderState {
+  ACTIVE
+  DELETED
 }
 
 input GenerateSingleSignOnAuthorizationUrlInput {
@@ -83,7 +92,7 @@ input LoginWithEmailInput {
 type Mutation {
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): UserWithAccessToken!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): UserWithAccessToken!
-  createPost: Post!
+  createPost(input: CreatePostInput!): Post!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
