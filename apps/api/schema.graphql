@@ -13,6 +13,11 @@ interface Blob {
   id: ID!
 }
 
+input CreateFolderInput {
+  name: String!
+  parentId: ID
+}
+
 input CreatePostInput {
   folderId: ID
 }
@@ -43,6 +48,12 @@ input FinalizePreorderPaymentInput {
   email: String!
   paymentId: String!
   wish: String!
+}
+
+type Folder {
+  id: ID!
+  name: String!
+  order: Binary!
 }
 
 enum FolderState {
@@ -92,6 +103,7 @@ input LoginWithEmailInput {
 type Mutation {
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): UserWithAccessToken!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): UserWithAccessToken!
+  createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
@@ -119,6 +131,7 @@ input PersistBlobAsImageInput {
 
 type Post {
   id: ID!
+  order: Binary!
 }
 
 enum PostContentSyncKind {
