@@ -5,6 +5,7 @@ function createPgEnum<T extends string>(enumName: string, obj: Record<string, T>
   return pgEnum(enumName, Object.values(obj) as [T, ...T[]]);
 }
 
+export const _FolderState = createPgEnum('_folder_state', E.FolderState);
 export const _JobState = createPgEnum('_job_state', E.JobState);
 export const _PostState = createPgEnum('_post_state', E.PostState);
 export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.PreorderPaymentState);

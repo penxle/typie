@@ -4,15 +4,15 @@
   import { graphql } from '$graphql';
 
   const createPost = graphql(`
-    mutation Editor_CreatePost_Mutation {
-      createPost {
+    mutation Editor_CreatePost_Mutation($input: CreatePostInput!) {
+      createPost(input: $input) {
         id
       }
     }
   `);
 
   onMount(async () => {
-    const resp = await createPost();
+    const resp = await createPost({});
 
     await goto(`/editor/${resp.id}`);
   });

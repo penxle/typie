@@ -1,3 +1,9 @@
+export type FolderState = keyof typeof FolderState;
+export const FolderState = {
+  ACTIVE: 'ACTIVE',
+  DELETED: 'DELETED',
+} as const;
+
 export type JobState = keyof typeof JobState;
 export const JobState = {
   PENDING: 'PENDING',
