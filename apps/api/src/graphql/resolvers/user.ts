@@ -6,7 +6,6 @@ import { User } from '../objects';
  */
 
 User.implement({
-  grantScopes: (user, context) => (user.id === context.session?.userId ? ['$owner'] : []),
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
@@ -27,10 +26,3 @@ builder.queryFields((t) => ({
     },
   }),
 }));
-
-/**
- * * Mutations
- */
-
-// builder.mutationFields((t) => ({
-// }));

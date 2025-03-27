@@ -35,18 +35,16 @@ builder.mutationFields((t) => ({
         .limit(1)
         .then(first);
 
-      return await db.transaction(async (tx) => {
-        return await tx
-          .insert(Folders)
-          .values({
-            userId: ctx.session.userId,
-            parentId: input.parentId,
-            name: input.name,
-            order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
-          })
-          .returning()
-          .then(firstOrThrow);
-      });
+      return await db
+        .insert(Folders)
+        .values({
+          userId: ctx.session.userId,
+          parentId: input.parentId,
+          name: input.name,
+          order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
+        })
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 }));
