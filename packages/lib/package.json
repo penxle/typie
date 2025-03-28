@@ -18,16 +18,16 @@
   "devDependencies": {
     "@glitter/tsconfig": "workspace:*",
     "@sveltejs/kit": "^2.20.2",
-    "@types/bun": "^1.2.5",
+    "@types/bun": "^1.2.8",
     "dayjs": "^1.11.13",
     "hono": "^4.7.5",
     "ipaddr.js": "^2.2.0",
     "pino": "^9.6.0",
     "remeda": "^2.21.2",
-    "svelte": "^5.25.2",
+    "svelte": "^5.25.3",
     "svgo": "^3.3.2",
     "typescript": "^5.8.2",
-    "vite": "^6.2.2",
+    "vite": "^6.2.3",
     "xmlbuilder2": "^3.1.1"
   }
 }

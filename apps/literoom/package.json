@@ -9,10 +9,10 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.772.0",
+    "@aws-sdk/client-s3": "^3.777.0",
     "@glitter/tsconfig": "workspace:*",
-    "@pulumi/aws": "^6.73.0",
-    "@pulumi/pulumi": "^3.157.0",
+    "@pulumi/aws": "^6.74.0",
+    "@pulumi/pulumi": "^3.159.0",
     "sharp": "^0.33.5",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",

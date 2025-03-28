@@ -23,6 +23,7 @@ insync
 ipaddr
 kakao
 karpenter
+kubeconfig
 milli
 natgw
 noeviction
