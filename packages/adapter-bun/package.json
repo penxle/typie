@@ -16,7 +16,7 @@
     "@glitter/lib": "workspace:*",
     "@glitter/tsconfig": "workspace:*",
     "@sveltejs/kit": "^2.20.2",
-    "@types/bun": "^1.2.5",
+    "@types/bun": "^1.2.8",
     "hono": "^4.7.5",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2"
