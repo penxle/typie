@@ -13,7 +13,6 @@ dotenv
 felte
 fira
 fstype
-glttr
 healthz
 iconify
 iframely

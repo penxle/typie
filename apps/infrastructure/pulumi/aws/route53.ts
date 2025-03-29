@@ -7,10 +7,6 @@ const createZone = (domain: string) => {
 };
 
 export const zones = {
-  glitter_im: createZone('glitter.im'),
-  glitter_pizza: createZone('glitter.pizza'),
-  glttr_io: createZone('glttr.io'),
-
   typie_co: createZone('typie.co'),
   typie_dev: createZone('typie.dev'),
   typie_me: createZone('typie.me'),
@@ -22,7 +18,18 @@ new aws.route53.Record('typie.co|txt', {
   zoneId: zones.typie_co.zoneId,
   type: 'TXT',
   name: 'typie.co',
-  records: ['google-site-verification=Q-1ETLmF6p7XkzQM0wpDyF0wCBQREsjK1aZdxR-4ggQ'],
+  records: [
+    'google-site-verification=Q-1ETLmF6p7XkzQM0wpDyF0wCBQREsjK1aZdxR-4ggQ',
+    'google-site-verification=hZdtWP44my1tA-wUAvYlOKAAPSp2vHT6M5omQXCRt6o',
+  ],
+  ttl: 300,
+});
+
+new aws.route53.Record('typie.co|mx', {
+  zoneId: zones.typie_co.zoneId,
+  type: 'MX',
+  name: 'typie.co',
+  records: ['1 smtp.google.com'],
   ttl: 300,
 });
 

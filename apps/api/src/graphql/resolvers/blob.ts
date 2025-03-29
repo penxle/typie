@@ -26,7 +26,7 @@ File.implement({
     name: t.exposeString('name'),
     size: t.exposeInt('size'),
 
-    url: t.string({ resolve: (blob) => `https://usercontents.glttr.io/files/${blob.path}` }),
+    url: t.string({ resolve: (blob) => `https://typie.net/files/${blob.path}` }),
   }),
 });
 
@@ -36,7 +36,7 @@ Image.implement({
     placeholder: t.exposeString('placeholder'),
 
     ratio: t.float({ resolve: (image) => image.width / image.height }),
-    url: t.string({ resolve: (blob) => `https://usercontents.glttr.io/images/${blob.path}` }),
+    url: t.string({ resolve: (blob) => `https://typie.net/images/${blob.path}` }),
   }),
 });
 

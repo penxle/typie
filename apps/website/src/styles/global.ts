@@ -81,40 +81,40 @@ export const globalCss = defineGlobalStyles({
 
 export const globalFontface = defineGlobalFontface({
   SUIT: {
-    src: 'url("https://cdn.glttr.io/fonts/SUIT.woff2") format("woff2-variations")',
+    src: 'url("https://typie.net/fonts/SUIT.woff2") format("woff2-variations")',
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
   },
   IBMPlexSansKR: {
-    src: 'url("https://cdn.glttr.io/fonts/IBMPlexSansKR-Bold.woff2") format("woff2")',
+    src: 'url("https://typie.net/fonts/IBMPlexSansKR-Bold.woff2") format("woff2")',
     fontStyle: 'normal',
     fontWeight: '700',
     fontDisplay: 'swap',
   },
   LINESeedKR: [
     {
-      src: 'url("https://cdn.glttr.io/fonts/LINESeedKR-Rg.woff2") format("woff2")',
+      src: 'url("https://typie.net/fonts/LINESeedKR-Rg.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '400',
       fontDisplay: 'swap',
     },
     {
-      src: 'url("https://cdn.glttr.io/fonts/LINESeedKR-Bd.woff2") format("woff2")',
+      src: 'url("https://typie.net/fonts/LINESeedKR-Bd.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '700',
       fontDisplay: 'swap',
     },
   ],
   Pretendard: pretendard.map((range, index) => ({
-    src: `url("https://cdn.glttr.io/fonts/PretendardVariable.subset.${index}.woff2") format("woff2-variations")`,
+    src: `url("https://typie.net/fonts/PretendardVariable.subset.${index}.woff2") format("woff2-variations")`,
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
     unicodeRange: range,
   })),
   FiraCode: {
-    src: 'url("https://cdn.glttr.io/fonts/FiraCode.woff2") format("woff2-variations")',
+    src: 'url("https://typie.net/fonts/FiraCode.woff2") format("woff2-variations")',
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
