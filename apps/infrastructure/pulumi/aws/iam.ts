@@ -49,8 +49,8 @@ new aws.iam.UserPolicy('developer@team', {
         Resource: [emailIdentity.arn, configurationSet.arn],
         Condition: {
           StringEquals: {
-            'ses:FromAddress': 'hello@glitter.im',
-            // 'ses:FromDisplayName': '글리터',
+            'ses:FromAddress': 'hello@typie.co',
+            // 'ses:FromDisplayName': 'Typie',
           },
         },
       },

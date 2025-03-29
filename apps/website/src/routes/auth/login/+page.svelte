@@ -1,7 +1,7 @@
 <script lang="ts">
   import { z } from 'zod';
   import { SingleSignOnProvider } from '@/enums';
-  import { GlitterError } from '@/errors';
+  import { TypieError } from '@/errors';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
@@ -39,7 +39,7 @@
       await goto('/');
     },
     onError: (error) => {
-      if (error instanceof GlitterError) {
+      if (error instanceof TypieError) {
         if (error.code === 'invalid_credentials') {
           throw new FormError('password', '이메일 혹은 비밀번호가 일치하지 않습니다.');
         } else if (error.code === 'password_not_set') {

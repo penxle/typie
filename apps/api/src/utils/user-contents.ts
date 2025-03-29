@@ -44,7 +44,7 @@ export const persistBlobAsImage = async ({ userId, file }: PersistBlobAsImagePar
 
     await aws.s3.send(
       new PutObjectCommand({
-        Bucket: 'glitter-usercontents',
+        Bucket: 'typie-usercontents',
         Key: `images/${key}`,
         Body: Buffer.from(buffer),
         ContentType: mimetype,

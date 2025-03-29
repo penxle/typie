@@ -11,5 +11,5 @@ export default defineConfig({
     options.chunkNames = 'chunks/[name]-[hash]';
   },
 
-  noExternal: [/^@glitter\//],
+  noExternal: [/^@typie\//],
 });

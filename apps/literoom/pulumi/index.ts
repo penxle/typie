@@ -40,7 +40,7 @@ new aws.lambda.Permission('literoom', {
 
 const accessPoint = new aws.s3.AccessPoint('usercontents', {
   name: 'usercontents',
-  bucket: 'glitter-usercontents',
+  bucket: 'typie-usercontents',
 });
 
 new aws.s3control.AccessPointPolicy('usercontents', {

@@ -24,7 +24,7 @@ export const codegenPlugin = (contextHolder: ContextHolder): Plugin => {
   const debounced = R.debounce(buildAndWriteContext, { waitMs: 100 });
 
   return {
-    name: '@glitter/gql:codegen',
+    name: '@typie/gql:codegen',
     enforce: 'pre',
 
     buildStart: async () => {

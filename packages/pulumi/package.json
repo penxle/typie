@@ -1,5 +1,5 @@
 {
-  "name": "@glitter/pulumi",
+  "name": "@typie/pulumi",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -10,10 +10,10 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@glitter/tsconfig": "workspace:*",
     "@pulumi/aws": "^6.74.0",
     "@pulumi/kubernetes": "^4.22.1",
     "@pulumi/pulumi": "^3.159.0",
+    "@typie/tsconfig": "workspace:*",
     "ts-pattern": "^5.6.2",
     "typescript": "^5.8.2"
   }

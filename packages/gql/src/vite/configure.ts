@@ -3,7 +3,7 @@ import type { Plugin } from 'vite';
 
 export const configurePlugin = (): Plugin => {
   return {
-    name: '@glitter/gql:configure',
+    name: '@typie/gql:configure',
     enforce: 'pre',
 
     configResolved: async (config) => {

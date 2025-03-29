@@ -3,12 +3,12 @@ import * as random from '@pulumi/random';
 import { zones } from '$aws/route53';
 import { securityGroups, subnets } from '$aws/vpc';
 
-const password = new random.RandomPassword('glitter@rds', {
+const password = new random.RandomPassword('typie@rds', {
   length: 20,
   special: false,
 });
 
-const devPassword = new random.RandomPassword('glitter-dev@rds', {
+const devPassword = new random.RandomPassword('typie-dev@rds', {
   length: 20,
   special: false,
 });
@@ -19,8 +19,8 @@ const subnetGroup = new aws.rds.SubnetGroup('private', {
   subnetIds: [subnets.private.az1.id, subnets.private.az2.id],
 });
 
-const parameterGroup = new aws.rds.ClusterParameterGroup('glitter', {
-  name: 'glitter-aurora-postgresql16',
+const parameterGroup = new aws.rds.ClusterParameterGroup('typie-aurora-postgresql16', {
+  name: 'typie-aurora-postgresql16',
   family: 'aurora-postgresql16',
 
   parameters: [
@@ -30,8 +30,8 @@ const parameterGroup = new aws.rds.ClusterParameterGroup('glitter', {
   ],
 });
 
-const cluster = new aws.rds.Cluster('glitter', {
-  clusterIdentifier: 'glitter',
+const cluster = new aws.rds.Cluster('typie', {
+  clusterIdentifier: 'typie',
 
   engine: 'aurora-postgresql',
   engineMode: 'provisioned',
@@ -46,7 +46,7 @@ const cluster = new aws.rds.Cluster('glitter', {
   storageEncrypted: true,
 
   backupRetentionPeriod: 7,
-  finalSnapshotIdentifier: 'glitter-final-snapshot',
+  finalSnapshotIdentifier: 'typie-final-snapshot',
 
   preferredBackupWindow: '19:00-20:00',
   preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
@@ -59,9 +59,9 @@ const cluster = new aws.rds.Cluster('glitter', {
   applyImmediately: true,
 });
 
-new aws.rds.ClusterInstance('glitter-1', {
+new aws.rds.ClusterInstance('typie-1', {
   clusterIdentifier: cluster.id,
-  identifier: 'glitter-1',
+  identifier: 'typie-1',
 
   engine: 'aurora-postgresql',
   instanceClass: 'db.t4g.medium',
@@ -76,9 +76,9 @@ new aws.rds.ClusterInstance('glitter-1', {
   applyImmediately: true,
 });
 
-// new aws.rds.ClusterInstance('glitter-2', {
+// new aws.rds.ClusterInstance('typie-2', {
 //   clusterIdentifier: cluster.id,
-//   identifier: 'glitter-2',
+//   identifier: 'typie-2',
 
 //   engine: 'aurora-postgresql',
 //   instanceClass: 'db.t4g.medium',
@@ -93,16 +93,16 @@ new aws.rds.ClusterInstance('glitter-1', {
 //   applyImmediately: true,
 // });
 
-new aws.route53.Record('db.glttr.io', {
-  zoneId: zones.glttr_io.zoneId,
+new aws.route53.Record('db.typie.io', {
+  zoneId: zones.typie_io.zoneId,
   type: 'CNAME',
-  name: 'db.glttr.io',
+  name: 'db.typie.io',
   records: [cluster.endpoint],
   ttl: 300,
 });
 
-const devCluster = new aws.rds.Cluster('glitter-dev', {
-  clusterIdentifier: 'glitter-dev',
+const devCluster = new aws.rds.Cluster('typie-dev', {
+  clusterIdentifier: 'typie-dev',
 
   engine: 'aurora-postgresql',
   engineMode: 'provisioned',
@@ -117,7 +117,7 @@ const devCluster = new aws.rds.Cluster('glitter-dev', {
   storageEncrypted: true,
 
   backupRetentionPeriod: 7,
-  finalSnapshotIdentifier: 'glitter-dev-final-snapshot',
+  finalSnapshotIdentifier: 'typie-dev-final-snapshot',
 
   preferredBackupWindow: '19:00-20:00',
   preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
@@ -130,9 +130,9 @@ const devCluster = new aws.rds.Cluster('glitter-dev', {
   applyImmediately: true,
 });
 
-new aws.rds.ClusterInstance('glitter-dev-1', {
+new aws.rds.ClusterInstance('typie-dev-1', {
   clusterIdentifier: devCluster.id,
-  identifier: 'glitter-dev-1',
+  identifier: 'typie-dev-1',
 
   engine: 'aurora-postgresql',
   instanceClass: 'db.t4g.medium',
@@ -147,10 +147,10 @@ new aws.rds.ClusterInstance('glitter-dev-1', {
   applyImmediately: true,
 });
 
-new aws.route53.Record('dev.db.glttr.io', {
-  zoneId: zones.glttr_io.zoneId,
+new aws.route53.Record('dev.db.typie.io', {
+  zoneId: zones.typie_io.zoneId,
   type: 'CNAME',
-  name: 'dev.db.glttr.io',
+  name: 'dev.db.typie.io',
   records: [devCluster.endpoint],
   ttl: 300,
 });

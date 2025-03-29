@@ -105,7 +105,7 @@
   };
 
   onMount(() => {
-    const persistence = new IndexeddbPersistence(`glitter:editor:${page.params.postId}`, doc);
+    const persistence = new IndexeddbPersistence(`typie:editor:${page.params.postId}`, doc);
     persistence.on('synced', () => forceSync());
 
     const unsubscribe = postContentSyncStream.subscribe({ postId: page.params.postId });

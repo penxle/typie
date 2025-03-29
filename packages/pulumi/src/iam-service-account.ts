@@ -21,9 +21,9 @@ export class IAMServiceAccount extends pulumi.ComponentResource {
   public readonly metadata: pulumi.Output<IAMServiceAccountOutputMetadata>;
 
   constructor(name: string, args: IAMServiceAccountArgs, opts?: pulumi.ComponentResourceOptions) {
-    super('glitter:index:IAMServiceAccount', name, {}, opts);
+    super('typie:index:IAMServiceAccount', name, {}, opts);
 
-    const ref = new pulumi.StackReference('glitter/infrastructure/base', {}, { parent: this });
+    const ref = new pulumi.StackReference('typie/infrastructure/base', {}, { parent: this });
     const oidcProviderArn = ref.getOutput('AWS_EKS_OIDC_PROVIDER_ARN');
     const oidcProviderUrl = ref.getOutput('AWS_EKS_OIDC_PROVIDER_URL');
 

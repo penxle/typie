@@ -1,5 +1,5 @@
 import '@/instrument';
-import '@glitter/lib/dayjs';
+import '@typie/lib/dayjs';
 import '@/mq';
 
 import { Hono } from 'hono';

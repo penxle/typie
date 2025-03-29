@@ -28,15 +28,15 @@ const Email = ({ verificationUrl }: Props) => {
         <Body className="bg-white font-sans">
           <Container className="mx-auto py-[48px] px-[24px] max-w-[520px]">
             <Img
-              src="https://cdn.glttr.io/email/logo-black.png"
+              src="https://typie.net/email/logo-black.png"
               height="32"
-              alt="글리터 로고"
+              alt="타이피 로고"
               className="logo-light h-[32px] w-auto object-cover mb-[24px]"
             />
             <Img
-              src="https://cdn.glttr.io/email/logo-white.png"
+              src="https://typie.net/email/logo-white.png"
               height="32"
-              alt="글리터 로고"
+              alt="타이피 로고"
               className="logo-dark h-[32px] w-auto object-cover mb-[24px]"
               style={{ display: 'none' }}
             />
@@ -73,7 +73,7 @@ const Email = ({ verificationUrl }: Props) => {
 };
 
 Email.PreviewProps = {
-  verificationUrl: 'https://glitter.im/auth/email?code=123456',
+  verificationUrl: 'https://typie.co/auth/email?code=123456',
 };
 
 export default Email;

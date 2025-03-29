@@ -11,8 +11,8 @@ const clusterRole = new aws.iam.Role('cluster@eks', {
   managedPolicyArns: [aws.iam.ManagedPolicy.AmazonEKSClusterPolicy],
 });
 
-export const cluster = new aws.eks.Cluster('glitter', {
-  name: 'glitter',
+export const cluster = new aws.eks.Cluster('typie', {
+  name: 'typie',
   version: '1.32',
   roleArn: clusterRole.arn,
 

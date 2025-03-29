@@ -1,5 +1,5 @@
 {
-  "name": "@glitter/api",
+  "name": "@typie/api",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -14,7 +14,6 @@
     "@aws-sdk/client-ses": "^3.777.0",
     "@aws-sdk/s3-presigned-post": "^3.777.0",
     "@ctrl/tinycolor": "^4.1.0",
-    "@glitter/lib": "workspace:*",
     "@graphql-yoga/redis-event-target": "^3.0.3",
     "@paralleldrive/cuid2": "^2.2.2",
     "@portone/server-sdk": "^0.14.0",
@@ -27,6 +26,7 @@
     "@react-email/components": "^0.0.34",
     "@resvg/resvg-js": "^2.6.2",
     "@sentry/bun": "^9.10.0",
+    "@typie/lib": "workspace:*",
     "bullmq": "^5.45.0",
     "dayjs": "^1.11.13",
     "drizzle-orm": "^0.41.0",
@@ -52,11 +52,11 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@glitter/pulumi": "workspace:*",
-    "@glitter/tsconfig": "workspace:*",
     "@types/bun": "^1.2.8",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
+    "@typie/pulumi": "workspace:*",
+    "@typie/tsconfig": "workspace:*",
     "drizzle-kit": "^0.30.6",
     "react-email": "^4.0.1",
     "tsup": "^8.4.0",

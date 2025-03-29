@@ -62,7 +62,7 @@ type ServiceArgs = {
 
 export class Service extends pulumi.ComponentResource {
   constructor(name: string, args: ServiceArgs, opts?: pulumi.ComponentResourceOptions) {
-    super('glitter:index:Service', name, {}, opts);
+    super('typie:index:Service', name, {}, opts);
 
     const project = pulumi.getProject();
     const stack = pulumi.getStack();
@@ -313,7 +313,7 @@ export class Service extends pulumi.ComponentResource {
       );
 
       if (cloudfront) {
-        const ref = new pulumi.StackReference('glitter/infrastructure/base', {}, { parent: this });
+        const ref = new pulumi.StackReference('typie/infrastructure/base', {}, { parent: this });
         const provider = new aws.Provider('us-east-1', { region: 'us-east-1' }, { parent: this });
 
         const zone = aws.route53.getZoneOutput({ name: cloudfront.domainZone }, { parent: this });

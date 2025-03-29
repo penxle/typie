@@ -41,7 +41,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: 509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/glitter
+          images: 509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/typie
           tags: type=raw,value=latest
 
       - name: Build image
@@ -98,16 +98,16 @@ jobs:
           tags: tag:github-actions
 
       - name: Update kubeconfig
-        run: aws eks update-kubeconfig --name glitter
+        run: aws eks update-kubeconfig --name typie
 
       - name: Apply infrastructure
         uses: pulumi/actions@v6
         with:
           command: up
           work-dir: apps/${{ matrix.app }}
-          stack-name: glitter/dev
+          stack-name: typie/dev
           upsert: true
           config-map: |
-            { "glitter:digest": { "value": "${{ needs.build.outputs.digest }}" } }
+            { "typie:digest": { "value": "${{ needs.build.outputs.digest }}" } }
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}

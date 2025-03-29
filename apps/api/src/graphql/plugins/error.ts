@@ -2,7 +2,7 @@ import { isAsyncIterable } from '@envelop/core';
 import * as Sentry from '@sentry/bun';
 import { GraphQLError } from 'graphql';
 import { dev } from '@/env';
-import { GlitterError } from '@/errors';
+import { TypieError } from '@/errors';
 import type { AsyncIterableIteratorOrValue, ExecutionResult } from '@envelop/core';
 import type { Plugin } from 'graphql-yoga';
 
@@ -22,7 +22,7 @@ class UnexpectedError extends GraphQLError {
 }
 
 const transformError = (error: unknown): GraphQLError => {
-  if (error instanceof GlitterError) {
+  if (error instanceof TypieError) {
     return error;
   } else if (error instanceof GraphQLError && error.originalError) {
     return transformError(error.originalError);

@@ -1,5 +1,5 @@
 {
-  "name": "@glitter/adapter-bun",
+  "name": "@typie/adapter-bun",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -13,10 +13,10 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@glitter/lib": "workspace:*",
-    "@glitter/tsconfig": "workspace:*",
     "@sveltejs/kit": "^2.20.2",
     "@types/bun": "^1.2.8",
+    "@typie/lib": "workspace:*",
+    "@typie/tsconfig": "workspace:*",
     "hono": "^4.7.5",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2"

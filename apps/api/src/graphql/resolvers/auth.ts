@@ -9,7 +9,7 @@ import { sendEmail } from '@/email';
 import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
 import { env } from '@/env';
-import { GlitterError } from '@/errors';
+import { TypieError } from '@/errors';
 import { google, kakao, naver } from '@/external/sso';
 import { createAccessToken, generateRandomAvatar, persistBlobAsImage } from '@/utils';
 import { builder } from '../builder';
@@ -45,15 +45,15 @@ builder.mutationFields((t) => ({
         .then(first);
 
       if (!user) {
-        throw new GlitterError({ code: 'invalid_credentials' });
+        throw new TypieError({ code: 'invalid_credentials' });
       }
 
       if (!user.password) {
-        throw new GlitterError({ code: 'password_not_set' });
+        throw new TypieError({ code: 'password_not_set' });
       }
 
       if (!(await Bun.password.verify(input.password, user.password))) {
-        throw new GlitterError({ code: 'invalid_credentials' });
+        throw new TypieError({ code: 'invalid_credentials' });
       }
 
       return {
@@ -76,7 +76,7 @@ builder.mutationFields((t) => ({
         .then(first);
 
       if (existingUser) {
-        throw new GlitterError({ code: 'user_email_exists' });
+        throw new TypieError({ code: 'user_email_exists' });
       }
 
       const code = nanoid();
@@ -93,7 +93,7 @@ builder.mutationFields((t) => ({
 
       await sendEmail({
         recipient: input.email,
-        subject: '[글리터] 이메일 주소를 인증해 주세요',
+        subject: '[타이피] 이메일 주소를 인증해 주세요',
         body: SignUpEmail({
           verificationUrl: `${env.WEBSITE_URL}/auth/email?code=${code}`,
         }),
@@ -109,7 +109,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }) => {
       const data = await redis.get(`auth:email:${input.code}`);
       if (!data) {
-        throw new GlitterError({ code: 'invalid_code' });
+        throw new TypieError({ code: 'invalid_code' });
       }
 
       const { email, password, name } = JSON.parse(data);
@@ -121,7 +121,7 @@ builder.mutationFields((t) => ({
         .then(first);
 
       if (existingUser) {
-        throw new GlitterError({ code: 'user_email_exists' });
+        throw new TypieError({ code: 'user_email_exists' });
       }
 
       const user = await db.transaction(async (tx) => {
@@ -252,7 +252,7 @@ builder.mutationFields((t) => ({
         .then(first);
 
       if (!existingUser) {
-        throw new GlitterError({ code: 'user_email_not_found' });
+        throw new TypieError({ code: 'user_email_not_found' });
       }
 
       const code = nanoid();
@@ -267,7 +267,7 @@ builder.mutationFields((t) => ({
 
       await sendEmail({
         recipient: input.email,
-        subject: '[글리터] 비밀번호를 재설정해 주세요',
+        subject: '[타이피] 비밀번호를 재설정해 주세요',
         body: PasswordResetEmail({
           resetUrl: `${env.WEBSITE_URL}/auth/reset-password?code=${code}`,
         }),
@@ -283,7 +283,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }) => {
       const data = await redis.get(`auth:reset-password:${input.code}`);
       if (!data) {
-        throw new GlitterError({ code: 'invalid_code' });
+        throw new TypieError({ code: 'invalid_code' });
       }
 
       const { email } = JSON.parse(data);

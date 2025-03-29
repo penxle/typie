@@ -1,8 +1,8 @@
 setup:
   - path: apps/api
-    project: glitter-api
+    project: typie-api
     config: dev_local
 
   - path: apps/website
-    project: glitter-website
+    project: typie-website
     config: dev_local

@@ -7,7 +7,7 @@ type RepositoryArgs = {
 
 class Repository extends pulumi.ComponentResource {
   constructor(name: string, args: RepositoryArgs, opts?: pulumi.ComponentResourceOptions) {
-    super('glitter:index:Repository', name, args, opts);
+    super('typie:index:Repository', name, args, opts);
 
     const repository = new aws.ecr.Repository(
       name,
@@ -48,4 +48,4 @@ const createRepository = (name: string) => {
   return new Repository(name, { name });
 };
 
-createRepository('glitter');
+createRepository('typie');

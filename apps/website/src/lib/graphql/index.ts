@@ -1,7 +1,7 @@
-import { createClient, errorExchange } from '@glitter/gql';
 import { error } from '@sveltejs/kit';
+import { createClient, errorExchange } from '@typie/gql';
 import { get } from 'svelte/store';
-import { GlitterError } from '@/errors';
+import { TypieError } from '@/errors';
 import { env } from '$env/dynamic/public';
 import { persisted } from '$lib/stores';
 
@@ -19,8 +19,8 @@ export default createClient({
   },
   exchanges: [
     errorExchange((error) => {
-      if (error.extensions.type === 'GlitterError') {
-        return new GlitterError({
+      if (error.extensions.type === 'TypieError') {
+        return new TypieError({
           code: error.extensions.code as string,
           message: error.message,
           status: error.extensions.status as number,
@@ -31,7 +31,7 @@ export default createClient({
     }),
   ],
   onError: (err) => {
-    if (err instanceof GlitterError) {
+    if (err instanceof TypieError) {
       error(err.status, { message: err.message });
     }
   },

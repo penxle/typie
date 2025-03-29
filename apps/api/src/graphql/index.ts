@@ -1,4 +1,4 @@
-import { getClientAddress } from '@glitter/lib';
+import { getClientAddress } from '@typie/lib';
 import { createYoga, useExecutionCancellation } from 'graphql-yoga';
 import { Hono } from 'hono';
 import { createContext } from '@/context';

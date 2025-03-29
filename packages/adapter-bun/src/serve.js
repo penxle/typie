@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { getClientAddress } from '@glitter/lib';
+import { getClientAddress } from '@typie/lib';
 import { Hono } from 'hono';
 
 /**

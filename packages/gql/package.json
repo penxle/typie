@@ -1,5 +1,5 @@
 {
-  "name": "@glitter/gql",
+  "name": "@typie/gql",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -20,9 +20,9 @@
     "test": "vitest"
   },
   "devDependencies": {
-    "@glitter/tsconfig": "workspace:*",
     "@sindresorhus/string-hash": "^2.0.0",
     "@sveltejs/kit": "^2.20.2",
+    "@typie/tsconfig": "workspace:*",
     "fast-glob": "^3.3.3",
     "fast-json-stable-stringify": "^2.1.0",
     "graphql": "^16.10.0",

@@ -5,7 +5,7 @@ import type { ContextHolder } from '../types';
 
 export const transformGraphQLPlugin = (contextHolder: ContextHolder): Plugin => {
   const sveltePreprocess: PreprocessorGroup = {
-    name: '@glitter/gql:transform-graphql',
+    name: '@typie/gql:transform-graphql',
     script: ({ content, attributes }) => {
       if (attributes.lang !== 'ts' || attributes.type !== undefined) {
         return;
@@ -123,7 +123,7 @@ export const transformGraphQLPlugin = (contextHolder: ContextHolder): Plugin => 
   };
 
   return {
-    name: '@glitter/gql:transform-graphql',
+    name: '@typie/gql:transform-graphql',
     enforce: 'post',
 
     api: { sveltePreprocess },

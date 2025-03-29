@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  */
 export const bun = () => {
   return {
-    name: '@glitter/adapter-bun',
+    name: '@typie/adapter-bun',
     adapt: async (builder) => {
       const tmp = builder.getBuildDirectory('adapter-bun');
       const out = 'dist';

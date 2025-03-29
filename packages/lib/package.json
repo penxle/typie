@@ -1,5 +1,5 @@
 {
-  "name": "@glitter/lib",
+  "name": "@typie/lib",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -16,9 +16,9 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@glitter/tsconfig": "workspace:*",
     "@sveltejs/kit": "^2.20.2",
     "@types/bun": "^1.2.8",
+    "@typie/tsconfig": "workspace:*",
     "dayjs": "^1.11.13",
     "hono": "^4.7.5",
     "ipaddr.js": "^2.2.0",

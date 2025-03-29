@@ -1,6 +1,6 @@
-import { gql } from '@glitter/gql/vite';
-import { svg } from '@glitter/lib/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { gql } from '@typie/gql/vite';
+import { svg } from '@typie/lib/vite';
 import icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
 

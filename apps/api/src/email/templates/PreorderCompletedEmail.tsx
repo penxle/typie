@@ -20,18 +20,18 @@ const Email = () => {
           `}
         </style>
       </Head>
-      <Preview>글리터 사전 등록이 완료되었어요!</Preview>
+      <Preview>타이피 사전 등록이 완료되었어요!</Preview>
       <Body style={{ wordBreak: 'keep-all' }}>
         <Container style={{ maxWidth: '640px', margin: '0 auto', padding: '40px' }}>
-          <Img src="https://cdn.glttr.io/email/logo-black.png" alt="글리터" width={60} className="logo-black" />
-          <Img src="https://cdn.glttr.io/email/logo-white.png" alt="글리터" width={60} className="logo-white" />
+          <Img src="https://typie.net/email/logo-black.png" alt="타이피" width={60} className="logo-black" />
+          <Img src="https://typie.net/email/logo-white.png" alt="타이피" width={60} className="logo-white" />
 
           <Text style={{ fontSize: '24px', fontWeight: 600, textAlign: 'center', lineHeight: '1.5' }}>
-            글리터 사전 등록이 완료되었어요!
+            타이피 사전 등록이 완료되었어요!
           </Text>
 
           <Text style={{ marginTop: '40px', fontSize: '14px', fontWeight: 500, textAlign: 'center', lineHeight: '1.5' }}>
-            글리터에 사전 등록해 주셔서 감사합니다.
+            타이피에 사전 등록해 주셔서 감사합니다.
             <br />
             더 편리하고 즐거운 글쓰기 경험을 선물해 드릴게요.
             <br />

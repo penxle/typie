@@ -73,7 +73,7 @@ builder.mutationFields((t) => ({
       const key = `${aws.createFragmentedS3ObjectKey()}${ext}`;
 
       const req = await createPresignedPost(aws.s3, {
-        Bucket: 'glitter-uploads',
+        Bucket: 'typie-uploads',
         Key: key,
         Conditions: [
           ['content-length-range', 0, 1024 * 1024 * 1024], // 1GB
@@ -100,7 +100,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const head = await aws.s3.send(
         new HeadObjectCommand({
-          Bucket: 'glitter-uploads',
+          Bucket: 'typie-uploads',
           Key: input.path,
         }),
       );
@@ -110,9 +110,9 @@ builder.mutationFields((t) => ({
 
       await aws.s3.send(
         new CopyObjectCommand({
-          Bucket: 'glitter-usercontents',
+          Bucket: 'typie-usercontents',
           Key: `files/${input.path}`,
-          CopySource: `glitter-uploads/${input.path}`,
+          CopySource: `typie-uploads/${input.path}`,
           MetadataDirective: 'REPLACE',
           ContentType: head.ContentType,
           ContentDisposition: `attachment; filename="${fileName}"`,
@@ -148,7 +148,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const object = await aws.s3.send(
         new GetObjectCommand({
-          Bucket: 'glitter-uploads',
+          Bucket: 'typie-uploads',
           Key: input.path,
         }),
       );
@@ -197,7 +197,7 @@ builder.mutationFields((t) => ({
 
       await aws.s3.send(
         new PutObjectCommand({
-          Bucket: 'glitter-usercontents',
+          Bucket: 'typie-usercontents',
           Key: `images/${input.path}`,
           Body: data,
           ContentType: mimetype,

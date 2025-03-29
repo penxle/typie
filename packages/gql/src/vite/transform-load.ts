@@ -5,7 +5,7 @@ import type { ContextHolder } from '../types';
 
 export const transformLoadPlugin = (contextHolder: ContextHolder): Plugin => {
   return {
-    name: '@glitter/gql:transform-load',
+    name: '@typie/gql:transform-load',
     enforce: 'post',
 
     transform: (code, id) => {
@@ -69,7 +69,7 @@ export const transformLoadPlugin = (contextHolder: ContextHolder): Plugin => {
           ],
         }),
         AST.b.importDeclaration.from({
-          source: AST.b.stringLiteral('@glitter/gql/runtime'),
+          source: AST.b.stringLiteral('@typie/gql/runtime'),
           specifiers: [
             AST.b.importSpecifier.from({
               imported: AST.b.identifier('handleError'),
