@@ -1,6 +1,6 @@
 import os from 'node:os';
-import { logger } from '@glitter/lib';
 import * as Sentry from '@sentry/bun';
+import { logger } from '@typie/lib';
 import { Queue, Worker } from 'bullmq';
 import { dev, env } from '@/env';
 import { crons, jobs } from './tasks';

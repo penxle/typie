@@ -1,1 +1,1 @@
-export { default } from '@glitter/lintconfig/eslint';
+export { default } from '@typie/lintconfig/eslint';

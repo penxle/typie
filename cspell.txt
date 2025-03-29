@@ -45,6 +45,7 @@ sslv
 stakater
 tabler
 tsup
+typie
 unplugin
 vcpu
 wyhash

@@ -9,7 +9,7 @@ type SendEmailParams = {
 
 export const sendEmail = async ({ subject, recipient, body }: SendEmailParams) => {
   await resend.emails.send({
-    from: '글리터 <hello@glitter.im>',
+    from: 'Typie <hello@typie.co>',
     to: [recipient],
     subject,
     react: body,

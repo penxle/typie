@@ -10,7 +10,7 @@
     struct?: Record<string, unknown>;
   };
 
-  let { type = 'website', title, trailing = '글리터', description, image, struct }: Props = $props();
+  let { type = 'website', title, trailing = '타이피', description, image, struct }: Props = $props();
 
   const href = $derived(`https://${page.url.host}${page.url.pathname}`);
   const effectiveTitle = $derived(trailing ? `${title}${trailing ? ` · ${trailing}` : ''}` : title);
@@ -35,7 +35,7 @@
     {/if}
   {/if}
   <meta content={href} property="og:url" />
-  <meta content="글리터" property="og:site_name" />
+  <meta content="타이피" property="og:site_name" />
   <meta content={type} property="og:type" />
   <meta content="ko_KR" property="og:locale" />
   <link {href} rel="canonical" />

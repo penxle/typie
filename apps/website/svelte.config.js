@@ -1,4 +1,4 @@
-import { bun } from '@glitter/adapter-bun';
+import { bun } from '@typie/adapter-bun';
 import { sveltePreprocess } from 'svelte-preprocess';
 
 /** @type {import('@sveltejs/kit').Config} */

@@ -2,7 +2,8 @@ import * as aws from '@pulumi/aws';
 import * as pulumi from '@pulumi/pulumi';
 
 const cdn = new aws.s3.BucketV2('cdn', {
-  bucket: 'glitter-cdn',
+  bucket: 'typie-cdn',
+  forceDestroy: true,
 });
 
 new aws.s3.BucketPolicy('cdn', {
@@ -21,7 +22,8 @@ new aws.s3.BucketPolicy('cdn', {
 });
 
 const usercontents = new aws.s3.BucketV2('usercontents', {
-  bucket: 'glitter-usercontents',
+  bucket: 'typie-usercontents',
+  forceDestroy: true,
 });
 
 new aws.s3.BucketPolicy('usercontents', {
@@ -56,7 +58,8 @@ new aws.s3.BucketLifecycleConfigurationV2('usercontents', {
 });
 
 const uploads = new aws.s3.BucketV2('uploads', {
-  bucket: 'glitter-uploads',
+  bucket: 'typie-uploads',
+  forceDestroy: true,
 });
 
 new aws.s3.BucketLifecycleConfigurationV2('uploads', {
@@ -78,7 +81,7 @@ new aws.s3.BucketCorsConfigurationV2('uploads', {
     {
       allowedHeaders: ['*'],
       allowedMethods: ['POST'],
-      allowedOrigins: ['https://glitter.im', 'https://glitter.pizza', 'http://localhost:4000'],
+      allowedOrigins: ['https://typie.co', 'https://typie.dev', 'http://localhost:4000'],
     },
   ],
 });

@@ -1,1 +1,1 @@
-export { default } from '@glitter/lintconfig/prettier';
+export { default } from '@typie/lintconfig/prettier';

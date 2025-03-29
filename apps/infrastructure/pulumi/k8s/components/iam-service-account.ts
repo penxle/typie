@@ -22,7 +22,7 @@ export class IAMServiceAccount extends pulumi.ComponentResource {
   public readonly metadata: pulumi.Output<IAMServiceAccountOutputMetadata>;
 
   constructor(name: string, args: IAMServiceAccountArgs, opts?: pulumi.ComponentResourceOptions) {
-    super('glitter:index:IAMServiceAccount', name, {}, opts);
+    super('typie:index:IAMServiceAccount', name, {}, opts);
 
     const role = new aws.iam.Role(
       `${name}@eks`,

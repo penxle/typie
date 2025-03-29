@@ -1,9 +1,9 @@
 import * as aws from '@pulumi/aws';
 
-const vpc = new aws.ec2.Vpc('glitter', {
+const vpc = new aws.ec2.Vpc('typie', {
   cidrBlock: '10.64.0.0/16',
   enableDnsHostnames: true,
-  tags: { Name: 'glitter' },
+  tags: { Name: 'typie' },
 });
 
 const publicAz1Subnet = new aws.ec2.Subnet('public-az1', {

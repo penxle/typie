@@ -1,4 +1,4 @@
-import { logger } from '@glitter/lib';
+import { logger } from '@typie/lib';
 import type { Logger } from 'drizzle-orm/logger';
 
 export class DrizzleLogger implements Logger {

@@ -9,7 +9,7 @@ import { tokens } from './tokens';
 import { utilities } from './utilities';
 
 export const preset = definePreset({
-  name: '@glitter/website',
+  name: '@typie/website',
   presets: ['@pandacss/preset-base'],
 
   theme: {

@@ -1,5 +1,5 @@
 {
-  "name": "@glitter/lintconfig",
+  "name": "@typie/lintconfig",
   "version": "0.0.1",
   "private": true,
   "type": "module",

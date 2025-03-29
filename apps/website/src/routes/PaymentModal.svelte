@@ -47,7 +47,7 @@
       storeId: 'store-e1e69136-38bb-42dd-b226-3c78e03c1ff1',
       channelKey: 'channel-key-6403de1b-8d90-4813-bb8e-0b9a1c094f6b',
       paymentId: payment.id,
-      orderName: '글리터 사전 등록',
+      orderName: '타이피 사전 등록',
       totalAmount: 4900,
       currency: 'CURRENCY_KRW',
       payMethod: 'CARD',
@@ -117,7 +117,7 @@
           textStyle: '14m',
           resize: 'none',
         })}
-        placeholder="글리터에 가장 기대하는 기능이 있다면 적어주세요"
+        placeholder="타이피에 가장 기대하는 기능이 있다면 적어주세요"
         rows="3"
         bind:value={feature}
       ></textarea>
@@ -137,7 +137,7 @@
         <label class={css({ fontSize: '14px', cursor: 'pointer' })} for="confirmTerms">
           <a
             class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })}
-            href="https://glitter.rdbl.io/legal/terms"
+            href="https://typie.rdbl.io/legal/terms"
             rel="noopener noreferrer"
             target="_blank"
           >
@@ -146,7 +146,7 @@
           및
           <a
             class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })}
-            href="https://glitter.rdbl.io/legal/privacy"
+            href="https://typie.rdbl.io/legal/privacy"
             rel="noopener noreferrer"
             target="_blank"
           >
@@ -184,7 +184,7 @@
 
 <Dialog bind:open={confirmOpen}>
   <form class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })} method="dialog">
-    글리터 사전 등록이 완료되었어요!
+    타이피 사전 등록이 완료되었어요!
 
     <button
       class={css({

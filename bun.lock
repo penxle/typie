@@ -2,9 +2,9 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "@glitter/monorepo",
+      "name": "@typie/monorepo",
       "devDependencies": {
-        "@glitter/lintconfig": "workspace:*",
+        "@typie/lintconfig": "workspace:*",
         "cspell": "^8.18.0",
         "eslint": "^9.23.0",
         "husky": "^9.1.7",
@@ -16,14 +16,13 @@
       },
     },
     "apps/api": {
-      "name": "@glitter/api",
+      "name": "@typie/api",
       "version": "0.0.1",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.777.0",
         "@aws-sdk/client-ses": "^3.777.0",
         "@aws-sdk/s3-presigned-post": "^3.777.0",
         "@ctrl/tinycolor": "^4.1.0",
-        "@glitter/lib": "workspace:*",
         "@graphql-yoga/redis-event-target": "^3.0.3",
         "@paralleldrive/cuid2": "^2.2.2",
         "@portone/server-sdk": "^0.14.0",
@@ -36,6 +35,7 @@
         "@react-email/components": "^0.0.34",
         "@resvg/resvg-js": "^2.6.2",
         "@sentry/bun": "^9.10.0",
+        "@typie/lib": "workspace:*",
         "bullmq": "^5.45.0",
         "dayjs": "^1.11.13",
         "drizzle-orm": "^0.41.0",
@@ -61,11 +61,11 @@
         "zod": "^3.24.2",
       },
       "devDependencies": {
-        "@glitter/pulumi": "workspace:*",
-        "@glitter/tsconfig": "workspace:*",
         "@types/bun": "^1.2.8",
         "@types/react": "^19.0.12",
         "@types/react-dom": "^19.0.4",
+        "@typie/pulumi": "workspace:*",
+        "@typie/tsconfig": "workspace:*",
         "drizzle-kit": "^0.30.6",
         "react-email": "^4.0.1",
         "tsup": "^8.4.0",
@@ -73,30 +73,30 @@
       },
     },
     "apps/infrastructure": {
-      "name": "@glitter/infrastructure",
+      "name": "@typie/infrastructure",
       "version": "0.0.1",
       "devDependencies": {
-        "@glitter/pulumi": "workspace:*",
-        "@glitter/tsconfig": "workspace:*",
         "@pulumi/aws": "^6.74.0",
         "@pulumi/kubernetes": "^4.22.1",
         "@pulumi/pulumi": "^3.159.0",
         "@pulumi/random": "^4.18.0",
         "@pulumi/tailscale": "^0.18.0",
         "@pulumi/tls": "^5.1.1",
+        "@typie/pulumi": "workspace:*",
+        "@typie/tsconfig": "workspace:*",
         "fast-glob": "^3.3.3",
         "tsx": "^4.19.3",
         "typescript": "^5.8.2",
       },
     },
     "apps/literoom": {
-      "name": "@glitter/literoom",
+      "name": "@typie/literoom",
       "version": "0.0.1",
       "devDependencies": {
         "@aws-sdk/client-s3": "^3.777.0",
-        "@glitter/tsconfig": "workspace:*",
         "@pulumi/aws": "^6.74.0",
         "@pulumi/pulumi": "^3.159.0",
+        "@typie/tsconfig": "workspace:*",
         "sharp": "^0.33.5",
         "tsup": "^8.4.0",
         "tsx": "^4.19.3",
@@ -104,16 +104,11 @@
       },
     },
     "apps/website": {
-      "name": "@glitter/website",
+      "name": "@typie/website",
       "version": "0.0.1",
       "devDependencies": {
         "@ctrl/tinycolor": "^4.1.0",
         "@floating-ui/dom": "^1.6.13",
-        "@glitter/adapter-bun": "workspace:*",
-        "@glitter/gql": "workspace:*",
-        "@glitter/lib": "workspace:*",
-        "@glitter/pulumi": "workspace:*",
-        "@glitter/tsconfig": "workspace:*",
         "@iconify-json/lucide": "^1.2.33",
         "@pandacss/dev": "^0.53.3",
         "@portone/browser-sdk": "^0.0.14",
@@ -124,6 +119,11 @@
         "@tiptap/html": "^2.11.5",
         "@tiptap/pm": "^2.11.5",
         "@types/mixpanel-browser": "^2.54.0",
+        "@typie/adapter-bun": "workspace:*",
+        "@typie/gql": "workspace:*",
+        "@typie/lib": "workspace:*",
+        "@typie/pulumi": "workspace:*",
+        "@typie/tsconfig": "workspace:*",
         "body-scroll-lock-upgrade": "^1.1.0",
         "es-hangul": "^2.3.2",
         "ky": "^1.7.5",
@@ -152,28 +152,28 @@
       },
     },
     "packages/adapter-bun": {
-      "name": "@glitter/adapter-bun",
+      "name": "@typie/adapter-bun",
       "version": "0.0.1",
       "devDependencies": {
-        "@glitter/lib": "workspace:*",
-        "@glitter/tsconfig": "workspace:*",
         "@sveltejs/kit": "^2.20.2",
         "@types/bun": "^1.2.8",
+        "@typie/lib": "workspace:*",
+        "@typie/tsconfig": "workspace:*",
         "hono": "^4.7.5",
         "tsup": "^8.4.0",
         "typescript": "^5.8.2",
       },
     },
     "packages/gql": {
-      "name": "@glitter/gql",
+      "name": "@typie/gql",
       "version": "0.0.1",
       "bin": {
         "gql": "./bin/index.ts",
       },
       "devDependencies": {
-        "@glitter/tsconfig": "workspace:*",
         "@sindresorhus/string-hash": "^2.0.0",
         "@sveltejs/kit": "^2.20.2",
+        "@typie/tsconfig": "workspace:*",
         "fast-glob": "^3.3.3",
         "fast-json-stable-stringify": "^2.1.0",
         "graphql": "^16.10.0",
@@ -191,12 +191,12 @@
       },
     },
     "packages/lib": {
-      "name": "@glitter/lib",
+      "name": "@typie/lib",
       "version": "0.0.1",
       "devDependencies": {
-        "@glitter/tsconfig": "workspace:*",
         "@sveltejs/kit": "^2.20.2",
         "@types/bun": "^1.2.8",
+        "@typie/tsconfig": "workspace:*",
         "dayjs": "^1.11.13",
         "hono": "^4.7.5",
         "ipaddr.js": "^2.2.0",
@@ -210,7 +210,7 @@
       },
     },
     "packages/lintconfig": {
-      "name": "@glitter/lintconfig",
+      "name": "@typie/lintconfig",
       "version": "0.0.1",
       "devDependencies": {
         "@eslint/eslintrc": "^3.3.1",
@@ -233,19 +233,19 @@
       },
     },
     "packages/pulumi": {
-      "name": "@glitter/pulumi",
+      "name": "@typie/pulumi",
       "version": "0.0.1",
       "devDependencies": {
-        "@glitter/tsconfig": "workspace:*",
         "@pulumi/aws": "^6.74.0",
         "@pulumi/kubernetes": "^4.22.1",
         "@pulumi/pulumi": "^3.159.0",
+        "@typie/tsconfig": "workspace:*",
         "ts-pattern": "^5.6.2",
         "typescript": "^5.8.2",
       },
     },
     "packages/tsconfig": {
-      "name": "@glitter/tsconfig",
+      "name": "@typie/tsconfig",
       "version": "0.0.1",
     },
   },
@@ -609,26 +609,6 @@
     "@floating-ui/dom": ["@floating-ui/dom@1.6.13", "", { "dependencies": { "@floating-ui/core": "^1.6.0", "@floating-ui/utils": "^0.2.9" } }, "sha512-umqzocjDgNRGTuO7Q8CU32dkHkECqI8ZdMZ5Swb6QAM0t5rnlrN3lGo1hdpscRd3WS8T6DKYK4ephgIH9iRh3w=="],
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.9", "", {}, "sha512-MDWhGtE+eHw5JW7lq4qhc5yRLS11ERl1c7Z6Xd0a58DozHES6EnNNwUWbMiG4J9Cgj053Bhk8zvlhFYKVhULwg=="],
-
-    "@glitter/adapter-bun": ["@glitter/adapter-bun@workspace:packages/adapter-bun"],
-
-    "@glitter/api": ["@glitter/api@workspace:apps/api"],
-
-    "@glitter/gql": ["@glitter/gql@workspace:packages/gql"],
-
-    "@glitter/infrastructure": ["@glitter/infrastructure@workspace:apps/infrastructure"],
-
-    "@glitter/lib": ["@glitter/lib@workspace:packages/lib"],
-
-    "@glitter/lintconfig": ["@glitter/lintconfig@workspace:packages/lintconfig"],
-
-    "@glitter/literoom": ["@glitter/literoom@workspace:apps/literoom"],
-
-    "@glitter/pulumi": ["@glitter/pulumi@workspace:packages/pulumi"],
-
-    "@glitter/tsconfig": ["@glitter/tsconfig@workspace:packages/tsconfig"],
-
-    "@glitter/website": ["@glitter/website@workspace:apps/website"],
 
     "@graphql-tools/executor": ["@graphql-tools/executor@1.4.6", "", { "dependencies": { "@graphql-tools/utils": "^10.8.6", "@graphql-typed-document-node/core": "^3.2.0", "@repeaterjs/repeater": "^3.0.4", "@whatwg-node/disposablestack": "^0.0.6", "@whatwg-node/promise-helpers": "^1.0.0", "tslib": "^2.4.0" }, "peerDependencies": { "graphql": "^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0" } }, "sha512-vtwuotFe9DR1gZ2VXYRxcL6GVP6dYUHWibA9JNOkdRiwCW/icTY7oU9xUVITnOAfjNh9k8Z43kZmiyr2aMopVA=="],
 
@@ -1341,6 +1321,26 @@
     "@typescript-eslint/utils": ["@typescript-eslint/utils@8.28.0", "", { "dependencies": { "@eslint-community/eslint-utils": "^4.4.0", "@typescript-eslint/scope-manager": "8.28.0", "@typescript-eslint/types": "8.28.0", "@typescript-eslint/typescript-estree": "8.28.0" }, "peerDependencies": { "eslint": "^8.57.0 || ^9.0.0", "typescript": ">=4.8.4 <5.9.0" } }, "sha512-OELa9hbTYciYITqgurT1u/SzpQVtDLmQMFzy/N8pQE+tefOyCWT79jHsav294aTqV1q1u+VzqDGbuujvRYaeSQ=="],
 
     "@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.28.0", "", { "dependencies": { "@typescript-eslint/types": "8.28.0", "eslint-visitor-keys": "^4.2.0" } }, "sha512-hbn8SZ8w4u2pRwgQ1GlUrPKE+t2XvcCW5tTRF7j6SMYIuYG37XuzIW44JCZPa36evi0Oy2SnM664BlIaAuQcvg=="],
+
+    "@typie/adapter-bun": ["@typie/adapter-bun@workspace:packages/adapter-bun"],
+
+    "@typie/api": ["@typie/api@workspace:apps/api"],
+
+    "@typie/gql": ["@typie/gql@workspace:packages/gql"],
+
+    "@typie/infrastructure": ["@typie/infrastructure@workspace:apps/infrastructure"],
+
+    "@typie/lib": ["@typie/lib@workspace:packages/lib"],
+
+    "@typie/lintconfig": ["@typie/lintconfig@workspace:packages/lintconfig"],
+
+    "@typie/literoom": ["@typie/literoom@workspace:apps/literoom"],
+
+    "@typie/pulumi": ["@typie/pulumi@workspace:packages/pulumi"],
+
+    "@typie/tsconfig": ["@typie/tsconfig@workspace:packages/tsconfig"],
+
+    "@typie/website": ["@typie/website@workspace:apps/website"],
 
     "@ungap/structured-clone": ["@ungap/structured-clone@1.3.0", "", {}, "sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g=="],
 

@@ -34,7 +34,7 @@ export const writeArtifactAssets = async ({ gqlDir, schema, artifacts }: Context
 
     const program = AST.b.program([
       AST.b.importDeclaration.from({
-        source: AST.b.stringLiteral('@glitter/gql/runtime'),
+        source: AST.b.stringLiteral('@typie/gql/runtime'),
         specifiers: [AST.b.importSpecifier(AST.b.identifier(fn))],
       }),
       AST.b.exportNamedDeclaration(
@@ -161,7 +161,7 @@ export const writePublicAssets = async ({ gqlDir, artifacts }: Context) => {
   const indexTs = AST.b.program([
     AST.b.importDeclaration.from({
       importKind: 'type',
-      source: AST.b.stringLiteral('@glitter/gql/runtime'),
+      source: AST.b.stringLiteral('@typie/gql/runtime'),
       specifiers: [AST.b.importSpecifier.from({ imported: AST.b.identifier('CacheFacade') })],
     }),
     AST.b.exportAllDeclaration(AST.b.stringLiteral('./public/functions')),
@@ -186,7 +186,7 @@ export const writePublicAssets = async ({ gqlDir, artifacts }: Context) => {
   ]);
   await writeFile(path.join(gqlDir, 'index.d.ts'), AST.print(indexTs));
 
-  const indexJs = AST.b.program([AST.b.exportAllDeclaration(AST.b.stringLiteral('@glitter/gql/runtime'))]);
+  const indexJs = AST.b.program([AST.b.exportAllDeclaration(AST.b.stringLiteral('@typie/gql/runtime'))]);
   await writeFile(path.join(gqlDir, 'index.js'), AST.print(indexJs));
 };
 
@@ -282,7 +282,7 @@ export const writeTypeAssets = async ({ projectDir, gqlDir, artifacts }: Context
     const program = AST.b.program([
       AST.b.importDeclaration.from({
         importKind: 'type',
-        source: AST.b.stringLiteral('@glitter/gql/runtime'),
+        source: AST.b.stringLiteral('@typie/gql/runtime'),
         specifiers: [
           AST.b.importSpecifier.from({
             imported: AST.b.identifier('VariablesFn'),

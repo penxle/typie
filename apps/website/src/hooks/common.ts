@@ -1,1 +1,1 @@
-import '@glitter/lib/dayjs';
+import '@typie/lib/dayjs';

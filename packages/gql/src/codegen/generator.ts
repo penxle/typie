@@ -167,7 +167,7 @@ export const buildGraphQLFunctions = (artifacts: Artifact[]): AST.Program => {
     }),
     AST.b.importDeclaration.from({
       importKind: 'type',
-      source: AST.b.stringLiteral('@glitter/gql/runtime'),
+      source: AST.b.stringLiteral('@typie/gql/runtime'),
       specifiers: [
         AST.b.importSpecifier(AST.b.identifier('QueryStore')),
         AST.b.importSpecifier(AST.b.identifier('MutationStore')),

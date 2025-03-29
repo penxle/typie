@@ -10,41 +10,44 @@ export const zones = {
   glitter_im: createZone('glitter.im'),
   glitter_pizza: createZone('glitter.pizza'),
   glttr_io: createZone('glttr.io'),
+
+  typie_co: createZone('typie.co'),
+  typie_dev: createZone('typie.dev'),
+  typie_me: createZone('typie.me'),
+  typie_net: createZone('typie.net'),
+  typie_io: createZone('typie.io'),
 };
 
-new aws.route53.Record('glitter.im|txt', {
-  zoneId: zones.glitter_im.zoneId,
+new aws.route53.Record('typie.co|txt', {
+  zoneId: zones.typie_co.zoneId,
   type: 'TXT',
-  name: 'glitter.im',
-  records: [
-    // spell-checker:disable-next-line
-    'google-site-verification=QXQUl_XRbKvl20qm2ClmqOcRpsdVPQVHd7RT9CLYtsE',
-  ],
+  name: 'typie.co',
+  records: ['google-site-verification=Q-1ETLmF6p7XkzQM0wpDyF0wCBQREsjK1aZdxR-4ggQ'],
   ttl: 300,
 });
 
-new aws.route53.Record('send.glitter.im|mx', {
-  zoneId: zones.glitter_im.zoneId,
+new aws.route53.Record('send.typie.co|mx', {
+  zoneId: zones.typie_co.zoneId,
   type: 'MX',
-  name: 'send.glitter.im',
+  name: 'send.typie.co',
   records: ['10 feedback-smtp.ap-northeast-1.amazonses.com'],
   ttl: 300,
 });
 
-new aws.route53.Record('send.glitter.im|txt', {
-  zoneId: zones.glitter_im.zoneId,
+new aws.route53.Record('send.typie.co|txt', {
+  zoneId: zones.typie_co.zoneId,
   type: 'TXT',
-  name: 'send.glitter.im',
+  name: 'send.typie.co',
   records: ['v=spf1 include:amazonses.com ~all'],
   ttl: 300,
 });
 
-new aws.route53.Record('resend._domainkey.glitter.im|txt', {
-  zoneId: zones.glitter_im.zoneId,
+new aws.route53.Record('resend._domainkey.typie.co|txt', {
+  zoneId: zones.typie_co.zoneId,
   type: 'TXT',
-  name: 'resend._domainkey.glitter.im',
+  name: 'resend._domainkey.typie.co',
   records: [
-    'p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQD1vooTTa2V08o1vMw003MVvE6/UWJ8NlYrOEYyTKGP4kKXr2yXXeXfCmI9r4NmDJROUd1kz6Zg4dorcCDe4ai6kgI9iE+jSrp9qwCV/3Jxi/lu8yC6kNhYCPHrl7twgor7kq6cIoZFzuDbDQXqXJlmFJB9siv+fEYMzW48x0IcDQIDAQAB',
+    'p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC3+gXuQ+MyJT5PUzXZ7UJHY3vfwy41Bh6nmhBHbCDK7WJvr0COTx5LbwYH7+hZLIVLZgevUR4ErJO5w1GPAK29RRZ49iACcUgh4rJBME4l0w1h3vsq1guTkTjR2Uakrjx0r/dNof+XAMSvYJ0GMxF5CY1jFPJ/KmVPfQgROFUF5wIDAQAB',
   ],
   ttl: 300,
 });

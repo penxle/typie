@@ -8,7 +8,7 @@ import dayjs from 'dayjs';
 import { GraphQLJSON } from 'graphql-scalars';
 import * as R from 'remeda';
 import { base64 } from 'rfc4648';
-import { GlitterError } from '@/errors';
+import { TypieError } from '@/errors';
 import type { Context, UserContext } from '@/context';
 
 export const builder = new SchemaBuilder<{
@@ -40,7 +40,7 @@ export const builder = new SchemaBuilder<{
     }),
     treatErrorsAsUnauthorized: true,
     authorizeOnSubscribe: true,
-    unauthorizedError: (_, __, ___, result) => new GlitterError({ code: 'unauthorized', message: result.message, status: 401 }),
+    unauthorizedError: (_, __, ___, result) => new TypieError({ code: 'unauthorized', message: result.message, status: 401 }),
   },
 
   withInput: {
@@ -50,7 +50,7 @@ export const builder = new SchemaBuilder<{
   },
 
   zod: {
-    validationError: (error) => new GlitterError({ code: 'validation_error', message: error.issues[0].message, status: 400 }),
+    validationError: (error) => new TypieError({ code: 'validation_error', message: error.issues[0].message, status: 400 }),
   },
 });
 

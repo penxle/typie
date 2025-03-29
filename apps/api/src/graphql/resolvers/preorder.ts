@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db, firstOrThrow, PreorderPayments, PreorderUsers } from '@/db';
-import { GlitterError } from '@/errors';
+import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { builder } from '../builder';
 import { PreorderPayment, PreorderUser } from '../objects';
@@ -33,7 +33,7 @@ builder.mutationFields((t) => ({
         .where(eq(PreorderUsers.email, input.email.toLowerCase()))
         .limit(1);
       if (alreadyOrderedUser.length > 0) {
-        throw new GlitterError({ code: 'ALREADY_ORDERED_EMAIL', message: '이미 예약 신청한 이메일입니다.' });
+        throw new TypieError({ code: 'ALREADY_ORDERED_EMAIL', message: '이미 예약 신청한 이메일입니다.' });
       }
 
       return await db
@@ -65,11 +65,11 @@ builder.mutationFields((t) => ({
       const paymentResult = await portone.getPayment({ paymentId: paymentRequest.id });
 
       if (paymentResult.status !== 'succeeded') {
-        throw new GlitterError({ code: 'PAYMENT_FAILED', message: paymentResult.message });
+        throw new TypieError({ code: 'PAYMENT_FAILED', message: paymentResult.message });
       }
 
       if (paymentResult.amount.total !== paymentRequest.amount) {
-        throw new GlitterError({ code: 'PAYMENT_AMOUNT_MISMATCH', message: '결제 금액이 일치하지 않아요' });
+        throw new TypieError({ code: 'PAYMENT_AMOUNT_MISMATCH', message: '결제 금액이 일치하지 않아요' });
       }
 
       return await db.transaction(async (tx) => {

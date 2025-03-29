@@ -1,6 +1,6 @@
 <script lang="ts">
   import { z } from 'zod';
-  import { GlitterError } from '@/errors';
+  import { TypieError } from '@/errors';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
   import { css } from '$styled-system/css';
@@ -22,7 +22,7 @@
       });
     },
     onError: (error) => {
-      if (error instanceof GlitterError && error.code === 'user_email_not_found') {
+      if (error instanceof TypieError && error.code === 'user_email_not_found') {
         throw new FormError('email', '등록되지 않은 이메일입니다.');
       }
     },

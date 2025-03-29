@@ -28,7 +28,7 @@ type RedirectArgs = {
 
 export class Redirect extends pulumi.ComponentResource {
   constructor(name: string, args: RedirectArgs, opts?: pulumi.ComponentResourceOptions) {
-    super('glitter:index:Redirect', name, {}, opts);
+    super('typie:index:Redirect', name, {}, opts);
 
     const stack = pulumi.getStack();
 

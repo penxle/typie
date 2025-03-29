@@ -1,13 +1,13 @@
-import * as glitter from '@glitter/pulumi';
 import * as pulumi from '@pulumi/pulumi';
+import * as typie from '@typie/pulumi';
 
-const config = new pulumi.Config('glitter');
+const config = new pulumi.Config('typie');
 
-new glitter.Service('website', {
+new typie.Service('website', {
   name: 'website',
 
   image: {
-    name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/glitter',
+    name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/typie',
     digest: config.require('digest'),
     command: ['bun', 'run', 'apps/website/index.js'],
   },
@@ -24,13 +24,13 @@ new glitter.Service('website', {
   },
 
   secret: {
-    project: 'glitter-website',
+    project: 'typie-website',
   },
 
   ingress: {
     domain: {
-      production: 'glitter.im',
-      dev: 'glitter.pizza',
+      production: 'typie.co',
+      dev: 'typie.dev',
     },
 
     priority: {
@@ -40,13 +40,13 @@ new glitter.Service('website', {
 
     cloudfront: {
       production: {
-        domainZone: 'glitter.im',
+        domainZone: 'typie.co',
       },
     },
   },
 });
 
-new glitter.Redirect('www.website', {
+new typie.Redirect('www.website', {
   name: 'www.website',
 
   priority: {
@@ -55,28 +55,13 @@ new glitter.Redirect('www.website', {
   },
 
   production: {
-    from: { host: 'www.glitter.im' },
-    to: { host: 'glitter.im' },
+    from: { host: 'www.typie.co' },
+    to: { host: 'typie.co' },
   },
 
   dev: {
-    from: { host: 'www.glitter.pizza' },
-    to: { host: 'glitter.pizza' },
-  },
-
-  code: 301,
-});
-
-new glitter.Redirect('glttr.io', {
-  name: 'glttr.io',
-
-  priority: {
-    production: '23',
-  },
-
-  production: {
-    from: { host: 'glttr.io' },
-    to: { host: 'glitter.im' },
+    from: { host: 'www.typie.dev' },
+    to: { host: 'typie.dev' },
   },
 
   code: 301,

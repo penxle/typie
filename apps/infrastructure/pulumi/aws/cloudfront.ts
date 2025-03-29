@@ -29,6 +29,12 @@ export const certificates = {
   glitter_im: createCertificate('glitter.im'),
   glitter_pizza: createCertificate('glitter.pizza'),
   glttr_io: createCertificate('glttr.io'),
+
+  typie_co: createCertificate('typie.co'),
+  typie_dev: createCertificate('typie.dev'),
+  typie_me: createCertificate('typie.me'),
+  typie_net: createCertificate('typie.net'),
+  typie_io: createCertificate('typie.io'),
 };
 
 const s3OriginAccessControl = new aws.cloudfront.OriginAccessControl('s3', {
@@ -152,13 +158,24 @@ const staticResponseHeadersPolicy = new aws.cloudfront.ResponseHeadersPolicy('st
 
 const cdn = new aws.cloudfront.Distribution('cdn', {
   enabled: true,
-  aliases: ['cdn.glttr.io'],
+  aliases: ['typie.net'],
   httpVersion: 'http2and3',
 
   origins: [
     {
       originId: 'cdn',
       domainName: buckets.cdn.bucketRegionalDomainName,
+      originAccessControlId: s3OriginAccessControl.id,
+    },
+    {
+      originId: 'usercontents',
+      domainName: buckets.usercontents.bucketRegionalDomainName,
+      originAccessControlId: s3OriginAccessControl.id,
+    },
+    {
+      originId: 'usercontents-literoom',
+      // spell-checker:disable-next-line
+      domainName: 'usercontents-literoo-dsqhecmpgp5romu8x8rbkcmbapn2a--ol-s3.s3.ap-northeast-2.amazonaws.com',
       originAccessControlId: s3OriginAccessControl.id,
     },
   ],
@@ -174,65 +191,18 @@ const cdn = new aws.cloudfront.Distribution('cdn', {
     responseHeadersPolicyId: staticResponseHeadersPolicy.id,
   },
 
-  restrictions: {
-    geoRestriction: {
-      restrictionType: 'none',
-    },
-  },
-
-  viewerCertificate: {
-    acmCertificateArn: certificates.glttr_io.arn,
-    sslSupportMethod: 'sni-only',
-    minimumProtocolVersion: 'TLSv1.2_2021',
-  },
-
-  waitForDeployment: false,
-});
-
-new aws.route53.Record('cdn.glttr.io', {
-  zoneId: zones.glttr_io.zoneId,
-  type: 'A',
-  name: 'cdn.glttr.io',
-  aliases: [
-    {
-      name: cdn.domainName,
-      zoneId: cdn.hostedZoneId,
-      evaluateTargetHealth: false,
-    },
-  ],
-});
-
-const usercontents = new aws.cloudfront.Distribution('usercontents', {
-  enabled: true,
-  aliases: ['usercontents.glttr.io'],
-  httpVersion: 'http2and3',
-
-  origins: [
-    {
-      originId: 'usercontents',
-      domainName: buckets.usercontents.bucketRegionalDomainName,
-      originAccessControlId: s3OriginAccessControl.id,
-    },
-    {
-      originId: 'usercontents-literoom',
-      // spell-checker:disable-next-line
-      domainName: 'usercontents-literoo-s7pfcdx19zeq7wkgrydyso5bapn2a--ol-s3.s3.ap-northeast-2.amazonaws.com',
-      originAccessControlId: s3OriginAccessControl.id,
-    },
-  ],
-
-  defaultCacheBehavior: {
-    targetOriginId: 'usercontents',
-    compress: true,
-    viewerProtocolPolicy: 'redirect-to-https',
-    allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
-    cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
-    cachePolicyId: staticCachePolicy.id,
-    originRequestPolicyId: staticOriginRequestPolicy.id,
-    responseHeadersPolicyId: staticResponseHeadersPolicy.id,
-  },
-
   orderedCacheBehaviors: [
+    {
+      targetOriginId: 'usercontents',
+      pathPattern: 'files/*',
+      compress: true,
+      viewerProtocolPolicy: 'redirect-to-https',
+      allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+      cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
+      cachePolicyId: staticCachePolicy.id,
+      originRequestPolicyId: staticOriginRequestPolicy.id,
+      responseHeadersPolicyId: staticResponseHeadersPolicy.id,
+    },
     {
       targetOriginId: 'usercontents-literoom',
       pathPattern: 'images/*',
@@ -253,7 +223,7 @@ const usercontents = new aws.cloudfront.Distribution('usercontents', {
   },
 
   viewerCertificate: {
-    acmCertificateArn: certificates.glttr_io.arn,
+    acmCertificateArn: certificates.typie_net.arn,
     sslSupportMethod: 'sni-only',
     minimumProtocolVersion: 'TLSv1.2_2021',
   },
@@ -261,20 +231,20 @@ const usercontents = new aws.cloudfront.Distribution('usercontents', {
   waitForDeployment: false,
 });
 
-new aws.route53.Record('usercontents.glttr.io', {
-  zoneId: zones.glttr_io.zoneId,
+new aws.route53.Record('typie.net', {
+  zoneId: zones.typie_net.zoneId,
   type: 'A',
-  name: 'usercontents.glttr.io',
+  name: 'typie.net',
   aliases: [
     {
-      name: usercontents.domainName,
-      zoneId: usercontents.hostedZoneId,
+      name: cdn.domainName,
+      zoneId: cdn.hostedZoneId,
       evaluateTargetHealth: false,
     },
   ],
 });
 
-export const distributions = { cdn, usercontents };
+export const distributions = { cdn };
 
 export const outputs = {
   AWS_CLOUDFRONT_DYNAMIC_CACHE_POLICY_ID: dynamicCachePolicy.id,

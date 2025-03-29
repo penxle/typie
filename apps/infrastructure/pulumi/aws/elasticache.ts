@@ -8,15 +8,15 @@ const subnetGroup = new aws.elasticache.SubnetGroup('private', {
   subnetIds: [subnets.private.az1.id, subnets.private.az2.id],
 });
 
-const parameterGroup = new aws.elasticache.ParameterGroup('glitter', {
-  name: 'glitter-valkey8',
+const parameterGroup = new aws.elasticache.ParameterGroup('typie-valkey8', {
+  name: 'typie-valkey8',
   family: 'valkey8',
 
   parameters: [{ name: 'maxmemory-policy', value: 'noeviction' }],
 });
 
-const cluster = new aws.elasticache.ReplicationGroup('glitter', {
-  replicationGroupId: 'glitter',
+const cluster = new aws.elasticache.ReplicationGroup('typie', {
+  replicationGroupId: 'typie',
   description: 'Valkey cluster',
 
   engine: 'valkey',
@@ -39,7 +39,7 @@ const cluster = new aws.elasticache.ReplicationGroup('glitter', {
   transitEncryptionEnabled: false,
 
   snapshotRetentionLimit: 7,
-  finalSnapshotIdentifier: 'glitter-final-snapshot',
+  finalSnapshotIdentifier: 'typie-final-snapshot',
 
   snapshotWindow: '19:00-20:00',
   maintenanceWindow: 'sun:20:00-sun:22:00',
@@ -47,10 +47,10 @@ const cluster = new aws.elasticache.ReplicationGroup('glitter', {
   applyImmediately: true,
 });
 
-new aws.route53.Record('redis.glttr.io', {
-  zoneId: zones.glttr_io.zoneId,
+new aws.route53.Record('redis.typie.io', {
+  zoneId: zones.typie_io.zoneId,
   type: 'CNAME',
-  name: 'redis.glttr.io',
+  name: 'redis.typie.io',
   records: [cluster.primaryEndpointAddress],
   ttl: 300,
 });

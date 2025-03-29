@@ -1,6 +1,6 @@
 <script lang="ts">
   import { z } from 'zod';
-  import { GlitterError } from '@/errors';
+  import { TypieError } from '@/errors';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
   import { css } from '$styled-system/css';
@@ -32,7 +32,7 @@
       });
     },
     onError: (error) => {
-      if (error instanceof GlitterError && error.code === 'user_email_exists') {
+      if (error instanceof TypieError && error.code === 'user_email_exists') {
         throw new FormError('email', '이미 사용중인 이메일입니다.');
       }
     },

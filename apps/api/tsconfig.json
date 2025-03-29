@@ -1,5 +1,5 @@
 {
-  "extends": ["@glitter/tsconfig"],
+  "extends": ["@typie/tsconfig"],
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"]

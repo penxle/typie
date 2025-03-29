@@ -1,6 +1,6 @@
 <script lang="ts">
   import { z } from 'zod';
-  import { GlitterError } from '@/errors';
+  import { TypieError } from '@/errors';
   import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
@@ -30,7 +30,7 @@
       });
     },
     onError: (error) => {
-      if (error instanceof GlitterError && error.code === 'invalid_code') {
+      if (error instanceof TypieError && error.code === 'invalid_code') {
         throw new FormError('confirmPassword', '만료되었거나 유효하지 않은 링크입니다. 비밀번호 재설정을 다시 요청해주세요.');
       }
     },

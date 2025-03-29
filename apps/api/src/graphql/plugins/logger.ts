@@ -1,4 +1,4 @@
-import { logger } from '@glitter/lib';
+import { logger } from '@typie/lib';
 import type { Plugin } from 'graphql-yoga';
 import type { Context } from '@/context';
 

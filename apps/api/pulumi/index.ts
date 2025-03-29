@@ -1,14 +1,14 @@
-import * as glitter from '@glitter/pulumi';
 import * as pulumi from '@pulumi/pulumi';
+import * as typie from '@typie/pulumi';
 
-const config = new pulumi.Config('glitter');
-const ref = new pulumi.StackReference('glitter/infrastructure/base');
+const config = new pulumi.Config('typie');
+const ref = new pulumi.StackReference('typie/infrastructure/base');
 
-new glitter.Service('api', {
+new typie.Service('api', {
   name: 'api',
 
   image: {
-    name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/glitter',
+    name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/typie',
     digest: config.require('digest'),
     command: ['bun', 'run', 'apps/api/index.js'],
   },
@@ -44,8 +44,8 @@ new glitter.Service('api', {
           Resource: [ref.getOutput('AWS_SES_EMAIL_IDENTITY'), ref.getOutput('AWS_SES_CONFIGURATION_SET')],
           Condition: {
             StringEquals: {
-              'ses:FromAddress': 'hello@glitter.im',
-              // 'ses:FromDisplayName': '글리터',
+              'ses:FromAddress': 'hello@typie.co',
+              'ses:FromDisplayName': 'Typie',
             },
           },
         },
@@ -54,13 +54,13 @@ new glitter.Service('api', {
   },
 
   secret: {
-    project: 'glitter-api',
+    project: 'typie-api',
   },
 
   ingress: {
     domain: {
-      production: 'api.glitter.im',
-      dev: 'api.glitter.pizza',
+      production: 'api.typie.co',
+      dev: 'api.typie.dev',
     },
 
     priority: {
