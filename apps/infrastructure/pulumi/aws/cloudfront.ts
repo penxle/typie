@@ -26,10 +26,6 @@ const createCertificate = (domain: string) => {
 };
 
 export const certificates = {
-  glitter_im: createCertificate('glitter.im'),
-  glitter_pizza: createCertificate('glitter.pizza'),
-  glttr_io: createCertificate('glttr.io'),
-
   typie_co: createCertificate('typie.co'),
   typie_dev: createCertificate('typie.dev'),
   typie_me: createCertificate('typie.me'),
