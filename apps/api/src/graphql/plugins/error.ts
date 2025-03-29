@@ -1,5 +1,6 @@
 import { isAsyncIterable } from '@envelop/core';
 import * as Sentry from '@sentry/bun';
+import { logger } from '@typie/lib';
 import { GraphQLError } from 'graphql';
 import { dev } from '@/env';
 import { TypieError } from '@/errors';
@@ -27,8 +28,10 @@ const transformError = (error: unknown): GraphQLError => {
   } else if (error instanceof GraphQLError && error.originalError) {
     return transformError(error.originalError);
   } else if (error instanceof Error) {
+    logger.error(error);
     return new UnexpectedError(error);
   } else {
+    logger.error(error);
     return new UnexpectedError(new Error(String(error)));
   }
 };
