@@ -283,7 +283,7 @@ export class Service extends pulumi.ComponentResource {
               'alb.ingress.kubernetes.io/group.order': priority,
               'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
               'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
-              ...(cloudfront && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
+              // ...(cloudfront && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
             },
           },
           spec: {
@@ -316,17 +316,18 @@ export class Service extends pulumi.ComponentResource {
         const ref = new pulumi.StackReference('typie/infrastructure/base', {}, { parent: this });
         const provider = new aws.Provider('us-east-1', { region: 'us-east-1' }, { parent: this });
 
-        const zone = aws.route53.getZoneOutput({ name: cloudfront.domainZone }, { parent: this });
+        // const zone = aws.route53.getZoneOutput({ name: cloudfront.domainZone }, { parent: this });
         const certificate = aws.acm.getCertificateOutput(
           { domain: cloudfront.domainZone, statuses: ['ISSUED'] },
           { parent: this, provider },
         );
 
-        const distribution = new aws.cloudfront.Distribution(
+        // const distribution = new aws.cloudfront.Distribution(
+        new aws.cloudfront.Distribution(
           name,
           {
             enabled: true,
-            aliases: [domainName],
+            // aliases: [domainName],
             httpVersion: 'http2and3',
 
             origins: [
@@ -372,22 +373,22 @@ export class Service extends pulumi.ComponentResource {
           { parent: this },
         );
 
-        new aws.route53.Record(
-          name,
-          {
-            name: domainName,
-            type: 'A',
-            zoneId: zone.zoneId,
-            aliases: [
-              {
-                name: distribution.domainName,
-                zoneId: distribution.hostedZoneId,
-                evaluateTargetHealth: false,
-              },
-            ],
-          },
-          { parent: this },
-        );
+        // new aws.route53.Record(
+        //   name,
+        //   {
+        //     name: domainName,
+        //     type: 'A',
+        //     zoneId: zone.zoneId,
+        //     aliases: [
+        //       {
+        //         name: distribution.domainName,
+        //         zoneId: distribution.hostedZoneId,
+        //         evaluateTargetHealth: false,
+        //       },
+        //     ],
+        //   },
+        //   { parent: this },
+        // );
       }
     }
   }
