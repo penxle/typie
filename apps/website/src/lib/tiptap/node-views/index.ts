@@ -1,4 +1,5 @@
 export * from './blockquote';
+export * from './callout';
 export * from './code-block';
 export * from './embed';
 export * from './file';
