@@ -1,7 +1,9 @@
 import Mixpanel from 'mixpanel-browser';
+import { env } from '$env/dynamic/public';
 
 export const setupMixpanel = () => {
-  Mixpanel.init('1e356c26031e78256d39f6907b366be8', {
+  Mixpanel.init(env.PUBLIC_MIXPANEL_TOKEN, {
+    api_host: 'https://mpp.typie.co',
     ignore_dnt: true,
     persistence: 'localStorage',
   });
