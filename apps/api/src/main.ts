@@ -4,11 +4,13 @@ import '@/mq';
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { deriveContext } from '@/context';
 import { env } from '@/env';
 import { yoga } from '@/graphql';
 import { rest } from '@/rest';
+import type { Env } from '@/context';
 
-const app = new Hono();
+const app = new Hono<Env>();
 
 app.use('*', async (c, next) => {
   const origin = c.req.header('origin');
@@ -19,6 +21,13 @@ app.use('*', async (c, next) => {
       credentials: true,
     })(c, next);
   }
+
+  return next();
+});
+
+app.use('*', async (c, next) => {
+  const context = await deriveContext(c);
+  c.set('context', context);
 
   return next();
 });

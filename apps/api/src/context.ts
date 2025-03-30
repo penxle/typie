@@ -6,7 +6,6 @@ import { getCookie } from 'hono/cookie';
 import * as R from 'remeda';
 import { db, first, UserSessions } from './db';
 import { decodeAccessToken } from './utils';
-import type { YogaInitialContext } from 'graphql-yoga';
 import type { Context as HonoContext } from 'hono';
 
 type LoaderParams<T, R, S, N extends boolean, M extends boolean> = {
@@ -17,13 +16,10 @@ type LoaderParams<T, R, S, N extends boolean, M extends boolean> = {
   load: (keys: T[]) => Promise<R[]>;
 };
 
-type ServerContext = YogaInitialContext & {
-  c: HonoContext;
-};
+export type ServerContext = HonoContext<Env>;
 
 type DefaultContext = {
-  c: HonoContext;
-  ip?: string;
+  ip: string;
 
   loader: <T, R, S, N extends boolean = false, M extends boolean = false, RR = N extends true ? R | null : R>(
     params: LoaderParams<T, R, S, N, M>,
@@ -31,18 +27,25 @@ type DefaultContext = {
   ' $loaders': Map<string, DataLoader<unknown, unknown>>;
 };
 
-export type UserContext = {
+export type SessionContext = {
   session: {
     id: string;
     userId: string;
   };
 };
 
-export type Context = DefaultContext & Partial<UserContext>;
+export type Context = DefaultContext & Partial<SessionContext>;
 
-export const createContext = async ({ c }: ServerContext): Promise<Context> => {
+export type UserContext = Context & {
+  c: ServerContext;
+};
+
+export type Env = {
+  Variables: { context: Context };
+};
+
+export const deriveContext = async (c: ServerContext): Promise<Context> => {
   const ctx: Context = {
-    c,
     ip: getClientAddress(c),
 
     loader: <

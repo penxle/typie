@@ -4,8 +4,9 @@ import qs from 'query-string';
 import { db, firstOrThrow, PreorderPayments, PreorderUsers } from '@/db';
 import { env } from '@/env';
 import * as portone from '@/external/portone';
+import type { Env } from '@/context';
 
-export const payment = new Hono();
+export const payment = new Hono<Env>();
 
 payment.get('/redirect', async (c) => {
   const paymentId = c.req.query('paymentId');

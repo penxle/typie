@@ -16,7 +16,7 @@ import { google, kakao, naver } from '@/external/sso';
 import { encodeAccessToken, generateRandomAvatar, persistBlobAsImage } from '@/utils';
 import { builder } from '../builder';
 import { User } from '../objects';
-import type { Context } from '@/context';
+import type { UserContext } from '@/context';
 import type { Transaction } from '@/db';
 
 /**
@@ -304,7 +304,7 @@ builder.mutationFields((t) => ({
  * * Utils
  */
 
-const createSessionAndSetCookie = async (ctx: Context, userId: string) => {
+const createSessionAndSetCookie = async (ctx: UserContext, userId: string) => {
   const session = await db.insert(UserSessions).values({ userId }).returning({ id: UserSessions.id }).then(firstOrThrow);
   const accessToken = await encodeAccessToken(session.id);
 
