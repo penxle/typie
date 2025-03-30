@@ -9,6 +9,7 @@ const schema = z.object({
   KAKAO_CLIENT_ID: z.string(),
   KAKAO_CLIENT_SECRET: z.string(),
   LISTEN_PORT: z.coerce.number().optional(),
+  MEILISEARCH_API_KEY: z.string(),
   NAVER_CLIENT_ID: z.string(),
   NAVER_CLIENT_SECRET: z.string(),
   PORTONE_API_SECRET: z.string(),

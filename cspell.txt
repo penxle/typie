@@ -23,6 +23,8 @@ ipaddr
 kakao
 karpenter
 kubeconfig
+meili
+meilisearch
 milli
 natgw
 noeviction
