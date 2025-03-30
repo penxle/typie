@@ -3,6 +3,7 @@
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
   import FileUpIcon from '~icons/lucide/file-up';
+  import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
   import GemIcon from '~icons/lucide/gem';
   import ImageIcon from '~icons/lucide/image';
   import ItalicIcon from '~icons/lucide/italic';
@@ -112,6 +113,13 @@
       icon: MinusIcon,
       active: editor.current.isActive('horizontal_rule'),
       onclick: () => editor.current.chain().focus().setHorizontalRule().run(),
+    },
+    {
+      id: 'callout',
+      label: '콜아웃',
+      icon: GalleryVerticalEndIcon,
+      active: editor.current.isActive('callout'),
+      onclick: () => editor.current.chain().focus().setCallout().run(),
     },
     {
       id: 'table',

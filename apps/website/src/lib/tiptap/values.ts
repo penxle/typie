@@ -74,6 +74,13 @@ export const values = {
     { label: '구분선 7', type: 'horizontal_rule_7', component: HorizontalRule7 },
   ],
 
+  callout: [
+    { label: '정보', type: 'info' },
+    { label: '성공', type: 'success' },
+    { label: '경고', type: 'warning' },
+    { label: '주의', type: 'danger' },
+  ],
+
   paragraphIndent: [
     { label: '없음', value: 0 },
     { label: '0.5칸', value: 0.5 },
@@ -103,6 +110,7 @@ export const defaultValues = {
   textAlign: 'left',
   blockquote: 'blockquote_1',
   horizontalRule: 'horizontal_rule_1',
+  callout: 'info',
   paragraphIndent: 1,
   maxWidth: 1000,
   blockGap: 1,

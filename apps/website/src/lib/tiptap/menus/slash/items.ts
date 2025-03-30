@@ -1,6 +1,7 @@
 import CodeIcon from '~icons/lucide/code';
 import CodeXmlIcon from '~icons/lucide/code-xml';
 import FileUpIcon from '~icons/lucide/file-up';
+import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
 import ImageIcon from '~icons/lucide/image';
 import ListIcon from '~icons/lucide/list';
 import ListOrderedIcon from '~icons/lucide/list-ordered';
@@ -58,6 +59,17 @@ export const menuItems: MenuItem[] = [
     icon: ListOrderedIcon,
     command: ({ editor, range }) => {
       chain(editor, range).toggleOrderedList().run();
+    },
+  },
+  {
+    id: 'callout',
+    type: 'callout',
+    group: 'block',
+    name: '콜아웃',
+    keywords: ['callout'],
+    icon: GalleryVerticalEndIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).setCallout().run();
     },
   },
   {
