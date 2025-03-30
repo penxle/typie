@@ -17,6 +17,7 @@ const schema = z.object({
   REDIS_URL: z.string(),
   RESEND_API_KEY: z.string(),
   SENTRY_DSN: z.string().optional(),
+  USERSITE_HOST: z.string(),
   WEBSITE_URL: z.string(),
 });
 

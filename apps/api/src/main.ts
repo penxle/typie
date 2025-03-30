@@ -13,13 +13,19 @@ import type { Env } from '@/context';
 const app = new Hono<Env>();
 
 app.use('*', async (c, next) => {
-  const origin = c.req.header('origin');
+  const origin = c.req.header('Origin');
+  if (!origin) {
+    return next();
+  }
 
-  if (origin === env.WEBSITE_URL) {
-    return cors({
-      origin,
-      credentials: true,
-    })(c, next);
+  const url = new URL(origin);
+  const handler = cors({
+    origin,
+    credentials: true,
+  });
+
+  if (url.origin === env.WEBSITE_URL || url.hostname === env.USERSITE_HOST || url.hostname.endsWith(`.${env.USERSITE_HOST}`)) {
+    return handler(c, next);
   }
 
   return next();
