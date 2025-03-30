@@ -42,13 +42,14 @@
       open = false;
     }
   }}
+  use:showModal
+  {...rest}
   onsubmit={(e) => {
     e.preventDefault();
     dialogEl.close();
     open = false;
+    rest.onsubmit?.(e);
   }}
-  use:showModal
-  {...rest}
 >
   <div
     class={css({ position: 'absolute', inset: '0', backgroundColor: 'gray.900/24' })}
