@@ -29,6 +29,12 @@ export class Cache {
     this.dependencies$.next(new Set([key]));
   }
 
+  clear() {
+    const keys = Object.keys(this.storage);
+    this.storage = { [rootFieldKey]: {} };
+    this.dependencies$.next(new Set(keys));
+  }
+
   observe<T extends $StoreSchema>(
     storeSchema: StoreSchema<T>,
     variables: T['$input'],

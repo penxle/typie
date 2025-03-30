@@ -20,6 +20,10 @@ class CacheFacade {
   resolve(params: ResolveParams) {
     return makeEntityKey(params);
   }
+
+  clear() {
+    this.cache.clear();
+  }
 }
 
 export type { CacheFacade };

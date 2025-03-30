@@ -25,6 +25,10 @@ export default {
     typescript: {
       config: (config) => ({
         ...config,
+        compilerOptions: {
+          ...config.compilerOptions,
+          rootDirs: [...config.compilerOptions.rootDirs, '../.gql/types'],
+        },
         include: [...config.include, '../pulumi/**/*.ts', '../scripts/**/*.ts'],
       }),
     },
