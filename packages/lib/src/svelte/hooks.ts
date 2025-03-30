@@ -6,6 +6,7 @@ export const logging: Handle = async ({ event, resolve }) => {
     scope: 'http',
     ip: event.getClientAddress(),
     method: event.request.method,
+    host: event.url.hostname,
     path: event.url.pathname,
     ua: event.request.headers.get('user-agent'),
   });
