@@ -59,8 +59,8 @@ new typie.Service('api', {
 
   ingress: {
     domain: {
-      production: 'api.typie.co',
-      dev: 'api.typie.dev',
+      production: ['api.typie.co'],
+      dev: ['api.typie.dev'],
     },
 
     priority: {
