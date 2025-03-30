@@ -137,7 +137,7 @@
         <label class={css({ fontSize: '14px', cursor: 'pointer' })} for="confirmTerms">
           <a
             class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })}
-            href="https://typie.rdbl.io/legal/terms"
+            href="https://help.typie.co/legal/terms"
             rel="noopener noreferrer"
             target="_blank"
           >
@@ -146,7 +146,7 @@
           및
           <a
             class={css({ textDecoration: 'underline', textUnderlineOffset: '2px' })}
-            href="https://typie.rdbl.io/legal/privacy"
+            href="https://help.typie.co/legal/privacy"
             rel="noopener noreferrer"
             target="_blank"
           >

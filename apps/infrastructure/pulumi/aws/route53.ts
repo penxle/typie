@@ -33,6 +33,15 @@ new aws.route53.Record('typie.co|mx', {
   ttl: 300,
 });
 
+new aws.route53.Record('help.typie.co', {
+  zoneId: zones.typie_co.zoneId,
+  type: 'CNAME',
+  name: 'help.typie.co',
+  // spell-checker:disable-next-line
+  records: ['cname.rdbl.io'],
+  ttl: 300,
+});
+
 new aws.route53.Record('send.typie.co|mx', {
   zoneId: zones.typie_co.zoneId,
   type: 'MX',

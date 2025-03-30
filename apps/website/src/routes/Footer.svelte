@@ -36,14 +36,14 @@
       <div class={css({ color: '[#636363]' })}>
         <a
           class={css({ fontWeight: '[500]', color: '[#3260E1]' })}
-          href="https://typie.rdbl.io/legal/privacy"
+          href="https://help.typie.co/legal/privacy"
           rel="noopener noreferrer"
           target="_blank"
         >
           개인정보처리방침
         </a>
         |
-        <a class={css({ color: '[#3260E1]' })} href="https://typie.rdbl.io/legal/terms" rel="noopener noreferrer" target="_blank">
+        <a class={css({ color: '[#3260E1]' })} href="https://help.typie.co/legal/terms" rel="noopener noreferrer" target="_blank">
           이용약관
         </a>
         |
