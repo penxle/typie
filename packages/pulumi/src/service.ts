@@ -39,8 +39,8 @@ type ServiceArgs = {
     path?: pulumi.Input<string>;
 
     domain: {
-      production: pulumi.Input<string>;
-      dev: pulumi.Input<string>;
+      production: pulumi.Input<string>[];
+      dev: pulumi.Input<string>[];
     };
 
     priority: {
@@ -50,11 +50,11 @@ type ServiceArgs = {
 
     cloudfront?: {
       production?: {
-        domainZone: pulumi.Input<string>;
+        domainZone: pulumi.Input<string>[];
       };
 
       dev?: {
-        domainZone: pulumi.Input<string>;
+        domainZone: pulumi.Input<string>[];
       };
     };
   };
@@ -76,11 +76,6 @@ export class Service extends pulumi.ComponentResource {
     const config = match(stack)
       .with('prod', () => 'prod')
       .with('dev', () => 'dev')
-      .run();
-
-    const cloudfront = match(stack)
-      .with('prod', () => args.ingress?.cloudfront?.production)
-      .with('dev', () => args.ingress?.cloudfront?.dev)
       .run();
 
     let secret;
@@ -261,7 +256,7 @@ export class Service extends pulumi.ComponentResource {
 
     if (args.ingress) {
       /* eslint-disable @typescript-eslint/no-non-null-assertion */
-      const domainName = match(stack)
+      const domainNames = match(stack)
         .with('prod', () => args.ingress!.domain.production)
         .with('dev', () => args.ingress!.domain.dev)
         .run();
@@ -269,6 +264,11 @@ export class Service extends pulumi.ComponentResource {
       const priority = match(stack)
         .with('prod', () => args.ingress!.priority.production)
         .with('dev', () => args.ingress!.priority.dev)
+        .run();
+
+      const cloudfront = match(stack)
+        .with('prod', () => args.ingress!.cloudfront?.production)
+        .with('dev', () => args.ingress!.cloudfront?.dev)
         .run();
       /* eslint-enable @typescript-eslint/no-non-null-assertion */
 
@@ -288,25 +288,24 @@ export class Service extends pulumi.ComponentResource {
           },
           spec: {
             ingressClassName: 'alb',
-            rules: [
-              {
-                host: domainName,
-                http: {
-                  paths: [
-                    {
-                      path: args.ingress.path ?? '/',
-                      pathType: 'Prefix',
-                      backend: {
-                        service: {
-                          name: service.metadata.name,
-                          port: { number: service.spec.ports[0].port },
-                        },
+            rules: domainNames.map((domainName) => ({
+              host: domainName,
+              http: {
+                paths: [
+                  {
+                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                    path: args.ingress!.path ?? '/',
+                    pathType: 'Prefix',
+                    backend: {
+                      service: {
+                        name: service.metadata.name,
+                        port: { number: service.spec.ports[0].port },
                       },
                     },
-                  ],
-                },
+                  },
+                ],
               },
-            ],
+            })),
           },
         },
         { parent: this },
@@ -316,79 +315,78 @@ export class Service extends pulumi.ComponentResource {
         const ref = new pulumi.StackReference('typie/infrastructure/base', {}, { parent: this });
         const provider = new aws.Provider('us-east-1', { region: 'us-east-1' }, { parent: this });
 
-        // const zone = aws.route53.getZoneOutput({ name: cloudfront.domainZone }, { parent: this });
-        const certificate = aws.acm.getCertificateOutput(
-          { domain: cloudfront.domainZone, statuses: ['ISSUED'] },
-          { parent: this, provider },
-        );
+        for (const domainZone of cloudfront.domainZone) {
+          // const zone = aws.route53.getZoneOutput({ name: domainZone }, { parent: this });
+          const certificate = aws.acm.getCertificateOutput({ domain: domainZone, statuses: ['ISSUED'] }, { parent: this, provider });
 
-        // const distribution = new aws.cloudfront.Distribution(
-        new aws.cloudfront.Distribution(
-          name,
-          {
-            enabled: true,
-            // aliases: [domainName],
-            httpVersion: 'http2and3',
+          // const distribution = new aws.cloudfront.Distribution(
+          new aws.cloudfront.Distribution(
+            name,
+            {
+              enabled: true,
+              // aliases: [domainName],
+              httpVersion: 'http2and3',
 
-            origins: [
-              {
-                originId: 'alb',
-                domainName: ingress.status.loadBalancer.ingress[0].hostname,
-                customOriginConfig: {
-                  httpPort: 80,
-                  httpsPort: 443,
-                  originProtocolPolicy: 'https-only',
-                  originSslProtocols: ['TLSv1.2'],
-                  originReadTimeout: 60,
-                  originKeepaliveTimeout: 60,
+              origins: [
+                {
+                  originId: 'alb',
+                  domainName: ingress.status.loadBalancer.ingress[0].hostname,
+                  customOriginConfig: {
+                    httpPort: 80,
+                    httpsPort: 443,
+                    originProtocolPolicy: 'https-only',
+                    originSslProtocols: ['TLSv1.2'],
+                    originReadTimeout: 60,
+                    originKeepaliveTimeout: 60,
+                  },
+                },
+              ],
+
+              defaultCacheBehavior: {
+                targetOriginId: 'alb',
+                compress: true,
+                viewerProtocolPolicy: 'redirect-to-https',
+                allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+                cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
+                cachePolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_CACHE_POLICY_ID'),
+                originRequestPolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_ORIGIN_REQUEST_POLICY_ID'),
+                responseHeadersPolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_RESPONSE_HEADERS_POLICY_ID'),
+              },
+
+              restrictions: {
+                geoRestriction: {
+                  restrictionType: 'none',
                 },
               },
-            ],
 
-            defaultCacheBehavior: {
-              targetOriginId: 'alb',
-              compress: true,
-              viewerProtocolPolicy: 'redirect-to-https',
-              allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
-              cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
-              cachePolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_CACHE_POLICY_ID'),
-              originRequestPolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_ORIGIN_REQUEST_POLICY_ID'),
-              responseHeadersPolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_RESPONSE_HEADERS_POLICY_ID'),
-            },
-
-            restrictions: {
-              geoRestriction: {
-                restrictionType: 'none',
+              viewerCertificate: {
+                acmCertificateArn: certificate.arn,
+                sslSupportMethod: 'sni-only',
+                minimumProtocolVersion: 'TLSv1.2_2021',
               },
+
+              waitForDeployment: false,
             },
+            { parent: this },
+          );
 
-            viewerCertificate: {
-              acmCertificateArn: certificate.arn,
-              sslSupportMethod: 'sni-only',
-              minimumProtocolVersion: 'TLSv1.2_2021',
-            },
-
-            waitForDeployment: false,
-          },
-          { parent: this },
-        );
-
-        // new aws.route53.Record(
-        //   name,
-        //   {
-        //     name: domainName,
-        //     type: 'A',
-        //     zoneId: zone.zoneId,
-        //     aliases: [
-        //       {
-        //         name: distribution.domainName,
-        //         zoneId: distribution.hostedZoneId,
-        //         evaluateTargetHealth: false,
-        //       },
-        //     ],
-        //   },
-        //   { parent: this },
-        // );
+          // new aws.route53.Record(
+          //   name,
+          //   {
+          //     name: domainName,
+          //     type: 'A',
+          //     zoneId: zone.zoneId,
+          //     aliases: [
+          //       {
+          //         name: distribution.domainName,
+          //         zoneId: distribution.hostedZoneId,
+          //         evaluateTargetHealth: false,
+          //       },
+          //     ],
+          //   },
+          //   { parent: this },
+          // );
+        }
       }
     }
   }

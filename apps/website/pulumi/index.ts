@@ -29,8 +29,8 @@ new typie.Service('website', {
 
   ingress: {
     domain: {
-      production: 'typie.co',
-      dev: 'typie.dev',
+      production: ['typie.co', 'typie.me', '*.typie.me'],
+      dev: ['typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev'],
     },
 
     priority: {
@@ -40,7 +40,7 @@ new typie.Service('website', {
 
     cloudfront: {
       production: {
-        domainZone: 'typie.co',
+        domainZone: ['typie.co'],
       },
     },
   },

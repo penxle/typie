@@ -3,12 +3,12 @@ import { usEast1 } from '$aws/providers';
 import { zones } from '$aws/route53';
 import { buckets } from '$aws/s3';
 
-const createCertificate = (domain: string) => {
+const createCertificate = (domain: string, ...subjectAlternativeNames: string[]) => {
   const certificate = new aws.acm.Certificate(
     `${domain}@cloudfront`,
     {
       domainName: domain,
-      subjectAlternativeNames: [`*.${domain}`],
+      subjectAlternativeNames: [`*.${domain}`, ...subjectAlternativeNames],
       validationMethod: 'DNS',
     },
     { provider: usEast1 },
@@ -27,7 +27,7 @@ const createCertificate = (domain: string) => {
 
 export const certificates = {
   typie_co: createCertificate('typie.co'),
-  typie_dev: createCertificate('typie.dev'),
+  typie_dev: createCertificate('typie.dev', '*.usersite.typie.dev'),
   typie_me: createCertificate('typie.me'),
   typie_net: createCertificate('typie.net'),
   typie_io: createCertificate('typie.io'),
