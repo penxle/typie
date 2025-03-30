@@ -7,7 +7,7 @@ const jwk = JSON.parse(new TextDecoder().decode(base64.parse(env.ACCESS_TOKEN_JW
 const publicKey = await jose.importJWK({ ...jwk, d: undefined }, jwk.alg);
 const privateKey = await jose.importJWK(jwk, jwk.alg);
 
-export const createAccessToken = async (sessionId: string) => {
+export const encodeAccessToken = async (sessionId: string) => {
   return await new jose.SignJWT({})
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     .setProtectedHeader({ alg: jwk.alg! })

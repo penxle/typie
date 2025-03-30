@@ -1,7 +1,13 @@
+import { getClientAddress } from '@typie/lib';
 import DataLoader from 'dataloader';
+import { eq } from 'drizzle-orm';
 import stringify from 'fast-json-stable-stringify';
+import { getCookie } from 'hono/cookie';
 import * as R from 'remeda';
+import { db, first, UserSessions } from './db';
+import { decodeAccessToken } from './utils';
 import type { YogaInitialContext } from 'graphql-yoga';
+import type { Context as HonoContext } from 'hono';
 
 type LoaderParams<T, R, S, N extends boolean, M extends boolean> = {
   name: string;
@@ -12,11 +18,11 @@ type LoaderParams<T, R, S, N extends boolean, M extends boolean> = {
 };
 
 type ServerContext = YogaInitialContext & {
-  ip: string;
+  c: HonoContext;
 };
 
 type DefaultContext = {
-  req: Request;
+  c: HonoContext;
   ip?: string;
 
   loader: <T, R, S, N extends boolean = false, M extends boolean = false, RR = N extends true ? R | null : R>(
@@ -34,10 +40,10 @@ export type UserContext = {
 
 export type Context = DefaultContext & Partial<UserContext>;
 
-export const createContext = async ({ request, ip }: ServerContext): Promise<Context> => {
+export const createContext = async ({ c }: ServerContext): Promise<Context> => {
   const ctx: Context = {
-    req: request,
-    ip,
+    c,
+    ip: getClientAddress(c),
 
     loader: <
       T,
@@ -90,6 +96,25 @@ export const createContext = async ({ request, ip }: ServerContext): Promise<Con
     },
     ' $loaders': new Map(),
   };
+
+  const accessToken = getCookie(c, 'typie-at');
+  if (accessToken) {
+    const sessionId = await decodeAccessToken(accessToken);
+    if (sessionId) {
+      const session = await db
+        .select({ id: UserSessions.id, userId: UserSessions.userId })
+        .from(UserSessions)
+        .where(eq(UserSessions.id, sessionId))
+        .then(first);
+
+      if (session) {
+        ctx.session = {
+          id: session.id,
+          userId: session.userId,
+        };
+      }
+    }
+  }
 
   return ctx;
 };

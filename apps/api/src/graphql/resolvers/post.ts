@@ -168,7 +168,7 @@ builder.subscriptionFields((t) => ({
         }),
       ]);
 
-      ctx.req.signal.addEventListener('abort', () => {
+      ctx.c.req.raw.signal.addEventListener('abort', () => {
         repeater.return();
       });
 

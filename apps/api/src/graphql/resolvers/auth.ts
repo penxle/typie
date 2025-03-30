@@ -1,4 +1,6 @@
+import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
+import { deleteCookie, setCookie } from 'hono/cookie';
 import ky from 'ky';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
@@ -11,21 +13,11 @@ import { SingleSignOnProvider, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { google, kakao, naver } from '@/external/sso';
-import { createAccessToken, generateRandomAvatar, persistBlobAsImage } from '@/utils';
+import { encodeAccessToken, generateRandomAvatar, persistBlobAsImage } from '@/utils';
 import { builder } from '../builder';
 import { User } from '../objects';
+import type { Context } from '@/context';
 import type { Transaction } from '@/db';
-
-/**
- * * Types
- */
-
-const UserWithAccessToken = builder.simpleObject('UserWithAccessToken', {
-  fields: (t) => ({
-    user: t.field({ type: User }),
-    accessToken: t.string(),
-  }),
-});
 
 /**
  * * Mutations
@@ -33,9 +25,9 @@ const UserWithAccessToken = builder.simpleObject('UserWithAccessToken', {
 
 builder.mutationFields((t) => ({
   loginWithEmail: t.fieldWithInput({
-    type: UserWithAccessToken,
+    type: User,
     input: { email: t.input.string(), password: t.input.string() },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
       const email = input.email.toLowerCase();
 
       const user = await db
@@ -56,10 +48,9 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_credentials' });
       }
 
-      return {
-        user: user.id,
-        accessToken: await createSessionAndReturnAccessToken(user.id),
-      };
+      await createSessionAndSetCookie(ctx, user.id);
+
+      return user.id;
     },
   }),
 
@@ -104,9 +95,9 @@ builder.mutationFields((t) => ({
   }),
 
   authorizeSignUpEmail: t.fieldWithInput({
-    type: UserWithAccessToken,
+    type: User,
     input: { code: t.input.string() },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
       const data = await redis.get(`auth:email:${input.code}`);
       if (!data) {
         throw new TypieError({ code: 'invalid_code' });
@@ -141,10 +132,9 @@ builder.mutationFields((t) => ({
 
       await redis.del(`auth:email:${input.code}`);
 
-      return {
-        user: user.id,
-        accessToken: await createSessionAndReturnAccessToken(user.id),
-      };
+      await createSessionAndSetCookie(ctx, user.id);
+
+      return user.id;
     },
   }),
 
@@ -164,9 +154,9 @@ builder.mutationFields((t) => ({
   }),
 
   authorizeSingleSignOn: t.fieldWithInput({
-    type: UserWithAccessToken,
+    type: User,
     input: { provider: t.input.field({ type: SingleSignOnProvider }), params: t.input.field({ type: 'JSON' }) },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
       const externalUser = await match(input.provider)
         .with(SingleSignOnProvider.GOOGLE, () => google.authorizeUser(input.params.code))
         .with(SingleSignOnProvider.NAVER, () => naver.authorizeUser(input.params.code))
@@ -180,10 +170,9 @@ builder.mutationFields((t) => ({
         .then(first);
 
       if (sso) {
-        return {
-          user: sso.userId,
-          accessToken: await createSessionAndReturnAccessToken(sso.userId),
-        };
+        await createSessionAndSetCookie(ctx, sso.userId);
+
+        return sso.userId;
       }
 
       const existingUser = await db
@@ -200,10 +189,9 @@ builder.mutationFields((t) => ({
           email: externalUser.email,
         });
 
-        return {
-          user: existingUser.id,
-          accessToken: await createSessionAndReturnAccessToken(existingUser.id),
-        };
+        await createSessionAndSetCookie(ctx, existingUser.id);
+
+        return existingUser.id;
       }
 
       const user = await db.transaction(async (tx) => {
@@ -232,10 +220,9 @@ builder.mutationFields((t) => ({
         return user;
       });
 
-      return {
-        user: user.id,
-        accessToken: await createSessionAndReturnAccessToken(user.id),
-      };
+      await createSessionAndSetCookie(ctx, user.id);
+
+      return user.id;
     },
   }),
 
@@ -304,6 +291,10 @@ builder.mutationFields((t) => ({
     resolve: async (_, __, ctx) => {
       await db.delete(UserSessions).where(eq(UserSessions.id, ctx.session.id));
 
+      deleteCookie(ctx.c, 'typie-at', {
+        path: '/',
+      });
+
       return true;
     },
   }),
@@ -313,10 +304,17 @@ builder.mutationFields((t) => ({
  * * Utils
  */
 
-const createSessionAndReturnAccessToken = async (userId: string) => {
+const createSessionAndSetCookie = async (ctx: Context, userId: string) => {
   const session = await db.insert(UserSessions).values({ userId }).returning({ id: UserSessions.id }).then(firstOrThrow);
+  const accessToken = await encodeAccessToken(session.id);
 
-  return await createAccessToken(session.id);
+  setCookie(ctx.c, 'typie-at', accessToken, {
+    path: '/',
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    maxAge: dayjs.duration(1, 'year').asSeconds(),
+  });
 };
 
 type CreateUserParams = { email: string; name: string; avatarId: string };

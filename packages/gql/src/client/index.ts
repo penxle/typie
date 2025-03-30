@@ -95,6 +95,7 @@ class Client {
         fetch: context?.fetch,
         fetchOpts: {
           headers: this.headers?.(),
+          credentials: 'include',
         },
         extensions: context?.extensions,
       },

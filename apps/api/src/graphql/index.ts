@@ -1,4 +1,3 @@
-import { getClientAddress } from '@typie/lib';
 import { createYoga, useExecutionCancellation } from 'graphql-yoga';
 import { Hono } from 'hono';
 import { createContext } from '@/context';
@@ -19,5 +18,7 @@ const app = createYoga({
   plugins: [useExecutionCancellation(), useLogger(), useError()],
 });
 
-yoga.get('/', (c) => app.handleRequest(c.req.raw, { ip: getClientAddress(c) }));
-yoga.post('/', (c) => app.handleRequest(c.req.raw, { ip: getClientAddress(c) }));
+yoga.on(['GET', 'POST'], '/', async (c) => {
+  const response = await app.handle(c.req.raw, { c });
+  return c.newResponse(response.body, response);
+});

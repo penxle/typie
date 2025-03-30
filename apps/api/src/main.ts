@@ -10,13 +10,18 @@ import { rest } from '@/rest';
 
 const app = new Hono();
 
-app.use(
-  '*',
-  cors({
-    origin: (origin) => origin,
-    credentials: true,
-  }),
-);
+app.use('*', async (c, next) => {
+  const origin = c.req.header('origin');
+
+  if (origin === env.WEBSITE_URL) {
+    return cors({
+      origin,
+      credentials: true,
+    })(c, next);
+  }
+
+  return next();
+});
 
 app.route('/', rest);
 app.route('/graphql', yoga);
