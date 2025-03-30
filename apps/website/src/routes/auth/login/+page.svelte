@@ -5,7 +5,6 @@
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
-  import { accessToken } from '$lib/graphql';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
 
@@ -18,7 +17,7 @@
   const loginWithEmail = graphql(`
     mutation LoginPage_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {
       loginWithEmail(input: $input) {
-        accessToken
+        id
       }
     }
   `);
@@ -29,12 +28,10 @@
       password: z.string({ required_error: '비밀번호를 입력해주세요.' }).nonempty('비밀번호를 입력해주세요.'),
     }),
     onSubmit: async (data) => {
-      const resp = await loginWithEmail({
+      await loginWithEmail({
         email: data.email,
         password: data.password,
       });
-
-      $accessToken = resp.accessToken;
 
       await goto('/');
     },

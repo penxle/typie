@@ -101,15 +101,15 @@ input LoginWithEmailInput {
 }
 
 type Mutation {
-  authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): UserWithAccessToken!
-  authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): UserWithAccessToken!
+  authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): User!
+  authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): User!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
-  loginWithEmail(input: LoginWithEmailInput!): UserWithAccessToken!
+  loginWithEmail(input: LoginWithEmailInput!): User!
   logout: Boolean!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
@@ -221,9 +221,4 @@ type User {
 enum UserState {
   ACTIVE
   DEACTIVATED
-}
-
-type UserWithAccessToken {
-  accessToken: String!
-  user: User!
 }
