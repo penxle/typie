@@ -9,16 +9,16 @@ import { GraphQLJSON } from 'graphql-scalars';
 import * as R from 'remeda';
 import { base64 } from 'rfc4648';
 import { TypieError } from '@/errors';
-import type { Context, UserContext } from '@/context';
+import type { SessionContext, UserContext } from '@/context';
 
 export const builder = new SchemaBuilder<{
   AuthContexts: {
-    session: Context & UserContext;
+    session: UserContext & SessionContext;
   };
   AuthScopes: {
     session: boolean;
   };
-  Context: Context;
+  Context: UserContext;
   DefaultInputFieldRequiredness: true;
   DefaultFieldNullability: false;
   Scalars: {
