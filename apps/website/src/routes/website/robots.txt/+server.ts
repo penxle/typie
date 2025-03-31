@@ -10,7 +10,7 @@ export const GET: RequestHandler = async (event) => {
     lines.push('Disallow: /');
   }
 
-  lines.push(`Sitemap: https://${event.url.host}/sitemap.xml`);
+  lines.push(`Sitemap: ${event.url.origin}/sitemap.xml`);
 
   return new Response(lines.join('\n'), {
     headers: {

@@ -12,7 +12,6 @@
 
   let { type = 'website', title, trailing = '타이피', description, image, struct }: Props = $props();
 
-  const href = $derived(`https://${page.url.host}${page.url.pathname}`);
   const effectiveTitle = $derived(trailing ? `${title}${trailing ? ` · ${trailing}` : ''}` : title);
 </script>
 
@@ -34,11 +33,11 @@
       <meta content="summary" property="twitter:card" />
     {/if}
   {/if}
-  <meta content={href} property="og:url" />
+  <meta content={page.url.href} property="og:url" />
   <meta content="타이피" property="og:site_name" />
   <meta content={type} property="og:type" />
   <meta content="ko_KR" property="og:locale" />
-  <link {href} rel="canonical" />
+  <link href={page.url.href} rel="canonical" />
   {#if struct}
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
     {@html '<' + `script type="application/ld+json">${JSON.stringify(struct)}</script>`}
