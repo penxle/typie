@@ -14,6 +14,8 @@ const app = new Hono<Env>();
 
 app.use('*', async (c, next) => {
   const origin = c.req.header('Origin');
+  console.log(origin);
+
   if (!origin) {
     return next();
   }
