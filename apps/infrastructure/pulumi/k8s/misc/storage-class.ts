@@ -12,6 +12,7 @@ new k8s.storage.v1.StorageClass('ebs', {
   reclaimPolicy: 'Delete',
 
   parameters: {
+    // spell-checker:disable-next-line
     'csi.storage.k8s.io/fstype': 'xfs',
     type: 'gp3',
 
