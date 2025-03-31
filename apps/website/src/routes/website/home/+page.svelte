@@ -24,4 +24,4 @@
 </script>
 
 <div>{$query.me.email}</div>
-<button type="button" on:click={handleLogout}>로그아웃</button>
+<button onclick={handleLogout} type="button">로그아웃</button>
