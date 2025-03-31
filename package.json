@@ -30,9 +30,5 @@
     "typescript": "^5.8.2"
   },
   "packageManager": "bun@1.0.0",
-  "trustedDependencies": [
-    "@mongodb-js/zstd",
-    "protobufjs",
-    "svelte-preprocess"
-  ]
+  "trustedDependencies": []
 }
