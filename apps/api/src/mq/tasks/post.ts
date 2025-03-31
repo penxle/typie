@@ -4,20 +4,20 @@ import { base64 } from 'rfc4648';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, firstOrThrow, PostContentSnapshots, PostContentStates } from '@/db';
+import { db, firstOrThrow, PostContents, PostContentSnapshots } from '@/db';
 import { schema } from '@/pm';
 import { makeText } from '@/utils';
 import { defineJob } from '../types';
 
-export const PostContentStateUpdateJob = defineJob('post:content:state-update', async (postId: string) => {
+export const PostContentUpdateJob = defineJob('post:content:update', async (postId: string) => {
   await db.transaction(async (tx) => {
     const state = await tx
       .select({
-        update: PostContentStates.update,
-        vector: PostContentStates.vector,
+        update: PostContents.update,
+        vector: PostContents.vector,
       })
-      .from(PostContentStates)
-      .where(eq(PostContentStates.postId, postId))
+      .from(PostContents)
+      .where(eq(PostContents.postId, postId))
       .for('update')
       .then(firstOrThrow);
 
@@ -37,13 +37,13 @@ export const PostContentStateUpdateJob = defineJob('post:content:state-update', 
     const snapshot = Y.snapshot(doc);
 
     await tx
-      .update(PostContentStates)
+      .update(PostContents)
       .set({
         update: Y.encodeStateAsUpdateV2(doc),
         vector: Y.encodeStateVector(doc),
         updatedAt: dayjs(),
       })
-      .where(and(eq(PostContentStates.postId, postId)));
+      .where(and(eq(PostContents.postId, postId)));
 
     await redis.srem(`post:content:updates:${postId}`, ...updates);
 
@@ -53,22 +53,22 @@ export const PostContentStateUpdateJob = defineJob('post:content:state-update', 
 
     const title = doc.getText('title').toString() || null;
     const subtitle = doc.getText('subtitle').toString() || null;
-    const fragment = doc.getXmlFragment('content');
+    const fragment = doc.getXmlFragment('body');
 
     const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
-    const content = node.toJSON();
-    const text = makeText(content);
+    const body = node.toJSON();
+    const text = makeText(body);
 
     await tx
-      .update(PostContentStates)
+      .update(PostContents)
       .set({
         title,
         subtitle,
-        content,
+        body,
         text,
         updatedAt: dayjs(),
       })
-      .where(and(eq(PostContentStates.postId, postId)));
+      .where(and(eq(PostContents.postId, postId)));
 
     await tx.insert(PostContentSnapshots).values({
       postId,
