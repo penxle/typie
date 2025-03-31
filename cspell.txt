@@ -4,12 +4,14 @@
 altinity
 amazonses
 asof
+batang
 buildx
 bullmq
 bytea
 crds
 dmarc
 dotenv
+dotum
 felte
 fira
 fstype
@@ -26,6 +28,8 @@ kubeconfig
 meili
 meilisearch
 milli
+myeongjo
+nanum
 natgw
 noeviction
 noreferrer
@@ -36,6 +40,7 @@ penxle
 pulumi
 remeda
 resvg
+ridi
 sadd
 sasl
 setex

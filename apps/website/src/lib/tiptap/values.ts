@@ -13,7 +13,14 @@ import HorizontalRule6 from './assets/horizontal-rule/6.svelte';
 import HorizontalRule7 from './assets/horizontal-rule/7.svelte';
 
 export const values = {
-  fontFamily: [{ label: '프리텐다드', value: 'Pretendard' }],
+  fontFamily: [
+    { label: '프리텐다드', value: 'Pretendard' },
+    { label: '코펍월드돋움', value: 'KoPubWorldDotum' },
+    { label: '나눔바른고딕', value: 'NanumBarunGothic' },
+    { label: '리디바탕', value: 'RIDIBatang' },
+    { label: '코펍월드바탕', value: 'KoPubWorldBatang' },
+    { label: '나눔명조', value: 'NanumMyeongjo' },
+  ],
 
   fontSize: [
     { label: '8pt', value: 8 },
