@@ -16,7 +16,7 @@
   <div class={css({ marginBottom: '40px', color: 'white', textAlign: 'center' })}>
     <p class={css({ fontFamily: '[LINESeedKR]', fontSize: '24px', fontWeight: '[700]' })}>
       지금 얼리버드 특별가로
-      <br class={css({ hideFrom: 'md' })} />
+      <br class={css({ hideFrom: 'lg' })} />
       사전 등록하고
       <br />
       타이피의 첫 유저가 되어보세요!
@@ -30,8 +30,8 @@
       borderWidth: '1px',
       borderColor: '[#d5d5d5]',
       borderRadius: '6px',
-      paddingX: { base: '8px', md: '12px' },
-      paddingY: { base: '6px', md: '8px' },
+      paddingX: { base: '8px', lg: '12px' },
+      paddingY: { base: '6px', lg: '8px' },
       backgroundColor: 'white',
       width: 'full',
       maxWidth: '425px',

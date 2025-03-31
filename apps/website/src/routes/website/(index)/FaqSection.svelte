@@ -53,15 +53,15 @@
   class={flex({
     direction: 'column',
     align: 'center',
-    paddingTop: { base: '80px', md: '100px' },
+    paddingTop: { base: '80px', lg: '100px' },
     paddingX: '20px',
     paddingBottom: '60px',
     width: 'full',
     backgroundColor: '[#F9FAFB]',
   })}
 >
-  <div class={css({ marginBottom: { base: '60px', md: '80px' }, textAlign: 'center' })}>
-    <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '22px', md: '[32px]' }, fontWeight: '[700]' })}>자주 묻는 질문들</h2>
+  <div class={css({ marginBottom: { base: '60px', lg: '80px' }, textAlign: 'center' })}>
+    <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '22px', lg: '[32px]' }, fontWeight: '[700]' })}>자주 묻는 질문들</h2>
   </div>
 
   <div class={flex({ direction: 'column', width: 'full', maxWidth: '900px', borderYWidth: '1px', borderYColor: '[#E9E9E9]' })}>

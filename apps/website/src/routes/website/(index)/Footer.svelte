@@ -10,7 +10,7 @@
       direction: 'column',
       gap: '20px',
       paddingX: '20px',
-      paddingY: { base: '40px', md: '100px' },
+      paddingY: { base: '40px', lg: '100px' },
       fontSize: '14px',
       width: 'full',
       maxWidth: '900px',

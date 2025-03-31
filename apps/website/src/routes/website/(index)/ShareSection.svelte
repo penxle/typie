@@ -25,17 +25,17 @@
   ];
 
   const cardStyle = css.raw({
-    borderRadius: { base: '8px', md: '16px' },
-    paddingTop: { base: '20px', md: '30px' },
-    paddingX: { base: '24px', md: '36px' },
-    paddingBottom: { base: '30px', md: '40px' },
+    borderRadius: { base: '8px', lg: '16px' },
+    paddingTop: { base: '20px', lg: '30px' },
+    paddingX: { base: '24px', lg: '36px' },
+    paddingBottom: { base: '30px', lg: '40px' },
     boxShadow: '[0px 4px 8px 2px rgba(0, 0, 0, 0.08)]',
     textAlign: 'left',
     width: 'full',
     '& > div': {
-      marginBottom: { base: '28px', md: '40px' },
+      marginBottom: { base: '28px', lg: '40px' },
       fontFamily: '[LINESeedKR]',
-      fontSize: { base: '18px', md: '28px' },
+      fontSize: { base: '18px', lg: '28px' },
       fontWeight: '[700]',
     },
     '& > p': {
@@ -52,36 +52,36 @@
     position: 'relative',
     paddingTop: '56px',
     paddingX: '20px',
-    paddingBottom: { base: '100px', md: '180px' },
+    paddingBottom: { base: '100px', lg: '180px' },
   })}
 >
   <div class={css({ textAlign: 'center', width: 'full', maxWidth: '900px' })}>
     <h2
       class={css({
-        marginBottom: { base: '16px', md: '30px' },
+        marginBottom: { base: '16px', lg: '30px' },
         fontFamily: '[LINESeedKR]',
-        fontSize: { base: '28px', md: '[42px]' },
+        fontSize: { base: '28px', lg: '[42px]' },
         fontWeight: '[700]',
       })}
     >
       원하는 순간,
-      <br class={css({ hideFrom: 'md' })} />
+      <br class={css({ hideFrom: 'lg' })} />
       원하는 독자에게만
     </h2>
     <PaperAirplane
-      class={css({ position: 'absolute', top: '0', left: '0', width: 'full', maxHeight: '340px', mdDown: { height: '200px' } })}
+      class={css({ position: 'absolute', top: '0', left: '0', width: 'full', maxHeight: '340px', lgDown: { height: '200px' } })}
     />
 
     <p>
-      링크를 생성하거나 비밀번호를 설정해서 <br class={css({ hideFrom: 'md' })} />
+      링크를 생성하거나 비밀번호를 설정해서 <br class={css({ hideFrom: 'lg' })} />
       원하는 독자에게만 창작물을 공유할 수 있어요.
       <br />
       전하고 싶은 만큼, 원하는 사람에게만
-      <br class={css({ hideFrom: 'md' })} />
+      <br class={css({ hideFrom: 'lg' })} />
       안전하게 공유하세요.
     </p>
 
-    <div class={grid({ columns: { base: 1, md: 3 }, gap: '30px', marginTop: '60px', marginBottom: '30px' })}>
+    <div class={grid({ columns: { base: 1, lg: 3 }, gap: '30px', marginTop: '60px', marginBottom: '30px' })}>
       {#each cards as { title, description, asset } (title)}
         <div
           class={flex({
@@ -108,7 +108,7 @@
       {/each}
     </div>
 
-    <div class={flex({ gap: '30px', mdDown: { flexDirection: 'column' } })}>
+    <div class={flex({ gap: '30px', lgDown: { flexDirection: 'column' } })}>
       <div class={css({ backgroundColor: '[#B1D8CB]' }, cardStyle)}>
         <div>
           공개 할 부분과

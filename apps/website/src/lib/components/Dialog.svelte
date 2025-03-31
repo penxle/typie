@@ -68,7 +68,7 @@
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: { base: '20px', md: '40px' },
+      padding: { base: '20px', lg: '40px' },
       width: 'full',
       margin: 'auto',
       pointerEvents: 'none',

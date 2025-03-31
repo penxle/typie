@@ -42,18 +42,18 @@
       <h2
         class={css({
           position: 'relative',
-          marginBottom: { base: '16px', md: '30px' },
+          marginBottom: { base: '16px', lg: '30px' },
           fontFamily: '[LINESeedKR]',
-          fontSize: { base: '28px', md: '[42px]' },
+          fontSize: { base: '28px', lg: '[42px]' },
           fontWeight: '[700]',
           zIndex: '1',
         })}
       >
         창작의 결을
-        <br class={css({ hideFrom: 'md' })} />
+        <br class={css({ hideFrom: 'lg' })} />
         그대로 살리는 에디터
       </h2>
-      <Underline class={css({ position: 'absolute', bottom: '-8px', left: '-30px', zIndex: '0', color: '[#B1ACE2]', hideBelow: 'md' })} />
+      <Underline class={css({ position: 'absolute', bottom: '-8px', left: '-30px', zIndex: '0', color: '[#B1ACE2]', hideBelow: 'lg' })} />
     </div>
 
     <p>
@@ -64,7 +64,7 @@
   </div>
 
   <div class={css({ position: 'relative', width: 'full', maxWidth: '900px' })}>
-    <div class={grid({ columns: { base: 1, md: 2 }, gap: '20px', md: { paddingX: '25px' } })}>
+    <div class={grid({ columns: { base: 1, lg: 2 }, gap: '20px', lg: { paddingX: '25px' } })}>
       {#each cards as { title, description, cardStyle, asset } (title)}
         <div
           class={css(
@@ -75,7 +75,7 @@
               borderRadius: '[17px]',
               padding: '20px',
               width: 'full',
-              mdDown: { height: '300px' },
+              lgDown: { height: '300px' },
             },
             cardStyle,
           )}
@@ -86,7 +86,7 @@
             <p>{description}</p>
           </div>
 
-          <svelte:component this={asset} class={css({ marginTop: { base: '30px', md: '50px' }, maxWidth: '300px' })} />
+          <svelte:component this={asset} class={css({ marginTop: { base: '30px', lg: '50px' }, maxWidth: '300px' })} />
         </div>
       {/each}
     </div>
