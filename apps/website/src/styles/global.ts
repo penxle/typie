@@ -1,5 +1,4 @@
 import { defineGlobalFontface, defineGlobalStyles } from '@pandacss/dev';
-import pretendard from './pretendard.json' with { type: 'json' };
 
 export const globalCss = defineGlobalStyles({
   '*': {
@@ -80,43 +79,113 @@ export const globalCss = defineGlobalStyles({
 
 export const globalFontface = defineGlobalFontface({
   SUIT: {
-    src: 'url("https://typie.net/fonts/SUIT.woff2") format("woff2-variations")',
+    src: 'url("https://typie.net/fonts/SUIT-Variable.woff2") format("woff2-variations")',
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
   },
+
   IBMPlexSansKR: {
     src: 'url("https://typie.net/fonts/IBMPlexSansKR-Bold.woff2") format("woff2")',
     fontStyle: 'normal',
     fontWeight: '700',
     fontDisplay: 'swap',
   },
+
   LINESeedKR: [
     {
-      src: 'url("https://typie.net/fonts/LINESeedKR-Rg.woff2") format("woff2")',
+      src: 'url("https://typie.net/fonts/LINESeedKR-Regular.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '400',
       fontDisplay: 'swap',
     },
     {
-      src: 'url("https://typie.net/fonts/LINESeedKR-Bd.woff2") format("woff2")',
+      src: 'url("https://typie.net/fonts/LINESeedKR-Bold.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '700',
       fontDisplay: 'swap',
     },
   ],
-  Pretendard: pretendard.map((range, index) => ({
-    src: `url("https://typie.net/fonts/PretendardVariable.subset.${index}.woff2") format("woff2-variations")`,
-    fontStyle: 'normal',
-    fontWeight: '100 900',
-    fontDisplay: 'swap',
-    unicodeRange: range,
-  })),
+
   FiraCode: {
-    src: 'url("https://typie.net/fonts/FiraCode.woff2") format("woff2-variations")',
+    src: 'url("https://typie.net/fonts/FiraCode-Variable.woff2") format("woff2-variations")',
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
+  },
+
+  KoPubWorldBatang: [
+    {
+      src: 'url("https://typie.net/fonts/KoPubWorldBatang-Medium.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '500',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://typie.net/fonts/KoPubWorldBatang-Bold.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '700',
+      fontDisplay: 'block',
+    },
+  ],
+
+  KoPubWorldDotum: [
+    {
+      src: 'url("https://typie.net/fonts/KoPubWorldDotum-Medium.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '500',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://typie.net/fonts/KoPubWorldDotum-Bold.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '700',
+      fontDisplay: 'block',
+    },
+  ],
+
+  NanumBarunGothic: [
+    {
+      src: 'url("https://typie.net/fonts/NanumBarunGothic-Regular.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '400',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://typie.net/fonts/NanumBarunGothic-Bold.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '700',
+      fontDisplay: 'block',
+    },
+  ],
+
+  NanumMyeongjo: [
+    {
+      src: 'url("https://typie.net/fonts/NanumMyeongjo-Regular.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '400',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://typie.net/fonts/NanumMyeongjo-Bold.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '700',
+      fontDisplay: 'block',
+    },
+  ],
+
+  Pretendard: {
+    src: `url("https://typie.net/fonts/Pretendard-Variable.woff2") format("woff2-variations")`,
+    fontStyle: 'normal',
+    fontWeight: '100 900',
+    fontDisplay: 'block',
+  },
+
+  RIDIBatang: {
+    src: 'url("https://typie.net/fonts/RIDIBatang-Regular.woff2") format("woff2")',
+    fontStyle: 'normal',
+    fontWeight: '400',
+    fontDisplay: 'block',
   },
 });
 
