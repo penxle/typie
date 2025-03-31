@@ -52,7 +52,11 @@ export const serve = async ({ Server, manifest, prerendered }) => {
       });
     }
 
-    const response = await sveltekit.respond(c.req.raw, {
+    const url = new URL(c.req.url);
+    url.protocol = process.env.NODE_ENV === 'production' ? 'https:' : 'http:';
+
+    const request = new Request(url, c.req.raw);
+    const response = await sveltekit.respond(request, {
       getClientAddress: () => {
         return getClientAddress(c);
       },
