@@ -92,11 +92,12 @@
         id="email"
         class={css({
           borderWidth: '1px',
-          borderColor: 'line.secondary',
+          borderColor: 'gray.200',
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '8px',
-          textStyle: '14m',
+          fontSize: '14px',
+          fontWeight: 'medium',
         })}
         placeholder="이메일을 입력해주세요"
         required
@@ -111,11 +112,12 @@
         id="feature"
         class={css({
           borderWidth: '1px',
-          borderColor: 'line.secondary',
+          borderColor: 'gray.200',
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '8px',
-          textStyle: '14m',
+          fontSize: '14px',
+          fontWeight: 'medium',
           resize: 'none',
         })}
         placeholder="타이피에 가장 기대하는 기능이 있다면 적어주세요"

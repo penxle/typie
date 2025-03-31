@@ -1,81 +1,65 @@
-import { defineSemanticTokens, defineTokens } from '@pandacss/dev';
+import { defineTokens } from '@pandacss/dev';
 
 export const colors = defineTokens.colors({
   current: { value: 'currentColor' },
 
+  white: { value: '#fff' },
+  black: { value: '#000' },
   transparent: { value: 'rgb(0 0 0 / 0)' },
 
-  gray: {
-    '50': { value: '#F9FAFB' },
-    '100': { value: '#F2F4F6' },
-    '150': { value: '#EEEFF1' },
-    '200': { value: '#E5E7EA' },
-    '300': { value: '#ACB2B9' },
-    '400': { value: '#696D72' },
-    '500': { value: '#464B53' },
-    '600': { value: '#3C4048' },
-    '700': { value: '#33363D' },
-    '800': { value: '#2A2D32' },
-    '850': { value: '#25292D' },
-    '900': { value: '#23262A' },
-    '950': { value: '#1F2123' },
+  brand: {
+    '50': { value: 'oklch(0.962 0.018 272.314)' },
+    '100': { value: 'oklch(0.93 0.034 272.788)' },
+    '200': { value: 'oklch(0.87 0.065 274.039)' },
+    '300': { value: 'oklch(0.785 0.115 274.713)' },
+    '400': { value: 'oklch(0.673 0.182 276.935)' },
+    '500': { value: 'oklch(0.585 0.233 277.117)' },
+    '600': { value: 'oklch(0.511 0.262 276.966)' },
+    '700': { value: 'oklch(0.457 0.24 277.023)' },
+    '800': { value: 'oklch(0.398 0.195 277.366)' },
+    '900': { value: 'oklch(0.359 0.144 278.697)' },
+    '950': { value: 'oklch(0.257 0.09 281.288)' },
   },
-  primary: {
-    '50': { value: '#F7F9FC' },
-    '100': { value: '#EEF2F8' },
-    '200': { value: '#D6DEFF' },
-    '300': { value: '#496AFD' },
-    '400': { value: '#415CFB' },
-    '500': { value: '#2950FF' },
-    '600': { value: '#002BEB' },
-    '700': { value: '#0021B3' },
-    '800': { value: '#1B2967' },
-    '900': { value: '#343B54' },
-    '950': { value: '#293240' },
-  },
-  red: {
-    '50': { value: '#FEF5F6' },
-    '100': { value: '#FDE1E5' },
-    '200': { value: '#FCCED5' },
-    '300': { value: '#F78C9C' },
-    '400': { value: '#F5667A' },
-    '500': { value: '#F2415A' },
-    '600': { value: '#E5102E' },
-    '700': { value: '#AC0C22' },
-    '800': { value: '#570611' },
-    '900': { value: '#39040B' },
-    '950': { value: '#1D0206' },
-  },
-  white: { value: '#ffffff' },
-});
 
-export const semanticColors = defineSemanticTokens.colors({
-  /**
-   * Common
-   */
-  text: {
-    primary: { value: { base: '{colors.gray.950}', _dark: '{colors.gray.50}' } },
-    secondary: { value: { base: '{colors.gray.500}', _dark: '{colors.gray.200}' } },
-    tertiary: { value: { base: '{colors.gray.400}', _dark: '{colors.gray.300}' } },
-    quaternary: { value: { base: '{colors.gray.300}', _dark: '{colors.gray.500}' } },
-    danger: { value: { base: '{colors.red.600}', _dark: '{colors.red.400}' } },
-    emphasis: { value: { base: '{colors.primary.400}', _dark: '{colors.primary.300}' } },
+  gray: {
+    '50': { value: 'oklch(0.985 0 0)' },
+    '100': { value: 'oklch(0.967 0.001 286.375)' },
+    '200': { value: 'oklch(0.92 0.004 286.32)' },
+    '300': { value: 'oklch(0.871 0.006 286.286)' },
+    '400': { value: 'oklch(0.705 0.015 286.067)' },
+    '500': { value: 'oklch(0.552 0.016 285.938)' },
+    '600': { value: 'oklch(0.442 0.017 285.786)' },
+    '700': { value: 'oklch(0.37 0.013 285.805)' },
+    '800': { value: 'oklch(0.274 0.006 286.033)' },
+    '900': { value: 'oklch(0.21 0.006 285.885)' },
+    '950': { value: 'oklch(0.141 0.005 285.823)' },
   },
-  line: {
-    primary: { value: { base: '{colors.gray.100}', _dark: '{colors.gray.850}' } },
-    secondary: { value: { base: '{colors.gray.150}', _dark: '{colors.gray.700}' } },
-    tertiary: { value: { base: '{colors.gray.200}', _dark: '{colors.gray.600}' } },
-    emphasis: { value: { base: '{colors.primary.500}', _dark: '{colors.primary.400}' } },
+
+  red: {
+    '50': { value: 'oklch(0.971 0.013 17.38)' },
+    '100': { value: 'oklch(0.936 0.032 17.717)' },
+    '200': { value: 'oklch(0.885 0.062 18.334)' },
+    '300': { value: 'oklch(0.808 0.114 19.571)' },
+    '400': { value: 'oklch(0.704 0.191 22.216)' },
+    '500': { value: 'oklch(0.637 0.237 25.331)' },
+    '600': { value: 'oklch(0.577 0.245 27.325)' },
+    '700': { value: 'oklch(0.505 0.213 27.518)' },
+    '800': { value: 'oklch(0.444 0.177 26.899)' },
+    '900': { value: 'oklch(0.396 0.141 25.723)' },
+    '950': { value: 'oklch(0.258 0.092 26.042)' },
   },
-  background: {
-    primary: { value: { base: '{colors.white}', _dark: '{colors.gray.950}' } },
-    secondary: { value: { base: '{colors.gray.50}', _dark: '{colors.gray.900}' } },
-    tertiary: { value: { base: '{colors.gray.100}', _dark: '{colors.gray.850}' } },
-    quaternary: { value: { base: '{colors.gray.150}', _dark: '{colors.gray.800}' } },
-    emphasis: { value: { base: '{colors.primary.50}', _dark: '{colors.primary.900}' } },
-  },
-  overlay: {
-    primary: { value: { base: '{colors.white}', _dark: '{colors.gray.900}' } },
-    secondary: { value: { base: '{colors.white}', _dark: '{colors.gray.850}' } },
+
+  green: {
+    '50': { value: 'oklch(0.982 0.018 155.826)' },
+    '100': { value: 'oklch(0.962 0.044 156.743)' },
+    '200': { value: 'oklch(0.925 0.084 155.995)' },
+    '300': { value: 'oklch(0.871 0.15 154.449)' },
+    '400': { value: 'oklch(0.792 0.209 151.711)' },
+    '500': { value: 'oklch(0.723 0.219 149.579)' },
+    '600': { value: 'oklch(0.627 0.194 149.214)' },
+    '700': { value: 'oklch(0.527 0.154 150.069)' },
+    '800': { value: 'oklch(0.448 0.119 151.328)' },
+    '900': { value: 'oklch(0.393 0.095 152.535)' },
+    '950': { value: 'oklch(0.266 0.065 152.934)' },
   },
 });

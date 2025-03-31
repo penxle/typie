@@ -69,7 +69,7 @@
           marginBottom: '4px',
           color: 'gray.500',
           size: '40px',
-          backgroundColor: 'background.primary',
+          backgroundColor: 'white',
           boxShadow: 'xlarge',
           zIndex: '30',
           _hover: {
@@ -83,7 +83,7 @@
       >
         <Icon icon={XIcon} />
       </button>
-      <span class={css({ display: 'block', textStyle: '13sb', color: 'text.tertiary', textAlign: 'center' })}>ESC</span>
+      <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'semibold', color: 'gray.400', textAlign: 'center' })}>ESC</span>
     </div>
   </div>
 

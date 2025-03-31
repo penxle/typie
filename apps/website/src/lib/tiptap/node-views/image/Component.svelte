@@ -212,7 +212,7 @@
             justifyContent: 'space-between',
             gap: '7px',
             borderWidth: '1px',
-            borderColor: 'line.primary',
+            borderColor: 'gray.100',
             borderRadius: '4px',
             width: 'full',
             backgroundColor: 'gray.100',
@@ -228,15 +228,15 @@
             gap: '12px',
             paddingX: '14px',
             paddingY: '12px',
-            textStyle: '14r',
-            color: 'text.tertiary',
+            fontSize: '14px',
+            color: 'gray.400',
           })}
         >
           {#if inflight}
             <RingSpinner style={css.raw({ color: 'gray.400', size: '20px' })} />
             이미지 업로드 중
           {:else}
-            <Icon style={css.raw({ color: 'text.tertiary' })} icon={ImageIcon} size={20} />
+            <Icon style={css.raw({ color: 'gray.400' })} icon={ImageIcon} size={20} />
             이미지 업로드
           {/if}
         </div>
@@ -251,17 +251,17 @@
       direction: 'column',
       align: 'center',
       borderWidth: '1px',
-      borderColor: 'line.secondary',
+      borderColor: 'gray.200',
       borderRadius: '10px',
       padding: '12px',
-      backgroundColor: 'background.primary',
+      backgroundColor: 'white',
       width: '380px',
       boxShadow: 'xlarge',
       zIndex: '1',
     })}
     use:floating
   >
-    <span class={css({ textStyle: '13r', color: 'text.tertiary' })}>아래 버튼을 클릭해 파일을 선택하세요</span>
+    <span class={css({ fontSize: '13px', color: 'gray.400' })}>아래 버튼을 클릭해 이미지를 선택하세요</span>
     <button class={css({ marginTop: '12px', width: 'full' })} onclick={handleUpload} type="button">이미지 선택</button>
   </div>
 {/if}

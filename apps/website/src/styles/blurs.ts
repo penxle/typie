@@ -1,6 +1,6 @@
 import { defineTokens } from '@pandacss/dev';
-import { generatePXs } from './helpers';
+import { px } from './helpers';
 
 export const blurs = defineTokens.blurs({
-  ...generatePXs(16),
+  ...px(16),
 });

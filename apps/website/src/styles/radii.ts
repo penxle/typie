@@ -1,7 +1,7 @@
 import { defineTokens } from '@pandacss/dev';
-import { generatePXs } from './helpers';
+import { px } from './helpers';
 
 export const radii = defineTokens.radii({
-  ...generatePXs(16),
+  ...px(16),
   full: { value: '50%' },
 });

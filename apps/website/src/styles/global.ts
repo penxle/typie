@@ -24,10 +24,9 @@ export const globalCss = defineGlobalStyles({
     WebkitFontSmoothing: 'antialiased',
     MozOsxFontSmoothing: 'grayscale',
 
-    color: 'text.primary',
-    backgroundColor: 'background.primary',
+    color: 'gray.950',
+    backgroundColor: 'white',
     lineHeight: '1.4',
-    letterSpacing: '-0.004em',
   },
 
   a: {
@@ -67,7 +66,7 @@ export const globalCss = defineGlobalStyles({
   },
 
   '::placeholder': {
-    color: 'text.quaternary',
+    color: 'gray.400',
   },
 
   '::-webkit-search-cancel-button': {

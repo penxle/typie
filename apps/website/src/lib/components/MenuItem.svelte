@@ -63,9 +63,10 @@
         marginX: '6px',
         paddingX: '12px',
         paddingY: '7px',
-        textStyle: '14m',
+        fontSize: '14px',
+        fontWeight: 'medium',
         textAlign: 'left',
-        color: 'text.secondary',
+        color: 'gray.500',
         _enabled: {
           _hover: {
             backgroundColor: 'gray.100',
@@ -74,25 +75,25 @@
             backgroundColor: 'gray.200',
           },
           _active: {
-            color: 'text.primary',
+            color: 'gray.950',
             backgroundColor: 'gray.100',
           },
           _selected: {
-            color: 'text.primary',
+            color: 'gray.950',
             backgroundColor: 'gray.100',
           },
         },
         _disabled: {
-          color: 'text.quaternary',
+          color: 'gray.300',
         },
       }),
       variants: {
         variant: {
           default: {
-            color: 'text.secondary',
+            color: 'gray.500',
           },
           danger: {
-            color: 'text.danger',
+            color: 'red.600',
           },
         },
       },

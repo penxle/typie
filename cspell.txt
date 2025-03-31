@@ -30,6 +30,7 @@ natgw
 noeviction
 noreferrer
 oidcs
+oklch
 on+
 penxle
 pulumi

@@ -152,10 +152,10 @@
         flexDirection: 'column',
         gap: '2px',
         borderWidth: '1px',
-        borderColor: 'line.secondary',
+        borderColor: 'gray.200',
         borderRadius: '12px',
         paddingY: '6px',
-        backgroundColor: 'background.tertiary',
+        backgroundColor: 'gray.100',
         minWidth: '120px',
         boxShadow: 'xlarge',
         overflowY: 'auto',
@@ -178,7 +178,7 @@
     {/if}
 
     {#if action}
-      <li class={css({ position: 'sticky', bottom: '0', paddingBottom: '12px', backgroundColor: 'background.primary' })}>
+      <li class={css({ position: 'sticky', bottom: '0', paddingBottom: '12px', backgroundColor: 'white' })}>
         {@render action?.()}
       </li>
     {/if}

@@ -1,4 +1,4 @@
-export const generateREMs = (max: number) => {
+export const rem = (max: number) => {
   const lists = Object.fromEntries([...Array.from({ length: max }).keys()].map((i) => [`${i + 1}px`, { value: `${(i + 1) / 16}rem` }]));
 
   return {
@@ -7,7 +7,7 @@ export const generateREMs = (max: number) => {
   };
 };
 
-export const generatePXs = (max: number) => {
+export const px = (max: number) => {
   const lists = Object.fromEntries([...Array.from({ length: max }).keys()].map((i) => [`${i + 1}px`, { value: `${i + 1}px` }]));
 
   return {
