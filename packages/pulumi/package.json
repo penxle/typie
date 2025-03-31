@@ -14,7 +14,7 @@
     "@pulumi/kubernetes": "^4.22.1",
     "@pulumi/pulumi": "^3.159.0",
     "@typie/tsconfig": "workspace:*",
-    "ts-pattern": "^5.6.2",
+    "ts-pattern": "^5.7.0",
     "typescript": "^5.8.2"
   }
 }
