@@ -8,23 +8,23 @@ import type { JSONContent } from '@tiptap/core';
 type MakeYDocParams = {
   title?: string | null;
   subtitle?: string | null;
-  content: JSONContent;
+  body: JSONContent;
 };
-export const makeYDoc = ({ title, subtitle, content }: MakeYDocParams) => {
-  const node = Node.fromJSON(schema, content);
+export const makeYDoc = ({ title, subtitle, body }: MakeYDocParams) => {
+  const node = Node.fromJSON(schema, body);
   const doc = new Y.Doc();
 
   doc.getText('title').insert(0, title ?? '');
   doc.getText('subtitle').insert(0, subtitle ?? '');
 
-  const fragment = doc.getXmlFragment('content');
+  const fragment = doc.getXmlFragment('body');
   prosemirrorToYXmlFragment(node, fragment);
 
   return doc;
 };
 
-export const makeText = (content: JSONContent) => {
-  const node = Node.fromJSON(schema, content);
+export const makeText = (body: JSONContent) => {
+  const node = Node.fromJSON(schema, body);
 
   return getText(node, {
     blockSeparator: '\n',

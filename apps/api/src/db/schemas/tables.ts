@@ -94,34 +94,17 @@ export const Posts = pgTable(
   (t) => [unique().on(t.userId, t.folderId, t.order).nullsNotDistinct()],
 );
 
-export const PostContentSnapshots = pgTable(
-  'post_content_snapshots',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId('PCSN')),
-    postId: text('post_id')
-      .notNull()
-      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    snapshot: bytea('snapshot').notNull(),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.postId, t.createdAt)],
-);
-
-export const PostContentStates = pgTable('post_content_states', {
+export const PostContents = pgTable('post_contents', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('PCST')),
+    .$defaultFn(() => createDbId('PC')),
   postId: text('post_id')
     .notNull()
     .unique()
     .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   title: text('title'),
   subtitle: text('subtitle'),
-  content: jsonb('content').notNull().$type<JSONContent>(),
+  body: jsonb('body').notNull().$type<JSONContent>(),
   text: text('text').notNull(),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
@@ -132,6 +115,23 @@ export const PostContentStates = pgTable('post_content_states', {
     .notNull()
     .default(sql`now()`),
 });
+
+export const PostContentSnapshots = pgTable(
+  'post_content_snapshots',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('PCS')),
+    postId: text('post_id')
+      .notNull()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    snapshot: bytea('snapshot').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.postId, t.createdAt)],
+);
 
 export const PreorderPayments = pgTable('preorder_payments', {
   id: text('id')

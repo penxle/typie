@@ -6,7 +6,6 @@
   import * as Y from 'yjs';
   import { PostContentSyncKind } from '@/enums';
   import { browser } from '$app/environment';
-  import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
@@ -14,6 +13,19 @@
   import Toolbar from '../Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
+
+  const query = graphql(`
+    query EditorPostIdPage_Query($postId: ID!) {
+      post(postId: $postId) {
+        id
+
+        content {
+          id
+          update
+        }
+      }
+    }
+  `);
 
   const syncPostContent = graphql(`
     mutation Editor_SyncPostContent_Mutation($input: SyncPostContentInput!) {
@@ -45,7 +57,7 @@
     }
 
     await syncPostContent({
-      postId: page.params.postId,
+      postId: $query.post.id,
       kind: PostContentSyncKind.UPDATE,
       data: base64.stringify(update),
     });
@@ -59,14 +71,14 @@
     const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
 
     await syncPostContent({
-      postId: page.params.postId,
+      postId: $query.post.id,
       kind: PostContentSyncKind.AWARENESS,
       data: base64.stringify(update),
     });
   });
 
   postContentSyncStream.on('data', ({ postContentSyncStream: { postId, kind, data } }) => {
-    if (postId !== page.params.postId) {
+    if (postId !== $query.post.id) {
       return;
     }
 
@@ -82,7 +94,7 @@
     const clientStateVector = Y.encodeStateVector(doc);
 
     const results = await syncPostContent({
-      postId: page.params.postId,
+      postId: $query.post.id,
       kind: PostContentSyncKind.VECTOR,
       data: base64.stringify(clientStateVector),
     });
@@ -93,7 +105,7 @@
         const serverMissingUpdate = Y.encodeStateAsUpdateV2(doc, serverStateVector);
 
         await syncPostContent({
-          postId: page.params.postId,
+          postId: $query.post.id,
           kind: PostContentSyncKind.UPDATE,
           data: base64.stringify(serverMissingUpdate),
         });
@@ -105,12 +117,12 @@
   };
 
   onMount(() => {
-    const persistence = new IndexeddbPersistence(`typie:editor:${page.params.postId}`, doc);
+    const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
     persistence.on('synced', () => forceSync());
 
-    const unsubscribe = postContentSyncStream.subscribe({ postId: page.params.postId });
+    const unsubscribe = postContentSyncStream.subscribe({ postId: $query.post.id });
 
-    // Y.applyUpdateV2(doc, base64.parse($query.page.content.update), 'remote');
+    Y.applyUpdateV2(doc, base64.parse($query.post.content.update), 'remote');
     awareness.setLocalStateField('user', {
       name: 'Anonymous',
       color: '#000000',

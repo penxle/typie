@@ -42,6 +42,7 @@ export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
 export const Image = createObjectRef('Image', T.Images);
 export const Post = createObjectRef('Post', T.Posts);
+export const PostContent = createObjectRef('PostContent', T.PostContents);
 export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const User = createObjectRef('User', T.Users);

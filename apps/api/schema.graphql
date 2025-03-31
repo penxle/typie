@@ -130,8 +130,14 @@ input PersistBlobAsImageInput {
 }
 
 type Post {
+  content: PostContent!
   id: ID!
   order: Binary!
+}
+
+type PostContent {
+  id: ID!
+  update: Binary!
 }
 
 enum PostContentSyncKind {
@@ -170,6 +176,7 @@ type PreorderUser {
 type Query {
   image(id: ID!): Image!
   me: User
+  post(postId: ID!): Post!
 }
 
 input ResetPasswordInput {

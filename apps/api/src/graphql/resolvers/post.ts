@@ -5,14 +5,14 @@ import { Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, PostContentSnapshots, PostContentStates, Posts } from '@/db';
+import { db, first, firstOrThrow, PostContents, PostContentSnapshots, Posts } from '@/db';
 import { PostContentSyncKind } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
-import { Post } from '../objects';
+import { Post, PostContent } from '../objects';
 
 /**
  * * Types
@@ -22,8 +22,36 @@ Post.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     order: t.expose('order', { type: 'Binary' }),
+
+    content: t.field({
+      type: PostContent,
+      resolve: async (post) => {
+        return await db.select().from(PostContents).where(eq(PostContents.postId, post.id)).then(firstOrThrow);
+      },
+    }),
   }),
 });
+
+PostContent.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    update: t.expose('update', { type: 'Binary' }),
+  }),
+});
+
+/**
+ * * Queries
+ */
+
+builder.queryFields((t) => ({
+  post: t.field({
+    type: Post,
+    args: { postId: t.arg.id() },
+    resolve: async (_, args) => {
+      return args.postId;
+    },
+  }),
+}));
 
 /**
  * * Mutations
@@ -38,10 +66,10 @@ builder.mutationFields((t) => ({
       const subtitle = null;
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const node = schema.topNodeType.createAndFill()!;
-      const content = node.toJSON();
-      const text = makeText(content);
+      const body = node.toJSON();
+      const text = makeText(body);
 
-      const doc = makeYDoc({ title, subtitle, content });
+      const doc = makeYDoc({ title, subtitle, body });
       const snapshot = Y.snapshot(doc);
 
       const last = await db
@@ -63,11 +91,11 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
 
-        await tx.insert(PostContentStates).values({
+        await tx.insert(PostContents).values({
           postId: post.id,
           title,
           subtitle,
-          content,
+          body,
           text,
           update: Y.encodeStateAsUpdateV2(doc),
           vector: Y.encodeStateVector(doc),
@@ -108,7 +136,7 @@ builder.mutationFields((t) => ({
 
         await redis.sadd(`post:content:updates:${input.postId}`, data);
 
-        await enqueueJob('post:content:state-update', input.postId);
+        await enqueueJob('post:content:update', input.postId);
 
         return [];
       } else if (input.kind === PostContentSyncKind.VECTOR) {
@@ -193,9 +221,9 @@ const decoder = new TextDecoder();
 
 export const getLatestPostContentState = async (postId: string) => {
   const state = await db
-    .select({ update: PostContentStates.update, vector: PostContentStates.vector })
-    .from(PostContentStates)
-    .where(eq(PostContentStates.postId, postId))
+    .select({ update: PostContents.update, vector: PostContents.vector })
+    .from(PostContents)
+    .where(eq(PostContents.postId, postId))
     .then(firstOrThrow);
 
   const pendingUpdates = await redis.smembers(`post:content:updates:${postId}`);

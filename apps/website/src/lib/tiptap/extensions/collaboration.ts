@@ -62,7 +62,7 @@ export const Collaboration = Extension.create<CollaborationOptions>({
   },
 
   addProseMirrorPlugins() {
-    const fragment = this.options.doc.getXmlFragment('content');
+    const fragment = this.options.doc.getXmlFragment('body');
 
     const yUndoPluginInstance = yUndoPlugin();
     const originalUndoPluginView = yUndoPluginInstance.spec.view;
