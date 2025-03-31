@@ -11,7 +11,7 @@
   class={flex({
     justify: 'center',
     marginTop: '100px',
-    marginBottom: { base: '120px', md: '180px' },
+    marginBottom: { base: '120px', lg: '180px' },
     paddingX: '20px',
   })}
 >
@@ -37,14 +37,14 @@
         blur: '[90px]',
         borderRadius: 'full',
         size: '560px',
-        mdDown: { bottom: '0' },
+        lgDown: { bottom: '0' },
       })}
     ></div>
 
     <div class={css({ position: 'relative', zIndex: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', width: 'full' })}>
       <div class={flex({ direction: 'column', align: 'center', textAlign: 'center' })}>
         <div class={css({ position: 'relative', width: 'fit' })}>
-          <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '28px', md: '[42px]' }, fontWeight: '[700]' })}>
+          <h2 class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '28px', lg: '[42px]' }, fontWeight: '[700]' })}>
             몰입을 돕는 최적의 환경
           </h2>
           <Circle
@@ -55,12 +55,12 @@
               translateY: '-1/2',
               left: '-26px',
               color: '[#F7DE9C]',
-              height: { base: '72px', md: '94px' },
+              height: { base: '72px', lg: '94px' },
             })}
           />
         </div>
 
-        <p class={css({ marginTop: { base: '16px', md: '30px' }, fontWeight: '[500]' })}>
+        <p class={css({ marginTop: { base: '16px', lg: '30px' }, fontWeight: '[500]' })}>
           집중 모드와 타이머, 목표치 설정 등으로 방해없이
           <br />
           오직 글쓰기에 몰입할 수 있는 환경을 만들 수 있어요.
@@ -70,12 +70,12 @@
       <div
         class={flex({
           align: 'center',
-          gap: { base: '16px', md: '30px' },
+          gap: { base: '16px', lg: '30px' },
           position: 'relative',
           marginTop: '60px',
           textAlign: 'center',
-          mdDown: { flexDirection: 'column' },
-          md: { width: 'full' },
+          lgDown: { flexDirection: 'column' },
+          lg: { width: 'full' },
         })}
       >
         <Decoration class={css({ position: 'absolute', top: '-56px', right: '-64px', color: '[#B1D8CB]', width: '100px' })} />
@@ -94,13 +94,13 @@
             display: 'flex',
             flexDirection: 'column',
             borderRadius: '8px',
-            paddingX: { base: '20px', md: '30px' },
-            paddingY: { base: '16px', md: '24px' },
+            paddingX: { base: '20px', lg: '30px' },
+            paddingY: { base: '16px', lg: '24px' },
             backgroundColor: '[#000000]',
             color: 'white',
             width: 'full',
             maxWidth: '460px',
-            height: { base: '300px', md: '318px' },
+            height: { base: '300px', lg: '318px' },
           })}
         >
           <!-- prettier-ignore -->
@@ -116,13 +116,13 @@
         <div
           class={css({
             borderRadius: '8px',
-            paddingX: { base: '20px', md: '30px' },
-            paddingY: { base: '16px', md: '24px' },
+            paddingX: { base: '20px', lg: '30px' },
+            paddingY: { base: '16px', lg: '24px' },
             backgroundColor: '[#000000]',
             color: 'white',
-            height: { base: '300px', md: '318px' },
+            height: { base: '300px', lg: '318px' },
             width: 'full',
-            maxWidth: { base: '460px', md: '410px' },
+            maxWidth: { base: '460px', lg: '410px' },
           })}
         >
           <!-- prettier-ignore -->

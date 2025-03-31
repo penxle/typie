@@ -23,7 +23,7 @@
       left: '0',
       right: '0',
       width: 'full',
-      height: { base: '100px', md: '180px' },
+      height: { base: '100px', lg: '180px' },
       borderColor: 'transparent',
       backgroundColor: '[#FFFDF8]',
       clipPath: 'polygon(0 0, 100% 100%, 0 100%)',
@@ -42,12 +42,12 @@
   >
     <Logo class={css({ height: '32px', color: 'white' })} />
 
-    <div class={css({ marginTop: { base: '32px', md: '51px' }, marginBottom: '40px', color: 'white', textAlign: 'center' })}>
+    <div class={css({ marginTop: { base: '32px', lg: '51px' }, marginBottom: '40px', color: 'white', textAlign: 'center' })}>
       <h1
         class={css({
-          marginBottom: { base: '16px', md: '30px' },
+          marginBottom: { base: '16px', lg: '30px' },
           fontFamily: '[IBMPlexSansKR]',
-          fontSize: { base: '32px', md: '[52px]' },
+          fontSize: { base: '32px', lg: '[52px]' },
           fontWeight: '[700]',
         })}
       >
@@ -56,7 +56,7 @@
         글쓰기 앱을 만나보세요
       </h1>
 
-      <p class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '16px', md: '18px' } })}>
+      <p class={css({ fontFamily: '[LINESeedKR]', fontSize: { base: '16px', lg: '18px' } })}>
         몰입해서 쓰고, 유연하게 공유하고, 깔끔하게 정리하는 스마트한 에디터, 타이피.
         <br />
         지금 얼리버드 한정 특별가로 미리 등록하세요.
@@ -67,12 +67,12 @@
       class={flex({
         align: 'center',
         gap: '16px',
-        marginBottom: { base: '16px', md: '30px' },
+        marginBottom: { base: '16px', lg: '30px' },
         borderWidth: '1px',
         borderColor: '[#d5d5d5]',
         borderRadius: '6px',
-        paddingX: { base: '8px', md: '12px' },
-        paddingY: { base: '6px', md: '8px' },
+        paddingX: { base: '8px', lg: '12px' },
+        paddingY: { base: '6px', lg: '8px' },
         backgroundColor: 'white',
         width: 'full',
         maxWidth: '425px',
@@ -107,7 +107,7 @@
       </button>
     </form>
 
-    <Editor class={css({ marginBottom: { base: '-60px', md: '-140px' }, width: 'full', maxWidth: '900px' })} />
+    <Editor class={css({ marginBottom: { base: '-60px', lg: '-140px' }, width: 'full', maxWidth: '900px' })} />
   </div>
 </div>
 
