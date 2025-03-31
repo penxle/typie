@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const schema = z.object({
+  ACCESS_TOKEN_DOMAIN: z.string(),
   ACCESS_TOKEN_JWK: z.string(),
   DATABASE_URL: z.string(),
   GOOGLE_OAUTH_CLIENT_ID: z.string(),

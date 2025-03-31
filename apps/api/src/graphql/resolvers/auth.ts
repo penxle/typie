@@ -293,6 +293,7 @@ builder.mutationFields((t) => ({
 
       deleteCookie(ctx.c, 'typie-at', {
         path: '/',
+        domain: env.ACCESS_TOKEN_DOMAIN,
       });
 
       return true;
@@ -310,6 +311,7 @@ const createSessionAndSetCookie = async (ctx: UserContext, userId: string) => {
 
   setCookie(ctx.c, 'typie-at', accessToken, {
     path: '/',
+    domain: env.ACCESS_TOKEN_DOMAIN,
     httpOnly: true,
     secure: true,
     sameSite: 'none',
