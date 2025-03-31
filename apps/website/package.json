@@ -18,6 +18,7 @@
     "@pulumi/aws": "^6.74.0",
     "@pulumi/kubernetes": "^4.22.1",
     "@pulumi/pulumi": "^3.159.0",
+    "@sindresorhus/string-hash": "^2.0.0",
     "@sveltejs/kit": "^2.20.2",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tiptap/core": "^2.11.7",

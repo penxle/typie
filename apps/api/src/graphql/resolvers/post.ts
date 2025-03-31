@@ -44,7 +44,7 @@ PostContent.implement({
  */
 
 builder.queryFields((t) => ({
-  post: t.field({
+  post: t.withAuth({ session: true }).field({
     type: Post,
     args: { postId: t.arg.id() },
     resolve: async (_, args) => {
