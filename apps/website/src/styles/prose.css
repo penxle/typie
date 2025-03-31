@@ -10,7 +10,7 @@
 
   line-height: 1.6;
 
-  /* gray.1000 */
+  /* gray.950 */
   caret-color: #09090b;
 
   & *::selection {
@@ -42,7 +42,7 @@
     position: relative;
   }
 
-  li:not([role='tab']) {
+  li {
     margin-top: 4px;
 
     &:first-child {
@@ -50,7 +50,7 @@
     }
   }
 
-  :is(ul, ol) :is(ul, ol) li:not([role='tab']):first-child {
+  :is(ul, ol) :is(ul, ol) li:first-child {
     margin-top: 4px;
   }
 
