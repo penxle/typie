@@ -31,6 +31,29 @@ export const values = {
     { label: '72pt', value: 72 },
   ],
 
+  fontColor: [
+    { label: '블랙', value: 'black', hex: '#09090b' },
+    { label: '그레이', value: 'gray', hex: '#71717a' },
+    { label: '화이트', value: 'white', hex: '#ffffff' },
+    { label: '레드', value: 'red', hex: '#ef4444' },
+    { label: '오렌지', value: 'orange', hex: '#f97316' },
+    { label: '앰버', value: 'amber', hex: '#f59e0b' },
+    { label: '옐로', value: 'yellow', hex: '#eab308' },
+    { label: '라임', value: 'lime', hex: '#84cc16' },
+    { label: '그린', value: 'green', hex: '#22c55e' },
+    { label: '에메랄드', value: 'emerald', hex: '#10b981' },
+    { label: '틸', value: 'teal', hex: '#14b8a6' },
+    { label: '시안', value: 'cyan', hex: '#06b6d4' },
+    { label: '스카이', value: 'sky', hex: '#0ea5e9' },
+    { label: '블루', value: 'blue', hex: '#3b82f6' },
+    { label: '인디고', value: 'indigo', hex: '#6366f1' },
+    { label: '바이올렛', value: 'violet', hex: '#8b5cf6' },
+    { label: '퍼플', value: 'purple', hex: '#a855f7' },
+    { label: '마젠타', value: 'fuchsia', hex: '#d946ef' },
+    { label: '핑크', value: 'pink', hex: '#ec4899' },
+    { label: '로즈', value: 'rose', hex: '#f43f5e' },
+  ],
+
   lineHeight: [
     { label: '80%', value: 0.8 },
     { label: '100%', value: 1 },
@@ -105,6 +128,7 @@ export const values = {
 export const defaultValues = {
   fontFamily: 'Pretendard',
   fontSize: 16,
+  fontColor: 'black',
   lineHeight: 1.6,
   letterSpacing: 0,
   textAlign: 'left',

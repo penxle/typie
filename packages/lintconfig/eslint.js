@@ -64,6 +64,7 @@ export default defineConfig([
       'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-array-for-each': 'off',
       'unicorn/no-array-method-this-argument': 'off',
+      'unicorn/no-array-reduce': 'off',
       'unicorn/no-empty-file': 'off',
       'unicorn/no-null': 'off',
       'unicorn/prefer-switch': 'off',

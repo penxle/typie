@@ -224,6 +224,22 @@
       editor.current
         .chain()
         .focus()
+        .setFontColor(currentTarget.value as never)
+        .run()}
+  >
+    {#each values.fontColor as { label, value } (value)}
+      <option selected={(editor.current.getAttributes('font_color').value ?? defaultValues.fontColor) === value} {value}>
+        {label}
+      </option>
+    {/each}
+  </select>
+
+  <select
+    class={css({ borderWidth: '1px', borderRadius: '4px', paddingX: '4px', paddingY: '2px', fontSize: '14px' })}
+    onchange={({ currentTarget }) =>
+      editor.current
+        .chain()
+        .focus()
         .setParagraphLineHeight(Number(currentTarget.value) as never)
         .run()}
   >
@@ -313,10 +329,4 @@
       </option>
     {/each}
   </select>
-
-  <input
-    class={css({ borderWidth: '1px', borderRadius: '4px', paddingX: '4px', paddingY: '2px', fontSize: '14px' })}
-    onchange={({ currentTarget }) => editor.current.chain().focus().setFontColor(currentTarget.value).run()}
-    type="color"
-  />
 </div>
