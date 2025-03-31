@@ -1,10 +1,13 @@
+import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as typie from '@typie/pulumi';
+import { match } from 'ts-pattern';
 
+const stack = pulumi.getStack();
 const config = new pulumi.Config('typie');
 const ref = new pulumi.StackReference('typie/infrastructure/base');
 
-new typie.Service('api', {
+const app = new typie.App('api', {
   name: 'api',
 
   image: {
@@ -56,16 +59,44 @@ new typie.Service('api', {
   secret: {
     project: 'typie-api',
   },
+});
 
-  ingress: {
-    domain: {
-      production: ['api.typie.co'],
-      dev: ['api.typie.dev'],
-    },
+const host = match(stack)
+  .with('prod', () => 'api.typie.co')
+  .with('dev', () => 'api.typie.dev')
+  .run();
 
-    priority: {
-      production: '11',
-      dev: '111',
+new k8s.networking.v1.Ingress('api', {
+  metadata: {
+    name: 'api',
+    namespace: app.service.metadata.namespace,
+    annotations: {
+      'alb.ingress.kubernetes.io/group.name': 'public-alb',
+      'alb.ingress.kubernetes.io/group.order': '10',
+      'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
+      'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
     },
+  },
+  spec: {
+    ingressClassName: 'alb',
+    rules: [
+      {
+        host,
+        http: {
+          paths: [
+            {
+              path: '/',
+              pathType: 'Prefix',
+              backend: {
+                service: {
+                  name: app.service.metadata.name,
+                  port: { number: app.service.spec.ports[0].port },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ],
   },
 });

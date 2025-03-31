@@ -53,6 +53,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@pulumi/kubernetes": "^4.22.1",
+    "@pulumi/pulumi": "^3.159.0",
     "@types/bun": "^1.2.8",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",

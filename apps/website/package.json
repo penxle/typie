@@ -15,6 +15,8 @@
     "@iconify-json/lucide": "^1.2.33",
     "@pandacss/dev": "^0.53.3",
     "@portone/browser-sdk": "^0.0.14",
+    "@pulumi/aws": "^6.74.0",
+    "@pulumi/kubernetes": "^4.22.1",
     "@pulumi/pulumi": "^3.159.0",
     "@sveltejs/kit": "^2.20.2",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
