@@ -25,14 +25,14 @@ export const SyntaxHighlight = Extension.create<never, Storage>({
       new Plugin({
         key,
         state: {
-          init: (_, state) => {
+          init: () => {
             getSingletonHighlighter({
               themes: ['min-light'],
               langs: ['html'],
             }).then((highlighter) => {
               this.storage.highlighter = highlighter;
 
-              const { tr } = state;
+              const { tr } = this.editor.state;
               tr.setMeta(key, true);
               this.editor.view.dispatch(tr);
             });
