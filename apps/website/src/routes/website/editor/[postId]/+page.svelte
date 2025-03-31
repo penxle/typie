@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { random } from '@ctrl/tinycolor';
+  import stringHash from '@sindresorhus/string-hash';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import { IndexeddbPersistence } from 'y-indexeddb';
@@ -16,6 +18,11 @@
 
   const query = graphql(`
     query EditorPostIdPage_Query($postId: ID!) {
+      me @required {
+        id
+        name
+      }
+
       post(postId: $postId) {
         id
 
@@ -124,8 +131,8 @@
 
     Y.applyUpdateV2(doc, base64.parse($query.post.content.update), 'remote');
     awareness.setLocalStateField('user', {
-      name: 'Anonymous',
-      color: '#000000',
+      name: $query.me.name,
+      color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
     });
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
