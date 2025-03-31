@@ -1,8 +1,8 @@
 import { defineTokens } from '@pandacss/dev';
-import { generateREMs } from './helpers';
+import { rem } from './helpers';
 
 export const sizes = defineTokens.sizes({
-  ...generateREMs(1600),
+  ...rem(1200),
 
   full: { value: '100%' },
   none: { value: 'none' },

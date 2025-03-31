@@ -91,7 +91,7 @@
           alignItems: 'center',
           justifyContent: 'space-between',
           borderWidth: '1px',
-          borderColor: 'line.primary',
+          borderColor: 'gray.100',
           borderRadius: '4px',
           backgroundColor: { base: 'gray.100', _hover: 'gray.200', _active: 'gray.300' },
         },
@@ -109,14 +109,14 @@
           gap: '12px',
           paddingX: '14px',
           paddingY: '12px',
-          textStyle: '14r',
+          fontSize: '14px',
           truncate: true,
         })}
       >
-        <Icon style={css.raw({ color: 'text.tertiary' })} icon={PaperclipIcon} size={20} />
+        <Icon style={css.raw({ color: 'gray.400' })} icon={PaperclipIcon} size={20} />
         <span class={css({ truncate: true })}>{node.attrs.name}</span>
         <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
-        <span class={css({ color: 'text.tertiary' })}>{formatFileSize(node.attrs.size)}</span>
+        <span class={css({ color: 'gray.400' })}>{formatFileSize(node.attrs.size)}</span>
       </div>
     {:else}
       <div
@@ -125,8 +125,8 @@
           gap: '12px',
           paddingX: '14px',
           paddingY: '12px',
-          textStyle: '14r',
-          color: 'text.tertiary',
+          fontSize: '14px',
+          color: 'gray.400',
           width: 'full',
         })}
         use:anchor
@@ -136,12 +136,12 @@
           {#if file}
             <span class={css({ truncate: true })}>{file.name}</span>
             <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
-            <span class={css({ color: 'text.tertiary' })}>{formatFileSize(file.size)}</span>
+            <span class={css({ color: 'gray.400' })}>{formatFileSize(file.size)}</span>
           {:else}
             파일 업로드 중...
           {/if}
         {:else}
-          <Icon style={css.raw({ color: 'text.tertiary' })} icon={PaperclipIcon} size={20} />
+          <Icon style={css.raw({ color: 'gray.400' })} icon={PaperclipIcon} size={20} />
           파일 업로드
         {/if}
       </div>
@@ -153,7 +153,7 @@
           marginRight: '12px',
           borderRadius: '4px',
           padding: '2px',
-          color: 'text.tertiary',
+          color: 'gray.400',
         })}
       >
         <Icon icon={ArrowDownToLineIcon} size={20} />
@@ -169,17 +169,17 @@
       align: 'center',
       justify: 'center',
       borderWidth: '1px',
-      borderColor: 'line.secondary',
+      borderColor: 'gray.200',
       borderRadius: '12px',
       padding: '12px',
-      backgroundColor: 'background.primary',
+      backgroundColor: 'white',
       width: '380px',
       boxShadow: 'xlarge',
       zIndex: '1',
     })}
     use:floating
   >
-    <span class={css({ textStyle: '13r', color: 'text.tertiary' })}>아래 버튼을 클릭해 파일을 선택하세요</span>
+    <span class={css({ fontSize: '13px', color: 'gray.400' })}>아래 버튼을 클릭해 파일을 선택하세요</span>
     <button class={css({ marginTop: '12px', width: 'full' })} onclick={handleUpload} type="button">파일 선택</button>
   </div>
 {/if}

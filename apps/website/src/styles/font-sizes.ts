@@ -1,6 +1,6 @@
 import { defineTokens } from '@pandacss/dev';
-import { generateREMs } from './helpers';
+import { rem } from './helpers';
 
 export const fontSizes = defineTokens.fontSizes({
-  ...generateREMs(32),
+  ...rem(32),
 });

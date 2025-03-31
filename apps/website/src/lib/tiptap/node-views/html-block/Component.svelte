@@ -14,7 +14,8 @@
     style={css.raw({
       paddingY: '18px',
       paddingX: '16px',
-      textStyle: '14m',
+      fontSize: '14px',
+      fontWeight: 'medium',
       fontFamily: 'mono',
       backgroundColor: 'gray.200',
       borderRadius: '4px',

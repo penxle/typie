@@ -103,17 +103,17 @@
       {:else}
         <svelte:element
           this={editor.current.isEditable ? 'div' : 'a'}
-          class={flex({ borderWidth: '1px', borderColor: 'line.primary', borderRadius: '6px' })}
+          class={flex({ borderWidth: '1px', borderColor: 'gray.100', borderRadius: '6px' })}
           {...!editor.current.isEditable && { href: node.attrs.url, target: '_blank', rel: 'noopener noreferrer' }}
         >
           <div class={flex({ direction: 'column', grow: '1', paddingX: '16px', paddingY: '15px' })}>
-            <p class={css({ marginBottom: '3px', textStyle: '14m', lineClamp: 1 })}>
+            <p class={css({ marginBottom: '3px', fontSize: '14px', fontWeight: 'medium', lineClamp: 1 })}>
               {node.attrs.title ?? '(제목 없음)'}
             </p>
-            <p class={css({ textStyle: '12m', color: 'text.secondary', lineClamp: 2, whiteSpace: 'pre-line' })}>
+            <p class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500', lineClamp: 2, whiteSpace: 'pre-line' })}>
               {node.attrs.description ?? ''}
             </p>
-            <p class={css({ marginTop: 'auto', textStyle: '12m', lineClamp: 1 })}>{new URL(node.attrs.url).origin}</p>
+            <p class={css({ marginTop: 'auto', fontSize: '12px', fontWeight: 'medium', lineClamp: 1 })}>{new URL(node.attrs.url).origin}</p>
           </div>
           {#if node.attrs.thumbnailUrl}
             <img
@@ -160,12 +160,12 @@
           align: 'center',
           gap: '12px',
           borderWidth: '1px',
-          borderColor: 'line.primary',
+          borderColor: 'gray.100',
           borderRadius: '4px',
           paddingX: '14px',
           paddingY: '12px',
-          textStyle: '14r',
-          color: 'text.tertiary',
+          fontSize: '14px',
+          color: 'gray.400',
           backgroundColor: 'gray.100',
           width: 'full',
         })}
@@ -189,10 +189,10 @@
       direction: 'column',
       align: 'center',
       borderWidth: '1px',
-      borderColor: 'line.secondary',
+      borderColor: 'gray.200',
       borderRadius: '12px',
       padding: '12px',
-      backgroundColor: 'background.primary',
+      backgroundColor: 'white',
       width: '380px',
       boxShadow: 'xlarge',
       zIndex: '1',
@@ -203,7 +203,7 @@
     }}
     use:floating
   >
-    <span class={css({ marginBottom: '12px', textStyle: '13r', color: 'text.tertiary' })}>
+    <span class={css({ marginBottom: '12px', fontSize: '13px', color: 'gray.400' })}>
       Youtube, Google Drive, 일반 링크 등
       <br />
       다양한 콘텐츠를 임베드할 수 있어요
@@ -211,7 +211,7 @@
     <input
       bind:this={inputEl}
       name="url"
-      class={css({ textStyle: '14r', width: 'full', height: '[32px!]' })}
+      class={css({ fontSize: '14px', width: 'full', height: '32px!' })}
       placeholder="https://..."
       type="url"
       bind:value={url}

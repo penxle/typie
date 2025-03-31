@@ -90,7 +90,8 @@
     class={center({
       size: 'full',
       borderRadius: '4px',
-      textStyle: '14m',
+      fontSize: '14px',
+      fontWeight: 'medium',
       color: 'gray.500',
       backgroundColor: 'gray.200',
       display: isLastRowHovered ? 'flex' : 'none',
@@ -137,7 +138,8 @@
     class={center({
       size: 'full',
       borderRadius: '4px',
-      textStyle: '14m',
+      fontSize: '14px',
+      fontWeight: 'medium',
       color: 'gray.500',
       backgroundColor: 'gray.200',
       display: isLastColumnHovered ? 'flex' : 'none',
@@ -186,7 +188,8 @@
     class={center({
       size: 'full',
       borderRadius: 'full',
-      textStyle: '14m',
+      fontSize: '14px',
+      fontWeight: 'medium',
       color: 'gray.500',
       backgroundColor: 'gray.200',
       display: isLastRowHovered && isLastColumnHovered ? 'flex' : 'none',

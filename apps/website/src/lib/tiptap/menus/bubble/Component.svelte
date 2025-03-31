@@ -41,7 +41,7 @@
       backgroundColor: 'gray.200',
     },
     _pressed: {
-      color: 'text.emphasis',
+      color: 'brand.400',
       '& *': { strokeWidth: '[2.5]' },
     },
     _active: {
@@ -86,10 +86,10 @@
     alignItems: 'center',
     gap: '2px',
     borderWidth: '1px',
-    borderColor: 'line.secondary',
+    borderColor: 'gray.200',
     borderRadius: '10px',
     padding: '4px',
-    backgroundColor: 'background.tertiary',
+    backgroundColor: 'gray.100',
     height: '42px',
     boxShadow: 'xlarge',
     zIndex: '20',

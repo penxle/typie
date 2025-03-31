@@ -60,10 +60,10 @@
     direction: 'column',
     gap: '1px',
     borderWidth: '1px',
-    borderColor: 'line.secondary',
+    borderColor: 'gray.200',
     borderRadius: '12px',
     paddingY: '4px',
-    backgroundColor: 'background.tertiary',
+    backgroundColor: 'gray.100',
     width: '210px',
     maxHeight: '340px',
     overflow: 'auto',
@@ -104,9 +104,9 @@
         <Icon icon={item.icon} />
       </div>
 
-      <div class={css({ textStyle: '14m' })}>{item.name}</div>
+      <div class={css({ fontSize: '14px', fontWeight: 'medium' })}>{item.name}</div>
     </div>
   {:else}
-    <div class={css({ paddingX: '8px', color: 'text.tertiary', textStyle: '14sb' })}>결과 없음</div>
+    <div class={css({ paddingX: '8px', color: 'gray.400', fontSize: '14px', fontWeight: 'semibold' })}>결과 없음</div>
   {/each}
 </div>

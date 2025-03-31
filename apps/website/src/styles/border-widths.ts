@@ -1,6 +1,6 @@
 import { defineTokens } from '@pandacss/dev';
-import { generateREMs } from './helpers';
+import { rem } from './helpers';
 
 export const borderWidths = defineTokens.borderWidths({
-  ...generateREMs(4),
+  ...rem(4),
 });
