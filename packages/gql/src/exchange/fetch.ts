@@ -55,7 +55,7 @@ async function* request<T extends $StoreSchema>(op: Operation<T>) {
     yield {
       type: 'error' as const,
       operation: op,
-      errors: [new GraphQLError('Network error', { originalError: err as Error })],
+      errors: [new GraphQLError(`Network error: ${err}`, { originalError: err as Error })],
     };
   }
 }
