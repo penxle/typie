@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { match } from 'ts-pattern';
   import { SingleSignOnProvider } from '@/enums';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -7,7 +8,7 @@
   import { center } from '$styled-system/patterns';
 
   const authorizeSingleSignOn = graphql(`
-    mutation SSONaverPage_AuthorizeSingleSignOn_Mutation($input: AuthorizeSingleSignOnInput!) {
+    mutation SSOProviderPage_AuthorizeSingleSignOn_Mutation($input: AuthorizeSingleSignOnInput!) {
       authorizeSingleSignOn(input: $input) {
         id
       }
@@ -16,7 +17,11 @@
 
   onMount(async () => {
     await authorizeSingleSignOn({
-      provider: SingleSignOnProvider.NAVER,
+      provider: match(page.params.provider)
+        .with('google', () => SingleSignOnProvider.GOOGLE)
+        .with('kakao', () => SingleSignOnProvider.KAKAO)
+        .with('naver', () => SingleSignOnProvider.NAVER)
+        .run(),
       params: Object.fromEntries(page.url.searchParams),
     });
 
@@ -27,5 +32,5 @@
 </script>
 
 <div class={center({ width: 'screen', height: 'screen' })}>
-  <div>로그인 중...</div>
+  <div>logging in with {page.params.provider}...</div>
 </div>
