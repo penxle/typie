@@ -1,3 +1,4 @@
+import { getText, getTextSerializersFromSchema } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
@@ -20,4 +21,13 @@ export const makeYDoc = ({ title, subtitle, content }: MakeYDocParams) => {
   prosemirrorToYXmlFragment(node, fragment);
 
   return doc;
+};
+
+export const makeText = (content: JSONContent) => {
+  const node = Node.fromJSON(schema, content);
+
+  return getText(node, {
+    blockSeparator: '\n',
+    textSerializers: getTextSerializersFromSchema(schema),
+  }).trim();
 };

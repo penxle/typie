@@ -1,9 +1,12 @@
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import { base64 } from 'rfc4648';
+import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
 import { db, firstOrThrow, PostContentSnapshots, PostContentStates } from '@/db';
+import { schema } from '@/pm';
+import { makeText } from '@/utils';
 import { defineJob } from '../types';
 
 export const PostContentStateUpdateJob = defineJob('post:content:state-update', async (postId: string) => {
@@ -21,7 +24,7 @@ export const PostContentStateUpdateJob = defineJob('post:content:state-update', 
     const updates = await redis.smembers(`post:content:updates:${postId}`);
 
     if (updates.length === 0) {
-      return false;
+      return;
     }
 
     const update = Y.mergeUpdatesV2(updates.map((update) => base64.parse(update)));
@@ -44,11 +47,32 @@ export const PostContentStateUpdateJob = defineJob('post:content:state-update', 
 
     await redis.srem(`post:content:updates:${postId}`, ...updates);
 
-    if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
-      await tx.insert(PostContentSnapshots).values({
-        postId,
-        snapshot: Y.encodeSnapshotV2(snapshot),
-      });
+    if (Y.equalSnapshots(prevSnapshot, snapshot)) {
+      return;
     }
+
+    const title = doc.getText('title').toString() || null;
+    const subtitle = doc.getText('subtitle').toString() || null;
+    const fragment = doc.getXmlFragment('content');
+
+    const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
+    const content = node.toJSON();
+    const text = makeText(content);
+
+    await tx
+      .update(PostContentStates)
+      .set({
+        title,
+        subtitle,
+        content,
+        text,
+        updatedAt: dayjs(),
+      })
+      .where(and(eq(PostContentStates.postId, postId)));
+
+    await tx.insert(PostContentSnapshots).values({
+      postId,
+      snapshot: Y.encodeSnapshotV2(snapshot),
+    });
   });
 });

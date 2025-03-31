@@ -1,10 +1,11 @@
 // spell-checker:ignoreRegExp /createDbId\('[A-Z]{1,4}'/g
 
 import { eq, sql } from 'drizzle-orm';
-import { index, integer, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
 import * as E from './enums';
 import { createDbId } from './id';
 import { bytea, datetime } from './types';
+import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const Files = pgTable('files', {
@@ -118,6 +119,10 @@ export const PostContentStates = pgTable('post_content_states', {
     .notNull()
     .unique()
     .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  title: text('title'),
+  subtitle: text('subtitle'),
+  content: jsonb('content').notNull().$type<JSONContent>(),
+  text: text('text').notNull(),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
   createdAt: datetime('created_at')

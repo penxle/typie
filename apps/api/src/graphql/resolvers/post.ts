@@ -10,7 +10,7 @@ import { PostContentSyncKind } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
-import { makeYDoc } from '@/utils';
+import { makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
 import { Post } from '../objects';
 
@@ -34,16 +34,14 @@ builder.mutationFields((t) => ({
     type: Post,
     input: { folderId: t.input.id({ required: false }) },
     resolve: async (_, { input }, ctx) => {
+      const title = null;
+      const subtitle = null;
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const node = schema.topNodeType.createAndFill()!;
       const content = node.toJSON();
+      const text = makeText(content);
 
-      const doc = makeYDoc({
-        title: null,
-        subtitle: null,
-        content,
-      });
-
+      const doc = makeYDoc({ title, subtitle, content });
       const snapshot = Y.snapshot(doc);
 
       const last = await db
@@ -67,6 +65,10 @@ builder.mutationFields((t) => ({
 
         await tx.insert(PostContentStates).values({
           postId: post.id,
+          title,
+          subtitle,
+          content,
+          text,
           update: Y.encodeStateAsUpdateV2(doc),
           vector: Y.encodeStateVector(doc),
         });
