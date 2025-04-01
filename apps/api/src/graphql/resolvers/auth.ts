@@ -8,7 +8,7 @@ import { redis } from '@/cache';
 import { db, first, firstOrThrow } from '@/db';
 import { Images, Users, UserSessions, UserSingleSignOns } from '@/db/schemas/tables';
 import { sendEmail } from '@/email';
-import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
+import { EmailChangeEmail, NotifyEmailChangeEmail, PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
@@ -281,6 +281,83 @@ builder.mutationFields((t) => ({
         .where(eq(Users.email, email));
 
       await redis.del(`auth:reset-password:${input.code}`);
+
+      return true;
+    },
+  }),
+
+  sendEmailChangeEmail: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: { email: t.input.string() },
+    resolve: async (_, { input }, ctx) => {
+      const email = input.email.toLowerCase();
+
+      const existingUser = await db
+        .select({ id: Users.id })
+        .from(Users)
+        .where(and(eq(Users.email, email), eq(Users.state, UserState.ACTIVE)))
+        .then(first);
+
+      if (existingUser) {
+        throw new TypieError({ code: 'user_email_exists' });
+      }
+
+      const { name } = await db.select({ name: Users.name }).from(Users).where(eq(Users.id, ctx.session.userId)).then(firstOrThrow);
+
+      const code = nanoid();
+
+      await redis.setex(
+        `auth:change-email:${code}`,
+        24 * 60 * 60,
+        JSON.stringify({
+          email,
+          userId: ctx.session.userId,
+        }),
+      );
+
+      await sendEmail({
+        recipient: input.email,
+        subject: '[타이피] 이메일 주소를 인증해 주세요',
+        body: EmailChangeEmail({
+          name,
+          newEmail: email,
+          verificationUrl: `${env.WEBSITE_URL}/auth/change-email?code=${code}`,
+        }),
+      });
+
+      return true;
+    },
+  }),
+
+  changeEmail: t.fieldWithInput({
+    type: 'Boolean',
+    input: { code: t.input.string() },
+    resolve: async (_, { input }) => {
+      const data = await redis.get(`auth:change-email:${input.code}`);
+      if (!data) {
+        throw new TypieError({ code: 'invalid_code' });
+      }
+
+      const { email, userId } = JSON.parse(data) as { email: string; userId: string };
+
+      const { name, oldEmail } = await db
+        .select({ name: Users.name, oldEmail: Users.email })
+        .from(Users)
+        .where(eq(Users.id, userId))
+        .then(firstOrThrow);
+
+      await db.update(Users).set({ email }).where(eq(Users.id, userId));
+
+      await redis.del(`auth:change-email:${input.code}`);
+
+      await sendEmail({
+        recipient: oldEmail,
+        subject: '[타이피] 이메일 주소가 변경되었어요',
+        body: NotifyEmailChangeEmail({
+          name,
+          newEmail: email,
+        }),
+      });
 
       return true;
     },
