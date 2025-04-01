@@ -44,7 +44,7 @@ const websiteIngress = new k8s.networking.v1.Ingress('website', {
       'alb.ingress.kubernetes.io/group.order': '20',
       'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
       'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
-      // ...(stack === 'prod' && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
+      ...(stack === 'prod' && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
     },
   },
   spec: {
@@ -134,17 +134,15 @@ const usersiteIngress = new k8s.networking.v1.Ingress('usersite', {
 });
 
 if (stack === 'prod') {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const websiteZone = aws.route53.getZoneOutput({ name: 'typie.co' });
   const websiteCertificate = aws.acm.getCertificateOutput({ domain: 'typie.co', statuses: ['ISSUED'] }, { provider });
 
   const usersiteZone = aws.route53.getZoneOutput({ name: 'typie.me' });
   const usersiteCertificate = aws.acm.getCertificateOutput({ domain: 'typie.me', statuses: ['ISSUED'] }, { provider });
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const websiteDistribution = new aws.cloudfront.Distribution('website', {
     enabled: true,
-    // aliases: [domainName],
+    aliases: ['typie.co'],
     httpVersion: 'http2and3',
 
     origins: [
@@ -232,6 +230,19 @@ if (stack === 'prod') {
     },
 
     waitForDeployment: false,
+  });
+
+  new aws.route53.Record('website', {
+    name: 'typie.co',
+    type: 'A',
+    zoneId: websiteZone.zoneId,
+    aliases: [
+      {
+        name: websiteDistribution.domainName,
+        zoneId: websiteDistribution.hostedZoneId,
+        evaluateTargetHealth: false,
+      },
+    ],
   });
 
   new aws.route53.Record('usersite-apex', {
