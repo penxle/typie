@@ -13,6 +13,10 @@ interface Blob {
   id: ID!
 }
 
+input ChangeEmailInput {
+  code: String!
+}
+
 input CreateFolderInput {
   name: String!
   parentId: ID
@@ -103,6 +107,7 @@ input LoginWithEmailInput {
 type Mutation {
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): User!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): User!
+  changeEmail(input: ChangeEmailInput!): Boolean!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
@@ -114,6 +119,7 @@ type Mutation {
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   resetPassword(input: ResetPasswordInput!): Boolean!
+  sendEmailChangeEmail(input: SendEmailChangeEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
@@ -182,6 +188,10 @@ type Query {
 input ResetPasswordInput {
   code: String!
   password: String!
+}
+
+input SendEmailChangeEmailInput {
+  email: String!
 }
 
 input SendPasswordResetEmailInput {
