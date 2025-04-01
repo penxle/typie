@@ -1,13 +1,13 @@
 import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow } from '@/db';
-import { Users } from '@/db/schemas/tables';
+import { db, first, firstOrThrow, Users } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import { UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
+import { userSchema } from '@/validation';
 import { builder } from '../builder';
 import { User } from '../objects';
 
@@ -116,6 +116,16 @@ builder.mutationFields((t) => ({
       });
 
       return true;
+    },
+  }),
+
+  updateUser: t.withAuth({ session: true }).fieldWithInput({
+    type: User,
+    input: {
+      name: t.input.string({ validate: { schema: userSchema.name } }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      return await db.update(Users).set({ name: input.name }).where(eq(Users.id, ctx.session.userId)).returning().then(firstOrThrow);
     },
   }),
 }));
