@@ -13,10 +13,6 @@ interface Blob {
   id: ID!
 }
 
-input ChangeEmailInput {
-  code: String!
-}
-
 input CreateFolderInput {
   name: String!
   parentId: ID
@@ -107,7 +103,6 @@ input LoginWithEmailInput {
 type Mutation {
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): User!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): User!
-  changeEmail(input: ChangeEmailInput!): Boolean!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
@@ -119,11 +114,12 @@ type Mutation {
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   resetPassword(input: ResetPasswordInput!): Boolean!
-  sendEmailChangeEmail(input: SendEmailChangeEmailInput!): Boolean!
+  sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
+  updateEmail(input: UpdateEmailInput!): Boolean!
 }
 
 input PersistBlobAsFileInput {
@@ -190,7 +186,7 @@ input ResetPasswordInput {
   password: String!
 }
 
-input SendEmailChangeEmailInput {
+input SendEmailUpdateEmailInput {
   email: String!
 }
 
@@ -227,6 +223,10 @@ type SyncPostContentPayload {
 
 input UnfurlEmbedInput {
   url: String!
+}
+
+input UpdateEmailInput {
+  code: String!
 }
 
 type User {
