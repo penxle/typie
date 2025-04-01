@@ -16,7 +16,6 @@ const schema = z.object({
   PORTONE_API_SECRET: z.string(),
   PUBLIC_PULUMI_STACK: z.string().optional(),
   REDIS_URL: z.string(),
-  RESEND_API_KEY: z.string(),
   SENTRY_DSN: z.string().optional(),
   USERSITE_HOST: z.string(),
   WEBSITE_URL: z.string(),
