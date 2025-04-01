@@ -5,14 +5,14 @@
   import { graphql } from '$graphql';
   import { center } from '$styled-system/patterns';
 
-  const changeEmail = graphql(`
-    mutation ChangeEmailPage_ChangeEmail_Mutation($input: ChangeEmailInput!) {
-      changeEmail(input: $input)
+  const updateEmail = graphql(`
+    mutation UpdateEmailPage_UpdateEmail_Mutation($input: UpdateEmailInput!) {
+      updateEmail(input: $input)
     }
   `);
 
   onMount(async () => {
-    await changeEmail({
+    await updateEmail({
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       code: page.url.searchParams.get('code')!,
     });
