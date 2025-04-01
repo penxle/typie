@@ -120,6 +120,7 @@ type Mutation {
   syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   updateEmail(input: UpdateEmailInput!): Boolean!
+  updateUser(input: UpdateUserInput!): User!
 }
 
 input PersistBlobAsFileInput {
@@ -227,6 +228,10 @@ input UnfurlEmbedInput {
 
 input UpdateEmailInput {
   code: String!
+}
+
+input UpdateUserInput {
+  name: String!
 }
 
 type User {

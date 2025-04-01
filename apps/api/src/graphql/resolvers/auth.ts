@@ -321,7 +321,11 @@ const createSessionAndSetCookie = async (ctx: UserContext, userId: string) => {
 
 type CreateUserParams = { email: string; name: string; avatarId: string };
 const createUser = async (tx: Transaction, { email, name, avatarId }: CreateUserParams) => {
-  const user = await tx.insert(Users).values({ email, name, avatarId }).returning({ id: Users.id }).then(firstOrThrow);
+  const user = await tx
+    .insert(Users)
+    .values({ email, name: name.trim().slice(0, 20), avatarId })
+    .returning({ id: Users.id })
+    .then(firstOrThrow);
 
   await tx.update(Images).set({ userId: user.id }).where(eq(Images.id, avatarId));
 
