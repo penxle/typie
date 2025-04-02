@@ -87,6 +87,10 @@ export const SlashMenu = Extension.create({
               sorter: (items) => items,
             });
 
+            if (items.length === 0) {
+              return { active: false };
+            }
+
             return {
               active: true,
               range: {
