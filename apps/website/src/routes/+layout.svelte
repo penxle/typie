@@ -1,7 +1,11 @@
 <script lang="ts">
   import '../app.css';
 
+  import { css } from '$styled-system/css';
+
   let { children } = $props();
 </script>
 
-{@render children()}
+<div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
+  {@render children()}
+</div>

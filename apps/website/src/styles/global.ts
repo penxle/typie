@@ -75,6 +75,10 @@ export const globalCss = defineGlobalStyles({
   '[hidden]': {
     display: 'none!',
   },
+
+  '::-webkit-details-marker': {
+    display: 'none',
+  },
 });
 
 export const globalFontface = defineGlobalFontface({
