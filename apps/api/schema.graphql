@@ -120,7 +120,19 @@ type Mutation {
   syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   updateEmail(input: UpdateEmailInput!): Boolean!
+  updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updateUser(input: UpdateUserInput!): User!
+}
+
+type PaymentMethod {
+  createdAt: DateTime!
+  id: ID!
+  name: String!
+}
+
+enum PaymentMethodState {
+  ACTIVE
+  DEACTIVATED
 }
 
 input PersistBlobAsFileInput {
@@ -230,6 +242,13 @@ input UpdateEmailInput {
   code: String!
 }
 
+input UpdatePaymentMethodInput {
+  birthOrBusinessRegistrationNumber: String!
+  cardNumber: String!
+  expiry: String!
+  passwordTwoDigits: String!
+}
+
 input UpdateUserInput {
   name: String!
 }
@@ -238,6 +257,7 @@ type User {
   email: String!
   id: ID!
   name: String!
+  paymentMethod: PaymentMethod
 }
 
 enum UserState {
