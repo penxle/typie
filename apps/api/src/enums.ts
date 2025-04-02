@@ -12,6 +12,12 @@ export const JobState = {
   FAILED: 'FAILED',
 } as const;
 
+export type PaymentMethodState = keyof typeof PaymentMethodState;
+export const PaymentMethodState = {
+  ACTIVE: 'ACTIVE',
+  DEACTIVATED: 'DEACTIVATED',
+} as const;
+
 export type PostState = keyof typeof PostState;
 export const PostState = {
   ACTIVE: 'ACTIVE',

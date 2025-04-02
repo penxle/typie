@@ -75,6 +75,29 @@ export const Images = pgTable('images', {
     .default(sql`now()`),
 });
 
+export const PaymentMethods = pgTable(
+  'payment_methods',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('PYMT')),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    billingKey: text('billing_key').notNull(),
+    state: E._PaymentMethodState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex()
+      .on(t.userId)
+      .where(sql`${t.state} = 'ACTIVE'`),
+  ],
+);
+
 export const Posts = pgTable(
   'posts',
   {

@@ -14,6 +14,7 @@ const schema = z.object({
   NAVER_CLIENT_ID: z.string(),
   NAVER_CLIENT_SECRET: z.string(),
   PORTONE_API_SECRET: z.string(),
+  PORTONE_CHANNEL_KEY: z.string(),
   PUBLIC_PULUMI_STACK: z.string().optional(),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
