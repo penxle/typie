@@ -3,5 +3,6 @@
 LICENSE
 docs/*
 !docs/*.md
+*.rs
 
 apps/api/drizzle/*
