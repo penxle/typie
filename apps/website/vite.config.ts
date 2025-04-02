@@ -18,7 +18,7 @@ export default defineConfig({
     port: 4000,
     strictPort: true,
     fs: {
-      allow: ['..'],
+      allow: ['./styled-system', '../../lib/glyphr/dist'],
     },
   },
 });

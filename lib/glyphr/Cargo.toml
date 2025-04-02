@@ -1,0 +1,24 @@
+[package]
+name = "glyphr"
+version = "0.0.1"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+wasm-bindgen = "0.2.100"
+console_error_panic_hook = { version = "0.1.7", optional = true }
+js-sys = "0.3.77"
+wee_alloc = "0.4.5"
+swash = "0.2.2"
+web-sys = { version = "0.3.77", features = ["console"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.34"
+
+[profile.release]
+opt-level = "s"

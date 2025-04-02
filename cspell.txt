@@ -6,11 +6,13 @@ batang
 buildx
 bullmq
 bytea
+cdylib
 crds
 dmarc
 dotenv
 dotum
 fira
+glyphr
 healthz
 iconify
 iframely
@@ -35,6 +37,7 @@ pulumi
 remeda
 resvg
 ridi
+rlib
 sadd
 setex
 shiki

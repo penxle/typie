@@ -2,6 +2,7 @@
 
 node_modules/
 dist/
+target/
 .turbo/
 
 .env.local
@@ -12,5 +13,3 @@ styled-system/
 !packages/styled-system/
 
 vite.config.ts.timestamp-*
-
-apps/api/import-files/
