@@ -1,5 +1,4 @@
-import { PortOneClient } from '@portone/server-sdk';
-import { match, P } from 'ts-pattern';
+import { PortOneClient, RestError } from '@portone/server-sdk';
 import { env } from '../env';
 
 export const client = PortOneClient({ secret: env.PORTONE_API_SECRET });
@@ -142,11 +141,26 @@ const makeSuccessResult = <T>(data: T): PortOneSuccessResult<T> => {
 };
 
 const makeFailureResult = (error: unknown): PortOneFailureResult => {
-  // TODO: 에러 구분이 빠졌는데 나중에 필요
   return {
     status: 'failed',
-    ...match(error)
-      .with(P.instanceOf(Error), (e) => ({ code: e.message, message: e.message }))
-      .otherwise((e) => ({ code: 'unknown', message: String(e) })),
+    ...(() => {
+      if (error instanceof RestError && error.data.type === 'PG_PROVIDER') {
+        // Narrowing PgProviderError https://portone-io.github.io/server-sdk/js/types/Common.PgProviderError.html
+        return {
+          code: error.data.pgCode,
+          message: error.data.pgMessage,
+        };
+      } else if (error instanceof Error) {
+        return {
+          code: error.name,
+          message: error.message,
+        };
+      } else {
+        return {
+          code: 'unknown',
+          message: String(error),
+        };
+      }
+    })(),
   };
 };
