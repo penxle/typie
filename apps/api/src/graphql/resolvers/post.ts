@@ -124,6 +124,10 @@ builder.mutationFields((t) => ({
           snapshot: Y.encodeSnapshotV2(snapshot),
         });
 
+        await tx.insert(PostOptions).values({
+          postId: post.id,
+        });
+
         return post;
       });
     },
