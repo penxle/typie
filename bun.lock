@@ -23,6 +23,7 @@
         "@aws-sdk/client-ses": "^3.777.0",
         "@aws-sdk/s3-presigned-post": "^3.777.0",
         "@ctrl/tinycolor": "^4.1.0",
+        "@faker-js/faker": "^9.6.0",
         "@graphql-yoga/redis-event-target": "^3.0.3",
         "@paralleldrive/cuid2": "^2.2.2",
         "@portone/server-sdk": "^0.14.0",
@@ -162,7 +163,7 @@
     },
     "lib/glyphr": {
       "name": "@typie/glyphr",
-      "version": "0.1.0",
+      "version": "0.0.1",
     },
     "packages/adapter-bun": {
       "name": "@typie/adapter-bun",
@@ -612,6 +613,8 @@
     "@eslint/object-schema": ["@eslint/object-schema@2.1.6", "", {}, "sha512-RBMg5FRL0I0gs51M/guSAj5/e14VQ4tpZnQNWwuDT66P14I43ItmPfIZRhO9fUVIPOAQXU47atlywZ/czoqFPA=="],
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.2.7", "", { "dependencies": { "@eslint/core": "^0.12.0", "levn": "^0.4.1" } }, "sha512-JubJ5B2pJ4k4yGxaNLdbjrnk9d/iDz6/q8wOilpIowd6PJPgaxCuHBnBszq7Ce2TyMrywm5r4PnKm6V3iiZF+g=="],
+
+    "@faker-js/faker": ["@faker-js/faker@9.6.0", "", {}, "sha512-3vm4by+B5lvsFPSyep3ELWmZfE3kicDtmemVpuwl1yH7tqtnHdsA6hG8fbXedMVdkzgtvzWoRgjSB4Q+FHnZiw=="],
 
     "@floating-ui/core": ["@floating-ui/core@1.6.9", "", { "dependencies": { "@floating-ui/utils": "^0.2.9" } }, "sha512-uMXCuQ3BItDUbAMhIXw7UPXRfAlOAvZzdK9BWpE60MCn+Svt3aLn9jsPTi/WNGlRUu2uI0v5S7JiIUsbsvh3fw=="],
 

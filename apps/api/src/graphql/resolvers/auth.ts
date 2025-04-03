@@ -1,3 +1,4 @@
+import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import { deleteCookie, setCookie } from 'hono/cookie';
@@ -5,8 +6,7 @@ import ky from 'ky';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow } from '@/db';
-import { Images, Users, UserSessions, UserSingleSignOns } from '@/db/schemas/tables';
+import { db, first, firstOrThrow, Images, Sites, Users, UserSessions, UserSingleSignOns } from '@/db';
 import { sendEmail } from '@/email';
 import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
@@ -321,11 +321,19 @@ const createSessionAndSetCookie = async (ctx: UserContext, userId: string) => {
 
 type CreateUserParams = { email: string; name: string; avatarId: string };
 const createUser = async (tx: Transaction, { email, name, avatarId }: CreateUserParams) => {
-  const user = await tx
-    .insert(Users)
-    .values({ email, name: name.trim().slice(0, 20), avatarId })
-    .returning({ id: Users.id })
-    .then(firstOrThrow);
+  const name_ = name.trim().slice(0, 20);
+
+  const user = await tx.insert(Users).values({ email, name: name_, avatarId }).returning({ id: Users.id }).then(firstOrThrow);
+
+  await tx.insert(Sites).values({
+    userId: user.id,
+    slug: [
+      faker.word.adjective({ length: { min: 3, max: 5 } }),
+      faker.word.noun({ length: { min: 4, max: 6 } }),
+      faker.string.numeric({ length: { min: 3, max: 4 } }),
+    ].join('-'),
+    name: `${name_}의 사이트`,
+  });
 
   await tx.update(Images).set({ userId: user.id }).where(eq(Images.id, avatarId));
 
