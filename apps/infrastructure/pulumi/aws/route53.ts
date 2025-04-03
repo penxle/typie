@@ -21,6 +21,7 @@ new aws.route53.Record('typie.co|txt', {
   records: [
     'google-site-verification=Q-1ETLmF6p7XkzQM0wpDyF0wCBQREsjK1aZdxR-4ggQ',
     'google-site-verification=hZdtWP44my1tA-wUAvYlOKAAPSp2vHT6M5omQXCRt6o',
+    'v=spf1 include:mail.stibee.com ~all',
   ],
   ttl: 300,
 });
@@ -39,5 +40,13 @@ new aws.route53.Record('help.typie.co', {
   name: 'help.typie.co',
   // spell-checker:disable-next-line
   records: ['cname.rdbl.io'],
+  ttl: 300,
+});
+
+new aws.route53.Record('stb._domainkey.typie.co', {
+  zoneId: zones.typie_co.zoneId,
+  type: 'CNAME',
+  name: 'stb._domainkey.typie.co',
+  records: ['dkim.stibee.com'],
   ttl: 300,
 });
