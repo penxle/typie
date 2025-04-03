@@ -32,6 +32,12 @@ export const PostContentSyncKind = {
   HEARTBEAT: 'HEARTBEAT',
 } as const;
 
+export type PostVisibility = keyof typeof PostVisibility;
+export const PostVisibility = {
+  UNLISTED: 'UNLISTED',
+  PRIVATE: 'PRIVATE',
+} as const;
+
 export type PreorderPaymentState = keyof typeof PreorderPaymentState;
 export const PreorderPaymentState = {
   PENDING: 'PENDING',

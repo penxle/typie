@@ -44,6 +44,7 @@ export const Image = createObjectRef('Image', T.Images);
 export const PaymentMethod = createObjectRef('PaymentMethod', T.PaymentMethods);
 export const Post = createObjectRef('Post', T.Posts);
 export const PostContent = createObjectRef('PostContent', T.PostContents);
+export const PostOption = createObjectRef('PostOption', T.PostOptions);
 export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const User = createObjectRef('User', T.Users);

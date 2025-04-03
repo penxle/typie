@@ -5,14 +5,14 @@ import { Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, PostContents, PostContentSnapshots, Posts } from '@/db';
-import { PostContentSyncKind } from '@/enums';
+import { db, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts } from '@/db';
+import { PostContentSyncKind, PostVisibility } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
-import { Post, PostContent } from '../objects';
+import { Post, PostContent, PostOption } from '../objects';
 
 /**
  * * Types
@@ -29,6 +29,13 @@ Post.implement({
         return await db.select().from(PostContents).where(eq(PostContents.postId, post.id)).then(firstOrThrow);
       },
     }),
+
+    option: t.field({
+      type: PostOption,
+      resolve: async (post) => {
+        return await db.select().from(PostOptions).where(eq(PostOptions.postId, post.id)).then(firstOrThrow);
+      },
+    }),
   }),
 });
 
@@ -36,6 +43,17 @@ PostContent.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     update: t.expose('update', { type: 'Binary' }),
+  }),
+});
+
+PostOption.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    visibility: t.expose('visibility', { type: PostVisibility }),
+    password: t.exposeString('password', { nullable: true }),
+    allowComments: t.exposeBoolean('allowComments'),
+    allowReactions: t.exposeBoolean('allowReactions'),
+    allowCopies: t.exposeBoolean('allowCopies'),
   }),
 });
 
@@ -160,6 +178,32 @@ builder.mutationFields((t) => ({
       }
 
       throw new Error('Invalid kind');
+    },
+  }),
+
+  updatePostOption: t.withAuth({ session: true }).fieldWithInput({
+    type: PostOption,
+    input: {
+      postId: t.input.id(),
+      visibility: t.input.field({ type: PostVisibility }),
+      password: t.input.string(),
+      allowComments: t.input.boolean(),
+      allowReactions: t.input.boolean(),
+      allowCopies: t.input.boolean(),
+    },
+    resolve: async (_, { input }) => {
+      return await db
+        .update(PostOptions)
+        .set({
+          visibility: input.visibility,
+          password: input.password,
+          allowComments: input.allowComments,
+          allowReactions: input.allowReactions,
+          allowCopies: input.allowCopies,
+        })
+        .where(eq(PostOptions.postId, input.postId))
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 }));

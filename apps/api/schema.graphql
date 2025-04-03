@@ -121,6 +121,7 @@ type Mutation {
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
+  updatePostOption(input: UpdatePostOptionInput!): PostOption!
   updateUser(input: UpdateUserInput!): User!
 }
 
@@ -147,6 +148,7 @@ input PersistBlobAsImageInput {
 type Post {
   content: PostContent!
   id: ID!
+  option: PostOption!
   order: Binary!
 }
 
@@ -168,9 +170,23 @@ type PostContentSyncStreamPayload {
   postId: ID!
 }
 
+type PostOption {
+  allowComments: Boolean!
+  allowCopies: Boolean!
+  allowReactions: Boolean!
+  id: ID!
+  password: String
+  visibility: PostVisibility!
+}
+
 enum PostState {
   ACTIVE
   DELETED
+}
+
+enum PostVisibility {
+  PRIVATE
+  UNLISTED
 }
 
 type PreorderPayment {
@@ -252,6 +268,15 @@ input UpdatePaymentMethodInput {
   cardNumber: String!
   expiry: String!
   passwordTwoDigits: String!
+}
+
+input UpdatePostOptionInput {
+  allowComments: Boolean!
+  allowCopies: Boolean!
+  allowReactions: Boolean!
+  password: String!
+  postId: ID!
+  visibility: PostVisibility!
 }
 
 input UpdateUserInput {

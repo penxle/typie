@@ -45,6 +45,7 @@ sindresorhus
 smembers
 srem
 stakater
+stibee
 tsup
 typie
 unplugin
