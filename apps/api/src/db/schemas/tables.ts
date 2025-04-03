@@ -1,7 +1,7 @@
 // spell-checker:ignoreRegExp /createDbId\('[A-Z]{1,4}'/g
 
 import { eq, sql } from 'drizzle-orm';
-import { index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
 import * as E from './enums';
 import { createDbId } from './id';
 import { bytea, datetime } from './types';
@@ -155,6 +155,24 @@ export const PostContentSnapshots = pgTable(
   },
   (t) => [index().on(t.postId, t.createdAt)],
 );
+
+export const PostOptions = pgTable('post_options', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('PO')),
+  postId: text('post_id')
+    .notNull()
+    .unique()
+    .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  visibility: E._PostVisibility('visibility').notNull().default('PRIVATE'),
+  password: text('password'),
+  allowComments: boolean('allow_comments').notNull().default(true),
+  allowReactions: boolean('allow_reactions').notNull().default(true),
+  allowCopies: boolean('allow_copies').notNull().default(false),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const PreorderPayments = pgTable('preorder_payments', {
   id: text('id')
