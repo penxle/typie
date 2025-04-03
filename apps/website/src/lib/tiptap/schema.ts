@@ -1,6 +1,6 @@
 import { Behavior, BlockSelectionExt, DropCursor, Placeholder, SyntaxHighlight, Typography } from './extensions';
 import { Bold, FontColor, FontFamily, FontSize, Italic, Link, Ruby, Strike, Underline } from './marks';
-import { BubbleMenu, FloatingMenu, SlashMenu } from './menus';
+import { FloatingMenu, SlashMenu } from './menus';
 import { Blockquote, Callout, CodeBlock, Embed, File, HorizontalRule, HtmlBlock, Image, Table, TableCell, TableRow } from './node-views';
 import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
 
@@ -50,7 +50,6 @@ export const extensions = [
   Typography,
 
   // menus
-  BubbleMenu,
   FloatingMenu,
   SlashMenu,
 ];
