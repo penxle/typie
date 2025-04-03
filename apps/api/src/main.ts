@@ -2,9 +2,12 @@ import '@/instrument';
 import '@typie/lib/dayjs';
 import '@/mq';
 
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { deriveContext } from '@/context';
+import { db, first, Sites } from '@/db';
+import { SiteState } from '@/enums';
 import { env } from '@/env';
 import { yoga } from '@/graphql';
 import { rest } from '@/rest';
@@ -24,8 +27,22 @@ app.use('*', async (c, next) => {
     credentials: true,
   });
 
-  if (url.origin === env.WEBSITE_URL || url.hostname === env.USERSITE_HOST || url.hostname.endsWith(`.${env.USERSITE_HOST}`)) {
+  if (url.origin === env.WEBSITE_URL || url.hostname === env.USERSITE_HOST) {
     return handler(c, next);
+  }
+
+  const pattern = new RegExp(`^([^.]+)\\.${env.USERSITE_HOST}$`);
+  const slug = url.hostname.match(pattern)?.[1];
+  if (slug) {
+    const site = await db
+      .select({ id: Sites.id })
+      .from(Sites)
+      .where(and(eq(Sites.slug, slug), eq(Sites.state, SiteState.ACTIVE)))
+      .then(first);
+
+    if (site) {
+      return handler(c, next);
+    }
   }
 
   return next();
