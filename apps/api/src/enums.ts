@@ -46,6 +46,12 @@ export const SingleSignOnProvider = {
   NAVER: 'NAVER',
 } as const;
 
+export type SiteState = keyof typeof SiteState;
+export const SiteState = {
+  ACTIVE: 'ACTIVE',
+  DELETED: 'DELETED',
+} as const;
+
 export type UserState = keyof typeof UserState;
 export const UserState = {
   ACTIVE: 'ACTIVE',

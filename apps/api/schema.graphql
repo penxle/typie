@@ -219,6 +219,11 @@ enum SingleSignOnProvider {
   NAVER
 }
 
+enum SiteState {
+  ACTIVE
+  DELETED
+}
+
 type Subscription {
   postContentSyncStream(postId: ID!): PostContentSyncStreamPayload!
 }

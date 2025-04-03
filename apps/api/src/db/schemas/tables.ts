@@ -183,6 +183,29 @@ export const PreorderUsers = pgTable('preorder_users', {
     .default(sql`now()`),
 });
 
+export const Sites = pgTable(
+  'sites',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('S', { length: 'short' })),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    state: E._SiteState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex()
+      .on(t.slug)
+      .where(eq(t.state, sql`'ACTIVE'`)),
+  ],
+);
+
 export const Users = pgTable(
   'users',
   {
