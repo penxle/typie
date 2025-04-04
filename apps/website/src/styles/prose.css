@@ -18,8 +18,7 @@
   }
 
   & > * + *,
-  & [data-node-view-content-editable] > * + *, /* callout 등 */
-  & [data-node-view-content-editable] > [role='tabpanel'] > * + * /* tabs */ {
+  & [data-node-view-content-editable] > * + * {
     margin-top: var(--prosemirror-block-gap);
   }
 
