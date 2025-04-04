@@ -1,17 +1,18 @@
 import { and, eq } from 'drizzle-orm';
-import { db, first, firstOrThrow, PaymentMethods } from '@/db';
+import { db, first, firstOrThrow, PaymentMethods, TableCode } from '@/db';
 import { PaymentMethodState } from '@/enums';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { cardSchema } from '@/validation';
 import { builder } from '../builder';
-import { PaymentMethod, User } from '../objects';
+import { isTypeOf, PaymentMethod, User } from '../objects';
 
 /**
  * * Types
  */
 
 PaymentMethod.implement({
+  isTypeOf: isTypeOf(TableCode.PAYMENT_METHODS),
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),

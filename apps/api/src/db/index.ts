@@ -12,6 +12,7 @@ export const db = drizzle(pg, { schema: { ...tables, ...enums }, logger: new Dri
 export type Database = typeof db;
 export type Transaction = Database extends PgDatabase<infer T, infer U, infer V> ? PgTransaction<T, U, V> : never;
 
+export * from './schemas/codes';
 export * from './schemas/id';
 export * from './schemas/tables';
 export * from './utils';

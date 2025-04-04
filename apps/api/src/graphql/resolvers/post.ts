@@ -6,7 +6,7 @@ import { Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, Entities, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts } from '@/db';
+import { db, Entities, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts, TableCode } from '@/db';
 import { EntityType, PostContentSyncKind, PostVisibility } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
@@ -40,6 +40,7 @@ IPost.implement({
 });
 
 Post.implement({
+  isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
     content: t.field({
@@ -59,7 +60,7 @@ Post.implement({
 });
 
 PostView.implement({
-  isTypeOf: isTypeOf('P'),
+  isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
     content: t.field({
@@ -87,6 +88,7 @@ IPostContent.implement({
 });
 
 PostContent.implement({
+  isTypeOf: isTypeOf(TableCode.POST_CONTENTS),
   interfaces: [IPostContent],
   fields: (t) => ({
     update: t.expose('update', { type: 'Binary' }),
@@ -94,6 +96,7 @@ PostContent.implement({
 });
 
 PostContentView.implement({
+  isTypeOf: isTypeOf(TableCode.POST_CONTENTS),
   interfaces: [IPostContent],
   fields: (t) => ({
     body: t.expose('body', { type: 'JSON' }),
@@ -111,6 +114,7 @@ IPostOption.implement({
 });
 
 PostOption.implement({
+  isTypeOf: isTypeOf(TableCode.POST_OPTIONS),
   interfaces: [IPostOption],
   fields: (t) => ({
     password: t.exposeString('password', { nullable: true }),
@@ -118,6 +122,7 @@ PostOption.implement({
 });
 
 PostOptionView.implement({
+  isTypeOf: isTypeOf(TableCode.POST_OPTIONS),
   interfaces: [IPostOption],
   fields: (t) => ({
     hasPassword: t.boolean({ resolve: (self) => !!self.password }),

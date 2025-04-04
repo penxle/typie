@@ -1,7 +1,6 @@
-// spell-checker:ignoreRegExp /createDbId\('[A-Z]{1,4}'/g
-
 import { eq, sql } from 'drizzle-orm';
 import { boolean, index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import { TableCode } from './codes';
 import * as E from './enums';
 import { createDbId } from './id';
 import { bytea, datetime } from './types';
@@ -11,7 +10,7 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 export const Files = pgTable('files', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('FILE')),
+    .$defaultFn(() => createDbId(TableCode.FILES)),
   userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
   format: text('format').notNull(),
@@ -25,7 +24,7 @@ export const Files = pgTable('files', {
 export const Folders = pgTable('folders', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('F', { length: 'short' })),
+    .$defaultFn(() => createDbId(TableCode.FOLDERS, { length: 'short' })),
   entityId: text('entity_id')
     .notNull()
     .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
@@ -38,7 +37,7 @@ export const Folders = pgTable('folders', {
 export const Embeds = pgTable('embeds', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('EMBD')),
+    .$defaultFn(() => createDbId(TableCode.EMBEDS)),
   userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   url: text('url').notNull().unique(),
   type: text('type').notNull(),
@@ -56,7 +55,7 @@ export const Entities = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('E', { length: 'short' })),
+      .$defaultFn(() => createDbId(TableCode.ENTITIES, { length: 'short' })),
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
@@ -83,7 +82,7 @@ export const Entities = pgTable(
 export const Images = pgTable('images', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('IMG')),
+    .$defaultFn(() => createDbId(TableCode.IMAGES)),
   userId: text('user_id').references((): AnyPgColumn => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
   format: text('format').notNull(),
@@ -102,7 +101,7 @@ export const PaymentMethods = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('PYMT')),
+      .$defaultFn(() => createDbId(TableCode.PAYMENT_METHODS)),
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
@@ -123,7 +122,7 @@ export const PaymentMethods = pgTable(
 export const Posts = pgTable('posts', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('P', { length: 'short' })),
+    .$defaultFn(() => createDbId(TableCode.POSTS, { length: 'short' })),
   entityId: text('entity_id')
     .notNull()
     .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
@@ -135,7 +134,7 @@ export const Posts = pgTable('posts', {
 export const PostContents = pgTable('post_contents', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('PC')),
+    .$defaultFn(() => createDbId(TableCode.POST_CONTENTS)),
   postId: text('post_id')
     .notNull()
     .unique()
@@ -159,7 +158,7 @@ export const PostContentSnapshots = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('PCS')),
+      .$defaultFn(() => createDbId(TableCode.POST_CONTENT_SNAPSHOTS)),
     postId: text('post_id')
       .notNull()
       .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
@@ -174,7 +173,7 @@ export const PostContentSnapshots = pgTable(
 export const PostOptions = pgTable('post_options', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('PO')),
+    .$defaultFn(() => createDbId(TableCode.POST_OPTIONS)),
   postId: text('post_id')
     .notNull()
     .unique()
@@ -192,7 +191,7 @@ export const PostOptions = pgTable('post_options', {
 export const PreorderPayments = pgTable('preorder_payments', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('PP')),
+    .$defaultFn(() => createDbId(TableCode.PREORDER_PAYMENTS)),
   email: text('email').notNull(),
   amount: integer('amount').notNull(),
   state: E._PreorderPaymentState('state').notNull().default('PENDING'),
@@ -207,7 +206,7 @@ export const PreorderPayments = pgTable('preorder_payments', {
 export const PreorderUsers = pgTable('preorder_users', {
   id: text('id')
     .primaryKey()
-    .$defaultFn(() => createDbId('PU')),
+    .$defaultFn(() => createDbId(TableCode.PREORDER_USERS)),
   email: text('email').unique().notNull(),
   wish: text('wish'),
   preorderPaymentId: text('preorder_payment_id').notNull(),
@@ -221,7 +220,7 @@ export const Sites = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('S', { length: 'short' })),
+      .$defaultFn(() => createDbId(TableCode.SITES, { length: 'short' })),
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
@@ -244,7 +243,7 @@ export const Users = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('U', { length: 'short' })),
+      .$defaultFn(() => createDbId(TableCode.USERS, { length: 'short' })),
     email: text('email').notNull(),
     password: text('password'),
     name: text('name').notNull(),
@@ -269,7 +268,7 @@ export const UserSessions = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('USES')),
+      .$defaultFn(() => createDbId(TableCode.USER_SESSIONS)),
     userId: text('user_id')
       .notNull()
       .references(() => Users.id),
@@ -285,7 +284,7 @@ export const UserSingleSignOns = pgTable(
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId('USSO')),
+      .$defaultFn(() => createDbId(TableCode.USER_SINGLE_SIGN_ONS)),
     userId: text('user_id')
       .notNull()
       .references(() => Users.id),

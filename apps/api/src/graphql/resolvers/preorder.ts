@@ -1,19 +1,21 @@
 import { eq } from 'drizzle-orm';
-import { db, firstOrThrow, PreorderPayments, PreorderUsers } from '@/db';
+import { db, firstOrThrow, PreorderPayments, PreorderUsers, TableCode } from '@/db';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { builder } from '../builder';
-import { PreorderPayment, PreorderUser } from '../objects';
+import { isTypeOf, PreorderPayment, PreorderUser } from '../objects';
 
 const PAYMENT_AMOUNT = 4900;
 
 PreorderPayment.implement({
+  isTypeOf: isTypeOf(TableCode.PREORDER_PAYMENTS),
   fields: (t) => ({
     id: t.exposeID('id'),
   }),
 });
 
 PreorderUser.implement({
+  isTypeOf: isTypeOf(TableCode.PREORDER_USERS),
   fields: (t) => ({
     id: t.exposeID('id'),
     email: t.exposeString('email'),

@@ -5,10 +5,10 @@ import { eq } from 'drizzle-orm';
 import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
-import { db, Files, firstOrThrow, Images } from '@/db';
+import { db, Files, firstOrThrow, Images, TableCode } from '@/db';
 import * as aws from '@/external/aws';
 import { builder } from '../builder';
-import { Blob, File, Image } from '../objects';
+import { Blob, File, Image, isTypeOf } from '../objects';
 
 /**
  * * Types
@@ -21,6 +21,7 @@ Blob.implement({
 });
 
 File.implement({
+  isTypeOf: isTypeOf(TableCode.FILES),
   interfaces: [Blob],
   fields: (t) => ({
     name: t.exposeString('name'),
@@ -31,6 +32,7 @@ File.implement({
 });
 
 Image.implement({
+  isTypeOf: isTypeOf(TableCode.IMAGES),
   interfaces: [Blob],
   fields: (t) => ({
     placeholder: t.exposeString('placeholder'),
