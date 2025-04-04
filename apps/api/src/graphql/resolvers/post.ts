@@ -78,7 +78,10 @@ builder.queryFields((t) => ({
 builder.mutationFields((t) => ({
   createPost: t.withAuth({ session: true }).fieldWithInput({
     type: Post,
-    input: { folderId: t.input.id({ required: false }) },
+    input: {
+      siteId: t.input.id(),
+      folderId: t.input.id({ required: false }),
+    },
     resolve: async (_, { input }, ctx) => {
       const title = null;
       const subtitle = null;
@@ -103,6 +106,7 @@ builder.mutationFields((t) => ({
           .insert(Posts)
           .values({
             userId: ctx.session.userId,
+            siteId: input.siteId,
             folderId: input.folderId,
             order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
           })

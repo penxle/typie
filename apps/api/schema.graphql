@@ -16,10 +16,12 @@ interface Blob {
 input CreateFolderInput {
   name: String!
   parentId: ID
+  siteId: ID!
 }
 
 input CreatePostInput {
   folderId: ID
+  siteId: ID!
 }
 
 input CreatePreorderPaymentInput {
@@ -235,6 +237,12 @@ enum SingleSignOnProvider {
   NAVER
 }
 
+type Site {
+  id: ID!
+  name: String!
+  slug: String!
+}
+
 enum SiteState {
   ACTIVE
   DELETED
@@ -288,6 +296,7 @@ type User {
   id: ID!
   name: String!
   paymentMethod: PaymentMethod
+  sites: [Site!]!
 }
 
 enum UserState {
