@@ -9,12 +9,12 @@
 
   let { children } = $props();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = graphql(`
     query DashboardLayout_Query {
       me @required {
         id
-        email
+
+        ...DashboardLayout_SidebarContainer_user
       }
     }
   `);
@@ -77,7 +77,7 @@
 {#if mounted}
   <div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
     <div class={flex({ align: 'flex-start', height: 'full' })}>
-      <SidebarContainer {items} />
+      <SidebarContainer $user={$query.me} {items} />
 
       <div class={css({ width: 'full' })}>
         {@render children()}

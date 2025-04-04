@@ -2,17 +2,30 @@
   import { quintInOut } from 'svelte/easing';
   import { scale, slide } from 'svelte/transition';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
+  import { fragment, graphql } from '$graphql';
   import { Icon } from '$lib/components';
   import { expandSidebar } from '$lib/stores';
   import { css } from '$styled-system/css';
   import Sidebar from './Sidebar.svelte';
+  import type { DashboardLayout_SidebarContainer_user } from '$graphql';
   import type { Item } from './types';
 
   type Props = {
+    $user: DashboardLayout_SidebarContainer_user;
     items: Item[];
   };
 
-  let { items }: Props = $props();
+  let { $user: _user, items }: Props = $props();
+
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment DashboardLayout_SidebarContainer_user on User {
+        id
+        ...DashboardLayout_Sidebar_user
+      }
+    `),
+  );
 
   let sidebarPopoverVisible = $state(false);
 </script>
@@ -31,7 +44,7 @@
     in:scale={{ start: 0.95, duration: 10, opacity: 0.9, easing: quintInOut }}
     out:slide={{ axis: 'x' }}
   >
-    <Sidebar {items} bind:sidebarPopoverVisible />
+    <Sidebar {$user} {items} bind:sidebarPopoverVisible />
   </div>
 {:else}
   <div
@@ -77,7 +90,7 @@
       </button>
 
       <div class={css({ height: 'full', backgroundColor: 'white', boxShadow: 'medium' })}>
-        <Sidebar {items} bind:sidebarPopoverVisible />
+        <Sidebar {$user} {items} bind:sidebarPopoverVisible />
       </div>
     </div>
   </div>
