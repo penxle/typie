@@ -3,7 +3,7 @@ import * as R from 'remeda';
 import { match } from 'ts-pattern';
 import * as AST from '../ast';
 import { scalarTSTypes } from '../const';
-import type { Artifact, CompositeType, Selection, Variable } from '../types';
+import type { Artifact, CompositeType, DistributiveOmit, Selection, Variable } from '../types';
 
 const buildScalarRefTSType = (name: string, direction: 'Input' | 'Output') => {
   const type = scalarTSTypes[name as keyof typeof scalarTSTypes][direction];
@@ -14,8 +14,6 @@ const wrapTSType = (type: Parameters<typeof AST.b.tsArrayType>[0], isList: boole
   const t = isList ? AST.b.tsArrayType(AST.b.tsParenthesizedType(type)) : type;
   return isNonNull ? t : AST.b.tsUnionType([t, AST.b.tsUndefinedKeyword(), AST.b.tsNullKeyword()]);
 };
-
-type DistributiveOmit<T, K extends string> = T extends unknown ? Omit<T, K> : never;
 
 export const buildSelectionsTSType = (
   selections: Selection[],
