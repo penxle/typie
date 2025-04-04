@@ -31,11 +31,16 @@ const createObjectRef = <T extends TableConfig>(name: string, table: TableWithId
   });
 };
 
-// const createInterfaceRef = <T extends TableConfig>(name: string, table: TableWithIdColumn<T>) => {
-//   return builder.loadableInterfaceRef(name, {
-//     ...makeLoadableFields(table),
-//   });
-// };
+const createInterfaceRef = <T extends TableConfig>(name: string, table: TableWithIdColumn<T>) => {
+  return builder.loadableInterfaceRef(name, {
+    ...makeLoadableFields(table),
+  });
+};
+
+export const IFolder = createInterfaceRef('IFolder', T.Folders);
+export const IPost = createInterfaceRef('IPost', T.Posts);
+export const IPostContent = createInterfaceRef('IPostContent', T.PostContents);
+export const IPostOption = createInterfaceRef('IPostOption', T.PostOptions);
 
 export const Embed = createObjectRef('Embed', T.Embeds);
 export const File = createObjectRef('File', T.Files);
@@ -50,5 +55,18 @@ export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const Site = createObjectRef('Site', T.Sites);
 export const User = createObjectRef('User', T.Users);
 
+export const FolderView = createObjectRef('FolderView', T.Folders);
+export const PostView = createObjectRef('PostView', T.Posts);
+export const PostContentView = createObjectRef('PostContentView', T.PostContents);
+export const PostOptionView = createObjectRef('PostOptionView', T.PostOptions);
+
 type BlobShape = { id: string; path: string };
 export const Blob = builder.interfaceRef<BlobShape>('Blob');
+
+export const Entity = builder.unionType('Entity', {
+  types: [Folder, Post],
+});
+
+export const EntityView = builder.unionType('EntityView', {
+  types: [FolderView, PostView],
+});

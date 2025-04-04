@@ -2,18 +2,26 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { db, first, firstOrThrow, Folders } from '@/db';
 import { builder } from '../builder';
-import { Folder } from '../objects';
+import { Folder, FolderView, IFolder } from '../objects';
 
 /**
  * * Types
  */
 
-Folder.implement({
+IFolder.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
     order: t.expose('order', { type: 'Binary' }),
   }),
+});
+
+Folder.implement({
+  interfaces: [IFolder],
+});
+
+FolderView.implement({
+  interfaces: [IFolder],
 });
 
 /**

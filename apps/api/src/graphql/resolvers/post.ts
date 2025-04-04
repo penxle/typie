@@ -12,48 +12,100 @@ import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
-import { Post, PostContent, PostOption } from '../objects';
+import { IPost, IPostContent, IPostOption, Post, PostContent, PostContentView, PostOption, PostOptionView, PostView } from '../objects';
 
 /**
  * * Types
  */
 
-Post.implement({
+IPost.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     order: t.expose('order', { type: 'Binary' }),
+  }),
+});
 
+Post.implement({
+  interfaces: [IPost],
+  fields: (t) => ({
     content: t.field({
       type: PostContent,
-      resolve: async (post) => {
-        return await db.select().from(PostContents).where(eq(PostContents.postId, post.id)).then(firstOrThrow);
+      resolve: async (self) => {
+        return await db.select().from(PostContents).where(eq(PostContents.postId, self.id)).then(firstOrThrow);
       },
     }),
 
     option: t.field({
       type: PostOption,
-      resolve: async (post) => {
-        return await db.select().from(PostOptions).where(eq(PostOptions.postId, post.id)).then(firstOrThrow);
+      resolve: async (self) => {
+        return await db.select().from(PostOptions).where(eq(PostOptions.postId, self.id)).then(firstOrThrow);
       },
     }),
   }),
 });
 
-PostContent.implement({
+PostView.implement({
+  interfaces: [IPost],
+  fields: (t) => ({
+    content: t.field({
+      type: PostContentView,
+      resolve: async (self) => {
+        return await db.select().from(PostContents).where(eq(PostContents.postId, self.id)).then(firstOrThrow);
+      },
+    }),
+
+    option: t.field({
+      type: PostOptionView,
+      resolve: async (self) => {
+        return await db.select().from(PostOptions).where(eq(PostOptions.postId, self.id)).then(firstOrThrow);
+      },
+    }),
+  }),
+});
+
+IPostContent.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
+    title: t.exposeString('title', { nullable: true }),
+    subtitle: t.exposeString('subtitle', { nullable: true }),
+  }),
+});
+
+PostContent.implement({
+  interfaces: [IPostContent],
+  fields: (t) => ({
     update: t.expose('update', { type: 'Binary' }),
   }),
 });
 
-PostOption.implement({
+PostContentView.implement({
+  interfaces: [IPostContent],
+  fields: (t) => ({
+    body: t.expose('body', { type: 'JSON' }),
+  }),
+});
+
+IPostOption.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     visibility: t.expose('visibility', { type: PostVisibility }),
-    password: t.exposeString('password', { nullable: true }),
     allowComments: t.exposeBoolean('allowComments'),
     allowReactions: t.exposeBoolean('allowReactions'),
     allowCopies: t.exposeBoolean('allowCopies'),
+  }),
+});
+
+PostOption.implement({
+  interfaces: [IPostOption],
+  fields: (t) => ({
+    password: t.exposeString('password', { nullable: true }),
+  }),
+});
+
+PostOptionView.implement({
+  interfaces: [IPostOption],
+  fields: (t) => ({
+    hasPassword: t.boolean({ resolve: (self) => !!self.password }),
   }),
 });
 
@@ -64,6 +116,14 @@ PostOption.implement({
 builder.queryFields((t) => ({
   post: t.withAuth({ session: true }).field({
     type: Post,
+    args: { postId: t.arg.id() },
+    resolve: async (_, args) => {
+      return args.postId;
+    },
+  }),
+
+  postView: t.field({
+    type: PostView,
     args: { postId: t.arg.id() },
     resolve: async (_, args) => {
       return args.postId;

@@ -39,6 +39,10 @@ type Embed {
   url: String!
 }
 
+union Entity = Folder | Post
+
+union EntityView = FolderView | PostView
+
 type File implements Blob {
   id: ID!
   name: String!
@@ -52,7 +56,7 @@ input FinalizePreorderPaymentInput {
   wish: String!
 }
 
-type Folder {
+type Folder implements IFolder {
   id: ID!
   name: String!
   order: Binary!
@@ -63,9 +67,40 @@ enum FolderState {
   DELETED
 }
 
+type FolderView implements IFolder {
+  id: ID!
+  name: String!
+  order: Binary!
+}
+
 input GenerateSingleSignOnAuthorizationUrlInput {
   email: String
   provider: SingleSignOnProvider!
+}
+
+interface IFolder {
+  id: ID!
+  name: String!
+  order: Binary!
+}
+
+interface IPost {
+  id: ID!
+  order: Binary!
+}
+
+interface IPostContent {
+  id: ID!
+  subtitle: String
+  title: String
+}
+
+interface IPostOption {
+  allowComments: Boolean!
+  allowCopies: Boolean!
+  allowReactions: Boolean!
+  id: ID!
+  visibility: PostVisibility!
 }
 
 type Image implements Blob {
@@ -147,15 +182,17 @@ input PersistBlobAsImageInput {
   path: String!
 }
 
-type Post {
+type Post implements IPost {
   content: PostContent!
   id: ID!
   option: PostOption!
   order: Binary!
 }
 
-type PostContent {
+type PostContent implements IPostContent {
   id: ID!
+  subtitle: String
+  title: String
   update: Binary!
 }
 
@@ -172,7 +209,14 @@ type PostContentSyncStreamPayload {
   postId: ID!
 }
 
-type PostOption {
+type PostContentView implements IPostContent {
+  body: JSON!
+  id: ID!
+  subtitle: String
+  title: String
+}
+
+type PostOption implements IPostOption {
   allowComments: Boolean!
   allowCopies: Boolean!
   allowReactions: Boolean!
@@ -181,9 +225,25 @@ type PostOption {
   visibility: PostVisibility!
 }
 
+type PostOptionView implements IPostOption {
+  allowComments: Boolean!
+  allowCopies: Boolean!
+  allowReactions: Boolean!
+  hasPassword: Boolean!
+  id: ID!
+  visibility: PostVisibility!
+}
+
 enum PostState {
   ACTIVE
   DELETED
+}
+
+type PostView implements IPost {
+  content: PostContentView!
+  id: ID!
+  option: PostOptionView!
+  order: Binary!
 }
 
 enum PostVisibility {
@@ -210,6 +270,7 @@ type Query {
   image(id: ID!): Image!
   me: User
   post(postId: ID!): Post!
+  postView(postId: ID!): PostView!
 }
 
 input ResetPasswordInput {
