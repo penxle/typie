@@ -3,6 +3,7 @@ import path from 'node:path';
 import fg from 'fast-glob';
 import * as graphql from 'graphql';
 import { preprocess } from 'svelte/compiler';
+import { match } from 'ts-pattern';
 import * as AST from './ast';
 import { buildSelections } from './parser/selection';
 import { buildVariables } from './parser/variables';
@@ -86,12 +87,36 @@ export const collectArtifacts = async (root: string) => {
                     meta,
                   });
                 } else if (definition.kind === 'FragmentDefinition') {
+                  const on = schema.getType(definition.typeCondition.name.value);
+                  if (!on) {
+                    throw new Error(`Expected type: ${definition.typeCondition.name.value}`);
+                  }
+
+                  if (!graphql.isCompositeType(on)) {
+                    throw new Error(`Expected composite type: ${on.name}`);
+                  }
+
                   fragments.push({
                     name: definition.name.value,
                     kind: 'fragment',
                     file,
                     source,
-                    on: definition.typeCondition.name.value,
+                    on: match(on)
+                      .when(graphql.isObjectType, (t) => ({
+                        kind: 'Object' as const,
+                        name: t.name,
+                      }))
+                      .when(graphql.isInterfaceType, (t) => ({
+                        kind: 'Interface' as const,
+                        name: t.name,
+                        implementations: schema.getPossibleTypes(t).map((t) => t.name),
+                      }))
+                      .when(graphql.isUnionType, (t) => ({
+                        kind: 'Union' as const,
+                        name: t.name,
+                        members: t.getTypes().map((t) => t.name),
+                      }))
+                      .exhaustive(),
                     node: definition,
                     meta: {},
                   });
@@ -122,9 +147,9 @@ export const buildArtifacts = (
       throw new Error(`Duplicate fragment name: ${fragment.name}`);
     }
 
-    const on = schema.getType(fragment.on);
+    const on = schema.getType(fragment.on.name);
     if (!on) {
-      throw new Error(`Expected type: ${fragment.on}`);
+      throw new Error(`Expected type: ${fragment.on.name}`);
     }
 
     if (!graphql.isCompositeType(on)) {

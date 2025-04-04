@@ -1,5 +1,7 @@
 import type graphql from 'graphql';
 
+export type DistributiveOmit<T, K extends string> = T extends unknown ? Omit<T, K> : never;
+
 export type ContextHolder = {
   context: Context | null;
 };
@@ -30,7 +32,7 @@ export type OperationArtifact = BaseArtifact & {
 
 export type FragmentArtifact = BaseArtifact & {
   kind: Extract<ArtifactKind, 'fragment'>;
-  on: string;
+  on: DistributiveOmit<CompositeType, 'isNonNull' | 'isList'>;
   node: graphql.FragmentDefinitionNode;
 };
 

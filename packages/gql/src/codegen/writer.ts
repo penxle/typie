@@ -126,7 +126,7 @@ export const writeArtifactAssets = async ({ gqlDir, schema, artifacts }: Context
             }),
             AST.b.tsPropertySignature.from({
               key: AST.b.identifier('$output'),
-              typeAnnotation: AST.b.tsTypeAnnotation(buildSelectionsTSType(fragment.selections)),
+              typeAnnotation: AST.b.tsTypeAnnotation(buildSelectionsTSType(fragment.selections, fragment.on)),
             }),
             AST.b.tsPropertySignature.from({
               key: AST.b.identifier('$meta'),
