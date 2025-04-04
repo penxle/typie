@@ -85,7 +85,7 @@ export const Paragraph = Node.create({
           },
         ),
       }),
-      0,
+      !this.editor?.isEditable && node.content.size === 0 ? ['br'] : 0,
     ];
   },
 
