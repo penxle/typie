@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { graphql } from '$graphql';
+  import { expandSidebar } from '$lib/stores/global-stores';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import PageList from './PageList.svelte';
+  import SidebarContainer from './SidebarContainer.svelte';
   import type { Item } from './types';
 
   let { children } = $props();
@@ -16,6 +18,14 @@
       }
     }
   `);
+
+  let mounted = $state(false);
+
+  onMount(() => {
+    if ($expandSidebar === null) $expandSidebar = true;
+
+    mounted = true;
+  });
 
   let items: Item[] = [
     {
@@ -64,27 +74,14 @@
   ];
 </script>
 
-<div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
-  <div class={flex({ align: 'flex-start', height: 'full' })}>
-    <div class={css({ flex: 'none', backgroundColor: 'gray.100', width: '300px', height: 'full', overflowY: 'auto' })}>
-      <nav class={css({ position: 'sticky', top: '0' })}>
-        <p>홈</p>
-        <p>검색</p>
-        <p>알림</p>
-        <p>설정</p>
-      </nav>
+{#if mounted}
+  <div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
+    <div class={flex({ align: 'flex-start', height: 'full' })}>
+      <SidebarContainer {items} />
 
-      <hr class={css({ marginY: '20px', border: 'none', height: '1px', width: 'full', backgroundColor: 'gray.900' })} />
-
-      <div>
-        <p>보관함</p>
-
-        <PageList {items} />
+      <div class={css({ width: 'full' })}>
+        {@render children()}
       </div>
     </div>
-
-    <div class={css({ width: 'full' })}>
-      {@render children()}
-    </div>
   </div>
-</div>
+{/if}
