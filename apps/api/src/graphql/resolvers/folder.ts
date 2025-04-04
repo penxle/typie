@@ -2,7 +2,7 @@ import { faker } from '@faker-js/faker';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { db, Entities, first, firstOrThrow, Folders, TableCode } from '@/db';
-import { EntityType } from '@/enums';
+import { EntityState, EntityType } from '@/enums';
 import { builder } from '../builder';
 import { Entity, Folder, FolderView, IFolder, isTypeOf } from '../objects';
 
@@ -42,6 +42,21 @@ builder.mutationFields((t) => ({
       name: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
+      if (input.parentEntityId) {
+        await db
+          .select({ id: Entities.id })
+          .from(Entities)
+          .where(
+            and(
+              eq(Entities.siteId, input.siteId),
+              eq(Entities.id, input.parentEntityId),
+              eq(Entities.type, EntityType.FOLDER),
+              eq(Entities.state, EntityState.ACTIVE),
+            ),
+          )
+          .then(firstOrThrow);
+      }
+
       const last = await db
         .select({ order: Entities.order })
         .from(Entities)

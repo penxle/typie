@@ -7,7 +7,7 @@ import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
 import { db, Entities, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts, TableCode } from '@/db';
-import { EntityType, PostContentSyncKind, PostVisibility } from '@/enums';
+import { EntityState, EntityType, PostContentSyncKind, PostVisibility } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
@@ -164,6 +164,21 @@ builder.mutationFields((t) => ({
 
       const doc = makeYDoc({ title, subtitle, body });
       const snapshot = Y.snapshot(doc);
+
+      if (input.parentEntityId) {
+        await db
+          .select({ id: Entities.id })
+          .from(Entities)
+          .where(
+            and(
+              eq(Entities.siteId, input.siteId),
+              eq(Entities.id, input.parentEntityId),
+              eq(Entities.type, EntityType.FOLDER),
+              eq(Entities.state, EntityState.ACTIVE),
+            ),
+          )
+          .then(firstOrThrow);
+      }
 
       const last = await db
         .select({ order: Entities.order })
