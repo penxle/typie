@@ -198,6 +198,7 @@ enum PaymentInvoiceState {
   CANCELED
   PAID
   UNPAID
+  UPCOMING
 }
 
 type PaymentMethod {
@@ -386,7 +387,7 @@ input UpdateEmailInput {
 input UpdatePaymentMethodInput {
   birthOrBusinessRegistrationNumber: String!
   cardNumber: String!
-  expiry: String!
+  expiryDate: String!
   passwordTwoDigits: String!
 }
 
@@ -413,9 +414,9 @@ type User {
 
 type UserPlan {
   billingCycle: UserPlanBillingCycle!
+  createdAt: DateTime!
   fee: Int!
   id: ID!
-  nextBillingAt: DateTime!
   plan: Plan!
 }
 

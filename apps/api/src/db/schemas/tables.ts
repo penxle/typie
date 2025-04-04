@@ -104,8 +104,9 @@ export const PaymentInvoices = pgTable('payment_invoices', {
   userId: text('user_id')
     .notNull()
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  state: E._PaymentInvoiceState('state').notNull().default('UNPAID'),
+  state: E._PaymentInvoiceState('state').notNull(),
   amount: integer('amount').notNull(),
+  billingAt: datetime('billing_at').notNull(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -321,8 +322,6 @@ export const UserPlans = pgTable('user_plans', {
     .references(() => Plans.id),
   fee: integer('fee').notNull(),
   billingCycle: E._UserPlanBillingCycle('billing_cycle').notNull(),
-  nextBillingAt: datetime('next_billing_at').notNull(),
-  billingDate: integer('billing_date').notNull(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

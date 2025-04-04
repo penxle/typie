@@ -5,12 +5,12 @@ export const userSchema = {
 };
 
 export const cardSchema = {
-  number: z
+  cardNumber: z
     .string({ required_error: '카드 번호를 입력해 주세요' })
     .transform((str) => str.replaceAll(/\D/g, ''))
     .refine((str) => str.length >= 15 && str.length <= 16, { message: '올바른 카드 번호를 입력해 주세요' }),
 
-  expiry: z
+  expiryDate: z
     .string({ required_error: '만료일을 입력해 주세요' })
     .transform((str) => str.replaceAll(/\D/g, ''))
     .refine((str) => str.length === 4, { message: '올바른 만료일을 입력해 주세요' }),
