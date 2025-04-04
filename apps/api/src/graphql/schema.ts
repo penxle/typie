@@ -6,6 +6,7 @@ import './resolvers/folder';
 import './resolvers/payment';
 import './resolvers/post';
 import './resolvers/preorder';
+import './resolvers/site';
 import './resolvers/unfurl';
 import './resolvers/user';
 

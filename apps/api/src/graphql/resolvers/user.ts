@@ -1,15 +1,15 @@
 import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, Users } from '@/db';
+import { db, first, firstOrThrow, Sites, Users } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { UserState } from '@/enums';
+import { SiteState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { User } from '../objects';
+import { Site, User } from '../objects';
 
 /**
  * * Types
@@ -20,6 +20,16 @@ User.implement({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
     email: t.exposeString('email'),
+
+    sites: t.field({
+      type: [Site],
+      resolve: async (user) => {
+        return await db
+          .select()
+          .from(Sites)
+          .where(and(eq(Sites.userId, user.id), eq(Sites.state, SiteState.ACTIVE)));
+      },
+    }),
   }),
 });
 

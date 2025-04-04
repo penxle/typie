@@ -31,6 +31,9 @@ export const Folders = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     parentId: text('parent_id').references((): AnyPgColumn => Folders.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     name: text('name').notNull(),
     state: E._FolderState('state').notNull().default('ACTIVE'),
@@ -39,7 +42,7 @@ export const Folders = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [unique().on(t.userId, t.parentId, t.order).nullsNotDistinct()],
+  (t) => [unique().on(t.siteId, t.parentId, t.order).nullsNotDistinct()],
 );
 
 export const Embeds = pgTable('embeds', {
@@ -107,6 +110,9 @@ export const Posts = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     folderId: text('folder_id').references(() => Folders.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     state: E._PostState('state').notNull().default('ACTIVE'),
     order: bytea('order').notNull(),
@@ -114,7 +120,7 @@ export const Posts = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [unique().on(t.userId, t.folderId, t.order).nullsNotDistinct()],
+  (t) => [unique().on(t.siteId, t.folderId, t.order).nullsNotDistinct()],
 );
 
 export const PostContents = pgTable('post_contents', {

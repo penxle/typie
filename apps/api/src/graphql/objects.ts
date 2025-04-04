@@ -47,6 +47,7 @@ export const PostContent = createObjectRef('PostContent', T.PostContents);
 export const PostOption = createObjectRef('PostOption', T.PostOptions);
 export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
+export const Site = createObjectRef('Site', T.Sites);
 export const User = createObjectRef('User', T.Users);
 
 type BlobShape = { id: string; path: string };

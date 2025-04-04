@@ -23,7 +23,11 @@ Folder.implement({
 builder.mutationFields((t) => ({
   createFolder: t.withAuth({ session: true }).fieldWithInput({
     type: Folder,
-    input: { name: t.input.string(), parentId: t.input.id({ required: false }) },
+    input: {
+      siteId: t.input.id(),
+      parentId: t.input.id({ required: false }),
+      name: t.input.string(),
+    },
     resolve: async (_, { input }, ctx) => {
       const last = await db
         .select({ order: Folders.order })
@@ -39,6 +43,7 @@ builder.mutationFields((t) => ({
         .insert(Folders)
         .values({
           userId: ctx.session.userId,
+          siteId: input.siteId,
           parentId: input.parentId,
           name: input.name,
           order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
