@@ -10,7 +10,7 @@
   import type { Ref } from '$lib/utils';
 
   type Props = {
-    editor: Ref<Editor>;
+    editor?: Ref<Editor>;
     node: ProseMirrorNode;
     getPos: () => number;
     children: Snippet;
@@ -45,7 +45,9 @@
   };
 
   $effect(() => {
-    update(editor.current);
+    if (editor) {
+      update(editor.current);
+    }
   });
 </script>
 

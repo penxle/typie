@@ -82,7 +82,7 @@
 
 <NodeView data-drag-handle draggable>
   <svelte:element
-    this={editor.current.isEditable ? 'div' : 'a'}
+    this={editor?.current.isEditable ? 'div' : 'a'}
     class={cx(
       'group',
       css(
@@ -98,8 +98,8 @@
         pickerOpened && { backgroundColor: 'gray.200' },
       ),
     )}
-    aria-label={editor.current.isEditable ? undefined : `${node.attrs.name} 파일 다운로드`}
-    href={editor.current.isEditable ? undefined : node.attrs.url}
+    aria-label={editor?.current.isEditable ? undefined : `${node.attrs.name} 파일 다운로드`}
+    href={editor?.current.isEditable ? undefined : node.attrs.url}
   >
     {#if node.attrs.id}
       <div
@@ -147,7 +147,7 @@
       </div>
     {/if}
 
-    {#if !editor.current.isEditable}
+    {#if !editor?.current.isEditable}
       <div
         class={css({
           marginRight: '12px',
@@ -162,7 +162,7 @@
   </svelte:element>
 </NodeView>
 
-{#if pickerOpened && !node.attrs.id && !inflight && editor.current.isEditable}
+{#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
   <div
     class={flex({
       direction: 'column',

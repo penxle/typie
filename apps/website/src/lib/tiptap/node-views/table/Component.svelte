@@ -122,7 +122,7 @@
         <col bind:this={_colElems[i]} {...col[1]} />
       {/each}
     </colgroup>
-    {#if editor.current.isEditable}
+    {#if editor?.current.isEditable}
       <!-- svelte-ignore node_invalid_placement_ssr -->
       <div
         class={css({
@@ -184,7 +184,7 @@
 
     <NodeViewContentEditable as="tbody" />
 
-    {#if editor.current.isEditable}
+    {#if editor?.current.isEditable}
       <AddRowColButton {editor} {isLastColumnHovered} {isLastRowHovered} tableNode={node} tablePos={getPos()} />
     {/if}
   </table>

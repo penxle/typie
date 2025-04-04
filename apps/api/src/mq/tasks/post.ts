@@ -28,7 +28,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
     }
 
     const update = Y.mergeUpdatesV2(updates.map((update) => base64.parse(update)));
-    const doc = new Y.Doc();
+    const doc = new Y.Doc({ gc: false });
 
     Y.applyUpdateV2(doc, state.update);
     const prevSnapshot = Y.snapshot(doc);
