@@ -1,7 +1,9 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, Folders, Posts, TableCode } from '@/db';
-import { EntityState, EntityType } from '@/enums';
+import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode } from '@/db';
+import { EntityState, EntityType, SiteState } from '@/enums';
+import { env } from '@/env';
+import { TypieError } from '@/errors';
 import { builder } from '../builder';
 import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf } from '../objects';
 
@@ -77,12 +79,24 @@ EntityView.implement({
 builder.queryFields((t) => ({
   entityView: t.field({
     type: EntityView,
-    args: { slug: t.arg.string() },
+    args: { hostname: t.arg.string(), slug: t.arg.string() },
     resolve: async (_, args) => {
+      const pattern = new RegExp(`^([^.]+)\\.${env.USERSITE_HOST}$`);
+      const slug = args.hostname.match(pattern)?.[1];
+      if (!slug) {
+        throw new TypieError({ code: 'invalid_hostname' });
+      }
+
+      const site = await db
+        .select({ id: Sites.id })
+        .from(Sites)
+        .where(and(eq(Sites.slug, slug), eq(Sites.state, SiteState.ACTIVE)))
+        .then(firstOrThrow);
+
       return await db
         .select()
         .from(Entities)
-        .where(and(eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
+        .where(and(eq(Entities.siteId, site.id), eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
     },
   }),

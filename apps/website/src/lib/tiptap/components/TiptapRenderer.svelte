@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Editor } from '@tiptap/core';
   import { onMount } from 'svelte';
+  import { Ref } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { renderHTML } from '../lib/html';
   import { extensions } from '../schema';
@@ -10,7 +11,7 @@
   type Props = {
     style?: SystemStyleObject;
     content: JSONContent;
-    editor?: Editor;
+    editor?: Ref<Editor>;
   };
 
   let { style, content, editor = $bindable() }: Props = $props();
@@ -19,24 +20,30 @@
   const html = $derived(renderHTML(content, extensions));
 
   onMount(() => {
-    editor = new Editor({
+    const e = new Editor({
       editable: false,
       content,
       extensions,
       injectCSS: false,
 
       editorProps: {
-        attributes: { class: css(style) },
+        attributes: { class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style) },
       },
 
       onCreate: ({ editor }) => {
         // eslint-disable-next-line svelte/no-dom-manipulating
         element?.replaceWith(editor.view.dom);
       },
+
+      onTransaction: ({ editor: e }) => {
+        editor = new Ref(e);
+      },
     });
 
+    editor = new Ref(e);
+
     return () => {
-      editor?.destroy();
+      editor?.current.destroy();
       editor = undefined;
     };
   });
@@ -48,13 +55,7 @@
 </svelte:head>
 
 <article
-  class={css({
-    display: 'contents',
-    fontFamily: 'prose',
-    whiteSpace: 'pre-wrap',
-    overflowWrap: 'break-word',
-    wordBreak: 'break-all',
-  })}
+  class={css({ display: 'contents', fontFamily: 'prose', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-all' })}
 >
   <div bind:this={element} class={cx('ProseMirror', css(style))}>
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->

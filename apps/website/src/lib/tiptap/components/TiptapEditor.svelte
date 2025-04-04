@@ -25,11 +25,13 @@
       element,
       extensions: [...extensions, ...(doc && awareness ? [Collaboration.configure({ doc, awareness })] : [])],
       injectCSS: false,
+
       editorProps: {
         attributes: { class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style) },
         scrollMargin: { top: 150, bottom: 50, left: 0, right: 0 },
         scrollThreshold: { top: 150, bottom: 50, left: 0, right: 0 },
       },
+
       onTransaction: ({ editor: e }) => {
         editor = new Ref(e);
       },
@@ -46,7 +48,7 @@
 
 <div
   bind:this={element}
-  class={css({ display: 'contents', fontFamily: 'prose', whiteSpace: 'pre-wrap', wordBreak: 'break-all' })}
+  class={css({ display: 'contents', fontFamily: 'prose', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-all' })}
   autocapitalize="off"
   spellcheck="false"
 ></div>

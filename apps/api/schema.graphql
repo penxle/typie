@@ -286,7 +286,7 @@ type PreorderUser {
 }
 
 type Query {
-  entityView(slug: String!): EntityView!
+  entityView(hostname: String!, slug: String!): EntityView!
   image(id: ID!): Image!
   me: User
   post(postId: ID!): Post!
