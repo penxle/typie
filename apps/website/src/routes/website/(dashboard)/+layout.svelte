@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import PageList from '../home/PageList.svelte';
+  import PageList from './PageList.svelte';
   import type { Item } from './types';
 
+  let { children } = $props();
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = graphql(`
-    query HomePage_Query {
+    query DashboardLayout_Query {
       me @required {
         id
         email
@@ -15,16 +17,6 @@
     }
   `);
 
-  const logout = graphql(`
-    mutation HomePage_Logout_Mutation {
-      logout
-    }
-  `);
-
-  const handleLogout = async () => {
-    await logout();
-    await goto('/');
-  };
   let items: Item[] = [
     {
       id: '1',
@@ -72,26 +64,27 @@
   ];
 </script>
 
-<div class={flex({ align: 'flex-start', height: 'full' })}>
-  <div class={css({ flex: 'none', backgroundColor: 'gray.100', width: '300px', height: 'full', overflowY: 'auto' })}>
-    <nav class={css({ position: 'sticky', top: '0' })}>
-      <p>홈</p>
-      <p>검색</p>
-      <p>알림</p>
-      <p>설정</p>
-    </nav>
+<div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
+  <div class={flex({ align: 'flex-start', height: 'full' })}>
+    <div class={css({ flex: 'none', backgroundColor: 'gray.100', width: '300px', height: 'full', overflowY: 'auto' })}>
+      <nav class={css({ position: 'sticky', top: '0' })}>
+        <p>홈</p>
+        <p>검색</p>
+        <p>알림</p>
+        <p>설정</p>
+      </nav>
 
-    <hr class={css({ marginY: '20px', border: 'none', height: '1px', width: 'full', backgroundColor: 'gray.900' })} />
+      <hr class={css({ marginY: '20px', border: 'none', height: '1px', width: 'full', backgroundColor: 'gray.900' })} />
 
-    <div>
-      <p>보관함</p>
+      <div>
+        <p>보관함</p>
 
-      <PageList {items} />
+        <PageList {items} />
+      </div>
     </div>
-  </div>
 
-  <div class={css({ width: 'full' })}>
-    <div>{$query.me.email}</div>
-    <button onclick={handleLogout} type="button">로그아웃</button>
+    <div class={css({ width: 'full' })}>
+      {@render children()}
+    </div>
   </div>
 </div>
