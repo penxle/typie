@@ -19,9 +19,7 @@ type IssueBillingKeyParams = {
 
 type IssueBillingKeyResult = PortOneResult<{
   billingKey: string;
-  card: {
-    name: string;
-  };
+  cardName: string;
 }>;
 export const issueBillingKey = async (params: IssueBillingKeyParams): Promise<IssueBillingKeyResult> => {
   try {
@@ -56,9 +54,7 @@ export const issueBillingKey = async (params: IssueBillingKeyParams): Promise<Is
 
     return makeSuccessResult({
       billingKey,
-      card: {
-        name: card.name!,
-      },
+      cardName: card.name!,
     });
     /* eslint-enable @typescript-eslint/no-non-null-assertion */
   } catch (err) {

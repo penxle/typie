@@ -20,8 +20,9 @@ export const JobState = {
 
 export type PaymentInvoiceState = keyof typeof PaymentInvoiceState;
 export const PaymentInvoiceState = {
-  UNPAID: 'UNPAID',
+  UPCOMING: 'UPCOMING',
   PAID: 'PAID',
+  UNPAID: 'UNPAID',
   CANCELED: 'CANCELED',
 } as const;
 

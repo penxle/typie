@@ -1,15 +1,15 @@
 import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, Sites, TableCode, Users } from '@/db';
+import { db, first, firstOrThrow, PaymentMethods, Sites, TableCode, Users } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { SiteState, UserState } from '@/enums';
+import { PaymentMethodState, SiteState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { isTypeOf, Site, User } from '../objects';
+import { isTypeOf, PaymentMethod, Site, User } from '../objects';
 
 /**
  * * Types
@@ -29,6 +29,18 @@ User.implement({
           .select()
           .from(Sites)
           .where(and(eq(Sites.userId, user.id), eq(Sites.state, SiteState.ACTIVE)));
+      },
+    }),
+
+    paymentMethod: t.field({
+      type: PaymentMethod,
+      nullable: true,
+      resolve: async (user) => {
+        return await db
+          .select()
+          .from(PaymentMethods)
+          .where(and(eq(PaymentMethods.userId, user.id), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
+          .then(first);
       },
     }),
   }),

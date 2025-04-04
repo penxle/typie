@@ -1,13 +1,13 @@
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
-import { match } from 'ts-pattern';
 import { db, first, firstOrThrow, PaymentInvoices, PaymentMethods, PaymentRecords, Plans, TableCode, UserPlans, Users } from '@/db';
 import { PaymentInvoiceState, PaymentMethodState, PaymentRecordState, PlanAvailability, UserPlanBillingCycle } from '@/enums';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
+import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
 import { cardSchema } from '@/validation';
 import { builder } from '../builder';
-import { isTypeOf, PaymentMethod, Plan, User, UserPlan } from '../objects';
+import { isTypeOf, PaymentMethod, Plan, UserPlan } from '../objects';
 
 /**
  * * Types
@@ -34,26 +34,13 @@ UserPlan.implement({
   isTypeOf: isTypeOf(TableCode.USER_PLANS),
   fields: (t) => ({
     id: t.exposeID('id'),
-    plan: t.field({ type: Plan, resolve: (userPlan) => userPlan.planId }),
     fee: t.exposeInt('fee'),
     billingCycle: t.expose('billingCycle', { type: UserPlanBillingCycle }),
-    nextBillingAt: t.expose('nextBillingAt', { type: 'DateTime' }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+
+    plan: t.field({ type: Plan, resolve: (userPlan) => userPlan.planId }),
   }),
 });
-
-builder.objectField(User, 'paymentMethod', (t) =>
-  t.field({
-    type: PaymentMethod,
-    nullable: true,
-    resolve: async (user) => {
-      return await db
-        .select()
-        .from(PaymentMethods)
-        .where(and(eq(PaymentMethods.userId, user.id), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
-        .then(first);
-    },
-  }),
-);
 
 /**
  * * Mutations
@@ -63,15 +50,15 @@ builder.mutationFields((t) => ({
   updatePaymentMethod: t.withAuth({ session: true }).fieldWithInput({
     type: PaymentMethod,
     input: {
-      cardNumber: t.input.string({ validate: { schema: cardSchema.number } }),
-      expiry: t.input.string({ validate: { schema: cardSchema.expiry } }),
+      cardNumber: t.input.string({ validate: { schema: cardSchema.cardNumber } }),
+      expiryDate: t.input.string({ validate: { schema: cardSchema.expiryDate } }),
       birthOrBusinessRegistrationNumber: t.input.string({
         validate: { schema: cardSchema.birthOrBusinessRegistrationNumber },
       }),
       passwordTwoDigits: t.input.string({ validate: { schema: cardSchema.passwordTwoDigits } }),
     },
     resolve: async (_, { input }, ctx) => {
-      const [, expiryMonth, expiryYear] = input.expiry.match(/^(\d{2})(\d{2})$/) || [];
+      const [, expiryMonth, expiryYear] = input.expiryDate.match(/^(\d{2})(\d{2})$/) || [];
 
       const result = await portone.issueBillingKey({
         customerId: ctx.session.userId,
@@ -101,7 +88,7 @@ builder.mutationFields((t) => ({
           .insert(PaymentMethods)
           .values({
             userId: ctx.session.userId,
-            name: `${result.card.name} ${input.cardNumber.slice(-4)}`,
+            name: `${result.cardName} ${input.cardNumber.slice(-4)}`,
             billingKey: result.billingKey,
           })
           .returning()
@@ -117,7 +104,7 @@ builder.mutationFields((t) => ({
       billingCycle: t.input.field({ type: UserPlanBillingCycle }),
     },
     resolve: async (_, { input }, ctx) => {
-      const currentPlan = await db
+      const userPlan = await db
         .select({
           id: UserPlans.id,
         })
@@ -125,68 +112,66 @@ builder.mutationFields((t) => ({
         .where(eq(UserPlans.userId, ctx.session.userId))
         .then(first);
 
-      if (currentPlan) {
+      if (userPlan) {
         // TODO: 플랜 변경 & 정산 처리 추후 구현 (아예 다른 플랜? 결제주기만 변경?)
         throw new TypieError({ code: 'plan_already_enrolled' });
       }
 
-      const [paymentMethod, plan, me] = await Promise.all([
-        db
-          .select({
-            id: PaymentMethods.id,
-            billingKey: PaymentMethods.billingKey,
-          })
-          .from(PaymentMethods)
-          .where(and(eq(PaymentMethods.userId, ctx.session.userId), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
-          .then(firstOrThrow),
-        db
-          .select({
-            id: Plans.id,
-            name: Plans.name,
-            fee: Plans.fee,
-          })
-          .from(Plans)
-          .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.PUBLIC)))
-          .then(firstOrThrow),
-        db.select({ name: Users.name, email: Users.email }).from(Users).where(eq(Users.id, ctx.session.userId)).then(firstOrThrow),
-      ]);
+      const user = await db
+        .select({ name: Users.name, email: Users.email })
+        .from(Users)
+        .where(eq(Users.id, ctx.session.userId))
+        .then(firstOrThrow);
 
-      const amount = calcuratePaymentAmount({ fee: plan.fee, billingCycle: input.billingCycle });
-      const today = dayjs().kst();
-      const billingDate = today.date();
-      const nextBillingAt = getNextBillingDate({ today, billingCycle: input.billingCycle, billingDate });
+      const plan = await db
+        .select({ id: Plans.id, name: Plans.name, fee: Plans.fee })
+        .from(Plans)
+        .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.PUBLIC)))
+        .then(firstOrThrow);
+
+      const paymentMethod = await db
+        .select({ id: PaymentMethods.id, billingKey: PaymentMethods.billingKey })
+        .from(PaymentMethods)
+        .where(and(eq(PaymentMethods.userId, ctx.session.userId), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
+        .then(firstOrThrow);
 
       return await db.transaction(async (tx) => {
-        const invoice = await tx
-          .insert(PaymentInvoices)
-          .values({
-            userId: ctx.session.userId,
-            amount,
-            state: PaymentInvoiceState.PAID,
-          })
-          .returning({ id: PaymentInvoices.id })
-          .then(firstOrThrow);
-
         const userPlan = await tx
           .insert(UserPlans)
           .values({
             userId: ctx.session.userId,
             planId: plan.id,
-            fee: plan.fee,
+            fee: calculatePaymentAmount(input.billingCycle, plan.fee),
             billingCycle: input.billingCycle,
-            nextBillingAt,
-            billingDate,
           })
           .returning()
           .then(firstOrThrow);
 
+        const invoice = await tx
+          .insert(PaymentInvoices)
+          .values({
+            userId: ctx.session.userId,
+            amount: userPlan.fee,
+            billingAt: dayjs(),
+            state: PaymentInvoiceState.PAID,
+          })
+          .returning({ id: PaymentInvoices.id })
+          .then(firstOrThrow);
+
+        await tx.insert(PaymentInvoices).values({
+          userId: ctx.session.userId,
+          amount: userPlan.fee,
+          billingAt: getNextPaymentDate(input.billingCycle, userPlan.createdAt),
+          state: PaymentInvoiceState.UPCOMING,
+        });
+
         const paymentResult = await portone.makePayment({
           paymentId: invoice.id,
           billingKey: paymentMethod.billingKey,
-          customerName: me.name,
-          customerEmail: me.email,
+          customerName: user.name,
+          customerEmail: user.email,
           orderName: '타이피 정기결제',
-          amount,
+          amount: userPlan.fee,
         });
 
         if (paymentResult.status === 'failed') {
@@ -197,7 +182,7 @@ builder.mutationFields((t) => ({
           invoiceId: invoice.id,
           methodId: paymentMethod.id,
           state: PaymentRecordState.SUCCEEDED,
-          amount,
+          amount: userPlan.fee,
           receiptUrl: paymentResult.receiptUrl,
         });
 
@@ -206,40 +191,3 @@ builder.mutationFields((t) => ({
     },
   }),
 }));
-
-/**
- * * Utils
- */
-
-const billingCycleToUnit = (billingCycle: UserPlanBillingCycle) =>
-  match(billingCycle)
-    .with(UserPlanBillingCycle.MONTHLY, () => 'month' as const)
-    .with(UserPlanBillingCycle.YEARLY, () => 'year' as const)
-    .exhaustive();
-
-type CalcuratePaymentAmountParams = {
-  fee: number;
-  billingCycle: UserPlanBillingCycle;
-};
-
-const calcuratePaymentAmount = ({ fee, billingCycle }: CalcuratePaymentAmountParams) => {
-  return match(billingCycle)
-    .with(UserPlanBillingCycle.MONTHLY, () => fee)
-    .with(UserPlanBillingCycle.YEARLY, () => fee * 12)
-    .exhaustive();
-};
-
-type GetNextBillingDateParams = {
-  today: Dayjs;
-  billingCycle: UserPlanBillingCycle;
-  billingDate: number;
-};
-
-const getNextBillingDate = ({ today, billingCycle, billingDate }: GetNextBillingDateParams) => {
-  const lastDayOfNextBillingMonth = today.add(1, billingCycleToUnit(billingCycle)).endOf('month').startOf('day');
-
-  if (billingDate < lastDayOfNextBillingMonth.date()) {
-    return lastDayOfNextBillingMonth.date(billingDate);
-  }
-  return lastDayOfNextBillingMonth;
-};
