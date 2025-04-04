@@ -51,7 +51,7 @@ export const Body = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { class: 'prose' }), 0];
+    return ['div', mergeAttributes(HTMLAttributes, { class: this.editor?.isEditable ? 'prose prose-editable' : 'prose' }), 0];
   },
 
   addCommands() {

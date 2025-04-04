@@ -22,12 +22,6 @@
     margin-top: var(--prosemirror-block-gap);
   }
 
-  &[contenteditable='true'] {
-    & [data-drag-handle] {
-      cursor: grab;
-    }
-  }
-
   table {
     border-collapse: collapse;
     table-layout: fixed;
@@ -51,6 +45,14 @@
 
   :is(ul, ol) :is(ul, ol) li:first-child {
     margin-top: 4px;
+  }
+}
+
+.prose-editable {
+  &[contenteditable='true'] {
+    & [data-drag-handle] {
+      cursor: grab;
+    }
   }
 
   .column-resize-handle {

@@ -21,6 +21,10 @@ export const SlashMenu = Extension.create({
   name: 'slash_menu',
 
   addProseMirrorPlugins() {
+    if (!this.editor.isEditable) {
+      return [];
+    }
+
     let dom: HTMLElement | null = null;
     let component: { handleKeyDown: (event: KeyboardEvent) => boolean } | null = null;
     let cleanup: (() => void) | null = null;
