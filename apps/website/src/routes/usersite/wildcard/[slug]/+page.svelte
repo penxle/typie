@@ -5,13 +5,22 @@
   const query = graphql(`
     query UsersiteWildcardSlugPage_Query($slug: String!) {
       entityView(slug: $slug) {
-        ... on PostView {
-          id
-        }
+        id
 
-        ... on FolderView {
-          id
-          name
+        node {
+          ... on PostView {
+            id
+
+            content {
+              id
+              title
+            }
+          }
+
+          ... on FolderView {
+            id
+            name
+          }
         }
       }
     }

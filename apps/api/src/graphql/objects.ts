@@ -41,6 +41,7 @@ export const isTypeOf = (tableCode: string) => (self: unknown) => {
   return decodeDbId((self as { id: string }).id) === tableCode;
 };
 
+export const IEntity = createInterfaceRef('IEntity', T.Entities);
 export const IFolder = createInterfaceRef('IFolder', T.Folders);
 export const IPost = createInterfaceRef('IPost', T.Posts);
 export const IPostContent = createInterfaceRef('IPostContent', T.PostContents);
@@ -60,6 +61,7 @@ export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const Site = createObjectRef('Site', T.Sites);
 export const User = createObjectRef('User', T.Users);
 
+export const EntityView = createObjectRef('EntityView', T.Entities);
 export const FolderView = createObjectRef('FolderView', T.Folders);
 export const PostView = createObjectRef('PostView', T.Posts);
 export const PostContentView = createObjectRef('PostContentView', T.PostContents);
@@ -68,10 +70,10 @@ export const PostOptionView = createObjectRef('PostOptionView', T.PostOptions);
 type BlobShape = { id: string; path: string };
 export const Blob = builder.interfaceRef<BlobShape>('Blob');
 
-export const EntityUnion = builder.unionType('EntityUnion', {
+export const EntityNode = builder.unionType('EntityNode', {
   types: [Folder, Post],
 });
 
-export const EntityViewUnion = builder.unionType('EntityViewUnion', {
+export const EntityViewNode = builder.unionType('EntityViewNode', {
   types: [FolderView, PostView],
 });

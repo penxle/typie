@@ -39,10 +39,13 @@ type Embed {
   url: String!
 }
 
-type Entity {
+type Entity implements IEntity {
   id: ID!
+  node: EntityNode!
   order: Binary!
 }
+
+union EntityNode = Folder | Post
 
 enum EntityState {
   ACTIVE
@@ -54,9 +57,13 @@ enum EntityType {
   POST
 }
 
-union EntityUnion = Folder | Post
+type EntityView implements IEntity {
+  id: ID!
+  node: EntityViewNode!
+  order: Binary!
+}
 
-union EntityViewUnion = FolderView | PostView
+union EntityViewNode = FolderView | PostView
 
 type File implements Blob {
   id: ID!
@@ -86,6 +93,11 @@ type FolderView implements IFolder {
 input GenerateSingleSignOnAuthorizationUrlInput {
   email: String
   provider: SingleSignOnProvider!
+}
+
+interface IEntity {
+  id: ID!
+  order: Binary!
 }
 
 interface IFolder {
@@ -272,10 +284,11 @@ type PreorderUser {
 }
 
 type Query {
-  entityView(slug: String!): EntityViewUnion!
+  entityView(slug: String!): EntityView!
   image(id: ID!): Image!
   me: User
   post(postId: ID!): Post!
+  site(siteId: ID!): Site!
 }
 
 input ResetPasswordInput {
@@ -304,6 +317,7 @@ enum SingleSignOnProvider {
 }
 
 type Site {
+  entities: [Entity!]!
   id: ID!
   name: String!
   slug: String!
