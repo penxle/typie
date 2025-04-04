@@ -1,5 +1,5 @@
 import { asc, inArray } from 'drizzle-orm';
-import { db } from '@/db';
+import { db, decodeDbId } from '@/db';
 import * as T from '@/db/schemas/tables';
 import { builder } from './builder';
 import type { DataLoaderOptions } from '@pothos/plugin-dataloader';
@@ -37,12 +37,17 @@ const createInterfaceRef = <T extends TableConfig>(name: string, table: TableWit
   });
 };
 
+export const isTypeOf = (tableCode: string) => (self: unknown) => {
+  return decodeDbId((self as { id: string }).id) === tableCode;
+};
+
 export const IFolder = createInterfaceRef('IFolder', T.Folders);
 export const IPost = createInterfaceRef('IPost', T.Posts);
 export const IPostContent = createInterfaceRef('IPostContent', T.PostContents);
 export const IPostOption = createInterfaceRef('IPostOption', T.PostOptions);
 
 export const Embed = createObjectRef('Embed', T.Embeds);
+export const Entity = createObjectRef('Entity', T.Entities);
 export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
 export const Image = createObjectRef('Image', T.Images);
@@ -63,10 +68,10 @@ export const PostOptionView = createObjectRef('PostOptionView', T.PostOptions);
 type BlobShape = { id: string; path: string };
 export const Blob = builder.interfaceRef<BlobShape>('Blob');
 
-export const Entity = builder.unionType('Entity', {
+export const EntityUnion = builder.unionType('EntityUnion', {
   types: [Folder, Post],
 });
 
-export const EntityView = builder.unionType('EntityView', {
+export const EntityViewUnion = builder.unionType('EntityViewUnion', {
   types: [FolderView, PostView],
 });

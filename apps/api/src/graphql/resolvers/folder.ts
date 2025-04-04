@@ -1,8 +1,10 @@
+import { faker } from '@faker-js/faker';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
-import { db, first, firstOrThrow, Folders } from '@/db';
+import { db, Entities, first, firstOrThrow, Folders } from '@/db';
+import { EntityType } from '@/enums';
 import { builder } from '../builder';
-import { Folder, FolderView, IFolder } from '../objects';
+import { Entity, Folder, FolderView, IFolder, isTypeOf } from '../objects';
 
 /**
  * * Types
@@ -12,15 +14,18 @@ IFolder.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
-    order: t.expose('order', { type: 'Binary' }),
+
+    entity: t.field({ type: Entity, resolve: (self) => self.entityId }),
   }),
 });
 
 Folder.implement({
+  isTypeOf: isTypeOf('F'),
   interfaces: [IFolder],
 });
 
 FolderView.implement({
+  isTypeOf: isTypeOf('F'),
   interfaces: [IFolder],
 });
 
@@ -33,31 +38,46 @@ builder.mutationFields((t) => ({
     type: Folder,
     input: {
       siteId: t.input.id(),
-      parentId: t.input.id({ required: false }),
+      parentEntityId: t.input.id({ required: false }),
       name: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
       const last = await db
-        .select({ order: Folders.order })
-        .from(Folders)
+        .select({ order: Entities.order })
+        .from(Entities)
         .where(
-          and(eq(Folders.userId, ctx.session.userId), input.parentId ? eq(Folders.parentId, input.parentId) : isNull(Folders.parentId)),
+          and(
+            eq(Entities.siteId, input.siteId),
+            input.parentEntityId ? eq(Entities.parentId, input.parentEntityId) : isNull(Entities.parentId),
+          ),
         )
-        .orderBy(desc(Folders.order))
+        .orderBy(desc(Entities.order))
         .limit(1)
         .then(first);
 
-      return await db
-        .insert(Folders)
-        .values({
-          userId: ctx.session.userId,
-          siteId: input.siteId,
-          parentId: input.parentId,
-          name: input.name,
-          order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
-        })
-        .returning()
-        .then(firstOrThrow);
+      return await db.transaction(async (tx) => {
+        const entity = await tx
+          .insert(Entities)
+          .values({
+            userId: ctx.session.userId,
+            siteId: input.siteId,
+            parentId: input.parentEntityId,
+            slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
+            type: EntityType.FOLDER,
+            order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
+          })
+          .returning({ id: Entities.id })
+          .then(firstOrThrow);
+
+        return await db
+          .insert(Folders)
+          .values({
+            entityId: entity.id,
+            name: input.name,
+          })
+          .returning()
+          .then(firstOrThrow);
+      });
     },
   }),
 }));

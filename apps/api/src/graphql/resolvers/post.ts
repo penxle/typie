@@ -1,3 +1,4 @@
+import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
@@ -5,14 +6,26 @@ import { Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts } from '@/db';
-import { PostContentSyncKind, PostVisibility } from '@/enums';
+import { db, Entities, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts } from '@/db';
+import { EntityType, PostContentSyncKind, PostVisibility } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
-import { IPost, IPostContent, IPostOption, Post, PostContent, PostContentView, PostOption, PostOptionView, PostView } from '../objects';
+import {
+  Entity,
+  IPost,
+  IPostContent,
+  IPostOption,
+  isTypeOf,
+  Post,
+  PostContent,
+  PostContentView,
+  PostOption,
+  PostOptionView,
+  PostView,
+} from '../objects';
 
 /**
  * * Types
@@ -21,7 +34,8 @@ import { IPost, IPostContent, IPostOption, Post, PostContent, PostContentView, P
 IPost.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
-    order: t.expose('order', { type: 'Binary' }),
+
+    entity: t.field({ type: Entity, resolve: (self) => self.entityId }),
   }),
 });
 
@@ -45,6 +59,7 @@ Post.implement({
 });
 
 PostView.implement({
+  isTypeOf: isTypeOf('P'),
   interfaces: [IPost],
   fields: (t) => ({
     content: t.field({
@@ -121,14 +136,6 @@ builder.queryFields((t) => ({
       return args.postId;
     },
   }),
-
-  postView: t.field({
-    type: PostView,
-    args: { postId: t.arg.id() },
-    resolve: async (_, args) => {
-      return args.postId;
-    },
-  }),
 }));
 
 /**
@@ -140,7 +147,7 @@ builder.mutationFields((t) => ({
     type: Post,
     input: {
       siteId: t.input.id(),
-      folderId: t.input.id({ required: false }),
+      parentEntityId: t.input.id({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const title = null;
@@ -154,21 +161,36 @@ builder.mutationFields((t) => ({
       const snapshot = Y.snapshot(doc);
 
       const last = await db
-        .select({ order: Posts.order })
-        .from(Posts)
-        .where(and(eq(Posts.userId, ctx.session.userId), input.folderId ? eq(Posts.folderId, input.folderId) : isNull(Posts.folderId)))
-        .orderBy(desc(Posts.order))
+        .select({ order: Entities.order })
+        .from(Entities)
+        .where(
+          and(
+            eq(Entities.siteId, input.siteId),
+            input.parentEntityId ? eq(Entities.parentId, input.parentEntityId) : isNull(Entities.parentId),
+          ),
+        )
+        .orderBy(desc(Entities.order))
         .limit(1)
         .then(first);
 
       return await db.transaction(async (tx) => {
-        const post = await tx
-          .insert(Posts)
+        const entity = await tx
+          .insert(Entities)
           .values({
             userId: ctx.session.userId,
             siteId: input.siteId,
-            folderId: input.folderId,
+            parentId: input.parentEntityId,
+            slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
+            type: EntityType.POST,
             order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
+          })
+          .returning({ id: Entities.id })
+          .then(firstOrThrow);
+
+        const post = await tx
+          .insert(Posts)
+          .values({
+            entityId: entity.id,
           })
           .returning()
           .then(firstOrThrow);

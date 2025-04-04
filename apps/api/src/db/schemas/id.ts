@@ -15,6 +15,6 @@ export const createDbId = (tableCode: string, opt?: { length: 'short' | 'moderat
   return `${tableCode}0${fn().toUpperCase()}`;
 };
 
-export const extractTableCode = (id: string) => {
+export const decodeDbId = (id: string) => {
   return id.split('0', 2)[0];
 };
