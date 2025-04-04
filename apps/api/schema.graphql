@@ -40,6 +40,7 @@ type Embed {
 }
 
 type Entity implements IEntity {
+  children: [Entity!]!
   id: ID!
   node: EntityNode!
   order: Binary!
@@ -58,6 +59,7 @@ enum EntityType {
 }
 
 type EntityView implements IEntity {
+  children: [EntityView!]!
   id: ID!
   node: EntityViewNode!
   order: Binary!
