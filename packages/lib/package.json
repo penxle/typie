@@ -16,7 +16,7 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.20.2",
+    "@sveltejs/kit": "^2.20.3",
     "@types/bun": "^1.2.8",
     "@typie/tsconfig": "workspace:*",
     "dayjs": "^1.11.13",
@@ -24,10 +24,10 @@
     "ipaddr.js": "^2.2.0",
     "pino": "^9.6.0",
     "remeda": "^2.21.2",
-    "svelte": "^5.25.3",
+    "svelte": "^5.25.6",
     "svgo": "^3.3.2",
     "typescript": "^5.8.2",
-    "vite": "^6.2.3",
+    "vite": "^6.2.5",
     "xmlbuilder2": "^3.1.1"
   }
 }
