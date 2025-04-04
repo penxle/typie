@@ -22,28 +22,18 @@ export const Files = pgTable('files', {
     .default(sql`now()`),
 });
 
-export const Folders = pgTable(
-  'folders',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId('F', { length: 'short' })),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    siteId: text('site_id')
-      .notNull()
-      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    parentId: text('parent_id').references((): AnyPgColumn => Folders.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    name: text('name').notNull(),
-    state: E._FolderState('state').notNull().default('ACTIVE'),
-    order: bytea('order').notNull(),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [unique().on(t.siteId, t.parentId, t.order).nullsNotDistinct()],
-);
+export const Folders = pgTable('folders', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('F', { length: 'short' })),
+  entityId: text('entity_id')
+    .notNull()
+    .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const Embeds = pgTable('embeds', {
   id: text('id')
@@ -60,6 +50,35 @@ export const Embeds = pgTable('embeds', {
     .notNull()
     .default(sql`now()`),
 });
+
+export const Entities = pgTable(
+  'entities',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId('E', { length: 'short' })),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    parentId: text('parent_id').references((): AnyPgColumn => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    slug: text('slug').notNull(),
+    type: E._EntityType('type').notNull(),
+    order: bytea('order').notNull(),
+    state: E._EntityState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex()
+      .on(t.slug)
+      .where(eq(t.state, sql`'ACTIVE'`)),
+    unique().on(t.siteId, t.parentId, t.order).nullsNotDistinct(),
+  ],
+);
 
 export const Images = pgTable('images', {
   id: text('id')
@@ -101,27 +120,17 @@ export const PaymentMethods = pgTable(
   ],
 );
 
-export const Posts = pgTable(
-  'posts',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId('P', { length: 'short' })),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    siteId: text('site_id')
-      .notNull()
-      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    folderId: text('folder_id').references(() => Folders.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    state: E._PostState('state').notNull().default('ACTIVE'),
-    order: bytea('order').notNull(),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [unique().on(t.siteId, t.folderId, t.order).nullsNotDistinct()],
-);
+export const Posts = pgTable('posts', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId('P', { length: 'short' })),
+  entityId: text('entity_id')
+    .notNull()
+    .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const PostContents = pgTable('post_contents', {
   id: text('id')

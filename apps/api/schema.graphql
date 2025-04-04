@@ -15,12 +15,12 @@ interface Blob {
 
 input CreateFolderInput {
   name: String!
-  parentId: ID
+  parentEntityId: ID
   siteId: ID!
 }
 
 input CreatePostInput {
-  folderId: ID
+  parentEntityId: ID
   siteId: ID!
 }
 
@@ -39,9 +39,24 @@ type Embed {
   url: String!
 }
 
-union Entity = Folder | Post
+type Entity {
+  id: ID!
+  order: Binary!
+}
 
-union EntityView = FolderView | PostView
+enum EntityState {
+  ACTIVE
+  DELETED
+}
+
+enum EntityType {
+  FOLDER
+  POST
+}
+
+union EntityUnion = Folder | Post
+
+union EntityViewUnion = FolderView | PostView
 
 type File implements Blob {
   id: ID!
@@ -57,20 +72,15 @@ input FinalizePreorderPaymentInput {
 }
 
 type Folder implements IFolder {
+  entity: Entity!
   id: ID!
   name: String!
-  order: Binary!
-}
-
-enum FolderState {
-  ACTIVE
-  DELETED
 }
 
 type FolderView implements IFolder {
+  entity: Entity!
   id: ID!
   name: String!
-  order: Binary!
 }
 
 input GenerateSingleSignOnAuthorizationUrlInput {
@@ -79,14 +89,14 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 }
 
 interface IFolder {
+  entity: Entity!
   id: ID!
   name: String!
-  order: Binary!
 }
 
 interface IPost {
+  entity: Entity!
   id: ID!
-  order: Binary!
 }
 
 interface IPostContent {
@@ -184,9 +194,9 @@ input PersistBlobAsImageInput {
 
 type Post implements IPost {
   content: PostContent!
+  entity: Entity!
   id: ID!
   option: PostOption!
-  order: Binary!
 }
 
 type PostContent implements IPostContent {
@@ -234,16 +244,11 @@ type PostOptionView implements IPostOption {
   visibility: PostVisibility!
 }
 
-enum PostState {
-  ACTIVE
-  DELETED
-}
-
 type PostView implements IPost {
   content: PostContentView!
+  entity: Entity!
   id: ID!
   option: PostOptionView!
-  order: Binary!
 }
 
 enum PostVisibility {
@@ -267,10 +272,10 @@ type PreorderUser {
 }
 
 type Query {
+  entityView(slug: String!): EntityViewUnion!
   image(id: ID!): Image!
   me: User
   post(postId: ID!): Post!
-  postView(postId: ID!): PostView!
 }
 
 input ResetPasswordInput {

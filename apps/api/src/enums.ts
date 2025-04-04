@@ -1,7 +1,13 @@
-export type FolderState = keyof typeof FolderState;
-export const FolderState = {
+export type EntityState = keyof typeof EntityState;
+export const EntityState = {
   ACTIVE: 'ACTIVE',
   DELETED: 'DELETED',
+} as const;
+
+export type EntityType = keyof typeof EntityType;
+export const EntityType = {
+  FOLDER: 'FOLDER',
+  POST: 'POST',
 } as const;
 
 export type JobState = keyof typeof JobState;
@@ -16,12 +22,6 @@ export type PaymentMethodState = keyof typeof PaymentMethodState;
 export const PaymentMethodState = {
   ACTIVE: 'ACTIVE',
   DEACTIVATED: 'DEACTIVATED',
-} as const;
-
-export type PostState = keyof typeof PostState;
-export const PostState = {
-  ACTIVE: 'ACTIVE',
-  DELETED: 'DELETED',
 } as const;
 
 export type PostContentSyncKind = keyof typeof PostContentSyncKind;

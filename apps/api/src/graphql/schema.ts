@@ -2,6 +2,7 @@ import './enums';
 import './objects';
 import './resolvers/auth';
 import './resolvers/blob';
+import './resolvers/entity';
 import './resolvers/folder';
 import './resolvers/payment';
 import './resolvers/post';
