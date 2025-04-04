@@ -53,6 +53,7 @@ export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
 export const Image = createObjectRef('Image', T.Images);
 export const PaymentMethod = createObjectRef('PaymentMethod', T.PaymentMethods);
+export const Plan = createObjectRef('Plan', T.Plans);
 export const Post = createObjectRef('Post', T.Posts);
 export const PostContent = createObjectRef('PostContent', T.PostContents);
 export const PostOption = createObjectRef('PostOption', T.PostOptions);
@@ -60,6 +61,7 @@ export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPaym
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const Site = createObjectRef('Site', T.Sites);
 export const User = createObjectRef('User', T.Users);
+export const UserPlan = createObjectRef('UserPlan', T.UserPlans);
 
 export const EntityView = createObjectRef('EntityView', T.Entities);
 export const FolderView = createObjectRef('FolderView', T.Folders);

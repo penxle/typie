@@ -39,6 +39,11 @@ type Embed {
   url: String!
 }
 
+input EnrollPlanInput {
+  billingCycle: UserPlanBillingCycle!
+  planId: ID!
+}
+
 type Entity implements IEntity {
   children: [Entity!]!
   id: ID!
@@ -169,6 +174,7 @@ type Mutation {
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
+  enrollPlan(input: EnrollPlanInput!): UserPlan!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
@@ -188,6 +194,12 @@ type Mutation {
   updateUser(input: UpdateUserInput!): User!
 }
 
+enum PaymentInvoiceState {
+  CANCELED
+  PAID
+  UNPAID
+}
+
 type PaymentMethod {
   createdAt: DateTime!
   id: ID!
@@ -199,6 +211,11 @@ enum PaymentMethodState {
   DEACTIVATED
 }
 
+enum PaymentRecordState {
+  FAILED
+  SUCCEEDED
+}
+
 input PersistBlobAsFileInput {
   path: String!
 }
@@ -206,6 +223,16 @@ input PersistBlobAsFileInput {
 input PersistBlobAsImageInput {
   modification: JSON
   path: String!
+}
+
+type Plan {
+  fee: Int!
+  id: ID!
+}
+
+enum PlanAvailability {
+  PRIVATE
+  PUBLIC
 }
 
 type Post implements IPost {
@@ -382,6 +409,19 @@ type User {
   name: String!
   paymentMethod: PaymentMethod
   sites: [Site!]!
+}
+
+type UserPlan {
+  billingCycle: UserPlanBillingCycle!
+  fee: Int!
+  id: ID!
+  nextBillingAt: DateTime!
+  plan: Plan!
+}
+
+enum UserPlanBillingCycle {
+  MONTHLY
+  YEARLY
 }
 
 enum UserState {

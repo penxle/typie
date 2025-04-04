@@ -6,6 +6,7 @@ import { createDbId } from './id';
 import { bytea, datetime } from './types';
 import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import type { PlanRules } from './json';
 
 export const Files = pgTable('files', {
   id: text('id')
@@ -96,6 +97,20 @@ export const Images = pgTable('images', {
     .default(sql`now()`),
 });
 
+export const PaymentInvoices = pgTable('payment_invoices', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.PAYMENT_INVOICES)),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  state: E._PaymentInvoiceState('state').notNull().default('UNPAID'),
+  amount: integer('amount').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const PaymentMethods = pgTable(
   'payment_methods',
   {
@@ -118,6 +133,37 @@ export const PaymentMethods = pgTable(
       .where(sql`${t.state} = 'ACTIVE'`),
   ],
 );
+
+export const PaymentRecords = pgTable('payment_records', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.PAYMENT_RECORDS)),
+  invoiceId: text('invoice_id')
+    .notNull()
+    .references(() => PaymentInvoices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  methodId: text('method_id')
+    .notNull()
+    .references(() => PaymentMethods.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  state: E._PaymentRecordState('state').notNull(),
+  amount: integer('amount').notNull(),
+  receiptUrl: text('receipt_url'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const Plans = pgTable('plans', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.PLANS)),
+  name: text('name').notNull(),
+  rules: jsonb('rules').notNull().$type<PlanRules>(),
+  fee: integer('fee').notNull(),
+  availability: E._PlanAvailability('availability').notNull().default('PUBLIC'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const Posts = pgTable('posts', {
   id: text('id')
@@ -262,6 +308,25 @@ export const Users = pgTable(
       .where(eq(t.state, sql`'ACTIVE'`)),
   ],
 );
+
+export const UserPlans = pgTable('user_plans', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_PLANS)),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id),
+  planId: text('plan_id')
+    .notNull()
+    .references(() => Plans.id),
+  fee: integer('fee').notNull(),
+  billingCycle: E._UserPlanBillingCycle('billing_cycle').notNull(),
+  nextBillingAt: datetime('next_billing_at').notNull(),
+  billingDate: integer('billing_date').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const UserSessions = pgTable(
   'user_sessions',
