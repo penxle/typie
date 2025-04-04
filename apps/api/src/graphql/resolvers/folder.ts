@@ -1,7 +1,7 @@
 import { faker } from '@faker-js/faker';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
-import { db, Entities, first, firstOrThrow, Folders } from '@/db';
+import { db, Entities, first, firstOrThrow, Folders, TableCode } from '@/db';
 import { EntityType } from '@/enums';
 import { builder } from '../builder';
 import { Entity, Folder, FolderView, IFolder, isTypeOf } from '../objects';
@@ -20,12 +20,12 @@ IFolder.implement({
 });
 
 Folder.implement({
-  isTypeOf: isTypeOf('F'),
+  isTypeOf: isTypeOf(TableCode.FOLDERS),
   interfaces: [IFolder],
 });
 
 FolderView.implement({
-  isTypeOf: isTypeOf('F'),
+  isTypeOf: isTypeOf(TableCode.FOLDERS),
   interfaces: [IFolder],
 });
 

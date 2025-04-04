@@ -1,14 +1,15 @@
 import { eq } from 'drizzle-orm';
-import { db, Embeds, first, firstOrThrow } from '@/db';
+import { db, Embeds, first, firstOrThrow, TableCode } from '@/db';
 import * as iframely from '@/external/iframely';
 import { builder } from '../builder';
-import { Embed } from '../objects';
+import { Embed, isTypeOf } from '../objects';
 
 /**
  * * Types
  */
 
 Embed.implement({
+  isTypeOf: isTypeOf(TableCode.EMBEDS),
   fields: (t) => ({
     id: t.exposeID('id'),
     url: t.exposeString('url'),

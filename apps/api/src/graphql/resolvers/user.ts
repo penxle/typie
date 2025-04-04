@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, Sites, Users } from '@/db';
+import { db, first, firstOrThrow, Sites, TableCode, Users } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import { SiteState, UserState } from '@/enums';
@@ -9,13 +9,14 @@ import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { Site, User } from '../objects';
+import { isTypeOf, Site, User } from '../objects';
 
 /**
  * * Types
  */
 
 User.implement({
+  isTypeOf: isTypeOf(TableCode.USERS),
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),

@@ -1,15 +1,16 @@
 import { and, eq } from 'drizzle-orm';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, Folders, Posts } from '@/db';
+import { db, Entities, firstOrThrow, Folders, Posts, TableCode } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { builder } from '../builder';
-import { Entity, EntityViewUnion } from '../objects';
+import { Entity, EntityViewUnion, isTypeOf } from '../objects';
 
 /**
  * * Types
  */
 
 Entity.implement({
+  isTypeOf: isTypeOf(TableCode.ENTITIES),
   fields: (t) => ({
     id: t.exposeID('id'),
     order: t.expose('order', { type: 'Binary' }),
