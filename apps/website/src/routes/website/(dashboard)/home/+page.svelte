@@ -7,6 +7,30 @@
       me @required {
         id
         email
+
+        sites {
+          id
+
+          entities {
+            id
+
+            node {
+              ... on Folder {
+                id
+                name
+              }
+
+              ... on Post {
+                id
+
+                content {
+                  id
+                  title
+                }
+              }
+            }
+          }
+        }
       }
     }
   `);
@@ -25,3 +49,9 @@
 
 <div>{$query.me.email}</div>
 <button onclick={handleLogout} type="button">로그아웃</button>
+
+<pre>
+  {#each $query.me.sites as site (site.id)}
+    <pre>{JSON.stringify(site, null, 2)}</pre>
+  {/each}
+</pre>

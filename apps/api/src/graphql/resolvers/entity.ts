@@ -3,17 +3,48 @@ import { match } from 'ts-pattern';
 import { db, Entities, firstOrThrow, Folders, Posts, TableCode } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { builder } from '../builder';
-import { Entity, EntityViewUnion, isTypeOf } from '../objects';
+import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf } from '../objects';
 
 /**
  * * Types
  */
 
-Entity.implement({
-  isTypeOf: isTypeOf(TableCode.ENTITIES),
+IEntity.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     order: t.expose('order', { type: 'Binary' }),
+  }),
+});
+
+Entity.implement({
+  isTypeOf: isTypeOf(TableCode.ENTITIES),
+  interfaces: [IEntity],
+  fields: (t) => ({
+    node: t.field({
+      type: EntityNode,
+      resolve: async (self) => {
+        return match(self.type)
+          .with(EntityType.FOLDER, () => db.select().from(Folders).where(eq(Folders.entityId, self.id)).then(firstOrThrow))
+          .with(EntityType.POST, () => db.select().from(Posts).where(eq(Posts.entityId, self.id)).then(firstOrThrow))
+          .exhaustive();
+      },
+    }),
+  }),
+});
+
+EntityView.implement({
+  isTypeOf: isTypeOf(TableCode.ENTITIES),
+  interfaces: [IEntity],
+  fields: (t) => ({
+    node: t.field({
+      type: EntityViewNode,
+      resolve: async (self) => {
+        return match(self.type)
+          .with(EntityType.FOLDER, () => db.select().from(Folders).where(eq(Folders.entityId, self.id)).then(firstOrThrow))
+          .with(EntityType.POST, () => db.select().from(Posts).where(eq(Posts.entityId, self.id)).then(firstOrThrow))
+          .exhaustive();
+      },
+    }),
   }),
 });
 
@@ -23,19 +54,14 @@ Entity.implement({
 
 builder.queryFields((t) => ({
   entityView: t.field({
-    type: EntityViewUnion,
+    type: EntityView,
     args: { slug: t.arg.string() },
     resolve: async (_, args) => {
-      const entity = await db
-        .select({ id: Entities.id, type: Entities.type })
+      return await db
+        .select()
         .from(Entities)
         .where(and(eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
-
-      return match(entity.type)
-        .with(EntityType.FOLDER, () => db.select().from(Folders).where(eq(Folders.entityId, entity.id)).then(firstOrThrow))
-        .with(EntityType.POST, () => db.select().from(Posts).where(eq(Posts.entityId, entity.id)).then(firstOrThrow))
-        .exhaustive();
     },
   }),
 }));
