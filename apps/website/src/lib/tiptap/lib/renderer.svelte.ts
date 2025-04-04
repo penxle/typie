@@ -14,7 +14,7 @@ import type { Decoration, DecorationSource, NodeView as ProseMirrorNodeView } fr
 import type { Component } from 'svelte';
 
 export type NodeViewProps = Omit<TiptapNodeViewProps, 'editor'> & {
-  editor: Ref<Editor>;
+  editor?: Ref<Editor>;
 };
 
 export type NodeViewComponent = Component<NodeViewProps>;

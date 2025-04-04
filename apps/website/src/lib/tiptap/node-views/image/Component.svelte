@@ -124,18 +124,18 @@
           width: 'full',
           _hover: { '& button': { display: 'flex' } },
         })}
-        onclick={() => !editor.current.isEditable && (enlarged = true)}
+        onclick={() => !editor?.current.isEditable && (enlarged = true)}
         role="presentation"
       >
         <Img
-          style={css.raw({ width: 'full', borderRadius: '4px' }, !editor.current.isEditable && { cursor: 'zoom-in' })}
+          style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
           $image={node.attrs}
           alt="본문 이미지"
           progressive
           size="full"
         />
 
-        {#if editor.current.isEditable}
+        {#if editor?.current.isEditable}
           <button
             class={css({
               position: 'absolute',
@@ -245,7 +245,7 @@
   </div>
 </NodeView>
 
-{#if pickerOpened && !node.attrs.id && !inflight && editor.current.isEditable}
+{#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
   <div
     class={flex({
       direction: 'column',

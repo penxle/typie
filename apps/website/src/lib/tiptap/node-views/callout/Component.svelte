@@ -42,7 +42,7 @@
     })}
   >
     <svelte:element
-      this={editor.current.isEditable ? 'button' : 'div'}
+      this={editor?.current.isEditable ? 'button' : 'div'}
       style:color
       class={css(
         {
@@ -55,15 +55,15 @@
             backgroundColor: 'gray.900/8',
           },
         },
-        !editor.current.isEditable && { pointerEvents: 'none' },
+        !editor?.current.isEditable && { pointerEvents: 'none' },
       )}
       contenteditable={false}
       onclick={() => {
         const type = callouts[(callouts.indexOf(node.attrs.type) + 1) % callouts.length];
         updateAttributes({ type });
       }}
-      role={editor.current.isEditable ? 'button' : 'img'}
-      {...editor.current.isEditable && {
+      role={editor?.current.isEditable ? 'button' : 'img'}
+      {...editor?.current.isEditable && {
         type: 'button',
       }}
     >

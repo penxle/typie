@@ -23,6 +23,21 @@
       "attrs": { "type": { "default": "blockquote_1" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=blockquote]" }]
     },
+    "callout": {
+      "content": "paragraph+",
+      "group": "block",
+      "defining": true,
+      "attrs": { "type": { "default": "info" } },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=callout]" }]
+    },
+    "code_block": {
+      "content": "text*",
+      "marks": "",
+      "group": "block",
+      "code": true,
+      "attrs": { "language": { "default": "text" } },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=code_block]" }, { "tag": "pre" }]
+    },
     "embed": {
       "group": "block",
       "draggable": true,
@@ -45,6 +60,13 @@
       "group": "block",
       "attrs": { "type": { "default": "horizontal_rule_1" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=horizontal_rule]" }]
+    },
+    "html_block": {
+      "content": "text*",
+      "marks": "",
+      "group": "block",
+      "code": true,
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=html_block]" }, { "tag": "pre" }]
     },
     "image": {
       "group": "block",

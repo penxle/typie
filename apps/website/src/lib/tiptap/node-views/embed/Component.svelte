@@ -96,15 +96,15 @@
   >
     {#if node.attrs.id}
       {#if node.attrs.html}
-        <div bind:this={embedContainerEl} class={css({ display: 'contents' }, editor.current.isEditable && { pointerEvents: 'none' })}>
+        <div bind:this={embedContainerEl} class={css({ display: 'contents' }, editor?.current.isEditable && { pointerEvents: 'none' })}>
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html node.attrs.html}
         </div>
       {:else}
         <svelte:element
-          this={editor.current.isEditable ? 'div' : 'a'}
+          this={editor?.current.isEditable ? 'div' : 'a'}
           class={flex({ borderWidth: '1px', borderColor: 'gray.100', borderRadius: '6px' })}
-          {...!editor.current.isEditable && { href: node.attrs.url, target: '_blank', rel: 'noopener noreferrer' }}
+          {...!editor?.current.isEditable && { href: node.attrs.url, target: '_blank', rel: 'noopener noreferrer' }}
         >
           <div class={flex({ direction: 'column', grow: '1', paddingX: '16px', paddingY: '15px' })}>
             <p class={css({ marginBottom: '3px', fontSize: '14px', fontWeight: 'medium', lineClamp: 1 })}>
@@ -130,7 +130,7 @@
         </svelte:element>
       {/if}
 
-      {#if editor.current.isEditable}
+      {#if editor?.current.isEditable}
         <button
           class={css(
             {
@@ -183,7 +183,7 @@
   </div>
 </NodeView>
 
-{#if pickerOpened && !node.attrs.id && !inflight && editor.current.isEditable}
+{#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
   <form
     class={flex({
       direction: 'column',
