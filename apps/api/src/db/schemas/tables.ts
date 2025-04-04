@@ -65,6 +65,7 @@ export const Entities = pgTable(
       .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     parentId: text('parent_id').references((): AnyPgColumn => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     slug: text('slug').notNull(),
+    permalink: text('permalink').notNull(),
     type: E._EntityType('type').notNull(),
     order: bytea('order').notNull(),
     state: E._EntityState('state').notNull().default('ACTIVE'),
@@ -75,6 +76,9 @@ export const Entities = pgTable(
   (t) => [
     uniqueIndex()
       .on(t.slug)
+      .where(eq(t.state, sql`'ACTIVE'`)),
+    uniqueIndex()
+      .on(t.permalink)
       .where(eq(t.state, sql`'ACTIVE'`)),
     unique().on(t.siteId, t.parentId, t.order).nullsNotDistinct(),
   ],

@@ -82,6 +82,7 @@ builder.mutationFields((t) => ({
             siteId: input.siteId,
             parentId: input.parentEntityId,
             slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
+            permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
             type: EntityType.FOLDER,
             order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
           })
