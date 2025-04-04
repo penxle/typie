@@ -84,7 +84,7 @@ builder.mutationFields((t) => ({
           .returning({ id: Entities.id })
           .then(firstOrThrow);
 
-        return await db
+        return await tx
           .insert(Folders)
           .values({
             entityId: entity.id,
