@@ -16,7 +16,10 @@ IEntity.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     slug: t.exposeString('slug'),
+    permalink: t.exposeString('permalink'),
     order: t.expose('order', { type: 'Binary' }),
+
+    site: t.field({ type: Site, resolve: (self) => self.siteId }),
   }),
 });
 
@@ -24,8 +27,6 @@ Entity.implement({
   isTypeOf: isTypeOf(TableCode.ENTITIES),
   interfaces: [IEntity],
   fields: (t) => ({
-    site: t.field({ type: Site, resolve: (self) => self.siteId }),
-
     node: t.field({
       type: EntityNode,
       resolve: async (self) => {
@@ -101,6 +102,18 @@ builder.queryFields((t) => ({
         .select()
         .from(Entities)
         .where(and(eq(Entities.siteId, site.id), eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
+        .then(firstOrThrow);
+    },
+  }),
+
+  entityViewByPermalink: t.field({
+    type: EntityView,
+    args: { permalink: t.arg.string() },
+    resolve: async (_, args) => {
+      return await db
+        .select()
+        .from(Entities)
+        .where(and(eq(Entities.permalink, args.permalink), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
     },
   }),
