@@ -1,11 +1,12 @@
 import { and, asc, eq } from 'drizzle-orm';
+import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode } from '@/db';
 import { EntityState, EntityType, SiteState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { builder } from '../builder';
-import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf } from '../objects';
+import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site } from '../objects';
 
 /**
  * * Types
@@ -14,6 +15,7 @@ import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf } fro
 IEntity.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
+    slug: t.exposeString('slug'),
     order: t.expose('order', { type: 'Binary' }),
   }),
 });
@@ -22,6 +24,8 @@ Entity.implement({
   isTypeOf: isTypeOf(TableCode.ENTITIES),
   interfaces: [IEntity],
   fields: (t) => ({
+    site: t.field({ type: Site, resolve: (self) => self.siteId }),
+
     node: t.field({
       type: EntityNode,
       resolve: async (self) => {
@@ -79,10 +83,10 @@ EntityView.implement({
 builder.queryFields((t) => ({
   entityView: t.field({
     type: EntityView,
-    args: { hostname: t.arg.string(), slug: t.arg.string() },
+    args: { origin: t.arg.string(), slug: t.arg.string() },
     resolve: async (_, args) => {
-      const pattern = new RegExp(`^([^.]+)\\.${env.USERSITE_HOST}$`);
-      const slug = args.hostname.match(pattern)?.[1];
+      const pattern = new RegExp(`^${escape(env.USERSITE_URL).replace(String.raw`\*\.`, String.raw`([^.]+)\.`)}$`);
+      const slug = args.origin.match(pattern)?.[1];
       if (!slug) {
         throw new TypieError({ code: 'invalid_hostname' });
       }

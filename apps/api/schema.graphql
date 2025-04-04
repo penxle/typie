@@ -44,6 +44,8 @@ type Entity implements IEntity {
   id: ID!
   node: EntityNode!
   order: Binary!
+  site: Site!
+  slug: String!
 }
 
 union EntityNode = Folder | Post
@@ -63,6 +65,7 @@ type EntityView implements IEntity {
   id: ID!
   node: EntityViewNode!
   order: Binary!
+  slug: String!
 }
 
 union EntityViewNode = FolderView | PostView
@@ -87,7 +90,7 @@ type Folder implements IFolder {
 }
 
 type FolderView implements IFolder {
-  entity: Entity!
+  entity: EntityView!
   id: ID!
   name: String!
 }
@@ -100,16 +103,15 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 interface IEntity {
   id: ID!
   order: Binary!
+  slug: String!
 }
 
 interface IFolder {
-  entity: Entity!
   id: ID!
   name: String!
 }
 
 interface IPost {
-  entity: Entity!
   id: ID!
 }
 
@@ -260,7 +262,7 @@ type PostOptionView implements IPostOption {
 
 type PostView implements IPost {
   content: PostContentView!
-  entity: Entity!
+  entity: EntityView!
   id: ID!
   option: PostOptionView!
 }
@@ -286,7 +288,7 @@ type PreorderUser {
 }
 
 type Query {
-  entityView(hostname: String!, slug: String!): EntityView!
+  entityView(origin: String!, slug: String!): EntityView!
   image(id: ID!): Image!
   me: User
   post(postId: ID!): Post!
@@ -323,6 +325,7 @@ type Site {
   id: ID!
   name: String!
   slug: String!
+  url: String!
 }
 
 enum SiteState {

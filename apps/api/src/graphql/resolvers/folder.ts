@@ -4,7 +4,7 @@ import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { db, Entities, first, firstOrThrow, Folders, TableCode } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { builder } from '../builder';
-import { Entity, Folder, FolderView, IFolder, isTypeOf } from '../objects';
+import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
 
 /**
  * * Types
@@ -14,19 +14,23 @@ IFolder.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
-
-    entity: t.field({ type: Entity, resolve: (self) => self.entityId }),
   }),
 });
 
 Folder.implement({
   isTypeOf: isTypeOf(TableCode.FOLDERS),
   interfaces: [IFolder],
+  fields: (t) => ({
+    entity: t.field({ type: Entity, resolve: (self) => self.entityId }),
+  }),
 });
 
 FolderView.implement({
   isTypeOf: isTypeOf(TableCode.FOLDERS),
   interfaces: [IFolder],
+  fields: (t) => ({
+    entity: t.field({ type: EntityView, resolve: (self) => self.entityId }),
+  }),
 });
 
 /**

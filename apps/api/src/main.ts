@@ -2,6 +2,7 @@ import '@/instrument';
 import '@typie/lib/dayjs';
 import '@/mq';
 
+import escape from 'escape-string-regexp';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { deriveContext } from '@/context';
@@ -11,6 +12,7 @@ import { rest } from '@/rest';
 import type { Env } from '@/context';
 
 const app = new Hono<Env>();
+const pattern = new RegExp(`^${escape(env.USERSITE_URL).replace(String.raw`\*\.`, String.raw`(([^.]+)\.)?`)}$`);
 
 app.use('*', async (c, next) => {
   const origin = c.req.header('Origin');
@@ -24,7 +26,7 @@ app.use('*', async (c, next) => {
     credentials: true,
   });
 
-  if (url.origin === env.WEBSITE_URL || url.hostname === env.USERSITE_HOST || url.hostname.endsWith(`.${env.USERSITE_HOST}`)) {
+  if (url.origin === env.WEBSITE_URL || pattern.test(url.origin)) {
     return handler(c, next);
   }
 

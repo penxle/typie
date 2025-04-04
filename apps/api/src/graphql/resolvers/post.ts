@@ -15,6 +15,7 @@ import { makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
 import {
   Entity,
+  EntityView,
   IPost,
   IPostContent,
   IPostOption,
@@ -34,8 +35,6 @@ import {
 IPost.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
-
-    entity: t.field({ type: Entity, resolve: (self) => self.entityId }),
   }),
 });
 
@@ -43,6 +42,8 @@ Post.implement({
   isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
+    entity: t.field({ type: Entity, resolve: (self) => self.entityId }),
+
     content: t.field({
       type: PostContent,
       resolve: async (self) => {
@@ -63,6 +64,8 @@ PostView.implement({
   isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
+    entity: t.field({ type: EntityView, resolve: (self) => self.entityId }),
+
     content: t.field({
       type: PostContentView,
       resolve: async (self) => {
