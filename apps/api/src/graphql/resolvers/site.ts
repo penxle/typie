@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db, Entities, TableCode } from '@/db';
 import { EntityState } from '@/enums';
+import { env } from '@/env';
 import { builder } from '../builder';
 import { Entity, isTypeOf, Site } from '../objects';
 
@@ -14,6 +15,10 @@ Site.implement({
     id: t.exposeID('id'),
     slug: t.exposeString('slug'),
     name: t.exposeString('name'),
+
+    url: t.string({
+      resolve: (self) => env.USERSITE_URL.replace('*', self.slug),
+    }),
 
     entities: t.field({
       type: [Entity],

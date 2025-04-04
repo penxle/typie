@@ -26,6 +26,16 @@
       post(postId: $postId) {
         id
 
+        entity {
+          id
+          slug
+
+          site {
+            id
+            url
+          }
+        }
+
         content {
           id
           update
@@ -152,6 +162,8 @@
 </script>
 
 <div class={flex({ direction: 'column', alignItems: 'center', gap: '24px', paddingY: '100px', width: 'screen', height: 'screen' })}>
+  <a href={`${$query.post.entity.site.url}/${$query.post.entity.slug}`} rel="noopener noreferrer" target="_blank">go to usersite</a>
+
   {#if editor}
     <Toolbar {editor} />
   {/if}

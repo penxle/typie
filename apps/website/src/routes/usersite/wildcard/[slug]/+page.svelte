@@ -5,8 +5,8 @@
   import { css } from '$styled-system/css';
 
   const query = graphql(`
-    query UsersiteWildcardSlugPage_Query($hostname: String!, $slug: String!) {
-      entityView(hostname: $hostname, slug: $slug) {
+    query UsersiteWildcardSlugPage_Query($origin: String!, $slug: String!) {
+      entityView(origin: $origin, slug: $slug) {
         id
 
         node {
