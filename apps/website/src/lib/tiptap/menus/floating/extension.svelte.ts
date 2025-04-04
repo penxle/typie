@@ -13,6 +13,10 @@ export const FloatingMenu = Extension.create({
   name: 'floating_menu',
 
   addProseMirrorPlugins() {
+    if (!this.editor.isEditable) {
+      return [];
+    }
+
     let dom: HTMLElement | null = null;
     let component: Record<string, never> | null = null;
     let cleanup: (() => void) | null = null;
