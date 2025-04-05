@@ -10,10 +10,11 @@
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { autosize } from '$lib/actions';
-  import { Helmet, HorizontalDivider } from '$lib/components';
+  import { Button, Helmet, HorizontalDivider } from '$lib/components';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import TopBar from '../TopBar.svelte';
   import { YState } from './state.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
@@ -41,6 +42,19 @@
           entity {
             id
             slug
+
+            ancestors {
+              id
+
+              node {
+                __typename
+
+                ... on Folder {
+                  id
+                  name
+                }
+              }
+            }
 
             site {
               id
@@ -86,6 +100,8 @@
 
   const title = new YState(doc, 'title');
   const subtitle = new YState(doc, 'subtitle');
+
+  const effectiveTitle = $derived(title.current || '(제목 없음)');
 
   doc.on('updateV2', async (update, origin) => {
     if (!browser || origin === 'remote') {
@@ -180,10 +196,34 @@
   });
 </script>
 
-<Helmet title={`${title.current || '(제목 없음)'} 작성 중`} />
+<Helmet title={`${effectiveTitle} 작성 중`} />
+
+<TopBar>
+  <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
+        {#if ancestor.node.__typename === 'Folder'}
+          <div>{ancestor.node.name}</div>
+          <div>/</div>
+        {/if}
+      {/each}
+
+      <div>
+        {effectiveTitle}
+      </div>
+    </div>
+
+    <div>
+      <Button external href={`${$query.post.entity.site.url}/${$query.post.entity.slug}`} size="sm" type="link" variant="secondary">
+        공유
+      </Button>
+    </div>
+  </div>
+</TopBar>
+
+<HorizontalDivider />
 
 <div class={flex({ flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'hidden' })}>
-  <!-- <a href={`${$query.post.entity.site.url}/${$query.post.entity.slug}`} rel="noopener noreferrer" target="_blank">go to usersite</a> -->
   <Toolbar {editor} />
 
   <div

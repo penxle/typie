@@ -1,4 +1,5 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode } from '@/db';
@@ -45,6 +46,32 @@ Entity.implement({
           .from(Entities)
           .where(and(eq(Entities.parentId, self.id), eq(Entities.state, EntityState.ACTIVE)))
           .orderBy(asc(Entities.order));
+      },
+    }),
+
+    ancestors: t.field({
+      type: [Entity],
+      resolve: async (self) => {
+        const e = alias(Entities, 'e');
+
+        const result = await db.execute<{ id: string }>(sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id}, ${Entities.parentId}, 0 AS depth
+            FROM ${Entities}
+            WHERE ${eq(Entities.id, self.id)}
+            UNION ALL
+            SELECT ${e.id}, ${e.parentId}, sq.depth + 1
+            FROM ${Entities} as e
+            JOIN sq ON ${e.id} = sq.parent_id
+            WHERE sq.parent_id IS NOT NULL
+          )
+          SELECT id
+          FROM sq
+          WHERE ${ne(sql`id`, self.id)}
+          ORDER BY depth DESC
+        `);
+
+        return result.map((row) => row.id);
       },
     }),
   }),

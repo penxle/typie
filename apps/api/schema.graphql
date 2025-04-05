@@ -45,6 +45,7 @@ input EnrollPlanInput {
 }
 
 type Entity implements IEntity {
+  ancestors: [Entity!]!
   children: [Entity!]!
   id: ID!
   node: EntityNode!

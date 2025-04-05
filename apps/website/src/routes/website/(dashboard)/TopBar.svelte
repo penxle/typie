@@ -3,12 +3,19 @@
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context/app.svelte';
   import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
+  import type { Snippet } from 'svelte';
+
+  type Props = {
+    children?: Snippet;
+  };
+
+  let { children }: Props = $props();
 
   const app = getAppContext();
 </script>
 
-<div>
+<div class={flex({ alignItems: 'center', gap: '8px', height: '48px' })}>
   {#if !app.preference.current.sidebarExpanded}
     <div
       class={css({ width: app.state.sidebarPopoverVisible ? '240px' : 'fit' })}
@@ -23,6 +30,18 @@
       >
         <Icon icon={ChevronsRightIcon} />
       </button>
+    </div>
+  {/if}
+
+  {#if children}
+    <div
+      class={css({
+        flexGrow: '1',
+        paddingLeft: app.preference.current.sidebarExpanded ? '8px' : '0',
+        paddingRight: '8px',
+      })}
+    >
+      {@render children()}
     </div>
   {/if}
 </div>
