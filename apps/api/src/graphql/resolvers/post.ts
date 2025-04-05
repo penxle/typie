@@ -85,8 +85,9 @@ PostView.implement({
 IPostContent.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
-    title: t.exposeString('title', { nullable: true }),
     subtitle: t.exposeString('subtitle', { nullable: true }),
+
+    title: t.string({ resolve: (self) => self.title || '(제목 없음)' }),
   }),
 });
 

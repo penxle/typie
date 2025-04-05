@@ -128,7 +128,7 @@ interface IPost {
 interface IPostContent {
   id: ID!
   subtitle: String
-  title: String
+  title: String!
 }
 
 interface IPostOption {
@@ -252,7 +252,7 @@ type Post implements IPost {
 type PostContent implements IPostContent {
   id: ID!
   subtitle: String
-  title: String
+  title: String!
   update: Binary!
 }
 
@@ -273,7 +273,7 @@ type PostContentView implements IPostContent {
   body: JSON!
   id: ID!
   subtitle: String
-  title: String
+  title: String!
 }
 
 type PostOption implements IPostOption {
