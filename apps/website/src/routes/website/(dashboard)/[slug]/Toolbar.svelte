@@ -34,19 +34,19 @@
   import type { Ref } from '$lib/utils';
 
   type Props = {
-    editor: Ref<Editor>;
+    editor?: Ref<Editor>;
   };
 
   let { editor }: Props = $props();
 </script>
 
-<div class={flex({ direction: 'column', gap: '8px', width: 'full', maxWidth: '1000px' })}>
-  <div class={flex({ alignItems: 'center', gap: '8px' })}>
+<div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '8px', width: 'full' })}>
+  <div class={flex({ alignItems: 'center', gap: '8px', width: 'full', maxWidth: '1200px' })}>
     <ToolbarButton
       icon={ImageIcon}
       label="이미지"
       onclick={() => {
-        editor.current.chain().focus().setImage().run();
+        editor?.current.chain().focus().setImage().run();
       }}
       size="large"
     />
@@ -55,7 +55,7 @@
       icon={PaperclipIcon}
       label="파일"
       onclick={() => {
-        editor.current.chain().focus().setFile().run();
+        editor?.current.chain().focus().setFile().run();
       }}
       size="large"
     />
@@ -64,7 +64,7 @@
       icon={FileUpIcon}
       label="임베드"
       onclick={() => {
-        editor.current.chain().focus().setEmbed().run();
+        editor?.current.chain().focus().setEmbed().run();
       }}
       size="large"
     />
@@ -80,7 +80,7 @@
             <ToolbarDropdownMenuItem
               style={css.raw({ justifyContent: 'center', height: '48px' })}
               onclick={() => {
-                editor.current.chain().focus().setHorizontalRule(type).run();
+                editor?.current.chain().focus().setHorizontalRule(type).run();
                 close();
               }}
             >
@@ -102,7 +102,7 @@
             <ToolbarDropdownMenuItem
               style={css.raw({ height: '48px' })}
               onclick={() => {
-                editor.current.chain().focus().setBlockquote(type).run();
+                editor?.current.chain().focus().setBlockquote(type).run();
                 close();
               }}
             >
@@ -117,7 +117,7 @@
       icon={GalleryVerticalEndIcon}
       label="콜아웃"
       onclick={() => {
-        editor.current.chain().focus().setCallout().run();
+        editor?.current.chain().focus().setCallout().run();
       }}
       size="large"
     />
@@ -126,7 +126,7 @@
       icon={TableIcon}
       label="표"
       onclick={() => {
-        editor.current.chain().focus().insertTable().run();
+        editor?.current.chain().focus().insertTable().run();
       }}
       size="large"
     />
@@ -140,7 +140,7 @@
         <ToolbarDropdownMenu>
           <ToolbarDropdownMenuItem
             onclick={() => {
-              editor.current.chain().focus().toggleBulletList().run();
+              editor?.current.chain().focus().toggleBulletList().run();
               close();
             }}
           >
@@ -152,7 +152,7 @@
 
           <ToolbarDropdownMenuItem
             onclick={() => {
-              editor.current.chain().focus().toggleOrderedList().run();
+              editor?.current.chain().focus().toggleOrderedList().run();
               close();
             }}
           >
@@ -169,7 +169,7 @@
       icon={CodeIcon}
       label="코드 블록"
       onclick={() => {
-        editor.current.chain().focus().setCodeBlock().run();
+        editor?.current.chain().focus().setCodeBlock().run();
       }}
       size="large"
     />
@@ -178,7 +178,7 @@
       icon={CodeXmlIcon}
       label="HTML 블록"
       onclick={() => {
-        editor.current.chain().focus().setHtmlBlock().run();
+        editor?.current.chain().focus().setHtmlBlock().run();
       }}
       size="large"
     />
@@ -186,12 +186,12 @@
 
   <HorizontalDivider />
 
-  <div class={flex({ alignItems: 'center', gap: '8px' })}>
+  <div class={flex({ alignItems: 'center', gap: '8px', width: 'full', maxWidth: '1200px' })}>
     <ToolbarButton
       icon={UndoIcon}
       label="실행 취소"
       onclick={() => {
-        editor.current.chain().focus().undo().run();
+        editor?.current.chain().focus().undo().run();
       }}
       size="small"
     />
@@ -200,7 +200,7 @@
       icon={RedoIcon}
       label="다시 실행"
       onclick={() => {
-        editor.current.chain().focus().redo().run();
+        editor?.current.chain().focus().redo().run();
       }}
       size="small"
     />
@@ -211,7 +211,7 @@
       {#snippet anchor()}
         <div
           style:background-color={values.fontColor.find(
-            ({ value }) => value === (editor.current.getAttributes('font_color').value ?? defaultValues.fontColor),
+            ({ value }) => value === (editor?.current.getAttributes('font_color').value ?? defaultValues.fontColor),
           )?.hex}
           class={css({ borderWidth: '1px', borderRadius: 'full', size: '20px' })}
         ></div>
@@ -227,12 +227,12 @@
                 borderWidth: '1px',
                 borderRadius: 'full',
                 size: '20px',
-                outlineWidth: (editor.current.getAttributes('font_color').value ?? defaultValues.fontColor) === value ? '2px' : '0',
+                outlineWidth: (editor?.current.getAttributes('font_color').value ?? defaultValues.fontColor) === value ? '2px' : '0',
                 outlineOffset: '1px',
               })}
               aria-label={label}
               onclick={() => {
-                editor.current.chain().focus().setFontColor(value).run();
+                editor?.current.chain().focus().setFontColor(value).run();
                 close();
               }}
               type="button"
@@ -245,7 +245,7 @@
     <ToolbarDropdownButton chevron label="글씨 서체" size="small">
       {#snippet anchor()}
         <div class={css({ fontSize: '14px' })}>
-          {values.fontFamily.find(({ value }) => value === (editor.current.getAttributes('font_family').value ?? defaultValues.fontFamily))
+          {values.fontFamily.find(({ value }) => value === (editor?.current.getAttributes('font_family').value ?? defaultValues.fontFamily))
             ?.label}
         </div>
       {/snippet}
@@ -255,9 +255,9 @@
           {#each values.fontFamily as { label, value } (value)}
             <ToolbarDropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
-              active={(editor.current.getAttributes('font_family').value ?? defaultValues.fontFamily) === value}
+              active={(editor?.current.getAttributes('font_family').value ?? defaultValues.fontFamily) === value}
               onclick={() => {
-                editor.current.chain().focus().setFontFamily(value).run();
+                editor?.current.chain().focus().setFontFamily(value).run();
                 close();
               }}
             >
@@ -271,7 +271,7 @@
     <ToolbarDropdownButton chevron label="글씨 크기" size="small">
       {#snippet anchor()}
         <div class={css({ fontSize: '14px' })}>
-          {values.fontSize.find(({ value }) => value === (editor.current.getAttributes('font_size').value ?? defaultValues.fontSize))
+          {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize))
             ?.label}
         </div>
       {/snippet}
@@ -281,9 +281,9 @@
           {#each values.fontSize as { label, value } (value)}
             <ToolbarDropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
-              active={(editor.current.getAttributes('font_size').value ?? defaultValues.fontSize) === value}
+              active={(editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize) === value}
               onclick={() => {
-                editor.current.chain().focus().setFontSize(value).run();
+                editor?.current.chain().focus().setFontSize(value).run();
                 close();
               }}
             >
@@ -297,41 +297,41 @@
     <VerticalDivider />
 
     <ToolbarButton
-      active={editor.current.isActive('bold')}
+      active={editor?.current.isActive('bold')}
       icon={BoldIcon}
       label="굵게"
       onclick={() => {
-        editor.current.chain().focus().toggleBold().run();
+        editor?.current.chain().focus().toggleBold().run();
       }}
       size="small"
     />
 
     <ToolbarButton
-      active={editor.current.isActive('italic')}
+      active={editor?.current.isActive('italic')}
       icon={ItalicIcon}
       label="기울임"
       onclick={() => {
-        editor.current.chain().focus().toggleItalic().run();
+        editor?.current.chain().focus().toggleItalic().run();
       }}
       size="small"
     />
 
     <ToolbarButton
-      active={editor.current.isActive('strike')}
+      active={editor?.current.isActive('strike')}
       icon={StrikethroughIcon}
       label="취소선"
       onclick={() => {
-        editor.current.chain().focus().toggleStrike().run();
+        editor?.current.chain().focus().toggleStrike().run();
       }}
       size="small"
     />
 
     <ToolbarButton
-      active={editor.current.isActive('underline')}
+      active={editor?.current.isActive('underline')}
       icon={UnderlineIcon}
       label="밑줄"
       onclick={() => {
-        editor.current.chain().focus().toggleUnderline().run();
+        editor?.current.chain().focus().toggleUnderline().run();
       }}
       size="small"
     />
@@ -339,30 +339,30 @@
     <VerticalDivider />
 
     <ToolbarButton
-      active={editor.current.isActive('link')}
+      active={editor?.current.isActive('link')}
       icon={LinkIcon}
       label="링크"
       onclick={() => {
         const url = prompt('링크를 입력하세요');
         if (url) {
-          editor.current.chain().focus().setLink(url).run();
+          editor?.current.chain().focus().setLink(url).run();
         } else {
-          editor.current.chain().focus().unsetLink().run();
+          editor?.current.chain().focus().unsetLink().run();
         }
       }}
       size="small"
     />
 
     <ToolbarButton
-      active={editor.current.isActive('ruby')}
+      active={editor?.current.isActive('ruby')}
       icon={RubyIcon}
       label="루비"
       onclick={() => {
         const ruby = prompt('루비를 입력하세요');
         if (ruby) {
-          editor.current.chain().focus().setRuby(ruby).run();
+          editor?.current.chain().focus().setRuby(ruby).run();
         } else {
-          editor.current.chain().focus().unsetRuby().run();
+          editor?.current.chain().focus().unsetRuby().run();
         }
       }}
       size="small"
@@ -374,7 +374,7 @@
       {#snippet anchor()}
         <ToolbarIcon
           icon={// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          values.textAlign.find(({ value }) => value === (editor.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign))!
+          values.textAlign.find(({ value }) => value === (editor?.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign))!
             .icon}
         />
       {/snippet}
@@ -384,9 +384,9 @@
           {#each values.textAlign as { label, value } (value)}
             <ToolbarDropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
-              active={(editor.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign) === value}
+              active={(editor?.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign) === value}
               onclick={() => {
-                editor.current.chain().focus().setParagraphTextAlign(value).run();
+                editor?.current.chain().focus().setParagraphTextAlign(value).run();
                 close();
               }}
             >
@@ -407,9 +407,9 @@
           {#each values.lineHeight as { label, value } (value)}
             <ToolbarDropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
-              active={(editor.current.getAttributes('paragraph').lineHeight ?? defaultValues.lineHeight) === value}
+              active={(editor?.current.getAttributes('paragraph').lineHeight ?? defaultValues.lineHeight) === value}
               onclick={() => {
-                editor.current.chain().focus().setParagraphLineHeight(value).run();
+                editor?.current.chain().focus().setParagraphLineHeight(value).run();
                 close();
               }}
             >
@@ -430,9 +430,9 @@
           {#each values.letterSpacing as { label, value } (value)}
             <ToolbarDropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
-              active={(editor.current.getAttributes('paragraph').letterSpacing ?? defaultValues.letterSpacing) === value}
+              active={(editor?.current.getAttributes('paragraph').letterSpacing ?? defaultValues.letterSpacing) === value}
               onclick={() => {
-                editor.current.chain().focus().setParagraphLetterSpacing(value).run();
+                editor?.current.chain().focus().setParagraphLetterSpacing(value).run();
                 close();
               }}
             >
@@ -447,14 +447,14 @@
     <select
       class={css({ borderWidth: '1px', borderRadius: '4px', paddingX: '4px', paddingY: '2px', fontSize: '14px' })}
       onchange={({ currentTarget }) =>
-        editor.current
+        editor?.current
           .chain()
           .focus()
           .setBodyMaxWidth(Number(currentTarget.value) as never)
           .run()}
     >
       {#each values.maxWidth as { label, value } (value)}
-        <option selected={(editor.current.getAttributes('body').maxWidth ?? defaultValues.maxWidth) === value} {value}>
+        <option selected={(editor?.current.getAttributes('body').maxWidth ?? defaultValues.maxWidth) === value} {value}>
           {label}
         </option>
       {/each}
@@ -463,14 +463,14 @@
     <select
       class={css({ borderWidth: '1px', borderRadius: '4px', paddingX: '4px', paddingY: '2px', fontSize: '14px' })}
       onchange={({ currentTarget }) =>
-        editor.current
+        editor?.current
           .chain()
           .focus()
           .setBodyBlockGap(Number(currentTarget.value) as never)
           .run()}
     >
       {#each values.blockGap as { label, value } (value)}
-        <option selected={(editor.current.getAttributes('body').blockGap ?? defaultValues.blockGap) === value} {value}>
+        <option selected={(editor?.current.getAttributes('body').blockGap ?? defaultValues.blockGap) === value} {value}>
           {label}
         </option>
       {/each}
@@ -479,14 +479,14 @@
     <select
       class={css({ borderWidth: '1px', borderRadius: '4px', paddingX: '4px', paddingY: '2px', fontSize: '14px' })}
       onchange={({ currentTarget }) =>
-        editor.current
+        editor?.current
           .chain()
           .focus()
           .setBodyParagraphIndent(Number(currentTarget.value) as never)
           .run()}
     >
       {#each values.paragraphIndent as { label, value } (value)}
-        <option selected={(editor.current.getAttributes('body').paragraphIndent ?? defaultValues.paragraphIndent) === value} {value}>
+        <option selected={(editor?.current.getAttributes('body').paragraphIndent ?? defaultValues.paragraphIndent) === value} {value}>
           {label}
         </option>
       {/each}
