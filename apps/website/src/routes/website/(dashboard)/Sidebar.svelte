@@ -5,7 +5,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { fragment, graphql } from '$graphql';
   import { Icon } from '$lib/components';
-  import { expandSidebar, sidebarPopoverVisible } from '$lib/stores';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import PageList from './PageList.svelte';
@@ -44,6 +44,8 @@
       }
     }
   `);
+
+  const app = getAppContext();
 </script>
 
 <nav
@@ -51,14 +53,14 @@
     zIndex: '[1000]',
     flexGrow: '0',
     flexShrink: '0',
-    width: $expandSidebar ? '240px' : '0',
+    width: app.preference.current.sidebarExpanded ? '240px' : '0',
     transitionDuration: '200ms',
     transitionProperty: 'width',
     transitionTimingFunction: 'ease',
     pointerEvents: 'none',
     height: 'full',
   })}
-  aria-hidden={!$expandSidebar && !$sidebarPopoverVisible}
+  aria-hidden={!app.preference.current.sidebarExpanded && !app.state.sidebarPopoverVisible}
 >
   <div
     class={css({
@@ -89,7 +91,7 @@
           transitionTimingFunction: 'ease',
           transitionProperty: 'width, opacity, transform',
         },
-        $expandSidebar
+        app.preference.current.sidebarExpanded
           ? {
               height: 'full',
               transform: 'translateX(0) translateY(0)',
@@ -99,14 +101,14 @@
               transform: 'translateX(0) translateY(59px)',
             },
 
-        !$expandSidebar &&
-          !$sidebarPopoverVisible && {
+        !app.preference.current.sidebarExpanded &&
+          !app.state.sidebarPopoverVisible && {
             opacity: '0',
             transform: 'translateX(-220px) translateY(59px)',
           },
       )}
-      onpointerenter={() => ($sidebarPopoverVisible = true)}
-      onpointerleave={() => ($sidebarPopoverVisible = false)}
+      onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
+      onpointerleave={() => (app.state.sidebarPopoverVisible = false)}
     >
       <div
         class={css({
@@ -117,12 +119,12 @@
           width: '240px',
           backgroundColor: 'transparent',
         })}
-        onpointerenter={() => ($sidebarPopoverVisible = true)}
+        onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
       ></div>
       <div
         class={css(
-          { position: 'absolute', inset: '0', zIndex: '[-1]', display: $expandSidebar ? 'none' : 'block' },
-          !$expandSidebar && $sidebarPopoverVisible && { backgroundColor: 'white', boxShadow: 'medium' },
+          { position: 'absolute', inset: '0', zIndex: '[-1]', display: app.preference.current.sidebarExpanded ? 'none' : 'block' },
+          !app.preference.current.sidebarExpanded && app.state.sidebarPopoverVisible && { backgroundColor: 'white', boxShadow: 'medium' },
         )}
       ></div>
 
@@ -132,22 +134,22 @@
           display: 'flex',
           flexDirection: 'column',
           height: 'full',
-          maxHeight: $expandSidebar ? 'full' : '[calc(-118px + 100vh)]',
+          maxHeight: app.preference.current.sidebarExpanded ? 'full' : '[calc(-118px + 100vh)]',
           overflowY: 'auto',
         })}
-        onpointerenter={() => ($sidebarPopoverVisible = true)}
-        onpointerleave={() => ($sidebarPopoverVisible = false)}
+        onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
+        onpointerleave={() => (app.state.sidebarPopoverVisible = false)}
       >
         <div class={css({ position: 'sticky', top: '0', backgroundColor: 'white' })}>
           <div class={flex({ align: 'center', justify: 'space-between' })}>
             <Logo class={css({ height: '32px', flex: 'none' })} />
 
             <div class={flex({ align: 'center', gap: '4px' })}>
-              {#if $expandSidebar}
+              {#if app.preference.current.sidebarExpanded}
                 <button
                   onclick={() => {
-                    $expandSidebar = false;
-                    $sidebarPopoverVisible = false;
+                    app.preference.current.sidebarExpanded = false;
+                    app.state.sidebarPopoverVisible = false;
                   }}
                   type="button"
                 >
