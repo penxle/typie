@@ -4,7 +4,7 @@
   import { expandSidebar } from '$lib/stores/global-stores';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import SidebarContainer from './SidebarContainer.svelte';
+  import Sidebar from './Sidebar.svelte';
   import type { Item } from './types';
 
   let { children } = $props();
@@ -14,7 +14,7 @@
       me @required {
         id
 
-        ...DashboardLayout_SidebarContainer_user
+        ...DashboardLayout_Sidebar_user
       }
     }
   `);
@@ -76,8 +76,8 @@
 
 {#if mounted}
   <div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
-    <div class={flex({ align: 'flex-start', height: 'full' })}>
-      <SidebarContainer $user={$query.me} {items} />
+    <div class={flex({ align: 'flex-start', height: 'full', position: 'relative' })}>
+      <Sidebar $user={$query.me} {items} />
 
       <div class={css({ width: 'full' })}>
         {@render children()}
