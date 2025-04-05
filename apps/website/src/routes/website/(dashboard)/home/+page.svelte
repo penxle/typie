@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
+  import TopBar from '../TopBar.svelte';
 
   const query = graphql(`
     query HomePage_Query {
@@ -47,6 +48,7 @@
   };
 </script>
 
+<TopBar />
 <div>{$query.me.email}</div>
 <button onclick={handleLogout} type="button">로그아웃</button>
 
