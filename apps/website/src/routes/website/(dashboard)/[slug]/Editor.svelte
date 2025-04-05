@@ -9,6 +9,7 @@
   import { PostContentSyncKind } from '@/enums';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
+  import { HorizontalDivider } from '$lib/components';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -171,14 +172,50 @@
   });
 </script>
 
-<div class={flex({ direction: 'column', alignItems: 'center', gap: '24px', paddingY: '100px', width: 'screen', height: 'screen' })}>
-  <a href={`${$query.post.entity.site.url}/${$query.post.entity.slug}`} rel="noopener noreferrer" target="_blank">go to usersite</a>
+<div class={flex({ flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'hidden' })}>
+  <!-- <a href={`${$query.post.entity.site.url}/${$query.post.entity.slug}`} rel="noopener noreferrer" target="_blank">go to usersite</a> -->
+  <Toolbar {editor} />
 
-  {#if editor}
-    <Toolbar {editor} />
-  {/if}
+  <div
+    class={flex({
+      flexDirection: 'column',
+      alignItems: 'center',
+      flexGrow: '1',
+      width: 'full',
+      backgroundColor: 'gray.100',
+      overflow: 'scroll',
+    })}
+  >
+    <div
+      class={flex({
+        flexDirection: 'column',
+        alignItems: 'center',
+        flexGrow: '1',
+        paddingY: '40px',
+        width: 'full',
+        maxWidth: '1200px',
+        backgroundColor: 'white',
+      })}
+    >
+      <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: '1000px' })}>
+        <input
+          class={css({ width: 'full', fontSize: { base: '22px', sm: '28px' }, fontWeight: 'bold' })}
+          maxlength="100"
+          placeholder="제목을 입력하세요"
+          type="text"
+        />
 
-  <div class={css({ width: 'full', flexGrow: 1 })}>
-    <TiptapEditor style={{ height: 'full' }} {awareness} {doc} bind:editor />
+        <input
+          class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium' })}
+          maxlength="100"
+          placeholder="부제목을 입력하세요"
+          type="text"
+        />
+
+        <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+      </div>
+
+      <TiptapEditor style={{ flexGrow: '1', width: 'full' }} {awareness} {doc} bind:editor />
+    </div>
   </div>
 </div>

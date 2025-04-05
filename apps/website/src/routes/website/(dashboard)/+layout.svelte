@@ -1,7 +1,6 @@
 <script lang="ts">
   import { graphql } from '$graphql';
   import { setupAppContext } from '$lib/context';
-  import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import Sidebar from './Sidebar.svelte';
   import type { Item } from './types';
@@ -67,12 +66,10 @@
   ];
 </script>
 
-<div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
-  <div class={flex({ align: 'flex-start', height: 'full', position: 'relative' })}>
-    <Sidebar $user={$query.me} {items} />
+<div class={flex({ position: 'relative', alignItems: 'flex-start', height: 'screen' })}>
+  <Sidebar $user={$query.me} {items} />
 
-    <div class={css({ width: 'full' })}>
-      {@render children()}
-    </div>
+  <div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full' })}>
+    {@render children()}
   </div>
 </div>

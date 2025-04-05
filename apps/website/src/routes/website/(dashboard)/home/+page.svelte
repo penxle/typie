@@ -49,8 +49,11 @@
 </script>
 
 <TopBar />
+
 <div>{$query.me.email}</div>
-<button onclick={handleLogout} type="button">로그아웃</button>
+<div>
+  <button onclick={handleLogout} type="button">로그아웃</button>
+</div>
 
 <pre>
   {#each $query.me.sites as site (site.id)}
