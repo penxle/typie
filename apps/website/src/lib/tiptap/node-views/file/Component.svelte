@@ -1,18 +1,20 @@
 <script lang="ts">
   import ArrowDownToLineIcon from '~icons/lucide/arrow-down-to-line';
+  import EllipsisIcon from '~icons/lucide/ellipsis';
   import PaperclipIcon from '~icons/lucide/paperclip';
+  import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
-  import { Icon, RingSpinner, VerticalDivider } from '$lib/components';
+  import { Button, Icon, Menu, MenuItem, RingSpinner, VerticalDivider } from '$lib/components';
   import { uploadBlob } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
   import { NodeView } from '../../lib';
   import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
 
-  let { node, editor, selected, updateAttributes }: Props = $props();
+  let { node, editor, selected, updateAttributes, deleteNode }: Props = $props();
 
   const persistBlobAsFile = graphql(`
     mutation FileNodeView_PersistBlobAsFile_Mutation($input: PersistBlobAsFileInput!) {
@@ -85,26 +87,21 @@
     this={editor?.current.isEditable ? 'div' : 'a'}
     class={cx(
       'group',
-      css(
-        {
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderWidth: '1px',
-          borderColor: 'gray.100',
-          borderRadius: '4px',
-          backgroundColor: { base: 'gray.100', _hover: 'gray.200', _active: 'gray.300' },
-        },
-        pickerOpened && { backgroundColor: 'gray.200' },
-      ),
+      css({
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderRadius: '4px',
+        backgroundColor: 'gray.100',
+      }),
     )}
     aria-label={editor?.current.isEditable ? undefined : `${node.attrs.name} 파일 다운로드`}
     href={editor?.current.isEditable ? undefined : node.attrs.url}
+    use:anchor
   >
     {#if node.attrs.id}
       <div
-        class={css({
-          display: 'flex',
+        class={flex({
           alignItems: 'center',
           gap: '12px',
           paddingX: '14px',
@@ -114,40 +111,72 @@
         })}
       >
         <Icon style={css.raw({ color: 'gray.400' })} icon={PaperclipIcon} size={20} />
+
         <span class={css({ truncate: true })}>{node.attrs.name}</span>
+
         <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
+
         <span class={css({ color: 'gray.400' })}>{formatFileSize(node.attrs.size)}</span>
       </div>
     {:else}
       <div
         class={flex({
-          align: 'center',
+          alignItems: 'center',
           gap: '12px',
           paddingX: '14px',
           paddingY: '12px',
           fontSize: '14px',
           color: 'gray.400',
-          width: 'full',
+          truncate: true,
         })}
-        use:anchor
       >
-        {#if inflight}
-          <RingSpinner style={css.raw({ size: '20px', color: 'gray.400' })} />
-          {#if file}
-            <span class={css({ truncate: true })}>{file.name}</span>
-            <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
-            <span class={css({ color: 'gray.400' })}>{formatFileSize(file.size)}</span>
-          {:else}
-            파일 업로드 중...
-          {/if}
+        {#if inflight && file}
+          <RingSpinner style={css.raw({ size: '20px' })} />
+
+          <span class={css({ truncate: true })}>{file.name}</span>
+
+          <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
+
+          <span class={css({ color: 'gray.400' })}>{formatFileSize(file.size)}</span>
         {:else}
-          <Icon style={css.raw({ color: 'gray.400' })} icon={PaperclipIcon} size={20} />
-          파일 업로드
+          <Icon icon={PaperclipIcon} size={20} />
+          {#if editor?.current.isEditable}
+            파일 업로드
+          {:else}
+            파일 없음
+          {/if}
         {/if}
       </div>
     {/if}
 
-    {#if !editor?.current.isEditable}
+    {#if editor?.current.isEditable}
+      <Menu>
+        {#snippet button({ open })}
+          <div
+            class={css(
+              {
+                marginRight: '12px',
+                borderRadius: '4px',
+                padding: '2px',
+                color: 'gray.400',
+                opacity: '0',
+                transition: 'common',
+                _hover: { backgroundColor: 'gray.200' },
+                _groupHover: { opacity: '100' },
+              },
+              open && { opacity: '100' },
+            )}
+          >
+            <Icon icon={EllipsisIcon} size={20} />
+          </div>
+        {/snippet}
+
+        <MenuItem onclick={() => deleteNode()} variant="danger">
+          <Icon icon={Trash2Icon} size={12} />
+          <span>삭제</span>
+        </MenuItem>
+      </Menu>
+    {:else if node.attrs.id}
       <div
         class={css({
           marginRight: '12px',
@@ -164,22 +193,21 @@
 
 {#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
   <div
-    class={flex({
-      direction: 'column',
-      align: 'center',
-      justify: 'center',
+    class={center({
+      flexDirection: 'column',
+      gap: '12px',
       borderWidth: '1px',
-      borderColor: 'gray.200',
       borderRadius: '12px',
       padding: '12px',
-      backgroundColor: 'white',
       width: '380px',
+      backgroundColor: 'white',
       boxShadow: 'xlarge',
       zIndex: '1',
     })}
     use:floating
   >
-    <span class={css({ fontSize: '13px', color: 'gray.400' })}>아래 버튼을 클릭해 파일을 선택하세요</span>
-    <button class={css({ marginTop: '12px', width: 'full' })} onclick={handleUpload} type="button">파일 선택</button>
+    <span class={css({ fontSize: '13px', color: 'gray.600' })}>아래 버튼을 클릭해 파일을 선택하세요</span>
+
+    <Button style={css.raw({ width: 'full' })} onclick={handleUpload} size="sm" variant="secondary">파일 선택</Button>
   </div>
 {/if}

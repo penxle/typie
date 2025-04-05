@@ -19,7 +19,7 @@
 
 <svelte:element
   this={as}
-  class={css({ whiteSpace: 'normal' }, style)}
+  class={css({ fontFamily: 'ui', whiteSpace: 'normal' }, style)}
   data-node-view
   ondragstart={onDragStart}
   role="presentation"

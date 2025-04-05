@@ -1,4 +1,4 @@
-import { autoUpdate, computePosition, flip, hide } from '@floating-ui/dom';
+import { autoUpdate, computePosition, flip, hide, offset } from '@floating-ui/dom';
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { mount, unmount } from 'svelte';
@@ -111,7 +111,7 @@ export const FloatingMenu = Extension.create({
 
                 const { x, y, middlewareData } = await computePosition(nodeDOM, dom, {
                   placement: 'left-start',
-                  middleware: [flip({ padding: 16 }), hide({ padding: 16 })],
+                  middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16 })],
                 });
 
                 dom.style.left = `${x}px`;

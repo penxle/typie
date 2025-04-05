@@ -1,12 +1,13 @@
 <script lang="ts">
+  import EllipsisIcon from '~icons/lucide/ellipsis';
   import ImageIcon from '~icons/lucide/image';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
-  import { Icon, Img, RingSpinner } from '$lib/components';
+  import { Button, Icon, Img, Menu, MenuItem, RingSpinner } from '$lib/components';
   import { uploadBlob } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { css, cx } from '$styled-system/css';
+  import { center, flex } from '$styled-system/patterns';
   import { NodeView } from '../../lib';
   import Enlarge from './Enlarge.svelte';
   import type { NodeViewProps } from '../../lib';
@@ -116,110 +117,106 @@
 </script>
 
 <NodeView style={css.raw({ display: 'flex', justifyContent: 'center' })}>
-  <div bind:this={containerEl} style:width={`${proportion * 100}%`} data-drag-handle draggable>
+  <div
+    bind:this={containerEl}
+    style:width={`${proportion * 100}%`}
+    class={cx('group', css({ position: 'relative' }))}
+    data-drag-handle
+    draggable
+  >
     {#if node.attrs.id}
-      <div
-        class={css({
-          position: 'relative',
-          width: 'full',
-          _hover: { '& button': { display: 'flex' } },
-        })}
+      <Img
+        style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
+        $image={node.attrs}
+        alt="본문 이미지"
         onclick={() => !editor?.current.isEditable && (enlarged = true)}
-        role="presentation"
-      >
-        <Img
-          style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
-          $image={node.attrs}
-          alt="본문 이미지"
-          progressive
-          size="full"
-        />
+        progressive
+        role="button"
+        size="full"
+      />
 
-        {#if editor?.current.isEditable}
-          <button
-            class={css({
-              position: 'absolute',
-              top: '10px',
-              right: '10px',
-              display: 'none',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '4px',
-              color: 'white',
-              backgroundColor: '[#363839/70]',
-              size: '28px',
-              _hover: { backgroundColor: '[#363839/40]' },
-            })}
-            onclick={() => deleteNode()}
-            type="button"
-          >
-            <Icon icon={Trash2Icon} size={16} />
-          </button>
-
-          <div class={flex({ position: 'absolute', top: '0', bottom: '0', left: '10px', alignItems: 'center' })}>
-            <button
-              class={css({
-                display: 'none',
-                borderRadius: '4px',
-                backgroundColor: '[#363839/70]',
-                width: '8px',
-                height: '1/3',
-                maxHeight: '72px',
-                cursor: 'col-resize',
-                _hover: { backgroundColor: '[#363839/40]' },
-              })}
-              aria-label="이미지 크기 조절"
-              onpointerdown={(event) => {
-                event.preventDefault();
-                handleResizeStart(event, true);
-              }}
-              onpointermove={handleResize}
-              onpointerup={handleResizeEnd}
-              type="button"
-            ></button>
-          </div>
-
-          <div class={flex({ position: 'absolute', top: '0', bottom: '0', right: '10px', alignItems: 'center' })}>
-            <button
-              class={css({
-                display: 'none',
-                borderRadius: '4px',
-                backgroundColor: '[#363839/70]',
-                width: '8px',
-                height: '1/3',
-                maxHeight: '72px',
-                cursor: 'col-resize',
-                _hover: { backgroundColor: '[#363839/40]' },
-              })}
-              aria-label="이미지 크기 조절"
-              onpointerdown={(event) => {
-                event.preventDefault();
-                handleResizeStart(event, false);
-              }}
-              onpointermove={handleResize}
-              onpointerup={handleResizeEnd}
-              type="button"
-            ></button>
-          </div>
-        {/if}
-      </div>
-    {:else}
-      <div
-        class={css(
-          {
+      {#if editor?.current.isEditable}
+        <button
+          class={css({
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '7px',
-            borderWidth: '1px',
-            borderColor: 'gray.100',
+            justifyContent: 'center',
             borderRadius: '4px',
-            width: 'full',
-            backgroundColor: 'gray.100',
-            _hover: { '& > button > div': { display: 'flex' } },
-          },
-          pickerOpened && { backgroundColor: 'gray.200' },
-        )}
+            size: '28px',
+            color: 'white',
+            backgroundColor: '[#363839/70]',
+            opacity: '0',
+            transition: 'opacity',
+            _hover: { backgroundColor: '[#363839/40]' },
+            _groupHover: { opacity: '100' },
+          })}
+          onclick={() => deleteNode()}
+          type="button"
+        >
+          <Icon icon={Trash2Icon} size={16} />
+        </button>
+
+        <div class={flex({ position: 'absolute', top: '0', bottom: '0', left: '10px', alignItems: 'center' })}>
+          <button
+            class={css({
+              borderRadius: '4px',
+              backgroundColor: '[#363839/70]',
+              width: '8px',
+              height: '1/3',
+              maxHeight: '72px',
+              cursor: 'col-resize',
+              opacity: '0',
+              transition: 'opacity',
+              _hover: { backgroundColor: '[#363839/40]' },
+              _groupHover: { opacity: '100' },
+            })}
+            aria-label="이미지 크기 조절"
+            onpointerdown={(event) => {
+              event.preventDefault();
+              handleResizeStart(event, true);
+            }}
+            onpointermove={handleResize}
+            onpointerup={handleResizeEnd}
+            type="button"
+          ></button>
+        </div>
+
+        <div class={flex({ position: 'absolute', top: '0', bottom: '0', right: '10px', alignItems: 'center' })}>
+          <button
+            class={css({
+              borderRadius: '4px',
+              backgroundColor: '[#363839/70]',
+              width: '8px',
+              height: '1/3',
+              maxHeight: '72px',
+              cursor: 'col-resize',
+              opacity: '0',
+              transition: 'opacity',
+              _hover: { backgroundColor: '[#363839/40]' },
+              _groupHover: { opacity: '100' },
+            })}
+            aria-label="이미지 크기 조절"
+            onpointerdown={(event) => {
+              event.preventDefault();
+              handleResizeStart(event, false);
+            }}
+            onpointermove={handleResize}
+            onpointerup={handleResizeEnd}
+            type="button"
+          ></button>
+        </div>
+      {/if}
+    {:else}
+      <div
+        class={flex({
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderRadius: '4px',
+          backgroundColor: 'gray.100',
+        })}
         use:anchor
       >
         <div
@@ -233,13 +230,46 @@
           })}
         >
           {#if inflight}
-            <RingSpinner style={css.raw({ color: 'gray.400', size: '20px' })} />
-            이미지 업로드 중
+            <RingSpinner style={css.raw({ size: '20px' })} />
+            이미지 업로드 중...
           {:else}
-            <Icon style={css.raw({ color: 'gray.400' })} icon={ImageIcon} size={20} />
-            이미지 업로드
+            <Icon icon={ImageIcon} size={20} />
+            {#if editor?.current.isEditable}
+              이미지 업로드
+            {:else}
+              이미지 없음
+            {/if}
           {/if}
         </div>
+
+        {#if editor?.current.isEditable}
+          <Menu>
+            {#snippet button({ open })}
+              <div
+                class={css(
+                  {
+                    marginRight: '12px',
+                    borderRadius: '4px',
+                    padding: '2px',
+                    color: 'gray.400',
+                    opacity: '0',
+                    transition: 'common',
+                    _hover: { backgroundColor: 'gray.200' },
+                    _groupHover: { opacity: '100' },
+                  },
+                  open && { opacity: '100' },
+                )}
+              >
+                <Icon icon={EllipsisIcon} size={20} />
+              </div>
+            {/snippet}
+
+            <MenuItem onclick={() => deleteNode()} variant="danger">
+              <Icon icon={Trash2Icon} size={12} />
+              <span>삭제</span>
+            </MenuItem>
+          </Menu>
+        {/if}
       </div>
     {/if}
   </div>
@@ -247,22 +277,22 @@
 
 {#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
   <div
-    class={flex({
-      direction: 'column',
-      align: 'center',
+    class={center({
+      flexDirection: 'column',
+      gap: '12px',
       borderWidth: '1px',
-      borderColor: 'gray.200',
-      borderRadius: '10px',
+      borderRadius: '12px',
       padding: '12px',
-      backgroundColor: 'white',
       width: '380px',
+      backgroundColor: 'white',
       boxShadow: 'xlarge',
       zIndex: '1',
     })}
     use:floating
   >
-    <span class={css({ fontSize: '13px', color: 'gray.400' })}>아래 버튼을 클릭해 이미지를 선택하세요</span>
-    <button class={css({ marginTop: '12px', width: 'full' })} onclick={handleUpload} type="button">이미지 선택</button>
+    <span class={css({ fontSize: '13px', color: 'gray.600' })}>아래 버튼을 클릭해 이미지를 선택하세요</span>
+
+    <Button style={css.raw({ width: 'full' })} onclick={handleUpload} size="sm" variant="secondary">이미지 선택</Button>
   </div>
 {/if}
 
