@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { graphql } from '$graphql';
-  import { expandSidebar } from '$lib/stores/global-stores';
+  import { setupAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import Sidebar from './Sidebar.svelte';
@@ -19,13 +18,7 @@
     }
   `);
 
-  let mounted = $state(false);
-
-  onMount(() => {
-    if ($expandSidebar === null) $expandSidebar = true;
-
-    mounted = true;
-  });
+  setupAppContext();
 
   let items: Item[] = [
     {
@@ -74,14 +67,12 @@
   ];
 </script>
 
-{#if mounted}
-  <div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
-    <div class={flex({ align: 'flex-start', height: 'full', position: 'relative' })}>
-      <Sidebar $user={$query.me} {items} />
+<div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', height: 'screen' })}>
+  <div class={flex({ align: 'flex-start', height: 'full', position: 'relative' })}>
+    <Sidebar $user={$query.me} {items} />
 
-      <div class={css({ width: 'full' })}>
-        {@render children()}
-      </div>
+    <div class={css({ width: 'full' })}>
+      {@render children()}
     </div>
   </div>
-{/if}
+</div>
