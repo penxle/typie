@@ -20,7 +20,7 @@
       verticalAlign: 'middle',
       flex: 'none',
       transition: 'common',
-      '& *': { strokeWidth: '[2]' },
+      '& *': { strokeWidth: '[2px]' },
     },
     variants: {
       size: {
