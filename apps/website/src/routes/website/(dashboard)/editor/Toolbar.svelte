@@ -343,7 +343,12 @@
       icon={LinkIcon}
       label="링크"
       onclick={() => {
-        editor.current.chain().focus().setLink('').run();
+        const url = prompt('링크를 입력하세요');
+        if (url) {
+          editor.current.chain().focus().setLink(url).run();
+        } else {
+          editor.current.chain().focus().unsetLink().run();
+        }
       }}
       size="small"
     />
@@ -353,7 +358,12 @@
       icon={RubyIcon}
       label="루비"
       onclick={() => {
-        editor.current.chain().focus().setRuby('').run();
+        const ruby = prompt('루비를 입력하세요');
+        if (ruby) {
+          editor.current.chain().focus().setRuby(ruby).run();
+        } else {
+          editor.current.chain().focus().unsetRuby().run();
+        }
       }}
       size="small"
     />
