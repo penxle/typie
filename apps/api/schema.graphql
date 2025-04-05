@@ -326,7 +326,7 @@ type Query {
   entityViewByPermalink(permalink: String!): EntityView!
   image(id: ID!): Image!
   me: User
-  post(postId: ID!): Post!
+  post(slug: String!): Post!
   site(siteId: ID!): Site!
 }
 

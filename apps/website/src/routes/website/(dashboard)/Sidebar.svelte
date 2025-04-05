@@ -36,6 +36,11 @@
     mutation DashboardLayout_Sidebar_CreatePost_Mutation($input: CreatePostInput!) {
       createPost(input: $input) {
         id
+
+        entity {
+          id
+          slug
+        }
       }
     }
   `);
@@ -156,7 +161,7 @@
                     siteId: $user.sites[0].id,
                   });
 
-                  await goto(`/editor/${resp.id}`);
+                  await goto(`/${resp.entity.slug}`);
                 }}
                 type="button"
               >

@@ -8,41 +8,51 @@
   import * as Y from 'yjs';
   import { PostContentSyncKind } from '@/enums';
   import { browser } from '$app/environment';
-  import { graphql } from '$graphql';
+  import { fragment, graphql } from '$graphql';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import Toolbar from '../Toolbar.svelte';
+  import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { Editor_query } from '$graphql';
   import type { Ref } from '$lib/utils';
 
-  const query = graphql(`
-    query EditorPostIdPage_Query($postId: ID!) {
-      me @required {
-        id
-        name
-      }
+  type Props = {
+    $query: Editor_query;
+  };
 
-      post(postId: $postId) {
-        id
+  let { $query: _query }: Props = $props();
 
-        entity {
+  const query = fragment(
+    _query,
+    graphql(`
+      fragment Editor_query on Query {
+        me @required {
           id
-          slug
+          name
+        }
 
-          site {
+        post(slug: $slug) {
+          id
+
+          entity {
             id
-            url
+            slug
+
+            site {
+              id
+              url
+            }
+          }
+
+          content {
+            id
+            update
           }
         }
-
-        content {
-          id
-          update
-        }
       }
-    }
-  `);
+    `),
+  );
 
   const syncPostContent = graphql(`
     mutation Editor_SyncPostContent_Mutation($input: SyncPostContentInput!) {
