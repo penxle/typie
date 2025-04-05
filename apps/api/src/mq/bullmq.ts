@@ -31,6 +31,7 @@ const worker = new Worker(
   },
   {
     connection: { url: env.REDIS_URL },
+    concurrency: 50,
   },
 );
 

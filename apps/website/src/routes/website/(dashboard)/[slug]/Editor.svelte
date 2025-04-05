@@ -10,7 +10,7 @@
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { autosize } from '$lib/actions';
-  import { HorizontalDivider } from '$lib/components';
+  import { Helmet, HorizontalDivider } from '$lib/components';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -179,6 +179,8 @@
     };
   });
 </script>
+
+<Helmet title={`${title.current || '(제목 없음)'} 작성 중`} />
 
 <div class={flex({ flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'hidden' })}>
   <!-- <a href={`${$query.post.entity.site.url}/${$query.post.entity.slug}`} rel="noopener noreferrer" target="_blank">go to usersite</a> -->
