@@ -84,6 +84,12 @@ export const UserPlanBillingCycle = {
   YEARLY: 'YEARLY',
 } as const;
 
+export type UserPlanState = keyof typeof UserPlanState;
+export const UserPlanState = {
+  ACTIVE: 'ACTIVE',
+  CANCELED: 'CANCELED',
+} as const;
+
 export type UserState = keyof typeof UserState;
 export const UserState = {
   ACTIVE: 'ACTIVE',
