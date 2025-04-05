@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, isNull } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
@@ -139,9 +139,14 @@ PostOptionView.implement({
 builder.queryFields((t) => ({
   post: t.withAuth({ session: true }).field({
     type: Post,
-    args: { postId: t.arg.id() },
+    args: { slug: t.arg.string() },
     resolve: async (_, args) => {
-      return args.postId;
+      return await db
+        .select(getTableColumns(Posts))
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(eq(Entities.slug, args.slug))
+        .then(firstOrThrow);
     },
   }),
 }));
