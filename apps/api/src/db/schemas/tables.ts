@@ -162,7 +162,7 @@ export const Plans = pgTable('plans', {
     .primaryKey()
     .$defaultFn(() => createDbId(TableCode.PLANS)),
   name: text('name').notNull(),
-  rules: jsonb('rules').notNull().$type<PlanRules>(),
+  rules: jsonb('rules').notNull().$type<Partial<PlanRules>>(),
   fee: integer('fee').notNull(),
   availability: E._PlanAvailability('availability').notNull().default('PUBLIC'),
   createdAt: datetime('created_at')
