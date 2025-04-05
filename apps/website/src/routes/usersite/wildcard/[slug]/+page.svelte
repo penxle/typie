@@ -38,8 +38,6 @@ host: {page.url.hostname}
 <br />
 slug: {page.params.slug}
 <br />
-{JSON.stringify($query)}
-<br />
 {#if $query.entityView.node.__typename === 'PostView'}
-  <TiptapRenderer style={css.raw({ borderWidth: '1px' })} content={$query.entityView.node.content.body} />
+  <TiptapRenderer style={css.raw({ borderWidth: '1px', padding: '16px' })} content={$query.entityView.node.content.body} />
 {/if}
