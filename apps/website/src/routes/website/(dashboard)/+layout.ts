@@ -6,3 +6,5 @@ export const _DashboardLayout_Query_AfterLoad: DashboardLayout_Query_AfterLoad =
     redirect(302, '/auth/login');
   }
 };
+
+export const ssr = false;
