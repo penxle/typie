@@ -9,10 +9,12 @@
   import { PostContentSyncKind } from '@/enums';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
+  import { autosize } from '$lib/actions';
   import { HorizontalDivider } from '$lib/components';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import { YState } from './state.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Editor_query } from '$graphql';
@@ -74,13 +76,16 @@
     }
   `);
 
-  let titleEl = $state<HTMLInputElement>();
-  let subtitleEl = $state<HTMLInputElement>();
+  let titleEl = $state<HTMLTextAreaElement>();
+  let subtitleEl = $state<HTMLTextAreaElement>();
 
   let editor = $state<Ref<Editor>>();
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
+
+  const title = new YState(doc, 'title');
+  const subtitle = new YState(doc, 'subtitle');
 
   doc.on('updateV2', async (update, origin) => {
     if (!browser || origin === 'remote') {
@@ -201,9 +206,9 @@
       })}
     >
       <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: '1000px' })}>
-        <input
+        <textarea
           bind:this={titleEl}
-          class={css({ width: 'full', fontSize: { base: '22px', sm: '28px' }, fontWeight: 'bold' })}
+          class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
           maxlength="100"
           onkeydown={(e) => {
             if (e.key === 'Enter' || e.key === 'ArrowDown') {
@@ -212,12 +217,14 @@
             }
           }}
           placeholder="제목을 입력하세요"
-          type="text"
-        />
+          rows={1}
+          bind:value={title.current}
+          use:autosize
+        ></textarea>
 
-        <input
+        <textarea
           bind:this={subtitleEl}
-          class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium' })}
+          class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', resize: 'none' })}
           maxlength="100"
           onkeydown={(e) => {
             if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
@@ -231,8 +238,10 @@
             }
           }}
           placeholder="부제목을 입력하세요"
-          type="text"
-        />
+          rows={1}
+          bind:value={subtitle.current}
+          use:autosize
+        ></textarea>
 
         <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
       </div>

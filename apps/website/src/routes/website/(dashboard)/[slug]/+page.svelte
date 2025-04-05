@@ -4,9 +4,15 @@
 
   const query = graphql(`
     query DashboardSlugPage_Query($slug: String!) {
+      post(slug: $slug) {
+        id
+      }
+
       ...Editor_query
     }
   `);
 </script>
 
-<Editor {$query} />
+{#key $query.post.id}
+  <Editor {$query} />
+{/key}
