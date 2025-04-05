@@ -5,6 +5,7 @@
   import { css } from '$styled-system/css';
   import { Collaboration } from '../extensions/collaboration';
   import { extensions } from '../schema';
+  import type { EditorView } from '@tiptap/pm/view';
   import type * as YAwareness from 'y-protocols/awareness';
   import type * as Y from 'yjs';
   import type { SystemStyleObject } from '$styled-system/types';
@@ -14,9 +15,10 @@
     editor?: Ref<Editor>;
     doc?: Y.Doc;
     awareness?: YAwareness.Awareness;
+    onkeydown?: (view: EditorView, event: KeyboardEvent) => void;
   };
 
-  let { style, editor = $bindable(), doc, awareness }: Props = $props();
+  let { style, editor = $bindable(), doc, awareness, onkeydown }: Props = $props();
 
   let element = $state<HTMLDivElement>();
 
@@ -30,6 +32,8 @@
         attributes: { class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style) },
         scrollMargin: { top: 150, bottom: 150, left: 0, right: 0 },
         scrollThreshold: { top: 150, bottom: 150, left: 0, right: 0 },
+
+        handleKeyDown: onkeydown,
       },
 
       onTransaction: ({ editor: e }) => {

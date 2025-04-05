@@ -74,6 +74,9 @@
     }
   `);
 
+  let titleEl = $state<HTMLInputElement>();
+  let subtitleEl = $state<HTMLInputElement>();
+
   let editor = $state<Ref<Editor>>();
 
   const doc = new Y.Doc();
@@ -199,15 +202,34 @@
     >
       <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: '1000px' })}>
         <input
+          bind:this={titleEl}
           class={css({ width: 'full', fontSize: { base: '22px', sm: '28px' }, fontWeight: 'bold' })}
           maxlength="100"
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === 'ArrowDown') {
+              e.preventDefault();
+              subtitleEl?.focus();
+            }
+          }}
           placeholder="제목을 입력하세요"
           type="text"
         />
 
         <input
+          bind:this={subtitleEl}
           class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium' })}
           maxlength="100"
+          onkeydown={(e) => {
+            if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
+              e.preventDefault();
+              titleEl?.focus();
+            }
+
+            if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+              e.preventDefault();
+              editor?.current.chain().focus().setTextSelection(2).run();
+            }
+          }}
           placeholder="부제목을 입력하세요"
           type="text"
         />
@@ -215,7 +237,21 @@
         <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
       </div>
 
-      <TiptapEditor style={{ flexGrow: '1', width: 'full' }} {awareness} {doc} bind:editor />
+      <TiptapEditor
+        style={{ flexGrow: '1', width: 'full' }}
+        {awareness}
+        {doc}
+        onkeydown={(view, e) => {
+          const { doc, selection } = view.state;
+          const { anchor } = selection;
+
+          if (((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) || (e.key === 'Backspace' && !doc.textContent)) {
+            e.preventDefault();
+            subtitleEl?.focus();
+          }
+        }}
+        bind:editor
+      />
     </div>
   </div>
 </div>
