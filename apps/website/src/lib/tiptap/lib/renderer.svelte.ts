@@ -148,6 +148,14 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
     }
   }
 
+  override stopEvent(event: Event) {
+    if (event.target instanceof Element && event.target.closest('button')) {
+      return true;
+    }
+
+    return false;
+  }
+
   destroy() {
     this.editor?.off('selectionUpdate', this.#handleSelectionUpdate);
     this.editor?.off('transaction', this.#handleTransaction);

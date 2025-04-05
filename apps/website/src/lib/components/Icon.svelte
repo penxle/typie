@@ -35,8 +35,6 @@
       },
     },
   });
-
-  const baseStyle = $derived(recipe.raw({ size }));
 </script>
 
-<Icon class={css(baseStyle, style)} aria-hidden={ariaHidden ? 'true' : undefined} />
+<Icon class={css(recipe.raw({ size }), style)} aria-hidden={ariaHidden ? 'true' : undefined} />

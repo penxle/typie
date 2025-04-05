@@ -49,10 +49,8 @@
 }
 
 .prose-editable {
-  &[contenteditable='true'] {
-    & [data-drag-handle] {
-      cursor: grab;
-    }
+  & [data-drag-handle] {
+    cursor: grab;
   }
 
   .column-resize-handle {

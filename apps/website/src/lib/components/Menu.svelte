@@ -155,7 +155,7 @@
         borderColor: 'gray.200',
         borderRadius: '12px',
         paddingY: '6px',
-        backgroundColor: 'gray.100',
+        backgroundColor: 'white',
         minWidth: '120px',
         boxShadow: 'xlarge',
         overflowY: 'auto',

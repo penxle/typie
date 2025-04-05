@@ -6,6 +6,7 @@
   import { thumbHashToDataURL } from 'thumbhash';
   import { fragment, graphql } from '$graphql';
   import { css } from '$styled-system/css';
+  import type { HTMLImgAttributes } from 'svelte/elements';
   import type { Img_image } from '$graphql';
   import type { SystemStyleObject } from '$styled-system/types';
 
@@ -18,9 +19,9 @@
     size: Size;
     quality?: number;
     progressive?: boolean;
-  };
+  } & Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt'>;
 
-  let { $image: _image, alt, style, size, quality, progressive = false }: Props = $props();
+  let { $image: _image, alt, style, size, quality, progressive = false, ...rest }: Props = $props();
 
   const image = fragment(
     _image,
@@ -66,6 +67,8 @@
     imgEl.className = css({ size: 'full', objectFit: 'cover' }, style);
     imgEl.alt = alt;
     imgEl.src = src;
+
+    Object.assign(imgEl, rest);
   };
 
   $effect(() => {
@@ -96,12 +99,12 @@
       overflow: 'hidden',
     })}
   >
-    <img class={css(style, { size: 'full', objectFit: 'cover' })} {alt} loading="lazy" src={placeholderUrl} />
+    <img class={css(style, { size: 'full', objectFit: 'cover' })} {alt} loading="lazy" src={placeholderUrl} {...rest} />
 
     {#if loaded}
       <div bind:this={targetEl} class={css({ position: 'absolute', inset: '0' })} in:fade={{ duration: 200 }}></div>
     {/if}
   </div>
 {:else}
-  <img class={css(style)} {alt} loading="lazy" {sizes} {src} {srcset} />
+  <img class={css(style)} {alt} loading="lazy" {sizes} {src} {srcset} {...rest} />
 {/if}
