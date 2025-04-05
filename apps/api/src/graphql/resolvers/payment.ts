@@ -1,7 +1,14 @@
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import { db, first, firstOrThrow, PaymentInvoices, PaymentMethods, PaymentRecords, Plans, TableCode, UserPlans, Users } from '@/db';
-import { PaymentInvoiceState, PaymentMethodState, PaymentRecordState, PlanAvailability, UserPlanBillingCycle } from '@/enums';
+import {
+  PaymentInvoiceState,
+  PaymentMethodState,
+  PaymentRecordState,
+  PlanAvailability,
+  UserPlanBillingCycle,
+  UserPlanState,
+} from '@/enums';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
@@ -135,6 +142,9 @@ builder.mutationFields((t) => ({
         .where(and(eq(PaymentMethods.userId, ctx.session.userId), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
         .then(firstOrThrow);
 
+      const enrolledAt = dayjs.kst().startOf('day');
+      const nextPaymentDate = getNextPaymentDate(input.billingCycle, enrolledAt);
+
       return await db.transaction(async (tx) => {
         const userPlan = await tx
           .insert(UserPlans)
@@ -143,6 +153,7 @@ builder.mutationFields((t) => ({
             planId: plan.id,
             fee: calculatePaymentAmount(input.billingCycle, plan.fee),
             billingCycle: input.billingCycle,
+            expiresAt: nextPaymentDate,
           })
           .returning()
           .then(firstOrThrow);
@@ -152,7 +163,7 @@ builder.mutationFields((t) => ({
           .values({
             userId: ctx.session.userId,
             amount: userPlan.fee,
-            billingAt: dayjs(),
+            billingAt: enrolledAt,
             state: PaymentInvoiceState.PAID,
           })
           .returning({ id: PaymentInvoices.id })
@@ -161,7 +172,7 @@ builder.mutationFields((t) => ({
         await tx.insert(PaymentInvoices).values({
           userId: ctx.session.userId,
           amount: userPlan.fee,
-          billingAt: getNextPaymentDate(input.billingCycle, userPlan.createdAt),
+          billingAt: nextPaymentDate,
           state: PaymentInvoiceState.UPCOMING,
         });
 
@@ -187,6 +198,31 @@ builder.mutationFields((t) => ({
         });
 
         return userPlan;
+      });
+    },
+  }),
+
+  cancelPlan: t.withAuth({ session: true }).field({
+    type: UserPlan,
+    resolve: async (_, __, ctx) => {
+      await db
+        .select()
+        .from(UserPlans)
+        .where(and(eq(UserPlans.userId, ctx.session.userId), eq(UserPlans.state, UserPlanState.ACTIVE)))
+        .then(firstOrThrow);
+
+      return await db.transaction(async (tx) => {
+        await tx
+          .update(PaymentInvoices)
+          .set({ state: PaymentInvoiceState.CANCELED })
+          .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)));
+
+        return await tx
+          .update(UserPlans)
+          .set({ state: UserPlanState.CANCELED })
+          .where(and(eq(UserPlans.userId, ctx.session.userId), eq(UserPlans.state, UserPlanState.ACTIVE)))
+          .returning()
+          .then(firstOrThrow);
       });
     },
   }),

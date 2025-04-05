@@ -176,6 +176,7 @@ input LoginWithEmailInput {
 type Mutation {
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): User!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): User!
+  cancelPlan: UserPlan!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
@@ -429,6 +430,11 @@ type UserPlan {
 enum UserPlanBillingCycle {
   MONTHLY
   YEARLY
+}
+
+enum UserPlanState {
+  ACTIVE
+  CANCELED
 }
 
 enum UserState {

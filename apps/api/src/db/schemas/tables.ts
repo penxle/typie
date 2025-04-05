@@ -326,6 +326,8 @@ export const UserPlans = pgTable('user_plans', {
     .references(() => Plans.id),
   fee: integer('fee').notNull(),
   billingCycle: E._UserPlanBillingCycle('billing_cycle').notNull(),
+  state: E._UserPlanState('state').notNull().default('ACTIVE'),
+  expiresAt: datetime('expires_at').notNull(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
