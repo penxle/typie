@@ -49,6 +49,8 @@
 }
 
 .prose-editable {
+  padding-bottom: 80px;
+
   & [data-drag-handle] {
     cursor: grab;
   }
