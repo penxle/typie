@@ -12,6 +12,7 @@
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
   import RedoIcon from '~icons/lucide/redo';
+  import SettingsIcon from '~icons/lucide/settings';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import TableIcon from '~icons/lucide/table';
   import UnderlineIcon from '~icons/lucide/underline';
@@ -20,7 +21,7 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
-  import { HorizontalDivider, VerticalDivider } from '$lib/components';
+  import { HorizontalDivider, SegmentButtons, VerticalDivider } from '$lib/components';
   import { defaultValues, values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
   import { center, flex, grid } from '$styled-system/patterns';
@@ -186,7 +187,7 @@
 
   <HorizontalDivider />
 
-  <div class={flex({ alignItems: 'center', gap: '8px', width: 'full', maxWidth: '1200px' })}>
+  <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '8px', width: 'full', maxWidth: '1200px' })}>
     <ToolbarButton
       icon={UndoIcon}
       label="실행 취소"
@@ -443,54 +444,81 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <!--
-    <select
-      class={css({ borderWidth: '1px', borderRadius: '4px', paddingX: '4px', paddingY: '2px', fontSize: '14px' })}
-      onchange={({ currentTarget }) =>
-        editor?.current
-          .chain()
-          .focus()
-          .setBodyMaxWidth(Number(currentTarget.value) as never)
-          .run()}
-    >
-      {#each values.maxWidth as { label, value } (value)}
-        <option selected={(editor?.current.getAttributes('body').maxWidth ?? defaultValues.maxWidth) === value} {value}>
-          {label}
-        </option>
-      {/each}
-    </select>
+    <div class={css({ flexGrow: '1' })}></div>
 
-    <select
-      class={css({ borderWidth: '1px', borderRadius: '4px', paddingX: '4px', paddingY: '2px', fontSize: '14px' })}
-      onchange={({ currentTarget }) =>
-        editor?.current
-          .chain()
-          .focus()
-          .setBodyBlockGap(Number(currentTarget.value) as never)
-          .run()}
-    >
-      {#each values.blockGap as { label, value } (value)}
-        <option selected={(editor?.current.getAttributes('body').blockGap ?? defaultValues.blockGap) === value} {value}>
-          {label}
-        </option>
-      {/each}
-    </select>
+    <ToolbarDropdownButton label="본문 설정" placement="bottom-end" size="small">
+      {#snippet anchor()}
+        <ToolbarIcon icon={SettingsIcon} />
+      {/snippet}
 
-    <select
-      class={css({ borderWidth: '1px', borderRadius: '4px', paddingX: '4px', paddingY: '2px', fontSize: '14px' })}
-      onchange={({ currentTarget }) =>
-        editor?.current
-          .chain()
-          .focus()
-          .setBodyParagraphIndent(Number(currentTarget.value) as never)
-          .run()}
-    >
-      {#each values.paragraphIndent as { label, value } (value)}
-        <option selected={(editor?.current.getAttributes('body').paragraphIndent ?? defaultValues.paragraphIndent) === value} {value}>
-          {label}
-        </option>
-      {/each}
-    </select> -->
+      {#snippet floating()}
+        <div
+          class={flex({
+            flexDirection: 'column',
+            gap: '16px',
+            borderWidth: '1px',
+            borderRadius: '4px',
+            padding: '16px',
+          })}
+        >
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px' })}>
+            <div class={css({ fontSize: '13px', fontWeight: 'medium' })}>본문 폭</div>
+            <div class={css({ width: '200px' })}>
+              <SegmentButtons
+                items={[
+                  { label: '600px', value: 600 },
+                  { label: '800px', value: 800 },
+                  { label: '1000px', value: 1000 },
+                ]}
+                onselect={(value) => {
+                  editor?.current.chain().focus().setBodyMaxWidth(value).run();
+                }}
+                size="sm"
+                value={editor?.current.state.doc.firstChild?.attrs.maxWidth}
+              />
+            </div>
+          </div>
+
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px' })}>
+            <div class={css({ fontSize: '13px', fontWeight: 'medium' })}>문단 들여쓰기</div>
+            <div class={css({ width: '200px' })}>
+              <SegmentButtons
+                items={[
+                  { label: '없음', value: 0 },
+                  { label: '0.5칸', value: 0.5 },
+                  { label: '1칸', value: 1 },
+                  { label: '2칸', value: 2 },
+                ]}
+                onselect={(value) => {
+                  editor?.current.chain().focus().setBodyParagraphIndent(value).run();
+                }}
+                size="sm"
+                value={editor?.current.state.doc.firstChild?.attrs.paragraphIndent}
+              />
+            </div>
+          </div>
+
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px' })}>
+            <div class={css({ fontSize: '13px', fontWeight: 'medium' })}>문단 사이 간격</div>
+            <div class={css({ width: '200px' })}>
+              <SegmentButtons
+                items={[
+                  { label: '없음', value: 0 },
+                  { label: '0.5줄', value: 0.5 },
+                  { label: '1줄', value: 1 },
+                  { label: '2줄', value: 2 },
+                ]}
+                onselect={(value) => {
+                  editor?.current.chain().focus().setBodyBlockGap(value).run();
+                }}
+                size="sm"
+                value={editor?.current.state.doc.firstChild?.attrs.blockGap}
+              />
+            </div>
+          </div>
+        </div>
+      {/snippet}
+    </ToolbarDropdownButton>
   </div>
 
   <HorizontalDivider />

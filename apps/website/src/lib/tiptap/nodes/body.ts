@@ -58,32 +58,50 @@ export const Body = Node.create({
     return {
       setBodyParagraphIndent:
         (paragraphIndent) =>
-        ({ commands }) => {
+        ({ tr, dispatch }) => {
           if (!paragraphIndents.includes(paragraphIndent)) {
             return false;
           }
 
-          return commands.updateAttributes(this.name, { paragraphIndent });
+          tr.setNodeAttribute(0, 'paragraphIndent', paragraphIndent);
+
+          if (dispatch) {
+            dispatch(tr);
+          }
+
+          return true;
         },
 
       setBodyMaxWidth:
         (maxWidth) =>
-        ({ commands }) => {
+        ({ tr, dispatch }) => {
           if (!maxWidths.includes(maxWidth)) {
             return false;
           }
 
-          return commands.updateAttributes(this.name, { maxWidth });
+          tr.setNodeAttribute(0, 'maxWidth', maxWidth);
+
+          if (dispatch) {
+            dispatch(tr);
+          }
+
+          return true;
         },
 
       setBodyBlockGap:
         (blockGap) =>
-        ({ commands }) => {
+        ({ tr, dispatch }) => {
           if (!blockGaps.includes(blockGap)) {
             return false;
           }
 
-          return commands.updateAttributes(this.name, { blockGap });
+          tr.setNodeAttribute(0, 'blockGap', blockGap);
+
+          if (dispatch) {
+            dispatch(tr);
+          }
+
+          return true;
         },
     };
   },
