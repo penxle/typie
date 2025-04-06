@@ -61,10 +61,11 @@
 
     inflight = true;
     try {
-      const attrs = await unfurlEmbed({ url });
+      const attrs = await unfurlEmbed({
+        url: /^[^:]+:\/\//.test(url) ? url : `https://${url}`,
+      });
+
       updateAttributes(attrs);
-    } catch (err: unknown) {
-      console.error(err);
     } finally {
       inflight = false;
     }
