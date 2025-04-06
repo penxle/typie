@@ -23,6 +23,7 @@ export const Placeholder = Extension.create({
 
             const body = doc.child(0);
             const currentBodyEmpty =
+              empty &&
               body.childCount === 1 &&
               body.child(0).type.name === 'paragraph' &&
               (body.child(0).attrs.textAlign === 'left' || body.child(0).attrs.textAlign === 'justify') &&
@@ -39,8 +40,8 @@ export const Placeholder = Extension.create({
             if (currentBodyEmpty || currentParagraphEmpty) {
               decorations.push(
                 createDecoration(
-                  $anchor.pos === 0 ? 1 : $anchor.before(),
-                  $anchor.pos === 0 ? 3 : $anchor.after(),
+                  $anchor.pos <= 2 ? 1 : $anchor.before(),
+                  $anchor.pos <= 2 ? 3 : $anchor.after(),
                   '내용을 입력하거나 /를 입력해 블록 삽입하기...',
                 ),
               );
