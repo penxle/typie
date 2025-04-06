@@ -14,8 +14,10 @@ export const makeYDoc = ({ title, subtitle, body }: MakeYDocParams) => {
   const node = Node.fromJSON(schema, body);
   const doc = new Y.Doc();
 
-  doc.getText('title').insert(0, title ?? '');
-  doc.getText('subtitle').insert(0, subtitle ?? '');
+  const map = doc.getMap('attrs');
+  map.set('title', title ?? '');
+  map.set('subtitle', subtitle ?? '');
+  map.set('maxWidth', 1000);
 
   const fragment = doc.getXmlFragment('body');
   prosemirrorToYXmlFragment(node, fragment);

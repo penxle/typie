@@ -104,6 +104,7 @@ PostContentView.implement({
   interfaces: [IPostContent],
   fields: (t) => ({
     body: t.expose('body', { type: 'JSON' }),
+    maxWidth: t.exposeInt('maxWidth'),
   }),
 });
 

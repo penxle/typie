@@ -273,6 +273,7 @@ type PostContentSyncStreamPayload {
 type PostContentView implements IPostContent {
   body: JSON!
   id: ID!
+  maxWidth: Int!
   subtitle: String
   title: String!
 }

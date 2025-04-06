@@ -1,25 +1,28 @@
 import type * as Y from 'yjs';
 
-export class YState {
-  #current = $state<string>() as string;
+export class YState<T> {
+  #current = $state<T>() as T;
 
-  #yDoc: Y.Doc;
-  #yText: Y.Text;
+  #doc: Y.Doc;
+  #map: Y.Map<T>;
+  #name: string;
 
-  constructor(doc: Y.Doc, name: string) {
-    this.#yDoc = doc;
-    this.#yText = doc.getText(name);
+  constructor(doc: Y.Doc, name: string, defaultValue: T) {
+    this.#doc = doc;
+    this.#name = name;
 
-    this.#current = this.#yText.toString();
+    this.#map = doc.getMap('attrs');
+
+    this.#current = this.#map.get(name) ?? defaultValue;
 
     const handler = () => {
-      this.#current = this.#yText.toString();
+      this.#current = this.#map.get(name) ?? defaultValue;
     };
 
     $effect(() => {
-      this.#yText.observe(handler);
+      this.#map.observe(handler);
       return () => {
-        this.#yText.unobserve(handler);
+        this.#map.unobserve(handler);
       };
     });
   }
@@ -28,11 +31,11 @@ export class YState {
     return this.#current;
   }
 
-  set current(value: string) {
+  set current(value: T) {
     this.#current = value;
-    this.#yDoc.transact(() => {
-      this.#yText.delete(0, this.#yText.length);
-      this.#yText.insert(0, value);
+
+    this.#doc.transact(() => {
+      this.#map.set(this.#name, value);
     });
   }
 }
