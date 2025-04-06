@@ -63,7 +63,7 @@
     borderColor: 'gray.200',
     borderRadius: '12px',
     paddingY: '4px',
-    backgroundColor: 'gray.100',
+    backgroundColor: 'white',
     width: '210px',
     maxHeight: '340px',
     overflow: 'auto',
@@ -86,7 +86,7 @@
         marginX: '4px',
         borderRadius: '6px',
         padding: '4px',
-        backgroundColor: selectedIdx === idx ? 'gray.200' : undefined,
+        backgroundColor: selectedIdx === idx ? 'gray.100' : undefined,
       })}
       onclick={() => onexecute(item)}
       onkeydown={handleKeyDown}
