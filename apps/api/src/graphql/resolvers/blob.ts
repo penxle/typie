@@ -132,7 +132,7 @@ builder.mutationFields((t) => ({
           userId: ctx.session.userId,
           name: decodeURIComponent(fileName),
           size: head.ContentLength!,
-          format: head.ContentType!,
+          format: head.ContentType ?? 'application/octet-stream',
           path: input.path,
         })
         .returning()
