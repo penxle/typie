@@ -320,7 +320,17 @@
 <ul
   bind:this={listEl}
   style:margin-left={depth === 0 ? 0 : 16 + 'px'}
-  class={cx('dnd-list', css({ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px', touchAction: 'none' }))}
+  class={cx(
+    'dnd-list',
+    css({
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+      marginTop: depth === 0 ? '0' : '2px',
+      paddingLeft: '0',
+      touchAction: 'none',
+    }),
+  )}
 >
   <div
     bind:this={indicatorEl}
@@ -334,7 +344,7 @@
         width: 'full',
         height: '3px',
         borderRadius: '6px',
-        backgroundColor: 'brand.600/40',
+        backgroundColor: 'brand.500/50',
         display: 'none',
         pointerEvents: 'none',
       }),

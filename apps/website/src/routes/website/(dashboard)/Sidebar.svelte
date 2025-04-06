@@ -1,10 +1,14 @@
 <script lang="ts">
-  import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
-  import PenLineIcon from '~icons/lucide/pen-line';
+  import BellIcon from '~icons/lucide/bell';
+  import FolderIcon from '~icons/lucide/folder';
+  import HomeIcon from '~icons/lucide/home';
+  import PanelLeftCloseIcon from '~icons/lucide/panel-left-close';
+  import SearchIcon from '~icons/lucide/search';
+  import SettingsIcon from '~icons/lucide/settings';
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
   import { fragment, graphql } from '$graphql';
-  import { Icon } from '$lib/components';
+  import { Button, Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -90,6 +94,9 @@
           transitionDuration: '200ms',
           transitionTimingFunction: 'ease',
           transitionProperty: 'width, opacity, transform',
+          backgroundColor: 'white',
+          borderRightRadius: '10px',
+          boxShadow: 'small',
         },
         app.preference.current.sidebarExpanded
           ? {
@@ -124,7 +131,12 @@
       <div
         class={css(
           { position: 'absolute', inset: '0', zIndex: '[-1]', display: app.preference.current.sidebarExpanded ? 'none' : 'block' },
-          !app.preference.current.sidebarExpanded && app.state.sidebarPopoverVisible && { backgroundColor: 'white', boxShadow: 'medium' },
+          !app.preference.current.sidebarExpanded &&
+            app.state.sidebarPopoverVisible && {
+              backgroundColor: 'white',
+              borderRightRadius: '10px',
+              boxShadow: 'small',
+            },
         )}
       ></div>
 
@@ -135,30 +147,66 @@
           flexDirection: 'column',
           height: 'full',
           maxHeight: app.preference.current.sidebarExpanded ? 'full' : '[calc(-118px + 100vh)]',
-          borderRightWidth: '1px',
           overflowY: 'auto',
+          padding: '10px',
         })}
         onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
         onpointerleave={() => (app.state.sidebarPopoverVisible = false)}
       >
-        <div class={css({ position: 'sticky', top: '0', backgroundColor: 'white' })}>
-          <div class={flex({ align: 'center', justify: 'space-between' })}>
-            <Logo class={css({ height: '32px', flex: 'none' })} />
+        <div
+          class={css({
+            position: 'sticky',
+            top: '0',
+            backgroundColor: 'white',
+            paddingBottom: '8px',
+          })}
+        >
+          <div
+            class={flex({
+              align: 'center',
+              justify: 'space-between',
+              paddingY: '6px',
+            })}
+          >
+            <Logo
+              class={css({
+                height: '24px',
+                flex: 'none',
+              })}
+            />
 
             <div class={flex({ align: 'center', gap: '4px' })}>
               {#if app.preference.current.sidebarExpanded}
                 <button
+                  class={css({
+                    padding: '4px',
+                    borderRadius: '6px',
+                    color: 'gray.500',
+                    _hover: {
+                      backgroundColor: 'gray.100',
+                      color: 'gray.700',
+                    },
+                  })}
                   onclick={() => {
                     app.preference.current.sidebarExpanded = false;
                     app.state.sidebarPopoverVisible = false;
                   }}
                   type="button"
                 >
-                  <Icon icon={ChevronsLeftIcon} />
+                  <Icon icon={PanelLeftCloseIcon} size={16} />
                 </button>
               {/if}
+            </div>
+          </div>
 
-              <button
+          <nav
+            class={css({
+              marginTop: '12px',
+            })}
+          >
+            <div class={css({ marginBottom: '12px' })}>
+              <Button
+                style={css.raw({ width: 'full' })}
                 onclick={async () => {
                   const resp = await createPost({
                     siteId: $user.sites[0].id,
@@ -166,25 +214,80 @@
 
                   await goto(`/${resp.entity.slug}`);
                 }}
-                type="button"
+                variant="primary"
               >
-                <Icon icon={PenLineIcon} />
-              </button>
+                새 글 쓰기
+              </Button>
             </div>
-          </div>
 
-          <nav>
-            <p>홈</p>
-            <p>검색</p>
-            <p>알림</p>
-            <p>설정</p>
+            <ul
+              class={css({
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+              })}
+            >
+              {#each [{ name: '홈', icon: HomeIcon }, { name: '검색', icon: SearchIcon }, { name: '알림', icon: BellIcon }, { name: '설정', icon: SettingsIcon }] as item (item.name)}
+                <li>
+                  <button
+                    class={css({
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      paddingX: '8px',
+                      paddingY: '6px',
+                      width: 'full',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      fontWeight: 'medium',
+                      color: 'gray.600',
+                      backgroundColor: 'transparent',
+                      _hover: {
+                        backgroundColor: 'gray.100',
+                      },
+                    })}
+                    type="button"
+                  >
+                    <Icon style={{ color: 'gray.500' }} icon={item.icon} size={16} />
+                    {item.name}
+                  </button>
+                </li>
+              {/each}
+            </ul>
           </nav>
         </div>
 
-        <hr class={css({ marginY: '20px', border: 'none', height: '1px', width: 'full', backgroundColor: 'gray.900' })} />
+        <div
+          class={css({
+            marginY: '8px',
+            height: '1px',
+            width: 'full',
+            backgroundColor: 'gray.200',
+          })}
+        ></div>
 
-        <div class={css({ minHeight: '720px' })}>
-          <p>보관함</p>
+        <div
+          class={css({
+            minHeight: '400px',
+            paddingTop: '4px',
+          })}
+        >
+          <div
+            class={css({
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              paddingX: '8px',
+              paddingY: '6px',
+              marginBottom: '4px',
+              fontSize: '13px',
+              fontWeight: 'medium',
+              color: 'gray.700',
+            })}
+          >
+            <Icon style={{ color: 'gray.500' }} icon={FolderIcon} size={14} />
+            <span>보관함</span>
+          </div>
 
           <PageList {items} />
         </div>
