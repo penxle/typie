@@ -41,6 +41,7 @@ declare module '@tiptap/core' {
       goToNextCell: () => ReturnType;
       goToPreviousCell: () => ReturnType;
       fixTables: () => ReturnType;
+      setTableBorderStyle: (borderStyle: string) => ReturnType;
     };
   }
 
@@ -58,6 +59,18 @@ export const Table = createNodeView(Component, {
   content: 'table_row+',
   isolating: true,
   tableRole: 'table',
+
+  addAttributes() {
+    return {
+      borderStyle: {
+        default: 'solid',
+        rendered: false,
+        parseHTML: (element) => {
+          return element.style.borderStyle;
+        },
+      },
+    };
+  },
 
   parseHTML() {
     return [{ tag: 'table' }];
@@ -169,6 +182,11 @@ export const Table = createNodeView(Component, {
           }
 
           return true;
+        },
+      setTableBorderStyle:
+        (borderStyle: string) =>
+        ({ commands }) => {
+          return commands.updateAttributes(this.name, { borderStyle });
         },
     };
   },

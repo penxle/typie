@@ -4,6 +4,7 @@
   import { tick } from 'svelte';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import { TiptapNodeViewBubbleMenu } from '../../components';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import AddRowColButton from './AddRowColButton.svelte';
   import ColHandle from './ColHandle.svelte';
@@ -21,7 +22,7 @@
     colgroupRendered = true;
   });
 
-  let { node, HTMLAttributes, editor, getPos }: Props = $props();
+  let { node, HTMLAttributes, editor, getPos, updateAttributes }: Props = $props();
 
   const hasSpan = $derived.by(() => {
     let has = false;
@@ -100,6 +101,7 @@
 
 <NodeView style={css.raw({ position: 'relative' })}>
   <table
+    style:--table-border-style={node.attrs.borderStyle}
     onpointerleave={() => {
       hoveredRowIndex = null;
       hoveredColumnIndex = null;
@@ -110,7 +112,8 @@
         position: 'relative',
         borderRadius: '4px',
         borderStyle: 'hidden',
-        outline: '1px solid',
+        outlineWidth: '1px',
+        outlineStyle: 'var(--table-border-style)',
         outlineOffset: '-1px',
         outlineColor: 'gray.300',
       }),
@@ -182,10 +185,22 @@
       {/if}
     {/if}
 
-    <NodeViewContentEditable as="tbody" />
+    <NodeViewContentEditable
+      style={css.raw({ '& p': { textIndent: '0!' }, '& td': { borderStyle: 'var(--table-border-style)' } })}
+      as="tbody"
+    />
 
     {#if editor?.current.isEditable}
       <AddRowColButton {editor} {isLastColumnHovered} {isLastRowHovered} tableNode={node} tablePos={getPos()} />
     {/if}
   </table>
 </NodeView>
+
+<TiptapNodeViewBubbleMenu {editor} {getPos} {node}>
+  <select onchange={(e) => updateAttributes({ borderStyle: e.currentTarget.value })}>
+    <option selected={node.attrs.borderStyle === 'solid'} value="solid">solid</option>
+    <option selected={node.attrs.borderStyle === 'dashed'} value="dashed">dashed</option>
+    <option selected={node.attrs.borderStyle === 'dotted'} value="dotted">dotted</option>
+    <option selected={node.attrs.borderStyle === 'none'} value="none">none</option>
+  </select>
+</TiptapNodeViewBubbleMenu>
