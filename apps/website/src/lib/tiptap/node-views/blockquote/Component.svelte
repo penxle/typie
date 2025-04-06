@@ -16,5 +16,5 @@
 <NodeView style={flex.raw({ gap: '16px' })}>
   <Component />
 
-  <NodeViewContentEditable style={css.raw({ flexGrow: '1' })} />
+  <NodeViewContentEditable style={css.raw({ flexGrow: '1', '& > *': { textAlign: '[left!]', textIndent: '0!' } })} />
 </NodeView>
