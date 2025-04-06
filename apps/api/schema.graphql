@@ -127,6 +127,7 @@ interface IPost {
 }
 
 interface IPostContent {
+  excerpt: String!
   id: ID!
   subtitle: String
   title: String!
@@ -251,6 +252,7 @@ type Post implements IPost {
 }
 
 type PostContent implements IPostContent {
+  excerpt: String!
   id: ID!
   subtitle: String
   title: String!
@@ -272,6 +274,7 @@ type PostContentSyncStreamPayload {
 
 type PostContentView implements IPostContent {
   body: JSON!
+  excerpt: String!
   id: ID!
   maxWidth: Int!
   subtitle: String
