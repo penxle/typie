@@ -1,55 +1,52 @@
-import { Body, Container, Head, Hr, Html, Img, Preview, Text } from '@react-email/components';
+import { Button, Column, Heading, Row, Text } from '@react-email/components';
+import TypieEmail from './components/TypieEmail';
 
 const Email = () => {
   return (
-    <Html lang="ko">
-      <Head>
-        <style>
-          {`
-            @media (prefers-color-scheme: dark) {
-              .logo-black {
-                display: none;
-              }
-            }
+    <TypieEmail preview="타이피에 사전 등록해 주셔서 감사합니다. 더 편리하고 즐거운 글쓰기 경험을 선물해 드릴게요.">
+      <Heading className="text-[28px] font-bold text-[#111111] mb-[20px] tracking-[-0.02em]">사전 등록이 완료되었어요</Heading>
 
-            @media (prefers-color-scheme: light) {
-              .logo-white {
-                display: none;
-              }
-            }
-          `}
-        </style>
-      </Head>
-      <Preview>타이피 사전 등록이 완료되었어요!</Preview>
-      <Body style={{ wordBreak: 'keep-all' }}>
-        <Container style={{ maxWidth: '640px', margin: '0 auto', padding: '40px' }}>
-          <Img src="https://typie.net/email/logo-black.png" alt="타이피" width={60} className="logo-black" />
-          <Img src="https://typie.net/email/logo-white.png" alt="타이피" width={60} className="logo-white" />
+      <Text className="text-[16px] text-[#37352f] mb-[20px] leading-[1.5]">
+        타이피에 사전 등록해 주셔서 감사합니다.
+        <br />
+        더 편리하고 즐거운 글쓰기 경험을 선물해 드릴게요.
+        <br />
+        기다려 주셔서 감사드리며, 곧 만나요!
+      </Text>
 
-          <Text style={{ fontSize: '24px', fontWeight: 600, textAlign: 'center', lineHeight: '1.5' }}>
-            타이피 사전 등록이 완료되었어요!
-          </Text>
+      <Text className="text-[16px] text-[#37352f] mb-[20px] leading-[1.5]">
+        보내주신 모든 의견을 꼼꼼히 검토하고 알찬 서비스를 준비하고 있어요.
+        <br />
+        방향성은 바뀔 수 있으니, 언제든 다양한 의견 부탁드려요.
+      </Text>
 
-          <Text style={{ marginTop: '40px', fontSize: '14px', fontWeight: 500, textAlign: 'center', lineHeight: '1.5' }}>
-            타이피에 사전 등록해 주셔서 감사합니다.
-            <br />
-            더 편리하고 즐거운 글쓰기 경험을 선물해 드릴게요.
-            <br />
-            기다려 주셔서 감사드리며, 곧 만나요!
-          </Text>
+      <Text className="text-[16px] text-[#37352f] mb-[40px] leading-[1.5]">
+        사전 등록자를 대상으로 디스코드에서 타이피 커뮤니티가 운영되고 있어요.
+        <br />
+        개발 소식 업데이트부터 의견 수렴, 사용성 테스트까지 다양한 소통이 이루어지는 공간이에요.
+        <br />
+        관심 있으시다면 언제든 편히 둘러봐주세요.
+      </Text>
 
-          <Hr style={{ margin: '40px 0' }} />
+      <Row className="mb-[40px]">
+        <Column align="center">
+          <Button
+            className="bg-[#000000] text-white py-[15px] px-[30px] rounded-[4px] font-medium text-[15px] no-underline text-center box-border"
+            href="https://typie.link/community"
+          >
+            커뮤니티 가입하기
+          </Button>
+        </Column>
+      </Row>
 
-          <Text style={{ fontSize: '10px', color: '#ACB2B9', textAlign: 'left', lineHeight: '1.5' }}>
-            (주) 펜슬컴퍼니
-            <br />
-            대표 : 배준현
-            <br />
-            서울특별시 강남구 강남대로100길 14, 6층
-          </Text>
-        </Container>
-      </Body>
-    </Html>
+      <Text className="text-[16px] text-[#37352f] mb-[20px] leading-[1.5]">
+        앞으로도 중요한 소식은 이메일로 전달해드릴 예정이에요.
+        <br />
+        그럼, 다시 한번 잘 부탁드릴게요.
+        <br />
+        <br />- 타이피 팀 드림
+      </Text>
+    </TypieEmail>
   );
 };
 

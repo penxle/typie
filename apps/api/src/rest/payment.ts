@@ -2,6 +2,8 @@ import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import qs from 'query-string';
 import { db, firstOrThrow, PreorderPayments, PreorderUsers } from '@/db';
+import { sendEmail } from '@/email';
+import { PreorderCompletedEmail } from '@/email/templates';
 import { env } from '@/env';
 import * as portone from '@/external/portone';
 import type { Env } from '@/context';
@@ -48,7 +50,7 @@ payment.get('/redirect', async (c) => {
 
   const customData = JSON.parse(paymentResult.customData ?? '{}');
 
-  await db.transaction(async (tx) => {
+  const preorderUser = await db.transaction(async (tx) => {
     await tx
       .update(PreorderPayments)
       .set({
@@ -59,12 +61,18 @@ payment.get('/redirect', async (c) => {
     return await tx
       .insert(PreorderUsers)
       .values({
-        email: customData.email,
+        email: customData.email.toLowerCase(),
         wish: customData.wish,
         preorderPaymentId: paymentRequest.id,
       })
       .returning()
       .then(firstOrThrow);
+  });
+
+  await sendEmail({
+    recipient: preorderUser.email,
+    subject: '[타이피] 사전 등록이 완료되었어요',
+    body: PreorderCompletedEmail(),
   });
 
   return c.redirect(
