@@ -8,13 +8,13 @@ export const transform = (content: string) => {
         ${content}
         <script>
           window.addEventListener('DOMContentLoaded', () => {
-            var observer = new ResizeObserver((entries) => {
-              for (var entry of entries) {
-                parent.postMessage({ type: 'resize', height: entry.contentRect.height }, '*');
+            const observer = new ResizeObserver((entries) => {
+              for (const entry of entries) {
+                parent.postMessage({ type: 'resize', height: entry.borderBoxSize[0].blockSize }, '*');
               }
             });
 
-            observer.observe(document.body);
+            observer.observe(document.documentElement, { box: 'border-box' });
           });
         </script>
       </body>
