@@ -70,8 +70,6 @@
       <Icon {icon} size={20} />
     </svelte:element>
 
-    <div class={css({ flexGrow: 1, paddingTop: '2px' })}>
-      <NodeViewContentEditable />
-    </div>
+    <NodeViewContentEditable style={css.raw({ flexGrow: '1', paddingTop: '2px', '& > *': { textAlign: '[left!]', textIndent: '0!' } })} />
   </div>
 </NodeView>
