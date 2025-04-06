@@ -43,16 +43,12 @@
   };
 
   $effect(() => {
-    if (!editor) {
-      return;
-    }
-
-    editor.current.on('create', init);
-    editor.current.on('transaction', handler);
+    editor?.current.on('create', init);
+    editor?.current.on('transaction', handler);
 
     return () => {
-      editor.current.off('create', init);
-      editor.current.off('transaction', handler);
+      editor?.current.off('create', init);
+      editor?.current.off('transaction', handler);
     };
   });
 </script>

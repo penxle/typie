@@ -36,12 +36,13 @@
 </script>
 
 {#if $query.entityView.node.__typename === 'PostView'}
-  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', backgroundColor: 'gray.100' })}>
+  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen', backgroundColor: 'gray.100' })}>
     <div
       style:--prosemirror-max-width={`${$query.entityView.node.content.maxWidth}px`}
       class={flex({
         flexDirection: 'column',
         alignItems: 'center',
+        flexGrow: '1',
         paddingY: '80px',
         width: 'full',
         maxWidth: '1200px',
