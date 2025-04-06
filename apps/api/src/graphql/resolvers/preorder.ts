@@ -1,5 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db, firstOrThrow, PreorderPayments, PreorderUsers, TableCode } from '@/db';
+import { sendEmail } from '@/email';
+import { PreorderCompletedEmail } from '@/email/templates';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { builder } from '../builder';
@@ -74,7 +76,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'PAYMENT_AMOUNT_MISMATCH', message: '결제 금액이 일치하지 않아요' });
       }
 
-      return await db.transaction(async (tx) => {
+      const preorderUser = await db.transaction(async (tx) => {
         await tx
           .update(PreorderPayments)
           .set({
@@ -92,6 +94,14 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
       });
+
+      await sendEmail({
+        recipient: preorderUser.email,
+        subject: '[타이피] 사전 등록이 완료되었어요',
+        body: PreorderCompletedEmail(),
+      });
+
+      return preorderUser;
     },
   }),
 }));
