@@ -15,7 +15,7 @@
   const app = getAppContext();
 </script>
 
-<div class={flex({ alignItems: 'center', gap: '8px', height: '48px' })}>
+<div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0', height: '48px' })}>
   {#if !app.preference.current.sidebarExpanded}
     <div
       class={css({ width: app.state.sidebarPopoverVisible ? '240px' : 'fit' })}

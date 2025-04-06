@@ -16,6 +16,7 @@
   import { flex } from '$styled-system/patterns';
   import TopBar from '../TopBar.svelte';
   import { YState } from './state.svelte';
+  import StatusBar from './StatusBar.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Editor_query } from '$graphql';
@@ -309,3 +310,7 @@
     </div>
   </div>
 </div>
+
+<HorizontalDivider />
+
+<StatusBar {editor} />
