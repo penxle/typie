@@ -99,8 +99,9 @@
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
 
-  const title = new YState(doc, 'title');
-  const subtitle = new YState(doc, 'subtitle');
+  const title = new YState<string>(doc, 'title', '');
+  const subtitle = new YState<string>(doc, 'subtitle', '');
+  const maxWidth = new YState<number>(doc, 'maxWidth', 1000);
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
@@ -225,7 +226,7 @@
 <HorizontalDivider />
 
 <div class={flex({ flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'hidden' })}>
-  <Toolbar {editor} />
+  <Toolbar {doc} {editor} />
 
   <div
     class={flex({
@@ -238,6 +239,7 @@
     })}
   >
     <div
+      style:--prosemirror-max-width={`${maxWidth.current}px`}
       class={flex({
         flexDirection: 'column',
         alignItems: 'center',
@@ -248,7 +250,7 @@
         backgroundColor: 'white',
       })}
     >
-      <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: '1000px' })}>
+      <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
         <textarea
           bind:this={titleEl}
           class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}

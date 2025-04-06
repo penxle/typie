@@ -51,10 +51,13 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
       return;
     }
 
-    const title = doc.getText('title').toString() || null;
-    const subtitle = doc.getText('subtitle').toString() || null;
-    const fragment = doc.getXmlFragment('body');
+    const map = doc.getMap('attrs');
 
+    const title = (map.get('title') as string) || null;
+    const subtitle = (map.get('subtitle') as string) || null;
+    const maxWidth = (map.get('maxWidth') as number) ?? 1000;
+
+    const fragment = doc.getXmlFragment('body');
     const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
     const body = node.toJSON();
     const text = makeText(body);
@@ -66,6 +69,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
         subtitle,
         body,
         text,
+        maxWidth,
         updatedAt: dayjs(),
       })
       .where(and(eq(PostContents.postId, postId)));

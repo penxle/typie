@@ -26,19 +26,24 @@
   import { css } from '$styled-system/css';
   import { center, flex, grid } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
+  import { YState } from './state.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
+  import type * as Y from 'yjs';
   import type { Ref } from '$lib/utils';
 
   type Props = {
     editor?: Ref<Editor>;
+    doc: Y.Doc;
   };
 
-  let { editor }: Props = $props();
+  let { editor, doc }: Props = $props();
+
+  const maxWidth = new YState<number>(doc, 'maxWidth', 1000);
 </script>
 
 <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '8px', width: 'full' })}>
@@ -471,10 +476,10 @@
                   { label: '1000px', value: 1000 },
                 ]}
                 onselect={(value) => {
-                  editor?.current.chain().focus().setBodyMaxWidth(value).run();
+                  maxWidth.current = value;
                 }}
                 size="sm"
-                value={editor?.current.state.doc.firstChild?.attrs.maxWidth}
+                value={maxWidth.current ?? 1000}
               />
             </div>
           </div>
