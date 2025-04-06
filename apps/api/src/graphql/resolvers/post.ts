@@ -88,6 +88,13 @@ IPostContent.implement({
     subtitle: t.exposeString('subtitle', { nullable: true }),
 
     title: t.string({ resolve: (self) => self.title || '(제목 없음)' }),
+
+    excerpt: t.string({
+      resolve: (self) => {
+        const text = self.text.replaceAll(/\s+/g, ' ').trim();
+        return text.length <= 200 ? text : text.slice(0, 200) + '...';
+      },
+    }),
   }),
 });
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { graphql } from '$graphql';
-  import { HorizontalDivider } from '$lib/components';
+  import { Helmet, HorizontalDivider } from '$lib/components';
   import { TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -21,6 +21,7 @@
               title
               subtitle
               body
+              excerpt
               maxWidth
             }
           }
@@ -36,6 +37,8 @@
 </script>
 
 {#if $query.entityView.node.__typename === 'PostView'}
+  <Helmet description={$query.entityView.node.content.excerpt} title={$query.entityView.node.content.title} />
+
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen', backgroundColor: 'gray.100' })}>
     <div
       style:--prosemirror-max-width={`${$query.entityView.node.content.maxWidth}px`}
