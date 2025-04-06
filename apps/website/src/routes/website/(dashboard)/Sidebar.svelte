@@ -135,6 +135,7 @@
           flexDirection: 'column',
           height: 'full',
           maxHeight: app.preference.current.sidebarExpanded ? 'full' : '[calc(-118px + 100vh)]',
+          borderRightWidth: '1px',
           overflowY: 'auto',
         })}
         onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
