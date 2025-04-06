@@ -296,7 +296,10 @@
           const { doc, selection } = view.state;
           const { anchor } = selection;
 
-          if (((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) || (e.key === 'Backspace' && !doc.textContent)) {
+          if (
+            ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+            (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+          ) {
             e.preventDefault();
             subtitleEl?.focus();
           }
