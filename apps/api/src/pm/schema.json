@@ -85,6 +85,7 @@
       "content": "table_row+",
       "group": "block",
       "isolating": true,
+      "attrs": { "borderStyle": { "default": "solid" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=table]" }, { "tag": "table" }]
     },
     "table_cell": {
