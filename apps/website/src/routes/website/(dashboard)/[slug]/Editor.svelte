@@ -295,6 +295,9 @@
         style={{ flexGrow: '1', width: 'full' }}
         {awareness}
         {doc}
+        oncreate={() => {
+          titleEl?.focus();
+        }}
         onkeydown={(view, e) => {
           const { doc, selection } = view.state;
           const { anchor } = selection;

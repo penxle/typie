@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ChevronsRightIcon from '~icons/lucide/chevrons-right';
+  import PanelLeftOpenIcon from '~icons/lucide/panel-left-open';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context/app.svelte';
   import { css } from '$styled-system/css';
@@ -28,7 +28,7 @@
         onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
         type="button"
       >
-        <Icon icon={ChevronsRightIcon} />
+        <Icon icon={PanelLeftOpenIcon} />
       </button>
     </div>
   {/if}

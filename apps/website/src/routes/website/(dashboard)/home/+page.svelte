@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
+  import { center } from '$styled-system/patterns';
   import TopBar from '../TopBar.svelte';
 
   const query = graphql(`
@@ -50,13 +51,9 @@
 
 <TopBar />
 
-<div>{$query.me.email}</div>
-<div>
-  <button onclick={handleLogout} type="button">로그아웃</button>
+<div class={center({ flexDirection: 'column', flexGrow: '1', width: 'full' })}>
+  <div>{$query.me.email}</div>
+  <div>
+    <button onclick={handleLogout} type="button">로그아웃</button>
+  </div>
 </div>
-
-<pre>
-  {#each $query.me.sites as site (site.id)}
-    <pre>{JSON.stringify(site, null, 2)}</pre>
-  {/each}
-</pre>

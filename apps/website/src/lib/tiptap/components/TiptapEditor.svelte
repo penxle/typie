@@ -16,9 +16,10 @@
     doc?: Y.Doc;
     awareness?: YAwareness.Awareness;
     onkeydown?: (view: EditorView, event: KeyboardEvent) => void;
+    oncreate?: () => void;
   };
 
-  let { style, editor = $bindable(), doc, awareness, onkeydown }: Props = $props();
+  let { style, editor = $bindable(), doc, awareness, onkeydown, oncreate }: Props = $props();
 
   let element = $state<HTMLDivElement>();
 
@@ -39,6 +40,8 @@
       onTransaction: ({ editor: e }) => {
         editor = new Ref(e);
       },
+
+      onCreate: oncreate,
     });
 
     editor = new Ref(e);
