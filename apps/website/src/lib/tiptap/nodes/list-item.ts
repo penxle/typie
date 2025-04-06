@@ -1,6 +1,7 @@
-import { getNodeAtPosition, isAtEndOfNode, isAtStartOfNode, isNodeActive, Node } from '@tiptap/core';
+import { getNodeAtPosition, isAtEndOfNode, isAtStartOfNode, isNodeActive, mergeAttributes, Node } from '@tiptap/core';
 import { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { EditorState } from '@tiptap/pm/state';
+import { css } from '$styled-system/css';
 
 const findListItemPos = (state: EditorState) => {
   const { $from } = state.selection;
@@ -88,7 +89,13 @@ export const ListItem = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['li', HTMLAttributes, 0];
+    return [
+      'li',
+      mergeAttributes(HTMLAttributes, {
+        class: css({ '& > *': { textAlign: '[left!]', textIndent: '0!' } }),
+      }),
+      0,
+    ];
   },
 
   addKeyboardShortcuts() {

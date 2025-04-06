@@ -23,13 +23,17 @@ export const Placeholder = Extension.create({
 
             const body = doc.child(0);
             const currentBodyEmpty =
-              body.childCount === 1 && body.firstChild?.type.name === 'paragraph' && body.firstChild?.childCount === 0;
+              body.childCount === 1 &&
+              body.child(0).type.name === 'paragraph' &&
+              (body.child(0).attrs.textAlign === 'left' || body.child(0).attrs.textAlign === 'justify') &&
+              body.child(0).childCount === 0;
 
             const currentParagraphEmpty =
               this.editor.isFocused &&
               empty &&
               $anchor.depth === 2 &&
               $anchor.parent.type.name === 'paragraph' &&
+              ($anchor.parent.attrs.textAlign === 'left' || $anchor.parent.attrs.textAlign === 'justify') &&
               $anchor.parent.childCount === 0;
 
             if (currentBodyEmpty || currentParagraphEmpty) {
