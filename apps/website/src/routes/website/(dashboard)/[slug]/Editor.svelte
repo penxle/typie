@@ -244,7 +244,7 @@
         flexDirection: 'column',
         alignItems: 'center',
         flexGrow: '1',
-        paddingY: '40px',
+        paddingTop: '40px',
         width: 'full',
         maxWidth: '1200px',
         backgroundColor: 'white',
@@ -292,7 +292,7 @@
       </div>
 
       <TiptapEditor
-        style={{ flexGrow: '1', width: 'full' }}
+        style={css.raw({ flexGrow: '1', width: 'full' })}
         {awareness}
         {doc}
         oncreate={() => {
