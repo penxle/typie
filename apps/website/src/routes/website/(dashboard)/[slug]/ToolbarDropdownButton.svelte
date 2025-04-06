@@ -6,20 +6,22 @@
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import ToolbarTooltip from './ToolbarTooltip.svelte';
+  import type { Placement } from '@floating-ui/dom';
   import type { Snippet } from 'svelte';
 
   type Props = {
     size: 'large' | 'small';
     label: string;
     chevron?: boolean;
+    placement?: Placement;
     anchor: Snippet<[{ open: () => void }]>;
     floating: Snippet<[{ close: () => void }]>;
   };
 
-  let { size, label, chevron = false, anchor, floating }: Props = $props();
+  let { size, label, chevron = false, placement = 'bottom-start', anchor, floating }: Props = $props();
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
-    placement: 'bottom-start',
+    placement,
     offset: 8,
     onClickOutside: () => {
       opened = false;
