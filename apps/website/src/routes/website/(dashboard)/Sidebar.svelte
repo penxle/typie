@@ -37,6 +37,8 @@
     `),
   );
 
+  const app = getAppContext();
+
   const createPost = graphql(`
     mutation DashboardLayout_Sidebar_CreatePost_Mutation($input: CreatePostInput!) {
       createPost(input: $input) {
@@ -49,8 +51,6 @@
       }
     }
   `);
-
-  const app = getAppContext();
 
   const createFolder = graphql(`
     mutation DashboardLayout_Sidebar_CreateFolder_Mutation($input: CreateFolderInput!) {
@@ -319,7 +319,7 @@
             </button>
           </div>
 
-          <PageList {entities} />
+          <PageList {entities} siteId={$user.sites[0].id} />
         </div>
       </div>
     </div>

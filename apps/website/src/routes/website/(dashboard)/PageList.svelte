@@ -8,9 +8,10 @@
     entities: Entity[];
     depth?: number;
     parent?: Entity | null;
+    siteId: string;
   };
 
-  let { entities, depth = 0, parent = null }: Props = $props();
+  let { entities, depth = 0, parent = null, siteId }: Props = $props();
 
   let listEl: HTMLElement;
   let indicatorEl: HTMLElement;
@@ -355,6 +356,6 @@
   ></div>
 
   {#each entities as entity (entity.id)}
-    <PageItem {depth} {entity} {onPointerDown} {registerNode} />
+    <PageItem {depth} {entity} {onPointerDown} {registerNode} {siteId} />
   {/each}
 </ul>
