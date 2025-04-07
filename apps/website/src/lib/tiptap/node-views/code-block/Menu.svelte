@@ -20,6 +20,11 @@
 
   let { open = $bindable(false), node, updateAttributes }: Props = $props();
 
+  let attrs = $state(node.attrs);
+  $effect(() => {
+    attrs = node.attrs;
+  });
+
   let query = $state('');
   let inputElem = $state<HTMLInputElement>();
   let buttonEl = $state<HTMLButtonElement>();
@@ -127,7 +132,7 @@
   type="button"
   use:anchor
 >
-  {languages.find((language) => language.id === node.attrs.language)?.name ?? '?'}
+  {languages.find((language) => language.id === attrs.language)?.name ?? '?'}
 
   {#if open}
     <Icon icon={IconChevronUp} />
@@ -191,7 +196,7 @@
                   _selected: 'gray.100',
                 },
               })}
-              aria-pressed={node.attrs.language === language.id}
+              aria-pressed={attrs.language === language.id}
               onclick={() => {
                 updateAttributes({ language: language.id });
                 open = false;
@@ -202,7 +207,7 @@
             >
               {language.name}
 
-              {#if node.attrs.language === language.id}
+              {#if attrs.language === language.id}
                 <Icon style={css.raw({ color: 'brand.400', '& *': { strokeWidth: '[2]' } })} icon={IconCheck} />
               {/if}
             </button>

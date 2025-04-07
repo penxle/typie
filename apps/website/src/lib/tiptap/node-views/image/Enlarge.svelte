@@ -21,6 +21,11 @@
 
   let { node, referenceEl, onclose }: Props = $props();
 
+  let attrs = $state(node.attrs);
+  $effect(() => {
+    attrs = node.attrs;
+  });
+
   let containerEl = $state<HTMLDivElement>();
   let targetEl = $state<HTMLDivElement>();
 
@@ -98,7 +103,7 @@
     >
       <Img
         style={css.raw({ size: 'full', borderRadius: '4px', objectFit: 'contain', cursor: 'zoom-out' })}
-        $image={node.attrs}
+        $image={attrs}
         alt="본문 이미지"
         size="full"
       />

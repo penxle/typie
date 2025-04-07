@@ -14,6 +14,11 @@
 
   let { node, editor, updateAttributes }: Props = $props();
 
+  let attrs = $state(node.attrs);
+  $effect(() => {
+    attrs = node.attrs;
+  });
+
   const callouts = values.callout.map(({ type }) => type);
   type Callout = (typeof callouts)[number];
 
@@ -24,8 +29,8 @@
     danger: { icon: TriangleAlertIcon, color: '#dc2626' },
   };
 
-  const icon = $derived(calloutMap[node.attrs.type as Callout].icon);
-  const color = $derived(calloutMap[node.attrs.type as Callout].color);
+  const icon = $derived(calloutMap[attrs.type as Callout].icon);
+  const color = $derived(calloutMap[attrs.type as Callout].color);
 </script>
 
 <NodeView>
@@ -59,7 +64,7 @@
       )}
       contenteditable={false}
       onclick={() => {
-        const type = callouts[(callouts.indexOf(node.attrs.type) + 1) % callouts.length];
+        const type = callouts[(callouts.indexOf(attrs.type) + 1) % callouts.length];
         updateAttributes({ type });
       }}
       role={editor?.current.isEditable ? 'button' : 'img'}
