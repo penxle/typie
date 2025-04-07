@@ -17,20 +17,15 @@
 
 <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0', height: '48px' })}>
   {#if !app.preference.current.sidebarExpanded}
-    <div
-      class={css({ width: app.state.sidebarPopoverVisible ? '240px' : 'fit' })}
+    <button
+      class={center({ size: '48px', backgroundColor: 'white' })}
+      onclick={() => (app.preference.current.sidebarExpanded = true)}
       onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
       onpointerleave={() => (app.state.sidebarPopoverVisible = false)}
+      type="button"
     >
-      <button
-        class={center({ size: '48px', backgroundColor: 'white' })}
-        onclick={() => (app.preference.current.sidebarExpanded = true)}
-        onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
-        type="button"
-      >
-        <Icon icon={PanelLeftOpenIcon} />
-      </button>
-    </div>
+      <Icon icon={PanelLeftOpenIcon} />
+    </button>
   {/if}
 
   {#if children}
