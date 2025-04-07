@@ -24,7 +24,9 @@ export const globalCss = defineGlobalStyles({
     MozOsxFontSmoothing: 'grayscale',
 
     color: 'gray.950',
+    caretColor: 'gray.950',
     backgroundColor: 'white',
+
     lineHeight: '1.4',
   },
 
