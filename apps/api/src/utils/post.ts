@@ -1,7 +1,11 @@
 import { getText, getTextSerializersFromSchema } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
+import { eq } from 'drizzle-orm';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
+import { redis } from '@/cache';
+import { db, firstOrThrow } from '@/db';
+import { PostContents } from '@/db/schemas/tables';
 import { schema } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
 
@@ -32,4 +36,29 @@ export const makeText = (body: JSONContent) => {
     blockSeparator: '\n',
     textSerializers: getTextSerializersFromSchema(schema),
   }).trim();
+};
+
+export const getCurrentPostContentState = async (postId: string) => {
+  const state = await db
+    .select({ update: PostContents.update, vector: PostContents.vector })
+    .from(PostContents)
+    .where(eq(PostContents.postId, postId))
+    .then(firstOrThrow);
+
+  const pendingUpdates = await redis.smembersBuffer(`post:content:updates:${postId}`);
+
+  if (pendingUpdates.length === 0) {
+    return {
+      update: state.update,
+      vector: state.vector,
+    };
+  }
+
+  const updatedUpdate = Y.mergeUpdatesV2([state.update, ...pendingUpdates]);
+  const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
+
+  return {
+    update: updatedUpdate,
+    vector: updatedVector,
+  };
 };

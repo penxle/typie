@@ -6,7 +6,7 @@
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostContentSyncKind } from '@/enums';
+  import { PostContentSyncMessageKind } from '@/const';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { autosize } from '$lib/actions';
@@ -18,6 +18,7 @@
   import { YState } from './state.svelte';
   import StatusBar from './StatusBar.svelte';
   import Toolbar from './Toolbar.svelte';
+  import { createWebSocket } from './ws.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Editor_query } from '$graphql';
   import type { Ref } from '$lib/utils';
@@ -72,25 +73,6 @@
     `),
   );
 
-  const syncPostContent = graphql(`
-    mutation Editor_SyncPostContent_Mutation($input: SyncPostContentInput!) {
-      syncPostContent(input: $input) {
-        kind
-        data
-      }
-    }
-  `);
-
-  const postContentSyncStream = graphql(`
-    subscription Editor_PostContentSyncStream_Subscription($postId: ID!) {
-      postContentSyncStream(postId: $postId) {
-        postId
-        kind
-        data
-      }
-    }
-  `);
-
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
 
@@ -105,16 +87,35 @@
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
+  const encoder = new TextEncoder();
+
+  const ws = createWebSocket({
+    onopen: () => {
+      ws.send(PostContentSyncMessageKind.INIT, encoder.encode($query.post.id));
+    },
+    onmessage: (type, data) => {
+      if (type === PostContentSyncMessageKind.INIT) {
+        forceSync();
+      } else if (type === PostContentSyncMessageKind.UPDATE) {
+        Y.applyUpdateV2(doc, data, 'remote');
+      } else if (type === PostContentSyncMessageKind.VECTOR) {
+        const update = Y.encodeStateAsUpdateV2(doc, data);
+        ws.send(PostContentSyncMessageKind.UPDATE, update);
+      } else if (type === PostContentSyncMessageKind.AWARENESS) {
+        YAwareness.applyAwarenessUpdate(awareness, data, 'remote');
+      } else if (type === PostContentSyncMessageKind.PRESENCE) {
+        const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
+        ws.send(PostContentSyncMessageKind.AWARENESS, update);
+      }
+    },
+  });
+
   doc.on('updateV2', async (update, origin) => {
     if (!browser || origin === 'remote') {
       return;
     }
 
-    await syncPostContent({
-      postId: $query.post.id,
-      kind: PostContentSyncKind.UPDATE,
-      data: base64.stringify(update),
-    });
+    ws.send(PostContentSyncMessageKind.UPDATE, update);
   });
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
@@ -123,58 +124,16 @@
     }
 
     const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
-
-    await syncPostContent({
-      postId: $query.post.id,
-      kind: PostContentSyncKind.AWARENESS,
-      data: base64.stringify(update),
-    });
-  });
-
-  postContentSyncStream.on('data', ({ postContentSyncStream: { postId, kind, data } }) => {
-    if (postId !== $query.post.id) {
-      return;
-    }
-
-    if (kind === PostContentSyncKind.UPDATE) {
-      Y.applyUpdateV2(doc, base64.parse(data), 'remote');
-    } else if (kind === PostContentSyncKind.AWARENESS) {
-      YAwareness.applyAwarenessUpdate(awareness, base64.parse(data), 'remote');
-      // } else if (kind === PostContentSyncKind.HEARTBEAT) {
-    }
+    ws.send(PostContentSyncMessageKind.AWARENESS, update);
   });
 
   const forceSync = async () => {
-    const clientStateVector = Y.encodeStateVector(doc);
-
-    const results = await syncPostContent({
-      postId: $query.post.id,
-      kind: PostContentSyncKind.VECTOR,
-      data: base64.stringify(clientStateVector),
-    });
-
-    for (const { kind, data } of results) {
-      if (kind === PostContentSyncKind.VECTOR) {
-        const serverStateVector = base64.parse(data);
-        const serverMissingUpdate = Y.encodeStateAsUpdateV2(doc, serverStateVector);
-
-        await syncPostContent({
-          postId: $query.post.id,
-          kind: PostContentSyncKind.UPDATE,
-          data: base64.stringify(serverMissingUpdate),
-        });
-      } else if (kind === PostContentSyncKind.UPDATE) {
-        const clientMissingUpdate = base64.parse(data);
-        Y.applyUpdateV2(doc, clientMissingUpdate, 'remote');
-      }
-    }
+    const vector = Y.encodeStateVector(doc);
+    ws.send(PostContentSyncMessageKind.VECTOR, vector);
   };
 
   onMount(() => {
     const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
-    persistence.on('synced', () => forceSync());
-
-    const unsubscribe = postContentSyncStream.subscribe({ postId: $query.post.id });
 
     Y.applyUpdateV2(doc, base64.parse($query.post.content.update), 'remote');
     awareness.setLocalStateField('user', {
@@ -188,8 +147,6 @@
 
     return () => {
       clearInterval(forceSyncInterval);
-
-      unsubscribe();
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
 

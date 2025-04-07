@@ -1,17 +1,11 @@
 import { faker } from '@faker-js/faker';
-import dayjs from 'dayjs';
 import { and, desc, eq, getTableColumns, isNull } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
-import { Repeater } from 'graphql-yoga';
-import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
-import { redis } from '@/cache';
 import { db, Entities, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts, TableCode } from '@/db';
-import { EntityState, EntityType, PostContentSyncKind, PostVisibility } from '@/enums';
-import { enqueueJob } from '@/mq';
+import { EntityState, EntityType, PostVisibility } from '@/enums';
 import { schema } from '@/pm';
-import { pubsub } from '@/pubsub';
-import { makeText, makeYDoc } from '@/utils';
+import { decode, encode, makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
 import {
   Entity,
@@ -220,7 +214,7 @@ builder.mutationFields((t) => ({
             slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
             permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
             type: EntityType.POST,
-            order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
+            order: encode(generateJitteredKeyBetween(last ? decode(last.order) : null, null)),
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);
@@ -257,58 +251,6 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  syncPostContent: t.withAuth({ session: true }).fieldWithInput({
-    type: [
-      builder.simpleObject('SyncPostContentPayload', {
-        fields: (t) => ({
-          kind: t.field({ type: PostContentSyncKind }),
-          data: t.field({ type: 'Binary' }),
-        }),
-      }),
-    ],
-    input: {
-      postId: t.input.id(),
-      kind: t.input.field({ type: PostContentSyncKind }),
-      data: t.input.field({ type: 'Binary' }),
-    },
-    resolve: async (_, { input }) => {
-      if (input.kind === PostContentSyncKind.UPDATE) {
-        const data = base64.stringify(input.data);
-
-        pubsub.publish('post:content:sync', input.postId, {
-          kind: PostContentSyncKind.UPDATE,
-          data,
-        });
-
-        await redis.sadd(`post:content:updates:${input.postId}`, data);
-
-        await enqueueJob('post:content:update', input.postId);
-
-        return [];
-      } else if (input.kind === PostContentSyncKind.VECTOR) {
-        const state = await getLatestPostContentState(input.postId);
-
-        const clientStateVector = input.data;
-        const clientMissingUpdate = Y.diffUpdateV2(state.update, clientStateVector);
-        const serverStateVector = state.vector;
-
-        return [
-          { kind: PostContentSyncKind.UPDATE, data: clientMissingUpdate },
-          { kind: PostContentSyncKind.VECTOR, data: serverStateVector },
-        ] as const;
-      } else if (input.kind === PostContentSyncKind.AWARENESS) {
-        pubsub.publish('post:content:sync', input.postId, {
-          kind: PostContentSyncKind.AWARENESS,
-          data: base64.stringify(input.data),
-        });
-
-        return [];
-      }
-
-      throw new Error('Invalid kind');
-    },
-  }),
-
   updatePostOption: t.withAuth({ session: true }).fieldWithInput({
     type: PostOption,
     input: {
@@ -335,83 +277,3 @@ builder.mutationFields((t) => ({
     },
   }),
 }));
-
-/**
- * * Subscriptions
- */
-
-builder.subscriptionFields((t) => ({
-  postContentSyncStream: t.withAuth({ session: true }).field({
-    type: builder.simpleObject('PostContentSyncStreamPayload', {
-      fields: (t) => ({
-        postId: t.id(),
-        kind: t.field({ type: PostContentSyncKind }),
-        data: t.field({ type: 'Binary' }),
-      }),
-    }),
-    args: { postId: t.arg.id() },
-    subscribe: async (_, args, ctx) => {
-      const repeater = Repeater.merge([
-        pubsub.subscribe('post:content:sync', args.postId),
-        new Repeater<{ postId: string; kind: PostContentSyncKind; data: string }>(async (push, stop) => {
-          const ping = () => {
-            push({
-              postId: args.postId,
-              kind: 'HEARTBEAT',
-              data: base64.stringify(encoder.encode(dayjs().toISOString())),
-            });
-          };
-
-          ping();
-          const interval = setInterval(() => ping(), 1000);
-
-          await stop;
-          clearInterval(interval);
-        }),
-      ]);
-
-      ctx.c.req.raw.signal.addEventListener('abort', () => {
-        repeater.return();
-      });
-
-      return repeater;
-    },
-    resolve: (payload, args) => ({
-      postId: args.postId,
-      kind: payload.kind,
-      data: base64.parse(payload.data),
-    }),
-  }),
-}));
-
-/**
- * * Utils
- */
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-export const getLatestPostContentState = async (postId: string) => {
-  const state = await db
-    .select({ update: PostContents.update, vector: PostContents.vector })
-    .from(PostContents)
-    .where(eq(PostContents.postId, postId))
-    .then(firstOrThrow);
-
-  const pendingUpdates = await redis.smembers(`post:content:updates:${postId}`);
-
-  if (pendingUpdates.length === 0) {
-    return {
-      update: state.update,
-      vector: state.vector,
-    };
-  }
-
-  const updatedUpdate = Y.mergeUpdatesV2([state.update, ...pendingUpdates.map((update) => base64.parse(update))]);
-  const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
-
-  return {
-    update: updatedUpdate,
-    vector: updatedVector,
-  };
-};
