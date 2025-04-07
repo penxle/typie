@@ -1,15 +1,21 @@
 <script lang="ts">
   import { css } from '$styled-system/css';
   import { NodeView, NodeViewContentEditable } from '../../lib';
+  import Menu from './Menu.svelte';
   import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
 
-  // eslint-disable-next-line no-empty-pattern
-  let {}: Props = $props();
+  let { node, editor, updateAttributes }: Props = $props();
 </script>
 
-<NodeView>
+<NodeView style={css.raw({ position: 'relative' })}>
+  {#if editor?.current.isEditable}
+    <div class={css({ position: 'absolute', top: '4px', right: '4px' })} contentEditable={false}>
+      <Menu {node} {updateAttributes} />
+    </div>
+  {/if}
+
   <NodeViewContentEditable
     style={css.raw({
       paddingY: '18px',
