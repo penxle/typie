@@ -1,10 +1,14 @@
 <script lang="ts">
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
+  import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
+  import FilePlusIcon from '~icons/lucide/file-plus';
   import FolderIcon from '~icons/lucide/folder';
+  import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
-  import { Icon } from '$lib/components';
+  import { Icon, Menu, MenuItem } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import PageList from './PageList.svelte';
   import type { Entity } from './types';
@@ -14,12 +18,13 @@
     depth: number;
     onPointerDown: (e: PointerEvent, entity: Entity) => void;
     registerNode: (node: HTMLElement | undefined, entity: Entity & { depth: number }) => void;
+    siteId: string;
   };
 
-  let { entity, depth, onPointerDown, registerNode }: Props = $props();
+  let { entity, depth, onPointerDown, registerNode, siteId }: Props = $props();
 
-  const loadEntity = graphql(`
-    query PageItem_Query($id: ID!) @manual {
+  const entityQuery = graphql(`
+    query DashboardLayout_PageItem_Query($id: ID!) @manual {
       entity(id: $id) {
         id
         slug
@@ -54,13 +59,38 @@
   `);
 
   let open = $state(false);
-  let itemEl: HTMLElement;
+  let children = $state<Entity[]>([]);
+  let itemEl = $state<HTMLElement>();
 
   $effect(() => {
     registerNode(itemEl, { ...entity, depth });
   });
 
-  let children: Entity[] = $state([]);
+  const createPost = graphql(`
+    mutation DashboardLayout_PageItem_CreatePost_Mutation($input: CreatePostInput!) {
+      createPost(input: $input) {
+        id
+
+        entity {
+          id
+          slug
+        }
+      }
+    }
+  `);
+
+  const createFolder = graphql(`
+    mutation DashboardLayout_PageItem_CreateFolder_Mutation($input: CreateFolderInput!) {
+      createFolder(input: $input) {
+        id
+      }
+    }
+  `);
+
+  const loadEntity = async () => {
+    const result = await entityQuery.refetch({ id: entity.id });
+    children = result.entity.children;
+  };
 </script>
 
 <li
@@ -70,16 +100,11 @@
   onpointerdown={(e) => onPointerDown(e, entity)}
 >
   {#if entity.node?.__typename === 'Folder'}
-    <details
-      onmouseenter={async () => {
-        const result = await loadEntity.refetch({ id: entity.id });
-        children = result.entity.children;
-      }}
-      bind:open
-    >
+    <details bind:open>
       <summary
         class={cx(
           'dnd-item-body',
+          'group',
           css({
             display: 'flex',
             alignItems: 'center',
@@ -97,28 +122,76 @@
             },
           }),
         )}
+        onmouseenter={loadEntity}
       >
-        <span class={css({ display: 'flex', alignItems: 'center', width: '16px', height: '16px', color: 'gray.500' })}>
+        <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', width: '16px', height: '16px', color: 'gray.500' })}>
           {#if open}
             <Icon icon={ChevronUpIcon} size={14} />
           {:else}
             <Icon icon={ChevronDownIcon} size={14} />
           {/if}
         </span>
-        <span class={css({ display: 'flex', alignItems: 'center', width: '16px', height: '16px', color: 'gray.500' })}>
+        <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', width: '16px', height: '16px', color: 'gray.500' })}>
           <Icon icon={FolderIcon} size={14} />
         </span>
-        <span class={css({ fontSize: '14px', lineHeight: '[1.2]' })}>{entity.node.name}</span>
+        <span class={css({ fontSize: '14px', lineHeight: '[1.2]', flexGrow: '1', truncate: true })}>{entity.node.name}</span>
+
+        <Menu placement="bottom-start">
+          {#snippet button({ open })}
+            <div
+              class={css(
+                {
+                  display: 'none',
+                  borderRadius: '4px',
+                  padding: '1px',
+                  color: 'gray.400',
+                  transition: 'common',
+                  _hover: { backgroundColor: 'gray.200' },
+                  _groupHover: { display: 'block' },
+                },
+                open && { display: 'block' },
+              )}
+            >
+              <Icon icon={EllipsisIcon} size={14} />
+            </div>
+          {/snippet}
+
+          <MenuItem
+            onclick={async () => {
+              await createFolder({ siteId, name: '새 폴더', parentEntityId: entity.id });
+              await loadEntity();
+              open = true;
+            }}
+          >
+            <Icon icon={FolderPlusIcon} size={12} />
+            <span>하위 폴더 생성</span>
+          </MenuItem>
+          <MenuItem
+            onclick={async () => {
+              const resp = await createPost({
+                siteId,
+                parentEntityId: entity.id,
+              });
+              await loadEntity();
+              open = true;
+              await goto(`/${resp.entity.slug}`);
+            }}
+          >
+            <Icon icon={FilePlusIcon} size={12} />
+            <span>하위 포스트 생성</span>
+          </MenuItem>
+        </Menu>
       </summary>
 
       {#if children.length > 0}
-        <PageList depth={depth + 1} entities={children} parent={entity} />
+        <PageList depth={depth + 1} entities={children} parent={entity} {siteId} />
       {/if}
     </details>
   {:else}
     <a
       class={cx(
         'dnd-item-body',
+        'group',
         css({
           display: 'flex',
           alignItems: 'center',
@@ -138,10 +211,22 @@
       draggable="false"
       href="/{entity.slug}"
     >
-      <span class={css({ display: 'flex', alignItems: 'center', width: '16px', height: '16px', marginLeft: '22px', color: 'gray.500' })}>
+      <span
+        class={css({
+          display: 'flex',
+          alignItems: 'center',
+          flex: 'none',
+          width: '16px',
+          height: '16px',
+          marginLeft: '22px',
+          color: 'gray.500',
+        })}
+      >
         <Icon icon={FileIcon} size={14} />
       </span>
-      <span class={css({ fontSize: '14px', lineHeight: '[1.2]' })}>{entity.node?.content.title ?? '(제목 없음)'}</span>
+      <span class={css({ fontSize: '14px', lineHeight: '[1.2]', flexGrow: '1', truncate: true })}>
+        {entity.node?.content.title ?? '(제목 없음)'}
+      </span>
     </a>
   {/if}
 </li>
