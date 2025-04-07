@@ -10,9 +10,6 @@
 
   line-height: 1.6;
 
-  /* gray.950 */
-  caret-color: #09090b;
-
   & *::selection {
     background-color: color-mix(in srgb, var(--prosemirror-color-selection) 50%, transparent);
   }
