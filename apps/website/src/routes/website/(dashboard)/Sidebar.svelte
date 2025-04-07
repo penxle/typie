@@ -168,6 +168,7 @@
             top: '0',
             backgroundColor: 'white',
             paddingBottom: '8px',
+            zIndex: '1',
           })}
         >
           <div
