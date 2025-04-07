@@ -9,6 +9,7 @@ import { deriveContext } from '@/context';
 import { env } from '@/env';
 import { yoga } from '@/graphql';
 import { rest } from '@/rest';
+import { websocket } from './ws';
 import type { Env } from '@/context';
 
 const app = new Hono<Env>();
@@ -45,6 +46,7 @@ app.route('/graphql', yoga);
 
 const server = Bun.serve({
   fetch: app.fetch,
+  websocket,
   port: env.LISTEN_PORT ?? 3000,
   idleTimeout: 0,
 });

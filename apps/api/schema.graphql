@@ -194,7 +194,6 @@ type Mutation {
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
-  syncPostContent(input: SyncPostContentInput!): [SyncPostContentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
@@ -264,12 +263,6 @@ enum PostContentSyncKind {
   HEARTBEAT
   UPDATE
   VECTOR
-}
-
-type PostContentSyncStreamPayload {
-  data: Binary!
-  kind: PostContentSyncKind!
-  postId: ID!
 }
 
 type PostContentView implements IPostContent {
@@ -372,21 +365,6 @@ type Site {
 enum SiteState {
   ACTIVE
   DELETED
-}
-
-type Subscription {
-  postContentSyncStream(postId: ID!): PostContentSyncStreamPayload!
-}
-
-input SyncPostContentInput {
-  data: Binary!
-  kind: PostContentSyncKind!
-  postId: ID!
-}
-
-type SyncPostContentPayload {
-  data: Binary!
-  kind: PostContentSyncKind!
 }
 
 input UnfurlEmbedInput {
