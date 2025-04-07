@@ -7,10 +7,7 @@
       "parseDOM": [{ "tag": "p" }]
     },
     "doc": { "content": "body" },
-    "body": {
-      "content": "block+",
-      "attrs": { "paragraphIndent": { "default": 1 }, "maxWidth": { "default": 1000 }, "blockGap": { "default": 1 } }
-    },
+    "body": { "content": "block+", "attrs": { "paragraphIndent": { "default": 1 }, "blockGap": { "default": 1 } } },
     "text": { "group": "inline", "inline": true },
     "bullet_list": { "content": "list_item+", "group": "block list", "parseDOM": [{ "tag": "ul" }] },
     "hard_break": { "group": "inline", "inline": true, "selectable": false, "linebreakReplacement": true, "parseDOM": [{ "tag": "br" }] },
