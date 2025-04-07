@@ -4,9 +4,25 @@ export const globalCss = defineGlobalStyles({
   '*': {
     margin: '0',
     padding: '0',
+
     font: 'inherit',
+    lineHeight: 'inherit',
+    letterSpacing: 'inherit',
+
+    fontOpticalSizing: 'auto',
+    WebkitFontSmoothing: 'antialiased',
+    MozOsxFontSmoothing: 'grayscale',
+
     color: 'inherit',
     backgroundColor: 'transparent',
+
+    transform: 'translateZ(0)',
+    transformStyle: 'preserve-3d',
+    backfaceVisibility: 'hidden',
+    willChange: 'transform',
+
+    textRendering: 'optimizeLegibility',
+    textShadow: '[0 0 1px rgba(0, 0, 0, 0.1), 0 0 0 rgba(0, 0, 0, 0.1)]',
   },
 
   '*, *::before, *::after': {
@@ -20,14 +36,12 @@ export const globalCss = defineGlobalStyles({
     fontFeatureSettings: '"ss18" 1',
     textSizeAdjust: '100%',
 
-    WebkitFontSmoothing: 'antialiased',
-    MozOsxFontSmoothing: 'grayscale',
-
     color: 'gray.950',
     caretColor: 'gray.950',
     backgroundColor: 'white',
 
     lineHeight: '1.4',
+    letterSpacing: '-0.025em',
   },
 
   a: {
