@@ -15,8 +15,9 @@
     hidden?: boolean;
     leftItem?: Snippet;
     rightItem?: Snippet;
+    autofocus?: boolean;
   } & RecipeVariantProps<typeof recipe> &
-    Omit<HTMLInputAttributes, 'class' | 'style' | 'size' | 'name'>;
+    Omit<HTMLInputAttributes, 'class' | 'style' | 'size' | 'name' | 'autofocus'>;
 
   let {
     name,
@@ -29,8 +30,17 @@
     hidden = false,
     leftItem,
     rightItem,
+    autofocus = false,
     ...rest
   }: Props = $props();
+
+  $effect(() => {
+    if (autofocus) {
+      setTimeout(() => {
+        element?.focus();
+      });
+    }
+  });
 
   const recipe = cva({
     base: {

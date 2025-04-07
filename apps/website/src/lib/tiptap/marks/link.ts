@@ -21,13 +21,12 @@ export const Link = Mark.create({
 
   addAttributes() {
     return {
-      href: { isRequired: true },
-      auto: { default: false },
+      href: {},
     };
   },
 
   parseHTML() {
-    return [{ tag: 'a' }];
+    return [{ tag: 'a[href]' }];
   },
 
   renderHTML({ HTMLAttributes }) {
@@ -59,7 +58,7 @@ export const Link = Mark.create({
       unsetLink:
         () =>
         ({ chain }) => {
-          return chain().unsetMark(this.name, { extendEmptyMarkRange: true }).setMeta('preventLink', true).run();
+          return chain().unsetMark(this.name, { extendEmptyMarkRange: true }).run();
         },
     };
   },
@@ -68,10 +67,9 @@ export const Link = Mark.create({
     return [
       new Plugin({
         appendTransaction: (transactions, oldState, newState) => {
-          const docChanges = transactions.some((transaction) => transaction.docChanged) && !oldState.doc.eq(newState.doc);
-          const preventLink = transactions.some((transaction) => transaction.getMeta('preventLink'));
+          const docChanged = transactions.some((transaction) => transaction.docChanged) && !oldState.doc.eq(newState.doc);
 
-          if (!docChanges || preventLink) {
+          if (!docChanged) {
             return;
           }
 
@@ -80,28 +78,25 @@ export const Link = Mark.create({
           const changes = getChangedRanges(transform);
 
           for (const { newRange } of changes) {
-            const nodes = findChildrenInRange(newState.doc, newRange, (node) => node.isTextblock);
+            const nodes = findChildrenInRange(tr.doc, newRange, (node) => node.isTextblock);
             for (const node of nodes) {
-              const text = newState.doc.textBetween(node.pos, node.pos + node.node.nodeSize, ' ', ' ');
-              const links = find(text).filter((link) => link.isLink);
-
-              const autoLinks = getMarksBetween(node.pos, node.pos + node.node.nodeSize, newState.doc).filter(
-                ({ mark }) => mark.type.name === this.name && mark.attrs.auto,
-              );
-
-              for (const autoLink of autoLinks) {
-                tr.removeMark(autoLink.from, autoLink.to, this.type);
-              }
+              const text = tr.doc.textBetween(node.pos, node.pos + node.node.nodeSize);
+              const links = find(text, { defaultProtocol: 'https' }).filter((link) => link.isLink);
 
               for (const link of links) {
-                tr.addMark(
-                  node.pos + link.start + 1,
-                  node.pos + link.end + 1,
-                  this.type.create({
-                    href: link.href,
-                    auto: true,
-                  }),
-                );
+                const from = node.pos + link.start + 1;
+                const to = node.pos + link.end + 1;
+
+                const marks = getMarksBetween(from, to, tr.doc);
+                if (
+                  marks.some(
+                    (mark) => mark.from === from && mark.to === to && mark.mark.type === this.type && mark.mark.attrs.href === link.href,
+                  )
+                ) {
+                  continue;
+                }
+
+                tr.addMark(from, to, this.type.create({ href: link.href }));
               }
             }
           }
