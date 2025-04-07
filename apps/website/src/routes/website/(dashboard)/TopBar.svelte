@@ -15,7 +15,7 @@
   const app = getAppContext();
 </script>
 
-<div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0', height: '48px' })}>
+<div class={flex({ alignItems: 'center', flexShrink: '0', height: '48px' })}>
   {#if !app.preference.current.sidebarExpanded}
     <button
       class={center({ size: '48px', backgroundColor: 'white' })}
@@ -32,7 +32,7 @@
     <div
       class={css({
         flexGrow: '1',
-        paddingLeft: app.preference.current.sidebarExpanded ? '8px' : '0',
+        paddingLeft: app.preference.current.sidebarExpanded ? '16px' : '0',
         paddingRight: '8px',
       })}
     >
