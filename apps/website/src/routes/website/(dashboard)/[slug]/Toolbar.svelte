@@ -31,6 +31,8 @@
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
+  import ToolbarFloatingLink from './ToolbarFloatingLink.svelte';
+  import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
   import type * as Y from 'yjs';
@@ -344,35 +346,29 @@
 
     <VerticalDivider />
 
-    <ToolbarButton
-      active={editor?.current.isActive('link')}
-      icon={LinkIcon}
-      label="링크"
-      onclick={() => {
-        const url = prompt('링크를 입력하세요');
-        if (url) {
-          editor?.current.chain().focus().setLink(url).run();
-        } else {
-          editor?.current.chain().focus().unsetLink().run();
-        }
-      }}
-      size="small"
-    />
+    <ToolbarDropdownButton active={editor?.current.isActive('link')} label="링크" size="small">
+      {#snippet anchor()}
+        <ToolbarIcon icon={LinkIcon} />
+      {/snippet}
 
-    <ToolbarButton
-      active={editor?.current.isActive('ruby')}
-      icon={RubyIcon}
-      label="루비"
-      onclick={() => {
-        const ruby = prompt('루비를 입력하세요');
-        if (ruby) {
-          editor?.current.chain().focus().setRuby(ruby).run();
-        } else {
-          editor?.current.chain().focus().unsetRuby().run();
-        }
-      }}
-      size="small"
-    />
+      {#snippet floating({ close })}
+        {#if editor}
+          <ToolbarFloatingLink {close} {editor} />
+        {/if}
+      {/snippet}
+    </ToolbarDropdownButton>
+
+    <ToolbarDropdownButton active={editor?.current.isActive('ruby')} label="루비" size="small">
+      {#snippet anchor()}
+        <ToolbarIcon icon={RubyIcon} />
+      {/snippet}
+
+      {#snippet floating({ close })}
+        {#if editor}
+          <ToolbarFloatingRuby {close} {editor} />
+        {/if}
+      {/snippet}
+    </ToolbarDropdownButton>
 
     <VerticalDivider />
 

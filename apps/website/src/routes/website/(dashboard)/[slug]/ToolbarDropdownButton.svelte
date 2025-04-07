@@ -63,6 +63,7 @@
         paddingX: chevron ? '4px' : '0',
         width: chevron ? 'fit' : '24px',
         height: '24px',
+        color: active ? 'brand.500' : undefined,
         _hover: { backgroundColor: 'gray.100' },
         _pressed: { backgroundColor: 'gray.200' },
       })}
