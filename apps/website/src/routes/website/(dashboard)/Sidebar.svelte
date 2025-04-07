@@ -237,32 +237,102 @@
                 gap: '2px',
               })}
             >
-              {#each [{ name: '홈', icon: HomeIcon }, { name: '검색', icon: SearchIcon }, { name: '알림', icon: BellIcon }, { name: '설정', icon: SettingsIcon }] as item (item.name)}
-                <li>
-                  <button
-                    class={css({
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      paddingX: '8px',
-                      paddingY: '6px',
-                      width: 'full',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      fontWeight: 'medium',
-                      color: 'gray.600',
-                      backgroundColor: 'transparent',
-                      _hover: {
-                        backgroundColor: 'gray.100',
-                      },
-                    })}
-                    type="button"
-                  >
-                    <Icon style={{ color: 'gray.500' }} icon={item.icon} size={16} />
-                    {item.name}
-                  </button>
-                </li>
-              {/each}
+              <li>
+                <a
+                  class={css({
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    paddingX: '8px',
+                    paddingY: '6px',
+                    width: 'full',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontWeight: 'medium',
+                    color: 'gray.600',
+                    backgroundColor: 'transparent',
+                    _hover: {
+                      backgroundColor: 'gray.100',
+                    },
+                  })}
+                  href="/"
+                >
+                  <Icon style={{ color: 'gray.500' }} icon={HomeIcon} size={16} />
+                  홈
+                </a>
+              </li>
+              <li>
+                <button
+                  class={css({
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    paddingX: '8px',
+                    paddingY: '6px',
+                    width: 'full',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontWeight: 'medium',
+                    color: 'gray.600',
+                    backgroundColor: 'transparent',
+                    _hover: {
+                      backgroundColor: 'gray.100',
+                    },
+                  })}
+                  type="button"
+                >
+                  <Icon style={{ color: 'gray.500' }} icon={SearchIcon} size={16} />
+                  검색
+                </button>
+              </li>
+              <li>
+                <button
+                  class={css({
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    paddingX: '8px',
+                    paddingY: '6px',
+                    width: 'full',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontWeight: 'medium',
+                    color: 'gray.600',
+                    backgroundColor: 'transparent',
+                    _hover: {
+                      backgroundColor: 'gray.100',
+                    },
+                  })}
+                  type="button"
+                >
+                  <Icon style={{ color: 'gray.500' }} icon={BellIcon} size={16} />
+                  알림
+                </button>
+              </li>
+              <li>
+                <button
+                  class={css({
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    paddingX: '8px',
+                    paddingY: '6px',
+                    width: 'full',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontWeight: 'medium',
+                    color: 'gray.600',
+                    backgroundColor: 'transparent',
+                    _hover: {
+                      backgroundColor: 'gray.100',
+                    },
+                  })}
+                  type="button"
+                >
+                  <Icon style={{ color: 'gray.500' }} icon={SettingsIcon} size={16} />
+                  설정
+                </button>
+              </li>
             </ul>
           </nav>
         </div>
