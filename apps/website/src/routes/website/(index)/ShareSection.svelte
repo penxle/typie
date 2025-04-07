@@ -55,6 +55,17 @@
     paddingBottom: { base: '100px', lg: '180px' },
   })}
 >
+  <PaperAirplane
+    class={css({
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      width: 'full',
+      maxHeight: '340px',
+      lgDown: { height: '200px' },
+    })}
+  />
+
   <div class={css({ textAlign: 'center', width: 'full', maxWidth: '900px' })}>
     <h2
       class={css({
@@ -68,9 +79,6 @@
       <br class={css({ hideFrom: 'lg' })} />
       원하는 독자에게만
     </h2>
-    <PaperAirplane
-      class={css({ position: 'absolute', top: '0', left: '0', width: 'full', maxHeight: '340px', lgDown: { height: '200px' } })}
-    />
 
     <p>
       링크를 생성하거나 비밀번호를 설정해서 <br class={css({ hideFrom: 'lg' })} />
