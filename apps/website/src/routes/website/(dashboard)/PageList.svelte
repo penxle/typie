@@ -2,41 +2,41 @@
   import { css, cx } from '$styled-system/css';
   import { token } from '$styled-system/tokens';
   import PageItem from './PageItem.svelte';
-  import type { Dragging, DropTarget, Item } from './types';
+  import type { Dragging, DropTarget, Entity, RootEntity } from './types';
 
   type Props = {
-    items: Item[];
+    entities: Entity[];
     depth?: number;
-    parent?: Item | null;
+    parent?: Entity | null;
   };
 
-  let { items, depth = 0, parent = null }: Props = $props();
+  let { entities, depth = 0, parent = null }: Props = $props();
 
   let listEl: HTMLElement;
   let indicatorEl: HTMLElement;
   let dragging: Dragging | null = null;
   let dropTarget: DropTarget | null = null;
-  let nodeMap = new Map<HTMLElement, Item & { depth: number }>();
+  let nodeMap = new Map<HTMLElement, (Entity | RootEntity) & { depth: number }>();
 
-  const registerNode = (node: HTMLElement | undefined, item: Item & { depth: number }) => {
+  const registerNode = (node: HTMLElement | undefined, entity: (Entity | RootEntity) & { depth: number }) => {
     if (!node) {
       return;
     }
-    nodeMap.set(node, item);
+    nodeMap.set(node, entity);
   };
 
   $effect(() => {
     if (parent) {
       registerNode(listEl, { ...parent, depth });
     } else {
-      registerNode(listEl, { id: null, title: null, type: 'folder', children: items, depth });
+      registerNode(listEl, { id: null, __typename: 'RootEntity', children: entities, depth });
     }
   });
 
   // TODO: 모바일 터치 대응(딜레이 주기)
 
   const isDraggingOverTarget = (dropTarget: DropTarget, dragging: Dragging, ignoreAboveLine = false) => {
-    const draggingSiblingIndex = items.findIndex((item) => item.id === dragging.item.id);
+    const draggingSiblingIndex = entities.findIndex((item) => item.node?.id === dragging.item.id);
 
     const isTargetSameAsDragging = dropTarget.elem && dropTarget.elem === dragging.elem;
 
@@ -141,12 +141,14 @@
     }
   };
 
-  const onPointerDown = (event: PointerEvent, item: Item) => {
+  const onPointerDown = (event: PointerEvent, entity: Entity) => {
     event.stopPropagation();
 
     let draggingEl;
 
-    if (item.type === 'folder') {
+    if (!entity.node) return;
+
+    if (entity.node.__typename === 'Folder') {
       draggingEl = (event.target as HTMLElement).closest('.dnd-item-folder') as HTMLElement;
     } else {
       draggingEl = (event.target as HTMLElement).closest('.dnd-item-page') as HTMLElement;
@@ -157,7 +159,7 @@
     if (listEl !== pointerTarget) return;
 
     dragging = {
-      item,
+      item: entity.node,
       elem: draggingEl,
       event,
       ghostEl: createGhostEl(draggingEl),
@@ -352,7 +354,7 @@
     aria-hidden="true"
   ></div>
 
-  {#each items as item (item.id)}
-    <PageItem {depth} {item} {onPointerDown} {registerNode} />
+  {#each entities as entity (entity.id)}
+    <PageItem {depth} {entity} {onPointerDown} {registerNode} />
   {/each}
 </ul>
