@@ -52,6 +52,7 @@ ws.get(
     }
 
     let postId: string | null = null;
+    let timer: NodeJS.Timeout | null = null;
 
     return {
       onMessage: async (event, ws) => {
@@ -76,6 +77,11 @@ ws.get(
           clients.get(postId)?.forEach((client) => {
             send(client, PostContentSyncMessageKind.PRESENCE, new Uint8Array());
           });
+
+          send(ws, PostContentSyncMessageKind.HEARTBEAT, new Uint8Array());
+          timer = setInterval(() => {
+            send(ws, PostContentSyncMessageKind.HEARTBEAT, new Uint8Array());
+          }, 1000);
         }
 
         if (!postId) {
@@ -101,6 +107,10 @@ ws.get(
           if (clients.get(postId)?.size === 0) {
             clients.delete(postId);
           }
+        }
+
+        if (timer) {
+          clearInterval(timer);
         }
       },
     };
