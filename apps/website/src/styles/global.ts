@@ -16,11 +16,6 @@ export const globalCss = defineGlobalStyles({
     color: 'inherit',
     backgroundColor: 'transparent',
 
-    transform: 'translateZ(0)',
-    transformStyle: 'preserve-3d',
-    backfaceVisibility: 'hidden',
-    willChange: 'transform',
-
     textRendering: 'optimizeLegibility',
     textShadow: '[0 0 1px rgba(0, 0, 0, 0.1), 0 0 0 rgba(0, 0, 0, 0.1)]',
   },
