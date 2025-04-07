@@ -16,6 +16,11 @@
 
   let { node, editor, selected, updateAttributes, deleteNode }: Props = $props();
 
+  let attrs = $state(node.attrs);
+  $effect(() => {
+    attrs = node.attrs;
+  });
+
   const persistBlobAsImage = graphql(`
     mutation ImageNodeView_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
       persistBlobAsImage(input: $input) {
@@ -124,10 +129,10 @@
     data-drag-handle
     draggable
   >
-    {#if node.attrs.id}
+    {#if attrs.id}
       <Img
         style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
-        $image={node.attrs}
+        $image={attrs}
         alt="본문 이미지"
         onclick={() => !editor?.current.isEditable && (enlarged = true)}
         progressive
@@ -275,7 +280,7 @@
   </div>
 </NodeView>
 
-{#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
+{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable}
   <div
     class={center({
       flexDirection: 'column',

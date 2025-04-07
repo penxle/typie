@@ -15,6 +15,11 @@
 
   let { node, editor, selected, updateAttributes, deleteNode }: Props = $props();
 
+  let attrs = $state(node.attrs);
+  $effect(() => {
+    attrs = node.attrs;
+  });
+
   const unfurlEmbed = graphql(`
     mutation EmbedNodeView_UnfurlEmbed_Mutation($input: UnfurlEmbedInput!) {
       unfurlEmbed(input: $input) {
@@ -80,10 +85,10 @@
       document.head.append(script);
     }
 
-    if (node.attrs.html && node.attrs.title) {
+    if (attrs.html && attrs.title) {
       const iframe = embedContainerEl?.querySelector('iframe');
       if (iframe) {
-        iframe.setAttribute('title', node.attrs.title);
+        iframe.setAttribute('title', attrs.title);
       }
     }
   });
@@ -91,31 +96,31 @@
 
 <NodeView data-drag-handle draggable>
   <div class={cx('group', css({ position: 'relative' }))}>
-    {#if node.attrs.id}
-      {#if node.attrs.html}
+    {#if attrs.id}
+      {#if attrs.html}
         <div bind:this={embedContainerEl} class={css({ display: 'contents' }, editor?.current.isEditable && { pointerEvents: 'none' })}>
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          {@html node.attrs.html}
+          {@html attrs.html}
         </div>
       {:else}
         <svelte:element
           this={editor?.current.isEditable ? 'div' : 'a'}
           class={flex({ borderWidth: '1px', borderColor: 'gray.100', borderRadius: '6px' })}
-          {...!editor?.current.isEditable && { href: node.attrs.url, target: '_blank', rel: 'noopener noreferrer' }}
+          {...!editor?.current.isEditable && { href: attrs.url, target: '_blank', rel: 'noopener noreferrer' }}
         >
           <div class={flex({ direction: 'column', grow: '1', paddingX: '16px', paddingY: '15px' })}>
             <p class={css({ marginBottom: '3px', fontSize: '14px', fontWeight: 'medium', lineClamp: 1 })}>
-              {node.attrs.title ?? '(제목 없음)'}
+              {attrs.title ?? '(제목 없음)'}
             </p>
 
             <p class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500', lineClamp: 2, whiteSpace: 'pre-line' })}>
-              {node.attrs.description ?? ''}
+              {attrs.description ?? ''}
             </p>
 
-            <p class={css({ marginTop: 'auto', fontSize: '12px', fontWeight: 'medium', lineClamp: 1 })}>{new URL(node.attrs.url).origin}</p>
+            <p class={css({ marginTop: 'auto', fontSize: '12px', fontWeight: 'medium', lineClamp: 1 })}>{new URL(attrs.url).origin}</p>
           </div>
 
-          {#if node.attrs.thumbnailUrl}
+          {#if attrs.thumbnailUrl}
             <img
               class={css({
                 borderTopRightRadius: '5px',
@@ -123,8 +128,8 @@
                 size: '118px',
                 objectFit: 'cover',
               })}
-              alt={node.attrs.title ?? '(제목 없음)'}
-              src={node.attrs.thumbnailUrl}
+              alt={attrs.title ?? '(제목 없음)'}
+              src={attrs.thumbnailUrl}
             />
           {/if}
         </svelte:element>
@@ -220,7 +225,7 @@
   </div>
 </NodeView>
 
-{#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
+{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable}
   <form
     class={center({
       flexDirection: 'column',

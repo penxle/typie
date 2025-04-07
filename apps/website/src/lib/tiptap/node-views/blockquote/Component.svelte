@@ -9,8 +9,13 @@
 
   let { node }: Props = $props();
 
+  let attrs = $state(node.attrs);
+  $effect(() => {
+    attrs = node.attrs;
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const { component: Component } = $derived(values.blockquote.find(({ type }) => type === node.attrs.type)!);
+  const { component: Component } = $derived(values.blockquote.find(({ type }) => type === attrs.type)!);
 </script>
 
 <NodeView style={flex.raw({ gap: '16px' })}>

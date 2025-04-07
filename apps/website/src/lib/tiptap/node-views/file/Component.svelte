@@ -16,6 +16,11 @@
 
   let { node, editor, selected, updateAttributes, deleteNode }: Props = $props();
 
+  let attrs = $state(node.attrs);
+  $effect(() => {
+    attrs = node.attrs;
+  });
+
   const persistBlobAsFile = graphql(`
     mutation FileNodeView_PersistBlobAsFile_Mutation($input: PersistBlobAsFileInput!) {
       persistBlobAsFile(input: $input) {
@@ -95,11 +100,11 @@
         backgroundColor: 'gray.100',
       }),
     )}
-    aria-label={editor?.current.isEditable ? undefined : `${node.attrs.name} 파일 다운로드`}
-    href={editor?.current.isEditable ? undefined : node.attrs.url}
+    aria-label={editor?.current.isEditable ? undefined : `${attrs.name} 파일 다운로드`}
+    href={editor?.current.isEditable ? undefined : attrs.url}
     use:anchor
   >
-    {#if node.attrs.id}
+    {#if attrs.id}
       <div
         class={flex({
           alignItems: 'center',
@@ -112,11 +117,11 @@
       >
         <Icon style={css.raw({ color: 'gray.400' })} icon={PaperclipIcon} size={20} />
 
-        <span class={css({ truncate: true })}>{node.attrs.name}</span>
+        <span class={css({ truncate: true })}>{attrs.name}</span>
 
         <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
 
-        <span class={css({ color: 'gray.400' })}>{formatFileSize(node.attrs.size)}</span>
+        <span class={css({ color: 'gray.400' })}>{formatFileSize(attrs.size)}</span>
       </div>
     {:else}
       <div
@@ -176,7 +181,7 @@
           <span>삭제</span>
         </MenuItem>
       </Menu>
-    {:else if node.attrs.id}
+    {:else if attrs.id}
       <div
         class={css({
           marginRight: '12px',
@@ -191,7 +196,7 @@
   </svelte:element>
 </NodeView>
 
-{#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
+{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable}
   <div
     class={center({
       flexDirection: 'column',

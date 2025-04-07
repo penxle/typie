@@ -24,11 +24,16 @@
 
   let { node, HTMLAttributes, editor, getPos, updateAttributes }: Props = $props();
 
+  let attrs = $state(node.attrs);
+  $effect(() => {
+    attrs = node.attrs;
+  });
+
   const hasSpan = $derived.by(() => {
     let has = false;
 
     node.descendants((node) => {
-      if (node.type.name === 'tableCell' && (node.attrs.colspan > 1 || node.attrs.rowspan > 1)) {
+      if (node.type.name === 'tableCell' && (attrs.colspan > 1 || attrs.rowspan > 1)) {
         has = true;
         return;
       }
@@ -101,7 +106,7 @@
 
 <NodeView style={css.raw({ position: 'relative' })}>
   <table
-    style:--table-border-style={node.attrs.borderStyle}
+    style:--table-border-style={attrs.borderStyle}
     onpointerleave={() => {
       hoveredRowIndex = null;
       hoveredColumnIndex = null;
@@ -198,9 +203,9 @@
 
 <TiptapNodeViewBubbleMenu {editor} {getPos} {node}>
   <select onchange={(e) => updateAttributes({ borderStyle: e.currentTarget.value })}>
-    <option selected={node.attrs.borderStyle === 'solid'} value="solid">solid</option>
-    <option selected={node.attrs.borderStyle === 'dashed'} value="dashed">dashed</option>
-    <option selected={node.attrs.borderStyle === 'dotted'} value="dotted">dotted</option>
-    <option selected={node.attrs.borderStyle === 'none'} value="none">none</option>
+    <option selected={attrs.borderStyle === 'solid'} value="solid">solid</option>
+    <option selected={attrs.borderStyle === 'dashed'} value="dashed">dashed</option>
+    <option selected={attrs.borderStyle === 'dotted'} value="dotted">dotted</option>
+    <option selected={attrs.borderStyle === 'none'} value="none">none</option>
   </select>
 </TiptapNodeViewBubbleMenu>
