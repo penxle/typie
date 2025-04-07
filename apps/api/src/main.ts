@@ -9,7 +9,7 @@ import { deriveContext } from '@/context';
 import { env } from '@/env';
 import { yoga } from '@/graphql';
 import { rest } from '@/rest';
-import { websocket } from './ws';
+import { websocket } from '@/ws';
 import type { Env } from '@/context';
 
 const app = new Hono<Env>();

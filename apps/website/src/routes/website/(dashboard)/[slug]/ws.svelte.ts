@@ -46,14 +46,15 @@ export function createWebSocket(handlers: {
     };
   });
 
-  const send = (type: number, payload: Uint8Array) => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const data = new Uint8Array([type, ...payload]);
-      ws.send(data);
-    }
-  };
-
   return {
-    send,
+    send: (type: number, payload: Uint8Array) => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const data = new Uint8Array([type, ...payload]);
+        ws.send(data);
+      }
+    },
+    reconnect: () => {
+      ws?.close();
+    },
   };
 }

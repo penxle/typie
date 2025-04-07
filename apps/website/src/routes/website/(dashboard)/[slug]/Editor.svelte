@@ -1,6 +1,7 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
+  import dayjs from 'dayjs';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import { IndexeddbPersistence } from 'y-indexeddb';
@@ -78,6 +79,9 @@
 
   let editor = $state<Ref<Editor>>();
 
+  let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
+  let lastHeartbeatAt = $state(dayjs());
+
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
 
@@ -91,10 +95,14 @@
 
   const ws = createWebSocket({
     onopen: () => {
+      connectionStatus = 'connecting';
       ws.send(PostContentSyncMessageKind.INIT, encoder.encode($query.post.id));
     },
     onmessage: (type, data) => {
-      if (type === PostContentSyncMessageKind.INIT) {
+      if (type === PostContentSyncMessageKind.HEARTBEAT) {
+        lastHeartbeatAt = dayjs();
+      } else if (type === PostContentSyncMessageKind.INIT) {
+        connectionStatus = 'connected';
         forceSync();
       } else if (type === PostContentSyncMessageKind.UPDATE) {
         Y.applyUpdateV2(doc, data, 'remote');
@@ -108,23 +116,22 @@
         ws.send(PostContentSyncMessageKind.AWARENESS, update);
       }
     },
+    onclose: () => {
+      connectionStatus = 'disconnected';
+    },
   });
 
   doc.on('updateV2', async (update, origin) => {
-    if (!browser || origin === 'remote') {
-      return;
+    if (browser && origin !== 'remote') {
+      ws.send(PostContentSyncMessageKind.UPDATE, update);
     }
-
-    ws.send(PostContentSyncMessageKind.UPDATE, update);
   });
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
-    if (!browser || origin === 'remote') {
-      return;
+    if (browser && origin !== 'remote') {
+      const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
+      ws.send(PostContentSyncMessageKind.AWARENESS, update);
     }
-
-    const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
-    ws.send(PostContentSyncMessageKind.AWARENESS, update);
   });
 
   const forceSync = async () => {
@@ -144,9 +151,15 @@
     editor?.current.commands.setTextSelection(0);
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
+    const heartbeatInterval = setInterval(() => {
+      if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
+        ws.reconnect();
+      }
+    }, 1000);
 
     return () => {
       clearInterval(forceSyncInterval);
+      clearInterval(heartbeatInterval);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
 
@@ -275,4 +288,4 @@
 
 <HorizontalDivider />
 
-<StatusBar {editor} />
+<StatusBar {connectionStatus} {editor} />
