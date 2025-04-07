@@ -13,8 +13,9 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { Decoration, DecorationSource, NodeView as ProseMirrorNodeView } from '@tiptap/pm/view';
 import type { Component } from 'svelte';
 
-export type NodeViewProps = Omit<TiptapNodeViewProps, 'editor'> & {
+export type NodeViewProps = Omit<TiptapNodeViewProps, 'editor' | 'node'> & {
   editor?: Ref<Editor>;
+  node: Ref<ProseMirrorNode>;
 };
 
 export type NodeViewComponent = Component<NodeViewProps>;
@@ -52,7 +53,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
     this.#props = {
       editor: new Ref(this.editor),
       view: this.view,
-      node: this.node,
+      node: new Ref(this.node),
       decorations: this.decorations as DecorationWithType[],
       innerDecorations: this.innerDecorations,
       HTMLAttributes: this.HTMLAttributes,
@@ -128,7 +129,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
     this.innerDecorations = innerDecorations;
 
     if (this.#props) {
-      this.#props.node = node;
+      this.#props.node = new Ref(node);
       this.#props.decorations = decorations as DecorationWithType[];
       this.#props.innerDecorations = innerDecorations;
     }

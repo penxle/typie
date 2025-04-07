@@ -27,7 +27,7 @@
   const hasSpan = $derived.by(() => {
     let has = false;
 
-    node.descendants((node) => {
+    node.current.descendants((node) => {
       if (node.type.name === 'tableCell' && (node.attrs.colspan > 1 || node.attrs.rowspan > 1)) {
         has = true;
         return;
@@ -37,7 +37,7 @@
     return has;
   });
 
-  const { colgroup, tableWidth, tableMinWidth } = $derived(createColGroup(node, 50));
+  const { colgroup, tableWidth, tableMinWidth } = $derived(createColGroup(node.current, 50));
 
   // @ts-expect-error colgroup type mismatch
   const cols = $derived((colgroup?.slice(2) as ['col', Record<string, string>][]) ?? []);
@@ -75,7 +75,7 @@
   }
 
   $effect(() => {
-    getRows(node);
+    getRows(node.current);
   });
 
   let hoveredRowIndex = $state<number | null>(null);
@@ -101,7 +101,7 @@
 
 <NodeView style={css.raw({ position: 'relative' })}>
   <table
-    style:--table-border-style={node.attrs.borderStyle}
+    style:--table-border-style={node.current.attrs.borderStyle}
     onpointerleave={() => {
       hoveredRowIndex = null;
       hoveredColumnIndex = null;
@@ -153,7 +153,7 @@
             })}
             role="row"
           >
-            <RowHandle {editor} {hasSpan} {hoveredRowIndex} {i} tableNode={node} tablePos={getPos()} />
+            <RowHandle {editor} {hasSpan} {hoveredRowIndex} {i} tableNode={node.current} tablePos={getPos()} />
           </div>
         {/each}
       </div>
@@ -179,7 +179,7 @@
               },
             })}
           >
-            <ColHandle {editor} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} tablePos={getPos()} />
+            <ColHandle {editor} {hasSpan} {hoveredColumnIndex} {i} tableNode={node.current} tablePos={getPos()} />
           </div>
         {/each}
       {/if}
@@ -191,16 +191,16 @@
     />
 
     {#if editor?.current.isEditable}
-      <AddRowColButton {editor} {isLastColumnHovered} {isLastRowHovered} tableNode={node} tablePos={getPos()} />
+      <AddRowColButton {editor} {isLastColumnHovered} {isLastRowHovered} tableNode={node.current} tablePos={getPos()} />
     {/if}
   </table>
 </NodeView>
 
 <TiptapNodeViewBubbleMenu {editor} {getPos} {node}>
   <select onchange={(e) => updateAttributes({ borderStyle: e.currentTarget.value })}>
-    <option selected={node.attrs.borderStyle === 'solid'} value="solid">solid</option>
-    <option selected={node.attrs.borderStyle === 'dashed'} value="dashed">dashed</option>
-    <option selected={node.attrs.borderStyle === 'dotted'} value="dotted">dotted</option>
-    <option selected={node.attrs.borderStyle === 'none'} value="none">none</option>
+    <option selected={node.current.attrs.borderStyle === 'solid'} value="solid">solid</option>
+    <option selected={node.current.attrs.borderStyle === 'dashed'} value="dashed">dashed</option>
+    <option selected={node.current.attrs.borderStyle === 'dotted'} value="dotted">dotted</option>
+    <option selected={node.current.attrs.borderStyle === 'none'} value="none">none</option>
   </select>
 </TiptapNodeViewBubbleMenu>

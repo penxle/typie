@@ -24,8 +24,8 @@
     danger: { icon: TriangleAlertIcon, color: '#dc2626' },
   };
 
-  const icon = $derived(calloutMap[node.attrs.type as Callout].icon);
-  const color = $derived(calloutMap[node.attrs.type as Callout].color);
+  const icon = $derived(calloutMap[node.current.attrs.type as Callout].icon);
+  const color = $derived(calloutMap[node.current.attrs.type as Callout].color);
 </script>
 
 <NodeView>
@@ -59,7 +59,7 @@
       )}
       contenteditable={false}
       onclick={() => {
-        const type = callouts[(callouts.indexOf(node.attrs.type) + 1) % callouts.length];
+        const type = callouts[(callouts.indexOf(node.current.attrs.type) + 1) % callouts.length];
         updateAttributes({ type });
       }}
       role={editor?.current.isEditable ? 'button' : 'img'}

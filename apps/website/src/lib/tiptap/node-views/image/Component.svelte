@@ -72,7 +72,7 @@
   };
 
   let containerEl = $state<HTMLDivElement>();
-  let proportion = $state(node.attrs.proportion);
+  let proportion = $state(node.current.attrs.proportion);
 
   let initialResizeData: {
     x: number;
@@ -124,10 +124,10 @@
     data-drag-handle
     draggable
   >
-    {#if node.attrs.id}
+    {#if node.current.attrs.id}
       <Img
         style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
-        $image={node.attrs}
+        $image={node.current.attrs}
         alt="본문 이미지"
         onclick={() => !editor?.current.isEditable && (enlarged = true)}
         progressive
@@ -275,7 +275,7 @@
   </div>
 </NodeView>
 
-{#if pickerOpened && !node.attrs.id && !inflight && editor?.current.isEditable}
+{#if pickerOpened && !node.current.attrs.id && !inflight && editor?.current.isEditable}
   <div
     class={center({
       flexDirection: 'column',

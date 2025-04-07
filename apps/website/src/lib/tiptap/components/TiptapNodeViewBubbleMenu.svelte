@@ -11,7 +11,7 @@
 
   type Props = {
     editor?: Ref<Editor>;
-    node: ProseMirrorNode;
+    node: Ref<ProseMirrorNode>;
     getPos: () => number;
     children: Snippet;
   };
@@ -29,7 +29,7 @@
   const update = (editor: Editor) => {
     const { from, to } = editor.state.selection;
 
-    if (from !== getPos() || to !== getPos() + node.nodeSize) {
+    if (from !== getPos() || to !== getPos() + node.current.nodeSize) {
       open = false;
       return;
     }

@@ -98,7 +98,7 @@
     >
       <Img
         style={css.raw({ size: 'full', borderRadius: '4px', objectFit: 'contain', cursor: 'zoom-out' })}
-        $image={node.attrs}
+        $image={node.current.attrs}
         alt="본문 이미지"
         size="full"
       />

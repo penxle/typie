@@ -56,7 +56,7 @@
       loading="lazy"
       referrerpolicy="no-referrer"
       sandbox="allow-scripts"
-      srcdoc={transform(node.textContent)}
+      srcdoc={transform(node.current.textContent)}
       title="HTML"
     ></iframe>
   {/if}
