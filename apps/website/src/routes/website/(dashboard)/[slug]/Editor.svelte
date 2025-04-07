@@ -182,6 +182,8 @@
       color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
     });
 
+    editor?.current.commands.setTextSelection(0);
+
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
 
     return () => {
