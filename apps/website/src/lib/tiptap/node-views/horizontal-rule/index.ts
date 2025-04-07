@@ -45,8 +45,12 @@ export const HorizontalRule = createNodeView(Component, {
     return {
       setHorizontalRule:
         (type) =>
-        ({ commands }) => {
-          return commands.insertContent({ type: this.name, attrs: { type } });
+        ({ editor, commands }) => {
+          if (editor.isActive(this.name)) {
+            return commands.updateAttributes(this.name, { type });
+          } else {
+            return commands.insertContent({ type: this.name, attrs: { type } });
+          }
         },
     };
   },

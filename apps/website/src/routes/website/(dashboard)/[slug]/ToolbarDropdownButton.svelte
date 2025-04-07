@@ -12,13 +12,14 @@
   type Props = {
     size: 'large' | 'small';
     label: string;
+    active?: boolean;
     chevron?: boolean;
     placement?: Placement;
     anchor: Snippet<[{ open: () => void }]>;
     floating: Snippet<[{ close: () => void }]>;
   };
 
-  let { size, label, chevron = false, placement = 'bottom-start', anchor, floating }: Props = $props();
+  let { size, label, active = false, chevron = false, placement = 'bottom-start', anchor, floating }: Props = $props();
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
     placement,
@@ -41,8 +42,9 @@
       gap: '4px',
       borderRadius: '4px',
       size: '54px',
+      color: active ? 'brand.500' : undefined,
       _hover: { backgroundColor: 'gray.100' },
-      _pressed: { backgroundColor: 'gray.200' },
+      _pressed: { backgroundColor: 'gray.100' },
     })}
     aria-pressed={opened}
     onclick={open}

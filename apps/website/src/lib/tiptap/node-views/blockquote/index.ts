@@ -49,8 +49,14 @@ export const Blockquote = createNodeView(Component, {
     return {
       setBlockquote:
         (type) =>
-        ({ commands }) => {
-          return commands.wrapIn(this.name, { type });
+        ({ editor, commands }) => {
+          if (editor.isActive(this.name, { type })) {
+            return commands.lift(this.name);
+          } else if (editor.isActive(this.name)) {
+            return commands.updateAttributes(this.name, { type });
+          } else {
+            return commands.wrapIn(this.name, { type });
+          }
         },
       toggleBlockquote:
         (type) =>

@@ -75,7 +75,7 @@
       size="large"
     />
 
-    <ToolbarDropdownButton label="구분선" size="large">
+    <ToolbarDropdownButton active={editor?.current.isActive('horizontal_rule')} label="구분선" size="large">
       {#snippet anchor()}
         <ToolbarIcon icon={HorizontalRuleIcon} />
       {/snippet}
@@ -97,7 +97,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton label="인용구" size="large">
+    <ToolbarDropdownButton active={editor?.current.isActive('blockquote')} label="인용구" size="large">
       {#snippet anchor()}
         <ToolbarIcon icon={QuoteIcon} />
       {/snippet}
