@@ -1,6 +1,7 @@
 <script lang="ts">
   import BellIcon from '~icons/lucide/bell';
   import FolderIcon from '~icons/lucide/folder';
+  import FolderPlusIcon from '~icons/lucide/folder-plus';
   import HomeIcon from '~icons/lucide/home';
   import PanelLeftCloseIcon from '~icons/lucide/panel-left-close';
   import SearchIcon from '~icons/lucide/search';
@@ -14,14 +15,14 @@
   import { flex } from '$styled-system/patterns';
   import PageList from './PageList.svelte';
   import type { DashboardLayout_Sidebar_user } from '$graphql';
-  import type { Item } from './types';
+  import type { Entity } from './types';
 
   type Props = {
     $user: DashboardLayout_Sidebar_user;
-    items: Item[];
+    entities: Entity[];
   };
 
-  let { $user: _user, items }: Props = $props();
+  let { $user: _user, entities }: Props = $props();
 
   const user = fragment(
     _user,
@@ -50,11 +51,19 @@
   `);
 
   const app = getAppContext();
+
+  const createFolder = graphql(`
+    mutation DashboardLayout_Sidebar_CreateFolder_Mutation($input: CreateFolderInput!) {
+      createFolder(input: $input) {
+        id
+      }
+    }
+  `);
 </script>
 
 <nav
   class={css({
-    zIndex: '[1000]',
+    zIndex: '50',
     flexGrow: '0',
     flexShrink: '0',
     width: app.preference.current.sidebarExpanded ? '240px' : '0',
@@ -272,24 +281,44 @@
             paddingTop: '4px',
           })}
         >
-          <div
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              paddingX: '8px',
-              paddingY: '6px',
-              marginBottom: '4px',
-              fontSize: '13px',
-              fontWeight: 'medium',
-              color: 'gray.700',
-            })}
-          >
-            <Icon style={{ color: 'gray.500' }} icon={FolderIcon} size={14} />
-            <span>보관함</span>
+          <div class={flex({ align: 'center', justify: 'space-between' })}>
+            <div
+              class={css({
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                paddingX: '8px',
+                paddingY: '6px',
+                marginBottom: '4px',
+                fontSize: '13px',
+                fontWeight: 'medium',
+                color: 'gray.700',
+              })}
+            >
+              <Icon style={{ color: 'gray.500' }} icon={FolderIcon} size={14} />
+              <span>보관함</span>
+            </div>
+
+            <button
+              class={css({
+                padding: '4px',
+                borderRadius: '6px',
+                color: 'gray.500',
+                _hover: {
+                  backgroundColor: 'gray.100',
+                  color: 'gray.700',
+                },
+              })}
+              onclick={async () => {
+                await createFolder({ siteId: $user.sites[0].id, name: '새 폴더' });
+              }}
+              type="button"
+            >
+              <Icon icon={FolderPlusIcon} size={14} />
+            </button>
           </div>
 
-          <PageList {items} />
+          <PageList {entities} />
         </div>
       </div>
     </div>
