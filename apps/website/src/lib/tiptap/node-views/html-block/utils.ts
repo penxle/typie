@@ -1,11 +1,18 @@
 export const transform = (content: string) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(content, 'text/html');
+
+  const head = getHTML(doc.head);
+  const body = getHTML(doc.body);
+
   return `
     <html>
       <head>
         <style>html, body { margin: 0 }</style>
+        ${head}
       </head>
       <body>
-        ${content}
+        ${body}
         <script>
           window.addEventListener('DOMContentLoaded', () => {
             const observer = new ResizeObserver((entries) => {
@@ -20,4 +27,10 @@ export const transform = (content: string) => {
       </body>
     </html>
   `;
+};
+
+const getHTML = (element: HTMLElement) => {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = element.innerHTML;
+  return textarea.value;
 };

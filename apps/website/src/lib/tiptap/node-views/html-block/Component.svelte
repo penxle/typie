@@ -1,5 +1,6 @@
 <script lang="ts">
   import { on } from 'svelte/events';
+  import { browser } from '$app/environment';
   import { css } from '$styled-system/css';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import { transform } from './utils';
@@ -49,15 +50,17 @@
   {:else}
     <NodeViewContentEditable style={css.raw({ display: 'none' })} />
 
-    <iframe
-      bind:this={iframeEl}
-      class={css({ display: 'block', width: 'full' })}
-      height="0"
-      loading="lazy"
-      referrerpolicy="no-referrer"
-      sandbox="allow-scripts"
-      srcdoc={transform(node.textContent)}
-      title="HTML"
-    ></iframe>
+    {#if browser}
+      <iframe
+        bind:this={iframeEl}
+        class={css({ display: 'block', width: 'full' })}
+        height="0"
+        loading="lazy"
+        referrerpolicy="no-referrer"
+        sandbox="allow-scripts"
+        srcdoc={transform(node.textContent)}
+        title="HTML"
+      ></iframe>
+    {/if}
   {/if}
 </NodeView>
