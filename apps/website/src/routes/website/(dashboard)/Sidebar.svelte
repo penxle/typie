@@ -255,7 +255,7 @@
                       backgroundColor: 'gray.100',
                     },
                   })}
-                  href="/"
+                  href="/home"
                 >
                   <Icon style={{ color: 'gray.500' }} icon={HomeIcon} size={16} />
                   홈

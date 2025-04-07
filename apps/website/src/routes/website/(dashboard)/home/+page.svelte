@@ -9,30 +9,6 @@
       me @required {
         id
         email
-
-        sites {
-          id
-
-          entities {
-            id
-
-            node {
-              ... on Folder {
-                id
-                name
-              }
-
-              ... on Post {
-                id
-
-                content {
-                  id
-                  title
-                }
-              }
-            }
-          }
-        }
       }
     }
   `);
