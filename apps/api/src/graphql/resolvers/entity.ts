@@ -109,6 +109,18 @@ EntityView.implement({
  */
 
 builder.queryFields((t) => ({
+  entity: t.withAuth({ session: true }).field({
+    type: Entity,
+    args: { id: t.arg.id() },
+    resolve: async (_, args, ctx) => {
+      return await db
+        .select()
+        .from(Entities)
+        .where(and(eq(Entities.id, args.id), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
+        .then(firstOrThrow);
+    },
+  }),
+
   entityView: t.field({
     type: EntityView,
     args: { origin: t.arg.string(), slug: t.arg.string() },

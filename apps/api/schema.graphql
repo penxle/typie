@@ -327,6 +327,7 @@ type PreorderUser {
 }
 
 type Query {
+  entity(id: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   entityViewByPermalink(permalink: String!): EntityView!
   image(id: ID!): Image!
