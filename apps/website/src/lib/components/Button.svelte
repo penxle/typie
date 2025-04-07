@@ -95,9 +95,9 @@
         },
       },
       size: {
-        sm: { borderRadius: '6px', paddingX: '14px', paddingY: '6px', fontSize: '14px', fontWeight: 'semibold' },
-        md: { borderRadius: '8px', paddingX: '20px', paddingY: '10px', fontSize: '14px', fontWeight: 'semibold' },
-        lg: { borderRadius: '10px', paddingX: '30px', paddingY: '10px', fontSize: '16px', fontWeight: 'semibold' },
+        sm: { borderRadius: '6px', paddingX: '14px', paddingY: '6px', height: '32px', fontSize: '14px', fontWeight: 'semibold' },
+        md: { borderRadius: '8px', paddingX: '20px', paddingY: '10px', height: '40px', fontSize: '14px', fontWeight: 'semibold' },
+        lg: { borderRadius: '10px', paddingX: '30px', paddingY: '10px', height: '48px', fontSize: '16px', fontWeight: 'semibold' },
       },
     },
   });
