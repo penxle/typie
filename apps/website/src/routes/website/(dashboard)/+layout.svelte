@@ -46,7 +46,65 @@
     }
   `);
 
+  const siteUpdateStream = graphql(`
+    subscription DashboardLayout_SiteUpdateStream($siteId: ID!) {
+      siteUpdateStream(siteId: $siteId) {
+        ... on Site {
+          id
+
+          entities {
+            id
+
+            node {
+              ... on Folder {
+                id
+                name
+              }
+
+              ... on Post {
+                id
+
+                content {
+                  id
+                  title
+                }
+              }
+            }
+          }
+        }
+
+        ... on Entity {
+          id
+
+          node {
+            ... on Folder {
+              id
+              name
+            }
+
+            ... on Post {
+              id
+
+              content {
+                id
+                title
+              }
+            }
+          }
+        }
+      }
+    }
+  `);
+
   setupAppContext();
+
+  $effect(() => {
+    const unsubscribe = siteUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
+
+    return () => {
+      unsubscribe();
+    };
+  });
 </script>
 
 <div class={flex({ position: 'relative', alignItems: 'flex-start', height: 'screen' })}>

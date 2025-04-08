@@ -3,13 +3,14 @@ import { and, eq } from 'drizzle-orm';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, firstOrThrow, PostContents, PostContentSnapshots } from '@/db';
+import { db, Entities, firstOrThrow, PostContents, PostContentSnapshots, Posts } from '@/db';
 import { schema } from '@/pm';
+import { pubsub } from '@/pubsub';
 import { makeText } from '@/utils';
 import { defineJob } from '../types';
 
 export const PostContentUpdateJob = defineJob('post:content:update', async (postId: string) => {
-  await db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
     const state = await tx
       .select({ update: PostContents.update, vector: PostContents.vector })
       .from(PostContents)
@@ -19,7 +20,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
 
     const updates = await redis.smembersBuffer(`post:content:updates:${postId}`);
     if (updates.length === 0) {
-      return;
+      return false;
     }
 
     const update = Y.mergeUpdatesV2(updates);
@@ -36,14 +37,13 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
       .set({
         update: Y.encodeStateAsUpdateV2(doc),
         vector: Y.encodeStateVector(doc),
-        updatedAt: dayjs(),
       })
       .where(and(eq(PostContents.postId, postId)));
 
     await redis.srem(`post:content:updates:${postId}`, ...updates);
 
     if (Y.equalSnapshots(prevSnapshot, snapshot)) {
-      return;
+      return false;
     }
 
     const map = doc.getMap('attrs');
@@ -75,5 +75,18 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
       postId,
       snapshot: Y.encodeSnapshotV2(snapshot),
     });
+
+    return true;
   });
+
+  if (updated) {
+    const { siteId, entityId } = await db
+      .select({ siteId: Entities.siteId, entityId: Entities.id })
+      .from(Posts)
+      .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+      .where(eq(Posts.id, postId))
+      .then(firstOrThrow);
+
+    pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
+  }
 });
