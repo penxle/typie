@@ -17,21 +17,36 @@
     placement: 'bottom',
     offset: 4,
   });
-</script>
 
-<div
-  onmouseenter={() => {
+  const onmouseenter = () => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+
     timer = setTimeout(() => {
       show = true;
     }, 500);
-  }}
-  onmouseleave={() => {
-    clearTimeout(timer);
+  };
+
+  const onmouseleave = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+
     show = false;
-  }}
-  role="presentation"
-  use:anchor
->
+  };
+
+  $effect(() => {
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  });
+</script>
+
+<div {onmouseenter} {onmouseleave} role="presentation" use:anchor>
   {@render children()}
 </div>
 
@@ -46,6 +61,7 @@
       color: 'gray.100',
       backgroundColor: 'gray.600',
       zIndex: '50',
+      pointerEvents: 'none',
     })}
     role="tooltip"
     use:floating
