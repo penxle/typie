@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { NodeSelection, Plugin, PluginKey, Selection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { tip } from '$lib/notification';
 import { css, cx } from '$styled-system/css';
 import type { Range } from '@tiptap/core';
 import type { Node, ResolvedPos } from '@tiptap/pm/model';
@@ -41,6 +42,8 @@ export const BlockSelectionExt = Extension.create({
         if ($from.start() === $from.pos && $to.end() === $to.pos) {
           return editor.commands.setBlockSelection({ from: 1, to: editor.state.doc.nodeSize - 2 });
         }
+
+        tip.show('editor.shortcut.select-all', '`Mod-A` 키를 한번 더 눌러 본문 전체를 선택할 수 있어요.');
 
         return editor.commands.setTextSelection({ from: $from.start(), to: $to.end() });
       },
