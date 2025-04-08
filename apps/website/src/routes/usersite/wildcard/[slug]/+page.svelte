@@ -1,6 +1,6 @@
 <script lang="ts">
   import { graphql } from '$graphql';
-  import { Helmet, HorizontalDivider } from '$lib/components';
+  import { Helmet, HorizontalDivider, Img } from '$lib/components';
   import { TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -23,6 +23,11 @@
               body
               excerpt
               maxWidth
+
+              coverImage {
+                id
+                ...Img_image
+              }
             }
           }
 
@@ -52,6 +57,19 @@
         backgroundColor: 'white',
       })}
     >
+      {#if $query.entityView.node.content.coverImage}
+        <div class={css({ width: 'full', marginBottom: '40px' })}>
+          <Img
+            style={css.raw({ width: 'full' })}
+            $image={$query.entityView.node.content.coverImage}
+            alt="커버 이미지"
+            progressive
+            ratio={5 / 2}
+            size="full"
+          />
+        </div>
+      {/if}
+
       <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
         <div class={css({ fontSize: '28px', fontWeight: 'bold' })}>
           {$query.entityView.node.content.title}

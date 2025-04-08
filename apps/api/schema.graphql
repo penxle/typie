@@ -267,6 +267,7 @@ enum PostContentSyncKind {
 
 type PostContentView implements IPostContent {
   body: JSON!
+  coverImage: Image
   excerpt: String!
   id: ID!
   maxWidth: Int!

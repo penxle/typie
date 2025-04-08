@@ -195,6 +195,7 @@ export const PostContents = pgTable('post_contents', {
   body: jsonb('body').notNull().$type<JSONContent>(),
   text: text('text').notNull(),
   maxWidth: integer('max_width').notNull().default(1000),
+  coverImageId: text('cover_image_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
   createdAt: datetime('created_at')
