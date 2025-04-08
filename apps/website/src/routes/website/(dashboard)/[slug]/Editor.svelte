@@ -141,6 +141,7 @@
 
   onMount(() => {
     const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
+    persistence.on('synced', () => forceSync());
 
     Y.applyUpdateV2(doc, base64.parse($query.post.content.update), 'remote');
     awareness.setLocalStateField('user', {
