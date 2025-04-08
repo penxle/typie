@@ -21,7 +21,7 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
-  import { HorizontalDivider, SegmentButtons, VerticalDivider } from '$lib/components';
+  import { SegmentButtons, VerticalDivider } from '$lib/components';
   import { defaultValues, values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
   import { center, flex, grid } from '$styled-system/patterns';
@@ -41,15 +41,34 @@
   type Props = {
     editor?: Ref<Editor>;
     doc: Y.Doc;
+    sticked: boolean;
   };
 
-  let { editor, doc }: Props = $props();
+  let { editor, doc, sticked }: Props = $props();
 
   const maxWidth = new YState<number>(doc, 'maxWidth', 1000);
 </script>
 
-<div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '8px', width: 'full' })}>
-  <div class={flex({ alignItems: 'center', gap: '8px', width: 'full', maxWidth: '1200px' })}>
+<div
+  class={css(
+    {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '14px',
+      borderRadius: '12px',
+      marginX: '20px',
+      paddingX: '14px',
+      paddingY: '12px',
+      width: 'full',
+      maxWidth: '1200px',
+      backgroundColor: 'gray.50',
+      boxShadow: '[0px 0px 1px 0px rgba(80, 84, 90, 0.08), 0px 1px 4px 0px rgba(80, 84, 90, 0.08), 0px 2px 8px 0px rgba(80, 84, 90, 0.12)]',
+      pointerEvents: 'auto',
+    },
+    sticked && { borderTopRadius: '0' },
+  )}
+>
+  <div class={flex({ alignItems: 'center', gap: '8px', width: 'full' })}>
     <ToolbarButton
       icon={ImageIcon}
       label="이미지"
@@ -175,7 +194,7 @@
 
     <ToolbarButton
       icon={CodeIcon}
-      label="코드 블록"
+      label="코드"
       onclick={() => {
         editor?.current.chain().focus().setCodeBlock().run();
       }}
@@ -184,7 +203,7 @@
 
     <ToolbarButton
       icon={CodeXmlIcon}
-      label="HTML 블록"
+      label="HTML"
       onclick={() => {
         editor?.current.chain().focus().setHtmlBlock().run();
       }}
@@ -192,258 +211,272 @@
     />
   </div>
 
-  <HorizontalDivider />
+  <div class={flex({ alignItems: 'center', gap: '10px', width: 'full', maxWidth: '1200px' })}>
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      <ToolbarButton
+        style={css.raw({ borderRightRadius: '0' })}
+        icon={UndoIcon}
+        label="실행 취소"
+        onclick={() => {
+          editor?.current.chain().focus().undo().run();
+        }}
+        size="small"
+      />
 
-  <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '8px', width: 'full', maxWidth: '1200px' })}>
-    <ToolbarButton
-      icon={UndoIcon}
-      label="실행 취소"
-      onclick={() => {
-        editor?.current.chain().focus().undo().run();
-      }}
-      size="small"
-    />
+      <ToolbarButton
+        style={css.raw({ borderLeftRadius: '0' })}
+        icon={RedoIcon}
+        label="다시 실행"
+        onclick={() => {
+          editor?.current.chain().focus().redo().run();
+        }}
+        size="small"
+      />
+    </div>
 
-    <ToolbarButton
-      icon={RedoIcon}
-      label="다시 실행"
-      onclick={() => {
-        editor?.current.chain().focus().redo().run();
-      }}
-      size="small"
-    />
+    <VerticalDivider style={css.raw({ height: '12px' })} />
 
-    <VerticalDivider />
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      <ToolbarDropdownButton chevron label="글씨 색" size="small">
+        {#snippet anchor()}
+          <div class={center({ size: '20px' })}>
+            <div
+              style:background-color={values.fontColor.find(
+                ({ value }) => value === (editor?.current.getAttributes('font_color').value ?? defaultValues.fontColor),
+              )?.hex}
+              class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px' })}
+            ></div>
+          </div>
+        {/snippet}
 
-    <ToolbarDropdownButton chevron label="글씨 색" size="small">
-      {#snippet anchor()}
-        <div
-          style:background-color={values.fontColor.find(
-            ({ value }) => value === (editor?.current.getAttributes('font_color').value ?? defaultValues.fontColor),
-          )?.hex}
-          class={css({ borderWidth: '1px', borderRadius: 'full', size: '20px' })}
-        ></div>
-      {/snippet}
+        {#snippet floating({ close })}
+          <div class={grid({ columns: 10, gap: '8px', borderWidth: '1px', borderRadius: '4px', padding: '8px' })}>
+            {#each values.fontColor as { label, value, hex } (value)}
+              <button
+                style:background-color={hex}
+                style:outline-color={hex === '#ffffff' ? token('colors.gray.200') : hex}
+                class={center({
+                  borderWidth: '1px',
+                  borderRadius: 'full',
+                  outlineWidth: (editor?.current.getAttributes('font_color').value ?? defaultValues.fontColor) === value ? '2px' : '0',
+                  outlineOffset: '1px',
+                  size: '20px',
+                })}
+                aria-label={label}
+                onclick={() => {
+                  editor?.current.chain().focus().setFontColor(value).run();
+                  close();
+                }}
+                type="button"
+              ></button>
+            {/each}
+          </div>
+        {/snippet}
+      </ToolbarDropdownButton>
 
-      {#snippet floating({ close })}
-        <div class={grid({ columns: 10, gap: '8px', borderWidth: '1px', borderRadius: '4px', padding: '8px' })}>
-          {#each values.fontColor as { label, value, hex } (value)}
-            <button
-              style:background-color={hex}
-              style:outline-color={hex === '#ffffff' ? token('colors.gray.200') : hex}
-              class={center({
-                borderWidth: '1px',
-                borderRadius: 'full',
-                size: '20px',
-                outlineWidth: (editor?.current.getAttributes('font_color').value ?? defaultValues.fontColor) === value ? '2px' : '0',
-                outlineOffset: '1px',
-              })}
-              aria-label={label}
-              onclick={() => {
-                editor?.current.chain().focus().setFontColor(value).run();
-                close();
-              }}
-              type="button"
-            ></button>
-          {/each}
-        </div>
-      {/snippet}
-    </ToolbarDropdownButton>
+      <ToolbarDropdownButton style={css.raw({ width: '120px' })} chevron label="글씨 서체" size="small">
+        {#snippet anchor()}
+          <div class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>
+            {values.fontFamily.find(
+              ({ value }) => value === (editor?.current.getAttributes('font_family').value ?? defaultValues.fontFamily),
+            )?.label}
+          </div>
+        {/snippet}
 
-    <ToolbarDropdownButton chevron label="글씨 서체" size="small">
-      {#snippet anchor()}
-        <div class={css({ fontSize: '14px' })}>
-          {values.fontFamily.find(({ value }) => value === (editor?.current.getAttributes('font_family').value ?? defaultValues.fontFamily))
-            ?.label}
-        </div>
-      {/snippet}
+        {#snippet floating({ close })}
+          <ToolbarDropdownMenu>
+            {#each values.fontFamily as { label, value } (value)}
+              <ToolbarDropdownMenuItem
+                style={css.raw({ fontSize: '14px' })}
+                active={(editor?.current.getAttributes('font_family').value ?? defaultValues.fontFamily) === value}
+                onclick={() => {
+                  editor?.current.chain().focus().setFontFamily(value).run();
+                  close();
+                }}
+              >
+                <div style:font-family={value}>{label}</div>
+              </ToolbarDropdownMenuItem>
+            {/each}
+          </ToolbarDropdownMenu>
+        {/snippet}
+      </ToolbarDropdownButton>
 
-      {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
-          {#each values.fontFamily as { label, value } (value)}
-            <ToolbarDropdownMenuItem
-              style={css.raw({ fontSize: '14px' })}
-              active={(editor?.current.getAttributes('font_family').value ?? defaultValues.fontFamily) === value}
-              onclick={() => {
-                editor?.current.chain().focus().setFontFamily(value).run();
-                close();
-              }}
-            >
-              <div style:font-family={value}>{label}</div>
-            </ToolbarDropdownMenuItem>
-          {/each}
-        </ToolbarDropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
+      <ToolbarDropdownButton style={css.raw({ width: '60px' })} chevron label="글씨 크기" size="small">
+        {#snippet anchor()}
+          <div class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>
+            {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize))
+              ?.label}
+          </div>
+        {/snippet}
 
-    <ToolbarDropdownButton chevron label="글씨 크기" size="small">
-      {#snippet anchor()}
-        <div class={css({ fontSize: '14px' })}>
-          {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize))
-            ?.label}
-        </div>
-      {/snippet}
+        {#snippet floating({ close })}
+          <ToolbarDropdownMenu>
+            {#each values.fontSize as { label, value } (value)}
+              <ToolbarDropdownMenuItem
+                style={css.raw({ fontSize: '14px' })}
+                active={(editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize) === value}
+                onclick={() => {
+                  editor?.current.chain().focus().setFontSize(value).run();
+                  close();
+                }}
+              >
+                {label}
+              </ToolbarDropdownMenuItem>
+            {/each}
+          </ToolbarDropdownMenu>
+        {/snippet}
+      </ToolbarDropdownButton>
+    </div>
 
-      {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
-          {#each values.fontSize as { label, value } (value)}
-            <ToolbarDropdownMenuItem
-              style={css.raw({ fontSize: '14px' })}
-              active={(editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize) === value}
-              onclick={() => {
-                editor?.current.chain().focus().setFontSize(value).run();
-                close();
-              }}
-            >
-              {label}
-            </ToolbarDropdownMenuItem>
-          {/each}
-        </ToolbarDropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
+    <VerticalDivider style={css.raw({ height: '12px' })} />
 
-    <VerticalDivider />
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      <ToolbarButton
+        active={editor?.current.isActive('bold')}
+        icon={BoldIcon}
+        label="굵게"
+        onclick={() => {
+          editor?.current.chain().focus().toggleBold().run();
+        }}
+        size="small"
+      />
 
-    <ToolbarButton
-      active={editor?.current.isActive('bold')}
-      icon={BoldIcon}
-      label="굵게"
-      onclick={() => {
-        editor?.current.chain().focus().toggleBold().run();
-      }}
-      size="small"
-    />
+      <ToolbarButton
+        active={editor?.current.isActive('italic')}
+        icon={ItalicIcon}
+        label="기울임"
+        onclick={() => {
+          editor?.current.chain().focus().toggleItalic().run();
+        }}
+        size="small"
+      />
 
-    <ToolbarButton
-      active={editor?.current.isActive('italic')}
-      icon={ItalicIcon}
-      label="기울임"
-      onclick={() => {
-        editor?.current.chain().focus().toggleItalic().run();
-      }}
-      size="small"
-    />
+      <ToolbarButton
+        active={editor?.current.isActive('strike')}
+        icon={StrikethroughIcon}
+        label="취소선"
+        onclick={() => {
+          editor?.current.chain().focus().toggleStrike().run();
+        }}
+        size="small"
+      />
 
-    <ToolbarButton
-      active={editor?.current.isActive('strike')}
-      icon={StrikethroughIcon}
-      label="취소선"
-      onclick={() => {
-        editor?.current.chain().focus().toggleStrike().run();
-      }}
-      size="small"
-    />
+      <ToolbarButton
+        active={editor?.current.isActive('underline')}
+        icon={UnderlineIcon}
+        label="밑줄"
+        onclick={() => {
+          editor?.current.chain().focus().toggleUnderline().run();
+        }}
+        size="small"
+      />
+    </div>
 
-    <ToolbarButton
-      active={editor?.current.isActive('underline')}
-      icon={UnderlineIcon}
-      label="밑줄"
-      onclick={() => {
-        editor?.current.chain().focus().toggleUnderline().run();
-      }}
-      size="small"
-    />
+    <VerticalDivider style={css.raw({ height: '12px' })} />
 
-    <VerticalDivider />
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      <ToolbarDropdownButton active={editor?.current.isActive('link')} label="링크" size="small">
+        {#snippet anchor()}
+          <ToolbarIcon icon={LinkIcon} />
+        {/snippet}
 
-    <ToolbarDropdownButton active={editor?.current.isActive('link')} label="링크" size="small">
-      {#snippet anchor()}
-        <ToolbarIcon icon={LinkIcon} />
-      {/snippet}
+        {#snippet floating({ close })}
+          {#if editor}
+            <ToolbarFloatingLink {close} {editor} />
+          {/if}
+        {/snippet}
+      </ToolbarDropdownButton>
 
-      {#snippet floating({ close })}
-        {#if editor}
-          <ToolbarFloatingLink {close} {editor} />
-        {/if}
-      {/snippet}
-    </ToolbarDropdownButton>
+      <ToolbarDropdownButton active={editor?.current.isActive('ruby')} label="루비" size="small">
+        {#snippet anchor()}
+          <ToolbarIcon icon={RubyIcon} />
+        {/snippet}
 
-    <ToolbarDropdownButton active={editor?.current.isActive('ruby')} label="루비" size="small">
-      {#snippet anchor()}
-        <ToolbarIcon icon={RubyIcon} />
-      {/snippet}
+        {#snippet floating({ close })}
+          {#if editor}
+            <ToolbarFloatingRuby {close} {editor} />
+          {/if}
+        {/snippet}
+      </ToolbarDropdownButton>
+    </div>
 
-      {#snippet floating({ close })}
-        {#if editor}
-          <ToolbarFloatingRuby {close} {editor} />
-        {/if}
-      {/snippet}
-    </ToolbarDropdownButton>
+    <VerticalDivider style={css.raw({ height: '12px' })} />
 
-    <VerticalDivider />
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      <ToolbarDropdownButton label="문단 정렬" size="small">
+        {#snippet anchor()}
+          <ToolbarIcon
+            icon={// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            values.textAlign.find(
+              ({ value }) => value === (editor?.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign),
+            )!.icon}
+          />
+        {/snippet}
 
-    <ToolbarDropdownButton label="문단 정렬" size="small">
-      {#snippet anchor()}
-        <ToolbarIcon
-          icon={// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          values.textAlign.find(({ value }) => value === (editor?.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign))!
-            .icon}
-        />
-      {/snippet}
+        {#snippet floating({ close })}
+          <ToolbarDropdownMenu>
+            {#each values.textAlign as { label, value } (value)}
+              <ToolbarDropdownMenuItem
+                style={css.raw({ fontSize: '14px' })}
+                active={(editor?.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign) === value}
+                onclick={() => {
+                  editor?.current.chain().focus().setParagraphTextAlign(value).run();
+                  close();
+                }}
+              >
+                {label}
+              </ToolbarDropdownMenuItem>
+            {/each}
+          </ToolbarDropdownMenu>
+        {/snippet}
+      </ToolbarDropdownButton>
 
-      {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
-          {#each values.textAlign as { label, value } (value)}
-            <ToolbarDropdownMenuItem
-              style={css.raw({ fontSize: '14px' })}
-              active={(editor?.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign) === value}
-              onclick={() => {
-                editor?.current.chain().focus().setParagraphTextAlign(value).run();
-                close();
-              }}
-            >
-              {label}
-            </ToolbarDropdownMenuItem>
-          {/each}
-        </ToolbarDropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
+      <ToolbarDropdownButton label="문단 행간" size="small">
+        {#snippet anchor()}
+          <ToolbarIcon icon={LineHeightIcon} />
+        {/snippet}
 
-    <ToolbarDropdownButton label="문단 행간" size="small">
-      {#snippet anchor()}
-        <ToolbarIcon icon={LineHeightIcon} />
-      {/snippet}
+        {#snippet floating({ close })}
+          <ToolbarDropdownMenu>
+            {#each values.lineHeight as { label, value } (value)}
+              <ToolbarDropdownMenuItem
+                style={css.raw({ fontSize: '14px' })}
+                active={(editor?.current.getAttributes('paragraph').lineHeight ?? defaultValues.lineHeight) === value}
+                onclick={() => {
+                  editor?.current.chain().focus().setParagraphLineHeight(value).run();
+                  close();
+                }}
+              >
+                {label}
+              </ToolbarDropdownMenuItem>
+            {/each}
+          </ToolbarDropdownMenu>
+        {/snippet}
+      </ToolbarDropdownButton>
 
-      {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
-          {#each values.lineHeight as { label, value } (value)}
-            <ToolbarDropdownMenuItem
-              style={css.raw({ fontSize: '14px' })}
-              active={(editor?.current.getAttributes('paragraph').lineHeight ?? defaultValues.lineHeight) === value}
-              onclick={() => {
-                editor?.current.chain().focus().setParagraphLineHeight(value).run();
-                close();
-              }}
-            >
-              {label}
-            </ToolbarDropdownMenuItem>
-          {/each}
-        </ToolbarDropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
+      <ToolbarDropdownButton label="문단 자간" size="small">
+        {#snippet anchor()}
+          <ToolbarIcon icon={LetterSpacingIcon} />
+        {/snippet}
 
-    <ToolbarDropdownButton label="문단 자간" size="small">
-      {#snippet anchor()}
-        <ToolbarIcon icon={LetterSpacingIcon} />
-      {/snippet}
-
-      {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
-          {#each values.letterSpacing as { label, value } (value)}
-            <ToolbarDropdownMenuItem
-              style={css.raw({ fontSize: '14px' })}
-              active={(editor?.current.getAttributes('paragraph').letterSpacing ?? defaultValues.letterSpacing) === value}
-              onclick={() => {
-                editor?.current.chain().focus().setParagraphLetterSpacing(value).run();
-                close();
-              }}
-            >
-              {label}
-            </ToolbarDropdownMenuItem>
-          {/each}
-        </ToolbarDropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
+        {#snippet floating({ close })}
+          <ToolbarDropdownMenu>
+            {#each values.letterSpacing as { label, value } (value)}
+              <ToolbarDropdownMenuItem
+                style={css.raw({ fontSize: '14px' })}
+                active={(editor?.current.getAttributes('paragraph').letterSpacing ?? defaultValues.letterSpacing) === value}
+                onclick={() => {
+                  editor?.current.chain().focus().setParagraphLetterSpacing(value).run();
+                  close();
+                }}
+              >
+                {label}
+              </ToolbarDropdownMenuItem>
+            {/each}
+          </ToolbarDropdownMenu>
+        {/snippet}
+      </ToolbarDropdownButton>
+    </div>
 
     <div class={css({ flexGrow: '1' })}></div>
 
@@ -521,6 +554,4 @@
       {/snippet}
     </ToolbarDropdownButton>
   </div>
-
-  <HorizontalDivider />
 </div>

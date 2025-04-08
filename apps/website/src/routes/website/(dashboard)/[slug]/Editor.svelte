@@ -14,7 +14,7 @@
   import { Button, Helmet, HorizontalDivider } from '$lib/components';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
   import TopBar from '../TopBar.svelte';
   import { YState } from './state.svelte';
   import StatusBar from './StatusBar.svelte';
@@ -73,6 +73,9 @@
       }
     `),
   );
+
+  let toolbarEl = $state<HTMLDivElement>();
+  let toolbarSticked = $state(false);
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -169,6 +172,27 @@
       doc.destroy();
     };
   });
+
+  $effect(() => {
+    if (!toolbarEl) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          toolbarSticked = !entry.isIntersecting;
+        }
+      },
+      { root: toolbarEl.parentElement, rootMargin: '-21px', threshold: 1 },
+    );
+
+    observer.observe(toolbarEl);
+
+    return () => {
+      observer.disconnect();
+    };
+  });
 </script>
 
 <Helmet title={`${effectiveTitle} 작성 중`} />
@@ -196,94 +220,92 @@
 
 <HorizontalDivider />
 
-<div class={flex({ flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'hidden' })}>
-  <Toolbar {doc} {editor} />
+<div class={flex({ position: 'relative', flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'scroll' })}>
+  <div class={css({ flexShrink: '0', width: 'full', aspectRatio: '[10/1]', backgroundColor: 'gray.100' })}></div>
 
   <div
+    bind:this={toolbarEl}
+    class={css({ position: 'sticky', top: '20px', left: '0', right: '0', width: 'full', zIndex: '50', pointerEvents: 'none' })}
+  >
+    <div class={center({ position: 'absolute', top: '-20px', insetX: '0' })}>
+      <Toolbar {doc} {editor} sticked={toolbarSticked} />
+    </div>
+  </div>
+
+  <div
+    style:--prosemirror-max-width={`${maxWidth.current}px`}
     class={flex({
       flexDirection: 'column',
       alignItems: 'center',
       flexGrow: '1',
+      paddingTop: '120px',
       width: 'full',
-      backgroundColor: 'gray.100',
-      overflow: 'scroll',
+      maxWidth: '1200px',
+      backgroundColor: 'white',
     })}
   >
-    <div
-      style:--prosemirror-max-width={`${maxWidth.current}px`}
-      class={flex({
-        flexDirection: 'column',
-        alignItems: 'center',
-        flexGrow: '1',
-        paddingTop: '40px',
-        width: 'full',
-        maxWidth: '1200px',
-        backgroundColor: 'white',
-      })}
-    >
-      <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-        <textarea
-          bind:this={titleEl}
-          class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-          maxlength="100"
-          onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === 'ArrowDown') {
-              e.preventDefault();
-              subtitleEl?.focus();
-            }
-          }}
-          placeholder="제목을 입력하세요"
-          rows={1}
-          bind:value={title.current}
-          use:autosize
-        ></textarea>
-
-        <textarea
-          bind:this={subtitleEl}
-          class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', resize: 'none' })}
-          maxlength="100"
-          onkeydown={(e) => {
-            if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
-              e.preventDefault();
-              titleEl?.focus();
-            }
-
-            if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
-              e.preventDefault();
-              editor?.current.chain().focus().setTextSelection(2).run();
-            }
-          }}
-          placeholder="부제목을 입력하세요"
-          rows={1}
-          bind:value={subtitle.current}
-          use:autosize
-        ></textarea>
-
-        <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
-      </div>
-
-      <TiptapEditor
-        style={css.raw({ flexGrow: '1', width: 'full' })}
-        {awareness}
-        {doc}
-        oncreate={() => {
-          titleEl?.focus();
-        }}
-        onkeydown={(view, e) => {
-          const { doc, selection } = view.state;
-          const { anchor } = selection;
-
-          if (
-            ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
-            (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
-          ) {
+    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+      <textarea
+        bind:this={titleEl}
+        class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+        maxlength="100"
+        onkeydown={(e) => {
+          if (e.key === 'Enter' || e.key === 'ArrowDown') {
             e.preventDefault();
             subtitleEl?.focus();
           }
         }}
-        bind:editor
-      />
+        placeholder="제목을 입력하세요"
+        rows={1}
+        bind:value={title.current}
+        use:autosize
+      ></textarea>
+
+      <textarea
+        bind:this={subtitleEl}
+        class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', resize: 'none' })}
+        maxlength="100"
+        onkeydown={(e) => {
+          if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
+            e.preventDefault();
+            titleEl?.focus();
+          }
+
+          if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+            e.preventDefault();
+            editor?.current.chain().focus().setTextSelection(2).run();
+          }
+        }}
+        placeholder="부제목을 입력하세요"
+        rows={1}
+        bind:value={subtitle.current}
+        use:autosize
+      ></textarea>
+
+      <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
     </div>
+
+    <TiptapEditor
+      style={css.raw({ flexGrow: '1', width: 'full' })}
+      {awareness}
+      {doc}
+      oncreate={() => {
+        titleEl?.focus();
+      }}
+      onkeydown={(view, e) => {
+        const { doc, selection } = view.state;
+        const { anchor } = selection;
+
+        if (
+          ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+          (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+        ) {
+          e.preventDefault();
+          subtitleEl?.focus();
+        }
+      }}
+      bind:editor
+    />
   </div>
 </div>
 
