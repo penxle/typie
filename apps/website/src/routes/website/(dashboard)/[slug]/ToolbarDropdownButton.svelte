@@ -65,7 +65,7 @@
         height: '24px',
         color: active ? 'brand.500' : undefined,
         _hover: { backgroundColor: 'gray.100' },
-        _pressed: { backgroundColor: 'gray.200' },
+        _pressed: { backgroundColor: 'gray.100' },
       })}
       aria-label={label}
       aria-pressed={opened}
