@@ -24,7 +24,7 @@
       borderRadius: '4px',
       size: '54px',
       _hover: { backgroundColor: 'gray.100' },
-      _pressed: { backgroundColor: 'gray.200' },
+      _pressed: { backgroundColor: 'gray.100' },
     })}
     aria-pressed={active}
     {onclick}
@@ -42,7 +42,7 @@
         borderRadius: '4px',
         size: '24px',
         _hover: { backgroundColor: 'gray.100' },
-        _pressed: { backgroundColor: 'gray.200' },
+        _pressed: { backgroundColor: 'gray.100' },
       })}
       aria-pressed={active}
       {onclick}
