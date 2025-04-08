@@ -16,6 +16,7 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import TopBar from '../TopBar.svelte';
+  import Cover from './Cover.svelte';
   import { YState } from './state.svelte';
   import StatusBar from './StatusBar.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -221,7 +222,7 @@
 <HorizontalDivider />
 
 <div class={flex({ position: 'relative', flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'scroll' })}>
-  <div class={css({ flexShrink: '0', width: 'full', aspectRatio: '[10/1]', backgroundColor: 'gray.100' })}></div>
+  <Cover {doc} />
 
   <div
     bind:this={toolbarEl}

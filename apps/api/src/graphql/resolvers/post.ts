@@ -10,6 +10,7 @@ import { builder } from '../builder';
 import {
   Entity,
   EntityView,
+  Image,
   IPost,
   IPostContent,
   IPostOption,
@@ -106,6 +107,7 @@ PostContentView.implement({
   fields: (t) => ({
     body: t.expose('body', { type: 'JSON' }),
     maxWidth: t.exposeInt('maxWidth'),
+    coverImage: t.expose('coverImageId', { type: Image, nullable: true }),
   }),
 });
 

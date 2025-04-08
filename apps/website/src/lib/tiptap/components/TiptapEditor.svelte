@@ -31,8 +31,8 @@
 
       editorProps: {
         attributes: { class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style) },
-        scrollMargin: { top: 150, bottom: 150, left: 0, right: 0 },
-        scrollThreshold: { top: 150, bottom: 150, left: 0, right: 0 },
+        scrollMargin: { top: 250, bottom: 150, left: 0, right: 0 },
+        scrollThreshold: { top: 250, bottom: 150, left: 0, right: 0 },
 
         handleKeyDown: onkeydown,
       },

@@ -17,11 +17,12 @@
     alt: string;
     style?: SystemStyleObject;
     size: Size;
+    ratio?: number;
     quality?: number;
     progressive?: boolean;
   } & Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt'>;
 
-  let { $image: _image, alt, style, size, quality, progressive = false, ...rest }: Props = $props();
+  let { $image: _image, alt, style, size, ratio, quality, progressive = false, ...rest }: Props = $props();
 
   const image = fragment(
     _image,
@@ -92,7 +93,7 @@
 {#if placeholderUrl}
   <div
     bind:this={containerEl}
-    style:aspect-ratio={$image.ratio}
+    style:aspect-ratio={ratio ?? $image.ratio}
     class={css({
       position: 'relative',
       width: 'full',

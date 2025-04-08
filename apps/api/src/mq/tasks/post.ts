@@ -51,6 +51,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
     const title = (map.get('title') as string) || null;
     const subtitle = (map.get('subtitle') as string) || null;
     const maxWidth = (map.get('maxWidth') as number) ?? 1000;
+    const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
 
     const fragment = doc.getXmlFragment('body');
     const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
@@ -65,6 +66,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
         body,
         text,
         maxWidth,
+        coverImageId,
         updatedAt: dayjs(),
       })
       .where(and(eq(PostContents.postId, postId)));
