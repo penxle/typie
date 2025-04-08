@@ -1,11 +1,12 @@
 <script lang="ts">
   import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import ToolbarTooltip from './ToolbarTooltip.svelte';
   import type { Component } from 'svelte';
+  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
+    style?: SystemStyleObject;
     size: 'large' | 'small';
     icon: Component;
     label: string;
@@ -13,37 +14,48 @@
     onclick?: () => void;
   };
 
-  let { size, icon, label, active = false, onclick }: Props = $props();
+  let { style, size, icon, label, active = false, onclick }: Props = $props();
 </script>
 
 {#if size === 'large'}
   <button
-    class={center({
-      flexDirection: 'column',
-      gap: '4px',
-      borderRadius: '4px',
-      size: '54px',
-      _hover: { backgroundColor: 'gray.100' },
-      _pressed: { backgroundColor: 'gray.100' },
-    })}
+    class={css(
+      {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'column',
+        gap: '2px',
+        borderRadius: '6px',
+        size: '40px',
+        _hover: { backgroundColor: 'gray.100' },
+        _pressed: { backgroundColor: 'gray.100' },
+      },
+      style,
+    )}
     aria-pressed={active}
     {onclick}
     type="button"
   >
     <ToolbarIcon {icon} />
-    <span class={css({ fontSize: '11px' })}>{label}</span>
+    <span class={css({ fontSize: '10px' })}>{label}</span>
   </button>
 {:else if size === 'small'}
   <ToolbarTooltip {label}>
     <button
-      class={center({
-        flexDirection: 'column',
-        gap: '4px',
-        borderRadius: '4px',
-        size: '24px',
-        _hover: { backgroundColor: 'gray.100' },
-        _pressed: { backgroundColor: 'gray.100' },
-      })}
+      class={css(
+        {
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderRadius: '6px',
+          size: '24px',
+          backgroundColor: 'gray.100',
+          _hover: { backgroundColor: 'gray.200' },
+          _pressed: { backgroundColor: 'gray.200' },
+        },
+        style,
+      )}
       aria-pressed={active}
       {onclick}
       type="button"
