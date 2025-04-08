@@ -1,11 +1,11 @@
 <script lang="ts">
   import { match } from 'ts-pattern';
-  import IconAlarmClock from '~icons/lucide/alarm-clock';
   import IconTarget from '~icons/lucide/target';
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import StatusBarCharacterCount from './StatusBarCharacterCount.svelte';
+  import Timer from './Timer.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
 
@@ -37,10 +37,7 @@
     </div>
   </div>
 
-  <div class={flex({ alignItems: 'center', gap: '6px' })}>
-    <Icon style={{ color: 'gray.500' }} icon={IconAlarmClock} size={14} />
-    <div class={css({ fontSize: '14px' })}>타이머</div>
-  </div>
+  <Timer />
 
   <StatusBarCharacterCount {editor} />
 
