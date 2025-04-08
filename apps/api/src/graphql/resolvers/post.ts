@@ -5,6 +5,7 @@ import * as Y from 'yjs';
 import { db, Entities, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts, TableCode } from '@/db';
 import { EntityState, EntityType, PostVisibility } from '@/enums';
 import { schema } from '@/pm';
+import { pubsub } from '@/pubsub';
 import { decode, encode, makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
 import {
@@ -206,7 +207,7 @@ builder.mutationFields((t) => ({
         .limit(1)
         .then(first);
 
-      return await db.transaction(async (tx) => {
+      const post = await db.transaction(async (tx) => {
         const entity = await tx
           .insert(Entities)
           .values({
@@ -250,6 +251,10 @@ builder.mutationFields((t) => ({
 
         return post;
       });
+
+      pubsub.publish('site:update', input.siteId, { scope: 'site' });
+
+      return post;
     },
   }),
 

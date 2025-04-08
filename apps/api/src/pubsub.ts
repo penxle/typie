@@ -6,6 +6,7 @@ import type { PostContentSyncKind } from '@/enums';
 
 export const pubsub = createPubSub<{
   'post:content:sync': [postId: string, { kind: PostContentSyncKind; data: string }];
+  'site:update': [siteId: string, { scope: 'site' } | { scope: 'entity'; entityId: string }];
 }>({
   eventTarget: createRedisEventTarget({
     publishClient: new Redis(env.REDIS_URL),

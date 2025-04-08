@@ -1,7 +1,9 @@
 import { and, asc, eq, isNull } from 'drizzle-orm';
-import { db, Entities, TableCode } from '@/db';
+import { match } from 'ts-pattern';
+import { db, Entities, firstOrThrow, Sites, TableCode } from '@/db';
 import { EntityState } from '@/enums';
 import { env } from '@/env';
+import { pubsub } from '@/pubsub';
 import { builder } from '../builder';
 import { Entity, isTypeOf, Site } from '../objects';
 
@@ -43,6 +45,34 @@ builder.queryFields((t) => ({
     args: { siteId: t.arg.id() },
     resolve: async (_, args) => {
       return args.siteId;
+    },
+  }),
+}));
+
+/**
+ * * Subscriptions
+ */
+
+builder.subscriptionFields((t) => ({
+  siteUpdateStream: t.withAuth({ session: true }).field({
+    type: t.builder.unionType('SiteUpdateStreamPayload', {
+      types: [Site, Entity],
+    }),
+    args: { siteId: t.arg.id() },
+    subscribe: async (_, args, ctx) => {
+      const repeater = pubsub.subscribe('site:update', args.siteId);
+
+      ctx.c.req.raw.signal.addEventListener('abort', () => {
+        repeater.return();
+      });
+
+      return repeater;
+    },
+    resolve: async (payload, args) => {
+      return match(payload)
+        .with({ scope: 'site' }, () => db.select().from(Sites).where(eq(Sites.id, args.siteId)).then(firstOrThrow))
+        .with({ scope: 'entity' }, ({ entityId }) => db.select().from(Entities).where(eq(Entities.id, entityId)).then(firstOrThrow))
+        .exhaustive();
     },
   }),
 }));

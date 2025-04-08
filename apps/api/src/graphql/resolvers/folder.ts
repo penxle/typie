@@ -3,6 +3,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { db, Entities, first, firstOrThrow, Folders, TableCode } from '@/db';
 import { EntityState, EntityType } from '@/enums';
+import { pubsub } from '@/pubsub';
 import { builder } from '../builder';
 import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
 
@@ -74,7 +75,7 @@ builder.mutationFields((t) => ({
         .limit(1)
         .then(first);
 
-      return await db.transaction(async (tx) => {
+      const folder = await db.transaction(async (tx) => {
         const entity = await tx
           .insert(Entities)
           .values({
@@ -98,6 +99,10 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
       });
+
+      pubsub.publish('site:update', input.siteId, { scope: 'site' });
+
+      return folder;
     },
   }),
 }));

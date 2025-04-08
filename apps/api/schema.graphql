@@ -368,6 +368,12 @@ enum SiteState {
   DELETED
 }
 
+union SiteUpdateStreamPayload = Entity | Site
+
+type Subscription {
+  siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
+}
+
 input UnfurlEmbedInput {
   url: String!
 }
