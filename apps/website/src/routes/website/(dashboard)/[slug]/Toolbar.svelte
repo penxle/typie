@@ -22,6 +22,7 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
   import { SegmentButtons, VerticalDivider } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { defaultValues, values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
   import { center, flex, grid } from '$styled-system/patterns';
@@ -46,6 +47,7 @@
 
   let { editor, doc, sticked }: Props = $props();
 
+  const app = getAppContext();
   const maxWidth = new YState<number>(doc, 'maxWidth', 1000);
 </script>
 
@@ -62,11 +64,19 @@
       width: 'full',
       maxWidth: '1200px',
       backgroundColor: 'gray.50',
+      opacity: '30',
       boxShadow: '[0px 0px 1px 0px rgba(80, 84, 90, 0.08), 0px 1px 4px 0px rgba(80, 84, 90, 0.08), 0px 2px 8px 0px rgba(80, 84, 90, 0.12)]',
       pointerEvents: 'auto',
+      transition: 'opacity',
+      transitionDuration: '200ms',
+      transitionTimingFunction: 'ease',
+      _hover: { opacity: '100' },
     },
-    sticked && { borderTopRadius: '0' },
+    sticked ? { borderTopRadius: '0' } : { opacity: '100' },
+    app.state.toolbarActive && { opacity: '100' },
   )}
+  role="toolbar"
+  tabindex="-1"
 >
   <div class={flex({ alignItems: 'center', gap: '8px', width: 'full' })}>
     <ToolbarButton

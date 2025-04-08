@@ -3,6 +3,7 @@
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { createFloatingActions } from '$lib/actions';
   import { Icon } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import ToolbarTooltip from './ToolbarTooltip.svelte';
   import type { Placement } from '@floating-ui/dom';
@@ -26,14 +27,23 @@
     placement,
     offset: 8,
     onClickOutside: () => {
-      opened = false;
+      close();
     },
   });
 
   let opened = $state(false);
 
-  const open = () => (opened = true);
-  const close = () => (opened = false);
+  const app = getAppContext();
+
+  const open = () => {
+    opened = true;
+    app.state.toolbarActive = true;
+  };
+
+  const close = () => {
+    opened = false;
+    app.state.toolbarActive = false;
+  };
 </script>
 
 {#if size === 'large'}
