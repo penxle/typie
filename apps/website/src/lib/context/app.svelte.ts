@@ -9,6 +9,7 @@ type AppPreference = {
 
 type AppState = {
   sidebarPopoverVisible: boolean;
+  toolbarActive: boolean;
 };
 
 type AppTimerState = {
@@ -33,6 +34,7 @@ export const getAppContext = () => {
 export const setupAppContext = () => {
   const appState = $state<AppState>({
     sidebarPopoverVisible: false,
+    toolbarActive: false,
   });
 
   const context: AppContext = {
