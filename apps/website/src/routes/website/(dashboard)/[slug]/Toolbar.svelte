@@ -224,17 +224,19 @@
 
     <div class={css({ flexGrow: '1' })}></div>
 
-    <div class={css({ alignSelf: 'flex-start' })}>
-      <ToolbarButton
-        style={css.raw({ backgroundColor: 'transparent' })}
-        icon={app.preference.current.toolbarHidden ? ChevronsDownIcon : ChevronsUpIcon}
-        label={app.preference.current.toolbarHidden ? '툴바 고정하기' : '툴바 접기'}
-        onclick={() => {
-          app.preference.current.toolbarHidden = !app.preference.current.toolbarHidden;
-        }}
-        size="small"
-      />
-    </div>
+    {#if sticked}
+      <div class={css({ alignSelf: 'flex-start' })}>
+        <ToolbarButton
+          style={css.raw({ backgroundColor: 'transparent' })}
+          icon={app.preference.current.toolbarHidden ? ChevronsDownIcon : ChevronsUpIcon}
+          label={app.preference.current.toolbarHidden ? '툴바 고정하기' : '툴바 접기'}
+          onclick={() => {
+            app.preference.current.toolbarHidden = !app.preference.current.toolbarHidden;
+          }}
+          size="small"
+        />
+      </div>
+    {/if}
   </div>
 
   <div class={flex({ alignItems: 'center', gap: '10px', width: 'full', maxWidth: '1200px' })}>
