@@ -1,5 +1,7 @@
 <script lang="ts">
   import BoldIcon from '~icons/lucide/bold';
+  import ChevronsDownIcon from '~icons/lucide/chevrons-down';
+  import ChevronsUpIcon from '~icons/lucide/chevrons-up';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
   import FileUpIcon from '~icons/lucide/file-up';
@@ -64,16 +66,16 @@
       width: 'full',
       maxWidth: '1200px',
       backgroundColor: 'gray.50',
-      opacity: '30',
       boxShadow: '[0px 0px 1px 0px rgba(80, 84, 90, 0.08), 0px 1px 4px 0px rgba(80, 84, 90, 0.08), 0px 2px 8px 0px rgba(80, 84, 90, 0.12)]',
       pointerEvents: 'auto',
-      transition: 'opacity',
+      transitionProperty: 'transform',
       transitionDuration: '200ms',
       transitionTimingFunction: 'ease',
-      _hover: { opacity: '100' },
+      _hover: { transform: 'translateY(0)' },
     },
-    sticked ? { borderTopRadius: '0' } : { opacity: '100' },
-    app.state.toolbarActive && { opacity: '100' },
+    app.preference.current.toolbarHidden && { transform: 'translateY(-90%)', willChange: 'transform' },
+    sticked ? { borderTopRadius: '0' } : { transform: 'translateY(0)' },
+    app.state.toolbarActive && { transform: 'translateY(0)' },
   )}
   role="toolbar"
   tabindex="-1"
@@ -219,6 +221,20 @@
       }}
       size="large"
     />
+
+    <div class={css({ flexGrow: '1' })}></div>
+
+    <div class={css({ alignSelf: 'flex-start' })}>
+      <ToolbarButton
+        style={css.raw({ backgroundColor: 'transparent' })}
+        icon={app.preference.current.toolbarHidden ? ChevronsDownIcon : ChevronsUpIcon}
+        label={app.preference.current.toolbarHidden ? '툴바 고정하기' : '툴바 접기'}
+        onclick={() => {
+          app.preference.current.toolbarHidden = !app.preference.current.toolbarHidden;
+        }}
+        size="small"
+      />
+    </div>
   </div>
 
   <div class={flex({ alignItems: 'center', gap: '10px', width: 'full', maxWidth: '1200px' })}>

@@ -3,6 +3,7 @@ import { LocalStore, SessionStore } from '../state';
 
 type AppPreference = {
   sidebarExpanded: boolean;
+  toolbarHidden: boolean;
   focusDuration: number;
   restDuration: number;
 };
@@ -40,6 +41,7 @@ export const setupAppContext = () => {
   const context: AppContext = {
     preference: new LocalStore('typie:pref', {
       sidebarExpanded: true,
+      toolbarHidden: false,
       focusDuration: 30,
       restDuration: 10,
     }),
