@@ -25,9 +25,7 @@
       params: Object.fromEntries(page.url.searchParams),
     });
 
-    await goto('/', {
-      replaceState: true,
-    });
+    await goto('/', { replaceState: true });
   });
 </script>
 

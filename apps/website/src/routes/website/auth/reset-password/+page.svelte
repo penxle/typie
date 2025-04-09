@@ -1,9 +1,11 @@
 <script lang="ts">
   import { z } from 'zod';
   import { TypieError } from '@/errors';
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
+  import { toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
 
@@ -28,6 +30,10 @@
         code: page.url.searchParams.get('code') ?? '',
         password: data.password,
       });
+
+      toast.success('비밀번호가 재설정되었어요');
+
+      await goto('/auth/login', { replaceState: true });
     },
     onError: (error) => {
       if (error instanceof TypieError && error.code === 'invalid_code') {
