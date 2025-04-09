@@ -240,7 +240,8 @@ export const PostContentDailyStats = pgTable(
       .notNull()
       .references(() => PostContents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     date: datetime('date').notNull(),
-    characters: integer('characters').notNull(),
+    addedCharacters: integer('added_characters').notNull(),
+    removedCharacters: integer('removed_characters').notNull(),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
