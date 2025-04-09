@@ -1,9 +1,12 @@
 import { getClientAddress } from '@typie/lib';
 import DataLoader from 'dataloader';
+import dayjs from 'dayjs';
 import { eq } from 'drizzle-orm';
 import stringify from 'fast-json-stable-stringify';
-import { getCookie } from 'hono/cookie';
+import { getCookie, setCookie } from 'hono/cookie';
+import { nanoid } from 'nanoid';
 import * as R from 'remeda';
+import { env } from '@/env';
 import { db, first, UserSessions } from './db';
 import { decodeAccessToken } from './utils';
 import type { Context as HonoContext } from 'hono';
@@ -20,6 +23,7 @@ export type ServerContext = HonoContext<Env>;
 
 type DefaultContext = {
   ip: string;
+  deviceId: string;
 
   loader: <T, R, S, N extends boolean = false, M extends boolean = false, RR = N extends true ? R | null : R>(
     params: LoaderParams<T, R, S, N, M>,
@@ -45,9 +49,22 @@ export type Env = {
 };
 
 export const deriveContext = async (c: ServerContext): Promise<Context> => {
+  let deviceId = getCookie(c, 'typie-did');
+  if (!deviceId) {
+    deviceId = nanoid(32);
+    setCookie(c, 'typie-did', deviceId, {
+      path: '/',
+      domain: env.COOKIE_DOMAIN,
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: dayjs.duration(1, 'year').asSeconds(),
+    });
+  }
+
   const ctx: Context = {
     ip: getClientAddress(c),
-
+    deviceId,
     loader: <
       T,
       R,
