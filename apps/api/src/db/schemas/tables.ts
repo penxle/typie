@@ -215,12 +215,37 @@ export const PostContentSnapshots = pgTable(
     postId: text('post_id')
       .notNull()
       .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     snapshot: bytea('snapshot').notNull(),
+    order: integer('order').notNull().default(0),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.postId, t.createdAt)],
+  (t) => [index().on(t.postId, t.createdAt, t.order)],
+);
+
+export const PostContentDailyStats = pgTable(
+  'post_content_daily_stats',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_CONTENT_DAILY_STATS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    postContentId: text('post_content_id')
+      .notNull()
+      .references(() => PostContents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    date: datetime('date').notNull(),
+    characters: integer('characters').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.userId, t.postContentId, t.date)],
 );
 
 export const PostOptions = pgTable('post_options', {

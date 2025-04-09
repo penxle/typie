@@ -53,6 +53,7 @@ ws.get(
 
     let postId: string | null = null;
     let timer: NodeJS.Timeout | null = null;
+    const userId = context.session.userId;
 
     return {
       onMessage: async (event, ws) => {
@@ -90,7 +91,7 @@ ws.get(
 
         if (type === PostContentSyncMessageKind.UPDATE) {
           await publisher.publish('post:content:sync', Buffer.from([...encode(postId), 0, ...data]));
-          await redis.sadd(`post:content:updates:${postId}`, Buffer.from(payload));
+          await redis.sadd(`post:content:updates:${postId}`, Buffer.from([...encode(userId), 0, ...payload]));
           await enqueueJob('post:content:update', postId);
         } else if (type === PostContentSyncMessageKind.VECTOR) {
           const state = await getCurrentPostContentState(postId);
