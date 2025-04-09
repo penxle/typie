@@ -93,12 +93,13 @@
     style={css.raw({
       paddingX: '16px',
       paddingY: '16px',
-      fontSize: '14px',
+      minHeight: '80px',
       fontFamily: 'mono',
+      fontSize: '14px',
+      backgroundColor: 'white',
       overflowX: 'auto',
       whiteSpace: 'pre',
-      backgroundColor: 'white',
-      minHeight: '80px',
+      tabSize: '4',
       '&:not(:has(.ProseMirror-trailingBreak))': {
         _after: {
           content: '""',
