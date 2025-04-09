@@ -21,7 +21,7 @@ export const makeYDoc = ({ title, subtitle, body }: MakeYDocParams) => {
   const map = doc.getMap('attrs');
   map.set('title', title ?? '');
   map.set('subtitle', subtitle ?? '');
-  map.set('maxWidth', 1000);
+  map.set('maxWidth', 800);
 
   const fragment = doc.getXmlFragment('body');
   prosemirrorToYXmlFragment(node, fragment);

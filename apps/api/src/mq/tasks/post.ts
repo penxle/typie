@@ -113,7 +113,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
 
       const title = (map.get('title') as string) || null;
       const subtitle = (map.get('subtitle') as string) || null;
-      const maxWidth = (map.get('maxWidth') as number) ?? 1000;
+      const maxWidth = (map.get('maxWidth') as number) ?? 800;
       const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
 
       const fragment = doc.getXmlFragment('body');
