@@ -241,6 +241,7 @@ builder.mutationFields((t) => ({
         });
 
         await tx.insert(PostContentSnapshots).values({
+          userId: ctx.session.userId,
           postId: post.id,
           snapshot: Y.encodeSnapshotV2(snapshot),
         });

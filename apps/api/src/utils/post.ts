@@ -45,7 +45,17 @@ export const getCurrentPostContentState = async (postId: string) => {
     .where(eq(PostContents.postId, postId))
     .then(firstOrThrow);
 
-  const pendingUpdates = await redis.smembersBuffer(`post:content:updates:${postId}`);
+  const pendingUpdates = await redis.smembersBuffer(`post:content:updates:${postId}`).then((buffers) =>
+    buffers
+      .map((raw) => {
+        const data = new Uint8Array(raw);
+        const sepIdx = data.indexOf(0);
+
+        const update = data.slice(sepIdx + 1);
+        return update;
+      })
+      .filter((result) => result !== null),
+  );
 
   if (pendingUpdates.length === 0) {
     return {
