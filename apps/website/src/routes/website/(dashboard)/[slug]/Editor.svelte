@@ -4,6 +4,7 @@
   import dayjs from 'dayjs';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
+  import { on } from 'svelte/events';
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
@@ -12,6 +13,7 @@
   import { fragment, graphql } from '$graphql';
   import { autosize } from '$lib/actions';
   import { Button, Helmet, HorizontalDivider } from '$lib/components';
+  import { tip } from '$lib/notification';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -162,7 +164,19 @@
       }
     }, 1000);
 
+    const off = on(globalThis.window, 'keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        forceSync();
+        tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
+      }
+    });
+
     return () => {
+      off();
+
       clearInterval(forceSyncInterval);
       clearInterval(heartbeatInterval);
 
