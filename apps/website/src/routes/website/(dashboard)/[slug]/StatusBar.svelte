@@ -1,20 +1,33 @@
 <script lang="ts">
   import { match } from 'ts-pattern';
   import IconTarget from '~icons/lucide/target';
+  import { fragment, graphql } from '$graphql';
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import StatusBarCharacterCountWidget from './StatusBarCharacterCountWidget.svelte';
   import Timer from './Timer.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { StatusBar_post } from '$graphql';
   import type { Ref } from '$lib/utils';
 
   type Props = {
+    $post: StatusBar_post;
     editor?: Ref<Editor>;
     connectionStatus: 'connecting' | 'connected' | 'disconnected';
   };
 
-  let { editor, connectionStatus }: Props = $props();
+  let { $post: _post, editor, connectionStatus }: Props = $props();
+
+  const post = fragment(
+    _post,
+    graphql(`
+      fragment StatusBar_post on Post {
+        id
+        characterCountAdditionsToday
+      }
+    `),
+  );
 </script>
 
 <div class={flex({ alignItems: 'center', gap: '16px', flexShrink: '0', paddingX: '24px', height: '40px' })}>
@@ -43,6 +56,6 @@
 
   <div class={flex({ alignItems: 'center', gap: '6px' })}>
     <Icon style={{ color: 'gray.500' }} icon={IconTarget} size={14} />
-    <div class={css({ fontSize: '14px' })}>오늘 200자 씀</div>
+    <div class={css({ fontSize: '14px' })}>오늘 {$post.characterCountAdditionsToday}자 씀</div>
   </div>
 </div>

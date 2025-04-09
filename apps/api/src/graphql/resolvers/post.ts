@@ -1,8 +1,20 @@
 import { faker } from '@faker-js/faker';
-import { and, desc, eq, getTableColumns, isNull } from 'drizzle-orm';
+import dayjs from 'dayjs';
+import { and, desc, eq, getTableColumns, gte, isNull, lt, sum } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import * as Y from 'yjs';
-import { db, Entities, first, firstOrThrow, PostContents, PostContentSnapshots, PostOptions, Posts, TableCode } from '@/db';
+import {
+  db,
+  Entities,
+  first,
+  firstOrThrow,
+  PostCharacterCountChanges,
+  PostContents,
+  PostContentSnapshots,
+  PostOptions,
+  Posts,
+  TableCode,
+} from '@/db';
 import { EntityState, EntityType, PostVisibility } from '@/enums';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
@@ -51,6 +63,26 @@ Post.implement({
       type: PostOption,
       resolve: async (self) => {
         return await db.select().from(PostOptions).where(eq(PostOptions.postId, self.id)).then(firstOrThrow);
+      },
+    }),
+
+    characterCountAdditionsToday: t.int({
+      resolve: async (self) => {
+        const startOfDay = dayjs.kst().startOf('day');
+
+        const change = await db
+          .select({ additions: sum(PostCharacterCountChanges.additions) })
+          .from(PostCharacterCountChanges)
+          .where(
+            and(
+              eq(PostCharacterCountChanges.postId, self.id),
+              gte(PostCharacterCountChanges.timestamp, startOfDay),
+              lt(PostCharacterCountChanges.timestamp, startOfDay.add(1, 'day')),
+            ),
+          )
+          .then(first);
+
+        return change?.additions ? Number.parseInt(change.additions, 10) : 0;
       },
     }),
   }),

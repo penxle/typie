@@ -244,6 +244,7 @@ enum PlanAvailability {
 }
 
 type Post implements IPost {
+  characterCountAdditionsToday: Int!
   content: PostContent!
   entity: Entity!
   id: ID!
