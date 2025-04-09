@@ -79,3 +79,11 @@ export const EntityNode = builder.unionType('EntityNode', {
 export const EntityViewNode = builder.unionType('EntityViewNode', {
   types: [FolderView, PostView],
 });
+
+export const CharacterCountChange = builder.simpleObject('CharacterCountChange', {
+  fields: (t) => ({
+    date: t.field({ type: 'DateTime' }),
+    additions: t.int(),
+    deletions: t.int(),
+  }),
+});

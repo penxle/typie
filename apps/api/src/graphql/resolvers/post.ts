@@ -21,6 +21,7 @@ import { pubsub } from '@/pubsub';
 import { decode, encode, makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
 import {
+  CharacterCountChange,
   Entity,
   EntityView,
   Image,
@@ -66,23 +67,31 @@ Post.implement({
       },
     }),
 
-    characterCountAdditionsToday: t.int({
-      resolve: async (self) => {
-        const startOfDay = dayjs.kst().startOf('day');
-
+    characterCountChange: t.withAuth({ session: true }).field({
+      type: CharacterCountChange,
+      resolve: async (post, _, ctx) => {
+        const startOfDay = dayjs().kst().startOf('day');
         const change = await db
-          .select({ additions: sum(PostCharacterCountChanges.additions) })
+          .select({
+            additions: sum(PostCharacterCountChanges.additions),
+            deletions: sum(PostCharacterCountChanges.deletions),
+          })
           .from(PostCharacterCountChanges)
           .where(
             and(
-              eq(PostCharacterCountChanges.postId, self.id),
+              eq(PostCharacterCountChanges.userId, ctx.session.userId),
+              eq(PostCharacterCountChanges.postId, post.id),
               gte(PostCharacterCountChanges.timestamp, startOfDay),
               lt(PostCharacterCountChanges.timestamp, startOfDay.add(1, 'day')),
             ),
           )
           .then(first);
 
-        return change?.additions ? Number.parseInt(change.additions, 10) : 0;
+        return {
+          date: startOfDay,
+          additions: Number(change?.additions ?? 0),
+          deletions: Number(change?.deletions ?? 0),
+        };
       },
     }),
   }),

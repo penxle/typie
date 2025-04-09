@@ -13,6 +13,12 @@ interface Blob {
   id: ID!
 }
 
+type CharacterCountChange {
+  additions: Int!
+  date: DateTime!
+  deletions: Int!
+}
+
 input CreateFolderInput {
   name: String!
   parentEntityId: ID
@@ -244,7 +250,7 @@ enum PlanAvailability {
 }
 
 type Post implements IPost {
-  characterCountAdditionsToday: Int!
+  characterCountChange: CharacterCountChange!
   content: PostContent!
   entity: Entity!
   id: ID!

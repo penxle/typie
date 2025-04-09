@@ -85,7 +85,9 @@
             ... on Post {
               id
 
-              characterCountAdditionsToday
+              characterCountChange {
+                additions
+              }
 
               content {
                 id
