@@ -85,6 +85,8 @@
             ... on Post {
               id
 
+              characterCountAdditionsToday
+
               content {
                 id
                 title

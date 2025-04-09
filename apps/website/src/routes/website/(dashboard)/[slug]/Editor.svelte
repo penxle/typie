@@ -72,6 +72,8 @@
             id
             update
           }
+
+          ...StatusBar_post
         }
       }
     `),
@@ -326,4 +328,4 @@
 
 <HorizontalDivider />
 
-<StatusBar {connectionStatus} {editor} />
+<StatusBar $post={$query.post} {connectionStatus} {editor} />
