@@ -57,6 +57,7 @@ export const Plan = createObjectRef('Plan', T.Plans);
 export const Post = createObjectRef('Post', T.Posts);
 export const PostContent = createObjectRef('PostContent', T.PostContents);
 export const PostOption = createObjectRef('PostOption', T.PostOptions);
+export const PostReaction = createObjectRef('PostReaction', T.PostReactions);
 export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const Site = createObjectRef('Site', T.Sites);
