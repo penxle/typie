@@ -95,7 +95,7 @@
 
   const title = new YState<string>(doc, 'title', '');
   const subtitle = new YState<string>(doc, 'subtitle', '');
-  const maxWidth = new YState<number>(doc, 'maxWidth', 1000);
+  const maxWidth = new YState<number>(doc, 'maxWidth', 800);
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 

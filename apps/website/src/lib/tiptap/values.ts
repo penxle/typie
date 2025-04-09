@@ -143,6 +143,6 @@ export const defaultValues = {
   horizontalRule: 'horizontal_rule_1',
   callout: 'info',
   paragraphIndent: 1,
-  maxWidth: 1000,
+  maxWidth: 800,
   blockGap: 1,
 } as const;

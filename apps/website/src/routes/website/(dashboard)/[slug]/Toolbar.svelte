@@ -50,7 +50,7 @@
   let { editor, doc, sticked }: Props = $props();
 
   const app = getAppContext();
-  const maxWidth = new YState<number>(doc, 'maxWidth', 1000);
+  const maxWidth = new YState<number>(doc, 'maxWidth', 800);
 </script>
 
 <div
@@ -536,7 +536,7 @@
                   maxWidth.current = value;
                 }}
                 size="sm"
-                value={maxWidth.current ?? 1000}
+                value={maxWidth.current ?? 800}
               />
             </div>
           </div>
