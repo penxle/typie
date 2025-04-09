@@ -423,7 +423,7 @@ input UpdateUserInput {
 }
 
 type User {
-  dailyStats: [CharacterCountChange!]!
+  characterCountChanges: [CharacterCountChange!]!
   email: String!
   id: ID!
   name: String!

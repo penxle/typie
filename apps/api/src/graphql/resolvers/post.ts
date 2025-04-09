@@ -74,6 +74,7 @@ Post.implement({
       type: CharacterCountChange,
       resolve: async (post, _, ctx) => {
         const startOfDay = dayjs().kst().startOf('day');
+
         const change = await db
           .select({
             additions: sum(PostCharacterCountChanges.additions),
