@@ -55,6 +55,7 @@
 >
   <div
     class={flex({
+      justifyContent: 'space-between',
       alignItems: 'center',
       gap: '60px',
       borderBottomWidth: '1px',
