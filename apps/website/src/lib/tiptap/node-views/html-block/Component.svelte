@@ -52,7 +52,6 @@
     borderRadius: '8px',
     backgroundColor: 'gray.50',
     overflow: 'hidden',
-    boxShadow: '[0 2px 8px rgba(0, 0, 0, 0.05)]',
   })}
 >
   <div
@@ -129,7 +128,7 @@
         fontFamily: 'mono',
         backgroundColor: 'white',
         overflowX: 'auto',
-        whiteSpace: 'pre-wrap',
+        whiteSpace: 'pre',
         '&:not(:has(.ProseMirror-trailingBreak))': {
           _after: {
             content: '""',

@@ -27,7 +27,7 @@ export const renderHTML = (content: JSONContent, extensions: Extensions) => {
       const nodeViewContentEditable = nodeView.querySelector('[data-node-view-content-editable]');
 
       if (nodeViewContentEditableWrapper && nodeViewContentEditable) {
-        nodeViewContentEditable.replaceChildren(...nodeViewContentEditableWrapper.children);
+        nodeViewContentEditable.innerHTML = '\n' + nodeViewContentEditableWrapper.innerHTML;
       }
 
       nodeViewWrapper.replaceWith(nodeView);
