@@ -48,7 +48,6 @@
 <NodeView
   style={css.raw({
     borderWidth: '1px',
-    borderColor: 'gray.200',
     borderRadius: '8px',
     backgroundColor: 'gray.50',
     overflow: 'hidden',
@@ -122,13 +121,15 @@
   <NodeViewContentEditable
     style={css.raw(
       {
-        paddingY: '18px',
         paddingX: '16px',
-        fontSize: '14px',
+        paddingY: '16px',
+        minHeight: '80px',
         fontFamily: 'mono',
+        fontSize: '14px',
         backgroundColor: 'white',
         overflowX: 'auto',
         whiteSpace: 'pre',
+        tabSize: '4',
         '&:not(:has(.ProseMirror-trailingBreak))': {
           _after: {
             content: '""',
