@@ -103,7 +103,7 @@
 
     // 드롭 타겟 리스트 내 직계 자식 엘리먼트들
     const childrenElems = dropTarget.list.querySelectorAll(
-      ':scope > details > ul > .dnd-item-folder, :scope > details > ul > .dnd-item-page',
+      ':scope > .dnd-item-folder, :scope > .dnd-item-page, :scope > details > ul > .dnd-item-folder, :scope > details > ul > .dnd-item-page',
     );
 
     if (dropTarget.elem) {
@@ -186,11 +186,11 @@
 
     updateGhostElPosition(dragging, event);
 
-    let pointerTargetList = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.dnd-item-folder');
+    let pointerTargetList =
+      document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.dnd-item-folder') ??
+      document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.dnd-list');
 
-    if (!pointerTargetList) {
-      return;
-    }
+    if (!pointerTargetList) return;
 
     let parentId = nodeMap.get(pointerTargetList)?.id;
 
@@ -210,7 +210,7 @@
 
     // 드롭 타겟 리스트 내 직계 자식 엘리먼트들
     const childrenElems = pointerTargetList.querySelectorAll<HTMLElement>(
-      ':scope > details > ul > .dnd-item-folder, :scope > details > ul > .dnd-item-page',
+      ':scope > .dnd-item-folder, :scope > .dnd-item-page, :scope > details > ul > .dnd-item-folder, :scope > details > ul > .dnd-item-page',
     );
 
     const mineRect = pointerTargetList.querySelector(':scope > details > summary')?.getBoundingClientRect();
@@ -231,7 +231,9 @@
 
     // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
     for (const [i, child] of childrenElems.entries()) {
-      const pageRect = child.querySelector(':scope > .dnd-item-body')?.getBoundingClientRect();
+      const pageRect =
+        child.querySelector(':scope > .dnd-item-body')?.getBoundingClientRect() ??
+        child.querySelector(':scope > .dnd-item-page > .dnd-item-body')?.getBoundingClientRect();
       const folderRect = child.querySelector(':scope > details > .dnd-item-body')?.getBoundingClientRect();
 
       // 페이지 위아래로 indicator 표시
@@ -332,6 +334,7 @@
       marginTop: depth === 0 ? '0' : '2px',
       paddingLeft: '0',
       touchAction: 'none',
+      height: 'full',
     }),
   )}
 >
