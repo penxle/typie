@@ -24,7 +24,9 @@
     graphql(`
       fragment StatusBar_post on Post {
         id
-        characterCountAdditionsToday
+        characterCountChange {
+          additions
+        }
       }
     `),
   );
@@ -56,6 +58,6 @@
 
   <div class={flex({ alignItems: 'center', gap: '6px' })}>
     <Icon style={{ color: 'gray.500' }} icon={IconTarget} size={14} />
-    <div class={css({ fontSize: '14px' })}>오늘 {$post.characterCountAdditionsToday}자 씀</div>
+    <div class={css({ fontSize: '14px' })}>오늘 {$post.characterCountChange.additions}자 씀</div>
   </div>
 </div>
