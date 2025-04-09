@@ -8,7 +8,6 @@ export const transform = (content: string) => {
   return `
     <html>
       <head>
-        <style>html, body { margin: 0 }</style>
         ${head}
       </head>
       <body>

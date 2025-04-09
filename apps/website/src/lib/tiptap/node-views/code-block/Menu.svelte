@@ -121,6 +121,7 @@
     fontSize: '13px',
     fontWeight: 'medium',
     color: 'gray.600',
+    pointerEvents: 'auto',
     userSelect: 'none',
     _hover: {
       backgroundColor: 'gray.200',
