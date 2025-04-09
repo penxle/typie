@@ -111,13 +111,12 @@ export const FloatingMenu = Extension.create({
 
                 const { x, y, middlewareData } = await computePosition(nodeDOM, dom, {
                   placement: 'left-start',
-                  middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16 })],
+                  middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
                 });
 
                 dom.style.left = `${x}px`;
                 dom.style.top = `${y}px`;
-                dom.style.visibility = middlewareData.hide?.referenceHidden ? 'hidden' : 'visible';
-                dom.style.zIndex = '30';
+                dom.style.visibility = middlewareData.hide?.escaped ? 'hidden' : 'visible';
               });
             },
             destroy: () => {
