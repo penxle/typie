@@ -27,7 +27,7 @@ export const FontColor = Mark.create({
           return normalize(element.style.color);
         },
         renderHTML: ({ value }) => ({
-          style: `color: ${hexes[value]};${value === 'white' ? ' text-shadow: none !important;' : ''}`,
+          style: `color: ${hexes[value]};${value === 'white' ? ' text-shadow: none;' : ''}`,
         }),
       },
     };
