@@ -103,7 +103,11 @@
     <img class={css(style, { size: 'full', objectFit: 'cover' })} {alt} loading="lazy" src={placeholderUrl} {...rest} />
 
     {#if loaded}
-      <div bind:this={targetEl} class={css({ position: 'absolute', inset: '0' })} in:fade={{ duration: 200 }}></div>
+      <div
+        bind:this={targetEl}
+        class={css({ position: 'absolute', inset: '0', backgroundColor: 'white' })}
+        in:fade={{ duration: 200 }}
+      ></div>
     {/if}
   </div>
 {:else}
