@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { Helmet, HorizontalDivider, Img } from '$lib/components';
   import { TiptapRenderer } from '$lib/tiptap';
@@ -42,7 +43,11 @@
 </script>
 
 {#if $query.entityView.node.__typename === 'PostView'}
-  <Helmet description={$query.entityView.node.content.excerpt} title={$query.entityView.node.content.title} />
+  <Helmet
+    description={$query.entityView.node.content.excerpt}
+    image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${$query.entityView.id}` }}
+    title={$query.entityView.node.content.title}
+  />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen', backgroundColor: 'gray.100' })}>
     <div
