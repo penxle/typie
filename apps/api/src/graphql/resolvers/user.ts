@@ -1,7 +1,8 @@
-import { and, eq } from 'drizzle-orm';
+import dayjs, { Dayjs } from 'dayjs';
+import { and, eq, gte, lte, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, PaymentMethods, Sites, TableCode, Users } from '@/db';
+import { db, first, firstOrThrow, PaymentMethods, PostCharacterCountChanges, Sites, TableCode, Users } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import { PaymentMethodState, SiteState, UserState } from '@/enums';
@@ -9,7 +10,7 @@ import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { isTypeOf, PaymentMethod, Site, User } from '../objects';
+import { CharacterCountChange, isTypeOf, PaymentMethod, Site, User } from '../objects';
 
 /**
  * * Types
@@ -41,6 +42,67 @@ User.implement({
           .from(PaymentMethods)
           .where(and(eq(PaymentMethods.userId, user.id), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
           .then(first);
+      },
+    }),
+
+    dailyStats: t.field({
+      type: [CharacterCountChange],
+      resolve: async (user) => {
+        const endDate = dayjs().kst().endOf('day');
+        const startDate = endDate.subtract(1, 'year').startOf('day');
+
+        const statsByHour = await db
+          .select({
+            timestamp: PostCharacterCountChanges.timestamp,
+            additions: sum(PostCharacterCountChanges.additions),
+            deletions: sum(PostCharacterCountChanges.deletions),
+          })
+          .from(PostCharacterCountChanges)
+          .where(
+            and(
+              eq(PostCharacterCountChanges.userId, user.id),
+              gte(PostCharacterCountChanges.timestamp, startDate),
+              lte(PostCharacterCountChanges.timestamp, endDate),
+            ),
+          )
+          .groupBy(PostCharacterCountChanges.timestamp)
+          .orderBy(PostCharacterCountChanges.timestamp);
+
+        const stats = statsByHour.reduce(
+          (reducedStats, stat) => {
+            const lastStat = reducedStats.at(-1);
+            const currentDay = stat.timestamp.kst().startOf('day');
+            const additions = Number(stat.additions ?? 0);
+            const deletions = Number(stat.deletions ?? 0);
+
+            if (lastStat) {
+              if (lastStat.timestamp.isSame(currentDay, 'day')) {
+                lastStat.additions += additions;
+                lastStat.deletions += deletions;
+              } else {
+                reducedStats.push({
+                  timestamp: currentDay,
+                  additions,
+                  deletions,
+                });
+              }
+            } else {
+              reducedStats.push({
+                timestamp: currentDay,
+                additions,
+                deletions,
+              });
+            }
+            return reducedStats;
+          },
+          [] as { timestamp: Dayjs; additions: number; deletions: number }[],
+        );
+
+        return stats.map((stat) => ({
+          date: stat.timestamp,
+          additions: stat.additions,
+          deletions: stat.deletions,
+        }));
       },
     }),
   }),
