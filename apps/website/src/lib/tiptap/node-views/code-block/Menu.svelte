@@ -7,9 +7,9 @@
   import IconChevronUp from '~icons/lucide/chevron-up';
   import IconSearch from '~icons/lucide/search';
   import { createFloatingActions } from '$lib/actions';
-  import { HorizontalDivider, Icon } from '$lib/components';
+  import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
   import type { NodeViewProps } from '../../lib';
 
   type Props = {
@@ -46,7 +46,7 @@
   };
 
   const { anchor, floating } = createFloatingActions({
-    placement: 'bottom-end',
+    placement: 'bottom',
     offset: 4,
     onClickOutside: close,
   });
@@ -113,21 +113,23 @@
 
 <button
   bind:this={buttonEl}
-  class={css({
-    display: 'flex',
-    alignItems: 'center',
+  class={center({
     gap: '4px',
-    fontSize: '14px',
-    fontWeight: 'semibold',
-    paddingLeft: '10px',
-    paddingRight: '6px',
-    paddingY: '2px',
     borderRadius: '4px',
-    color: 'gray.700',
+    paddingX: '8px',
+    paddingY: '1px',
+    fontSize: '13px',
+    fontWeight: 'medium',
+    color: 'gray.600',
+    userSelect: 'none',
     _hover: {
       backgroundColor: 'gray.200',
     },
+    _expanded: {
+      backgroundColor: 'gray.200',
+    },
   })}
+  aria-expanded={open}
   onclick={() => (open = true)}
   type="button"
   use:anchor
@@ -135,9 +137,9 @@
   {languages.find((language) => language.id === attrs.language)?.name ?? '?'}
 
   {#if open}
-    <Icon icon={IconChevronUp} />
+    <Icon style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronUp} size={14} />
   {:else}
-    <Icon icon={IconChevronDown} />
+    <Icon style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronDown} size={14} />
   {/if}
 </button>
 
@@ -149,33 +151,52 @@
       direction: 'column',
       position: 'relative',
       backgroundColor: 'white',
-      borderRadius: '8px',
+      borderWidth: '1px',
+      borderRadius: '12px',
       maxHeight: '360px',
       overflowY: 'auto',
       scrollbar: 'hidden',
       zIndex: '50',
-      boxShadow: 'xlarge',
+      boxShadow: '[0 0 0 1px rgba(0,0,0,0.05), 0 10px 20px -5px rgba(0,0,0,0.1)]',
     })}
     role="menu"
     use:floating
   >
-    <div class={css({ padding: '8px', backgroundColor: 'white' })}>
+    <div
+      class={css({ padding: '8px', backgroundColor: 'white', borderTopRadius: '12px', borderBottom: '1px solid', borderColor: 'gray.100' })}
+    >
       <label
         class={flex({
           align: 'center',
           gap: '8px',
-          paddingY: '7px',
+          paddingY: '6px',
           paddingX: '10px',
-          borderRadius: '4px',
+          borderRadius: '6px',
           borderWidth: '1px',
+          borderColor: 'gray.200',
+          backgroundColor: 'gray.50',
+          _focusWithin: {
+            borderColor: 'gray.300',
+            backgroundColor: 'white',
+          },
         })}
       >
-        <Icon style={css.raw({})} icon={IconSearch} size={14} />
-        <input bind:this={inputElem} class={css({ fontSize: '14px' })} placeholder="언어를 검색하세요" type="text" bind:value={query} />
+        <Icon style={css.raw({ color: 'gray.400' })} icon={IconSearch} size={14} />
+        <input
+          bind:this={inputElem}
+          class={css({
+            fontSize: '13px',
+            width: 'full',
+            backgroundColor: 'transparent',
+            _placeholder: { color: 'gray.400' },
+          })}
+          placeholder="언어를 검색하세요"
+          type="text"
+          bind:value={query}
+        />
       </label>
     </div>
-    <HorizontalDivider />
-    <ul bind:this={menuEl} class={css({ padding: '8px', flex: '1', overflowY: 'auto' })}>
+    <ul bind:this={menuEl} class={css({ padding: '6px', flex: '1', overflowY: 'auto' })}>
       {#if filteredLanguages.length > 0}
         {#each filteredLanguages as language, index (language.id)}
           <li>
@@ -184,17 +205,19 @@
                 align: 'center',
                 justify: 'space-between',
                 gap: '4px',
-                paddingX: '14px',
+                paddingX: '10px',
                 paddingY: '6px',
-                fontSize: '14px',
+                fontSize: '13px',
                 width: 'full',
-                borderRadius: '4px',
+                borderRadius: '6px',
                 backgroundColor: {
                   base: selectedIndex === index ? 'gray.100' : 'transparent',
                   _hover: 'gray.100',
                   _focus: 'gray.100',
                   _selected: 'gray.100',
                 },
+                color: attrs.language === language.id ? 'brand.500' : 'gray.700',
+                fontWeight: attrs.language === language.id ? 'medium' : 'normal',
               })}
               aria-pressed={attrs.language === language.id}
               onclick={() => {
@@ -208,14 +231,14 @@
               {language.name}
 
               {#if attrs.language === language.id}
-                <Icon style={css.raw({ color: 'brand.400', '& *': { strokeWidth: '[2]' } })} icon={IconCheck} />
+                <Icon style={css.raw({ color: 'brand.500', '& *': { strokeWidth: '[2]' } })} icon={IconCheck} size={14} />
               {/if}
             </button>
           </li>
         {/each}
       {:else}
         <li>
-          <div class={css({ padding: '8px', fontSize: '14px', color: 'gray.500' })}>검색 결과가 없습니다</div>
+          <div class={css({ padding: '8px', fontSize: '13px', color: 'gray.400', textAlign: 'center' })}>검색 결과가 없습니다</div>
         </li>
       {/if}
     </ul>
