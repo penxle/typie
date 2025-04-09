@@ -4,11 +4,13 @@ import * as R from 'remeda';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, Entities, firstOrThrow, PostContentDailyStats, PostContents, PostContentSnapshots, Posts } from '@/db';
+import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, PostContentSnapshots, Posts } from '@/db';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { decode, makeText } from '@/utils';
 import { defineJob } from '../types';
+
+const getCharacterCount = (text: string) => text.replaceAll(/\s+/g, ' ').trim().length;
 
 export const PostContentUpdateJob = defineJob('post:content:update', async (postId: string) => {
   const buffers = await redis.smembersBuffer(`post:content:updates:${postId}`);
@@ -31,29 +33,28 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
       .for('update')
       .then(firstOrThrow);
 
-    const updateDataByUser = R.groupBy(
-      buffers
-        .map((raw) => {
-          const data = new Uint8Array(raw);
-          const sepIdx = data.indexOf(0);
+    const updates = R.groupBy(
+      buffers.map((buffer) => {
+        const data = new Uint8Array(buffer);
+        const sepIdx = data.indexOf(0);
 
-          const userId = decode(data.slice(0, sepIdx));
-          const update = data.slice(sepIdx + 1);
-          return { userId, update, raw };
-        })
-        .filter((result) => result !== null),
-      (result) => result.userId,
+        const userId = decode(data.slice(0, sepIdx));
+        const update = data.slice(sepIdx + 1);
+
+        return { userId, update };
+      }),
+      ({ userId }) => userId,
     );
 
     const doc = new Y.Doc({ gc: false });
     Y.applyUpdateV2(doc, state.update);
 
-    let previousTextLength = state.text.replaceAll(/\s+/g, ' ').trim().length;
+    let prevCharacterCount = getCharacterCount(state.text);
     let order = 0;
 
-    for (const [userId, data] of Object.entries(updateDataByUser)) {
+    for (const [userId, data] of Object.entries(updates)) {
       const prevSnapshot = Y.snapshot(doc);
-      const update = Y.mergeUpdatesV2(data.map((result) => result.update));
+      const update = Y.mergeUpdatesV2(data.map(({ update }) => update));
 
       Y.applyUpdateV2(doc, update);
       const snapshot = Y.snapshot(doc);
@@ -65,7 +66,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
           postId,
           userId,
           snapshot: Y.encodeSnapshotV2(snapshot),
-          order,
+          order: order++,
         });
 
         const fragment = doc.getXmlFragment('body');
@@ -73,30 +74,30 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
         const body = node.toJSON();
         const text = makeText(body);
 
-        const textLengthDiff = text.replaceAll(/\s+/g, ' ').trim().length - previousTextLength;
-        if (textLengthDiff !== 0) {
+        const characterCount = getCharacterCount(text);
+        const characterCountDelta = characterCount - prevCharacterCount;
+
+        if (characterCountDelta !== 0) {
           await tx
-            .insert(PostContentDailyStats)
+            .insert(PostCharacterCountChanges)
             .values({
-              postContentId: state.id,
+              postId,
               userId,
-              date: dayjs().kst().startOf('day'),
-              addedCharacters: Math.max(textLengthDiff, 0),
-              removedCharacters: Math.max(-textLengthDiff, 0),
+              timestamp: dayjs().startOf('hour'),
+              additions: Math.max(characterCountDelta, 0),
+              deletions: Math.max(-characterCountDelta, 0),
             })
             .onConflictDoUpdate({
-              target: [PostContentDailyStats.userId, PostContentDailyStats.postContentId, PostContentDailyStats.date],
+              target: [PostCharacterCountChanges.userId, PostCharacterCountChanges.postId, PostCharacterCountChanges.timestamp],
               set: {
-                addedCharacters: textLengthDiff > 0 ? sql`${PostContentDailyStats.addedCharacters} + ${textLengthDiff}` : undefined,
-                removedCharacters: textLengthDiff < 0 ? sql`${PostContentDailyStats.removedCharacters} + ${-textLengthDiff}` : undefined,
+                additions: characterCountDelta > 0 ? sql`${PostCharacterCountChanges.additions} + ${characterCountDelta}` : undefined,
+                deletions: characterCountDelta < 0 ? sql`${PostCharacterCountChanges.deletions} + ${-characterCountDelta}` : undefined,
               },
             });
         }
 
-        previousTextLength = text.replaceAll(/\s+/g, ' ').trim().length;
+        prevCharacterCount = characterCount;
       }
-
-      order++;
     }
 
     await tx
@@ -133,8 +134,6 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
         })
         .where(and(eq(PostContents.postId, postId)));
     }
-
-    return buffers;
   });
 
   await redis.srem(`post:content:updates:${postId}`, ...buffers);

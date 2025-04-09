@@ -182,6 +182,28 @@ export const Posts = pgTable('posts', {
     .default(sql`now()`),
 });
 
+export const PostCharacterCountChanges = pgTable(
+  'post_character_count_changes',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_CHARACTER_COUNT_CHANGES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    postId: text('post_id')
+      .notNull()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    timestamp: datetime('timestamp').notNull(),
+    additions: integer('additions').notNull().default(0),
+    deletions: integer('deletions').notNull().default(0),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.userId, t.postId, t.timestamp)],
+);
+
 export const PostContents = pgTable('post_contents', {
   id: text('id')
     .primaryKey()
@@ -225,28 +247,6 @@ export const PostContentSnapshots = pgTable(
       .default(sql`now()`),
   },
   (t) => [index().on(t.postId, t.createdAt, t.order)],
-);
-
-export const PostContentDailyStats = pgTable(
-  'post_content_daily_stats',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.POST_CONTENT_DAILY_STATS)),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    postContentId: text('post_content_id')
-      .notNull()
-      .references(() => PostContents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    date: datetime('date').notNull(),
-    addedCharacters: integer('added_characters').notNull(),
-    removedCharacters: integer('removed_characters').notNull(),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [uniqueIndex().on(t.userId, t.postContentId, t.date)],
 );
 
 export const PostOptions = pgTable('post_options', {

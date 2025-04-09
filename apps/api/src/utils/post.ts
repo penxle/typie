@@ -45,24 +45,20 @@ export const getCurrentPostContentState = async (postId: string) => {
     .where(eq(PostContents.postId, postId))
     .then(firstOrThrow);
 
-  const pendingUpdates = await redis.smembersBuffer(`post:content:updates:${postId}`).then((buffers) =>
-    buffers
-      .map((raw) => {
-        const data = new Uint8Array(raw);
-        const sepIdx = data.indexOf(0);
-
-        const update = data.slice(sepIdx + 1);
-        return update;
-      })
-      .filter((result) => result !== null),
-  );
-
-  if (pendingUpdates.length === 0) {
+  const buffers = await redis.smembersBuffer(`post:content:updates:${postId}`);
+  if (buffers.length === 0) {
     return {
       update: state.update,
       vector: state.vector,
     };
   }
+
+  const pendingUpdates = buffers.map((buffer) => {
+    const data = new Uint8Array(buffer);
+    const sepIdx = data.indexOf(0);
+
+    return data.slice(sepIdx + 1);
+  });
 
   const updatedUpdate = Y.mergeUpdatesV2([state.update, ...pendingUpdates]);
   const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
