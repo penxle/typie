@@ -48,7 +48,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
     const doc = new Y.Doc({ gc: false });
     Y.applyUpdateV2(doc, state.update);
 
-    let previousTextLength = state.text.length;
+    let previousTextLength = state.text.replaceAll(/\s+/g, ' ').trim().length;
     let order = 0;
 
     for (const [userId, data] of Object.entries(updateDataByUser)) {
@@ -73,25 +73,27 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
         const body = node.toJSON();
         const text = makeText(body);
 
-        const textLengthDiff = text.length - previousTextLength;
-        if (textLengthDiff > 0) {
+        const textLengthDiff = text.replaceAll(/\s+/g, ' ').trim().length - previousTextLength;
+        if (textLengthDiff !== 0) {
           await tx
             .insert(PostContentDailyStats)
             .values({
               postContentId: state.id,
               userId,
               date: dayjs().kst().startOf('day'),
-              characters: textLengthDiff,
+              addedCharacters: Math.max(textLengthDiff, 0),
+              removedCharacters: Math.max(-textLengthDiff, 0),
             })
             .onConflictDoUpdate({
               target: [PostContentDailyStats.userId, PostContentDailyStats.postContentId, PostContentDailyStats.date],
               set: {
-                characters: sql`${PostContentDailyStats.characters} + ${textLengthDiff}`,
+                addedCharacters: textLengthDiff > 0 ? sql`${PostContentDailyStats.addedCharacters} + ${textLengthDiff}` : undefined,
+                removedCharacters: textLengthDiff < 0 ? sql`${PostContentDailyStats.removedCharacters} + ${-textLengthDiff}` : undefined,
               },
             });
         }
 
-        previousTextLength = text.length;
+        previousTextLength = text.replaceAll(/\s+/g, ' ').trim().length;
       }
 
       order++;
