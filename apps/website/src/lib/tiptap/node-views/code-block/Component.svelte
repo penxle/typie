@@ -44,7 +44,6 @@
     borderRadius: '8px',
     backgroundColor: 'gray.50',
     overflow: 'hidden',
-    boxShadow: '[0 2px 8px rgba(0, 0, 0, 0.05)]',
   })}
 >
   <div
@@ -97,7 +96,7 @@
       fontSize: '14px',
       fontFamily: 'mono',
       overflowX: 'auto',
-      whiteSpace: 'pre-wrap',
+      whiteSpace: 'pre',
       backgroundColor: 'white',
       minHeight: '80px',
       '&:not(:has(.ProseMirror-trailingBreak))': {
