@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { graphql } from '$graphql';
+  import { toast } from '$lib/notification';
   import { center } from '$styled-system/patterns';
 
   const updateEmail = graphql(`
@@ -17,9 +18,9 @@
       code: page.url.searchParams.get('code')!,
     });
 
-    await goto('/', {
-      replaceState: true,
-    });
+    toast.success('이메일이 변경되었어요');
+
+    await goto('/', { replaceState: true });
   });
 </script>
 

@@ -19,9 +19,7 @@
       code: page.url.searchParams.get('code')!,
     });
 
-    await goto('/', {
-      replaceState: true,
-    });
+    await goto('/', { replaceState: true });
   });
 </script>
 
