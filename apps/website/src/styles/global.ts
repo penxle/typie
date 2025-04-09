@@ -9,15 +9,11 @@ export const globalCss = defineGlobalStyles({
     lineHeight: 'inherit',
     letterSpacing: 'inherit',
 
-    fontOpticalSizing: 'auto',
-    WebkitFontSmoothing: 'antialiased',
-    MozOsxFontSmoothing: 'grayscale',
-
     color: 'inherit',
     backgroundColor: 'transparent',
 
-    textRendering: 'optimizeLegibility',
-    textShadow: '[0 0 1px rgba(0, 0, 0, 0.1), 0 0 0 rgba(0, 0, 0, 0.1)]',
+    textRendering: 'inherit',
+    textShadow: 'inherit',
   },
 
   '*, *::before, *::after': {
@@ -37,6 +33,13 @@ export const globalCss = defineGlobalStyles({
 
     lineHeight: '1.4',
     letterSpacing: '-0.015em',
+
+    fontOpticalSizing: 'auto',
+    WebkitFontSmoothing: 'antialiased',
+    MozOsxFontSmoothing: 'grayscale',
+
+    textRendering: 'optimizeLegibility',
+    textShadow: '[0 0 1px rgba(0, 0, 0, 0.1), 0 0 0 rgba(0, 0, 0, 0.1)]',
   },
 
   a: {
