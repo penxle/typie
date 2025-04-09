@@ -1,4 +1,5 @@
 <script lang="ts">
+  import * as R from 'remeda';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -91,6 +92,8 @@
     const result = await entityQuery.refetch({ id: entity.id });
     children = result.entity.children;
   };
+
+  const debouncedLoadEntity = R.funnel(loadEntity, { minQuietPeriodMs: 100, triggerAt: 'end' });
 </script>
 
 <li
@@ -122,7 +125,12 @@
             },
           }),
         )}
-        onmouseenter={loadEntity}
+        onmouseenter={() => {
+          debouncedLoadEntity.call();
+        }}
+        onmouseleave={() => {
+          debouncedLoadEntity.cancel();
+        }}
       >
         <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', width: '16px', height: '16px', color: 'gray.500' })}>
           {#if open}
