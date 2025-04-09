@@ -4,7 +4,7 @@
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import StatusBarCharacterCount from './StatusBarCharacterCount.svelte';
+  import StatusBarCharacterCountWidget from './StatusBarCharacterCountWidget.svelte';
   import Timer from './Timer.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
@@ -39,7 +39,7 @@
 
   <Timer />
 
-  <StatusBarCharacterCount {editor} />
+  <StatusBarCharacterCountWidget {editor} />
 
   <div class={flex({ alignItems: 'center', gap: '6px' })}>
     <Icon style={{ color: 'gray.500' }} icon={IconTarget} size={14} />

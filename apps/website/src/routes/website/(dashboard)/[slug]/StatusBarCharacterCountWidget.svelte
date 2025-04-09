@@ -20,7 +20,7 @@
   let text = $state('');
   let textSerializers = $state<Record<string, TextSerializer>>({});
 
-  const countWithWhitespace = $derived(text.replaceAll(/[\r\n]/g, '').length);
+  const countWithWhitespace = $derived(text.replaceAll(/[\r\n]+/g, '\n').trim().length);
   const countWithoutWhitespace = $derived(text.replaceAll(/\s/g, '').length);
   const countWithoutWhitespaceAndPunctuation = $derived(text.replaceAll(/[\s\p{P}]/gu, '').length);
 
