@@ -36,15 +36,14 @@
 <NodeView>
   <div
     style:border-color={color}
-    style:background-color={`color-mix(in srgb, ${color} 4%, transparent)`}
+    style:background-color={`color-mix(in srgb, ${color} 2%, transparent)`}
     class={flex({
       alignItems: 'flex-start',
-      gap: '7px',
-      borderLeftWidth: '3px',
-      paddingLeft: '14px',
-      paddingRight: '16px',
+      gap: '8px',
+      borderWidth: '1px',
+      borderRadius: '8px',
+      paddingX: '12px',
       paddingY: '16px',
-      borderRightRadius: '4px',
     })}
   >
     <svelte:element
