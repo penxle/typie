@@ -1,17 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { cubicOut } from 'svelte/easing';
-  import { tweened } from 'svelte/motion';
-  import { derived } from 'svelte/store';
+  import { Tween } from 'svelte/motion';
   import XIcon from '~icons/lucide/x';
   import { portal, scrollLock } from '$lib/actions';
   import { Icon, Img } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
-  import type { Readable } from 'svelte/store';
   import type { NodeViewProps } from '../../lib';
-
-  type Rect = { top: number; left: number; width: number; height: number };
 
   type Props = {
     node: NodeViewProps['node'];
@@ -26,29 +21,50 @@
     attrs = node.attrs;
   });
 
-  let containerEl = $state<HTMLDivElement>();
   let targetEl = $state<HTMLDivElement>();
 
-  const progress = tweened(0, { duration: 300, easing: cubicOut });
-  const opacity = derived(progress, ($progress) => $progress);
-  let rect = $state<Readable<Rect>>();
+  let referenceRect = $state<DOMRect>();
+  let targetRect = $state<DOMRect>();
 
-  onMount(async () => {
-    if (!referenceEl || !targetEl) {
-      return;
+  const progress = new Tween(0, { duration: 300, easing: cubicOut });
+  const opacity = $derived(progress.current);
+
+  let transform = $derived.by(() => {
+    if (referenceRect && targetRect) {
+      const { width, height, top, left } = referenceRect;
+
+      const scaleX = width + progress.current * (targetRect.width - width);
+      const scaleY = height + progress.current * (targetRect.height - height);
+      const scale = Math.min(scaleX / width, scaleY / height);
+
+      const centerX = left + width / 2;
+      const centerY = top + height / 2;
+
+      const targetCenterX = targetRect.left + targetRect.width / 2;
+      const targetCenterY = targetRect.top + targetRect.height / 2;
+
+      const translateX = centerX + progress.current * (targetCenterX - centerX) - centerX;
+      const translateY = centerY + progress.current * (targetCenterY - centerY) - centerY;
+
+      return {
+        scale,
+        translateX,
+        translateY,
+        width,
+        height,
+        top,
+        left,
+      };
     }
+  });
 
-    const referenceRect = referenceEl.getBoundingClientRect();
-    const targetRect = targetEl.getBoundingClientRect();
+  $effect(() => {
+    if (referenceEl && targetEl) {
+      referenceRect = referenceEl.getBoundingClientRect();
+      targetRect = targetEl.getBoundingClientRect();
 
-    rect = derived(progress, ($progress) => ({
-      top: referenceRect.top + $progress * (targetRect.top - referenceRect.top),
-      left: referenceRect.left + $progress * (targetRect.left - referenceRect.left),
-      width: referenceRect.width + $progress * (targetRect.width - referenceRect.width),
-      height: referenceRect.height + $progress * (targetRect.height - referenceRect.height),
-    }));
-
-    $progress = 1;
+      progress.target = 1;
+    }
   });
 
   const handleClose = async () => {
@@ -64,7 +80,7 @@
     <div bind:this={targetEl} class={css({ size: 'full' })}></div>
   </div>
 
-  <div style:opacity={$opacity} class={css({ position: 'fixed', inset: '0', size: 'full', backgroundColor: 'white' })}>
+  <div style:opacity class={css({ position: 'fixed', inset: '0', size: 'full', backgroundColor: 'white' })}>
     <div class={css({ position: 'absolute', top: '20px', right: '20px' })}>
       <button
         class={center({
@@ -92,14 +108,14 @@
     </div>
   </div>
 
-  {#if $rect}
+  {#if transform}
     <div
-      bind:this={containerEl}
-      style:top={`${$rect.top}px`}
-      style:left={`${$rect.left}px`}
-      style:width={`${$rect.width}px`}
-      style:height={`${$rect.height}px`}
-      class={center({ position: 'fixed' })}
+      style:top={`${transform.top}px`}
+      style:left={`${transform.left}px`}
+      style:width={`${transform.width}px`}
+      style:height={`${transform.height}px`}
+      style:transform={`translate(${transform.translateX}px, ${transform.translateY}px) scale(${transform.scale})`}
+      class={center({ position: 'fixed', willChange: 'transform' })}
     >
       <Img
         style={css.raw({ size: 'full', borderRadius: '4px', objectFit: 'contain', cursor: 'zoom-out' })}
