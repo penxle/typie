@@ -13,8 +13,8 @@
   const app = getAppContext();
 
   let open = $state(false);
-  let focusDuration = $state(app.preference.current.focusDuration);
-  let restDuration = $state(app.preference.current.restDuration);
+  let focusDuration = $state(app.preference.current.focusDuration ?? 30);
+  let restDuration = $state(app.preference.current.restDuration ?? 10);
   let timerInterval: ReturnType<typeof setInterval> | null = $state(null);
   let showRestModal = $state(false);
 
