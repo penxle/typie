@@ -63,14 +63,16 @@
   role="banner"
 >
   {#if coverImage.current}
-    <Img
-      style={css.raw({ width: 'full', objectFit: 'cover' })}
-      $image={JSON.parse(coverImage.current)}
-      alt="커버 이미지"
-      progressive
-      ratio={5 / 1}
-      size="full"
-    />
+    {#key coverImage.current}
+      <Img
+        style={css.raw({ width: 'full', objectFit: 'cover' })}
+        $image={JSON.parse(coverImage.current)}
+        alt="커버 이미지"
+        progressive
+        ratio={5 / 1}
+        size="full"
+      />
+    {/key}
   {:else}
     <div class={center({ aspectRatio: '[10/1]', backgroundColor: 'gray.100' })}>
       {#if inflight}
