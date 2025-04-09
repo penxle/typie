@@ -12,10 +12,12 @@ import {
   PostContents,
   PostContentSnapshots,
   PostOptions,
+  PostReactions,
   Posts,
   TableCode,
 } from '@/db';
 import { EntityState, EntityType, PostVisibility } from '@/enums';
+import { TypieError } from '@/errors';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { decode, encode, makeText, makeYDoc } from '@/utils';
@@ -34,6 +36,7 @@ import {
   PostContentView,
   PostOption,
   PostOptionView,
+  PostReaction,
   PostView,
 } from '../objects';
 
@@ -116,6 +119,13 @@ PostView.implement({
         return await db.select().from(PostOptions).where(eq(PostOptions.postId, self.id)).then(firstOrThrow);
       },
     }),
+
+    reactions: t.field({
+      type: [PostReaction],
+      resolve: async (post) => {
+        return await db.select().from(PostReactions).where(eq(PostReactions.postId, post.id)).orderBy(desc(PostReactions.createdAt));
+      },
+    }),
   }),
 });
 
@@ -176,6 +186,14 @@ PostOptionView.implement({
   interfaces: [IPostOption],
   fields: (t) => ({
     hasPassword: t.boolean({ resolve: (self) => !!self.password }),
+  }),
+});
+
+PostReaction.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    emoji: t.expose('emoji', { type: 'String' }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });
 
@@ -321,6 +339,45 @@ builder.mutationFields((t) => ({
           allowCopies: input.allowCopies,
         })
         .where(eq(PostOptions.postId, input.postId))
+        .returning()
+        .then(firstOrThrow);
+    },
+  }),
+
+  createPostReaction: t.fieldWithInput({
+    type: PostReaction,
+    input: {
+      postId: t.input.id(),
+      emoji: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const post = await db
+        .select({
+          state: Entities.state,
+          allowReactions: PostOptions.allowReactions,
+        })
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .innerJoin(PostOptions, eq(Posts.id, PostOptions.postId))
+        .where(eq(Posts.id, input.postId))
+        .then(first);
+
+      if (post?.state !== EntityState.ACTIVE) {
+        throw new TypieError({ code: 'not_found' });
+      }
+
+      if (!post.allowReactions) {
+        throw new TypieError({ code: 'reaction_disallowed' });
+      }
+
+      return await db
+        .insert(PostReactions)
+        .values({
+          postId: input.postId,
+          userId: ctx.session?.userId,
+          emoji: input.emoji,
+          deviceId: ctx.deviceId,
+        })
         .returning()
         .then(firstOrThrow);
     },

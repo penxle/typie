@@ -30,6 +30,11 @@ input CreatePostInput {
   siteId: ID!
 }
 
+input CreatePostReactionInput {
+  emoji: String!
+  postId: ID!
+}
+
 input CreatePreorderPaymentInput {
   email: String!
 }
@@ -187,6 +192,7 @@ type Mutation {
   cancelPlan: UserPlan!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
+  createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   enrollPlan(input: EnrollPlanInput!): UserPlan!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
@@ -300,11 +306,18 @@ type PostOptionView implements IPostOption {
   visibility: PostVisibility!
 }
 
+type PostReaction {
+  createdAt: DateTime!
+  emoji: String!
+  id: ID!
+}
+
 type PostView implements IPost {
   content: PostContentView!
   entity: EntityView!
   id: ID!
   option: PostOptionView!
+  reactions: [PostReaction!]!
 }
 
 enum PostVisibility {

@@ -267,6 +267,25 @@ export const PostOptions = pgTable('post_options', {
     .default(sql`now()`),
 });
 
+export const PostReactions = pgTable(
+  'post_reactions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_REACTIONS)),
+    postId: text('post_id')
+      .notNull()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    deviceId: text('device_id').notNull(),
+    emoji: text('emoji').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.postId, t.createdAt)],
+);
+
 export const PreorderPayments = pgTable('preorder_payments', {
   id: text('id')
     .primaryKey()
