@@ -38,6 +38,7 @@
     style:border-color={color}
     style:background-color={`color-mix(in srgb, ${color} 4%, transparent)`}
     class={flex({
+      alignItems: 'flex-start',
       gap: '7px',
       borderLeftWidth: '3px',
       paddingLeft: '14px',
@@ -75,6 +76,17 @@
       <Icon {icon} size={20} />
     </svelte:element>
 
-    <NodeViewContentEditable style={css.raw({ flexGrow: '1', paddingTop: '2px', '& > *': { textAlign: '[left!]', textIndent: '0!' } })} />
+    <NodeViewContentEditable
+      style={css.raw({
+        flexGrow: '1',
+        '& > p': {
+          textAlign: '[left!]',
+          textIndent: '0!',
+          '&:first-child': {
+            marginTop: '[calc((28px - 1lh) / 2)]',
+          },
+        },
+      })}
+    />
   </div>
 </NodeView>
