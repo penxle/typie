@@ -1,5 +1,5 @@
-import dayjs, { Dayjs } from 'dayjs';
-import { and, eq, gte, lte, sum } from 'drizzle-orm';
+import dayjs from 'dayjs';
+import { and, asc, eq, gte, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
 import { db, first, firstOrThrow, PaymentMethods, PostCharacterCountChanges, Sites, TableCode, Users } from '@/db';
@@ -45,64 +45,28 @@ User.implement({
       },
     }),
 
-    dailyStats: t.field({
+    characterCountChanges: t.field({
       type: [CharacterCountChange],
-      resolve: async (user) => {
-        const endDate = dayjs().kst().endOf('day');
-        const startDate = endDate.subtract(1, 'year').startOf('day');
+      resolve: async (self) => {
+        const startOfTomorrow = dayjs.kst().startOf('day').add(1, 'day');
 
-        const statsByHour = await db
+        const date = sql<string>`DATE(${PostCharacterCountChanges.timestamp} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.utc);
+        return await db
           .select({
-            timestamp: PostCharacterCountChanges.timestamp,
-            additions: sum(PostCharacterCountChanges.additions),
-            deletions: sum(PostCharacterCountChanges.deletions),
+            date,
+            additions: sum(PostCharacterCountChanges.additions).mapWith(Number),
+            deletions: sum(PostCharacterCountChanges.deletions).mapWith(Number),
           })
           .from(PostCharacterCountChanges)
           .where(
             and(
-              eq(PostCharacterCountChanges.userId, user.id),
-              gte(PostCharacterCountChanges.timestamp, startDate),
-              lte(PostCharacterCountChanges.timestamp, endDate),
+              eq(PostCharacterCountChanges.userId, self.id),
+              gte(PostCharacterCountChanges.timestamp, startOfTomorrow.subtract(1, 'year')),
+              lt(PostCharacterCountChanges.timestamp, startOfTomorrow),
             ),
           )
-          .groupBy(PostCharacterCountChanges.timestamp)
-          .orderBy(PostCharacterCountChanges.timestamp);
-
-        const stats = statsByHour.reduce(
-          (reducedStats, stat) => {
-            const lastStat = reducedStats.at(-1);
-            const currentDay = stat.timestamp.kst().startOf('day');
-            const additions = Number(stat.additions ?? 0);
-            const deletions = Number(stat.deletions ?? 0);
-
-            if (lastStat) {
-              if (lastStat.timestamp.isSame(currentDay, 'day')) {
-                lastStat.additions += additions;
-                lastStat.deletions += deletions;
-              } else {
-                reducedStats.push({
-                  timestamp: currentDay,
-                  additions,
-                  deletions,
-                });
-              }
-            } else {
-              reducedStats.push({
-                timestamp: currentDay,
-                additions,
-                deletions,
-              });
-            }
-            return reducedStats;
-          },
-          [] as { timestamp: Dayjs; additions: number; deletions: number }[],
-        );
-
-        return stats.map((stat) => ({
-          date: stat.timestamp,
-          additions: stat.additions,
-          deletions: stat.deletions,
-        }));
+          .groupBy(date)
+          .orderBy(asc(date));
       },
     }),
   }),
