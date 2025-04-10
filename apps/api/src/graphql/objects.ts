@@ -47,6 +47,7 @@ export const IPost = createInterfaceRef('IPost', T.Posts);
 export const IPostContent = createInterfaceRef('IPostContent', T.PostContents);
 export const IPostOption = createInterfaceRef('IPostOption', T.PostOptions);
 
+export const Comment = createObjectRef('Comment', T.Comments);
 export const Embed = createObjectRef('Embed', T.Embeds);
 export const Entity = createObjectRef('Entity', T.Entities);
 export const File = createObjectRef('File', T.Files);

@@ -1,6 +1,7 @@
 // spell-checker:ignoreRegExp /: '[A-Z]{1,4}',/g
 
 export const TableCode = {
+  COMMENTS: 'C',
   FILES: 'FILE',
   FOLDERS: 'F',
   EMBEDS: 'EMBD',
