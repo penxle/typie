@@ -11,10 +11,11 @@
     icon: Component;
     label: string;
     active?: boolean;
+    disabled?: boolean;
     onclick?: () => void;
   };
 
-  let { style, size, icon, label, active = false, onclick }: Props = $props();
+  let { style, size, icon, label, active = false, disabled = false, onclick }: Props = $props();
 </script>
 
 {#if size === 'large'}
@@ -28,12 +29,16 @@
         gap: '2px',
         borderRadius: '6px',
         size: '40px',
-        _hover: { backgroundColor: 'gray.100' },
-        _pressed: { backgroundColor: 'gray.100' },
+        _enabled: {
+          _hover: { backgroundColor: 'gray.100' },
+          _pressed: { backgroundColor: 'gray.100' },
+        },
+        _disabled: { opacity: '50' },
       },
       style,
     )}
     aria-pressed={active}
+    {disabled}
     {onclick}
     type="button"
   >
@@ -51,12 +56,16 @@
           borderRadius: '6px',
           size: '24px',
           backgroundColor: 'gray.100',
-          _hover: { backgroundColor: 'gray.200' },
-          _pressed: { backgroundColor: 'gray.200' },
+          _enabled: {
+            _hover: { backgroundColor: 'gray.200' },
+            _pressed: { backgroundColor: 'gray.200' },
+          },
+          _disabled: { opacity: '50' },
         },
         style,
       )}
       aria-pressed={active}
+      {disabled}
       {onclick}
       type="button"
     >

@@ -25,7 +25,11 @@ export const Bold = Mark.create({
     return {
       toggleBold:
         () =>
-        ({ commands }) => {
+        ({ can, commands }) => {
+          if (!can().isMarkAllowed(this.name)) {
+            return false;
+          }
+
           return commands.toggleMark(this.name);
         },
     };

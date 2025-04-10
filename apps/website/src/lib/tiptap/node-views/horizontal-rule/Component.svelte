@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { NodeView } from '$lib/tiptap/lib';
-  import { values } from '$lib/tiptap/values';
   import { center } from '$styled-system/patterns';
-  import type { NodeViewProps } from '$lib/tiptap/lib';
+  import { NodeView } from '../../lib';
+  import { values } from '../../values';
+  import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
 

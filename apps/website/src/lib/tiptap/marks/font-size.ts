@@ -1,6 +1,6 @@
 import { Mark } from '@tiptap/core';
-import { values } from '$lib/tiptap/values';
 import { closest } from '$lib/utils';
+import { defaultValues, values } from '../values';
 
 const fontSizes = values.fontSize.map(({ value }) => value);
 type FontSize = (typeof fontSizes)[number];
@@ -10,7 +10,6 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     fontSize: {
       setFontSize: (fontSize: FontSize) => ReturnType;
-      unsetFontSize: () => ReturnType;
     };
   }
 }
@@ -50,14 +49,16 @@ export const FontSize = Mark.create({
     return {
       setFontSize:
         (value) =>
-        ({ commands }) => {
-          return commands.setMark(this.name, { value: closest(value, fontSizes) });
-        },
+        ({ commands, can }) => {
+          if (!can().isMarkAllowed(this.name)) {
+            return false;
+          }
 
-      unsetFontSize:
-        () =>
-        ({ commands }) => {
-          return commands.unsetMark(this.name);
+          if (value === defaultValues.fontSize) {
+            return commands.unsetMark(this.name);
+          } else {
+            return commands.setMark(this.name, { value: closest(value, fontSizes) });
+          }
         },
     };
   },

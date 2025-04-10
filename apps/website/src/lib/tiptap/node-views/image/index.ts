@@ -29,8 +29,12 @@ export const Image = createNodeView(Component, {
     return {
       setImage:
         () =>
-        ({ commands }) => {
-          return commands.insertContent({ type: 'image' });
+        ({ can, commands }) => {
+          if (!can().isNodeAllowed(this.name)) {
+            return false;
+          }
+
+          return commands.insertContent({ type: this.name });
         },
     };
   },

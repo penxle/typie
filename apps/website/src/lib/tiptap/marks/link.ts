@@ -45,8 +45,12 @@ export const Link = Mark.create({
     return {
       setLink:
         (href) =>
-        ({ chain }) => {
-          return chain().setMark(this.name, { href }).run();
+        ({ commands, can }) => {
+          if (!can().isMarkAllowed(this.name)) {
+            return false;
+          }
+
+          return commands.setMark(this.name, { href });
         },
 
       updateLink:

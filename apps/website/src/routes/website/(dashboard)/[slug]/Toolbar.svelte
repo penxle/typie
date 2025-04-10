@@ -82,6 +82,7 @@
 >
   <div class={flex({ alignItems: 'center', gap: '8px', width: 'full' })}>
     <ToolbarButton
+      disabled={!editor?.current.can().setImage()}
       icon={ImageIcon}
       label="이미지"
       onclick={() => {
@@ -91,6 +92,7 @@
     />
 
     <ToolbarButton
+      disabled={!editor?.current.can().setFile()}
       icon={PaperclipIcon}
       label="파일"
       onclick={() => {
@@ -100,6 +102,7 @@
     />
 
     <ToolbarButton
+      disabled={!editor?.current.can().setEmbed()}
       icon={FileUpIcon}
       label="임베드"
       onclick={() => {
@@ -108,7 +111,12 @@
       size="large"
     />
 
-    <ToolbarDropdownButton active={editor?.current.isActive('horizontal_rule')} label="구분선" size="large">
+    <ToolbarDropdownButton
+      active={editor?.current.isActive('horizontal_rule')}
+      disabled={!editor?.current.can().setHorizontalRule()}
+      label="구분선"
+      size="large"
+    >
       {#snippet anchor()}
         <ToolbarIcon icon={HorizontalRuleIcon} />
       {/snippet}
@@ -130,7 +138,12 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton active={editor?.current.isActive('blockquote')} label="인용구" size="large">
+    <ToolbarDropdownButton
+      active={editor?.current.isActive('blockquote')}
+      disabled={!editor?.current.can().toggleBlockquote()}
+      label="인용구"
+      size="large"
+    >
       {#snippet anchor()}
         <ToolbarIcon icon={QuoteIcon} />
       {/snippet}
@@ -141,7 +154,7 @@
             <ToolbarDropdownMenuItem
               style={css.raw({ height: '48px' })}
               onclick={() => {
-                editor?.current.chain().focus().setBlockquote(type).run();
+                editor?.current.chain().focus().toggleBlockquote(type).run();
                 close();
               }}
             >
@@ -153,15 +166,17 @@
     </ToolbarDropdownButton>
 
     <ToolbarButton
+      disabled={!editor?.current.can().toggleCallout()}
       icon={GalleryVerticalEndIcon}
       label="콜아웃"
       onclick={() => {
-        editor?.current.chain().focus().setCallout().run();
+        editor?.current.chain().focus().toggleCallout().run();
       }}
       size="large"
     />
 
     <ToolbarButton
+      disabled={!editor?.current.can().insertTable()}
       icon={TableIcon}
       label="표"
       onclick={() => {
@@ -170,7 +185,11 @@
       size="large"
     />
 
-    <ToolbarDropdownButton label="목록" size="large">
+    <ToolbarDropdownButton
+      disabled={!editor?.current || (!editor.current.can().toggleBulletList() && !editor.current.can().toggleOrderedList())}
+      label="목록"
+      size="large"
+    >
       {#snippet anchor()}
         <ToolbarIcon icon={ListIcon} />
       {/snippet}
@@ -205,6 +224,7 @@
     </ToolbarDropdownButton>
 
     <ToolbarButton
+      disabled={!editor?.current.can().setCodeBlock()}
       icon={CodeIcon}
       label="코드"
       onclick={() => {
@@ -214,6 +234,7 @@
     />
 
     <ToolbarButton
+      disabled={!editor?.current.can().setHtmlBlock()}
       icon={CodeXmlIcon}
       label="HTML"
       onclick={() => {
@@ -243,6 +264,7 @@
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
       <ToolbarButton
         style={css.raw({ borderRightRadius: '0' })}
+        disabled={!editor?.current.can().undo()}
         icon={UndoIcon}
         label="실행 취소"
         onclick={() => {
@@ -253,6 +275,7 @@
 
       <ToolbarButton
         style={css.raw({ borderLeftRadius: '0' })}
+        disabled={!editor?.current.can().redo()}
         icon={RedoIcon}
         label="다시 실행"
         onclick={() => {
@@ -265,7 +288,7 @@
     <VerticalDivider style={css.raw({ height: '12px' })} />
 
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <ToolbarDropdownButton chevron label="글씨 색" size="small">
+      <ToolbarDropdownButton chevron disabled={!editor?.current.can().setFontColor(defaultValues.fontColor)} label="글씨 색" size="small">
         {#snippet anchor()}
           <div class={center({ size: '20px' })}>
             <div
@@ -302,7 +325,13 @@
         {/snippet}
       </ToolbarDropdownButton>
 
-      <ToolbarDropdownButton style={css.raw({ width: '120px' })} chevron label="글씨 서체" size="small">
+      <ToolbarDropdownButton
+        style={css.raw({ width: '120px' })}
+        chevron
+        disabled={!editor?.current.can().chain().focus().setFontFamily(defaultValues.fontFamily).run()}
+        label="글씨 서체"
+        size="small"
+      >
         {#snippet anchor()}
           <div class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>
             {values.fontFamily.find(
@@ -329,7 +358,13 @@
         {/snippet}
       </ToolbarDropdownButton>
 
-      <ToolbarDropdownButton style={css.raw({ width: '60px' })} chevron label="글씨 크기" size="small">
+      <ToolbarDropdownButton
+        style={css.raw({ width: '60px' })}
+        chevron
+        disabled={!editor?.current.can().setFontSize(defaultValues.fontSize)}
+        label="글씨 크기"
+        size="small"
+      >
         {#snippet anchor()}
           <div class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>
             {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize))
@@ -361,6 +396,7 @@
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
       <ToolbarButton
         active={editor?.current.isActive('bold')}
+        disabled={!editor?.current.can().toggleBold()}
         icon={BoldIcon}
         label="굵게"
         onclick={() => {
@@ -371,6 +407,7 @@
 
       <ToolbarButton
         active={editor?.current.isActive('italic')}
+        disabled={!editor?.current.can().toggleItalic()}
         icon={ItalicIcon}
         label="기울임"
         onclick={() => {
@@ -381,6 +418,7 @@
 
       <ToolbarButton
         active={editor?.current.isActive('strike')}
+        disabled={!editor?.current.can().toggleStrike()}
         icon={StrikethroughIcon}
         label="취소선"
         onclick={() => {
@@ -391,6 +429,7 @@
 
       <ToolbarButton
         active={editor?.current.isActive('underline')}
+        disabled={!editor?.current.can().toggleUnderline()}
         icon={UnderlineIcon}
         label="밑줄"
         onclick={() => {
@@ -403,7 +442,12 @@
     <VerticalDivider style={css.raw({ height: '12px' })} />
 
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <ToolbarDropdownButton active={editor?.current.isActive('link')} label="링크" size="small">
+      <ToolbarDropdownButton
+        active={editor?.current.isActive('link')}
+        disabled={!editor?.current.can().setLink('')}
+        label="링크"
+        size="small"
+      >
         {#snippet anchor()}
           <ToolbarIcon icon={LinkIcon} />
         {/snippet}
@@ -415,7 +459,12 @@
         {/snippet}
       </ToolbarDropdownButton>
 
-      <ToolbarDropdownButton active={editor?.current.isActive('ruby')} label="루비" size="small">
+      <ToolbarDropdownButton
+        active={editor?.current.isActive('ruby')}
+        disabled={!editor?.current.can().setRuby('')}
+        label="루비"
+        size="small"
+      >
         {#snippet anchor()}
           <ToolbarIcon icon={RubyIcon} />
         {/snippet}
@@ -431,7 +480,11 @@
     <VerticalDivider style={css.raw({ height: '12px' })} />
 
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <ToolbarDropdownButton label="문단 정렬" size="small">
+      <ToolbarDropdownButton
+        disabled={!editor?.current.can().setParagraphTextAlign(defaultValues.textAlign)}
+        label="문단 정렬"
+        size="small"
+      >
         {#snippet anchor()}
           <ToolbarIcon
             icon={// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -459,7 +512,11 @@
         {/snippet}
       </ToolbarDropdownButton>
 
-      <ToolbarDropdownButton label="문단 행간" size="small">
+      <ToolbarDropdownButton
+        disabled={!editor?.current.can().setParagraphLineHeight(defaultValues.lineHeight)}
+        label="문단 행간"
+        size="small"
+      >
         {#snippet anchor()}
           <ToolbarIcon icon={LineHeightIcon} />
         {/snippet}
@@ -482,7 +539,11 @@
         {/snippet}
       </ToolbarDropdownButton>
 
-      <ToolbarDropdownButton label="문단 자간" size="small">
+      <ToolbarDropdownButton
+        disabled={!editor?.current.can().setParagraphLetterSpacing(defaultValues.letterSpacing)}
+        label="문단 자간"
+        size="small"
+      >
         {#snippet anchor()}
           <ToolbarIcon icon={LetterSpacingIcon} />
         {/snippet}

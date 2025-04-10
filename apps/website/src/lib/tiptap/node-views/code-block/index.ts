@@ -37,7 +37,11 @@ export const CodeBlock = createNodeView(Component, {
     return {
       setCodeBlock:
         () =>
-        ({ commands }) => {
+        ({ can, commands }) => {
+          if (!can().isNodeAllowed(this.name)) {
+            return false;
+          }
+
           return commands.insertContent({ type: this.name });
         },
     };

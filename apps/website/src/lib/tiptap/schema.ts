@@ -1,4 +1,4 @@
-import { Behavior, BlockSelectionExt, DropCursor, Placeholder, SyntaxHighlight, Typography } from './extensions';
+import { Behavior, BlockSelectionExt, Command, DropCursor, Placeholder, SyntaxHighlight, Typography } from './extensions';
 import { Bold, FontColor, FontFamily, FontSize, Italic, Link, Ruby, Strike, Underline } from './marks';
 import { FloatingMenu, SlashMenu } from './menus';
 import { Blockquote, Callout, CodeBlock, Embed, File, HorizontalRule, HtmlBlock, Image, Table, TableCell, TableRow } from './node-views';
@@ -43,6 +43,7 @@ export const extensions = [
 
   // extensions
   Behavior,
+  Command,
   BlockSelectionExt,
   DropCursor,
   Placeholder,

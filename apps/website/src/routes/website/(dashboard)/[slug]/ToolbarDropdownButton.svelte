@@ -15,13 +15,24 @@
     size: 'large' | 'small';
     label: string;
     active?: boolean;
+    disabled?: boolean;
     chevron?: boolean;
     placement?: Placement;
     anchor: Snippet<[{ open: () => void }]>;
     floating: Snippet<[{ close: () => void }]>;
   };
 
-  let { style, size, label, active = false, chevron = false, placement = 'bottom-start', anchor, floating }: Props = $props();
+  let {
+    style,
+    size,
+    label,
+    active = false,
+    disabled = false,
+    chevron = false,
+    placement = 'bottom-start',
+    anchor,
+    floating,
+  }: Props = $props();
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
     placement,
@@ -58,12 +69,16 @@
         borderRadius: '6px',
         size: '40px',
         color: active ? 'brand.500' : undefined,
-        _hover: { backgroundColor: 'gray.100' },
-        _pressed: { backgroundColor: 'gray.100' },
+        _enabled: {
+          _hover: { backgroundColor: 'gray.100' },
+          _pressed: { backgroundColor: 'gray.100' },
+        },
+        _disabled: { opacity: '50' },
       },
       style,
     )}
     aria-pressed={opened}
+    {disabled}
     onclick={open}
     type="button"
     use:anchorAction
@@ -87,13 +102,17 @@
           textAlign: 'left',
           color: active ? 'brand.500' : undefined,
           backgroundColor: 'gray.100',
-          _hover: { backgroundColor: 'gray.200' },
-          _pressed: { backgroundColor: 'gray.200' },
+          _enabled: {
+            _hover: { backgroundColor: 'gray.200' },
+            _pressed: { backgroundColor: 'gray.200' },
+          },
+          _disabled: { opacity: '50' },
         },
         style,
       )}
       aria-label={label}
       aria-pressed={opened}
+      {disabled}
       onclick={open}
       type="button"
       use:anchorAction

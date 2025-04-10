@@ -1,7 +1,7 @@
-import { mergeAttributes, Node } from '@tiptap/core';
-import { defaultValues, values } from '$lib/tiptap/values';
+import { isNodeActive, mergeAttributes, Node } from '@tiptap/core';
 import { closest } from '$lib/utils';
 import { css } from '$styled-system/css';
+import { defaultValues, values } from '../values';
 
 const textAligns = values.textAlign.map(({ value }) => value);
 type TextAlign = (typeof textAligns)[number];
@@ -99,8 +99,16 @@ export const Paragraph = Node.create({
 
       setParagraphTextAlign:
         (textAlign) =>
-        ({ commands }) => {
+        ({ state, commands }) => {
           if (!textAligns.includes(textAlign)) {
+            return false;
+          }
+
+          if (!isNodeActive(state, this.name)) {
+            return false;
+          }
+
+          if (isNodeActive(state, 'blockquote') || isNodeActive(state, 'callout') || isNodeActive(state, 'list_item')) {
             return false;
           }
 
@@ -109,8 +117,12 @@ export const Paragraph = Node.create({
 
       setParagraphLineHeight:
         (lineHeight) =>
-        ({ commands }) => {
+        ({ state, commands }) => {
           if (!lineHeights.includes(lineHeight)) {
+            return false;
+          }
+
+          if (!isNodeActive(state, this.name)) {
             return false;
           }
 
@@ -119,8 +131,12 @@ export const Paragraph = Node.create({
 
       setParagraphLetterSpacing:
         (letterSpacing) =>
-        ({ commands }) => {
+        ({ state, commands }) => {
           if (!letterSpacings.includes(letterSpacing)) {
+            return false;
+          }
+
+          if (!isNodeActive(state, this.name)) {
             return false;
           }
 

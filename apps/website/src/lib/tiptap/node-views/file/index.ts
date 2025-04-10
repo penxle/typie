@@ -27,8 +27,12 @@ export const File = createNodeView(Component, {
     return {
       setFile:
         () =>
-        ({ commands }) => {
-          return commands.insertContent({ type: 'file' });
+        ({ can, commands }) => {
+          if (!can().isNodeAllowed(this.name)) {
+            return false;
+          }
+
+          return commands.insertContent({ type: this.name });
         },
     };
   },

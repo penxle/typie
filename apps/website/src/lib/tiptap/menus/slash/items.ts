@@ -25,7 +25,7 @@ export const menuItems: MenuItem[] = [
     keywords: ['blockquote'],
     icon: TextQuoteIcon,
     command: ({ editor, range }) => {
-      chain(editor, range).setBlockquote().run();
+      chain(editor, range).toggleBlockquote().run();
     },
   },
   {
@@ -69,7 +69,7 @@ export const menuItems: MenuItem[] = [
     keywords: ['callout'],
     icon: GalleryVerticalEndIcon,
     command: ({ editor, range }) => {
-      chain(editor, range).setCallout().run();
+      chain(editor, range).toggleCallout().run();
     },
   },
   {

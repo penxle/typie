@@ -25,7 +25,11 @@ export const Italic = Mark.create({
     return {
       toggleItalic:
         () =>
-        ({ commands }) => {
+        ({ commands, can }) => {
+          if (!can().isMarkAllowed(this.name)) {
+            return false;
+          }
+
           return commands.toggleMark(this.name);
         },
     };
