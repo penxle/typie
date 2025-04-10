@@ -223,6 +223,7 @@ type Mutation {
   logout: Boolean!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  renameFolder(input: RenameFolderInput!): Folder!
   resetPassword(input: ResetPasswordInput!): Boolean!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
@@ -357,6 +358,11 @@ type Query {
   me: User
   post(slug: String!): Post!
   site(siteId: ID!): Site!
+}
+
+input RenameFolderInput {
+  id: ID!
+  name: String!
 }
 
 input ResetPasswordInput {
