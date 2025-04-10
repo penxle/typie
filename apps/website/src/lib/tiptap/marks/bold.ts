@@ -14,7 +14,30 @@ export const Bold = Mark.create({
   name: 'bold',
 
   parseHTML() {
-    return [{ tag: 'b' }];
+    return [
+      { tag: 'b' },
+      { tag: 'strong' },
+      {
+        style: 'font-weight',
+        consuming: false,
+        getAttrs: (value) => {
+          if (value === 'bold' || value === 'bolder') {
+            return null;
+          }
+
+          const weight = Number(value);
+          if (Number.isNaN(weight)) {
+            return false;
+          }
+
+          if (weight >= 500) {
+            return null;
+          }
+
+          return false;
+        },
+      },
+    ];
   },
 
   renderHTML({ HTMLAttributes }) {
@@ -26,11 +49,11 @@ export const Bold = Mark.create({
       toggleBold:
         () =>
         ({ can, commands }) => {
-          if (!can().isMarkAllowed(this.name)) {
+          if (!can().isMarkAllowed(this.type)) {
             return false;
           }
 
-          return commands.toggleMark(this.name);
+          return commands.toggleMark(this.type);
         },
     };
   },

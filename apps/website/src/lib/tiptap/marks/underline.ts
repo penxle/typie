@@ -14,7 +14,14 @@ export const Underline = Mark.create({
   name: 'underline',
 
   parseHTML() {
-    return [{ tag: 'u' }];
+    return [
+      { tag: 'u' },
+      {
+        style: 'text-decoration-line',
+        consuming: false,
+        getAttrs: (value) => value.includes('underline') && null,
+      },
+    ];
   },
 
   renderHTML({ HTMLAttributes }) {
@@ -26,11 +33,11 @@ export const Underline = Mark.create({
       toggleUnderline:
         () =>
         ({ commands, can }) => {
-          if (!can().isMarkAllowed(this.name)) {
+          if (!can().isMarkAllowed(this.type)) {
             return false;
           }
 
-          return commands.toggleMark(this.name);
+          return commands.toggleMark(this.type);
         },
     };
   },
