@@ -31,10 +31,14 @@
 
   const init = ({ editor }: { editor: Editor }) => {
     textSerializers = getTextSerializersFromSchema(editor.state.schema);
+    text = getText(editor.state.doc, {
+      blockSeparator: '\n',
+      textSerializers,
+    });
   };
 
   const handler = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
-    if (transaction.docChanged) {
+    if (transaction.docChanged && textSerializers) {
       text = getText(editor.state.doc, {
         blockSeparator: '\n',
         textSerializers,
