@@ -33,14 +33,8 @@ export type Folder = {
 export type Post = {
   __typename: 'Post';
   id: string;
-  content: PostContent;
+  title: string;
   entity?: Entity;
-};
-
-export type PostContent = {
-  __typename: 'PostContent';
-  id: string;
-  title: string | null;
 };
 
 export type RootEntity = {

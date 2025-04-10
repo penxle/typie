@@ -46,12 +46,7 @@
             ... on Post {
               __typename
               id
-
-              content {
-                __typename
-                id
-                title
-              }
+              title
             }
           }
         }
@@ -233,7 +228,7 @@
         <Icon icon={FileIcon} size={14} />
       </span>
       <span class={css({ fontSize: '14px', lineHeight: '[1.2]', flexGrow: '1', truncate: true })}>
-        {entity.node?.content.title ?? '(제목 없음)'}
+        {entity.node?.title ?? '(제목 없음)'}
       </span>
     </a>
   {/if}

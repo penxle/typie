@@ -4,7 +4,7 @@ import * as R from 'remeda';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, PostContentSnapshots, Posts } from '@/db';
+import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, Posts, PostSnapshots } from '@/db';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { decode, makeText } from '@/utils';
@@ -12,8 +12,8 @@ import { defineJob } from '../types';
 
 const getCharacterCount = (text: string) => text.replaceAll(/\s+/g, ' ').trim().length;
 
-export const PostContentUpdateJob = defineJob('post:content:update', async (postId: string) => {
-  const buffers = await redis.smembersBuffer(`post:content:updates:${postId}`);
+export const PostDocumentUpdateJob = defineJob('post:document:update', async (postId: string) => {
+  const buffers = await redis.smembersBuffer(`post:document:updates:${postId}`);
   if (buffers.length === 0) {
     return;
   }
@@ -21,15 +21,15 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
   let snapshotUpdated = false;
 
   await db.transaction(async (tx) => {
-    const state = await tx
+    const post = await tx
       .select({
-        id: PostContents.id,
+        id: Posts.id,
         update: PostContents.update,
-        vector: PostContents.vector,
         text: PostContents.text,
       })
-      .from(PostContents)
-      .where(eq(PostContents.postId, postId))
+      .from(Posts)
+      .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
+      .where(eq(Posts.id, postId))
       .for('update')
       .then(firstOrThrow);
 
@@ -47,9 +47,9 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
     );
 
     const doc = new Y.Doc({ gc: false });
-    Y.applyUpdateV2(doc, state.update);
+    Y.applyUpdateV2(doc, post.update);
 
-    let prevCharacterCount = getCharacterCount(state.text);
+    let prevCharacterCount = getCharacterCount(post.text);
     let order = 0;
 
     for (const [userId, data] of Object.entries(updates)) {
@@ -62,7 +62,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
       if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
         snapshotUpdated = true;
 
-        await tx.insert(PostContentSnapshots).values({
+        await tx.insert(PostSnapshots).values({
           postId,
           userId,
           snapshot: Y.encodeSnapshotV2(snapshot),
@@ -121,22 +121,31 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
       const body = node.toJSON();
       const text = makeText(body);
 
+      const updatedAt = dayjs();
+
       await tx
-        .update(PostContents)
+        .update(Posts)
         .set({
           title,
           subtitle,
-          body,
-          text,
           maxWidth,
           coverImageId,
-          updatedAt: dayjs(),
+          updatedAt,
+        })
+        .where(eq(Posts.id, postId));
+
+      await tx
+        .update(PostContents)
+        .set({
+          body,
+          text,
+          updatedAt,
         })
         .where(eq(PostContents.postId, postId));
     }
   });
 
-  await redis.srem(`post:content:updates:${postId}`, ...buffers);
+  await redis.srem(`post:document:updates:${postId}`, ...buffers);
 
   if (snapshotUpdated) {
     const { siteId, entityId } = await db

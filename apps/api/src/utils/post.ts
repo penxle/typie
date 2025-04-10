@@ -38,18 +38,18 @@ export const makeText = (body: JSONContent) => {
   }).trim();
 };
 
-export const getCurrentPostContentState = async (postId: string) => {
-  const state = await db
+export const getPostDocument = async (postId: string) => {
+  const { update, vector } = await db
     .select({ update: PostContents.update, vector: PostContents.vector })
     .from(PostContents)
     .where(eq(PostContents.postId, postId))
     .then(firstOrThrow);
 
-  const buffers = await redis.smembersBuffer(`post:content:updates:${postId}`);
+  const buffers = await redis.smembersBuffer(`post:document:updates:${postId}`);
   if (buffers.length === 0) {
     return {
-      update: state.update,
-      vector: state.vector,
+      update,
+      vector,
     };
   }
 
@@ -60,7 +60,7 @@ export const getCurrentPostContentState = async (postId: string) => {
     return data.slice(sepIdx + 1);
   });
 
-  const updatedUpdate = Y.mergeUpdatesV2([state.update, ...pendingUpdates]);
+  const updatedUpdate = Y.mergeUpdatesV2([update, ...pendingUpdates]);
   const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
 
   return {

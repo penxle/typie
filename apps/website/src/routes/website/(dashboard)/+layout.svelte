@@ -32,12 +32,7 @@
               ... on Post {
                 __typename
                 id
-
-                content {
-                  __typename
-                  id
-                  title
-                }
+                title
               }
             }
           }
@@ -63,11 +58,7 @@
 
               ... on Post {
                 id
-
-                content {
-                  id
-                  title
-                }
+                title
               }
             }
           }
@@ -84,14 +75,10 @@
 
             ... on Post {
               id
+              title
 
               characterCountChange {
                 additions
-              }
-
-              content {
-                id
-                title
               }
             }
           }

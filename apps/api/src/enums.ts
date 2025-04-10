@@ -50,14 +50,6 @@ export const PlanAvailability = {
   PRIVATE: 'PRIVATE',
 } as const;
 
-export type PostContentSyncKind = keyof typeof PostContentSyncKind;
-export const PostContentSyncKind = {
-  UPDATE: 'UPDATE',
-  VECTOR: 'VECTOR',
-  AWARENESS: 'AWARENESS',
-  HEARTBEAT: 'HEARTBEAT',
-} as const;
-
 export type PostVisibility = keyof typeof PostVisibility;
 export const PostVisibility = {
   UNLISTED: 'UNLISTED',

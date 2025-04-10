@@ -194,7 +194,14 @@ export const Posts = pgTable('posts', {
   entityId: text('entity_id')
     .notNull()
     .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  title: text('title'),
+  subtitle: text('subtitle'),
+  maxWidth: integer('max_width').notNull().default(800),
+  coverImageId: text('cover_image_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
     .notNull()
     .default(sql`now()`),
 });
@@ -229,12 +236,8 @@ export const PostContents = pgTable('post_contents', {
     .notNull()
     .unique()
     .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  title: text('title'),
-  subtitle: text('subtitle'),
   body: jsonb('body').notNull().$type<JSONContent>(),
   text: text('text').notNull(),
-  maxWidth: integer('max_width').notNull().default(800),
-  coverImageId: text('cover_image_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
   createdAt: datetime('created_at')
@@ -245,12 +248,12 @@ export const PostContents = pgTable('post_contents', {
     .default(sql`now()`),
 });
 
-export const PostContentSnapshots = pgTable(
-  'post_content_snapshots',
+export const PostSnapshots = pgTable(
+  'post_snapshots',
   {
     id: text('id')
       .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.POST_CONTENT_SNAPSHOTS)),
+      .$defaultFn(() => createDbId(TableCode.POST_SNAPSHOTS)),
     postId: text('post_id')
       .notNull()
       .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),

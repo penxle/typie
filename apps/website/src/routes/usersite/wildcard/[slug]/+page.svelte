@@ -16,19 +16,15 @@
 
           ... on PostView {
             id
+            title
+            subtitle
+            body
+            excerpt
+            maxWidth
 
-            content {
+            coverImage {
               id
-              title
-              subtitle
-              body
-              excerpt
-              maxWidth
-
-              coverImage {
-                id
-                ...Img_image
-              }
+              ...Img_image
             }
           }
 
@@ -44,14 +40,14 @@
 
 {#if $query.entityView.node.__typename === 'PostView'}
   <Helmet
-    description={$query.entityView.node.content.excerpt}
+    description={$query.entityView.node.excerpt}
     image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${$query.entityView.id}` }}
-    title={$query.entityView.node.content.title}
+    title={$query.entityView.node.title}
   />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen', backgroundColor: 'gray.100' })}>
     <div
-      style:--prosemirror-max-width={`${$query.entityView.node.content.maxWidth}px`}
+      style:--prosemirror-max-width={`${$query.entityView.node.maxWidth}px`}
       class={flex({
         flexDirection: 'column',
         alignItems: 'center',
@@ -62,11 +58,11 @@
         backgroundColor: 'white',
       })}
     >
-      {#if $query.entityView.node.content.coverImage}
+      {#if $query.entityView.node.coverImage}
         <div class={css({ width: 'full', marginBottom: '40px' })}>
           <Img
             style={css.raw({ width: 'full' })}
-            $image={$query.entityView.node.content.coverImage}
+            $image={$query.entityView.node.coverImage}
             alt="커버 이미지"
             progressive
             ratio={5 / 2}
@@ -77,19 +73,19 @@
 
       <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
         <div class={css({ fontSize: '28px', fontWeight: 'bold' })}>
-          {$query.entityView.node.content.title}
+          {$query.entityView.node.title}
         </div>
 
-        {#if $query.entityView.node.content.subtitle}
+        {#if $query.entityView.node.subtitle}
           <div class={css({ marginTop: '4px', fontSize: '16px', fontWeight: 'medium' })}>
-            {$query.entityView.node.content.subtitle}
+            {$query.entityView.node.subtitle}
           </div>
         {/if}
 
         <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
       </div>
 
-      <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.content.body} />
+      <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
     </div>
   </div>
 {/if}

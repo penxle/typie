@@ -24,6 +24,7 @@
     graphql(`
       fragment StatusBar_post on Post {
         id
+
         characterCountChange {
           additions
         }
