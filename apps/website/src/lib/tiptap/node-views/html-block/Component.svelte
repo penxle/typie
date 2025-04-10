@@ -144,7 +144,7 @@
   />
 
   {#if mode === 'preview'}
-    <div class={css({ position: 'relative', backgroundColor: 'white', minHeight: '200px' })}>
+    <div class={css({ position: 'relative', backgroundColor: 'white', minHeight: '200px' })} contentEditable={false}>
       {#if height === 0}
         <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white' })}>
           <RingSpinner style={css.raw({ size: '24px', color: 'gray.500' })} />
