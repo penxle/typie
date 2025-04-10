@@ -288,12 +288,12 @@
     <VerticalDivider style={css.raw({ height: '12px' })} />
 
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <ToolbarDropdownButton chevron disabled={!editor?.current.can().setFontColor(defaultValues.fontColor)} label="글씨 색" size="small">
+      <ToolbarDropdownButton chevron disabled={!editor?.current.can().setTextColor(defaultValues.textColor)} label="글씨 색" size="small">
         {#snippet anchor()}
           <div class={center({ size: '20px' })}>
             <div
-              style:background-color={values.fontColor.find(
-                ({ value }) => value === (editor?.current.getAttributes('font_color').value ?? defaultValues.fontColor),
+              style:background-color={values.textColor.find(
+                ({ value }) => value === (editor?.current.getAttributes('text_style').textColor ?? defaultValues.textColor),
               )?.hex}
               class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px' })}
             ></div>
@@ -302,20 +302,20 @@
 
         {#snippet floating({ close })}
           <div class={grid({ columns: 10, gap: '8px', borderWidth: '1px', borderRadius: '4px', padding: '8px' })}>
-            {#each values.fontColor as { label, value, hex } (value)}
+            {#each values.textColor as { label, value, hex } (value)}
               <button
                 style:background-color={hex}
                 style:outline-color={hex === '#ffffff' ? token('colors.gray.200') : hex}
                 class={center({
                   borderWidth: '1px',
                   borderRadius: 'full',
-                  outlineWidth: (editor?.current.getAttributes('font_color').value ?? defaultValues.fontColor) === value ? '2px' : '0',
+                  outlineWidth: (editor?.current.getAttributes('text_style').textColor ?? defaultValues.textColor) === value ? '2px' : '0',
                   outlineOffset: '1px',
                   size: '20px',
                 })}
                 aria-label={label}
                 onclick={() => {
-                  editor?.current.chain().focus().setFontColor(value).run();
+                  editor?.current.chain().focus().setTextColor(value).run();
                   close();
                 }}
                 type="button"
@@ -335,7 +335,7 @@
         {#snippet anchor()}
           <div class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>
             {values.fontFamily.find(
-              ({ value }) => value === (editor?.current.getAttributes('font_family').value ?? defaultValues.fontFamily),
+              ({ value }) => value === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily),
             )?.label}
           </div>
         {/snippet}
@@ -345,7 +345,7 @@
             {#each values.fontFamily as { label, value } (value)}
               <ToolbarDropdownMenuItem
                 style={css.raw({ fontSize: '14px' })}
-                active={(editor?.current.getAttributes('font_family').value ?? defaultValues.fontFamily) === value}
+                active={(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily) === value}
                 onclick={() => {
                   editor?.current.chain().focus().setFontFamily(value).run();
                   close();
@@ -367,7 +367,7 @@
       >
         {#snippet anchor()}
           <div class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>
-            {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize))
+            {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontSize ?? defaultValues.fontSize))
               ?.label}
           </div>
         {/snippet}
@@ -377,7 +377,7 @@
             {#each values.fontSize as { label, value } (value)}
               <ToolbarDropdownMenuItem
                 style={css.raw({ fontSize: '14px' })}
-                active={(editor?.current.getAttributes('font_size').value ?? defaultValues.fontSize) === value}
+                active={(editor?.current.getAttributes('text_style').fontSize ?? defaultValues.fontSize) === value}
                 onclick={() => {
                   editor?.current.chain().focus().setFontSize(value).run();
                   close();

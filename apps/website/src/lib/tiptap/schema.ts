@@ -1,8 +1,9 @@
 import { Behavior, BlockSelectionExt, Command, DropCursor, Placeholder, SyntaxHighlight, Typography } from './extensions';
-import { Bold, FontColor, FontFamily, FontSize, Italic, Link, Ruby, Strike, Underline } from './marks';
+import { Bold, Italic, Link, Ruby, Strike, TextStyle, Underline } from './marks';
 import { FloatingMenu, SlashMenu } from './menus';
 import { Blockquote, Callout, CodeBlock, Embed, File, HorizontalRule, HtmlBlock, Image, Table, TableCell, TableRow } from './node-views';
 import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
+import { FontFamily, FontSize, TextColor } from './text-styles';
 
 export const extensions = [
   // special nodes
@@ -19,14 +20,17 @@ export const extensions = [
 
   // marks
   Bold,
-  FontColor,
-  FontFamily,
-  FontSize,
   Italic,
   Link,
   Ruby,
   Strike,
+  TextStyle,
   Underline,
+
+  // text styles
+  TextColor,
+  FontFamily,
+  FontSize,
 
   // node views
   Blockquote,

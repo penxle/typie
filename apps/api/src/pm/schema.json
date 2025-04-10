@@ -95,14 +95,15 @@
     "table_row": { "tableRole": "row", "content": "table_cell+", "parseDOM": [{ "tag": "tr" }] }
   },
   "marks": {
-    "font_color": { "attrs": { "value": { "default": null } }, "parseDOM": [{ "tag": "span" }] },
-    "font_family": { "attrs": { "value": { "default": null } }, "parseDOM": [{ "tag": "span" }] },
-    "font_size": { "attrs": { "value": { "default": null } }, "parseDOM": [{ "tag": "span" }] },
     "ruby": { "inclusive": false, "attrs": { "text": { "default": null } }, "parseDOM": [{ "tag": "span[data-ruby]" }] },
     "bold": { "parseDOM": [{ "tag": "b" }] },
     "italic": { "parseDOM": [{ "tag": "i" }] },
-    "link": { "inclusive": false, "attrs": { "href": { "default": null }, "auto": { "default": false } }, "parseDOM": [{ "tag": "a" }] },
+    "link": { "inclusive": false, "attrs": { "href": { "default": null } }, "parseDOM": [{ "tag": "a[href]" }] },
     "strike": { "parseDOM": [{ "tag": "s" }] },
+    "text_style": {
+      "attrs": { "textColor": { "default": null }, "fontFamily": { "default": null }, "fontSize": { "default": null } },
+      "parseDOM": [{ "tag": "span" }]
+    },
     "underline": { "parseDOM": [{ "tag": "u" }] }
   },
   "topNode": "doc"

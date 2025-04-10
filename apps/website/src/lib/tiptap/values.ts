@@ -38,7 +38,7 @@ export const values = {
     { label: '72pt', value: 72 },
   ],
 
-  fontColor: [
+  textColor: [
     { label: '블랙', value: 'black', hex: '#09090b' },
     { label: '그레이', value: 'gray', hex: '#71717a' },
     { label: '화이트', value: 'white', hex: '#ffffff' },
@@ -135,7 +135,7 @@ export const values = {
 export const defaultValues = {
   fontFamily: 'Pretendard',
   fontSize: 16,
-  fontColor: 'black',
+  textColor: 'black',
   lineHeight: 1.6,
   letterSpacing: 0,
   textAlign: 'left',
