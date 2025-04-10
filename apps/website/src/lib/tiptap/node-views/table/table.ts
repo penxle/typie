@@ -80,19 +80,23 @@ export const Table = createNodeView(Component, {
     return {
       insertTable:
         ({ rows: rowsCount = 3, cols: colsCount = 3 } = {}) =>
-        ({ tr, dispatch, editor }) => {
+        ({ can, tr, dispatch, state }) => {
+          if (!can().isNodeAllowed(this.name)) {
+            return false;
+          }
+
           const cells = [];
           for (let index = 0; index < colsCount; index += 1) {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            cells.push(editor.schema.nodes.table_cell.createAndFill()!);
+            cells.push(state.schema.nodes.table_cell.createAndFill()!);
           }
 
           const rows = [];
           for (let index = 0; index < rowsCount; index += 1) {
-            rows.push(editor.schema.nodes.table_row.createChecked(null, cells));
+            rows.push(state.schema.nodes.table_row.createChecked(null, cells));
           }
 
-          const table = editor.schema.nodes.table.createChecked(null, rows);
+          const table = state.schema.nodes.table.createChecked(null, rows);
 
           if (dispatch) {
             const offset = tr.selection.from + 1;

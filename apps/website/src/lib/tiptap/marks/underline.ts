@@ -25,7 +25,11 @@ export const Underline = Mark.create({
     return {
       toggleUnderline:
         () =>
-        ({ commands }) => {
+        ({ commands, can }) => {
+          if (!can().isMarkAllowed(this.name)) {
+            return false;
+          }
+
           return commands.toggleMark(this.name);
         },
     };

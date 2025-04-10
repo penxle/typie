@@ -30,8 +30,12 @@ export const Embed = createNodeView(Component, {
     return {
       setEmbed:
         () =>
-        ({ commands }) => {
-          return commands.insertContent({ type: 'embed' });
+        ({ can, commands }) => {
+          if (!can().isNodeAllowed(this.name)) {
+            return false;
+          }
+
+          return commands.insertContent({ type: this.name });
         },
     };
   },

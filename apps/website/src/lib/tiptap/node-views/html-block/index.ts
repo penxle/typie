@@ -29,7 +29,11 @@ export const HtmlBlock = createNodeView(Component, {
     return {
       setHtmlBlock:
         () =>
-        ({ commands }) => {
+        ({ can, commands }) => {
+          if (!can().isNodeAllowed(this.name)) {
+            return false;
+          }
+
           return commands.insertContent({ type: this.name });
         },
     };

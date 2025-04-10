@@ -66,7 +66,11 @@ export const Ruby = Mark.create({
     return {
       setRuby:
         (text) =>
-        ({ commands }) => {
+        ({ commands, can }) => {
+          if (!can().isMarkAllowed(this.name)) {
+            return false;
+          }
+
           return commands.setMark(this.name, { text });
         },
 

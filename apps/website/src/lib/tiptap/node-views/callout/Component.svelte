@@ -4,10 +4,10 @@
   import InfoIcon from '~icons/lucide/info';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { Icon } from '$lib/components';
-  import { values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import { NodeView, NodeViewContentEditable } from '../../lib';
+  import { values } from '../../values';
   import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;

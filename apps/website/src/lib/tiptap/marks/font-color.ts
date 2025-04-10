@@ -1,6 +1,6 @@
 import { TinyColor } from '@ctrl/tinycolor';
 import { Mark } from '@tiptap/core';
-import { values } from '$lib/tiptap/values';
+import { defaultValues, values } from '../values';
 
 const hexes = Object.fromEntries(values.fontColor.map(({ value, hex }) => [value, hex]));
 const fontColors = values.fontColor.map(({ value }) => value);
@@ -11,7 +11,6 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     fontColor: {
       setFontColor: (fontColor: FontColor) => ReturnType;
-      unsetFontColor: () => ReturnType;
     };
   }
 }
@@ -58,18 +57,20 @@ export const FontColor = Mark.create({
     return {
       setFontColor:
         (value) =>
-        ({ commands }) => {
+        ({ commands, can }) => {
           if (!fontColors.includes(value)) {
             return false;
           }
 
-          return commands.setMark(this.name, { value });
-        },
+          if (!can().isMarkAllowed(this.name)) {
+            return false;
+          }
 
-      unsetFontColor:
-        () =>
-        ({ commands }) => {
-          return commands.unsetMark(this.name);
+          if (value === defaultValues.fontColor) {
+            return commands.unsetMark(this.name);
+          } else {
+            return commands.setMark(this.name, { value });
+          }
         },
     };
   },

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { NodeView, NodeViewContentEditable } from '$lib/tiptap/lib';
-  import { values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import type { NodeViewProps } from '$lib/tiptap/lib';
+  import { NodeView, NodeViewContentEditable } from '../../lib';
+  import { values } from '../../values';
+  import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
 

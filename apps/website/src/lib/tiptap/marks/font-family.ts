@@ -1,5 +1,5 @@
 import { Mark } from '@tiptap/core';
-import { values } from '$lib/tiptap/values';
+import { defaultValues, values } from '../values';
 
 const fontFamilies = values.fontFamily.map(({ value }) => value);
 type FontFamily = (typeof fontFamilies)[number];
@@ -9,7 +9,6 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     fontFamily: {
       setFontFamily: (fontFamily: FontFamily) => ReturnType;
-      unsetFontFamily: () => ReturnType;
     };
   }
 }
@@ -54,18 +53,20 @@ export const FontFamily = Mark.create({
     return {
       setFontFamily:
         (value) =>
-        ({ commands }) => {
+        ({ commands, can }) => {
           if (!fontFamilies.includes(value)) {
             return false;
           }
 
-          return commands.setMark(this.name, { value });
-        },
+          if (!can().isMarkAllowed(this.name)) {
+            return false;
+          }
 
-      unsetFontFamily:
-        () =>
-        ({ commands }) => {
-          return commands.unsetMark(this.name);
+          if (value === defaultValues.fontFamily) {
+            return commands.unsetMark(this.name);
+          } else {
+            return commands.setMark(this.name, { value });
+          }
         },
     };
   },

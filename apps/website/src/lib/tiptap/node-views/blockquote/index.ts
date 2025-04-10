@@ -1,5 +1,5 @@
-import { createNodeView } from '$lib/tiptap/lib';
-import { defaultValues, values } from '$lib/tiptap/values';
+import { createNodeView } from '../../lib';
+import { defaultValues, values } from '../../values';
 import Component from './Component.svelte';
 
 const blockquotes = values.blockquote.map(({ type }) => type);
@@ -9,9 +9,7 @@ declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     blockquote: {
-      setBlockquote: (type?: Blockquote) => ReturnType;
       toggleBlockquote: (type?: Blockquote) => ReturnType;
-      unsetBlockquote: () => ReturnType;
     };
   }
 }
@@ -25,7 +23,6 @@ export const Blockquote = createNodeView(Component, {
   addAttributes() {
     return {
       type: {
-        isRequired: true,
         default: defaultValues.blockquote,
         parseHTML: (element) => {
           const blockquote = element.dataset.type;
@@ -47,7 +44,7 @@ export const Blockquote = createNodeView(Component, {
 
   addCommands() {
     return {
-      setBlockquote:
+      toggleBlockquote:
         (type) =>
         ({ editor, commands }) => {
           if (editor.isActive(this.name, { type })) {
@@ -57,16 +54,6 @@ export const Blockquote = createNodeView(Component, {
           } else {
             return commands.wrapIn(this.name, { type });
           }
-        },
-      toggleBlockquote:
-        (type) =>
-        ({ commands }) => {
-          return commands.toggleWrap(this.name, { type });
-        },
-      unsetBlockquote:
-        () =>
-        ({ commands }) => {
-          return commands.lift(this.name);
         },
     };
   },

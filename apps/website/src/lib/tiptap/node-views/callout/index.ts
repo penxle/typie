@@ -1,5 +1,5 @@
-import { defaultValues, values } from '$lib/tiptap/values';
 import { createNodeView } from '../../lib';
+import { defaultValues, values } from '../../values';
 import Component from './Component.svelte';
 
 const callouts = values.callout.map(({ type }) => type);
@@ -9,9 +9,7 @@ declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     callout: {
-      setCallout: () => ReturnType;
       toggleCallout: () => ReturnType;
-      unsetCallout: () => ReturnType;
     };
   }
 }
@@ -46,20 +44,14 @@ export const Callout = createNodeView(Component, {
 
   addCommands() {
     return {
-      setCallout:
-        () =>
-        ({ commands }) => {
-          return commands.wrapIn(this.name);
-        },
       toggleCallout:
         () =>
-        ({ commands }) => {
-          return commands.toggleWrap(this.name);
-        },
-      unsetCallout:
-        () =>
-        ({ commands }) => {
-          return commands.lift(this.name);
+        ({ editor, commands }) => {
+          if (editor.isActive(this.name)) {
+            return commands.lift(this.name);
+          } else {
+            return commands.wrapIn(this.name);
+          }
         },
     };
   },
