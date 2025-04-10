@@ -21,10 +21,6 @@ export const HtmlBlock = createNodeView(Component, {
     return [{ tag: 'pre' }];
   },
 
-  renderText() {
-    return '';
-  },
-
   addCommands() {
     return {
       setHtmlBlock:

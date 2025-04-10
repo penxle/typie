@@ -24,10 +24,6 @@ export const HardBreak = Node.create({
     return ['br', HTMLAttributes];
   },
 
-  renderText() {
-    return '\n';
-  },
-
   addCommands() {
     return {
       setHardBreak:

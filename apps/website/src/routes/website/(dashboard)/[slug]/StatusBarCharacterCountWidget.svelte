@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { getText, getTextSerializersFromSchema } from '@tiptap/core';
+  import { getText } from '@tiptap/core';
   import { scale } from 'svelte/transition';
+  import { textSerializers } from '@/pm/serializer';
   import IconType from '~icons/lucide/type';
   import { createFloatingActions } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import type { Editor, TextSerializer } from '@tiptap/core';
+  import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
   import type { Ref } from '$lib/utils';
 
@@ -18,7 +19,6 @@
 
   let open = $state(false);
   let text = $state('');
-  let textSerializers = $state<Record<string, TextSerializer>>({});
 
   const countWithWhitespace = $derived(text.replaceAll(/\s+/g, ' ').trim().length);
   const countWithoutWhitespace = $derived(text.replaceAll(/\s/g, '').length);
@@ -29,16 +29,8 @@
     offset: 14,
   });
 
-  const init = ({ editor }: { editor: Editor }) => {
-    textSerializers = getTextSerializersFromSchema(editor.state.schema);
-    text = getText(editor.state.doc, {
-      blockSeparator: '\n',
-      textSerializers,
-    });
-  };
-
   const handler = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
-    if (transaction.docChanged && textSerializers) {
+    if (transaction.docChanged) {
       text = getText(editor.state.doc, {
         blockSeparator: '\n',
         textSerializers,
@@ -47,11 +39,9 @@
   };
 
   $effect(() => {
-    editor?.current.on('create', init);
     editor?.current.on('transaction', handler);
 
     return () => {
-      editor?.current.off('create', init);
       editor?.current.off('transaction', handler);
     };
   });
