@@ -1,11 +1,15 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
+import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { match } from 'ts-pattern';
 import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode } from '@/db';
 import { EntityState, EntityType, SiteState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
+import { pubsub } from '@/pubsub';
+import { decode, encode } from '@/utils';
+import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site } from '../objects';
 
@@ -154,6 +158,86 @@ builder.queryFields((t) => ({
         .from(Entities)
         .where(and(eq(Entities.permalink, args.permalink), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
+    },
+  }),
+}));
+
+builder.mutationFields((t) => ({
+  updateEntityPosition: t.withAuth({ session: true }).fieldWithInput({
+    type: Entity,
+    input: {
+      id: t.input.id(),
+      parentId: t.input.id({ required: false }),
+      previousOrder: t.input.field({ type: 'Binary', required: false }),
+      nextOrder: t.input.field({ type: 'Binary', required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db
+        .select({
+          id: Entities.id,
+          siteId: Entities.siteId,
+        })
+        .from(Entities)
+        .where(and(eq(Entities.id, input.id), eq(Entities.userId, ctx.session.userId)))
+        .then(firstOrThrow);
+
+      const parentEntity = input.parentId
+        ? await db
+            .select({
+              id: Entities.id,
+              siteId: Entities.siteId,
+            })
+            .from(Entities)
+            .where(and(eq(Entities.id, input.parentId), eq(Entities.userId, ctx.session.userId)))
+            .then(firstOrThrow)
+        : null;
+
+      await assertSitePermission({ userId: ctx.session.userId, siteId: entity.siteId, ctx });
+
+      if (parentEntity) {
+        if (parentEntity.siteId !== entity.siteId) {
+          throw new TypieError({ code: 'cross_site' });
+        }
+
+        const ancestors = await db.execute<{ id: string }>(sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id}, ${Entities.parentId}
+            FROM ${Entities}
+            WHERE ${eq(Entities.id, parentEntity.id)}
+            UNION ALL
+            SELECT ${Entities.id}, ${Entities.parentId}
+            FROM ${Entities}
+            JOIN sq ON ${Entities.id} = sq.parent_id
+            WHERE sq.parent_id IS NOT NULL
+          )
+          SELECT id
+          FROM sq
+          WHERE ${eq(sql`id`, entity.id)}
+        `);
+
+        if (ancestors.length > 0) {
+          throw new TypieError({ code: 'circular_reference' });
+        }
+      }
+
+      const updatedEntity = await db
+        .update(Entities)
+        .set({
+          parentId: parentEntity?.id ?? null,
+          order: encode(
+            generateJitteredKeyBetween(
+              input.previousOrder ? decode(input.previousOrder) : null,
+              input.nextOrder ? decode(input.nextOrder) : null,
+            ),
+          ),
+        })
+        .where(eq(Entities.id, entity.id))
+        .returning()
+        .then(firstOrThrow);
+
+      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+
+      return updatedEntity;
     },
   }),
 }));
