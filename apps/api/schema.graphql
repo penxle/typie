@@ -229,6 +229,7 @@ type Mutation {
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   updateEmail(input: UpdateEmailInput!): Boolean!
+  updateEntityPosition(input: UpdateEntityPositionInput!): Entity!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
   updateUser(input: UpdateUserInput!): User!
@@ -408,6 +409,13 @@ input UnfurlEmbedInput {
 
 input UpdateEmailInput {
   code: String!
+}
+
+input UpdateEntityPositionInput {
+  id: ID!
+  nextOrder: Binary
+  parentId: ID
+  previousOrder: Binary
 }
 
 input UpdatePaymentMethodInput {
