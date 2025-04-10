@@ -95,16 +95,16 @@
     "table_row": { "tableRole": "row", "content": "table_cell+", "parseDOM": [{ "tag": "tr" }] }
   },
   "marks": {
-    "ruby": { "inclusive": false, "attrs": { "text": { "default": null } }, "parseDOM": [{ "tag": "span[data-ruby]" }] },
-    "bold": { "parseDOM": [{ "tag": "b" }] },
-    "italic": { "parseDOM": [{ "tag": "i" }] },
     "link": { "inclusive": false, "attrs": { "href": { "default": null } }, "parseDOM": [{ "tag": "a[href]" }] },
-    "strike": { "parseDOM": [{ "tag": "s" }] },
+    "ruby": { "inclusive": false, "attrs": { "text": { "default": null } }, "parseDOM": [{ "tag": "span[data-ruby]" }] },
     "text_style": {
       "attrs": { "textColor": { "default": null }, "fontFamily": { "default": null }, "fontSize": { "default": null } },
       "parseDOM": [{ "tag": "span" }]
     },
-    "underline": { "parseDOM": [{ "tag": "u" }] }
+    "bold": { "parseDOM": [{ "tag": "b" }, { "tag": "strong" }, { "style": "font-weight", "consuming": false }] },
+    "italic": { "parseDOM": [{ "tag": "i" }, { "tag": "em" }, { "style": "font-style", "consuming": false }] },
+    "strike": { "parseDOM": [{ "tag": "s" }, { "tag": "del" }, { "style": "text-decoration-line", "consuming": false }] },
+    "underline": { "parseDOM": [{ "tag": "u" }, { "style": "text-decoration-line", "consuming": false }] }
   },
   "topNode": "doc"
 }

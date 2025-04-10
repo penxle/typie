@@ -14,7 +14,15 @@ export const Strike = Mark.create({
   name: 'strike',
 
   parseHTML() {
-    return [{ tag: 's' }];
+    return [
+      { tag: 's' },
+      { tag: 'del' },
+      {
+        style: 'text-decoration-line',
+        consuming: false,
+        getAttrs: (value) => value.includes('line-through') && null,
+      },
+    ];
   },
 
   renderHTML({ HTMLAttributes }) {
@@ -26,11 +34,11 @@ export const Strike = Mark.create({
       toggleStrike:
         () =>
         ({ commands, can }) => {
-          if (!can().isMarkAllowed(this.name)) {
+          if (!can().isMarkAllowed(this.type)) {
             return false;
           }
 
-          return commands.toggleMark(this.name);
+          return commands.toggleMark(this.type);
         },
     };
   },

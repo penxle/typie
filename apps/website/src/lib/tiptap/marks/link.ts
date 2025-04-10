@@ -16,8 +16,8 @@ declare module '@tiptap/core' {
 
 export const Link = Mark.create({
   name: 'link',
+  priority: 110,
   inclusive: false,
-  keepOnSplit: false,
 
   addAttributes() {
     return {

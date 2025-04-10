@@ -14,11 +14,19 @@ export const Italic = Mark.create({
   name: 'italic',
 
   parseHTML() {
-    return [{ tag: 'i' }];
+    return [
+      { tag: 'i' },
+      { tag: 'em' },
+      {
+        style: 'font-style',
+        consuming: false,
+        getAttrs: (value) => value === 'italic' && null,
+      },
+    ];
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['i', mergeAttributes(HTMLAttributes, { class: css({ fontStyle: 'italic' }) }), 0];
+    return ['em', mergeAttributes(HTMLAttributes, { class: css({ fontStyle: 'italic' }) }), 0];
   },
 
   addCommands() {
@@ -26,11 +34,11 @@ export const Italic = Mark.create({
       toggleItalic:
         () =>
         ({ commands, can }) => {
-          if (!can().isMarkAllowed(this.name)) {
+          if (!can().isMarkAllowed(this.type)) {
             return false;
           }
 
-          return commands.toggleMark(this.name);
+          return commands.toggleMark(this.type);
         },
     };
   },
