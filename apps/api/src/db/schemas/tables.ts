@@ -8,6 +8,23 @@ import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { PlanRules } from './json';
 
+export const Comments = pgTable('comments', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.COMMENTS)),
+  postId: text('post_id')
+    .notNull()
+    .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  state: E._CommentState('state').notNull().default('ACTIVE'),
+  content: text('content').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Files = pgTable('files', {
   id: text('id')
     .primaryKey()

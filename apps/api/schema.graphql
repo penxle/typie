@@ -19,6 +19,23 @@ type CharacterCountChange {
   deletions: Int!
 }
 
+type Comment {
+  content: String
+  createdAt: DateTime!
+  id: ID!
+  state: CommentState!
+}
+
+enum CommentState {
+  ACTIVE
+  DELETED
+}
+
+input CreateCommentInput {
+  content: String!
+  postId: ID!
+}
+
 input CreateFolderInput {
   name: String!
   parentEntityId: ID
@@ -40,6 +57,10 @@ input CreatePreorderPaymentInput {
 }
 
 scalar DateTime
+
+input DeleteCommentInput {
+  id: ID!
+}
 
 type Embed {
   description: String
@@ -190,10 +211,12 @@ type Mutation {
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): User!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): User!
   cancelPlan: UserPlan!
+  createComment(input: CreateCommentInput!): Comment!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
+  deleteComment(input: DeleteCommentInput!): Comment!
   enrollPlan(input: EnrollPlanInput!): UserPlan!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
@@ -313,6 +336,7 @@ type PostReaction {
 }
 
 type PostView implements IPost {
+  comments: [Comment!]!
   content: PostContentView!
   entity: EntityView!
   id: ID!

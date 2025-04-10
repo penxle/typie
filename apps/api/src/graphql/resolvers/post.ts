@@ -1,9 +1,10 @@
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
-import { and, desc, eq, getTableColumns, gte, isNull, lt, sum } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import * as Y from 'yjs';
 import {
+  Comments,
   db,
   Entities,
   first,
@@ -24,6 +25,7 @@ import { decode, encode, makeText, makeYDoc } from '@/utils';
 import { builder } from '../builder';
 import {
   CharacterCountChange,
+  Comment,
   Entity,
   EntityView,
   Image,
@@ -125,6 +127,26 @@ PostView.implement({
       type: [PostReaction],
       resolve: async (post) => {
         return await db.select().from(PostReactions).where(eq(PostReactions.postId, post.id)).orderBy(desc(PostReactions.createdAt));
+      },
+    }),
+
+    comments: t.field({
+      type: [Comment],
+      resolve: async (post, _, ctx) => {
+        const postOptionLoader = ctx.loader({
+          name: 'PostOptions(postId)',
+          load: async (postIds: string[]) => {
+            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, postIds));
+          },
+          key: (options) => options.postId,
+        });
+
+        const options = await postOptionLoader.load(post.id);
+        if (options?.allowComments) {
+          return await db.select().from(Comments).where(eq(Comments.postId, post.id)).orderBy(Comments.createdAt);
+        }
+
+        return [];
       },
     }),
   }),

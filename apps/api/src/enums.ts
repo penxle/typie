@@ -1,3 +1,9 @@
+export type CommentState = keyof typeof CommentState;
+export const CommentState = {
+  ACTIVE: 'ACTIVE',
+  DELETED: 'DELETED',
+} as const;
+
 export type EntityState = keyof typeof EntityState;
 export const EntityState = {
   ACTIVE: 'ACTIVE',
