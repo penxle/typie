@@ -1,4 +1,4 @@
-import { getText, getTextSerializersFromSchema } from '@tiptap/core';
+import { getText } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
 import { eq } from 'drizzle-orm';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
@@ -6,7 +6,7 @@ import * as Y from 'yjs';
 import { redis } from '@/cache';
 import { db, firstOrThrow } from '@/db';
 import { PostContents } from '@/db/schemas/tables';
-import { schema } from '@/pm';
+import { schema, textSerializers } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
 
 type MakeYDocParams = {
@@ -34,7 +34,7 @@ export const makeText = (body: JSONContent) => {
 
   return getText(node, {
     blockSeparator: '\n',
-    textSerializers: getTextSerializersFromSchema(schema),
+    textSerializers,
   }).trim();
 };
 

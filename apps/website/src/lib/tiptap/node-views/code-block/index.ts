@@ -21,10 +21,6 @@ export const CodeBlock = createNodeView(Component, {
     return [{ tag: 'pre' }];
   },
 
-  renderText() {
-    return '';
-  },
-
   addAttributes() {
     return {
       language: {
