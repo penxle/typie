@@ -1,9 +1,10 @@
 import { logger } from '@typie/lib';
+import { dev } from '@/env';
 import type { Logger } from 'drizzle-orm/logger';
 
 export class DrizzleLogger implements Logger {
   logQuery(query: string, params: unknown[]): void {
-    if (query.includes('@silent@')) {
+    if (!dev) {
       return;
     }
 
