@@ -72,7 +72,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'PAYMENT_FAILED', message: paymentResult.message });
       }
 
-      if (paymentResult.amount.total !== paymentRequest.amount) {
+      if (paymentResult.amount !== paymentRequest.amount) {
         throw new TypieError({ code: 'PAYMENT_AMOUNT_MISMATCH', message: '결제 금액이 일치하지 않아요' });
       }
 

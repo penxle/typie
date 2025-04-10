@@ -234,6 +234,7 @@ type Mutation {
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
   updateUser(input: UpdateUserInput!): User!
+  verifyIdentity(input: VerifyIdentityInput!): Boolean!
 }
 
 enum PaymentInvoiceState {
@@ -476,4 +477,8 @@ enum UserPlanState {
 enum UserState {
   ACTIVE
   DEACTIVATED
+}
+
+input VerifyIdentityInput {
+  identityVerificationId: String!
 }

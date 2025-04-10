@@ -37,7 +37,7 @@ payment.get('/redirect', async (c) => {
     );
   }
 
-  if (paymentResult.amount.total !== paymentRequest.amount) {
+  if (paymentResult.amount !== paymentRequest.amount) {
     return c.redirect(
       qs.stringifyUrl({
         url: env.WEBSITE_URL,

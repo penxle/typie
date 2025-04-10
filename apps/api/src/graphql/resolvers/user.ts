@@ -8,6 +8,7 @@ import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import { PaymentMethodState, SiteState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
+import * as portone from '@/external/portone';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
 import { CharacterCountChange, isTypeOf, PaymentMethod, Site, User } from '../objects';
@@ -175,6 +176,20 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       return await db.update(Users).set({ name: input.name }).where(eq(Users.id, ctx.session.userId)).returning().then(firstOrThrow);
+    },
+  }),
+
+  verifyIdentity: t.fieldWithInput({
+    type: 'Boolean',
+    input: { identityVerificationId: t.input.string() },
+    resolve: async (_, { input }) => {
+      const resp = await portone.getIdentityVerification({ identityVerificationId: input.identityVerificationId });
+
+      if (resp.status !== 'succeeded') {
+        throw new TypieError({ code: 'identity_verification_failed' });
+      }
+
+      return true;
     },
   }),
 }));
