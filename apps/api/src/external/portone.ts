@@ -16,11 +16,7 @@ type IssueBillingKeyParams = {
   birthOrBusinessRegistrationNumber: string;
   passwordTwoDigits: string;
 };
-
-type IssueBillingKeyResult = PortOneResult<{
-  billingKey: string;
-  cardName: string;
-}>;
+type IssueBillingKeyResult = PortOneResult<{ billingKey: string; cardName: string }>;
 export const issueBillingKey = async (params: IssueBillingKeyParams): Promise<IssueBillingKeyResult> => {
   try {
     const {
@@ -62,9 +58,7 @@ export const issueBillingKey = async (params: IssueBillingKeyParams): Promise<Is
   }
 };
 
-type DeleteBillingKeyParams = {
-  billingKey: string;
-};
+type DeleteBillingKeyParams = { billingKey: string };
 type DeleteBillingKeyResult = PortOneResult<unknown>;
 export const deleteBillingKey = async (params: DeleteBillingKeyParams): Promise<DeleteBillingKeyResult> => {
   try {
@@ -116,17 +110,48 @@ export const makePayment = async (params: MakePaymentParams): Promise<MakePaymen
   }
 };
 
-type GetPaymentParams = {
-  paymentId: string;
-};
-type GetPaymentResult = PortOneResult<{ amount: { total: number }; customData: string | undefined }>;
+type GetPaymentParams = { paymentId: string };
+type GetPaymentResult = PortOneResult<{ amount: number; customData: string | undefined }>;
 export const getPayment = async (params: GetPaymentParams): Promise<GetPaymentResult> => {
   const resp = await client.payment.getPayment({
     paymentId: params.paymentId,
   });
 
   if (resp.status === 'PAID') {
-    return makeSuccessResult(resp);
+    return makeSuccessResult({
+      amount: resp.amount.total,
+      customData: resp.customData,
+    });
+  }
+
+  return makeFailureResult(resp);
+};
+
+type GetIdentityVerificationParams = { identityVerificationId: string };
+type GetIdentityVerificationResult = PortOneResult<{
+  name: string;
+  birthDate: string;
+  gender: string;
+  operator: string;
+  phoneNumber: string;
+  ci: string;
+}>;
+export const getIdentityVerification = async (params: GetIdentityVerificationParams): Promise<GetIdentityVerificationResult> => {
+  const resp = await client.identityVerification.getIdentityVerification({
+    identityVerificationId: params.identityVerificationId,
+  });
+
+  if (resp.status === 'VERIFIED') {
+    /* eslint-disable @typescript-eslint/no-non-null-assertion */
+    return makeSuccessResult({
+      name: resp.verifiedCustomer.name,
+      birthDate: resp.verifiedCustomer.birthDate!,
+      gender: resp.verifiedCustomer.gender!,
+      operator: resp.verifiedCustomer.operator!,
+      phoneNumber: resp.verifiedCustomer.phoneNumber!,
+      ci: resp.verifiedCustomer.ci!,
+    });
+    /* eslint-enable @typescript-eslint/no-non-null-assertion */
   }
 
   return makeFailureResult(resp);
