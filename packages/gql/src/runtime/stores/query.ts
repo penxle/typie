@@ -1,4 +1,4 @@
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import { readable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { getClient } from '../../client/internal';
@@ -22,6 +22,7 @@ export const createQueryStore = <T extends $StoreSchema<Kind>>(schema: StoreSche
 
   if (schema.meta.mode === 'manual') {
     const setters = new Set<(v: T['$output']) => void>();
+    let subscription: Subscription | null = null;
 
     const store = readable<StoreOutput<T>>(undefined, (set) => {
       setters.add(set);
@@ -54,6 +55,28 @@ export const createQueryStore = <T extends $StoreSchema<Kind>>(schema: StoreSche
         for (const set of setters) {
           set(result.data);
         }
+
+        const cacheOperation = client.createOperation({
+          schema,
+          variables: effectiveVariables,
+          context: {
+            requestPolicy: 'cache-only',
+            fetch: effectiveContext?.fetch,
+          },
+        });
+
+        const cacheResult$ = client.executeOperation(cacheOperation);
+
+        subscription?.unsubscribe();
+        subscription = cacheResult$.subscribe((result) => {
+          if (result.type === 'error') {
+            throw result.errors[0];
+          }
+
+          for (const set of setters) {
+            set(result.data);
+          }
+        });
 
         return result.data;
       },

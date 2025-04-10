@@ -55,7 +55,6 @@
   `);
 
   let open = $state(false);
-  let children = $state<Entity[]>([]);
   let itemEl = $state<HTMLElement>();
 
   $effect(() => {
@@ -84,8 +83,7 @@
   `);
 
   const loadEntity = async () => {
-    const result = await entityQuery.refetch({ id: entity.id });
-    children = result.entity.children;
+    await entityQuery.refetch({ id: entity.id });
   };
 
   const debouncedLoadEntity = R.funnel(loadEntity, { minQuietPeriodMs: 100, triggerAt: 'end' });
@@ -186,8 +184,8 @@
         </Menu>
       </summary>
 
-      {#if children.length > 0}
-        <PageList depth={depth + 1} entities={children} parent={entity} {siteId} />
+      {#if $entityQuery && $entityQuery.entity.children.length > 0}
+        <PageList depth={depth + 1} entities={$entityQuery.entity.children} parent={entity} {siteId} />
       {/if}
     </details>
   {:else}
