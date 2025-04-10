@@ -24,6 +24,7 @@ const parameterGroup = new aws.rds.ClusterParameterGroup('typie-aurora-postgresq
   family: 'aurora-postgresql16',
 
   parameters: [
+    { name: 'default_toast_compression', value: 'lz4' },
     { name: 'pg_stat_statements.track', value: 'ALL' },
     { name: 'pg_stat_statements.max', value: '10000', applyMethod: 'pending-reboot' },
     { name: 'pg_stat_statements.track_utility', value: '0' },
