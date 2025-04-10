@@ -8,11 +8,12 @@ import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
 export const pg = postgres(env.DATABASE_URL, {
   max: 20,
-  max_lifetime: 60 * 60 * 1000,
+  max_lifetime: 3600,
   connection: {
     default_transaction_isolation: 'repeatable read',
     idle_in_transaction_session_timeout: 30 * 1000,
     lock_timeout: 10 * 1000,
+    statement_timeout: 30 * 1000,
   },
 });
 
