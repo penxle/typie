@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as R from 'remeda';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
@@ -132,7 +132,7 @@ export const PostContentUpdateJob = defineJob('post:content:update', async (post
           coverImageId,
           updatedAt: dayjs(),
         })
-        .where(and(eq(PostContents.postId, postId)));
+        .where(eq(PostContents.postId, postId));
     }
   });
 
