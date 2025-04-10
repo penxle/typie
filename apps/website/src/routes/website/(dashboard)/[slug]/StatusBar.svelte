@@ -32,7 +32,7 @@
   );
 </script>
 
-<div class={flex({ alignItems: 'center', gap: '16px', flexShrink: '0', paddingX: '24px', height: '40px' })}>
+<div class={flex({ alignItems: 'center', gap: '16px', flexShrink: '0', paddingX: '24px', height: '40px', userSelect: 'none' })}>
   <div class={flex({ alignItems: 'center', gap: '6px' })}>
     <div
       style:background-color={match(connectionStatus)
