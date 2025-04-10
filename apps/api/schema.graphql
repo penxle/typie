@@ -155,12 +155,10 @@ interface IFolder {
 }
 
 interface IPost {
-  id: ID!
-}
-
-interface IPostContent {
+  coverImage: Image
   excerpt: String!
   id: ID!
+  maxWidth: Int!
   subtitle: String
   title: String!
 }
@@ -281,35 +279,15 @@ enum PlanAvailability {
 
 type Post implements IPost {
   characterCountChange: CharacterCountChange!
-  content: PostContent!
-  entity: Entity!
-  id: ID!
-  option: PostOption!
-}
-
-type PostContent implements IPostContent {
-  excerpt: String!
-  id: ID!
-  subtitle: String
-  title: String!
-  update: Binary!
-}
-
-enum PostContentSyncKind {
-  AWARENESS
-  HEARTBEAT
-  UPDATE
-  VECTOR
-}
-
-type PostContentView implements IPostContent {
-  body: JSON!
   coverImage: Image
+  entity: Entity!
   excerpt: String!
   id: ID!
   maxWidth: Int!
+  option: PostOption!
   subtitle: String
   title: String!
+  update: Binary!
 }
 
 type PostOption implements IPostOption {
@@ -337,12 +315,17 @@ type PostReaction {
 }
 
 type PostView implements IPost {
+  body: JSON!
   comments: [Comment!]!
-  content: PostContentView!
+  coverImage: Image
   entity: EntityView!
+  excerpt: String!
   id: ID!
+  maxWidth: Int!
   option: PostOptionView!
   reactions: [PostReaction!]!
+  subtitle: String
+  title: String!
 }
 
 enum PostVisibility {

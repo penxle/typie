@@ -44,7 +44,6 @@ export const isTypeOf = (tableCode: string) => (self: unknown) => {
 export const IEntity = createInterfaceRef('IEntity', T.Entities);
 export const IFolder = createInterfaceRef('IFolder', T.Folders);
 export const IPost = createInterfaceRef('IPost', T.Posts);
-export const IPostContent = createInterfaceRef('IPostContent', T.PostContents);
 export const IPostOption = createInterfaceRef('IPostOption', T.PostOptions);
 
 export const Comment = createObjectRef('Comment', T.Comments);
@@ -56,7 +55,6 @@ export const Image = createObjectRef('Image', T.Images);
 export const PaymentMethod = createObjectRef('PaymentMethod', T.PaymentMethods);
 export const Plan = createObjectRef('Plan', T.Plans);
 export const Post = createObjectRef('Post', T.Posts);
-export const PostContent = createObjectRef('PostContent', T.PostContents);
 export const PostOption = createObjectRef('PostOption', T.PostOptions);
 export const PostReaction = createObjectRef('PostReaction', T.PostReactions);
 export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
@@ -68,7 +66,6 @@ export const UserPlan = createObjectRef('UserPlan', T.UserPlans);
 export const EntityView = createObjectRef('EntityView', T.Entities);
 export const FolderView = createObjectRef('FolderView', T.Folders);
 export const PostView = createObjectRef('PostView', T.Posts);
-export const PostContentView = createObjectRef('PostContentView', T.PostContents);
 export const PostOptionView = createObjectRef('PostOptionView', T.PostOptions);
 
 type BlobShape = { id: string; path: string };

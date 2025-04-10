@@ -1,7 +1,7 @@
-import { PostContentUpdateJob } from './post';
+import { PostDocumentUpdateJob } from './post';
 import { TestCron } from './test';
 
-export const jobs = [PostContentUpdateJob];
+export const jobs = [PostDocumentUpdateJob];
 export const crons = [TestCron];
 
 export type Jobs = typeof jobs;

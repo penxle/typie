@@ -11,10 +11,10 @@ import {
   firstOrThrow,
   PostCharacterCountChanges,
   PostContents,
-  PostContentSnapshots,
   PostOptions,
   PostReactions,
   Posts,
+  PostSnapshots,
   TableCode,
 } from '@/db';
 import { EntityState, EntityType, PostVisibility } from '@/enums';
@@ -30,12 +30,9 @@ import {
   EntityView,
   Image,
   IPost,
-  IPostContent,
   IPostOption,
   isTypeOf,
   Post,
-  PostContent,
-  PostContentView,
   PostOption,
   PostOptionView,
   PostReaction,
@@ -49,6 +46,24 @@ import {
 IPost.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
+    title: t.string({ resolve: (self) => self.title || '(제목 없음)' }),
+    subtitle: t.exposeString('subtitle', { nullable: true }),
+    maxWidth: t.exposeInt('maxWidth'),
+    coverImage: t.expose('coverImageId', { type: Image, nullable: true }),
+
+    excerpt: t.string({
+      resolve: async (self) => {
+        const content = await db
+          .select({ text: PostContents.text })
+          .from(PostContents)
+          .where(eq(PostContents.postId, self.id))
+          .then(firstOrThrow);
+
+        const text = content.text.replaceAll(/\s+/g, ' ').trim();
+
+        return text.length <= 200 ? text : text.slice(0, 200) + '...';
+      },
+    }),
   }),
 });
 
@@ -56,14 +71,20 @@ Post.implement({
   isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
-    entity: t.field({ type: Entity, resolve: (self) => self.entityId }),
-
-    content: t.field({
-      type: PostContent,
+    update: t.field({
+      type: 'Binary',
       resolve: async (self) => {
-        return await db.select().from(PostContents).where(eq(PostContents.postId, self.id)).then(firstOrThrow);
+        const content = await db
+          .select({ update: PostContents.update })
+          .from(PostContents)
+          .where(eq(PostContents.postId, self.id))
+          .then(firstOrThrow);
+
+        return content.update;
       },
     }),
+
+    entity: t.expose('entityId', { type: Entity }),
 
     option: t.field({
       type: PostOption,
@@ -107,14 +128,20 @@ PostView.implement({
   isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
-    entity: t.field({ type: EntityView, resolve: (self) => self.entityId }),
-
-    content: t.field({
-      type: PostContentView,
+    body: t.field({
+      type: 'JSON',
       resolve: async (self) => {
-        return await db.select().from(PostContents).where(eq(PostContents.postId, self.id)).then(firstOrThrow);
+        const content = await db
+          .select({ body: PostContents.body })
+          .from(PostContents)
+          .where(eq(PostContents.postId, self.id))
+          .then(firstOrThrow);
+
+        return content.body;
       },
     }),
+
+    entity: t.field({ type: EntityView, resolve: (self) => self.entityId }),
 
     option: t.field({
       type: PostOptionView,
@@ -149,40 +176,6 @@ PostView.implement({
         return [];
       },
     }),
-  }),
-});
-
-IPostContent.implement({
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    subtitle: t.exposeString('subtitle', { nullable: true }),
-
-    title: t.string({ resolve: (self) => self.title || '(제목 없음)' }),
-
-    excerpt: t.string({
-      resolve: (self) => {
-        const text = self.text.replaceAll(/\s+/g, ' ').trim();
-        return text.length <= 200 ? text : text.slice(0, 200) + '...';
-      },
-    }),
-  }),
-});
-
-PostContent.implement({
-  isTypeOf: isTypeOf(TableCode.POST_CONTENTS),
-  interfaces: [IPostContent],
-  fields: (t) => ({
-    update: t.expose('update', { type: 'Binary' }),
-  }),
-});
-
-PostContentView.implement({
-  isTypeOf: isTypeOf(TableCode.POST_CONTENTS),
-  interfaces: [IPostContent],
-  fields: (t) => ({
-    body: t.expose('body', { type: 'JSON' }),
-    maxWidth: t.exposeInt('maxWidth'),
-    coverImage: t.expose('coverImageId', { type: Image, nullable: true }),
   }),
 });
 
@@ -308,21 +301,21 @@ builder.mutationFields((t) => ({
           .insert(Posts)
           .values({
             entityId: entity.id,
+            title,
+            subtitle,
           })
           .returning()
           .then(firstOrThrow);
 
         await tx.insert(PostContents).values({
           postId: post.id,
-          title,
-          subtitle,
           body,
           text,
           update: Y.encodeStateAsUpdateV2(doc),
           vector: Y.encodeStateVector(doc),
         });
 
-        await tx.insert(PostContentSnapshots).values({
+        await tx.insert(PostSnapshots).values({
           userId: ctx.session.userId,
           postId: post.id,
           snapshot: Y.encodeSnapshotV2(snapshot),

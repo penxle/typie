@@ -8,7 +8,7 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
-import { db, Entities, first, Folders, Images, PostContents, Posts } from '@/db';
+import { db, Entities, first, Folders, Images, Posts } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import * as aws from '@/external/aws';
 import type { Env } from '@/context';
@@ -117,14 +117,13 @@ og.get('/:entityId', async (c) => {
 const renderPost = async (entityId: string) => {
   const post = await db
     .select({
-      title: PostContents.title,
-      subtitle: PostContents.subtitle,
+      title: Posts.title,
+      subtitle: Posts.subtitle,
       coverImagePath: Images.path,
     })
     .from(Entities)
     .innerJoin(Posts, eq(Posts.entityId, Entities.id))
-    .innerJoin(PostContents, eq(PostContents.postId, Posts.id))
-    .leftJoin(Images, eq(Images.id, PostContents.coverImageId))
+    .leftJoin(Images, eq(Images.id, Posts.coverImageId))
     .where(eq(Entities.id, entityId))
     .then(first);
 

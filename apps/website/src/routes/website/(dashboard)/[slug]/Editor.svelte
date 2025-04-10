@@ -8,7 +8,7 @@
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostContentSyncMessageKind } from '@/const';
+  import { PostDocumentSyncMessageKind } from '@/const';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { autosize } from '$lib/actions';
@@ -44,6 +44,7 @@
 
         post(slug: $slug) {
           id
+          update
 
           entity {
             id
@@ -66,11 +67,6 @@
               id
               url
             }
-          }
-
-          content {
-            id
-            update
           }
 
           ...StatusBar_post
@@ -104,24 +100,24 @@
   const ws = createWebSocket({
     onopen: () => {
       connectionStatus = 'connecting';
-      ws.send(PostContentSyncMessageKind.INIT, encoder.encode($query.post.id));
+      ws.send(PostDocumentSyncMessageKind.INIT, encoder.encode($query.post.id));
     },
     onmessage: (type, data) => {
-      if (type === PostContentSyncMessageKind.HEARTBEAT) {
+      if (type === PostDocumentSyncMessageKind.HEARTBEAT) {
         lastHeartbeatAt = dayjs();
-      } else if (type === PostContentSyncMessageKind.INIT) {
+      } else if (type === PostDocumentSyncMessageKind.INIT) {
         connectionStatus = 'connected';
         forceSync();
-      } else if (type === PostContentSyncMessageKind.UPDATE) {
+      } else if (type === PostDocumentSyncMessageKind.UPDATE) {
         Y.applyUpdateV2(doc, data, 'remote');
-      } else if (type === PostContentSyncMessageKind.VECTOR) {
+      } else if (type === PostDocumentSyncMessageKind.VECTOR) {
         const update = Y.encodeStateAsUpdateV2(doc, data);
-        ws.send(PostContentSyncMessageKind.UPDATE, update);
-      } else if (type === PostContentSyncMessageKind.AWARENESS) {
+        ws.send(PostDocumentSyncMessageKind.UPDATE, update);
+      } else if (type === PostDocumentSyncMessageKind.AWARENESS) {
         YAwareness.applyAwarenessUpdate(awareness, data, 'remote');
-      } else if (type === PostContentSyncMessageKind.PRESENCE) {
+      } else if (type === PostDocumentSyncMessageKind.PRESENCE) {
         const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
-        ws.send(PostContentSyncMessageKind.AWARENESS, update);
+        ws.send(PostDocumentSyncMessageKind.AWARENESS, update);
       }
     },
     onclose: () => {
@@ -131,27 +127,27 @@
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote') {
-      ws.send(PostContentSyncMessageKind.UPDATE, update);
+      ws.send(PostDocumentSyncMessageKind.UPDATE, update);
     }
   });
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
     if (browser && origin !== 'remote') {
       const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
-      ws.send(PostContentSyncMessageKind.AWARENESS, update);
+      ws.send(PostDocumentSyncMessageKind.AWARENESS, update);
     }
   });
 
   const forceSync = async () => {
     const vector = Y.encodeStateVector(doc);
-    ws.send(PostContentSyncMessageKind.VECTOR, vector);
+    ws.send(PostDocumentSyncMessageKind.VECTOR, vector);
   };
 
   onMount(() => {
     const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
     persistence.on('synced', () => forceSync());
 
-    Y.applyUpdateV2(doc, base64.parse($query.post.content.update), 'remote');
+    Y.applyUpdateV2(doc, base64.parse($query.post.update), 'remote');
     awareness.setLocalStateField('user', {
       name: $query.me.name,
       color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
