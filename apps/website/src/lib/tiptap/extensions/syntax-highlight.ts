@@ -71,6 +71,11 @@ const getDecorations = (editor: Editor, highlighter: Highlighter, doc: Node) => 
 
   const children = findChildren(doc, (node) => node.type.spec.code === true);
   for (const child of children) {
+    const code = child.node.textContent;
+    if (code.length > 10_000) {
+      continue;
+    }
+
     const language = child.node.type.name === 'html_block' ? 'html' : child.node.attrs.language;
     if (!languages.has(language) && bundledLanguages[language as never]) {
       highlighter.loadLanguage(language).then(() => {
@@ -82,7 +87,7 @@ const getDecorations = (editor: Editor, highlighter: Highlighter, doc: Node) => 
       continue;
     }
 
-    const result = highlighter.codeToTokens(child.node.textContent, { theme: 'min-light', lang: language });
+    const result = highlighter.codeToTokens(code, { theme: 'min-light', lang: language });
 
     for (const token of result.tokens.flat()) {
       const from = child.pos + token.offset + 1;
