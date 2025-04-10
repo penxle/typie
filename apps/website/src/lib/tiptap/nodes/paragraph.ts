@@ -1,7 +1,9 @@
 import { isNodeActive, mergeAttributes, Node } from '@tiptap/core';
+import { Plugin } from '@tiptap/pm/state';
 import { closest } from '$lib/utils';
 import { css } from '$styled-system/css';
 import { defaultValues, values } from '../values';
+import type { NodeType, ResolvedPos } from '@tiptap/pm/model';
 
 const textAligns = values.textAlign.map(({ value }) => value);
 type TextAlign = (typeof textAligns)[number];
@@ -144,4 +146,61 @@ export const Paragraph = Node.create({
         },
     };
   },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        appendTransaction: (_, __, newState) => {
+          const { selection, storedMarks, tr } = newState;
+          const { $anchor, empty } = selection;
+
+          if (
+            !empty ||
+            $anchor.parent.type !== this.type ||
+            $anchor.parentOffset !== 0 ||
+            $anchor.parent.childCount !== 0 ||
+            storedMarks !== null
+          ) {
+            return;
+          }
+
+          const textNode = getTextNodeToCopyMarks(this.type, $anchor);
+          if (textNode) {
+            tr.ensureMarks(textNode.marks);
+            return tr;
+          }
+        },
+      }),
+    ];
+  },
 });
+
+const getTextNodeToCopyMarks = (type: NodeType, $pos: ResolvedPos) => {
+  const currentNode = $pos.parent;
+
+  for (let depth = $pos.depth - 1; depth > 0; depth--) {
+    const node = $pos.node(depth);
+    if (node.childCount === 0) {
+      continue;
+    }
+
+    for (let idx = $pos.index(depth) - 1; idx >= 0; idx--) {
+      let child = node.child(idx);
+      if (child.type.name === 'list_item') {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        child = child.firstChild!;
+      }
+
+      if (child.type === type && child.childCount > 0 && child.attrs.textAlign === currentNode.attrs.textAlign) {
+        for (let i = child.childCount - 1; i >= 0; i--) {
+          const n = child.child(i);
+          if (n.isText) {
+            return n;
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+};
