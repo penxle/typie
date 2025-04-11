@@ -1,5 +1,5 @@
 export type Dragging = {
-  item: Folder | Post;
+  entity: Entity;
   elem: HTMLElement;
   ghostEl: HTMLElement;
   event: PointerEvent;

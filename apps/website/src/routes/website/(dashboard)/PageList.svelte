@@ -1,23 +1,91 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { graphql } from '$graphql';
   import { css, cx } from '$styled-system/css';
   import { token } from '$styled-system/tokens';
   import PageItem from './PageItem.svelte';
   import type { Dragging, DropTarget, Entity, RootEntity } from './types';
 
   type Props = {
-    entities: Entity[];
+    entities?: Entity[];
     depth?: number;
     parent?: Entity | null;
     siteId: string;
+    nodeMap?: Map<HTMLElement, (Entity | RootEntity) & { depth: number }>;
   };
 
-  let { entities, depth = 0, parent = null, siteId }: Props = $props();
+  let {
+    entities,
+    depth = 0,
+    parent = null,
+    siteId,
+    nodeMap = new Map<HTMLElement, (Entity | RootEntity) & { depth: number }>(),
+  }: Props = $props();
 
-  let listEl: HTMLElement;
-  let indicatorEl: HTMLElement;
-  let dragging: Dragging | null = null;
-  let dropTarget: DropTarget | null = null;
-  let nodeMap = new Map<HTMLElement, (Entity | RootEntity) & { depth: number }>();
+  let listEl = $state<HTMLElement>();
+  let indicatorEl = $state<HTMLElement>();
+  let dragging = $state<Dragging | null>(null);
+  let dropTarget = $state<DropTarget | null>(null);
+
+  const entityQuery = graphql(`
+    query DashboardLayout_PageList_Query($id: ID!) @manual {
+      entity(id: $id) {
+        id
+        slug
+
+        children {
+          __typename
+          id
+          slug
+          order
+
+          node {
+            ... on Folder {
+              __typename
+              id
+              name
+            }
+
+            ... on Post {
+              __typename
+              id
+              title
+            }
+          }
+
+          children {
+            __typename
+            id
+            slug
+            order
+          }
+        }
+      }
+    }
+  `);
+
+  const load = () => {
+    if (parent) {
+      entityQuery.refetch({ id: parent.id });
+    }
+  };
+
+  onMount(() => {
+    load();
+  });
+
+  const updateEntityPosition = graphql(`
+    mutation DashboardLayout_PageList_UpdateEntityPosition_Mutation($input: UpdateEntityPositionInput!) {
+      updateEntityPosition(input: $input) {
+        id
+
+        children {
+          id
+          order
+        }
+      }
+    }
+  `);
 
   const registerNode = (node: HTMLElement | undefined, entity: (Entity | RootEntity) & { depth: number }) => {
     if (!node) {
@@ -30,14 +98,16 @@
     if (parent) {
       registerNode(listEl, { ...parent, depth });
     } else {
-      registerNode(listEl, { id: null, __typename: 'RootEntity', children: entities, depth });
+      if (entities) registerNode(listEl, { id: null, __typename: 'RootEntity', children: entities, depth });
     }
   });
 
   // TODO: 모바일 터치 대응(딜레이 주기)
 
   const isDraggingOverTarget = (dropTarget: DropTarget, dragging: Dragging, ignoreAboveLine = false) => {
-    const draggingSiblingIndex = entities.findIndex((item) => item.node?.id === dragging.item.id);
+    if (!entities) return;
+
+    const draggingSiblingIndex = entities.findIndex((item) => item.id === dragging.entity.id);
 
     const isTargetSameAsDragging = dropTarget.elem && dropTarget.elem === dragging.elem;
 
@@ -160,7 +230,7 @@
     if (listEl !== pointerTarget) return;
 
     dragging = {
-      item: entity.node,
+      entity,
       elem: draggingEl,
       event,
       ghostEl: createGhostEl(draggingEl),
@@ -220,7 +290,41 @@
 
       // 1/4 지점 ~ 3/4 지점 사이에 있으면 indicator를 item 위에 표시
       if (pointerTopInList < childTop + (mineRect.height / 4) * 3 && !(pointerTopInList > childTop + mineRect.height)) {
-        indicatorPositionDraft = 0;
+        // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
+        for (const [i, child] of childrenElems.entries()) {
+          const pageRect =
+            child.querySelector(':scope > .dnd-item-body')?.getBoundingClientRect() ??
+            child.querySelector(':scope > .dnd-item-page > .dnd-item-body')?.getBoundingClientRect();
+          const folderRect = child.querySelector(':scope > details > .dnd-item-body')?.getBoundingClientRect();
+
+          // 페이지 위아래로 indicator 표시
+          if (pageRect) {
+            const childTop = pageRect.top - pointerTargetList.getBoundingClientRect().top;
+
+            // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
+            if (pointerTopInList < childTop + pageRect.height / 4) {
+              indicatorPositionDraft = i;
+              break;
+            } else if (pointerTopInList > childTop + pageRect.height) {
+              // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
+              indicatorPositionDraft = i + 1;
+            }
+          }
+
+          // 폴더 위아래로 indicator 표시
+          if (folderRect) {
+            const childTop = folderRect.top - pointerTargetList.getBoundingClientRect().top;
+            // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
+            if (pointerTopInList < childTop + folderRect.height / 4) {
+              indicatorPositionDraft = i;
+              break;
+            } else if (pointerTopInList > childTop + folderRect.height) {
+              // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
+              indicatorPositionDraft = i + 1;
+            }
+          }
+        }
+
         if (parent?.id === pointerTargetList.id) {
           parentId = parent.id;
         } else {
@@ -280,16 +384,69 @@
     updateIndicatorPosition(dragging, dropTarget);
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = async () => {
     if (!dragging) return;
 
     dragging.elem.releasePointerCapture(dragging.pointerId);
 
     if (dropTarget && !isDraggingOverTarget(dropTarget, dragging)) {
-      // TODO: 드롭 처리 로직 구현
+      if (dropTarget.elem && dragging.elem !== dropTarget.elem) {
+        // selection indicator: elem이 있으면 해당 아이템의 children으로 들어감
+        const targetItem = nodeMap.get(dropTarget.elem);
+
+        if (!targetItem) return;
+
+        await updateEntityPosition({
+          id: dragging.entity.id,
+          parentId: targetItem.id,
+          nextOrder: targetItem.children ? targetItem.children[0]?.order : undefined,
+        });
+
+        if (parent && targetItem?.id) {
+          await entityQuery.refetch({ id: targetItem.id });
+          await entityQuery.refetch({ id: parent.id });
+        }
+
+        // eslint-disable-next-line unicorn/no-negated-condition
+      } else if (dropTarget.indicatorPosition !== null) {
+        // line indicator
+        const targetList = nodeMap.get(dropTarget.list);
+
+        let nextOrder = null;
+        let previousOrder = null;
+
+        const children = targetList?.children;
+
+        if (dropTarget.indicatorPosition === 0 || !children || children.length === 0) {
+          // 맨 앞
+          nextOrder = children ? children[0]?.order : undefined;
+        } else if (dropTarget.indicatorPosition === children.length) {
+          // 맨 뒤
+          previousOrder = children.at(-1)?.order;
+        } else {
+          // 중간
+          previousOrder = children[dropTarget.indicatorPosition - 1]?.order;
+          nextOrder = children[dropTarget.indicatorPosition]?.order;
+        }
+
+        await updateEntityPosition({
+          id: dragging.entity.id,
+          parentId: targetList?.id,
+          nextOrder,
+          previousOrder,
+        });
+
+        if (parent && targetList?.id) {
+          await entityQuery.refetch({ id: targetList.id });
+          if (targetList.id !== parent.id) await entityQuery.refetch({ id: parent.id });
+        }
+      } else {
+        // invalid drop target
+        console.log('invalid drop target');
+      }
     }
 
-    dragging.ghostEl.remove();
+    dragging?.ghostEl.remove();
     dragging = null;
     dropTarget = null;
 
@@ -301,7 +458,11 @@
   const cancelDragging = () => {
     if (!dragging) return;
 
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', onPointerUp);
+
     dragging.elem.releasePointerCapture(dragging.pointerId);
+    dragging?.ghostEl.remove();
     dragging = null;
     dropTarget = null;
 
@@ -358,7 +519,15 @@
     aria-hidden="true"
   ></div>
 
-  {#each entities as entity (entity.id)}
-    <PageItem {depth} {entity} {onPointerDown} {registerNode} {siteId} />
-  {/each}
+  {#if parent}
+    {#if $entityQuery && $entityQuery.entity.children.length > 0}
+      {#each $entityQuery.entity.children as entity (entity.id)}
+        <PageItem {depth} {entity} {nodeMap} {onPointerDown} {registerNode} {siteId} />
+      {/each}
+    {/if}
+  {:else if entities}
+    {#each entities as entity (entity.id)}
+      <PageItem {depth} {entity} {nodeMap} {onPointerDown} {registerNode} {siteId} />
+    {/each}
+  {/if}
 </ul>

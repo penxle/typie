@@ -35,6 +35,27 @@
                 title
               }
             }
+
+            children {
+              __typename
+              id
+              slug
+              order
+
+              node {
+                ... on Folder {
+                  __typename
+                  id
+                  name
+                }
+
+                ... on Post {
+                  __typename
+                  id
+                  title
+                }
+              }
+            }
           }
         }
       }
@@ -49,6 +70,7 @@
 
           entities {
             id
+            order
 
             node {
               ... on Folder {
@@ -60,6 +82,11 @@
                 id
                 title
               }
+            }
+
+            children {
+              id
+              order
             }
           }
         }
@@ -81,6 +108,11 @@
                 additions
               }
             }
+          }
+
+          children {
+            id
+            order
           }
         }
       }

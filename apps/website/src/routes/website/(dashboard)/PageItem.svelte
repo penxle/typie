@@ -1,5 +1,4 @@
 <script lang="ts">
-  import * as R from 'remeda';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -12,7 +11,7 @@
   import { Icon, Menu, MenuItem } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import PageList from './PageList.svelte';
-  import type { Entity } from './types';
+  import type { Entity, RootEntity } from './types';
 
   type Props = {
     entity: Entity;
@@ -20,9 +19,10 @@
     onPointerDown: (e: PointerEvent, entity: Entity) => void;
     registerNode: (node: HTMLElement | undefined, entity: Entity & { depth: number }) => void;
     siteId: string;
+    nodeMap: Map<HTMLElement, (Entity | RootEntity) & { depth: number }>;
   };
 
-  let { entity, depth, onPointerDown, registerNode, siteId }: Props = $props();
+  let { entity, depth, onPointerDown, registerNode, siteId, nodeMap }: Props = $props();
 
   const entityQuery = graphql(`
     query DashboardLayout_PageItem_Query($id: ID!) @manual {
@@ -49,6 +49,13 @@
               title
             }
           }
+
+          children {
+            __typename
+            id
+            slug
+            order
+          }
         }
       }
     }
@@ -58,7 +65,7 @@
   let itemEl = $state<HTMLElement>();
 
   $effect(() => {
-    registerNode(itemEl, { ...entity, depth });
+    if (itemEl) registerNode(itemEl, { ...entity, depth });
   });
 
   const createPost = graphql(`
@@ -85,8 +92,6 @@
   const loadEntity = async () => {
     await entityQuery.refetch({ id: entity.id });
   };
-
-  const debouncedLoadEntity = R.funnel(loadEntity, { minQuietPeriodMs: 100, triggerAt: 'end' });
 </script>
 
 <li
@@ -118,12 +123,6 @@
             },
           }),
         )}
-        onmouseenter={() => {
-          debouncedLoadEntity.call();
-        }}
-        onmouseleave={() => {
-          debouncedLoadEntity.cancel();
-        }}
       >
         <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', width: '16px', height: '16px', color: 'gray.500' })}>
           {#if open}
@@ -184,9 +183,7 @@
         </Menu>
       </summary>
 
-      {#if $entityQuery && $entityQuery.entity.children.length > 0}
-        <PageList depth={depth + 1} entities={$entityQuery.entity.children} parent={entity} {siteId} />
-      {/if}
+      <PageList depth={depth + 1} {nodeMap} parent={entity} {siteId} />
     </details>
   {:else}
     <a

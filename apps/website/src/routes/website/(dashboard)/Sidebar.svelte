@@ -348,7 +348,7 @@
 
         <div
           class={css({
-            minHeight: '400px',
+            minHeight: '240px',
             paddingTop: '4px',
           })}
         >
