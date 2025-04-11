@@ -24,7 +24,7 @@ export const globalCss = defineGlobalStyles({
 
   html: {
     fontFamily: 'ui',
-    fontFeatureSettings: '"ss05" 1, "ss18" 1',
+    fontFeatureSettings: '"ss05" 1, "cv12" 1, "ss18" 1',
     textSizeAdjust: '100%',
 
     color: 'gray.950',
