@@ -55,6 +55,27 @@
                   title
                 }
               }
+
+              children {
+                __typename
+                id
+                slug
+                order
+
+                node {
+                  ... on Folder {
+                    __typename
+                    id
+                    name
+                  }
+
+                  ... on Post {
+                    __typename
+                    id
+                    title
+                  }
+                }
+              }
             }
           }
         }
@@ -87,6 +108,11 @@
             children {
               id
               order
+
+              children {
+                id
+                order
+              }
             }
           }
         }

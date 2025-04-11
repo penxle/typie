@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { graphql } from '$graphql';
   import { css, cx } from '$styled-system/css';
   import { token } from '$styled-system/tokens';
@@ -7,7 +6,7 @@
   import type { Dragging, DropTarget, Entity, RootEntity } from './types';
 
   type Props = {
-    entities?: Entity[];
+    entities: Entity[];
     depth?: number;
     parent?: Entity | null;
     siteId: string;
@@ -27,52 +26,7 @@
   let dragging = $state<Dragging | null>(null);
   let dropTarget = $state<DropTarget | null>(null);
 
-  const entityQuery = graphql(`
-    query DashboardLayout_PageList_Query($id: ID!) @manual {
-      entity(id: $id) {
-        id
-        slug
-
-        children {
-          __typename
-          id
-          slug
-          order
-
-          node {
-            ... on Folder {
-              __typename
-              id
-              name
-            }
-
-            ... on Post {
-              __typename
-              id
-              title
-            }
-          }
-
-          children {
-            __typename
-            id
-            slug
-            order
-          }
-        }
-      }
-    }
-  `);
-
-  const load = () => {
-    if (parent) {
-      entityQuery.refetch({ id: parent.id });
-    }
-  };
-
-  onMount(() => {
-    load();
-  });
+  const maxDepth = 2;
 
   const updateEntityPosition = graphql(`
     mutation DashboardLayout_PageList_UpdateEntityPosition_Mutation($input: UpdateEntityPositionInput!) {
@@ -98,11 +52,21 @@
     if (parent) {
       registerNode(listEl, { ...parent, depth });
     } else {
-      if (entities) registerNode(listEl, { id: null, __typename: 'RootEntity', children: entities, depth });
+      registerNode(listEl, { id: null, __typename: 'RootEntity', children: entities, node: null, depth });
     }
   });
 
   // TODO: 모바일 터치 대응(딜레이 주기)
+
+  const findDeepestDepth = (entity: Entity, depth = 0): number => {
+    const children = entity.children;
+
+    if (!children || children.length === 0) {
+      return depth;
+    }
+
+    return Math.max(...children.map((child) => findDeepestDepth(child, depth + 1)));
+  };
 
   const isDraggingOverTarget = (dropTarget: DropTarget, dragging: Dragging, ignoreAboveLine = false) => {
     if (!entities) return;
@@ -291,45 +255,11 @@
       // 1/4 지점 ~ 3/4 지점 사이에 있으면 indicator를 item 위에 표시
       if (pointerTopInList < childTop + (mineRect.height / 4) * 3 && !(pointerTopInList > childTop + mineRect.height)) {
         // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
-        for (const [i, child] of childrenElems.entries()) {
-          const pageRect =
-            child.querySelector(':scope > .dnd-item-body')?.getBoundingClientRect() ??
-            child.querySelector(':scope > .dnd-item-page > .dnd-item-body')?.getBoundingClientRect();
-          const folderRect = child.querySelector(':scope > details > .dnd-item-body')?.getBoundingClientRect();
-
-          // 페이지 위아래로 indicator 표시
-          if (pageRect) {
-            const childTop = pageRect.top - pointerTargetList.getBoundingClientRect().top;
-
-            // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
-            if (pointerTopInList < childTop + pageRect.height / 4) {
-              indicatorPositionDraft = i;
-              break;
-            } else if (pointerTopInList > childTop + pageRect.height) {
-              // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
-              indicatorPositionDraft = i + 1;
-            }
-          }
-
-          // 폴더 위아래로 indicator 표시
-          if (folderRect) {
-            const childTop = folderRect.top - pointerTargetList.getBoundingClientRect().top;
-            // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
-            if (pointerTopInList < childTop + folderRect.height / 4) {
-              indicatorPositionDraft = i;
-              break;
-            } else if (pointerTopInList > childTop + folderRect.height) {
-              // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
-              indicatorPositionDraft = i + 1;
-            }
-          }
-        }
 
         if (parent?.id === pointerTargetList.id) {
           parentId = parent.id;
-        } else {
-          targetElemDraft = pointerTargetList;
         }
+        targetElemDraft = pointerTargetList;
       }
     }
 
@@ -368,10 +298,22 @@
       }
     }
 
-    // FIXME: 폴더 닫혀있을 때도 여기에서 indicator 표시되도록
     if (indicatorPositionDraft === null) {
       // 마지막 아이템인 경우 그 아래에 indicator를 표시
       indicatorPositionDraft = childrenElems.length;
+    }
+
+    const targetListDepth =
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      nodeMap.get(pointerTargetList)!.depth + (targetElemDraft ? 1 : 0);
+    const draggingItemDeepestDepth = findDeepestDepth(dragging.entity);
+
+    const isMaxDepthExceeded = targetListDepth + draggingItemDeepestDepth > maxDepth;
+
+    // invalid drop target
+    if (isMaxDepthExceeded) {
+      indicatorPositionDraft = null;
+      targetElemDraft = null;
     }
 
     dropTarget = {
@@ -402,11 +344,6 @@
           nextOrder: targetItem.children ? targetItem.children[0]?.order : undefined,
         });
 
-        if (parent && targetItem?.id) {
-          await entityQuery.refetch({ id: targetItem.id });
-          await entityQuery.refetch({ id: parent.id });
-        }
-
         // eslint-disable-next-line unicorn/no-negated-condition
       } else if (dropTarget.indicatorPosition !== null) {
         // line indicator
@@ -435,11 +372,6 @@
           nextOrder,
           previousOrder,
         });
-
-        if (parent) {
-          if (targetList?.id) await entityQuery.refetch({ id: targetList.id });
-          if (targetList === null || targetList?.id !== parent.id) await entityQuery.refetch({ id: parent.id });
-        }
       } else {
         // invalid drop target
         console.log('invalid drop target');
@@ -522,15 +454,7 @@
     aria-hidden="true"
   ></div>
 
-  {#if parent}
-    {#if $entityQuery && $entityQuery.entity.children.length > 0}
-      {#each $entityQuery.entity.children as entity (entity.id)}
-        <PageItem {depth} {entity} {nodeMap} {onPointerDown} {registerNode} {siteId} />
-      {/each}
-    {/if}
-  {:else if entities}
-    {#each entities as entity (entity.id)}
-      <PageItem {depth} {entity} {nodeMap} {onPointerDown} {registerNode} {siteId} />
-    {/each}
-  {/if}
+  {#each entities as entity (entity.id)}
+    <PageItem {depth} {entity} {nodeMap} {onPointerDown} {registerNode} {siteId} />
+  {/each}
 </ul>
