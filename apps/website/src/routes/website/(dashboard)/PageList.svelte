@@ -436,9 +436,9 @@
           previousOrder,
         });
 
-        if (parent && targetList?.id) {
-          await entityQuery.refetch({ id: targetList.id });
-          if (targetList.id !== parent.id) await entityQuery.refetch({ id: parent.id });
+        if (parent) {
+          if (targetList?.id) await entityQuery.refetch({ id: targetList.id });
+          if (targetList === null || targetList?.id !== parent.id) await entityQuery.refetch({ id: parent.id });
         }
       } else {
         // invalid drop target
@@ -488,15 +488,18 @@
   style:margin-left={depth === 0 ? 0 : 16 + 'px'}
   class={cx(
     'dnd-list',
-    css({
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '2px',
-      marginTop: depth === 0 ? '0' : '2px',
-      paddingLeft: '0',
-      touchAction: 'none',
-      height: 'full',
-    }),
+    css(
+      {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '2px',
+        paddingLeft: '0',
+        paddingY: '6px',
+        touchAction: 'none',
+        height: 'full',
+      },
+      parent === null && { paddingBottom: '24px' },
+    ),
   )}
 >
   <div

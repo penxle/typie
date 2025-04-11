@@ -245,7 +245,9 @@
         </Menu>
       </summary>
 
-      <PageList depth={depth + 1} {nodeMap} parent={entity} {siteId} />
+      {#if open}
+        <PageList depth={depth + 1} {nodeMap} parent={entity} {siteId} />
+      {/if}
     </details>
   {:else}
     <a
