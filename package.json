@@ -31,5 +31,7 @@
     "typescript": "^5.8.2"
   },
   "packageManager": "bun@1.0.0",
-  "trustedDependencies": []
+  "trustedDependencies": [
+    "@mongodb-js/zstd"
+  ]
 }
