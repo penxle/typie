@@ -87,7 +87,7 @@ export const Paragraph = Node.create({
           },
         ),
       }),
-      !this.editor?.isEditable && node.content.size === 0 ? ['br'] : 0,
+      !this.editor?.isEditable && node.content.size === 0 ? ['br', { class: 'ProseMirror-trailingBreak' }] : 0,
     ];
   },
 

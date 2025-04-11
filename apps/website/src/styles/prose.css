@@ -2,7 +2,7 @@
   --prosemirror-color-selection: #90baf8;
 }
 
-.prose {
+.ProseMirror-body {
   width: 100%;
   max-width: var(--prosemirror-max-width);
 
@@ -45,7 +45,13 @@
   }
 }
 
-.prose-editable {
+.ProseMirror-hydratable {
+  p:has(br:not(.ProseMirror-trailingBreak))::after {
+    content: '\A';
+  }
+}
+
+.ProseMirror-editable {
   padding-bottom: 80px;
 
   & [data-drag-handle] {

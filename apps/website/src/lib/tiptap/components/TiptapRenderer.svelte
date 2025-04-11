@@ -57,7 +57,10 @@
 <article
   class={css({ display: 'contents', fontFamily: 'prose', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-all' })}
 >
-  <div bind:this={element} class={cx('ProseMirror', css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style))}>
+  <div
+    bind:this={element}
+    class={cx('ProseMirror ProseMirror-hydratable', css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style))}
+  >
     <!-- eslint-disable-next-line svelte/no-unused-svelte-ignore -->
     <!-- svelte-ignore hydration_html_changed -->
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
