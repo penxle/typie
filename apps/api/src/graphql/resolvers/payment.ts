@@ -45,7 +45,7 @@ UserPlan.implement({
     billingCycle: t.expose('billingCycle', { type: UserPlanBillingCycle }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
 
-    plan: t.field({ type: Plan, resolve: (userPlan) => userPlan.planId }),
+    plan: t.expose('planId', { type: Plan }),
   }),
 });
 

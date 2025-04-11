@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, eq, gte, lt, sql, sum } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
 import { db, first, firstOrThrow, PaymentMethods, PostCharacterCountChanges, Sites, TableCode, Users } from '@/db';
@@ -26,23 +26,39 @@ User.implement({
 
     sites: t.field({
       type: [Site],
-      resolve: async (user) => {
-        return await db
-          .select()
-          .from(Sites)
-          .where(and(eq(Sites.userId, user.id), eq(Sites.state, SiteState.ACTIVE)));
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'User.sites',
+          many: true,
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(Sites)
+              .where(and(inArray(Sites.userId, ids), eq(Sites.state, SiteState.ACTIVE)));
+          },
+          key: ({ userId }) => userId,
+        });
+
+        return await loader.load(self.id);
       },
     }),
 
     paymentMethod: t.field({
       type: PaymentMethod,
       nullable: true,
-      resolve: async (user) => {
-        return await db
-          .select()
-          .from(PaymentMethods)
-          .where(and(eq(PaymentMethods.userId, user.id), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
-          .then(first);
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'User.paymentMethod',
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(PaymentMethods)
+              .where(and(inArray(PaymentMethods.userId, ids), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)));
+          },
+          key: ({ userId }) => userId,
+        });
+
+        return await loader.load(self.id);
       },
     }),
 

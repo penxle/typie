@@ -27,9 +27,7 @@ PreorderUser.implement({
 builder.mutationFields((t) => ({
   createPreorderPayment: t.fieldWithInput({
     type: PreorderPayment,
-    input: {
-      email: t.input.string({ required: true, validate: { email: true } }),
-    },
+    input: { email: t.input.string({ validate: { email: true } }) },
     resolve: async (_, { input }) => {
       const alreadyOrderedUser = await db
         .select({ id: PreorderUsers.id })
@@ -54,8 +52,8 @@ builder.mutationFields((t) => ({
   finalizePreorderPayment: t.fieldWithInput({
     type: PreorderUser,
     input: {
-      paymentId: t.input.string({ required: true }),
-      email: t.input.string({ required: true, validate: { email: true } }),
+      paymentId: t.input.string(),
+      email: t.input.string({ validate: { email: true } }),
       wish: t.input.string(),
     },
     resolve: async (_, { input }) => {
