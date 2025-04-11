@@ -241,6 +241,16 @@ type Mutation {
   verifyIdentity(input: VerifyIdentityInput!): Boolean!
 }
 
+enum NotificationCategory {
+  ANNOUNCEMENT
+  COMMENT
+}
+
+enum NotificationState {
+  READ
+  UNREAD
+}
+
 enum PaymentInvoiceState {
   CANCELED
   PAID
