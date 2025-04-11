@@ -1,8 +1,8 @@
 import dayjs from 'dayjs';
-import { and, asc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, PaymentMethods, PostCharacterCountChanges, Sites, TableCode, Users } from '@/db';
+import { db, first, firstOrThrow, Notifications, PaymentMethods, PostCharacterCountChanges, Sites, TableCode, Users } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import { PaymentMethodState, SiteState, UserState } from '@/enums';
@@ -11,7 +11,7 @@ import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { CharacterCountChange, isTypeOf, PaymentMethod, Site, User } from '../objects';
+import { CharacterCountChange, isTypeOf, Notification, PaymentMethod, Site, User } from '../objects';
 
 /**
  * * Types
@@ -84,6 +84,13 @@ User.implement({
           )
           .groupBy(date)
           .orderBy(asc(date));
+      },
+    }),
+
+    notifications: t.field({
+      type: [Notification],
+      resolve: async (user) => {
+        return await db.select().from(Notifications).where(eq(Notifications.userId, user.id)).orderBy(desc(Notifications.createdAt));
       },
     }),
   }),
