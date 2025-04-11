@@ -157,7 +157,6 @@
           height: 'full',
           maxHeight: app.preference.current.sidebarExpanded ? 'full' : '[calc(-118px + 100vh)]',
           overflowY: 'auto',
-          padding: '10px',
         })}
         onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
         onpointerleave={() => (app.state.sidebarPopoverVisible = false)}
@@ -167,6 +166,7 @@
             position: 'sticky',
             top: '0',
             backgroundColor: 'white',
+            padding: '10px',
             paddingBottom: '8px',
             zIndex: '1',
           })}
@@ -349,6 +349,7 @@
         <div
           class={css({
             paddingTop: '4px',
+            paddingX: '10px',
           })}
         >
           <div class={flex({ align: 'center', justify: 'space-between' })}>
