@@ -17,7 +17,7 @@ export class DrizzleLogger implements Logger {
 
     logger.trace({
       scope: 'database',
-      query: interpolatedQuery,
+      query: interpolatedQuery.slice(0, 1000),
     });
   }
 }

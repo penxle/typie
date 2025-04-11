@@ -41,6 +41,7 @@
     "graphql-scalars": "^1.24.2",
     "graphql-yoga": "^5.13.2",
     "hono": "^4.7.5",
+    "hono-compress": "^0.7.0",
     "ioredis": "^5.6.0",
     "jose": "^6.0.10",
     "ky": "^1.8.0",
