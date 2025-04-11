@@ -1,5 +1,4 @@
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { match } from 'ts-pattern';
@@ -23,8 +22,7 @@ IEntity.implement({
     slug: t.exposeString('slug'),
     permalink: t.exposeString('permalink'),
     order: t.expose('order', { type: 'Binary' }),
-
-    site: t.field({ type: Site, resolve: (self) => self.siteId }),
+    site: t.expose('siteId', { type: Site }),
   }),
 });
 
@@ -34,39 +32,61 @@ Entity.implement({
   fields: (t) => ({
     node: t.field({
       type: EntityNode,
-      resolve: async (self) => {
-        return match(self.type)
-          .with(EntityType.FOLDER, () => db.select().from(Folders).where(eq(Folders.entityId, self.id)).then(firstOrThrow))
-          .with(EntityType.POST, () => db.select().from(Posts).where(eq(Posts.entityId, self.id)).then(firstOrThrow))
+      resolve: async (self, _, ctx) => {
+        const loader = match(self.type)
+          .with(EntityType.FOLDER, () =>
+            ctx.loader({
+              name: 'Entity.node (Folder)',
+              load: (ids) => db.select().from(Folders).where(inArray(Folders.entityId, ids)),
+              key: ({ entityId }) => entityId,
+            }),
+          )
+          .with(EntityType.POST, () =>
+            ctx.loader({
+              name: 'Entity.node (Post)',
+              load: (ids) => db.select().from(Posts).where(inArray(Posts.entityId, ids)),
+              key: ({ entityId }) => entityId,
+            }),
+          )
           .exhaustive();
+
+        return await loader.load(self.id);
       },
     }),
 
     children: t.field({
       type: [Entity],
-      resolve: async (self) => {
-        return await db
-          .select()
-          .from(Entities)
-          .where(and(eq(Entities.parentId, self.id), eq(Entities.state, EntityState.ACTIVE)))
-          .orderBy(asc(Entities.order));
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Entity.children',
+          many: true,
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(Entities)
+              .where(and(inArray(Entities.parentId, ids), eq(Entities.state, EntityState.ACTIVE)))
+              .orderBy(asc(Entities.order));
+          },
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          key: ({ parentId }) => parentId!,
+        });
+
+        return await loader.load(self.id);
       },
     }),
 
     ancestors: t.field({
       type: [Entity],
       resolve: async (self) => {
-        const e = alias(Entities, 'e');
-
-        const result = await db.execute<{ id: string }>(sql`
+        const rows = await db.execute<{ id: string }>(sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.parentId}, 0 AS depth
             FROM ${Entities}
             WHERE ${eq(Entities.id, self.id)}
             UNION ALL
-            SELECT ${e.id}, ${e.parentId}, sq.depth + 1
-            FROM ${Entities} as e
-            JOIN sq ON ${e.id} = sq.parent_id
+            SELECT ${Entities.id}, ${Entities.parentId}, sq.depth + 1
+            FROM ${Entities}
+            JOIN sq ON ${Entities.id} = sq.parent_id
             WHERE sq.parent_id IS NOT NULL
           )
           SELECT id
@@ -75,7 +95,7 @@ Entity.implement({
           ORDER BY depth DESC
         `);
 
-        return result.map((row) => row.id);
+        return rows.map(({ id }) => id);
       },
     }),
   }),
@@ -87,22 +107,46 @@ EntityView.implement({
   fields: (t) => ({
     node: t.field({
       type: EntityViewNode,
-      resolve: async (self) => {
-        return match(self.type)
-          .with(EntityType.FOLDER, () => db.select().from(Folders).where(eq(Folders.entityId, self.id)).then(firstOrThrow))
-          .with(EntityType.POST, () => db.select().from(Posts).where(eq(Posts.entityId, self.id)).then(firstOrThrow))
+      resolve: async (self, _, ctx) => {
+        const loader = match(self.type)
+          .with(EntityType.FOLDER, () =>
+            ctx.loader({
+              name: 'EntityView.node (Folder)',
+              load: (ids) => db.select().from(Folders).where(inArray(Folders.entityId, ids)),
+              key: ({ entityId }) => entityId,
+            }),
+          )
+          .with(EntityType.POST, () =>
+            ctx.loader({
+              name: 'EntityView.node (Post)',
+              load: (ids) => db.select().from(Posts).where(inArray(Posts.entityId, ids)),
+              key: ({ entityId }) => entityId,
+            }),
+          )
           .exhaustive();
+
+        return await loader.load(self.id);
       },
     }),
 
     children: t.field({
       type: [EntityView],
-      resolve: async (self) => {
-        return await db
-          .select()
-          .from(Entities)
-          .where(and(eq(Entities.parentId, self.id), eq(Entities.state, EntityState.ACTIVE)))
-          .orderBy(asc(Entities.order));
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'EntityView.children',
+          many: true,
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(Entities)
+              .where(and(inArray(Entities.parentId, ids), eq(Entities.state, EntityState.ACTIVE)))
+              .orderBy(asc(Entities.order));
+          },
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          key: ({ parentId }) => parentId!,
+        });
+
+        return await loader.load(self.id);
       },
     }),
   }),

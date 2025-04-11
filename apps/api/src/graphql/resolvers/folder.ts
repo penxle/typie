@@ -23,7 +23,7 @@ Folder.implement({
   isTypeOf: isTypeOf(TableCode.FOLDERS),
   interfaces: [IFolder],
   fields: (t) => ({
-    entity: t.field({ type: Entity, resolve: (self) => self.entityId }),
+    entity: t.expose('entityId', { type: Entity }),
   }),
 });
 
@@ -31,7 +31,7 @@ FolderView.implement({
   isTypeOf: isTypeOf(TableCode.FOLDERS),
   interfaces: [IFolder],
   fields: (t) => ({
-    entity: t.field({ type: EntityView, resolve: (self) => self.entityId }),
+    entity: t.expose('entityId', { type: EntityView }),
   }),
 });
 

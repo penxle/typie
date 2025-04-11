@@ -9,22 +9,19 @@ Comment.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     state: t.expose('state', { type: CommentState }),
-    content: t.field({
-      type: 'String',
-      nullable: true,
-      resolve: (comment) => (comment.state === CommentState.ACTIVE ? comment.content : null),
-    }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+
+    content: t.string({
+      nullable: true,
+      resolve: (self) => (self.state === CommentState.ACTIVE ? self.content : null),
+    }),
   }),
 });
 
 builder.mutationFields((t) => ({
   createComment: t.withAuth({ session: true }).fieldWithInput({
     type: Comment,
-    input: {
-      postId: t.input.id(),
-      content: t.input.string(),
-    },
+    input: { postId: t.input.id(), content: t.input.string() },
     resolve: async (_, { input }, ctx) => {
       const post = await db
         .select({ id: Posts.id })
@@ -48,9 +45,7 @@ builder.mutationFields((t) => ({
 
   deleteComment: t.withAuth({ session: true }).fieldWithInput({
     type: Comment,
-    input: {
-      id: t.input.id(),
-    },
+    input: { id: t.input.id() },
     resolve: async (_, { input }, ctx) => {
       const { comment, entity } = await db
         .select({ comment: Comments, entity: { userId: Entities.userId } })

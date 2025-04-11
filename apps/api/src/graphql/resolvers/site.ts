@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { match } from 'ts-pattern';
 import { db, Entities, firstOrThrow, Sites, TableCode } from '@/db';
 import { EntityState } from '@/enums';
@@ -18,18 +18,25 @@ Site.implement({
     slug: t.exposeString('slug'),
     name: t.exposeString('name'),
 
-    url: t.string({
-      resolve: (self) => env.USERSITE_URL.replace('*', self.slug),
-    }),
+    url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', self.slug) }),
 
     entities: t.field({
       type: [Entity],
-      resolve: async (site) => {
-        return await db
-          .select()
-          .from(Entities)
-          .where(and(eq(Entities.siteId, site.id), eq(Entities.state, EntityState.ACTIVE), isNull(Entities.parentId)))
-          .orderBy(asc(Entities.order));
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Site.entities',
+          many: true,
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(Entities)
+              .where(and(inArray(Entities.siteId, ids), eq(Entities.state, EntityState.ACTIVE), isNull(Entities.parentId)))
+              .orderBy(asc(Entities.order));
+          },
+          key: ({ siteId }) => siteId,
+        });
+
+        return await loader.load(self.id);
       },
     }),
   }),

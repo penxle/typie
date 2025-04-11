@@ -52,13 +52,19 @@ IPost.implement({
     coverImage: t.expose('coverImageId', { type: Image, nullable: true }),
 
     excerpt: t.string({
-      resolve: async (self) => {
-        const content = await db
-          .select({ text: PostContents.text })
-          .from(PostContents)
-          .where(eq(PostContents.postId, self.id))
-          .then(firstOrThrow);
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Post.excerpt',
+          load: async (ids) => {
+            return await db
+              .select({ postId: PostContents.postId, text: PostContents.text })
+              .from(PostContents)
+              .where(inArray(PostContents.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
 
+        const content = await loader.load(self.id);
         const text = content.text.replaceAll(/\s+/g, ' ').trim();
 
         return text.length <= 200 ? text : text.slice(0, 200) + '...';
@@ -73,12 +79,19 @@ Post.implement({
   fields: (t) => ({
     update: t.field({
       type: 'Binary',
-      resolve: async (self) => {
-        const content = await db
-          .select({ update: PostContents.update })
-          .from(PostContents)
-          .where(eq(PostContents.postId, self.id))
-          .then(firstOrThrow);
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Post.update',
+          load: async (ids) => {
+            return await db
+              .select({ postId: PostContents.postId, update: PostContents.update })
+              .from(PostContents)
+              .where(inArray(PostContents.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        const content = await loader.load(self.id);
 
         return content.update;
       },
@@ -88,8 +101,16 @@ Post.implement({
 
     option: t.field({
       type: PostOption,
-      resolve: async (self) => {
-        return await db.select().from(PostOptions).where(eq(PostOptions.postId, self.id)).then(firstOrThrow);
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Post.option',
+          load: async (ids) => {
+            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        return await loader.load(self.id);
       },
     }),
 
@@ -130,50 +151,83 @@ PostView.implement({
   fields: (t) => ({
     body: t.field({
       type: 'JSON',
-      resolve: async (self) => {
-        const content = await db
-          .select({ body: PostContents.body })
-          .from(PostContents)
-          .where(eq(PostContents.postId, self.id))
-          .then(firstOrThrow);
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'PostView.body',
+          load: async (ids) => {
+            return await db
+              .select({ postId: PostContents.postId, body: PostContents.body })
+              .from(PostContents)
+              .where(inArray(PostContents.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        const content = await loader.load(self.id);
 
         return content.body;
       },
     }),
 
-    entity: t.field({ type: EntityView, resolve: (self) => self.entityId }),
+    entity: t.expose('entityId', { type: EntityView }),
 
     option: t.field({
       type: PostOptionView,
-      resolve: async (self) => {
-        return await db.select().from(PostOptions).where(eq(PostOptions.postId, self.id)).then(firstOrThrow);
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'PostView.option',
+          load: async (ids) => {
+            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        return await loader.load(self.id);
       },
     }),
 
     reactions: t.field({
       type: [PostReaction],
-      resolve: async (post) => {
-        return await db.select().from(PostReactions).where(eq(PostReactions.postId, post.id)).orderBy(desc(PostReactions.createdAt));
+      resolve: async (post, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'PostView.reactions',
+          many: true,
+          load: async (ids) => {
+            return await db.select().from(PostReactions).where(inArray(PostReactions.postId, ids)).orderBy(desc(PostReactions.createdAt));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        return await loader.load(post.id);
       },
     }),
 
     comments: t.field({
       type: [Comment],
       resolve: async (post, _, ctx) => {
-        const postOptionLoader = ctx.loader({
-          name: 'PostOptions(postId)',
-          load: async (postIds: string[]) => {
-            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, postIds));
+        const optionLoader = ctx.loader({
+          name: 'PostView.option',
+          load: async (ids) => {
+            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
           },
-          key: (options) => options.postId,
+          key: ({ postId }) => postId,
         });
 
-        const options = await postOptionLoader.load(post.id);
-        if (options?.allowComments) {
-          return await db.select().from(Comments).where(eq(Comments.postId, post.id)).orderBy(Comments.createdAt);
+        const option = await optionLoader.load(post.id);
+        if (!option.allowComments) {
+          return [];
         }
 
-        return [];
+        const commentLoader = ctx.loader({
+          name: 'PostView.comments',
+          many: true,
+          load: async (ids) => {
+            return await db.select().from(Comments).where(inArray(Comments.postId, ids)).orderBy(Comments.createdAt);
+          },
+          key: ({ postId }) => postId,
+        });
+
+        return await commentLoader.load(post.id);
       },
     }),
   }),

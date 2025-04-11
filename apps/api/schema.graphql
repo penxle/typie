@@ -369,7 +369,6 @@ type Query {
   entity(id: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   entityViewByPermalink(permalink: String!): EntityView!
-  image(id: ID!): Image!
   me: User
   post(slug: String!): Post!
   searchPosts(input: SearchPostsInput!): SearchPostResult!

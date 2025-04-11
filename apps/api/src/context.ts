@@ -11,12 +11,12 @@ import { db, first, UserSessions } from './db';
 import { decodeAccessToken } from './utils';
 import type { Context as HonoContext } from 'hono';
 
-type LoaderParams<T, R, S, N extends boolean, M extends boolean> = {
+type LoaderParams<Key, Result, SortKey, Nullability extends boolean, Many extends boolean> = {
   name: string;
-  nullable?: N;
-  many?: M;
-  key: (value: N extends true ? R | null : R) => N extends true ? S | null : S;
-  load: (keys: T[]) => Promise<R[]>;
+  nullable?: Nullability;
+  many?: Many;
+  key: (value: Nullability extends true ? Result | null : Result) => Nullability extends true ? SortKey | null : SortKey;
+  load: (keys: Key[]) => Promise<Result[]>;
 };
 
 export type ServerContext = HonoContext<Env>;
@@ -25,9 +25,17 @@ type DefaultContext = {
   ip: string;
   deviceId: string;
 
-  loader: <T, R, S, N extends boolean = false, M extends boolean = false, RR = N extends true ? R | null : R>(
-    params: LoaderParams<T, R, S, N, M>,
-  ) => DataLoader<T, M extends true ? RR[] : RR, string>;
+  loader: <
+    Key = string,
+    Result = unknown,
+    SortKey = Key,
+    Nullability extends boolean = false,
+    Many extends boolean = false,
+    MaybeResult = Nullability extends true ? Result | null : Result,
+    FinalResult = Many extends true ? MaybeResult[] : MaybeResult,
+  >(
+    params: LoaderParams<Key, Result, SortKey, Nullability, Many>,
+  ) => DataLoader<Key, FinalResult, string>;
   ' $loaders': Map<string, DataLoader<unknown, unknown>>;
 };
 
@@ -65,29 +73,15 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
   const ctx: Context = {
     ip: getClientAddress(c),
     deviceId,
-    loader: <
-      T,
-      R,
-      S,
-      N extends boolean = false,
-      M extends boolean = false,
-      RR = N extends true ? R | null : R,
-      F = M extends true ? RR[] : RR,
-    >({
-      name,
-      nullable,
-      many,
-      load,
-      key,
-    }: LoaderParams<T, R, S, N, M>) => {
+    loader: ({ name, nullable, many, load, key }) => {
       const cached = ctx[' $loaders'].get(name);
       if (cached) {
-        return cached as DataLoader<T, F, string>;
+        return cached as never;
       }
 
-      const loader = new DataLoader<T, F, string>(
+      const loader = new DataLoader(
         async (keys) => {
-          const rows = await load(keys as T[]);
+          const rows = await load(keys as never);
           const values = R.groupBy(rows, (row) => stringify(key(row)));
           return keys.map((key) => {
             const value = values[stringify(key)];
@@ -105,14 +99,14 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
             }
 
             return new Error(`DataLoader(${name}): Missing key`);
-          }) as (F | Error)[];
+          });
         },
         { cache: false },
       );
 
       ctx[' $loaders'].set(name, loader);
 
-      return loader;
+      return loader as never;
     },
     ' $loaders': new Map(),
   };
