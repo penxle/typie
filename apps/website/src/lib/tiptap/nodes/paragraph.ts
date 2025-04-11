@@ -1,4 +1,4 @@
-import { isNodeActive, mergeAttributes, Node } from '@tiptap/core';
+import { findChildrenInRange, findParentNodeClosestToPos, isNodeActive, mergeAttributes, Node } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { closest } from '$lib/utils';
 import { css } from '$styled-system/css';
@@ -101,12 +101,8 @@ export const Paragraph = Node.create({
 
       setParagraphTextAlign:
         (textAlign) =>
-        ({ state, commands }) => {
+        ({ state, tr, dispatch }) => {
           if (!textAligns.includes(textAlign)) {
-            return false;
-          }
-
-          if (!isNodeActive(state, this.name)) {
             return false;
           }
 
@@ -114,7 +110,28 @@ export const Paragraph = Node.create({
             return false;
           }
 
-          return commands.updateAttributes(this.name, { textAlign });
+          const children = findChildrenInRange(state.doc, state.selection, (node) => node.type === this.type);
+          if (children.length === 0) {
+            return false;
+          }
+
+          for (const { pos } of children) {
+            const pos$ = tr.doc.resolve(pos);
+            const parent = findParentNodeClosestToPos(
+              pos$,
+              (node) => node.type.name === 'blockquote' || node.type.name === 'callout' || node.type.name === 'list_item',
+            );
+
+            if (parent) {
+              continue;
+            }
+
+            tr.setNodeMarkup(pos, undefined, { textAlign });
+          }
+
+          dispatch?.(tr);
+
+          return true;
         },
 
       setParagraphLineHeight:
@@ -124,11 +141,12 @@ export const Paragraph = Node.create({
             return false;
           }
 
-          if (!isNodeActive(state, this.name)) {
+          const children = findChildrenInRange(state.doc, state.selection, (node) => node.type === this.type);
+          if (children.length === 0) {
             return false;
           }
 
-          return commands.updateAttributes(this.name, { lineHeight });
+          return commands.updateAttributes(this.type, { lineHeight });
         },
 
       setParagraphLetterSpacing:
@@ -138,11 +156,12 @@ export const Paragraph = Node.create({
             return false;
           }
 
-          if (!isNodeActive(state, this.name)) {
+          const children = findChildrenInRange(state.doc, state.selection, (node) => node.type === this.type);
+          if (children.length === 0) {
             return false;
           }
 
-          return commands.updateAttributes(this.name, { letterSpacing });
+          return commands.updateAttributes(this.type, { letterSpacing });
         },
     };
   },
