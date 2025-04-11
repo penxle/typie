@@ -1,7 +1,7 @@
 <script lang="ts">
   import { center } from '$styled-system/patterns';
   import { NodeView } from '../../lib';
-  import { values } from '../../values';
+  import { defaultValues, values } from '../../values';
   import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
@@ -13,10 +13,13 @@
     attrs = node.attrs;
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const { component: Component } = $derived(values.horizontalRule.find(({ type }) => type === attrs.type)!);
+  const { component: Component } = $derived(
+    values.horizontalRule.find(({ type }) => type === attrs.type) ??
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      values.horizontalRule.find(({ type }) => type === defaultValues.horizontalRule)!,
+  );
 </script>
 
-<NodeView style={center.raw({ minHeight: '[1lh]' })}>
+<NodeView style={center.raw({ height: '16px' })}>
   <Component />
 </NodeView>

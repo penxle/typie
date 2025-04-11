@@ -55,7 +55,7 @@
     },
     "horizontal_rule": {
       "group": "block",
-      "attrs": { "type": { "default": "horizontal_rule_1" } },
+      "attrs": { "type": { "default": "light-line" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=horizontal_rule]" }]
     },
     "html_block": {
