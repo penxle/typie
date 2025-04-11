@@ -7,6 +7,7 @@ import { redis } from '@/cache';
 import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, Posts, PostSnapshots } from '@/db';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
+import { meili } from '@/search';
 import { decode, makeText } from '@/utils';
 import { defineJob } from '../types';
 
@@ -26,9 +27,11 @@ export const PostDocumentUpdateJob = defineJob('post:document:update', async (po
         id: Posts.id,
         update: PostContents.update,
         text: PostContents.text,
+        siteId: Entities.siteId,
       })
       .from(Posts)
       .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
+      .innerJoin(Entities, eq(Posts.entityId, Entities.id))
       .where(eq(Posts.id, postId))
       .for('update')
       .then(firstOrThrow);
@@ -142,6 +145,17 @@ export const PostDocumentUpdateJob = defineJob('post:document:update', async (po
           updatedAt,
         })
         .where(eq(PostContents.postId, postId));
+
+      await meili.index('posts').addDocuments([
+        {
+          id: postId,
+          siteId: post.siteId,
+          title,
+          subtitle,
+          text,
+          updatedAt: updatedAt.unix(),
+        },
+      ]);
     }
   });
 

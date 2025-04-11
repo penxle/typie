@@ -171,6 +171,10 @@ interface IPostOption {
   visibility: PostVisibility!
 }
 
+interface IPostSearchHit {
+  highlight: PostSearchHighlight
+}
+
 type Image implements Blob {
   id: ID!
   placeholder: String!
@@ -316,6 +320,17 @@ type PostReaction {
   id: ID!
 }
 
+type PostSearchHighlight {
+  subtitle: String
+  text: String
+  title: String
+}
+
+type PostSearchHit implements IPostSearchHit {
+  highlight: PostSearchHighlight
+  post: Post!
+}
+
 type PostView implements IPost {
   body: JSON!
   comments: [Comment!]!
@@ -357,6 +372,7 @@ type Query {
   image(id: ID!): Image!
   me: User
   post(slug: String!): Post!
+  searchPosts(input: SearchPostsInput!): SearchPostResult!
   site(siteId: ID!): Site!
 }
 
@@ -368,6 +384,16 @@ input RenameFolderInput {
 input ResetPasswordInput {
   code: String!
   password: String!
+}
+
+type SearchPostResult {
+  estimatedTotalHits: Int!
+  hits: [PostSearchHit!]!
+}
+
+input SearchPostsInput {
+  query: String!
+  siteId: ID!
 }
 
 input SendEmailUpdateEmailInput {
