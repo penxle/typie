@@ -2,8 +2,8 @@ import IconAlignCenter from '~icons/lucide/align-center';
 import IconAlignJustify from '~icons/lucide/align-justify';
 import IconAlignLeft from '~icons/lucide/align-left';
 import IconAlignRight from '~icons/lucide/align-right';
-import Blockquote1 from './assets/blockquote/1.svelte';
-import Blockquote2 from './assets/blockquote/2.svelte';
+import BlockquoteLeftLine from './assets/blockquote/left-line.svelte';
+import BlockquoteLeftQuote from './assets/blockquote/left-quote.svelte';
 import HorizontalRuleCircle from './assets/horizontal-rule/circle.svelte';
 import HorizontalRuleCircleLine from './assets/horizontal-rule/circle-line.svelte';
 import HorizontalRuleDashedLine from './assets/horizontal-rule/dashed-line.svelte';
@@ -92,8 +92,8 @@ export const values = {
   ],
 
   blockquote: [
-    { label: '인용구 1', type: 'blockquote_1', component: Blockquote1 },
-    { label: '인용구 2', type: 'blockquote_2', component: Blockquote2 },
+    { label: '왼쪽 선', type: 'left-line', component: BlockquoteLeftLine },
+    { label: '왼쪽 따옴표', type: 'left-quote', component: BlockquoteLeftQuote },
   ],
 
   horizontalRule: [
@@ -143,7 +143,7 @@ export const defaultValues = {
   lineHeight: 1.6,
   letterSpacing: 0,
   textAlign: 'left',
-  blockquote: 'blockquote_1',
+  blockquote: 'left-line',
   horizontalRule: 'light-line',
   callout: 'info',
   paragraphIndent: 1,

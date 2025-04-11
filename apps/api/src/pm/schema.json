@@ -17,7 +17,7 @@
       "content": "paragraph+",
       "group": "block",
       "defining": true,
-      "attrs": { "type": { "default": "blockquote_1" } },
+      "attrs": { "type": { "default": "left-line" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=blockquote]" }]
     },
     "callout": {
