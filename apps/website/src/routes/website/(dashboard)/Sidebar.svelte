@@ -348,7 +348,6 @@
 
         <div
           class={css({
-            minHeight: '240px',
             paddingTop: '4px',
           })}
         >
