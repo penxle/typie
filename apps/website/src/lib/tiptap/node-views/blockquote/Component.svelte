@@ -2,7 +2,7 @@
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import { NodeView, NodeViewContentEditable } from '../../lib';
-  import { values } from '../../values';
+  import { defaultValues, values } from '../../values';
   import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
@@ -14,8 +14,11 @@
     attrs = node.attrs;
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const { component: Component } = $derived(values.blockquote.find(({ type }) => type === attrs.type)!);
+  const { component: Component } = $derived(
+    values.blockquote.find(({ type }) => type === attrs.type) ??
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      values.blockquote.find(({ type }) => type === defaultValues.blockquote)!,
+  );
 </script>
 
 <NodeView style={flex.raw({ gap: '16px' })}>
