@@ -4,13 +4,15 @@ import IconAlignLeft from '~icons/lucide/align-left';
 import IconAlignRight from '~icons/lucide/align-right';
 import Blockquote1 from './assets/blockquote/1.svelte';
 import Blockquote2 from './assets/blockquote/2.svelte';
-import HorizontalRule1 from './assets/horizontal-rule/1.svelte';
-import HorizontalRule2 from './assets/horizontal-rule/2.svelte';
-import HorizontalRule3 from './assets/horizontal-rule/3.svelte';
-import HorizontalRule4 from './assets/horizontal-rule/4.svelte';
-import HorizontalRule5 from './assets/horizontal-rule/5.svelte';
-import HorizontalRule6 from './assets/horizontal-rule/6.svelte';
-import HorizontalRule7 from './assets/horizontal-rule/7.svelte';
+import HorizontalRuleCircle from './assets/horizontal-rule/circle.svelte';
+import HorizontalRuleCircleLine from './assets/horizontal-rule/circle-line.svelte';
+import HorizontalRuleDashedLine from './assets/horizontal-rule/dashed-line.svelte';
+import HorizontalRuleDiamond from './assets/horizontal-rule/diamond.svelte';
+import HorizontalRuleDiamondLine from './assets/horizontal-rule/diamond-line.svelte';
+import HorizontalRuleLightLine from './assets/horizontal-rule/light-line.svelte';
+import HorizontalRuleThreeCircles from './assets/horizontal-rule/three-circles.svelte';
+import HorizontalRuleThreeDiamonds from './assets/horizontal-rule/three-diamonds.svelte';
+import HorizontalRuleZigzag from './assets/horizontal-rule/zigzag.svelte';
 
 export const values = {
   fontFamily: [
@@ -95,13 +97,15 @@ export const values = {
   ],
 
   horizontalRule: [
-    { label: '구분선 1', type: 'horizontal_rule_1', component: HorizontalRule1 },
-    { label: '구분선 2', type: 'horizontal_rule_2', component: HorizontalRule2 },
-    { label: '구분선 3', type: 'horizontal_rule_3', component: HorizontalRule3 },
-    { label: '구분선 4', type: 'horizontal_rule_4', component: HorizontalRule4 },
-    { label: '구분선 5', type: 'horizontal_rule_5', component: HorizontalRule5 },
-    { label: '구분선 6', type: 'horizontal_rule_6', component: HorizontalRule6 },
-    { label: '구분선 7', type: 'horizontal_rule_7', component: HorizontalRule7 },
+    { label: '옅은 선', type: 'light-line', component: HorizontalRuleLightLine },
+    { label: '점선', type: 'dashed-line', component: HorizontalRuleDashedLine },
+    { label: '동그라미가 있는 선', type: 'circle-line', component: HorizontalRuleCircleLine },
+    { label: '마름모가 있는 선', type: 'diamond-line', component: HorizontalRuleDiamondLine },
+    { label: '동그라미', type: 'circle', component: HorizontalRuleCircle },
+    { label: '마름모', type: 'diamond', component: HorizontalRuleDiamond },
+    { label: '세 개의 동그라미', type: 'three-circles', component: HorizontalRuleThreeCircles },
+    { label: '세 개의 마름모', type: 'three-diamonds', component: HorizontalRuleThreeDiamonds },
+    { label: '지그재그', type: 'zigzag', component: HorizontalRuleZigzag },
   ],
 
   callout: [
@@ -140,7 +144,7 @@ export const defaultValues = {
   letterSpacing: 0,
   textAlign: 'left',
   blockquote: 'blockquote_1',
-  horizontalRule: 'horizontal_rule_1',
+  horizontalRule: 'light-line',
   callout: 'info',
   paragraphIndent: 1,
   maxWidth: 800,
