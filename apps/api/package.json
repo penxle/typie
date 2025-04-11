@@ -43,6 +43,7 @@
     "hono": "^4.7.5",
     "hono-compress": "^0.7.0",
     "ioredis": "^5.6.0",
+    "isomorphic-dompurify": "^2.23.0",
     "jose": "^6.0.10",
     "ky": "^1.8.0",
     "meilisearch": "^0.49.0",

@@ -8,6 +8,7 @@ import './resolvers/folder';
 import './resolvers/payment';
 import './resolvers/post';
 import './resolvers/preorder';
+import './resolvers/search';
 import './resolvers/site';
 import './resolvers/unfurl';
 import './resolvers/user';
