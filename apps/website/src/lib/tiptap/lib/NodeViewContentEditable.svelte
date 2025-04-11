@@ -11,4 +11,9 @@
   let { as = 'div', style, ...rest }: Props = $props();
 </script>
 
-<svelte:element this={as} class={css(style)} data-node-view-content-editable {...rest} />
+<svelte:element
+  this={as}
+  class={css({ fontFamily: 'prose', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-all' }, style)}
+  data-node-view-content-editable
+  {...rest}
+/>
