@@ -6,6 +6,7 @@
   import FilePlusIcon from '~icons/lucide/file-plus';
   import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import PencilIcon from '~icons/lucide/pencil';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { Icon, Menu, MenuItem } from '$lib/components';
@@ -64,8 +65,22 @@
   let open = $state(false);
   let itemEl = $state<HTMLElement>();
 
+  let editing = $state(false);
+  let inputEl = $state<HTMLInputElement>();
+  let name = $state('');
+
+  $effect(() => {
+    if (entity.node?.__typename === 'Folder') name = entity.node.name;
+  });
+
   $effect(() => {
     if (itemEl) registerNode(itemEl, { ...entity, depth });
+  });
+
+  $effect(() => {
+    if (editing && inputEl) {
+      inputEl.select();
+    }
   });
 
   const createPost = graphql(`
@@ -85,6 +100,15 @@
     mutation DashboardLayout_PageItem_CreateFolder_Mutation($input: CreateFolderInput!) {
       createFolder(input: $input) {
         id
+      }
+    }
+  `);
+
+  const renameFolder = graphql(`
+    mutation DashboardLayout_PageItem_RenameFolder_Mutation($input: RenameFolderInput!) {
+      renameFolder(input: $input) {
+        id
+        name
       }
     }
   `);
@@ -134,7 +158,37 @@
         <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', width: '16px', height: '16px', color: 'gray.500' })}>
           <Icon icon={FolderIcon} size={14} />
         </span>
-        <span class={css({ fontSize: '14px', lineHeight: '[1.2]', flexGrow: '1', truncate: true })}>{entity.node.name}</span>
+
+        {#if editing}
+          <form
+            class={css({ fontSize: '14px', flexGrow: '1', minWidth: '0' })}
+            onsubmit={async (e) => {
+              e.preventDefault();
+              if (editing && entity.node?.__typename === 'Folder') {
+                await renameFolder({
+                  id: entity.node.id,
+                  name,
+                });
+                editing = false;
+              }
+            }}
+          >
+            <input
+              bind:this={inputEl}
+              onblur={(e) => e.currentTarget.form?.requestSubmit()}
+              onkeydown={(e) => {
+                if (e.key === 'Escape' && entity.node?.__typename === 'Folder') {
+                  e.preventDefault();
+                  name = entity.node.name;
+                  editing = false;
+                }
+              }}
+              bind:value={name}
+            />
+          </form>
+        {:else}
+          <span class={css({ fontSize: '14px', flexGrow: '1', truncate: true })}>{name}</span>
+        {/if}
 
         <Menu placement="bottom-start">
           {#snippet button({ open })}
@@ -156,6 +210,14 @@
             </div>
           {/snippet}
 
+          <MenuItem
+            onclick={() => {
+              editing = true;
+            }}
+          >
+            <Icon icon={PencilIcon} size={12} />
+            <span>폴더 이름 변경</span>
+          </MenuItem>
           <MenuItem
             onclick={async () => {
               await createFolder({ siteId, name: '새 폴더', parentEntityId: entity.id });
