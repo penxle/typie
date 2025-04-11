@@ -1,4 +1,5 @@
 import { mergeAttributes, Node } from '@tiptap/core';
+import { base64url } from 'rfc4648';
 import { render } from 'svelte/server';
 import { SvelteNodeViewRenderer } from './renderer.svelte';
 import type { NodeConfig } from '@tiptap/core';
@@ -39,8 +40,8 @@ export const extendNodeToNodeView = <Options = any, Storage = any>(
         });
 
         return node.isLeaf
-          ? ['node-view', { 'data-head': head, 'data-html': body }]
-          : ['node-view', { 'data-head': head, 'data-html': body }, ['node-view-content-editable', 0]];
+          ? ['node-view', { 'data-head': encode(head), 'data-html': encode(body) }]
+          : ['node-view', { 'data-head': encode(head), 'data-html': encode(body) }, ['node-view-content-editable', 0]];
       } else {
         const attributes = mergeAttributes(HTMLAttributes, {
           'data-node-view-type': options?.name ?? this.name,
@@ -54,4 +55,9 @@ export const extendNodeToNodeView = <Options = any, Storage = any>(
       return SvelteNodeViewRenderer(component);
     },
   });
+};
+
+const encoder = new TextEncoder();
+const encode = (value: string) => {
+  return base64url.stringify(encoder.encode(value));
 };
