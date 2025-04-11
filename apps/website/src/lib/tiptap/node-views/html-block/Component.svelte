@@ -140,7 +140,6 @@
       },
       mode === 'preview' && { display: 'none' },
     )}
-    as="pre"
   />
 
   {#if mode === 'preview'}
