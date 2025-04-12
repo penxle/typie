@@ -280,7 +280,7 @@
           flex: 'none',
           width: '16px',
           height: '16px',
-          marginLeft: '22px',
+          marginLeft: '8px',
           color: 'gray.500',
         })}
       >

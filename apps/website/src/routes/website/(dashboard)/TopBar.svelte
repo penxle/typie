@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { sineInOut } from 'svelte/easing';
+  import { fade } from 'svelte/transition';
   import PanelLeftOpenIcon from '~icons/lucide/panel-left-open';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context/app.svelte';
@@ -21,6 +23,7 @@
       class={center({ size: '48px', backgroundColor: 'white' })}
       onclick={() => (app.preference.current.sidebarExpanded = true)}
       type="button"
+      transition:fade={{ duration: 100, easing: sineInOut }}
     >
       <Icon icon={PanelLeftOpenIcon} />
     </button>

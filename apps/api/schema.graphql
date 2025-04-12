@@ -473,6 +473,7 @@ input UpdateUserInput {
 }
 
 type User {
+  avatar: Image!
   characterCountChanges: [CharacterCountChange!]!
   email: String!
   id: ID!
