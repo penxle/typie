@@ -39,6 +39,8 @@
       justifyContent: 'center',
       textAlign: 'center',
       outlineOffset: '0',
+      transition: 'colors',
+      transitionProperty: 'unset',
       userSelect: 'none',
       pointerEvents: { _disabled: 'none', _loading: 'none' },
     },
@@ -57,9 +59,9 @@
           },
           backgroundColor: {
             _enabled: {
-              base: 'brand.600',
-              _hover: 'brand.500',
-              _focusVisible: 'brand.500',
+              base: 'brand.500',
+              _hover: 'brand.600',
+              _focusVisible: 'brand.600',
               _active: 'brand.700',
               _pressed: 'brand.700',
             },
@@ -130,6 +132,7 @@
       <RingSpinner style={spinnerRecipe.raw({ color: variant })} />
     </div>
   {/if}
+
   <div class={css({ display: 'contents' }, loading && { visibility: 'hidden' })}>
     {@render children()}
   </div>
