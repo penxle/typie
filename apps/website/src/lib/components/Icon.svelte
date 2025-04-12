@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css, cva } from '$styled-system/css';
   import type { Component } from 'svelte';
+  import type { SVGAttributes } from 'svelte/elements';
   import type { RecipeVariant, SystemStyleObject } from '$styled-system/types';
 
   type Variants = RecipeVariant<typeof recipe>;
@@ -9,10 +10,9 @@
     icon: Component;
     style?: SystemStyleObject;
     size?: Variants['size'];
-    ariaHidden?: boolean;
-  };
+  } & Omit<SVGAttributes<SVGSVGElement>, 'style' | 'size'>;
 
-  let { icon: Icon, style, size = 16, ariaHidden = false }: Props = $props();
+  let { icon: Icon, style, size = 16, ...rest }: Props = $props();
 
   const recipe = cva({
     base: {
@@ -37,4 +37,4 @@
   });
 </script>
 
-<Icon class={css(recipe.raw({ size }), style)} aria-hidden={ariaHidden ? 'true' : undefined} />
+<Icon class={css(recipe.raw({ size }), style)} {...rest} />

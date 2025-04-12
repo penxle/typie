@@ -30,7 +30,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
   let floatingElement: FloatingElement | undefined;
   let arrowElement: HTMLElement | undefined;
   let cleanupAutoUpdate: (() => void) | undefined;
-  let cleanupClickListener: (() => void) | undefined;
+  let cleanupPointerdownListener: (() => void) | undefined;
 
   const updatePosition: UpdatePosition = async () => {
     if (!referenceElement || !floatingElement) {
@@ -92,7 +92,11 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     }
   };
 
-  const clickListener = (event: Event) => {
+  const handlePointerdown = (event: Event) => {
+    if (event.target instanceof Element && event.target.closest('[data-floating-keep-open]')) {
+      return;
+    }
+
     if (options?.onClickOutside && !floatingElement?.contains(event.target as Node)) {
       options.onClickOutside();
     }
@@ -111,8 +115,9 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     }
 
     setTimeout(() => {
-      cleanupClickListener?.();
-      cleanupClickListener = on(globalThis, 'click', clickListener);
+      cleanupPointerdownListener?.();
+      // eslint-disable-next-line unicorn/prefer-global-this
+      cleanupPointerdownListener = on(window, 'pointerdown', handlePointerdown);
     }, 0);
   };
 
@@ -122,8 +127,8 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       cleanupAutoUpdate = undefined;
     }
 
-    cleanupClickListener?.();
-    cleanupClickListener = undefined;
+    cleanupPointerdownListener?.();
+    cleanupPointerdownListener = undefined;
   };
 
   const referenceAction: ReferenceAction = (element) => {

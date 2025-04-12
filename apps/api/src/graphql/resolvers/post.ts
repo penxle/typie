@@ -393,7 +393,7 @@ builder.mutationFields((t) => ({
     input: {
       postId: t.input.id(),
       visibility: t.input.field({ type: PostVisibility }),
-      password: t.input.string(),
+      password: t.input.string({ required: false }),
       allowComments: t.input.boolean(),
       allowReactions: t.input.boolean(),
       allowCopies: t.input.boolean(),
