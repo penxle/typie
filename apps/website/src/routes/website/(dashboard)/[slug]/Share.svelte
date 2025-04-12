@@ -133,68 +133,47 @@
       borderRadius: '12px',
       paddingX: '16px',
       paddingY: '16px',
-      width: '320px',
+      width: '360px',
       backgroundColor: 'white',
       boxShadow: 'xlarge',
       zIndex: '50',
     })}
     use:floating
   >
-    {#if form.fields.visibility === PostVisibility.PRIVATE}
-      <div class={flex({ flexDirection: 'column', gap: '14px' })}>
-        <div class={flex({ gap: '12px', alignItems: 'start' })}>
-          <div class={center({ flexShrink: '0', borderRadius: 'full', size: '40px', backgroundColor: 'gray.100' })}>
-            <Icon style={css.raw({ color: 'gray.500' })} icon={LockIcon} />
-          </div>
-
-          <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-            <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.800' })}>나만 볼 수 있는 포스트에요</h3>
-            <p class={css({ fontSize: '12px', color: 'gray.500' })}>남들과 공유하려면 링크 공개로 전환해주세요.</p>
-          </div>
-        </div>
-
-        <Button data-floating-keep-open onclick={() => (form.fields.visibility = PostVisibility.UNLISTED)}>
-          <div class={center({ gap: '6px' })}>
-            <Icon icon={GlobeIcon} />
-            <span>링크 공개로 전환</span>
-          </div>
-        </Button>
-      </div>
-    {:else if form.fields.visibility === PostVisibility.UNLISTED}
-      <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-            <div
-              class={center({
-                gap: '6px',
-                borderRadius: 'full',
-                paddingX: '10px',
-                paddingY: '4px',
-                backgroundColor: 'brand.100',
-              })}
-            >
+    <div class={flex({ flexDirection: 'column', gap: '16px' })}>
+      <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+        <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
+          {#if form.fields.visibility === PostVisibility.PRIVATE}
+            <div class={center({ gap: '6px', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'gray.100' })}>
+              <div class={css({ size: '6px', borderRadius: 'full', bg: 'gray.500' })}></div>
+              <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>비공개 중</div>
+            </div>
+          {:else if form.fields.visibility === PostVisibility.UNLISTED}
+            <div class={center({ gap: '6px', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'brand.100' })}>
               <div class={css({ size: '6px', borderRadius: 'full', bg: 'brand.500' })}></div>
               <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'brand.700' })}>링크 공개 중</div>
             </div>
+          {/if}
 
-            <button
-              class={center({
-                gap: '6px',
-                paddingX: '10px',
-                paddingY: '4px',
-                color: 'gray.500',
-                fontSize: '12px',
-                _hover: { color: 'gray.700' },
-              })}
-              data-floating-keep-open
-              onclick={() => (form.fields.visibility = PostVisibility.PRIVATE)}
-              type="button"
-            >
-              <Icon icon={LockIcon} size={12} />
-              비공개로 전환
-            </button>
-          </div>
+          {#if form.fields.visibility === PostVisibility.PRIVATE}
+            <div class={center({ color: 'gray.500', fontSize: '12px' })}>이 포스트는 나만 볼 수 있어요</div>
+          {:else if form.fields.visibility === PostVisibility.UNLISTED}
+            <div class={center({ color: 'gray.500', fontSize: '12px' })}>링크가 있는 누구나 포스트를 볼 수 있어요</div>
+          {/if}
+        </div>
 
+        {#if form.fields.visibility === PostVisibility.PRIVATE}
+          <Button
+            style={css.raw({ height: '36px' })}
+            data-floating-keep-open
+            onclick={() => (form.fields.visibility = PostVisibility.UNLISTED)}
+          >
+            <div class={center({ gap: '6px' })}>
+              <Icon icon={GlobeIcon} />
+              <span>링크 공개로 전환</span>
+            </div>
+          </Button>
+        {:else if form.fields.visibility === PostVisibility.UNLISTED}
           <div
             class={cx(
               'group',
@@ -247,8 +226,10 @@
               <Icon icon={ExternalLinkIcon} size={14} />
             </a>
           </div>
-        </div>
+        {/if}
+      </div>
 
+      {#if form.fields.visibility === PostVisibility.UNLISTED}
         <HorizontalDivider />
 
         <div class={flex({ flexDirection: 'column', gap: '12px' })}>
@@ -372,7 +353,21 @@
             <Switch bind:checked={form.fields.disallowCopies} />
           </div>
         </div>
-      </div>
-    {/if}
+
+        <HorizontalDivider />
+
+        <div class={flex({ justifyContent: 'flex-end' })}>
+          <button
+            class={center({ gap: '6px', color: 'gray.400', fontSize: '12px', _hover: { color: 'gray.500' } })}
+            data-floating-keep-open
+            onclick={() => (form.fields.visibility = PostVisibility.PRIVATE)}
+            type="button"
+          >
+            <Icon icon={LockIcon} size={12} />
+            비공개로 전환
+          </button>
+        </div>
+      {/if}
+    </div>
   </div>
 {/if}
