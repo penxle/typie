@@ -20,8 +20,6 @@
     <button
       class={center({ size: '48px', backgroundColor: 'white' })}
       onclick={() => (app.preference.current.sidebarExpanded = true)}
-      onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
-      onpointerleave={() => (app.state.sidebarPopoverVisible = false)}
       type="button"
     >
       <Icon icon={PanelLeftOpenIcon} />
