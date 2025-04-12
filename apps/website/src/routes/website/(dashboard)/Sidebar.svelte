@@ -62,339 +62,278 @@
   `);
 </script>
 
-<nav
+<aside
+  style:--expanded-width="240px"
+  style:--threshold-width="200px"
+  style:--y-offset="60px"
   class={css({
-    zIndex: '50',
-    flexGrow: '0',
+    position: 'relative',
     flexShrink: '0',
-    width: app.preference.current.sidebarExpanded ? '240px' : '0',
-    transitionDuration: '200ms',
-    transitionProperty: 'width',
-    transitionTimingFunction: 'ease',
-    pointerEvents: 'none',
+    width: app.preference.current.sidebarExpanded ? 'var(--expanded-width)' : '0',
     height: 'full',
+    paddingY: app.preference.current.sidebarExpanded ? '0' : 'var(--y-offset)',
+    transitionProperty: 'width, padding',
+    transitionDuration: '200ms',
+    transitionTimingFunction: 'ease',
+    willChange: 'width, padding',
+    pointerEvents: 'none',
+    zIndex: '50',
   })}
-  aria-hidden={!app.preference.current.sidebarExpanded && !app.state.sidebarPopoverVisible}
+  aria-hidden={!app.preference.current.sidebarExpanded && !app.state.sidebarTriggered}
 >
+  {#if !app.preference.current.sidebarExpanded}
+    {#if app.state.sidebarTriggered}
+      <div
+        class={css({
+          position: 'absolute',
+          left: 'var(--expanded-width)',
+          insetY: '0',
+          width: '[calc(100vw - var(--expanded-width))]',
+          pointerEvents: 'auto',
+        })}
+        onpointerenter={() => (app.state.sidebarTriggered = false)}
+      ></div>
+    {:else}
+      <div
+        class={css({
+          position: 'absolute',
+          left: '0',
+          insetY: '0',
+          width: 'var(--threshold-width)',
+          pointerEvents: 'auto',
+        })}
+        onpointerenter={() => (app.state.sidebarTriggered = true)}
+      ></div>
+    {/if}
+  {/if}
+
   <div
-    class={css({
-      position: 'absolute',
-      top: '0',
-      left: '0',
-      bottom: '0',
-      zIndex: '50',
-      display: 'flex',
+    class={flex({
       flexDirection: 'column',
-      width: '0',
-      overflow: 'visible',
-      pointerEvents: 'none',
+      borderRightRadius: '10px',
+      padding: '10px',
+      width: 'var(--expanded-width)',
+      height: 'full',
+      backgroundColor: 'white',
+      boxShadow: 'small',
+      transitionProperty: 'transform',
+      transitionDuration: '200ms',
+      transitionTimingFunction: 'ease',
+      transform:
+        app.preference.current.sidebarExpanded || app.state.sidebarTriggered
+          ? 'translateX(0)'
+          : `translateX(calc(var(--expanded-width) * -1))`,
+      willChange: 'transform',
+      pointerEvents: 'auto',
     })}
   >
     <div
-      class={css(
-        {
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'relative',
-          pointerEvents: 'auto',
-          visibility: 'visible',
-          paddingTop: '0',
-          width: '240px',
-          opacity: '100',
-          transitionDuration: '200ms',
-          transitionTimingFunction: 'ease',
-          transitionProperty: 'width, opacity, transform',
-          backgroundColor: 'white',
-          borderRightRadius: '10px',
-          boxShadow: 'small',
-        },
-        app.preference.current.sidebarExpanded
-          ? {
-              height: 'full',
-              transform: 'translateX(0) translateY(0)',
-            }
-          : {
-              height: 'auto',
-              transform: 'translateX(0) translateY(59px)',
-            },
-
-        !app.preference.current.sidebarExpanded &&
-          !app.state.sidebarPopoverVisible && {
-            opacity: '0',
-            transform: 'translateX(-220px) translateY(59px)',
-          },
-      )}
-      onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
-      onpointerleave={() => (app.state.sidebarPopoverVisible = false)}
+      class={flex({
+        align: 'center',
+        justify: 'space-between',
+        paddingY: '6px',
+      })}
     >
-      <div
+      <Logo
         class={css({
-          position: 'relative',
-          top: '-15px',
-          marginBottom: '-15px',
-          height: '15px',
-          width: '240px',
-          backgroundColor: 'transparent',
+          height: '24px',
+          flex: 'none',
         })}
-        onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
-      ></div>
-      <div
-        class={css(
-          { position: 'absolute', inset: '0', zIndex: '[-1]', display: app.preference.current.sidebarExpanded ? 'none' : 'block' },
-          !app.preference.current.sidebarExpanded &&
-            app.state.sidebarPopoverVisible && {
-              backgroundColor: 'white',
-              borderRightRadius: '10px',
-              boxShadow: 'small',
-            },
-        )}
-      ></div>
+      />
 
-      <div
+      {#if app.preference.current.sidebarExpanded}
+        <button
+          class={css({
+            padding: '4px',
+            borderRadius: '6px',
+            color: 'gray.500',
+            _hover: {
+              backgroundColor: 'gray.100',
+              color: 'gray.700',
+            },
+          })}
+          onclick={() => {
+            app.preference.current.sidebarExpanded = false;
+            app.state.sidebarTriggered = false;
+          }}
+          type="button"
+        >
+          <Icon icon={PanelLeftCloseIcon} size={16} />
+        </button>
+      {/if}
+    </div>
+
+    <nav
+      class={css({
+        marginTop: '12px',
+      })}
+    >
+      <div class={css({ marginBottom: '12px' })}>
+        <Button
+          style={css.raw({ width: 'full' })}
+          onclick={async () => {
+            const resp = await createPost({
+              siteId: $user.sites[0].id,
+            });
+
+            await goto(`/${resp.entity.slug}`);
+          }}
+          variant="primary"
+        >
+          <div class={center({ gap: '6px' })}>
+            <Icon icon={PencilLineIcon} size={16} />
+            새 글 쓰기
+          </div>
+        </Button>
+      </div>
+
+      <ul
         class={css({
-          position: 'relative',
           display: 'flex',
           flexDirection: 'column',
-          height: 'full',
-          maxHeight: app.preference.current.sidebarExpanded ? 'full' : '[calc(-118px + 100vh)]',
-          overflowY: 'auto',
-          padding: '10px',
+          gap: '2px',
         })}
-        onpointerenter={() => (app.state.sidebarPopoverVisible = true)}
-        onpointerleave={() => (app.state.sidebarPopoverVisible = false)}
       >
-        <div
-          class={css({
-            position: 'sticky',
-            top: '0',
-            backgroundColor: 'white',
-            paddingBottom: '8px',
-            zIndex: '1',
-          })}
-        >
-          <div
-            class={flex({
-              align: 'center',
-              justify: 'space-between',
-              paddingY: '6px',
-            })}
-          >
-            <Logo
-              class={css({
-                height: '24px',
-                flex: 'none',
-              })}
-            />
-
-            <div class={flex({ align: 'center', gap: '4px' })}>
-              {#if app.preference.current.sidebarExpanded}
-                <button
-                  class={css({
-                    padding: '4px',
-                    borderRadius: '6px',
-                    color: 'gray.500',
-                    _hover: {
-                      backgroundColor: 'gray.100',
-                      color: 'gray.700',
-                    },
-                  })}
-                  onclick={() => {
-                    app.preference.current.sidebarExpanded = false;
-                    app.state.sidebarPopoverVisible = false;
-                  }}
-                  type="button"
-                >
-                  <Icon icon={PanelLeftCloseIcon} size={16} />
-                </button>
-              {/if}
-            </div>
-          </div>
-
-          <nav
+        <li>
+          <a
             class={css({
-              marginTop: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              width: 'full',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: 'medium',
+              color: 'gray.600',
+              backgroundColor: 'transparent',
+              _hover: {
+                backgroundColor: 'gray.100',
+              },
             })}
+            href="/home"
           >
-            <div class={css({ marginBottom: '12px' })}>
-              <Button
-                style={css.raw({ width: 'full' })}
-                onclick={async () => {
-                  const resp = await createPost({
-                    siteId: $user.sites[0].id,
-                  });
+            <Icon style={{ color: 'gray.500' }} icon={HomeIcon} size={16} />
+            홈
+          </a>
+        </li>
+        <li>
+          <button
+            class={css({
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              width: 'full',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: 'medium',
+              color: 'gray.600',
+              backgroundColor: 'transparent',
+              _hover: {
+                backgroundColor: 'gray.100',
+              },
+            })}
+            type="button"
+          >
+            <Icon style={{ color: 'gray.500' }} icon={SearchIcon} size={16} />
+            검색
+          </button>
+        </li>
+        <li>
+          <button
+            class={css({
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              width: 'full',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: 'medium',
+              color: 'gray.600',
+              backgroundColor: 'transparent',
+              _hover: {
+                backgroundColor: 'gray.100',
+              },
+            })}
+            type="button"
+          >
+            <Icon style={{ color: 'gray.500' }} icon={BellIcon} size={16} />
+            알림
+          </button>
+        </li>
+        <li>
+          <button
+            class={css({
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              width: 'full',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: 'medium',
+              color: 'gray.600',
+              backgroundColor: 'transparent',
+              _hover: {
+                backgroundColor: 'gray.100',
+              },
+            })}
+            type="button"
+          >
+            <Icon style={{ color: 'gray.500' }} icon={SettingsIcon} size={16} />
+            설정
+          </button>
+        </li>
+      </ul>
+    </nav>
 
-                  await goto(`/${resp.entity.slug}`);
-                }}
-                variant="primary"
-              >
-                <div class={center({ gap: '6px' })}>
-                  <Icon icon={PencilLineIcon} size={16} />
-                  새 글 쓰기
-                </div>
-              </Button>
-            </div>
-
-            <ul
-              class={css({
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-              })}
-            >
-              <li>
-                <a
-                  class={css({
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    paddingX: '8px',
-                    paddingY: '6px',
-                    width: 'full',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    fontWeight: 'medium',
-                    color: 'gray.600',
-                    backgroundColor: 'transparent',
-                    _hover: {
-                      backgroundColor: 'gray.100',
-                    },
-                  })}
-                  href="/home"
-                >
-                  <Icon style={{ color: 'gray.500' }} icon={HomeIcon} size={16} />
-                  홈
-                </a>
-              </li>
-              <li>
-                <button
-                  class={css({
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    paddingX: '8px',
-                    paddingY: '6px',
-                    width: 'full',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    fontWeight: 'medium',
-                    color: 'gray.600',
-                    backgroundColor: 'transparent',
-                    _hover: {
-                      backgroundColor: 'gray.100',
-                    },
-                  })}
-                  type="button"
-                >
-                  <Icon style={{ color: 'gray.500' }} icon={SearchIcon} size={16} />
-                  검색
-                </button>
-              </li>
-              <li>
-                <button
-                  class={css({
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    paddingX: '8px',
-                    paddingY: '6px',
-                    width: 'full',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    fontWeight: 'medium',
-                    color: 'gray.600',
-                    backgroundColor: 'transparent',
-                    _hover: {
-                      backgroundColor: 'gray.100',
-                    },
-                  })}
-                  type="button"
-                >
-                  <Icon style={{ color: 'gray.500' }} icon={BellIcon} size={16} />
-                  알림
-                </button>
-              </li>
-              <li>
-                <button
-                  class={css({
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    paddingX: '8px',
-                    paddingY: '6px',
-                    width: 'full',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    fontWeight: 'medium',
-                    color: 'gray.600',
-                    backgroundColor: 'transparent',
-                    _hover: {
-                      backgroundColor: 'gray.100',
-                    },
-                  })}
-                  type="button"
-                >
-                  <Icon style={{ color: 'gray.500' }} icon={SettingsIcon} size={16} />
-                  설정
-                </button>
-              </li>
-            </ul>
-          </nav>
-        </div>
-
+    <div class={css({ paddingTop: '4px' })}>
+      <div class={flex({ align: 'center', justify: 'space-between' })}>
         <div
           class={css({
-            marginY: '8px',
-            height: '1px',
-            width: 'full',
-            backgroundColor: 'gray.200',
-          })}
-        ></div>
-
-        <div
-          class={css({
-            paddingTop: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            paddingX: '8px',
+            paddingY: '6px',
+            marginBottom: '4px',
+            fontSize: '13px',
+            fontWeight: 'medium',
+            color: 'gray.700',
           })}
         >
-          <div class={flex({ align: 'center', justify: 'space-between' })}>
-            <div
-              class={css({
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                paddingX: '8px',
-                paddingY: '6px',
-                marginBottom: '4px',
-                fontSize: '13px',
-                fontWeight: 'medium',
-                color: 'gray.700',
-              })}
-            >
-              <Icon style={{ color: 'gray.500' }} icon={FolderIcon} size={14} />
-              <span>보관함</span>
-            </div>
-
-            <button
-              class={css({
-                padding: '4px',
-                borderRadius: '6px',
-                color: 'gray.500',
-                _hover: {
-                  backgroundColor: 'gray.100',
-                  color: 'gray.700',
-                },
-              })}
-              onclick={async () => {
-                await createFolder({ siteId: $user.sites[0].id, name: '새 폴더' });
-              }}
-              type="button"
-            >
-              <Icon icon={FolderPlusIcon} size={14} />
-            </button>
-          </div>
-
-          <PageList {entities} siteId={$user.sites[0].id} />
+          <Icon style={{ color: 'gray.500' }} icon={FolderIcon} size={14} />
+          <span>보관함</span>
         </div>
+
+        <button
+          class={css({
+            padding: '4px',
+            borderRadius: '6px',
+            color: 'gray.500',
+            _hover: {
+              backgroundColor: 'gray.100',
+              color: 'gray.700',
+            },
+          })}
+          onclick={async () => {
+            await createFolder({ siteId: $user.sites[0].id, name: '새 폴더' });
+          }}
+          type="button"
+        >
+          <Icon icon={FolderPlusIcon} size={14} />
+        </button>
       </div>
     </div>
+
+    <div class={css({ flexGrow: '1', overflow: 'scroll' })}>
+      <PageList {entities} siteId={$user.sites[0].id} />
+    </div>
   </div>
-</nav>
+</aside>

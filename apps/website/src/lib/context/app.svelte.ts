@@ -9,7 +9,7 @@ type AppPreference = {
 };
 
 type AppState = {
-  sidebarPopoverVisible: boolean;
+  sidebarTriggered: boolean;
   toolbarActive: boolean;
 };
 
@@ -34,7 +34,7 @@ export const getAppContext = () => {
 
 export const setupAppContext = () => {
   const appState = $state<AppState>({
-    sidebarPopoverVisible: false,
+    sidebarTriggered: false,
     toolbarActive: false,
   });
 
