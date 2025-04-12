@@ -23,6 +23,8 @@ IEntity.implement({
     permalink: t.exposeString('permalink'),
     order: t.expose('order', { type: 'Binary' }),
     site: t.expose('siteId', { type: Site }),
+
+    url: t.string({ resolve: (self) => `${env.USERSITE_URL.replace('*.', '')}/${self.permalink}` }),
   }),
 });
 

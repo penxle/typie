@@ -5,6 +5,10 @@ type ZodShape<T> = {
   [K in keyof T]: z.ZodTypeAny;
 };
 
+type ExactPartial<T, Shape> = {
+  [K in keyof T]: K extends keyof Shape ? T[K] : never;
+} & Partial<Shape>;
+
 type IsStringLiteral<T> = T extends string ? (string extends T ? false : true) : false;
 
 type FormField<T, D, K extends keyof T> = K extends keyof D
@@ -31,7 +35,8 @@ type CreateFormOptions<T, D extends Partial<T>> = {
   schema:
     | z.ZodObject<ZodShape<T>, z.UnknownKeysParam, z.ZodTypeAny, T>
     | z.ZodEffects<z.ZodObject<ZodShape<T>, z.UnknownKeysParam, z.ZodTypeAny, T>>;
-  defaultValues?: D;
+  defaultValues?: ExactPartial<D, T>;
+  submitOn?: 'change' | 'submit';
   onSubmit: (data: T) => Awaitable<void>;
   onError?: (error: unknown) => void;
 };
@@ -53,8 +58,8 @@ export const createForm = <T extends Record<string, unknown>, D extends Partial<
   const formData = $state<Partial<T>>(options.defaultValues ?? {});
   const errors = $state<FormFieldErrors<T>>({} as FormFieldErrors<T>);
 
-  const handleSubmit = async (event: SubmitEvent) => {
-    event.preventDefault();
+  const handleSubmit = async (event?: SubmitEvent) => {
+    event?.preventDefault();
 
     formState.isLoading = true;
     try {
@@ -98,6 +103,11 @@ export const createForm = <T extends Record<string, unknown>, D extends Partial<
   const fields = new Proxy(formData, {
     set: (target, prop, value) => {
       target[prop as keyof T] = value;
+
+      if (options.submitOn === 'change') {
+        handleSubmit();
+      }
+
       return true;
     },
   }) as FormFields<T, D>;

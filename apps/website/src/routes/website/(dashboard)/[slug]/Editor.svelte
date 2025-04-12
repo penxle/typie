@@ -12,13 +12,14 @@
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { autosize } from '$lib/actions';
-  import { Button, Helmet, HorizontalDivider } from '$lib/components';
+  import { Helmet, HorizontalDivider } from '$lib/components';
   import { tip } from '$lib/notification';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import TopBar from '../TopBar.svelte';
   import Cover from './Cover.svelte';
+  import Share from './Share.svelte';
   import { YState } from './state.svelte';
   import StatusBar from './StatusBar.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -69,6 +70,7 @@
             }
           }
 
+          ...Editor_Share_post
           ...StatusBar_post
         }
       }
@@ -223,11 +225,7 @@
       <div class={css({ fontSize: '14px', fontWeight: 'medium' })}>{effectiveTitle}</div>
     </div>
 
-    <div>
-      <Button external href={`${$query.post.entity.site.url}/${$query.post.entity.slug}`} size="sm" type="link" variant="secondary">
-        공유
-      </Button>
-    </div>
+    <Share $post={$query.post} />
   </div>
 </TopBar>
 

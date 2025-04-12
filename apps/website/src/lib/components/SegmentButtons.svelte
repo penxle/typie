@@ -1,16 +1,17 @@
 <script generics="T" lang="ts">
   import { css, sva } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { RecipeVariant } from '$styled-system/css';
+  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
+    style?: SystemStyleObject;
     value: T;
     items: { label: string; value: T }[];
     size?: Variants['size'];
     onselect?: (value: T) => void;
   };
 
-  let { value = $bindable(), items = [], size = 'md', onselect }: Props = $props();
+  let { style, value = $bindable(), items = [], size = 'md', onselect }: Props = $props();
 
   type Variants = RecipeVariant<typeof recipe>;
   const recipe = sva({
@@ -64,13 +65,18 @@
 </script>
 
 <div
-  class={flex({
-    position: 'relative',
-    gap: '4px',
-    padding: '4px',
-    borderRadius: '10px',
-    backgroundColor: 'gray.100',
-  })}
+  class={css(
+    {
+      display: 'flex',
+      position: 'relative',
+      gap: '4px',
+      flexShrink: '0',
+      padding: '4px',
+      borderRadius: '10px',
+      backgroundColor: 'gray.100',
+    },
+    style,
+  )}
 >
   <div
     style:left={`calc(4px + ${selectedIndex} * ((100% - ${4 * (items.length + 1)}px) / ${items.length} + 4px))`}
