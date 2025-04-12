@@ -30,7 +30,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
   let floatingElement: FloatingElement | undefined;
   let arrowElement: HTMLElement | undefined;
   let cleanupAutoUpdate: (() => void) | undefined;
-  let cleanupPointerdownListener: (() => void) | undefined;
+  let cleanupClickHandler: (() => void) | undefined;
 
   const updatePosition: UpdatePosition = async () => {
     if (!referenceElement || !floatingElement) {
@@ -92,7 +92,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     }
   };
 
-  const handlePointerdown = (event: Event) => {
+  const handleClick = (event: Event) => {
     if (event.target instanceof Element && event.target.closest('[data-floating-keep-open]')) {
       return;
     }
@@ -115,9 +115,9 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     }
 
     setTimeout(() => {
-      cleanupPointerdownListener?.();
+      cleanupClickHandler?.();
       // eslint-disable-next-line unicorn/prefer-global-this
-      cleanupPointerdownListener = on(window, 'pointerdown', handlePointerdown);
+      cleanupClickHandler = on(window, 'click', handleClick);
     }, 0);
   };
 
@@ -127,8 +127,8 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       cleanupAutoUpdate = undefined;
     }
 
-    cleanupPointerdownListener?.();
-    cleanupPointerdownListener = undefined;
+    cleanupClickHandler?.();
+    cleanupClickHandler = undefined;
   };
 
   const referenceAction: ReferenceAction = (element) => {
