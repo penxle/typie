@@ -5,8 +5,18 @@ type ZodShape<T> = {
   [K in keyof T]: z.ZodTypeAny;
 };
 
+type IsStringLiteral<T> = T extends string ? (string extends T ? false : true) : false;
+
+type FormField<T, D, K extends keyof T> = K extends keyof D
+  ? D[K] extends undefined
+    ? T[K] | undefined
+    : IsStringLiteral<T[K]> extends true
+      ? T[K]
+      : D[K]
+  : T[K] | undefined;
+
 type FormFields<T, D extends Partial<T>> = {
-  [K in keyof T]: K extends keyof D ? (D[K] extends undefined ? T[K] | undefined : D[K]) : T[K] | undefined;
+  [K in keyof T]: FormField<T, D, K>;
 };
 
 type FormFieldErrors<T> = {
