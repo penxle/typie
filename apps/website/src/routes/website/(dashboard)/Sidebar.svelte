@@ -4,6 +4,7 @@
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import HomeIcon from '~icons/lucide/home';
   import PanelLeftCloseIcon from '~icons/lucide/panel-left-close';
+  import PencilLineIcon from '~icons/lucide/pencil-line';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import { goto } from '$app/navigation';
@@ -12,7 +13,7 @@
   import { Button, Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
   import PageList from './PageList.svelte';
   import type { DashboardLayout_Sidebar_user } from '$graphql';
   import type { Entity } from './types';
@@ -226,7 +227,10 @@
                 }}
                 variant="primary"
               >
-                새 글 쓰기
+                <div class={center({ gap: '6px' })}>
+                  <Icon icon={PencilLineIcon} size={16} />
+                  새 글 쓰기
+                </div>
               </Button>
             </div>
 
