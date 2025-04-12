@@ -53,6 +53,13 @@
       "attrs": { "id": { "default": null }, "name": { "default": null }, "size": { "default": null }, "url": { "default": null } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=file]" }]
     },
+    "fold": {
+      "content": "block+",
+      "group": "block",
+      "defining": true,
+      "attrs": { "open": { "default": true } },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=fold]" }]
+    },
     "horizontal_rule": {
       "group": "block",
       "attrs": { "type": { "default": "light-line" } },

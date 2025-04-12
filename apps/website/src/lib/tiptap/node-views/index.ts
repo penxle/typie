@@ -3,6 +3,7 @@ export * from './callout';
 export * from './code-block';
 export * from './embed';
 export * from './file';
+export * from './fold';
 export * from './horizontal-rule';
 export * from './html-block';
 export * from './image';
