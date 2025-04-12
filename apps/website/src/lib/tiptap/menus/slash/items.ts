@@ -1,3 +1,4 @@
+import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
 import CodeIcon from '~icons/lucide/code';
 import CodeXmlIcon from '~icons/lucide/code-xml';
 import FileUpIcon from '~icons/lucide/file-up';
@@ -70,6 +71,17 @@ export const menuItems: MenuItem[] = [
     icon: GalleryVerticalEndIcon,
     command: ({ editor, range }) => {
       chain(editor, range).toggleCallout().run();
+    },
+  },
+  {
+    id: 'fold',
+    type: 'fold',
+    group: 'block',
+    name: '폴드',
+    keywords: ['fold', 'collapse'],
+    icon: ChevronsDownUpIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).toggleFold().run();
     },
   },
   {

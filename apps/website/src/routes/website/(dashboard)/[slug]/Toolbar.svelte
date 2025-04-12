@@ -1,6 +1,7 @@
 <script lang="ts">
   import BoldIcon from '~icons/lucide/bold';
   import ChevronsDownIcon from '~icons/lucide/chevrons-down';
+  import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import ChevronsUpIcon from '~icons/lucide/chevrons-up';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
@@ -171,6 +172,16 @@
       label="콜아웃"
       onclick={() => {
         editor?.current.chain().focus().toggleCallout().run();
+      }}
+      size="large"
+    />
+
+    <ToolbarButton
+      disabled={!editor?.current.can().toggleFold()}
+      icon={ChevronsDownUpIcon}
+      label="폴드"
+      onclick={() => {
+        editor?.current.chain().focus().toggleFold().run();
       }}
       size="large"
     />

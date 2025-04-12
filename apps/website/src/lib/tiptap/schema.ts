@@ -1,7 +1,20 @@
 import { Behavior, BlockSelectionExt, Command, DropCursor, Placeholder, SyntaxHighlight, Typography } from './extensions';
 import { Bold, Italic, Link, Ruby, Strike, TextStyle, Underline } from './marks';
 import { FloatingMenu, SlashMenu } from './menus';
-import { Blockquote, Callout, CodeBlock, Embed, File, HorizontalRule, HtmlBlock, Image, Table, TableCell, TableRow } from './node-views';
+import {
+  Blockquote,
+  Callout,
+  CodeBlock,
+  Embed,
+  File,
+  Fold,
+  HorizontalRule,
+  HtmlBlock,
+  Image,
+  Table,
+  TableCell,
+  TableRow,
+} from './node-views';
 import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
 import { FontFamily, FontSize, TextColor } from './text-styles';
 
@@ -38,6 +51,7 @@ export const extensions = [
   CodeBlock,
   Embed,
   File,
+  Fold,
   HorizontalRule,
   HtmlBlock,
   Image,
