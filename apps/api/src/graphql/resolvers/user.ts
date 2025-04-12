@@ -11,7 +11,7 @@ import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { CharacterCountChange, isTypeOf, PaymentMethod, Site, User } from '../objects';
+import { CharacterCountChange, Image, isTypeOf, PaymentMethod, Site, User } from '../objects';
 
 /**
  * * Types
@@ -23,6 +23,7 @@ User.implement({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
     email: t.exposeString('email'),
+    avatar: t.expose('avatarId', { type: Image }),
 
     sites: t.field({
       type: [Site],

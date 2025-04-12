@@ -1,20 +1,21 @@
 <script lang="ts">
+  import { sineInOut } from 'svelte/easing';
+  import { fade } from 'svelte/transition';
   import BellIcon from '~icons/lucide/bell';
-  import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import HomeIcon from '~icons/lucide/home';
   import PanelLeftCloseIcon from '~icons/lucide/panel-left-close';
-  import PencilLineIcon from '~icons/lucide/pencil-line';
   import SearchIcon from '~icons/lucide/search';
-  import SettingsIcon from '~icons/lucide/settings';
+  import SquarePenIcon from '~icons/lucide/square-pen';
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
   import { fragment, graphql } from '$graphql';
-  import { Button, Icon } from '$lib/components';
+  import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css } from '$styled-system/css';
+  import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import PageList from './PageList.svelte';
+  import UserMenu from './UserMenu.svelte';
   import type { DashboardLayout_Sidebar_user } from '$graphql';
   import type { Entity } from './types';
 
@@ -34,6 +35,8 @@
         sites {
           id
         }
+
+        ...DashboardLayout_UserMenu_user
       }
     `),
   );
@@ -79,7 +82,6 @@
     pointerEvents: 'none',
     zIndex: '50',
   })}
-  aria-hidden={!app.preference.current.sidebarExpanded && !app.state.sidebarTriggered}
 >
   {#if !app.preference.current.sidebarExpanded}
     {#if app.state.sidebarTriggered}
@@ -108,232 +110,216 @@
   {/if}
 
   <div
-    class={flex({
-      flexDirection: 'column',
-      borderRightRadius: '10px',
-      padding: '10px',
-      width: 'var(--expanded-width)',
-      height: 'full',
-      backgroundColor: 'white',
-      boxShadow: 'small',
-      transitionProperty: 'transform',
-      transitionDuration: '200ms',
-      transitionTimingFunction: 'ease',
-      transform:
-        app.preference.current.sidebarExpanded || app.state.sidebarTriggered
-          ? 'translateX(0)'
-          : `translateX(calc(var(--expanded-width) * -1))`,
-      willChange: 'transform',
-      pointerEvents: 'auto',
-    })}
+    class={css(
+      {
+        display: 'flex',
+        flexDirection: 'column',
+        width: 'var(--expanded-width)',
+        height: 'full',
+        maxHeight: 'full',
+        backgroundColor: 'gray.50',
+        transitionProperty: 'background-color, border-width, border-radius, box-shadow, transform',
+        transitionDuration: '200ms',
+        transitionTimingFunction: 'ease',
+        transform:
+          app.preference.current.sidebarExpanded || app.state.sidebarTriggered
+            ? 'translateX(0)'
+            : `translateX(calc(var(--expanded-width) * -1))`,
+        willChange: 'background-color, border-width, border-radius, box-shadow, transform',
+        pointerEvents: 'auto',
+      },
+      !app.preference.current.sidebarExpanded && {
+        borderYWidth: '1px',
+        borderRightWidth: '1px',
+        borderRightRadius: '12px',
+        backgroundColor: 'white',
+        boxShadow: '[2px 0 8px -1px rgba(0, 0, 0, 0.1)]',
+      },
+    )}
+    inert={!app.preference.current.sidebarExpanded && !app.state.sidebarTriggered}
   >
-    <div
-      class={flex({
-        align: 'center',
-        justify: 'space-between',
-        paddingY: '6px',
-      })}
-    >
-      <Logo
-        class={css({
-          height: '24px',
-          flex: 'none',
-        })}
-      />
+    <div class={flex({ alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', marginX: '16px' })}>
+      <Logo class={css({ flexShrink: '0', height: '24px' })} />
 
       {#if app.preference.current.sidebarExpanded}
         <button
-          class={css({
-            padding: '4px',
+          class={center({
             borderRadius: '6px',
+            size: '24px',
             color: 'gray.500',
-            _hover: {
-              backgroundColor: 'gray.100',
-              color: 'gray.700',
-            },
+            _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
           })}
           onclick={() => {
             app.preference.current.sidebarExpanded = false;
-            app.state.sidebarTriggered = false;
+            app.state.sidebarTriggered = true;
           }}
           type="button"
+          transition:fade={{ duration: 100, easing: sineInOut }}
         >
           <Icon icon={PanelLeftCloseIcon} size={16} />
         </button>
       {/if}
     </div>
 
-    <nav
-      class={css({
-        marginTop: '12px',
-      })}
-    >
-      <div class={css({ marginBottom: '12px' })}>
-        <Button
-          style={css.raw({ width: 'full' })}
-          onclick={async () => {
-            const resp = await createPost({
-              siteId: $user.sites[0].id,
-            });
+    <div class={css({ position: 'relative', marginTop: '16px', marginX: '16px' })}>
+      <input
+        class={css({
+          width: 'full',
+          borderWidth: '1px',
+          borderRadius: '6px',
+          paddingLeft: '32px',
+          paddingRight: '32px',
+          paddingY: '6px',
+          fontSize: '14px',
+          cursor: 'text',
+          backgroundColor: 'gray.100',
+          // boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.05)]',
+        })}
+        disabled
+        placeholder="검색"
+        type="text"
+      />
 
-            await goto(`/${resp.entity.slug}`);
-          }}
-          variant="primary"
-        >
-          <div class={center({ gap: '6px' })}>
-            <Icon icon={PencilLineIcon} size={16} />
-            새 글 쓰기
-          </div>
-        </Button>
+      <div class={center({ position: 'absolute', left: '8px', top: '1/2', translate: 'auto', translateY: '-1/2' })}>
+        <Icon icon={SearchIcon} size={16} />
       </div>
 
-      <ul
-        class={css({
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '2px',
-        })}
-      >
-        <li>
-          <a
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              paddingX: '8px',
-              paddingY: '6px',
-              width: 'full',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: 'medium',
-              color: 'gray.600',
-              backgroundColor: 'transparent',
-              _hover: {
-                backgroundColor: 'gray.100',
-              },
-            })}
-            href="/home"
-          >
-            <Icon style={{ color: 'gray.500' }} icon={HomeIcon} size={16} />
-            홈
-          </a>
-        </li>
-        <li>
-          <button
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              paddingX: '8px',
-              paddingY: '6px',
-              width: 'full',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: 'medium',
-              color: 'gray.600',
-              backgroundColor: 'transparent',
-              _hover: {
-                backgroundColor: 'gray.100',
-              },
-            })}
-            type="button"
-          >
-            <Icon style={{ color: 'gray.500' }} icon={SearchIcon} size={16} />
-            검색
-          </button>
-        </li>
-        <li>
-          <button
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              paddingX: '8px',
-              paddingY: '6px',
-              width: 'full',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: 'medium',
-              color: 'gray.600',
-              backgroundColor: 'transparent',
-              _hover: {
-                backgroundColor: 'gray.100',
-              },
-            })}
-            type="button"
-          >
-            <Icon style={{ color: 'gray.500' }} icon={BellIcon} size={16} />
-            알림
-          </button>
-        </li>
-        <li>
-          <button
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              paddingX: '8px',
-              paddingY: '6px',
-              width: 'full',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: 'medium',
-              color: 'gray.600',
-              backgroundColor: 'transparent',
-              _hover: {
-                backgroundColor: 'gray.100',
-              },
-            })}
-            type="button"
-          >
-            <Icon style={{ color: 'gray.500' }} icon={SettingsIcon} size={16} />
-            설정
-          </button>
-        </li>
-      </ul>
-    </nav>
-
-    <div class={css({ paddingTop: '4px' })}>
-      <div class={flex({ align: 'center', justify: 'space-between' })}>
-        <div
-          class={css({
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            paddingX: '8px',
-            paddingY: '6px',
-            marginBottom: '4px',
-            fontSize: '13px',
+      <div class={center({ position: 'absolute', right: '8px', top: '1/2', translate: 'auto', translateY: '-1/2' })}>
+        <kbd
+          class={center({
+            gap: '2px',
+            borderRadius: '4px',
+            paddingX: '6px',
+            paddingY: '2px',
+            borderColor: 'gray.200',
+            fontFamily: 'mono',
+            fontSize: '12px',
             fontWeight: 'medium',
-            color: 'gray.700',
+            color: 'gray.500',
+            backgroundColor: 'gray.200',
           })}
         >
-          <Icon style={{ color: 'gray.500' }} icon={FolderIcon} size={14} />
-          <span>보관함</span>
-        </div>
+          <span>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</span>
+          {#if !navigator.platform.includes('Mac')}
+            <span>+</span>
+          {/if}
+          <span>K</span>
+        </kbd>
+      </div>
+    </div>
 
+    <ul class={css({ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '16px', marginX: '16px' })}>
+      <li>
+        <a
+          class={cx(
+            'group',
+            flex({
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              borderRadius: '6px',
+              width: 'full',
+              _hover: { backgroundColor: 'gray.100' },
+            }),
+          )}
+          href="/home"
+        >
+          <Icon style={{ color: 'gray.500', _groupHover: { color: 'gray.800' } }} icon={HomeIcon} size={16} />
+          <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.700', _groupHover: { color: 'gray.950' } })}>홈</span>
+        </a>
+      </li>
+
+      <li>
         <button
-          class={css({
-            padding: '4px',
-            borderRadius: '6px',
-            color: 'gray.500',
-            _hover: {
-              backgroundColor: 'gray.100',
-              color: 'gray.700',
-            },
-          })}
-          onclick={async () => {
-            await createFolder({ siteId: $user.sites[0].id, name: '새 폴더' });
-          }}
+          class={cx(
+            'group',
+            flex({
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              borderRadius: '6px',
+              width: 'full',
+              _hover: { backgroundColor: 'gray.100' },
+            }),
+          )}
           type="button"
         >
-          <Icon icon={FolderPlusIcon} size={14} />
+          <Icon style={{ color: 'gray.500', _groupHover: { color: 'gray.800' } }} icon={BellIcon} size={16} />
+          <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.700', _groupHover: { color: 'gray.950' } })}>알림</span>
         </button>
-      </div>
+      </li>
+    </ul>
+
+    <div class={flex({ alignItems: 'center', gap: '4px', marginTop: '16px', marginX: '16px' })}>
+      <div class={css({ flexGrow: '1', fontSize: '13px', color: 'gray.500' })}>보관함</div>
+
+      <button
+        class={center({
+          borderRadius: '6px',
+          size: '24px',
+          color: 'gray.500',
+          _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+        })}
+        onclick={async () => {
+          await createFolder({ siteId: $user.sites[0].id, name: '새 폴더' });
+        }}
+        type="button"
+      >
+        <Icon icon={FolderPlusIcon} size={14} />
+      </button>
+
+      <button
+        class={center({
+          borderRadius: '6px',
+          size: '24px',
+          color: 'gray.500',
+          _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+        })}
+        onclick={async () => {
+          const resp = await createPost({
+            siteId: $user.sites[0].id,
+          });
+
+          await goto(`/${resp.entity.slug}`);
+        }}
+        type="button"
+      >
+        <Icon icon={SquarePenIcon} size={14} />
+      </button>
     </div>
 
-    <div class={css({ flexGrow: '1', overflow: 'scroll' })}>
-      <PageList {entities} siteId={$user.sites[0].id} />
+    <div class={css({ position: 'relative', flexGrow: '1', overflow: 'hidden' })}>
+      <div class={css({ overflow: 'scroll', paddingX: '16px', height: 'full' })}>
+        <PageList {entities} siteId={$user.sites[0].id} />
+      </div>
+
+      <div
+        class={css({
+          position: 'absolute',
+          insetX: '0',
+          top: '0',
+          height: '16px',
+          backgroundGradient: 'to-b',
+          gradientFrom: app.preference.current.sidebarExpanded ? 'gray.50' : 'white',
+          gradientTo: 'transparent',
+        })}
+      ></div>
+
+      <div
+        class={css({
+          position: 'absolute',
+          insetX: '0',
+          bottom: '0',
+          height: '16px',
+          backgroundGradient: 'to-t',
+          gradientFrom: app.preference.current.sidebarExpanded ? 'gray.50' : 'white',
+          gradientTo: 'transparent',
+        })}
+      ></div>
     </div>
+
+    <UserMenu {$user} />
   </div>
 </aside>
