@@ -1,7 +1,7 @@
 <script lang="ts">
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Helmet, HorizontalDivider, Img } from '$lib/components';
+  import { Helmet, HorizontalDivider, Img, ProtectiveRegion } from '$lib/components';
   import { TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -25,6 +25,11 @@
             coverImage {
               id
               ...Img_image
+            }
+
+            option {
+              id
+              allowCopies
             }
           }
 
@@ -85,7 +90,13 @@
         <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
       </div>
 
-      <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
+      {#if $query.entityView.node.option.allowCopies}
+        <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
+      {:else}
+        <ProtectiveRegion>
+          <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
+        </ProtectiveRegion>
+      {/if}
     </div>
   </div>
 {/if}

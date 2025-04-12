@@ -3,7 +3,7 @@
   import { Tween } from 'svelte/motion';
   import XIcon from '~icons/lucide/x';
   import { portal, scrollLock } from '$lib/actions';
-  import { Icon, Img } from '$lib/components';
+  import { Icon, Img, ProtectiveRegion } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import type { NodeViewProps } from '../../lib';
@@ -76,53 +76,55 @@
 <svelte:window onclickcapture={handleClose} onkeydown={(e) => e.key === 'Escape' && handleClose()} />
 
 <div class={css({ position: 'fixed', inset: '0', size: 'full', zIndex: '50' })} use:portal use:scrollLock>
-  <div class={css({ position: 'fixed', inset: '0', size: 'full', paddingX: '[5vw]', paddingY: '[5vh]' })}>
-    <div bind:this={targetEl} class={css({ size: 'full' })}></div>
-  </div>
+  <ProtectiveRegion>
+    <div class={css({ position: 'fixed', inset: '0', size: 'full', paddingX: '[5vw]', paddingY: '[5vh]' })}>
+      <div bind:this={targetEl} class={css({ size: 'full' })}></div>
+    </div>
 
-  <div style:opacity class={css({ position: 'fixed', inset: '0', size: 'full', backgroundColor: 'white' })}>
-    <div class={css({ position: 'absolute', top: '20px', right: '20px' })}>
-      <button
-        class={center({
-          borderWidth: '[1.5px]',
-          borderColor: 'gray.300',
-          borderRadius: 'full',
-          marginBottom: '4px',
-          color: 'gray.500',
-          size: '40px',
-          backgroundColor: 'white',
-          boxShadow: 'xlarge',
-          zIndex: '30',
-          _hover: {
-            borderColor: 'gray.500',
-            color: 'gray.700',
-          },
-        })}
-        aria-label="닫기"
-        onclick={handleClose}
-        type="button"
+    <div style:opacity class={css({ position: 'fixed', inset: '0', size: 'full', backgroundColor: 'white' })}>
+      <div class={css({ position: 'absolute', top: '20px', right: '20px' })}>
+        <button
+          class={center({
+            borderWidth: '[1.5px]',
+            borderColor: 'gray.300',
+            borderRadius: 'full',
+            marginBottom: '4px',
+            color: 'gray.500',
+            size: '40px',
+            backgroundColor: 'white',
+            boxShadow: 'xlarge',
+            zIndex: '30',
+            _hover: {
+              borderColor: 'gray.500',
+              color: 'gray.700',
+            },
+          })}
+          aria-label="닫기"
+          onclick={handleClose}
+          type="button"
+        >
+          <Icon icon={XIcon} />
+        </button>
+        <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'semibold', color: 'gray.400', textAlign: 'center' })}>ESC</span>
+      </div>
+    </div>
+
+    {#if transform}
+      <div
+        style:top={`${transform.top}px`}
+        style:left={`${transform.left}px`}
+        style:width={`${transform.width}px`}
+        style:height={`${transform.height}px`}
+        style:transform={`translate(${transform.translateX}px, ${transform.translateY}px) scale(${transform.scale})`}
+        class={center({ position: 'fixed', willChange: 'transform' })}
       >
-        <Icon icon={XIcon} />
-      </button>
-      <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'semibold', color: 'gray.400', textAlign: 'center' })}>ESC</span>
-    </div>
-  </div>
-
-  {#if transform}
-    <div
-      style:top={`${transform.top}px`}
-      style:left={`${transform.left}px`}
-      style:width={`${transform.width}px`}
-      style:height={`${transform.height}px`}
-      style:transform={`translate(${transform.translateX}px, ${transform.translateY}px) scale(${transform.scale})`}
-      class={center({ position: 'fixed', willChange: 'transform' })}
-    >
-      <Img
-        style={css.raw({ size: 'full', borderRadius: '4px', objectFit: 'contain', cursor: 'zoom-out' })}
-        $image={attrs}
-        alt="본문 이미지"
-        size="full"
-      />
-    </div>
-  {/if}
+        <Img
+          style={css.raw({ size: 'full', borderRadius: '4px', objectFit: 'contain', cursor: 'zoom-out' })}
+          $image={attrs}
+          alt="본문 이미지"
+          size="full"
+        />
+      </div>
+    {/if}
+  </ProtectiveRegion>
 </div>
