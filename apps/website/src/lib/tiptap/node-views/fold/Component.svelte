@@ -36,11 +36,24 @@
         cursor: 'pointer',
       })}
       contenteditable={false}
+      onkeyup={(e) => {
+        if (e.code === 'Space') {
+          e.preventDefault();
+        }
+      }}
     >
       <Icon style={css.raw({ '& *': { strokeWidth: '[1.5px]' } })} icon={open ? ChevronUpIcon : ChevronDownIcon} size={20} />
-      <div class={css({ fontSize: '14px', fontWeight: 'medium' })}>
-        {open ? '접기' : '펼치기'}
-      </div>
+      {#if editor?.current.isEditable}
+        <input
+          class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}
+          oninput={(e) => updateAttributes({ title: e.currentTarget.value })}
+          placeholder="제목을 입력하세요"
+          type="text"
+          value={node.attrs.title}
+        />
+      {:else}
+        <span class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>{node.attrs.title}</span>
+      {/if}
     </summary>
 
     <NodeViewContentEditable style={css.raw({ paddingX: '24px', paddingY: '16px' })} />

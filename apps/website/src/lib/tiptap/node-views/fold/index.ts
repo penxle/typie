@@ -25,6 +25,10 @@ export const Fold = createNodeView(Component, {
           open: open ? 'true' : undefined,
         }),
       },
+      title: {
+        default: '',
+        rendered: false,
+      },
     };
   },
 

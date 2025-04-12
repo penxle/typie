@@ -149,7 +149,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
   }
 
   override stopEvent(event: Event) {
-    if (event.target instanceof Element && event.target.closest('button')) {
+    if (event.target instanceof Element && (event.target.closest('button') || event.target.closest('input'))) {
       return true;
     }
 
