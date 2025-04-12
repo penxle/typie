@@ -57,7 +57,7 @@
       "content": "block+",
       "group": "block",
       "defining": true,
-      "attrs": { "open": { "default": true } },
+      "attrs": { "open": { "default": true }, "title": { "default": "" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=fold]" }]
     },
     "horizontal_rule": {
