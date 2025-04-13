@@ -139,7 +139,7 @@
     inert={!app.preference.current.sidebarExpanded && !app.state.sidebarTriggered}
   >
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', marginX: '16px' })}>
-      <Logo class={css({ flexShrink: '0', height: '24px' })} />
+      <Logo class={css({ flexShrink: '0', height: '18px', color: 'brand.500' })} />
 
       {#if app.preference.current.sidebarExpanded}
         <button
@@ -208,7 +208,7 @@
       </div>
     </div>
 
-    <ul class={css({ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '16px', marginX: '16px' })}>
+    <ul class={css({ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '8px', marginX: '16px' })}>
       <li>
         <a
           class={cx(
@@ -252,7 +252,7 @@
       </li>
     </ul>
 
-    <div class={flex({ alignItems: 'center', gap: '4px', marginTop: '16px', marginX: '16px' })}>
+    <div class={flex({ alignItems: 'center', gap: '4px', marginTop: '8px', marginX: '16px' })}>
       <div class={css({ flexGrow: '1', fontSize: '13px', color: 'gray.500' })}>보관함</div>
 
       <button

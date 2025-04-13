@@ -79,7 +79,7 @@
 
 <Dialog onsubmit={handleSubmit} bind:open>
   <form class={flex({ direction: 'column', gap: '20px' })} method="dialog">
-    <Logo class={css({ marginBottom: '20px', height: '24px' })} />
+    <Logo class={css({ marginBottom: '20px', height: '20px', color: 'brand.500' })} />
 
     <div class={flex({ direction: 'column' })}>
       <label class={css({ display: 'flex', alignItems: 'flex-start', gap: '2px', marginBottom: '8px', fontSize: '14px' })} for="email">
