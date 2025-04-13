@@ -1,17 +1,29 @@
 import dayjs from 'dayjs';
-import { and, asc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, PaymentMethods, PostCharacterCountChanges, Sites, TableCode, UserPlans, Users } from '@/db';
+import {
+  db,
+  Entities,
+  first,
+  firstOrThrow,
+  PaymentMethods,
+  PostCharacterCountChanges,
+  Posts,
+  Sites,
+  TableCode,
+  UserPlans,
+  Users,
+} from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { PaymentMethodState, SiteState, UserPlanState, UserState } from '@/enums';
+import { EntityState, PaymentMethodState, SiteState, UserPlanState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { CharacterCountChange, Image, isTypeOf, PaymentMethod, Site, User, UserPlan } from '../objects';
+import { CharacterCountChange, Image, isTypeOf, PaymentMethod, Post, Site, User, UserPlan } from '../objects';
 
 /**
  * * Types
@@ -80,6 +92,29 @@ User.implement({
         });
 
         return await loader.load(self.id);
+      },
+    }),
+
+    recentPosts: t.field({
+      type: [Post],
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'User.recentPosts',
+          many: true,
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(Posts)
+              .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+              .where(and(inArray(Entities.userId, ids), eq(Entities.state, EntityState.ACTIVE)))
+              .orderBy(desc(Posts.updatedAt))
+              .limit(5);
+          },
+          key: ({ entities: { userId } }) => userId,
+        });
+
+        const rows = await loader.load(self.id);
+        return rows.map((row) => row.posts);
       },
     }),
 

@@ -1,7 +1,8 @@
 *execute
 *init
 *introend
-+create
+*create
+*outroend
 amazonses
 batang
 buildx

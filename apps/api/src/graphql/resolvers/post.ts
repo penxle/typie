@@ -77,6 +77,8 @@ Post.implement({
   isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
+    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+
     update: t.field({
       type: 'Binary',
       resolve: async (self, _, ctx) => {

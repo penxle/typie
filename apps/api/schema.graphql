@@ -294,6 +294,7 @@ type Post implements IPost {
   subtitle: String
   title: String!
   update: Binary!
+  updatedAt: DateTime!
 }
 
 type PostOption implements IPostOption {
@@ -475,6 +476,7 @@ type User {
   name: String!
   paymentMethod: PaymentMethod
   plan: UserPlan
+  recentPosts: [Post!]!
   sites: [Site!]!
 }
 
