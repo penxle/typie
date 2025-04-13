@@ -1,41 +1,42 @@
 import { assemble, disassemble } from 'es-hangul';
 import type { TransitionConfig } from 'svelte/transition';
 
-const getText = (n: Node): Text[] => {
-  if (n.nodeType === Node.TEXT_NODE) return [n as Text];
-  if (!n.childNodes) return [];
-  return [...n.childNodes].flatMap(getText);
+type NodeInfo = {
+  textNode: Text;
+  range: [number, number];
+  originalText: string;
+  characterParts: string[][];
 };
 
 const HANGUL_REGEX = /[가-힣]/;
 const PART_REGEX = /[ㄱ-ㅎㅏ-ㅣ]/;
+
+const getText = (node: Node): Text[] => (node.nodeType === Node.TEXT_NODE ? [node as Text] : [...(node.childNodes || [])].flatMap(getText));
 
 export const typewriter = (node: Element, { delay = 0, speed = 50 } = {}): TransitionConfig => {
   const textNodes = getText(node);
   if (textNodes.length === 0) throw new Error('Typewriter requires text nodes');
 
   let totalParts = 0;
-  const nodeRanges = textNodes.map((textNode) => {
+  const nodeRanges: NodeInfo[] = textNodes.map((textNode) => {
     const originalText = textNode.textContent ?? '';
-
     const characterParts: string[][] = [];
     let partCount = 0;
 
-    for (const character of originalText) {
-      const parts = HANGUL_REGEX.test(character) ? [...disassemble(character)] : [character];
-
+    for (const char of originalText) {
+      const parts = HANGUL_REGEX.test(char) ? [...disassemble(char)] : [char];
       characterParts.push(parts);
       partCount += parts.length;
     }
 
-    const range: [number, number] = [totalParts, totalParts + partCount];
+    const startPos = totalParts;
     totalParts += partCount;
 
     return {
       textNode,
-      range,
       originalText,
       characterParts,
+      range: [startPos, totalParts],
     };
   });
 
@@ -43,96 +44,53 @@ export const typewriter = (node: Element, { delay = 0, speed = 50 } = {}): Trans
 
   return {
     delay,
-    duration: totalParts * speed,
-    tick: (t: number, u: number) => {
-      const progress = t;
-      const direction = u <= 0.5 ? 0 : 1; // 0 = outro, 1 = intro
+    duration: totalParts * (1000 / speed),
+    tick: (t, u) => {
+      const isIntro = u > 0.5;
+      const position = Math.floor(totalParts * t);
 
-      // 초기화: intro 시작 또는 outro 종료 시
-      if ((direction === 1 && progress === 0) || (direction === 0 && progress === 1)) {
-        nodeRanges.forEach((nodeRange) => {
-          nodeRange.textNode.textContent = direction === 1 ? '' : nodeRange.originalText;
+      if ((isIntro && t === 0) || (!isIntro && t === 1)) {
+        nodeRanges.forEach(({ textNode, originalText }) => {
+          textNode.textContent = isIntro ? '' : originalText;
         });
         currentNodeIndex = 0;
+        return;
       }
 
-      const position = Math.trunc(totalParts * progress);
+      const compareFunc = isIntro ? (node: NodeInfo) => position >= node.range[1] : (node: NodeInfo) => position < node.range[0];
 
-      // intro(1)와 outro(0)에 따라 처리 분기
-      if (direction === 1) {
-        // Intro: 텍스트를 점진적으로 채움
-
-        // 완성된 노드 처리
-        while (currentNodeIndex < nodeRanges.length - 1 && position >= nodeRanges[currentNodeIndex].range[1]) {
-          nodeRanges[currentNodeIndex].textNode.textContent = nodeRanges[currentNodeIndex].originalText;
-          currentNodeIndex++;
-        }
-
-        const currentNode = nodeRanges[currentNodeIndex];
-        const displayedParts = position - currentNode.range[0];
-
-        if (displayedParts <= 0) {
-          currentNode.textNode.textContent = '';
-          return;
-        }
-
-        let result = '';
-        let processedParts = 0;
-
-        for (const parts of currentNode.characterParts) {
-          if (processedParts >= displayedParts) break;
-
-          const visibleParts = Math.min(parts.length, displayedParts - processedParts);
-          if (visibleParts <= 0) break;
-
-          const isHangulPart = parts.length > 1 && PART_REGEX.test(parts[0]);
-          const selectedParts = visibleParts < parts.length ? parts.slice(0, visibleParts) : parts;
-
-          result += isHangulPart ? assemble(selectedParts) : selectedParts[0];
-          processedParts += parts.length;
-        }
-
-        currentNode.textNode.textContent = result;
-      } else {
-        // Outro: 텍스트를 점진적으로 지움
-
-        // 완전히 지워진 노드 처리
-        while (currentNodeIndex < nodeRanges.length - 1 && position < nodeRanges[currentNodeIndex].range[0]) {
-          nodeRanges[currentNodeIndex].textNode.textContent = '';
-          currentNodeIndex++;
-        }
-
-        const currentNode = nodeRanges[currentNodeIndex];
-        const remainingParts = position - currentNode.range[0];
-
-        if (remainingParts <= 0) {
-          currentNode.textNode.textContent = '';
-          return;
-        }
-
-        let result = '';
-        let processedParts = 0;
-
-        for (const parts of currentNode.characterParts) {
-          if (processedParts >= remainingParts) {
-            // 남은 텍스트를 완전히 제거
-            break;
-          }
-
-          const visibleParts = Math.min(parts.length, remainingParts - processedParts);
-
-          if (visibleParts > 0) {
-            const isHangulPart = parts.length > 1 && PART_REGEX.test(parts[0]);
-            const selectedParts = visibleParts < parts.length ? parts.slice(0, visibleParts) : parts;
-
-            result += isHangulPart ? assemble(selectedParts) : selectedParts[0];
-          }
-
-          processedParts += parts.length;
-        }
-
-        currentNode.textNode.textContent = result;
+      while (currentNodeIndex < nodeRanges.length - 1 && compareFunc(nodeRanges[currentNodeIndex])) {
+        const { textNode, originalText } = nodeRanges[currentNodeIndex];
+        textNode.textContent = isIntro ? originalText : '';
+        currentNodeIndex++;
       }
+
+      const currentNode = nodeRanges[currentNodeIndex];
+      const visibleParts = position - currentNode.range[0];
+
+      if (visibleParts <= 0) {
+        currentNode.textNode.textContent = '';
+        return;
+      }
+
+      let result = '';
+      let processedParts = 0;
+
+      for (const parts of currentNode.characterParts) {
+        if (processedParts >= visibleParts) break;
+
+        const partsToShow = Math.min(parts.length, visibleParts - processedParts);
+        if (partsToShow <= 0) break;
+
+        result +=
+          parts.length > 1 && PART_REGEX.test(parts[0])
+            ? assemble(partsToShow < parts.length ? parts.slice(0, partsToShow) : parts)
+            : parts[0];
+
+        processedParts += parts.length;
+      }
+
+      currentNode.textNode.textContent = result;
     },
   };
 };
