@@ -259,6 +259,8 @@
       <textarea
         bind:this={titleEl}
         class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+        autocapitalize="off"
+        autocomplete="off"
         maxlength="100"
         onkeydown={(e) => {
           if (e.key === 'Enter' || e.key === 'ArrowDown') {
@@ -268,6 +270,7 @@
         }}
         placeholder="제목을 입력하세요"
         rows={1}
+        spellcheck="false"
         bind:value={title.current}
         use:autosize
       ></textarea>
@@ -275,6 +278,8 @@
       <textarea
         bind:this={subtitleEl}
         class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', resize: 'none' })}
+        autocapitalize="off"
+        autocomplete="off"
         maxlength="100"
         onkeydown={(e) => {
           if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
@@ -289,6 +294,7 @@
         }}
         placeholder="부제목을 입력하세요"
         rows={1}
+        spellcheck="false"
         bind:value={subtitle.current}
         use:autosize
       ></textarea>
