@@ -17,26 +17,20 @@
   const app = getAppContext();
 </script>
 
-<div class={flex({ alignItems: 'center', flexShrink: '0', height: '48px' })}>
+<div class={flex({ alignItems: 'center', flexShrink: '0', paddingX: '12px', height: '48px' })}>
   {#if !app.preference.current.sidebarExpanded}
     <button
-      class={center({ size: '48px', backgroundColor: 'white' })}
+      class={center({ borderRadius: '6px', size: '24px', _hover: { backgroundColor: 'gray.100' } })}
       onclick={() => (app.preference.current.sidebarExpanded = true)}
       type="button"
       transition:fade={{ duration: 100, easing: sineInOut }}
     >
-      <Icon icon={PanelLeftOpenIcon} />
+      <Icon icon={PanelLeftOpenIcon} size={16} />
     </button>
   {/if}
 
   {#if children}
-    <div
-      class={css({
-        flexGrow: '1',
-        paddingLeft: app.preference.current.sidebarExpanded ? '16px' : '0',
-        paddingRight: '8px',
-      })}
-    >
+    <div class={css({ flexGrow: '1', paddingX: '8px' })}>
       {@render children()}
     </div>
   {/if}
