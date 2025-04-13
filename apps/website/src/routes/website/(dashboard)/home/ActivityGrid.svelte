@@ -45,21 +45,23 @@
     const activities: Activity[] = [];
 
     const numbers = $user.characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
-    const min = Math.min(...numbers, 0);
-    const max = Math.max(...numbers, 0);
+    const min = Math.min(...numbers);
+    const max = Math.max(...numbers);
     const range = max - min;
 
     let currentDate = startDate;
     while (!currentDate.isAfter(endDate)) {
-      const change = $user.characterCountChanges.find(({ date }) => dayjs.utc(date).isSame(currentDate, 'day'));
+      const change = $user.characterCountChanges.find(({ date }) => dayjs(date).kst({ keepLocalTime: true }).isSame(currentDate, 'day'));
       if (change) {
         if (change.additions === 0) {
           activities.push({ date: currentDate, additions: 0, level: 0 });
+        } else if (range === 0) {
+          activities.push({ date: currentDate, additions: change.additions, level: 3 });
         } else if (change.additions === max) {
           activities.push({ date: currentDate, additions: change.additions, level: 5 });
         } else {
           const value = (change.additions - min) / range;
-          const level = (Math.floor(value * 4) + 1) as Level;
+          const level = (Math.round(value * 5) + 1) as Level;
           activities.push({ date: currentDate, additions: change.additions, level });
         }
       } else {
@@ -141,7 +143,7 @@
         >
           {weekday}
         </div>
-      {:else}{/if}
+      {/if}
     </div>
   {/each}
 
@@ -195,7 +197,7 @@
       {#if hoverActivity.additions > 0}
         {comma(hoverActivity.additions)}자 작성했어요
       {:else}
-        쉬었어요
+        기록이 없어요
       {/if}
     </div>
   </div>
