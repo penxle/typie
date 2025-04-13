@@ -122,8 +122,22 @@
   };
 </script>
 
-<div use:anchor>
-  <Button onclick={() => (open = true)} size="sm" variant="secondary">공유</Button>
+<div class={flex({ alignItems: 'center', gap: '12px', userSelect: 'none' })}>
+  {#if form.fields.visibility === PostVisibility.PRIVATE}
+    <div class={center({ gap: '6px', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'gray.100' })}>
+      <div class={css({ size: '6px', borderRadius: 'full', bg: 'gray.500' })}></div>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>비공개 중</div>
+    </div>
+  {:else if form.fields.visibility === PostVisibility.UNLISTED}
+    <div class={center({ gap: '6px', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'brand.100' })}>
+      <div class={css({ size: '6px', borderRadius: 'full', bg: 'brand.500' })}></div>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'brand.700' })}>링크 공개 중</div>
+    </div>
+  {/if}
+
+  <div use:anchor>
+    <Button onclick={() => (open = true)} size="sm" variant="secondary">공유</Button>
+  </div>
 </div>
 
 {#if open}
@@ -142,7 +156,7 @@
   >
     <div class={flex({ flexDirection: 'column', gap: '16px' })}>
       <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-        <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
+        <div class={flex({ justifyContent: 'space-between', alignItems: 'center', userSelect: 'none' })}>
           {#if form.fields.visibility === PostVisibility.PRIVATE}
             <div class={center({ gap: '6px', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'gray.100' })}>
               <div class={css({ size: '6px', borderRadius: 'full', bg: 'gray.500' })}></div>
@@ -162,74 +176,72 @@
           {/if}
         </div>
 
-        {#if form.fields.visibility === PostVisibility.PRIVATE}
-          <Button
-            style={css.raw({ height: '36px' })}
-            data-floating-keep-open
-            onclick={() => (form.fields.visibility = PostVisibility.UNLISTED)}
-          >
-            <div class={center({ gap: '6px' })}>
-              <Icon icon={GlobeIcon} />
-              <span>링크 공개로 전환</span>
-            </div>
-          </Button>
-        {:else if form.fields.visibility === PostVisibility.UNLISTED}
-          <div
-            class={cx(
-              'group',
-              flex({
-                alignItems: 'center',
-                gap: '4px',
-                borderWidth: '1px',
-                borderRadius: '6px',
-                paddingX: '12px',
-                height: '36px',
-                backgroundColor: 'gray.50',
-                _hover: {
-                  borderColor: 'brand.200',
-                },
-              }),
-            )}
-          >
-            <input
-              bind:this={linkInputEl}
-              class={css({ flexGrow: '1', color: 'gray.600', fontSize: '12px', _groupHover: { color: 'gray.900' } })}
-              onclick={() => linkInputEl?.select()}
-              readonly
-              value={$post.entity.url}
-            />
+        <div
+          class={cx(
+            'group',
+            flex({
+              alignItems: 'center',
+              gap: '4px',
+              borderWidth: '1px',
+              borderRadius: '6px',
+              paddingX: '12px',
+              height: '36px',
+              backgroundColor: 'gray.50',
+              _hover: {
+                borderColor: 'brand.200',
+              },
+            }),
+          )}
+        >
+          <input
+            bind:this={linkInputEl}
+            class={css({ flexGrow: '1', color: 'gray.600', fontSize: '12px', _groupHover: { color: 'gray.900' } })}
+            onclick={() => linkInputEl?.select()}
+            readonly
+            value={$post.entity.url}
+          />
 
-            <button
-              class={center({
-                borderRadius: '6px',
-                size: '20px',
-                color: 'gray.500',
-                _hover: { color: 'gray.700', backgroundColor: 'gray.200' },
-              })}
-              onclick={handleCopyLink}
-              type="button"
-            >
-              <Icon data-floating-keep-open icon={copied ? CheckIcon : CopyIcon} size={14} />
-            </button>
+          <button
+            class={center({
+              borderRadius: '6px',
+              size: '20px',
+              color: 'gray.500',
+              _hover: { color: 'gray.700', backgroundColor: 'gray.200' },
+            })}
+            onclick={handleCopyLink}
+            type="button"
+          >
+            <Icon data-floating-keep-open icon={copied ? CheckIcon : CopyIcon} size={14} />
+          </button>
 
-            <a
-              class={center({
-                borderRadius: '6px',
-                size: '20px',
-                color: 'gray.500',
-                _hover: { color: 'gray.700', backgroundColor: 'gray.200' },
-              })}
-              href={$post.entity.url}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              <Icon icon={ExternalLinkIcon} size={14} />
-            </a>
-          </div>
-        {/if}
+          <a
+            class={center({
+              borderRadius: '6px',
+              size: '20px',
+              color: 'gray.500',
+              _hover: { color: 'gray.700', backgroundColor: 'gray.200' },
+            })}
+            href={$post.entity.url}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <Icon icon={ExternalLinkIcon} size={14} />
+          </a>
+        </div>
       </div>
 
-      {#if form.fields.visibility === PostVisibility.UNLISTED}
+      {#if form.fields.visibility === PostVisibility.PRIVATE}
+        <Button
+          style={css.raw({ height: '36px' })}
+          data-floating-keep-open
+          onclick={() => (form.fields.visibility = PostVisibility.UNLISTED)}
+        >
+          <div class={center({ gap: '6px' })}>
+            <Icon icon={GlobeIcon} />
+            <span>링크 공개로 전환</span>
+          </div>
+        </Button>
+      {:else}
         <HorizontalDivider />
 
         <div class={flex({ flexDirection: 'column', gap: '12px' })}>

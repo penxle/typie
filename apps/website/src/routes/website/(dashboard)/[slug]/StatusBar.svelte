@@ -8,11 +8,11 @@
   import StatusBarCharacterCountWidget from './StatusBarCharacterCountWidget.svelte';
   import Timer from './Timer.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { StatusBar_post } from '$graphql';
+  import type { Editor_StatusBar_post } from '$graphql';
   import type { Ref } from '$lib/utils';
 
   type Props = {
-    $post: StatusBar_post;
+    $post: Editor_StatusBar_post;
     editor?: Ref<Editor>;
     connectionStatus: 'connecting' | 'connected' | 'disconnected';
   };
@@ -22,7 +22,7 @@
   const post = fragment(
     _post,
     graphql(`
-      fragment StatusBar_post on Post {
+      fragment Editor_StatusBar_post on Post {
         id
 
         characterCountChange {

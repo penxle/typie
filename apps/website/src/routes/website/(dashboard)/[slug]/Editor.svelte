@@ -71,7 +71,7 @@
           }
 
           ...Editor_Share_post
-          ...StatusBar_post
+          ...Editor_StatusBar_post
         }
       }
     `),
