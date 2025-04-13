@@ -99,7 +99,7 @@ User.implement({
           .where(
             and(
               eq(PostCharacterCountChanges.userId, self.id),
-              gte(PostCharacterCountChanges.timestamp, startOfTomorrow.subtract(1, 'year')),
+              gte(PostCharacterCountChanges.timestamp, startOfTomorrow.subtract(365, 'days')),
               lt(PostCharacterCountChanges.timestamp, startOfTomorrow),
             ),
           )

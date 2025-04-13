@@ -1,13 +1,16 @@
 <script lang="ts">
   import { graphql } from '$graphql';
-  import { center } from '$styled-system/patterns';
+  import { css } from '$styled-system/css';
+  import { center, flex } from '$styled-system/patterns';
   import TopBar from '../TopBar.svelte';
+  import ActivityGrid from './ActivityGrid.svelte';
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = graphql(`
     query HomePage_Query {
       me @required {
         id
+
+        ...HomePage_ActivityGrid_user
       }
     }
   `);
@@ -15,4 +18,10 @@
 
 <TopBar />
 
-<div class={center({ flexDirection: 'column', flexGrow: '1', width: 'full' })}>Home</div>
+<div class={center({ flexDirection: 'column', flexGrow: '1', width: 'full' })}>
+  <div class={flex({ flexDirection: 'column', flexGrow: '1', gap: '8px', width: 'full', maxWidth: '1000px' })}>
+    <div class={css({ fontSize: '14px', fontWeight: 'semibold' })}>나의 기록</div>
+
+    <ActivityGrid $user={$query.me} />
+  </div>
+</div>
