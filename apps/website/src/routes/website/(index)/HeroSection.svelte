@@ -40,7 +40,7 @@
       width: 'full',
     })}
   >
-    <Logo class={css({ height: '32px', color: 'white' })} />
+    <Logo class={css({ height: '24px', color: 'white' })} />
 
     <div class={css({ marginTop: { base: '32px', lg: '51px' }, marginBottom: '40px', color: 'white', textAlign: 'center' })}>
       <h1
