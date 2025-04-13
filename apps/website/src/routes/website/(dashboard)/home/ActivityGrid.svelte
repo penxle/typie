@@ -129,7 +129,7 @@
   })}
 >
   {#each weekdays as weekday, i (i)}
-    <div class={css({ position: 'relative', gridRow: `${i + 2}`, gridColumn: '1' })}>
+    <div style:grid-row={`${i + 2}`} class={css({ position: 'relative', gridColumn: '1' })}>
       {#if weekday}
         <div
           class={center({
