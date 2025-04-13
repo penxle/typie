@@ -236,7 +236,7 @@
 
   <div
     bind:this={toolbarEl}
-    class={css({ position: 'sticky', top: '20px', left: '0', right: '0', width: 'full', zIndex: '50', pointerEvents: 'none' })}
+    class={css({ position: 'sticky', top: '20px', left: '0', right: '0', width: 'full', zIndex: '40', pointerEvents: 'none' })}
   >
     <div class={center({ position: 'absolute', top: '-20px', insetX: '0' })}>
       <Toolbar {doc} {editor} sticked={toolbarSticked} />
