@@ -6,6 +6,9 @@
   import { cubicOut } from 'svelte/easing';
   import { fade } from 'svelte/transition';
   import { match } from 'ts-pattern';
+  import ArrowDownIcon from '~icons/lucide/arrow-down';
+  import ArrowUpIcon from '~icons/lucide/arrow-up';
+  import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
   import HomeIcon from '~icons/lucide/home';
   import PanelLeftCloseIcon from '~icons/lucide/panel-left-close';
@@ -293,6 +296,7 @@
         borderRadius: '16px',
         boxShadow: 'large',
         zIndex: '1',
+        overflow: 'hidden',
       })}
       transition:fade={{ duration: 150, easing: cubicOut }}
     >
@@ -433,7 +437,7 @@
                   <Icon icon={FileIcon} size={16} />
                 </div>
 
-                <div class={css({ fontSize: '16px', fontWeight: 'medium', truncate: true })}>
+                <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
                   {#if hit.title}
                     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                     {@html hit.title}
@@ -443,7 +447,7 @@
                 </div>
 
                 {#if hit.text}
-                  <div class={css({ color: 'gray.600', fontSize: '14px', truncate: true })}>
+                  <div class={css({ color: 'gray.600', fontSize: '12px', truncate: true })}>
                     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                     {@html hit.text}
                   </div>
@@ -465,6 +469,49 @@
             <div class={css({ fontSize: '14px' })}>다른 검색어를 입력해보세요</div>
           </div>
         {/each}
+      </div>
+
+      <div class={css({ height: '1px', backgroundColor: 'gray.200' })}></div>
+
+      <div
+        class={flex({
+          alignItems: 'center',
+          gap: '16px',
+          paddingX: '12px',
+          paddingY: '12px',
+          color: 'gray.500',
+          backgroundColor: 'gray.100',
+        })}
+      >
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <div class={flex({ alignItems: 'center', gap: '4px' })}>
+            <div class={center({ flexShrink: '0', borderWidth: '1px', borderRadius: '6px', size: '22px' })}>
+              <Icon icon={ArrowUpIcon} size={14} />
+            </div>
+
+            <div class={center({ flexShrink: '0', borderWidth: '1px', borderRadius: '6px', size: '22px' })}>
+              <Icon icon={ArrowDownIcon} size={14} />
+            </div>
+          </div>
+
+          <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>이동</span>
+        </div>
+
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <div class={center({ flexShrink: '0', borderWidth: '1px', borderRadius: '6px', size: '22px' })}>
+            <Icon icon={CornerDownLeftIcon} size={14} />
+          </div>
+
+          <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>선택</span>
+        </div>
+
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <div class={center({ flexShrink: '0', borderWidth: '1px', borderRadius: '6px', paddingX: '4px', height: '22px' })}>
+            <div class={css({ fontSize: '10px', fontWeight: 'bold' })}>ESC</div>
+          </div>
+
+          <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>닫기</span>
+        </div>
       </div>
     </div>
   </div>
