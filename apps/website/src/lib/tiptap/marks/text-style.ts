@@ -1,4 +1,5 @@
 import { getMarkAttributes, Mark } from '@tiptap/core';
+import { Plugin } from '@tiptap/pm/state';
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
@@ -54,5 +55,43 @@ export const TextStyle = Mark.create({
           return commands.unsetMark(this.type);
         },
     };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        appendTransaction: (transactions, _, newState) => {
+          if (!transactions.some((tr) => tr.docChanged)) {
+            return null;
+          }
+
+          const { tr, doc } = newState;
+          let modified = false;
+
+          doc.descendants((node, pos) => {
+            if (!node.isText) {
+              return true;
+            }
+
+            const marks = node.marks.filter((mark) => mark.type === this.type);
+            if (marks.length === 0) {
+              return true;
+            }
+
+            for (const mark of marks) {
+              const hasStyles = Object.entries(mark.attrs).some(([, value]) => !!value);
+              if (!hasStyles) {
+                tr.removeMark(pos, pos + node.nodeSize, mark.type);
+                modified = true;
+              }
+            }
+
+            return true;
+          });
+
+          return modified ? tr : null;
+        },
+      }),
+    ];
   },
 });
