@@ -108,7 +108,7 @@
       name: app.preference.current.sidebarExpanded ? '사이드바 닫기' : '사이드바 열기',
       aliases: [],
       icon: app.preference.current.sidebarExpanded ? PanelLeftCloseIcon : PanelLeftOpenIcon,
-      action: async () => {
+      action: () => {
         app.preference.current.sidebarExpanded = !app.preference.current.sidebarExpanded;
       },
     },
@@ -117,7 +117,7 @@
       aliases: [],
       icon: HomeIcon,
       action: async () => {
-        await goto('/');
+        await goto('/home');
       },
     },
     {
