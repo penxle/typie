@@ -174,10 +174,6 @@ interface IPostOption {
   visibility: PostVisibility!
 }
 
-interface IPostSearchHit {
-  highlight: PostSearchHighlight
-}
-
 type Image implements Blob {
   id: ID!
   placeholder: String!
@@ -279,6 +275,7 @@ input PersistBlobAsImageInput {
 type Plan {
   fee: Int!
   id: ID!
+  name: String!
 }
 
 enum PlanAvailability {
@@ -323,17 +320,6 @@ type PostReaction {
   id: ID!
 }
 
-type PostSearchHighlight {
-  subtitle: String
-  text: String
-  title: String
-}
-
-type PostSearchHit implements IPostSearchHit {
-  highlight: PostSearchHighlight
-  post: Post!
-}
-
 type PostView implements IPost {
   body: JSON!
   comments: [Comment!]!
@@ -374,7 +360,7 @@ type Query {
   entityViewByPermalink(permalink: String!): EntityView!
   me: User
   post(slug: String!): Post!
-  searchPosts(input: SearchPostsInput!): SearchPostResult!
+  search(query: String!, siteId: ID!): SearchResult!
   site(siteId: ID!): Site!
 }
 
@@ -388,14 +374,23 @@ input ResetPasswordInput {
   password: String!
 }
 
-type SearchPostResult {
-  estimatedTotalHits: Int!
-  hits: [PostSearchHit!]!
+union SearchHit = SearchHitPost
+
+type SearchHitPost {
+  post: Post!
+  subtitle: String
+  text: String
+  title: String
+  type: SearchHitType!
 }
 
-input SearchPostsInput {
-  query: String!
-  siteId: ID!
+enum SearchHitType {
+  POST
+}
+
+type SearchResult {
+  hits: [SearchHit!]!
+  totalHits: Int!
 }
 
 input SendEmailUpdateEmailInput {
@@ -479,6 +474,7 @@ type User {
   id: ID!
   name: String!
   paymentMethod: PaymentMethod
+  plan: UserPlan
   sites: [Site!]!
 }
 

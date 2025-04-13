@@ -28,6 +28,15 @@
           id
           ...Img_image
         }
+
+        plan {
+          id
+
+          plan {
+            id
+            name
+          }
+        }
       }
     `),
   );
@@ -68,6 +77,7 @@
     borderRadius: '6px',
     paddingX: '8px',
     paddingY: '6px',
+    textAlign: 'left',
     transitionProperty: 'background-color',
     transitionDuration: '200ms',
     transitionTimingFunction: 'ease',
@@ -86,7 +96,9 @@
         {$user.name}
       </div>
 
-      <div class={css({ fontSize: '12px', color: 'gray.500' })}>알파 테스트 이용중</div>
+      <div class={css({ fontSize: '12px', color: 'gray.500' })}>
+        {$user.plan?.plan.name ?? '무료'} 플랜 이용중
+      </div>
     </div>
   </div>
 

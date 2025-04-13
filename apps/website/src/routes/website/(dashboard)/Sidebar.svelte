@@ -161,7 +161,11 @@
       {/if}
     </div>
 
-    <div class={css({ position: 'relative', marginTop: '16px', marginX: '16px' })}>
+    <button
+      class={css({ position: 'relative', marginTop: '16px', marginX: '16px', cursor: 'text', userSelect: 'none' })}
+      onclick={() => (app.state.commandPaletteOpen = true)}
+      type="button"
+    >
       <input
         class={css({
           width: 'full',
@@ -171,31 +175,29 @@
           paddingRight: '32px',
           paddingY: '6px',
           fontSize: '14px',
-          cursor: 'text',
           backgroundColor: 'gray.100',
+          pointerEvents: 'none',
           // boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.05)]',
         })}
-        disabled
         placeholder="검색"
         type="text"
       />
 
-      <div class={center({ position: 'absolute', left: '8px', top: '1/2', translate: 'auto', translateY: '-1/2' })}>
+      <div class={center({ position: 'absolute', left: '8px', top: '1/2', translate: 'auto', translateY: '-1/2', pointerEvents: 'none' })}>
         <Icon icon={SearchIcon} size={16} />
       </div>
 
-      <div class={center({ position: 'absolute', right: '8px', top: '1/2', translate: 'auto', translateY: '-1/2' })}>
+      <div class={center({ position: 'absolute', right: '8px', top: '1/2', translate: 'auto', translateY: '-1/2', pointerEvents: 'none' })}>
         <kbd
           class={center({
             gap: '2px',
             borderRadius: '4px',
             paddingX: '6px',
             paddingY: '2px',
-            borderColor: 'gray.200',
             fontFamily: 'mono',
             fontSize: '12px',
             fontWeight: 'medium',
-            color: 'gray.500',
+            color: 'gray.400',
             backgroundColor: 'gray.200',
           })}
         >
@@ -206,7 +208,7 @@
           <span>K</span>
         </kbd>
       </div>
-    </div>
+    </button>
 
     <ul class={css({ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '8px', marginX: '16px' })}>
       <li>

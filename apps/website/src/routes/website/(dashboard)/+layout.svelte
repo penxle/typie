@@ -2,6 +2,7 @@
   import { graphql } from '$graphql';
   import { setupAppContext } from '$lib/context';
   import { flex } from '$styled-system/patterns';
+  import CommandPalette from './CommandPalette.svelte';
   import Sidebar from './Sidebar.svelte';
 
   let { children } = $props();
@@ -10,8 +11,6 @@
     query DashboardLayout_Query {
       me @required {
         id
-
-        ...DashboardLayout_Sidebar_user
 
         sites {
           id
@@ -57,7 +56,11 @@
               }
             }
           }
+
+          ...DashboardLayout_CommandPalette_site
         }
+
+        ...DashboardLayout_Sidebar_user
       }
     }
   `);
@@ -137,3 +140,5 @@
     {@render children()}
   </div>
 </div>
+
+<CommandPalette $site={$query.me.sites[0]} />
