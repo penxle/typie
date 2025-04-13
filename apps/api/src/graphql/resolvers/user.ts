@@ -2,16 +2,16 @@ import dayjs from 'dayjs';
 import { and, asc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, PaymentMethods, PostCharacterCountChanges, Sites, TableCode, Users } from '@/db';
+import { db, first, firstOrThrow, PaymentMethods, PostCharacterCountChanges, Sites, TableCode, UserPlans, Users } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { PaymentMethodState, SiteState, UserState } from '@/enums';
+import { PaymentMethodState, SiteState, UserPlanState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { CharacterCountChange, Image, isTypeOf, PaymentMethod, Site, User } from '../objects';
+import { CharacterCountChange, Image, isTypeOf, PaymentMethod, Site, User, UserPlan } from '../objects';
 
 /**
  * * Types
@@ -57,6 +57,26 @@ User.implement({
               .where(and(inArray(PaymentMethods.userId, ids), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)));
           },
           key: ({ userId }) => userId,
+        });
+
+        return await loader.load(self.id);
+      },
+    }),
+
+    plan: t.field({
+      type: UserPlan,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'User.enrolledPlan',
+          nullable: true,
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(UserPlans)
+              .where(and(inArray(UserPlans.userId, ids), inArray(UserPlans.state, [UserPlanState.ACTIVE, UserPlanState.CANCELED])));
+          },
+          key: (row) => row?.userId,
         });
 
         return await loader.load(self.id);

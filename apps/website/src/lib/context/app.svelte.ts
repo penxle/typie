@@ -10,6 +10,7 @@ type AppPreference = {
 
 type AppState = {
   sidebarTriggered: boolean;
+  commandPaletteOpen: boolean;
   toolbarActive: boolean;
 };
 
@@ -35,6 +36,7 @@ export const getAppContext = () => {
 export const setupAppContext = () => {
   const appState = $state<AppState>({
     sidebarTriggered: false,
+    commandPaletteOpen: false,
     toolbarActive: false,
   });
 

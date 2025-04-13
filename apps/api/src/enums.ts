@@ -63,6 +63,11 @@ export const PreorderPaymentState = {
   FAILED: 'FAILED',
 } as const;
 
+export type SearchHitType = keyof typeof SearchHitType;
+export const SearchHitType = {
+  POST: 'POST',
+} as const;
+
 export type SingleSignOnProvider = keyof typeof SingleSignOnProvider;
 export const SingleSignOnProvider = {
   GOOGLE: 'GOOGLE',

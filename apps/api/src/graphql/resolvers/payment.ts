@@ -33,6 +33,7 @@ Plan.implement({
   isTypeOf: isTypeOf(TableCode.PLANS),
   fields: (t) => ({
     id: t.exposeID('id'),
+    name: t.exposeString('name'),
     fee: t.exposeInt('fee'),
   }),
 });
