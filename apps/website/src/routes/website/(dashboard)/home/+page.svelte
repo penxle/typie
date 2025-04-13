@@ -131,8 +131,7 @@
           onoutroend={() => {
             updateGreeting();
           }}
-          in:typewriter={{ speed: 25 }}
-          out:typewriter={{ speed: 25 }}
+          transition:typewriter
         >
           {greeting}
         </span>
