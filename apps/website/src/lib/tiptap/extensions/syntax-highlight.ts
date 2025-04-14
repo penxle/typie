@@ -72,7 +72,7 @@ const getDecorations = (editor: Editor, highlighter: Highlighter, doc: Node) => 
   const children = findChildren(doc, (node) => node.type.spec.code === true);
   for (const child of children) {
     const code = child.node.textContent;
-    if (code.length > 10_000) {
+    if (code.length > 100_000) {
       continue;
     }
 
