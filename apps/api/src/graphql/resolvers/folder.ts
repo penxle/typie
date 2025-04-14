@@ -4,6 +4,7 @@ import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { pubsub } from '@/pubsub';
+import { decode, encode } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
@@ -86,7 +87,7 @@ builder.mutationFields((t) => ({
             slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
             permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
             type: EntityType.FOLDER,
-            order: encoder.encode(generateJitteredKeyBetween(last ? decoder.decode(last.order) : null, null)),
+            order: encode(generateJitteredKeyBetween(last ? decode(last.order) : null, null)),
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);
@@ -191,10 +192,3 @@ builder.mutationFields((t) => ({
     },
   }),
 }));
-
-/**
- * * Utils
- */
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();

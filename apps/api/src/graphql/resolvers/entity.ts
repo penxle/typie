@@ -209,7 +209,7 @@ builder.queryFields((t) => ({
 }));
 
 builder.mutationFields((t) => ({
-  updateEntityPosition: t.withAuth({ session: true }).fieldWithInput({
+  moveEntity: t.withAuth({ session: true }).fieldWithInput({
     type: Entity,
     input: {
       entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),

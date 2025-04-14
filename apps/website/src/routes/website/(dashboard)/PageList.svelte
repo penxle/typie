@@ -29,7 +29,7 @@
 
   const entityQuery = graphql(`
     query DashboardLayout_PageList_Query($id: ID!) @manual {
-      entity(id: $id) {
+      entity(entityId: $id) {
         id
         slug
 
@@ -74,9 +74,9 @@
     load();
   });
 
-  const updateEntityPosition = graphql(`
-    mutation DashboardLayout_PageList_UpdateEntityPosition_Mutation($input: UpdateEntityPositionInput!) {
-      updateEntityPosition(input: $input) {
+  const moveEntity = graphql(`
+    mutation DashboardLayout_PageList_MoveEntity_Mutation($input: MoveEntityInput!) {
+      moveEntity(input: $input) {
         id
 
         children {
@@ -396,9 +396,9 @@
 
         if (!targetItem) return;
 
-        await updateEntityPosition({
-          id: dragging.entity.id,
-          parentId: targetItem.id,
+        await moveEntity({
+          entityId: dragging.entity.id,
+          parentEntityId: targetItem.id,
           nextOrder: targetItem.children ? targetItem.children[0]?.order : undefined,
         });
 
@@ -429,9 +429,9 @@
           nextOrder = children[dropTarget.indicatorPosition]?.order;
         }
 
-        await updateEntityPosition({
-          id: dragging.entity.id,
-          parentId: targetList?.id,
+        await moveEntity({
+          entityId: dragging.entity.id,
+          parentEntityId: targetList?.id,
           nextOrder,
           previousOrder,
         });
