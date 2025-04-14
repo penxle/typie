@@ -12,16 +12,17 @@ import type { JSONContent } from '@tiptap/core';
 type MakeYDocParams = {
   title?: string | null;
   subtitle?: string | null;
+  maxWidth?: number;
   body: JSONContent;
 };
-export const makeYDoc = ({ title, subtitle, body }: MakeYDocParams) => {
+export const makeYDoc = ({ title, subtitle, maxWidth, body }: MakeYDocParams) => {
   const node = Node.fromJSON(schema, body);
   const doc = new Y.Doc();
 
   const map = doc.getMap('attrs');
   map.set('title', title ?? '');
   map.set('subtitle', subtitle ?? '');
-  map.set('maxWidth', 800);
+  map.set('maxWidth', maxWidth ?? 800);
 
   const fragment = doc.getXmlFragment('body');
   prosemirrorToYXmlFragment(node, fragment);
