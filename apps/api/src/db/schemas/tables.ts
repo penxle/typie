@@ -6,7 +6,7 @@ import { createDbId } from './id';
 import { bytea, datetime } from './types';
 import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { PlanRules } from './json';
+import type { NotificationData, PlanRules } from './json';
 
 export const Comments = pgTable('comments', {
   id: text('id')
@@ -113,6 +113,21 @@ export const Images = pgTable('images', {
   height: integer('height').notNull(),
   placeholder: text('placeholder').notNull(),
   path: text('path').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const Notifications = pgTable('notifications', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.NOTIFICATIONS)),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  category: E._NotificationCategory('category').notNull(),
+  state: E._NotificationState('state').notNull().default('UNREAD'),
+  data: jsonb('data').notNull().$type<NotificationData>(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
