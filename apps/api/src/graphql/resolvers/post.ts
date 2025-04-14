@@ -22,6 +22,7 @@ import { TypieError } from '@/errors';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { decode, encode, makeText, makeYDoc } from '@/utils';
+import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import {
   CharacterCountChange,
@@ -387,6 +388,41 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', input.siteId, { scope: 'site' });
 
       return post;
+    },
+  }),
+
+  deletePost: t.withAuth({ session: true }).fieldWithInput({
+    type: Post,
+    input: {
+      postId: t.input.id(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db
+        .select({
+          id: Entities.id,
+          siteId: Entities.siteId,
+        })
+        .from(Entities)
+        .innerJoin(Posts, eq(Entities.id, Posts.entityId))
+        .where(eq(Posts.id, input.postId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+        ctx,
+      });
+
+      await db
+        .update(Entities)
+        .set({
+          state: EntityState.DELETED,
+        })
+        .where(eq(Entities.id, entity.id));
+
+      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+
+      return input.postId;
     },
   }),
 
