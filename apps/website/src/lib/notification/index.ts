@@ -1,3 +1,4 @@
+export { dialog as Dialog } from './dialog/store';
 export { default as NotificationProvider } from './Provider.svelte';
-export * from './tip';
-export * from './toast';
+export { tip as Tip } from './tip/store';
+export { toast as Toast } from './toast/store';

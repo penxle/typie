@@ -13,7 +13,7 @@
   import { fragment, graphql } from '$graphql';
   import { autosize } from '$lib/actions';
   import { Helmet, HorizontalDivider } from '$lib/components';
-  import { tip } from '$lib/notification';
+  import { Tip } from '$lib/notification';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -170,7 +170,7 @@
         e.stopPropagation();
 
         forceSync();
-        tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
+        Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
       }
     });
 

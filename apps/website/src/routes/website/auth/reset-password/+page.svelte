@@ -5,7 +5,7 @@
   import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
-  import { toast } from '$lib/notification';
+  import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
 
@@ -31,7 +31,7 @@
         password: data.password,
       });
 
-      toast.success('비밀번호가 재설정되었어요');
+      Toast.success('비밀번호가 재설정되었어요');
 
       await goto('/auth/login', { replaceState: true });
     },
