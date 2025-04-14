@@ -147,6 +147,9 @@
             },
           }),
         )}
+        onclick={(e) => {
+          if (editing) e.preventDefault();
+        }}
       >
         <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', width: '16px', height: '16px', color: 'gray.500' })}>
           {#if open}
