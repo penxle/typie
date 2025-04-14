@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
-import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import * as Y from 'yjs';
 import {
@@ -390,6 +390,133 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', input.siteId, { scope: 'site' });
 
       return post;
+    },
+  }),
+
+  duplicatePost: t.withAuth({ session: true }).fieldWithInput({
+    type: Post,
+    input: {
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db
+        .select({
+          siteId: Entities.siteId,
+          parentEntityId: Entities.parentId,
+          order: Entities.order,
+        })
+        .from(Entities)
+        .innerJoin(Posts, eq(Entities.id, Posts.entityId))
+        .where(eq(Posts.id, input.postId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+        ctx,
+      });
+
+      const nextEntityOrder = await db
+        .select({ order: Entities.order })
+        .from(Entities)
+        .where(
+          and(
+            eq(Entities.siteId, entity.siteId),
+            entity.parentEntityId ? eq(Entities.parentId, entity.parentEntityId) : isNull(Entities.parentId),
+            gt(Entities.order, entity.order),
+          ),
+        )
+        .orderBy(desc(Entities.order))
+        .limit(1)
+        .then((rows) => rows[0]?.order ?? null);
+
+      const post = await db
+        .select({
+          title: Posts.title,
+          subtitle: Posts.subtitle,
+          maxWidth: Posts.maxWidth,
+          coverImageId: Posts.coverImageId,
+          content: {
+            body: PostContents.body,
+            text: PostContents.text,
+          },
+          option: {
+            allowComments: PostOptions.allowComments,
+            allowReactions: PostOptions.allowReactions,
+            allowCopies: PostOptions.allowCopies,
+            password: PostOptions.password,
+          },
+        })
+        .from(Posts)
+        .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
+        .innerJoin(PostOptions, eq(Posts.id, PostOptions.postId))
+        .where(eq(Posts.id, input.postId))
+        .then(firstOrThrow);
+
+      const title = `(사본) ${post.title ?? '(제목 없음)'}`;
+
+      const doc = makeYDoc({
+        title,
+        subtitle: post.subtitle,
+        body: post.content.body,
+        maxWidth: post.maxWidth,
+      });
+
+      const snapshot = Y.snapshot(doc);
+
+      const newPost = await db.transaction(async (tx) => {
+        const newEntity = await tx
+          .insert(Entities)
+          .values({
+            userId: ctx.session.userId,
+            siteId: entity.siteId,
+            parentId: entity.parentEntityId,
+            slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
+            permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
+            type: EntityType.POST,
+            order: encode(generateJitteredKeyBetween(nextEntityOrder ? decode(nextEntityOrder) : null, null)),
+          })
+          .returning({ id: Entities.id })
+          .then(firstOrThrow);
+
+        const newPost = await tx
+          .insert(Posts)
+          .values({
+            entityId: newEntity.id,
+            title,
+            subtitle: post.subtitle,
+            maxWidth: post.maxWidth,
+            coverImageId: post.coverImageId,
+          })
+          .returning()
+          .then(firstOrThrow);
+
+        await tx.insert(PostContents).values({
+          postId: newPost.id,
+          body: post.content.body,
+          text: post.content.text,
+          update: Y.encodeStateAsUpdateV2(doc),
+          vector: Y.encodeStateVector(doc),
+        });
+
+        await tx.insert(PostSnapshots).values({
+          userId: ctx.session.userId,
+          postId: newPost.id,
+          snapshot: Y.encodeSnapshotV2(snapshot),
+        });
+
+        await tx.insert(PostOptions).values({
+          postId: newPost.id,
+          visibility: PostVisibility.PRIVATE,
+          ...post.option,
+        });
+
+        return newPost;
+      });
+
+      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+
+      return newPost;
     },
   }),
 
