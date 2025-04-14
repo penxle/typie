@@ -1,3 +1,8 @@
+type AnnouncementNotificationData {
+  link: String
+  message: String!
+}
+
 input AuthorizeSignUpEmailInput {
   code: String!
 }
@@ -24,6 +29,10 @@ type Comment {
   createdAt: DateTime!
   id: ID!
   state: CommentState!
+}
+
+type CommentNotificationData {
+  comment: Comment!
 }
 
 enum CommentState {
@@ -220,6 +229,10 @@ input LoginWithEmailInput {
   password: String!
 }
 
+input MarkNotificationAsReadInput {
+  notificationId: ID!
+}
+
 input MoveEntityInput {
   entityId: ID!
   nextOrder: Binary
@@ -246,6 +259,8 @@ type Mutation {
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
   loginWithEmail(input: LoginWithEmailInput!): User!
   logout: Boolean!
+  markAllNotificationsAsRead: [Notification!]!
+  markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
   moveEntity(input: MoveEntityInput!): Entity!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
@@ -260,6 +275,25 @@ type Mutation {
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
   updateUser(input: UpdateUserInput!): User!
   verifyIdentity(input: VerifyIdentityInput!): Boolean!
+}
+
+type Notification {
+  category: NotificationCategory!
+  data: NotificationData!
+  id: ID!
+  state: NotificationState!
+}
+
+enum NotificationCategory {
+  ANNOUNCEMENT
+  COMMENT
+}
+
+union NotificationData = AnnouncementNotificationData | CommentNotificationData
+
+enum NotificationState {
+  READ
+  UNREAD
 }
 
 enum PaymentInvoiceState {
@@ -489,6 +523,7 @@ type User {
   email: String!
   id: ID!
   name: String!
+  notifications: [Notification!]!
   paymentMethod: PaymentMethod
   plan: UserPlan
   recentPosts: [Post!]!

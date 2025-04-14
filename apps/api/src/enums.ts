@@ -24,6 +24,18 @@ export const JobState = {
   FAILED: 'FAILED',
 } as const;
 
+export type NotificationCategory = keyof typeof NotificationCategory;
+export const NotificationCategory = {
+  ANNOUNCEMENT: 'ANNOUNCEMENT',
+  COMMENT: 'COMMENT',
+} as const;
+
+export type NotificationState = keyof typeof NotificationState;
+export const NotificationState = {
+  UNREAD: 'UNREAD',
+  READ: 'READ',
+} as const;
+
 export type PaymentInvoiceState = keyof typeof PaymentInvoiceState;
 export const PaymentInvoiceState = {
   UPCOMING: 'UPCOMING',

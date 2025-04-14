@@ -7,6 +7,7 @@ import {
   Entities,
   first,
   firstOrThrow,
+  Notifications,
   PaymentMethods,
   PostCharacterCountChanges,
   Posts,
@@ -23,7 +24,7 @@ import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { CharacterCountChange, Image, isTypeOf, PaymentMethod, Post, Site, User, UserPlan } from '../objects';
+import { CharacterCountChange, Image, isTypeOf, Notification, PaymentMethod, Post, Site, User, UserPlan } from '../objects';
 
 /**
  * * Types
@@ -140,6 +141,13 @@ User.implement({
           )
           .groupBy(date)
           .orderBy(asc(date));
+      },
+    }),
+
+    notifications: t.field({
+      type: [Notification],
+      resolve: async (user) => {
+        return await db.select().from(Notifications).where(eq(Notifications.userId, user.id)).orderBy(desc(Notifications.createdAt));
       },
     }),
   }),

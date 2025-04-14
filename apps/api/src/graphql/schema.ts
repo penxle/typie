@@ -5,6 +5,7 @@ import './resolvers/blob';
 import './resolvers/comment';
 import './resolvers/entity';
 import './resolvers/folder';
+import './resolvers/notification';
 import './resolvers/payment';
 import './resolvers/post';
 import './resolvers/preorder';

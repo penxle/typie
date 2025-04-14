@@ -52,6 +52,7 @@ export const Entity = createObjectRef('Entity', T.Entities);
 export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
 export const Image = createObjectRef('Image', T.Images);
+export const Notification = createObjectRef('Notification', T.Notifications);
 export const PaymentMethod = createObjectRef('PaymentMethod', T.PaymentMethods);
 export const Plan = createObjectRef('Plan', T.Plans);
 export const Post = createObjectRef('Post', T.Posts);
