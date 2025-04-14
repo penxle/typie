@@ -16,6 +16,7 @@ import {
   Posts,
   PostSnapshots,
   TableCode,
+  validateDbId,
 } from '@/db';
 import { EntityState, EntityType, PostVisibility } from '@/enums';
 import { TypieError } from '@/errors';
@@ -263,6 +264,7 @@ PostOptionView.implement({
 });
 
 PostReaction.implement({
+  isTypeOf: isTypeOf(TableCode.POST_REACTIONS),
   fields: (t) => ({
     id: t.exposeID('id'),
     emoji: t.expose('emoji', { type: 'String' }),
@@ -297,8 +299,8 @@ builder.mutationFields((t) => ({
   createPost: t.withAuth({ session: true }).fieldWithInput({
     type: Post,
     input: {
-      siteId: t.input.id(),
-      parentEntityId: t.input.id({ required: false }),
+      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
+      parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
     },
     resolve: async (_, { input }, ctx) => {
       const title = null;
@@ -393,9 +395,7 @@ builder.mutationFields((t) => ({
 
   deletePost: t.withAuth({ session: true }).fieldWithInput({
     type: Post,
-    input: {
-      postId: t.input.id(),
-    },
+    input: { postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }) },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
         .select({
@@ -429,7 +429,7 @@ builder.mutationFields((t) => ({
   updatePostOption: t.withAuth({ session: true }).fieldWithInput({
     type: PostOption,
     input: {
-      postId: t.input.id(),
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
       visibility: t.input.field({ type: PostVisibility }),
       password: t.input.string({ required: false }),
       allowComments: t.input.boolean(),
@@ -455,7 +455,7 @@ builder.mutationFields((t) => ({
   createPostReaction: t.fieldWithInput({
     type: PostReaction,
     input: {
-      postId: t.input.id(),
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
       emoji: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {

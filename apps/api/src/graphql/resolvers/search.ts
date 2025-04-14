@@ -1,5 +1,6 @@
 import DOMPurify from 'isomorphic-dompurify';
 import { match } from 'ts-pattern';
+import { TableCode, validateDbId } from '@/db';
 import { SearchHitType } from '@/enums';
 import { meili } from '@/search';
 import { assertSitePermission } from '@/utils/permission';
@@ -39,8 +40,7 @@ builder.queryFields((t) => ({
       }),
     }),
     args: {
-      // Meilisearch 필터 인젝션 방지용
-      siteId: t.arg.id({ validate: { regex: /^[0-9A-Z]+$/ } }),
+      siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }),
       query: t.arg.string(),
     },
     resolve: async (_, args, ctx) => {

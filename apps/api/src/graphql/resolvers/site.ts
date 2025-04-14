@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, Sites, TableCode } from '@/db';
+import { db, Entities, firstOrThrow, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState } from '@/enums';
 import { env } from '@/env';
 import { pubsub } from '@/pubsub';
@@ -49,7 +49,7 @@ Site.implement({
 builder.queryFields((t) => ({
   site: t.withAuth({ session: true }).field({
     type: Site,
-    args: { siteId: t.arg.id() },
+    args: { siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }) },
     resolve: async (_, args) => {
       return args.siteId;
     },
@@ -65,7 +65,7 @@ builder.subscriptionFields((t) => ({
     type: t.builder.unionType('SiteUpdateStreamPayload', {
       types: [Site, Entity],
     }),
-    args: { siteId: t.arg.id() },
+    args: { siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }) },
     subscribe: async (_, args, ctx) => {
       const repeater = pubsub.subscribe('site:update', args.siteId);
 

@@ -18,3 +18,7 @@ export const createDbId = (tableCode: string, opt?: { length: 'short' | 'moderat
 export const decodeDbId = (id: string) => {
   return id.split('0', 2)[0];
 };
+
+export const validateDbId = (tableCode: string) => {
+  return { regex: new RegExp(String.raw`^${tableCode}0[A-Z0-9]+$`) };
+};
