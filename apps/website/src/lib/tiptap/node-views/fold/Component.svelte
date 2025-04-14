@@ -11,7 +11,7 @@
 
   let { node, editor, updateAttributes }: Props = $props();
 
-  let open = $state(node.attrs.open);
+  let open = $state(editor?.current.isEditable ? node.attrs.open : false);
 </script>
 
 <NodeView>
