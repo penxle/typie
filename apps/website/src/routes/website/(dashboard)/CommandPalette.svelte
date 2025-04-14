@@ -289,14 +289,14 @@
     <div
       class={flex({
         flexDirection: 'column',
+        borderRadius: '16px',
         width: 'full',
         maxWidth: '600px',
         height: '600px',
         backgroundColor: 'gray.50',
-        borderRadius: '16px',
         boxShadow: 'large',
-        zIndex: '1',
         overflow: 'hidden',
+        zIndex: '1',
       })}
       transition:fade={{ duration: 150, easing: cubicOut }}
     >

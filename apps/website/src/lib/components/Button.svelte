@@ -95,11 +95,33 @@
             _disabled: 'gray.200',
           },
         },
+        danger: {
+          color: {
+            _enabled: {
+              base: 'white',
+              _hover: 'white',
+              _focusVisible: 'white',
+              _active: 'white',
+              _pressed: 'white',
+            },
+            _disabled: 'gray.500',
+          },
+          backgroundColor: {
+            _enabled: {
+              base: 'red.600',
+              _hover: 'red.500',
+              _focusVisible: 'red.500',
+              _active: 'red.700',
+              _pressed: 'red.700',
+            },
+            _disabled: 'gray.200',
+          },
+        },
       },
       size: {
-        sm: { borderRadius: '6px', paddingX: '14px', paddingY: '6px', height: '32px', fontSize: '14px', fontWeight: 'semibold' },
-        md: { borderRadius: '8px', paddingX: '20px', paddingY: '10px', height: '40px', fontSize: '14px', fontWeight: 'semibold' },
-        lg: { borderRadius: '10px', paddingX: '30px', paddingY: '10px', height: '48px', fontSize: '16px', fontWeight: 'semibold' },
+        sm: { borderRadius: '6px', paddingX: '12px', height: '32px', fontSize: '13px', fontWeight: 'semibold' },
+        md: { borderRadius: '8px', paddingX: '20px', height: '36px', fontSize: '14px', fontWeight: 'semibold' },
+        lg: { borderRadius: '12px', paddingX: '28px', height: '40px', fontSize: '15px', fontWeight: 'semibold' },
       },
     },
   });
@@ -112,6 +134,7 @@
       color: {
         primary: { color: 'white' },
         secondary: { color: 'gray.700' },
+        danger: { color: 'red.700' },
       },
     },
   });

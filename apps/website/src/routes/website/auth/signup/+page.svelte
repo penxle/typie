@@ -3,7 +3,7 @@
   import { TypieError } from '@/errors';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
-  import { toast } from '$lib/notification';
+  import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
 
@@ -32,7 +32,7 @@
         password: data.password,
       });
 
-      toast.success('이메일을 보냈어요');
+      Toast.success('이메일을 보냈어요');
     },
     onError: (error) => {
       if (error instanceof TypieError && error.code === 'user_email_exists') {
