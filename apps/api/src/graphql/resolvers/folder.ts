@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { db, Entities, first, firstOrThrow, Folders, TableCode } from '@/db';
 import { EntityState, EntityType } from '@/enums';
@@ -110,7 +110,7 @@ builder.mutationFields((t) => ({
   renameFolder: t.withAuth({ session: true }).fieldWithInput({
     type: Folder,
     input: {
-      id: t.input.id(),
+      folderId: t.input.id(),
       name: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
@@ -121,7 +121,7 @@ builder.mutationFields((t) => ({
         })
         .from(Folders)
         .innerJoin(Entities, eq(Folders.entityId, Entities.id))
-        .where(and(eq(Folders.id, input.id), eq(Entities.userId, ctx.session.userId)))
+        .where(and(eq(Folders.id, input.folderId), eq(Entities.userId, ctx.session.userId)))
         .then(firstOrThrow);
 
       await assertSitePermission({ userId: ctx.session.userId, siteId: folder.siteId, ctx });
@@ -138,6 +138,58 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', folder.siteId, { scope: 'site' });
 
       return renamedFolder;
+    },
+  }),
+
+  deleteFolder: t.withAuth({ session: true }).fieldWithInput({
+    type: Folder,
+    input: {
+      folderId: t.input.id(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const folder = await db
+        .select({
+          id: Folders.id,
+          entityId: Entities.id,
+          siteId: Entities.siteId,
+        })
+        .from(Folders)
+        .innerJoin(Entities, eq(Folders.entityId, Entities.id))
+        .where(eq(Folders.id, input.folderId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: folder.siteId,
+        ctx,
+      });
+
+      const recursiveChildEntityIds = await db
+        .execute<{ id: string }>(
+          sql`
+            WITH RECURSIVE child_entities AS (
+              SELECT id FROM entities WHERE parent_id = ${folder.entityId}
+              UNION ALL
+              SELECT e.id FROM entities e
+              INNER JOIN child_entities ON e.parent_id = child_entities.id
+            )
+            SELECT id FROM child_entities;
+          `,
+        )
+        .then((rows) => rows.map((row) => row.id));
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(Entities)
+          .set({
+            state: EntityState.DELETED,
+          })
+          .where(inArray(Entities.id, [folder.entityId, ...recursiveChildEntityIds]));
+      });
+
+      pubsub.publish('site:update', folder.siteId, { scope: 'site' });
+
+      return folder.id;
     },
   }),
 }));

@@ -62,6 +62,10 @@ input DeleteCommentInput {
   id: ID!
 }
 
+input DeleteFolderInput {
+  folderId: ID!
+}
+
 input DeletePostInput {
   postId: ID!
 }
@@ -222,6 +226,7 @@ type Mutation {
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   deleteComment(input: DeleteCommentInput!): Comment!
+  deleteFolder(input: DeleteFolderInput!): Folder!
   deletePost(input: DeletePostInput!): Post!
   enrollPlan(input: EnrollPlanInput!): UserPlan!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
@@ -371,7 +376,7 @@ type Query {
 }
 
 input RenameFolderInput {
-  id: ID!
+  folderId: ID!
   name: String!
 }
 
