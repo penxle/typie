@@ -293,7 +293,7 @@
     </div>
 
     <div class={css({ position: 'relative', flexGrow: '1', overflow: 'hidden' })}>
-      <div class={css({ overflow: 'scroll', paddingX: '16px', height: 'full' })}>
+      <div class={css({ paddingX: '16px', overflow: 'auto', height: 'full' })}>
         <PageList {entities} siteId={$user.sites[0].id} />
       </div>
 
@@ -306,6 +306,7 @@
           backgroundGradient: 'to-b',
           gradientFrom: app.preference.current.sidebarExpanded ? 'gray.50' : 'white',
           gradientTo: 'transparent',
+          pointerEvents: 'none',
         })}
       ></div>
 
@@ -318,6 +319,7 @@
           backgroundGradient: 'to-t',
           gradientFrom: app.preference.current.sidebarExpanded ? 'gray.50' : 'white',
           gradientTo: 'transparent',
+          pointerEvents: 'none',
         })}
       ></div>
     </div>

@@ -54,6 +54,27 @@
                   title
                 }
               }
+
+              children {
+                __typename
+                id
+                slug
+                order
+
+                node {
+                  ... on Folder {
+                    __typename
+                    id
+                    name
+                  }
+
+                  ... on Post {
+                    __typename
+                    id
+                    title
+                  }
+                }
+              }
             }
           }
 
@@ -73,6 +94,7 @@
 
           entities {
             id
+            slug
             order
 
             node {
@@ -80,7 +102,6 @@
                 id
                 name
               }
-
               ... on Post {
                 id
                 title
@@ -89,7 +110,39 @@
 
             children {
               id
+              slug
               order
+
+              node {
+                ... on Folder {
+                  __typename
+                  id
+                  name
+                }
+
+                ... on Post {
+                  id
+                  title
+                }
+              }
+
+              children {
+                id
+                slug
+                order
+
+                node {
+                  ... on Folder {
+                    id
+                    name
+                  }
+
+                  ... on Post {
+                    id
+                    title
+                  }
+                }
+              }
             }
           }
         }
@@ -116,6 +169,11 @@
           children {
             id
             order
+
+            children {
+              id
+              order
+            }
           }
         }
       }
@@ -136,7 +194,7 @@
 <div class={flex({ position: 'relative', alignItems: 'flex-start', height: 'screen' })}>
   <Sidebar $user={$query.me} entities={$query.me.sites[0].entities} />
 
-  <div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full' })}>
+  <div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full', overflowY: 'auto' })}>
     {@render children()}
   </div>
 </div>

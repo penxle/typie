@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { graphql } from '$graphql';
   import { css, cx } from '$styled-system/css';
   import { token } from '$styled-system/tokens';
@@ -7,7 +6,7 @@
   import type { Dragging, DropTarget, Entity, RootEntity } from './types';
 
   type Props = {
-    entities?: Entity[];
+    entities: Entity[];
     depth?: number;
     parent?: Entity | null;
     siteId: string;
@@ -27,52 +26,7 @@
   let dragging = $state<Dragging | null>(null);
   let dropTarget = $state<DropTarget | null>(null);
 
-  const entityQuery = graphql(`
-    query DashboardLayout_PageList_Query($id: ID!) @manual {
-      entity(entityId: $id) {
-        id
-        slug
-
-        children {
-          __typename
-          id
-          slug
-          order
-
-          node {
-            ... on Folder {
-              __typename
-              id
-              name
-            }
-
-            ... on Post {
-              __typename
-              id
-              title
-            }
-          }
-
-          children {
-            __typename
-            id
-            slug
-            order
-          }
-        }
-      }
-    }
-  `);
-
-  const load = () => {
-    if (parent) {
-      entityQuery.refetch({ id: parent.id });
-    }
-  };
-
-  onMount(() => {
-    load();
-  });
+  const maxDepth = 2;
 
   const moveEntity = graphql(`
     mutation DashboardLayout_PageList_MoveEntity_Mutation($input: MoveEntityInput!) {
@@ -98,11 +52,21 @@
     if (parent) {
       registerNode(listEl, { ...parent, depth });
     } else {
-      if (entities) registerNode(listEl, { id: null, __typename: 'RootEntity', children: entities, depth });
+      registerNode(listEl, { id: null, __typename: 'RootEntity', children: entities, node: null, depth });
     }
   });
 
   // TODO: 모바일 터치 대응(딜레이 주기)
+
+  const findDeepestDepth = (entity: Entity, depth = 0): number => {
+    const children = entity.children;
+
+    if (!children || children.length === 0) {
+      return depth;
+    }
+
+    return Math.max(...children.map((child) => findDeepestDepth(child, depth + 1)));
+  };
 
   const isDraggingOverTarget = (dropTarget: DropTarget, dragging: Dragging, ignoreAboveLine = false) => {
     if (!entities) return;
@@ -171,10 +135,7 @@
     indicatorEl.style.left = `${dropTarget.list.getBoundingClientRect().left}px`;
     indicatorEl.style.width = `${dropTarget.list.getBoundingClientRect().width}px`;
 
-    // 드롭 타겟 리스트 내 직계 자식 엘리먼트들
-    const childrenElems = dropTarget.list.querySelectorAll(
-      ':scope > .dnd-item-folder, :scope > .dnd-item-page, :scope > details > ul > .dnd-item-folder, :scope > details > ul > .dnd-item-page',
-    );
+    const childrenElems = dropTarget.list.querySelectorAll<HTMLElement>(':scope > .dnd-item-folder, :scope > .dnd-item-page');
 
     if (dropTarget.elem) {
       indicatorEl.style.top = `${dropTarget.list.getBoundingClientRect().top}px`;
@@ -256,9 +217,7 @@
 
     updateGhostElPosition(dragging, event);
 
-    let pointerTargetList =
-      document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.dnd-item-folder') ??
-      document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.dnd-list');
+    let pointerTargetList = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.dnd-list, .dnd-item-folder');
 
     if (!pointerTargetList) return;
 
@@ -279,99 +238,99 @@
     const pointerTopInList = event.clientY - pointerTargetList.getBoundingClientRect().top;
 
     // 드롭 타겟 리스트 내 직계 자식 엘리먼트들
-    const childrenElems = pointerTargetList.querySelectorAll<HTMLElement>(
-      ':scope > .dnd-item-folder, :scope > .dnd-item-page, :scope > details > ul > .dnd-item-folder, :scope > details > ul > .dnd-item-page',
+    // line indicator
+    const childrenElems = pointerTargetList.querySelectorAll<HTMLElement>(':scope > .dnd-item-folder, :scope > .dnd-item-page');
+    // box indicator
+    const childrenElems2 = pointerTargetList.querySelectorAll<HTMLElement>(
+      ':scope > details > ul > .dnd-item-folder, :scope > details > ul > .dnd-item-page, :scope > details > p',
     );
 
-    const mineRect = pointerTargetList.querySelector(':scope > details > summary')?.getBoundingClientRect();
+    if (childrenElems2.length > 0) {
+      const mineRect = pointerTargetList.querySelector(':scope > details > summary')?.getBoundingClientRect();
+      const emptyRect = pointerTargetList.querySelector(':scope > details > p')?.getBoundingClientRect();
 
-    if (mineRect) {
-      const childTop = mineRect.top - pointerTargetList.getBoundingClientRect().top;
+      if (emptyRect) {
+        const childTop = emptyRect.top - pointerTargetList.getBoundingClientRect().top;
 
-      // 1/4 지점 ~ 3/4 지점 사이에 있으면 indicator를 item 위에 표시
-      if (pointerTopInList < childTop + (mineRect.height / 4) * 3 && !(pointerTopInList > childTop + mineRect.height)) {
-        // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
-        for (const [i, child] of childrenElems.entries()) {
-          const pageRect =
-            child.querySelector(':scope > .dnd-item-body')?.getBoundingClientRect() ??
-            child.querySelector(':scope > .dnd-item-page > .dnd-item-body')?.getBoundingClientRect();
-          const folderRect = child.querySelector(':scope > details > .dnd-item-body')?.getBoundingClientRect();
+        // 1/4 지점 ~ 3/4 지점 사이에 있으면 indicator를 item 위에 표시
+        if (pointerTopInList < childTop + (emptyRect.height / 4) * 3 && !(pointerTopInList > childTop + emptyRect.height)) {
+          // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
 
-          // 페이지 위아래로 indicator 표시
-          if (pageRect) {
-            const childTop = pageRect.top - pointerTargetList.getBoundingClientRect().top;
-
-            // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
-            if (pointerTopInList < childTop + pageRect.height / 4) {
-              indicatorPositionDraft = i;
-              break;
-            } else if (pointerTopInList > childTop + pageRect.height) {
-              // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
-              indicatorPositionDraft = i + 1;
-            }
+          if (parent?.id === pointerTargetList.id) {
+            parentId = parent.id;
           }
-
-          // 폴더 위아래로 indicator 표시
-          if (folderRect) {
-            const childTop = folderRect.top - pointerTargetList.getBoundingClientRect().top;
-            // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
-            if (pointerTopInList < childTop + folderRect.height / 4) {
-              indicatorPositionDraft = i;
-              break;
-            } else if (pointerTopInList > childTop + folderRect.height) {
-              // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
-              indicatorPositionDraft = i + 1;
-            }
-          }
+          targetElemDraft = pointerTargetList;
         }
+      }
 
-        if (parent?.id === pointerTargetList.id) {
-          parentId = parent.id;
-        } else {
+      if (mineRect) {
+        const childTop = mineRect.top - pointerTargetList.getBoundingClientRect().top;
+
+        // 1/4 지점 ~ 3/4 지점 사이에 있으면 indicator를 item 위에 표시
+        if (pointerTopInList < childTop + (mineRect.height / 4) * 3 && !(pointerTopInList > childTop + mineRect.height)) {
+          // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
+
+          if (parent?.id === pointerTargetList.id) {
+            parentId = parent.id;
+          }
           targetElemDraft = pointerTargetList;
         }
       }
     }
 
-    // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
-    for (const [i, child] of childrenElems.entries()) {
-      const pageRect =
-        child.querySelector(':scope > .dnd-item-body')?.getBoundingClientRect() ??
-        child.querySelector(':scope > .dnd-item-page > .dnd-item-body')?.getBoundingClientRect();
-      const folderRect = child.querySelector(':scope > details > .dnd-item-body')?.getBoundingClientRect();
+    if (childrenElems) {
+      // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
+      for (const [i, child] of childrenElems.entries()) {
+        const pageRect = child.querySelector(':scope > .dnd-item-body')?.getBoundingClientRect();
+        const folderRect = child.querySelector(':scope > details > .dnd-item-body')?.getBoundingClientRect();
 
-      // 페이지 위아래로 indicator 표시
-      if (pageRect) {
-        const childTop = pageRect.top - pointerTargetList.getBoundingClientRect().top;
+        // 페이지 위아래로 indicator 표시
+        if (pageRect) {
+          const childTop = pageRect.top - pointerTargetList.getBoundingClientRect().top;
 
-        // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
-        if (pointerTopInList < childTop + pageRect.height / 4) {
-          indicatorPositionDraft = i;
-          break;
-        } else if (pointerTopInList > childTop + pageRect.height) {
-          // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
-          indicatorPositionDraft = i + 1;
+          // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
+          if (pointerTopInList < childTop + pageRect.height / 4) {
+            indicatorPositionDraft = i;
+            break;
+          } else if (pointerTopInList > childTop + pageRect.height) {
+            // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
+            indicatorPositionDraft = i + 1;
+          }
         }
-      }
 
-      // 폴더 위아래로 indicator 표시
-      if (folderRect) {
-        const childTop = folderRect.top - pointerTargetList.getBoundingClientRect().top;
-        // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
-        if (pointerTopInList < childTop + folderRect.height / 4) {
-          indicatorPositionDraft = i;
-          break;
-        } else if (pointerTopInList > childTop + folderRect.height) {
-          // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
-          indicatorPositionDraft = i + 1;
+        // 폴더 위아래로 indicator 표시
+        if (folderRect) {
+          const childTop = folderRect.top - pointerTargetList.getBoundingClientRect().top;
+          // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
+          if (pointerTopInList < childTop + folderRect.height / 4) {
+            indicatorPositionDraft = i;
+            break;
+          } else if (pointerTopInList > childTop + folderRect.height) {
+            // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
+            indicatorPositionDraft = i + 1;
+          }
         }
       }
     }
 
-    // FIXME: 폴더 닫혀있을 때도 여기에서 indicator 표시되도록
     if (indicatorPositionDraft === null) {
       // 마지막 아이템인 경우 그 아래에 indicator를 표시
       indicatorPositionDraft = childrenElems.length;
+    }
+
+    const targetListDepth =
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      nodeMap.get(pointerTargetList)!.depth + (targetElemDraft ? 1 : 0);
+
+    const draggingItemDeepestDepth = findDeepestDepth(dragging.entity);
+    const res = draggingItemDeepestDepth === 0 && dragging.entity.node?.__typename === 'Folder' ? 1 : draggingItemDeepestDepth;
+
+    const isMaxDepthExceeded = targetListDepth + res > maxDepth;
+
+    // invalid drop target
+    if (isMaxDepthExceeded) {
+      indicatorPositionDraft = null;
+      targetElemDraft = null;
     }
 
     dropTarget = {
@@ -402,11 +361,6 @@
           nextOrder: targetItem.children ? targetItem.children[0]?.order : undefined,
         });
 
-        if (parent && targetItem?.id) {
-          await entityQuery.refetch({ id: targetItem.id });
-          await entityQuery.refetch({ id: parent.id });
-        }
-
         // eslint-disable-next-line unicorn/no-negated-condition
       } else if (dropTarget.indicatorPosition !== null) {
         // line indicator
@@ -435,11 +389,6 @@
           nextOrder,
           previousOrder,
         });
-
-        if (parent) {
-          if (targetList?.id) await entityQuery.refetch({ id: targetList.id });
-          if (targetList === null || targetList?.id !== parent.id) await entityQuery.refetch({ id: parent.id });
-        }
       } else {
         // invalid drop target
         console.log('invalid drop target');
@@ -485,20 +434,22 @@
 
 <ul
   bind:this={listEl}
-  style:margin-left={depth === 0 ? 0 : 16 + 'px'}
+  style:margin-left={depth > 0 ? '16px' : '0'}
   class={cx(
     'dnd-list',
     css(
       {
         display: 'flex',
         flexDirection: 'column',
-        gap: '2px',
-        paddingLeft: '0',
-        paddingY: '6px',
+        gap: '3px',
+        paddingY: '3px',
         touchAction: 'none',
         height: 'full',
       },
-      parent === null && { paddingBottom: '24px' },
+      parent === null && {
+        paddingTop: '8px',
+        paddingBottom: '48px',
+      },
     ),
   )}
 >
@@ -522,15 +473,7 @@
     aria-hidden="true"
   ></div>
 
-  {#if parent}
-    {#if $entityQuery && $entityQuery.entity.children.length > 0}
-      {#each $entityQuery.entity.children as entity (entity.id)}
-        <PageItem {depth} {entity} {nodeMap} {onPointerDown} {registerNode} {siteId} />
-      {/each}
-    {/if}
-  {:else if entities}
-    {#each entities as entity (entity.id)}
-      <PageItem {depth} {entity} {nodeMap} {onPointerDown} {registerNode} {siteId} />
-    {/each}
-  {/if}
+  {#each entities as entity (entity.id)}
+    <PageItem {depth} {entity} {nodeMap} {onPointerDown} {registerNode} {siteId} />
+  {/each}
 </ul>

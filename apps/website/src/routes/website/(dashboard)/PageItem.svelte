@@ -25,43 +25,6 @@
 
   let { entity, depth, onPointerDown, registerNode, siteId, nodeMap }: Props = $props();
 
-  const entityQuery = graphql(`
-    query DashboardLayout_PageItem_Query($id: ID!) @manual {
-      entity(entityId: $id) {
-        id
-        slug
-
-        children {
-          __typename
-          id
-          slug
-          order
-
-          node {
-            ... on Folder {
-              __typename
-              id
-              name
-            }
-
-            ... on Post {
-              __typename
-              id
-              title
-            }
-          }
-
-          children {
-            __typename
-            id
-            slug
-            order
-          }
-        }
-      }
-    }
-  `);
-
   let open = $state(false);
   let itemEl = $state<HTMLElement>();
 
@@ -112,10 +75,6 @@
       }
     }
   `);
-
-  const loadEntity = async () => {
-    await entityQuery.refetch({ id: entity.id });
-  };
 </script>
 
 <li
@@ -135,7 +94,7 @@
             alignItems: 'center',
             gap: '6px',
             paddingX: '8px',
-            paddingY: '6px',
+            paddingY: '5px',
             borderRadius: '6px',
             fontSize: '14px',
             cursor: 'pointer',
@@ -221,23 +180,23 @@
             <Icon icon={PencilIcon} size={12} />
             <span>폴더 이름 변경</span>
           </MenuItem>
-          <MenuItem
-            onclick={async () => {
-              await createFolder({ siteId, name: '새 폴더', parentEntityId: entity.id });
-              await loadEntity();
-              open = true;
-            }}
-          >
-            <Icon icon={FolderPlusIcon} size={12} />
-            <span>하위 폴더 생성</span>
-          </MenuItem>
+          {#if depth < 2}
+            <MenuItem
+              onclick={async () => {
+                await createFolder({ siteId, name: '새 폴더', parentEntityId: entity.id });
+                open = true;
+              }}
+            >
+              <Icon icon={FolderPlusIcon} size={12} />
+              <span>하위 폴더 생성</span>
+            </MenuItem>
+          {/if}
           <MenuItem
             onclick={async () => {
               const resp = await createPost({
                 siteId,
                 parentEntityId: entity.id,
               });
-              await loadEntity();
               open = true;
               await goto(`/${resp.entity.slug}`);
             }}
@@ -248,8 +207,22 @@
         </Menu>
       </summary>
 
-      {#if open}
-        <PageList depth={depth + 1} {nodeMap} parent={entity} {siteId} />
+      {#if entity.children}
+        {#if entity.children.length > 0}
+          <PageList depth={depth + 1} entities={entity.children} {nodeMap} parent={entity} {siteId} />
+        {:else}
+          <p
+            class={css({
+              marginLeft: '16px',
+              paddingX: '8px',
+              paddingY: '5px',
+              fontSize: '14px',
+              color: 'gray.400',
+            })}
+          >
+            폴더가 비어있어요
+          </p>
+        {/if}
       {/if}
     </details>
   {:else}
@@ -262,7 +235,7 @@
           alignItems: 'center',
           gap: '6px',
           paddingX: '8px',
-          paddingY: '6px',
+          paddingY: '5px',
           borderRadius: '6px',
           fontWeight: 'medium',
           fontSize: '14px',
@@ -283,7 +256,6 @@
           flex: 'none',
           width: '16px',
           height: '16px',
-          marginLeft: '8px',
           color: 'gray.500',
         })}
       >
