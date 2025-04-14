@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode } from '@/db';
+import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, SiteState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
@@ -161,12 +161,12 @@ EntityView.implement({
 builder.queryFields((t) => ({
   entity: t.withAuth({ session: true }).field({
     type: Entity,
-    args: { id: t.arg.id() },
+    args: { entityId: t.arg.id({ validate: validateDbId(TableCode.ENTITIES) }) },
     resolve: async (_, args, ctx) => {
       return await db
         .select()
         .from(Entities)
-        .where(and(eq(Entities.id, args.id), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
+        .where(and(eq(Entities.id, args.entityId), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
     },
   }),
@@ -212,8 +212,8 @@ builder.mutationFields((t) => ({
   updateEntityPosition: t.withAuth({ session: true }).fieldWithInput({
     type: Entity,
     input: {
-      id: t.input.id(),
-      parentId: t.input.id({ required: false }),
+      entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
+      parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
       previousOrder: t.input.field({ type: 'Binary', required: false }),
       nextOrder: t.input.field({ type: 'Binary', required: false }),
     },
@@ -224,17 +224,17 @@ builder.mutationFields((t) => ({
           siteId: Entities.siteId,
         })
         .from(Entities)
-        .where(and(eq(Entities.id, input.id), eq(Entities.userId, ctx.session.userId)))
+        .where(and(eq(Entities.id, input.entityId), eq(Entities.userId, ctx.session.userId)))
         .then(firstOrThrow);
 
-      const parentEntity = input.parentId
+      const parentEntity = input.parentEntityId
         ? await db
             .select({
               id: Entities.id,
               siteId: Entities.siteId,
             })
             .from(Entities)
-            .where(and(eq(Entities.id, input.parentId), eq(Entities.userId, ctx.session.userId)))
+            .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.userId, ctx.session.userId)))
             .then(firstOrThrow)
         : null;
 

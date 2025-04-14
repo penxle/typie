@@ -1,6 +1,18 @@
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
-import { db, first, firstOrThrow, PaymentInvoices, PaymentMethods, PaymentRecords, Plans, TableCode, UserPlans, Users } from '@/db';
+import {
+  db,
+  first,
+  firstOrThrow,
+  PaymentInvoices,
+  PaymentMethods,
+  PaymentRecords,
+  Plans,
+  TableCode,
+  UserPlans,
+  Users,
+  validateDbId,
+} from '@/db';
 import {
   PaymentInvoiceState,
   PaymentMethodState,
@@ -108,7 +120,7 @@ builder.mutationFields((t) => ({
   enrollPlan: t.withAuth({ session: true }).fieldWithInput({
     type: UserPlan,
     input: {
-      planId: t.input.id(),
+      planId: t.input.id({ validate: validateDbId(TableCode.PLANS) }),
       billingCycle: t.input.field({ type: UserPlanBillingCycle }),
     },
     resolve: async (_, { input }, ctx) => {

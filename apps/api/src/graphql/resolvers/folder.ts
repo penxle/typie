@@ -1,7 +1,7 @@
 import { faker } from '@faker-js/faker';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
-import { db, Entities, first, firstOrThrow, Folders, TableCode } from '@/db';
+import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { pubsub } from '@/pubsub';
 import { assertSitePermission } from '@/utils/permission';
@@ -43,8 +43,8 @@ builder.mutationFields((t) => ({
   createFolder: t.withAuth({ session: true }).fieldWithInput({
     type: Folder,
     input: {
-      siteId: t.input.id(),
-      parentEntityId: t.input.id({ required: false }),
+      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
+      parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
       name: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
@@ -110,7 +110,7 @@ builder.mutationFields((t) => ({
   renameFolder: t.withAuth({ session: true }).fieldWithInput({
     type: Folder,
     input: {
-      folderId: t.input.id(),
+      folderId: t.input.id({ validate: validateDbId(TableCode.FOLDERS) }),
       name: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
@@ -143,9 +143,7 @@ builder.mutationFields((t) => ({
 
   deleteFolder: t.withAuth({ session: true }).fieldWithInput({
     type: Folder,
-    input: {
-      folderId: t.input.id(),
-    },
+    input: { folderId: t.input.id({ validate: validateDbId(TableCode.FOLDERS) }) },
     resolve: async (_, { input }, ctx) => {
       const folder = await db
         .select({

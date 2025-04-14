@@ -59,7 +59,7 @@ input CreatePreorderPaymentInput {
 scalar DateTime
 
 input DeleteCommentInput {
-  id: ID!
+  commentId: ID!
 }
 
 input DeleteFolderInput {
@@ -366,7 +366,7 @@ type PreorderUser {
 }
 
 type Query {
-  entity(id: ID!): Entity!
+  entity(entityId: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   entityViewByPermalink(permalink: String!): EntityView!
   me: User
@@ -452,9 +452,9 @@ input UpdateEmailInput {
 }
 
 input UpdateEntityPositionInput {
-  id: ID!
+  entityId: ID!
   nextOrder: Binary
-  parentId: ID
+  parentEntityId: ID
   previousOrder: Binary
 }
 

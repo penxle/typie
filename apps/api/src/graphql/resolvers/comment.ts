@@ -1,11 +1,12 @@
 import { and, eq } from 'drizzle-orm';
-import { Comments, db, Entities, firstOrThrow, PostOptions, Posts } from '@/db';
+import { Comments, db, Entities, firstOrThrow, PostOptions, Posts, TableCode, validateDbId } from '@/db';
 import { CommentState, EntityState } from '@/enums';
 import { TypieError } from '@/errors';
 import { builder } from '../builder';
-import { Comment } from '../objects';
+import { Comment, isTypeOf } from '../objects';
 
 Comment.implement({
+  isTypeOf: isTypeOf(TableCode.COMMENTS),
   fields: (t) => ({
     id: t.exposeID('id'),
     state: t.expose('state', { type: CommentState }),
@@ -21,7 +22,10 @@ Comment.implement({
 builder.mutationFields((t) => ({
   createComment: t.withAuth({ session: true }).fieldWithInput({
     type: Comment,
-    input: { postId: t.input.id(), content: t.input.string() },
+    input: {
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+      content: t.input.string(),
+    },
     resolve: async (_, { input }, ctx) => {
       const post = await db
         .select({ id: Posts.id })
@@ -45,14 +49,14 @@ builder.mutationFields((t) => ({
 
   deleteComment: t.withAuth({ session: true }).fieldWithInput({
     type: Comment,
-    input: { id: t.input.id() },
+    input: { commentId: t.input.id({ validate: validateDbId(TableCode.COMMENTS) }) },
     resolve: async (_, { input }, ctx) => {
       const { comment, entity } = await db
         .select({ comment: Comments, entity: { userId: Entities.userId } })
         .from(Comments)
         .innerJoin(Posts, eq(Comments.postId, Posts.id))
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .where(and(eq(Comments.id, input.id), eq(Comments.userId, ctx.session.userId)))
+        .where(and(eq(Comments.id, input.commentId), eq(Comments.userId, ctx.session.userId)))
         .then(firstOrThrow);
 
       if (comment.userId !== ctx.session.userId && entity.userId !== ctx.session.userId) {
