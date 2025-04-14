@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
-import { and, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import * as Y from 'yjs';
 import {
@@ -426,7 +426,7 @@ builder.mutationFields((t) => ({
             gt(Entities.order, entity.order),
           ),
         )
-        .orderBy(desc(Entities.order))
+        .orderBy(asc(Entities.order))
         .limit(1)
         .then((rows) => rows[0]?.order ?? null);
 
