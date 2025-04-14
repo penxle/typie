@@ -16,18 +16,18 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.20.3",
-    "@types/bun": "^1.2.8",
+    "@sveltejs/kit": "^2.20.5",
+    "@types/bun": "^1.2.9",
     "@typie/tsconfig": "workspace:*",
     "dayjs": "^1.11.13",
-    "hono": "^4.7.5",
+    "hono": "^4.7.6",
     "ipaddr.js": "^2.2.0",
     "pino": "^9.6.0",
     "remeda": "^2.21.2",
-    "svelte": "^5.25.6",
+    "svelte": "^5.26.2",
     "svgo": "^3.3.2",
-    "typescript": "^5.8.2",
-    "vite": "^6.2.5",
+    "typescript": "^5.8.3",
+    "vite": "^6.2.6",
     "xmlbuilder2": "^3.1.1"
   }
 }
