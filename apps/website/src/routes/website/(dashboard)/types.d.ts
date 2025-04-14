@@ -40,5 +40,6 @@ export type Post = {
 export type RootEntity = {
   __typename: 'RootEntity';
   id: null;
+  node: null;
   children: Entity[];
 };
