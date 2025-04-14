@@ -216,6 +216,13 @@ input LoginWithEmailInput {
   password: String!
 }
 
+input MoveEntityInput {
+  entityId: ID!
+  nextOrder: Binary
+  parentEntityId: ID
+  previousOrder: Binary
+}
+
 type Mutation {
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): User!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): User!
@@ -234,6 +241,7 @@ type Mutation {
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
   loginWithEmail(input: LoginWithEmailInput!): User!
   logout: Boolean!
+  moveEntity(input: MoveEntityInput!): Entity!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   renameFolder(input: RenameFolderInput!): Folder!
@@ -243,7 +251,6 @@ type Mutation {
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   updateEmail(input: UpdateEmailInput!): Boolean!
-  updateEntityPosition(input: UpdateEntityPositionInput!): Entity!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
   updateUser(input: UpdateUserInput!): User!
@@ -449,13 +456,6 @@ input UnfurlEmbedInput {
 
 input UpdateEmailInput {
   code: String!
-}
-
-input UpdateEntityPositionInput {
-  entityId: ID!
-  nextOrder: Binary
-  parentEntityId: ID
-  previousOrder: Binary
 }
 
 input UpdatePaymentMethodInput {

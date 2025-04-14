@@ -27,7 +27,7 @@
 
   const entityQuery = graphql(`
     query DashboardLayout_PageItem_Query($id: ID!) @manual {
-      entity(id: $id) {
+      entity(entityId: $id) {
         id
         slug
 
@@ -169,7 +169,7 @@
               e.preventDefault();
               if (editing && entity.node?.__typename === 'Folder') {
                 await renameFolder({
-                  id: entity.node.id,
+                  folderId: entity.node.id,
                   name,
                 });
                 editing = false;
