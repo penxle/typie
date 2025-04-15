@@ -14,6 +14,7 @@
   import { Icon, Menu, MenuItem } from '$lib/components';
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
+  import { maxDepth } from './const';
   import PageList from './PageList.svelte';
   import type { Entity, RootEntity } from './types';
 
@@ -233,7 +234,8 @@
             <Icon icon={PencilIcon} size={12} />
             <span>폴더 이름 변경</span>
           </MenuItem>
-          {#if depth < 2}
+
+          {#if depth < maxDepth - 1}
             <MenuItem
               onclick={async () => {
                 await createFolder({ siteId, name: '새 폴더', parentEntityId: entity.id });
