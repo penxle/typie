@@ -444,7 +444,6 @@
         gap: '3px',
         paddingY: '3px',
         touchAction: 'none',
-        height: 'full',
       },
       parent === null && {
         paddingTop: '8px',
