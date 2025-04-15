@@ -67,7 +67,7 @@
 
 <aside
   style:--expanded-width="240px"
-  style:--threshold-width="200px"
+  style:--threshold-width="48px"
   style:--y-offset="60px"
   class={css({
     position: 'relative',
