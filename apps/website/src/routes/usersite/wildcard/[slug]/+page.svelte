@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { Helmet, HorizontalDivider, Img, ProtectiveRegion } from '$lib/components';
   import { TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import Header from './Header.svelte';
 
   const query = graphql(`
     query UsersiteWildcardSlugPage_Query($origin: String!, $slug: String!) {
@@ -41,6 +43,30 @@
       }
     }
   `);
+
+  const meQuery = graphql(`
+    query UsersiteWildcardSlugPage_Me_Query @manual {
+      me {
+        id
+
+        ...UsersiteWildcardSlugPage_Header_user
+      }
+    }
+  `);
+
+  let loading = $state(true);
+
+  const load = async () => {
+    try {
+      await meQuery.refetch();
+    } finally {
+      loading = false;
+    }
+  };
+
+  onMount(() => {
+    load();
+  });
 </script>
 
 {#if $query.entityView.node.__typename === 'PostView'}
@@ -50,6 +76,8 @@
     title={$query.entityView.node.title}
   />
 
+  <Header $user={$meQuery?.me ?? null} {loading} />
+
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen', backgroundColor: 'gray.100' })}>
     <div
       style:--prosemirror-max-width={`${$query.entityView.node.maxWidth}px`}
@@ -57,6 +85,7 @@
         flexDirection: 'column',
         alignItems: 'center',
         flexGrow: '1',
+        paddingX: '20px',
         paddingY: '80px',
         width: 'full',
         maxWidth: '1200px',
