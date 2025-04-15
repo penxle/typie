@@ -2,6 +2,7 @@
   import { graphql } from '$graphql';
   import { css, cx } from '$styled-system/css';
   import { token } from '$styled-system/tokens';
+  import { maxDepth } from './const';
   import PageItem from './PageItem.svelte';
   import type { Dragging, DropTarget, Entity, RootEntity } from './types';
 
@@ -25,8 +26,6 @@
   let indicatorEl = $state<HTMLElement>();
   let dragging = $state<Dragging | null>(null);
   let dropTarget = $state<DropTarget | null>(null);
-
-  const maxDepth = 2;
 
   const moveEntity = graphql(`
     mutation DashboardLayout_PageList_MoveEntity_Mutation($input: MoveEntityInput!) {
