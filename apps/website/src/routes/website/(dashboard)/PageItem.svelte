@@ -142,14 +142,35 @@
           if (editing) e.preventDefault();
         }}
       >
-        <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', width: '16px', height: '16px', color: 'gray.500' })}>
+        <span
+          class={css({
+            display: 'none',
+            alignItems: 'center',
+            flex: 'none',
+            width: '16px',
+            height: '16px',
+            color: 'gray.500',
+            _groupHover: { display: 'flex' },
+          })}
+        >
           {#if open}
             <Icon icon={ChevronUpIcon} size={14} />
           {:else}
             <Icon icon={ChevronDownIcon} size={14} />
           {/if}
         </span>
-        <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', width: '16px', height: '16px', color: 'gray.500' })}>
+
+        <span
+          class={css({
+            display: 'flex',
+            alignItems: 'center',
+            flex: 'none',
+            width: '16px',
+            height: '16px',
+            color: 'gray.500',
+            _groupHover: { display: 'none' },
+          })}
+        >
           <Icon icon={FolderIcon} size={14} />
         </span>
 
