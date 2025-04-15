@@ -113,11 +113,10 @@
     const draggingElRect = dragging.elem.getBoundingClientRect();
 
     const offsetX = dragging.event.clientX - draggingElRect.left;
-    const offsetY = dragging.event.clientY - draggingElRect.top;
 
     dragging.ghostEl.style.display = 'block';
     dragging.ghostEl.style.left = `${e.clientX - offsetX}px`;
-    dragging.ghostEl.style.top = `${e.clientY - offsetY}px`;
+    dragging.ghostEl.style.top = `${e.clientY}px`;
     dragging.ghostEl.style.opacity = dropTarget?.elem && dropTarget.elem !== dragging.elem ? '0.25' : '0.35';
   };
 
@@ -164,7 +163,7 @@
 
     if (dropTarget.elem) {
       indicatorEl.style.height = `${dropTarget.elem.getBoundingClientRect().height}px`;
-      indicatorEl.style.opacity = '0.9';
+      indicatorEl.style.opacity = '0.75';
       indicatorEl.style.borderWidth = '1px';
     } else {
       indicatorEl.style.height = '3px';
@@ -237,15 +236,12 @@
     // 드롭 타겟 리스트 내 포인터의 y 좌표
     const pointerTopInList = event.clientY - pointerTargetList.getBoundingClientRect().top;
 
-    // 드롭 타겟 리스트 내 직계 자식 엘리먼트들
-    // line indicator
-    const childrenElems = pointerTargetList.querySelectorAll<HTMLElement>(':scope > .dnd-item-folder, :scope > .dnd-item-page');
     // box indicator
     const childrenElems2 = pointerTargetList.querySelectorAll<HTMLElement>(
       ':scope > details > ul > .dnd-item-folder, :scope > details > ul > .dnd-item-page, :scope > details > p',
     );
 
-    if (childrenElems2.length > 0) {
+    if (childrenElems2.length > 0 && parent?.id !== pointerTargetList.id) {
       const mineRect = pointerTargetList.querySelector(':scope > details > summary')?.getBoundingClientRect();
       const emptyRect = pointerTargetList.querySelector(':scope > details > p')?.getBoundingClientRect();
 
@@ -253,12 +249,9 @@
         const childTop = emptyRect.top - pointerTargetList.getBoundingClientRect().top;
 
         // 1/4 지점 ~ 3/4 지점 사이에 있으면 indicator를 item 위에 표시
-        if (pointerTopInList < childTop + (emptyRect.height / 4) * 3 && !(pointerTopInList > childTop + emptyRect.height)) {
+        if (pointerTopInList < childTop + (emptyRect.height / 4) * 3 || pointerTopInList > childTop + emptyRect.height) {
           // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
-
-          if (parent?.id === pointerTargetList.id) {
-            parentId = parent.id;
-          }
+          indicatorPositionDraft = 0;
           targetElemDraft = pointerTargetList;
         }
       }
@@ -267,18 +260,35 @@
         const childTop = mineRect.top - pointerTargetList.getBoundingClientRect().top;
 
         // 1/4 지점 ~ 3/4 지점 사이에 있으면 indicator를 item 위에 표시
-        if (pointerTopInList < childTop + (mineRect.height / 4) * 3 && !(pointerTopInList > childTop + mineRect.height)) {
+        if (pointerTopInList < childTop + (mineRect.height / 4) * 3 || pointerTopInList > childTop + mineRect.height) {
           // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
-
-          if (parent?.id === pointerTargetList.id) {
-            parentId = parent.id;
-          }
+          indicatorPositionDraft = 0;
           targetElemDraft = pointerTargetList;
+        }
+      }
+
+      for (const [i, child] of childrenElems2.entries()) {
+        const folderRect = child.querySelector(':scope > details > .dnd-item-body')?.getBoundingClientRect();
+
+        // 폴더 위아래로 indicator 표시
+        if (folderRect) {
+          const childTop = folderRect.top - pointerTargetList.getBoundingClientRect().top;
+          // 1/4 지점보다 위에 있으면 그 앞에 indicator를 표시
+          if (pointerTopInList < childTop + folderRect.height / 4) {
+            indicatorPositionDraft = i;
+            break;
+          } else if (pointerTopInList > childTop + folderRect.height) {
+            // 3/4 지점보다 아래에 있으면 그 다음에 indicator를 표시
+            indicatorPositionDraft = i + 1;
+          }
         }
       }
     }
 
-    if (childrenElems) {
+    // line indicator
+    const childrenElems = pointerTargetList.querySelectorAll<HTMLElement>(':scope > .dnd-item-folder, :scope > .dnd-item-page');
+
+    if (childrenElems.length > 0 && !targetElemDraft) {
       // 포인터가 위치한 자식 엘리먼트의 인덱스로 indicator 위치를 결정
       for (const [i, child] of childrenElems.entries()) {
         const pageRect = child.querySelector(':scope > .dnd-item-body')?.getBoundingClientRect();
@@ -311,11 +321,11 @@
           }
         }
       }
-    }
 
-    if (indicatorPositionDraft === null) {
-      // 마지막 아이템인 경우 그 아래에 indicator를 표시
-      indicatorPositionDraft = childrenElems.length;
+      if (indicatorPositionDraft === null) {
+        // 마지막 아이템인 경우 그 아래에 indicator를 표시
+        indicatorPositionDraft = childrenElems.length;
+      }
     }
 
     const targetListDepth =
@@ -434,7 +444,7 @@
 
 <ul
   bind:this={listEl}
-  style:margin-left={depth > 0 ? '16px' : '0'}
+  style:margin-left={parent === null ? '0' : '22px'}
   class={cx(
     'dnd-list',
     css(
