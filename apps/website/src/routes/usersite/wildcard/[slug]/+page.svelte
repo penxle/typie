@@ -6,6 +6,8 @@
   import { TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import Comment from './Comment.svelte';
+  import CommentInput from './CommentInput.svelte';
   import Header from './Header.svelte';
 
   const query = graphql(`
@@ -26,6 +28,7 @@
             option {
               id
               protectContent
+              allowComment
             }
 
             coverImage {
@@ -43,6 +46,11 @@
               ... on PostViewBodyUnavailable {
                 reason
               }
+            }
+
+            comments {
+              id
+              ...UsersiteWildcardSlugPage_Comment_comment
             }
           }
 
@@ -141,6 +149,22 @@
       {:else if $query.entityView.node.body.__typename === 'PostViewBodyUnavailable'}
         <div class={css({ fontSize: '16px', fontWeight: 'medium' })}>
           {$query.entityView.node.body.reason}
+        </div>
+      {/if}
+
+      {#if $query.entityView.node.option.allowComment}
+        <div class={flex({ direction: 'column', gap: '24px', marginTop: '24px', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+          <p class={css({ fontWeight: 'semibold' })}>댓글 {$query.entityView.node.comments.length}</p>
+
+          <CommentInput postId={$query.entityView.node.id} />
+
+          {#each $query.entityView.node.comments as comment, i (comment.id)}
+            {#if i !== 0}
+              <HorizontalDivider />
+            {/if}
+
+            <Comment $comment={comment} />
+          {/each}
         </div>
       {/if}
     </div>
