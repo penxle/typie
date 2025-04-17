@@ -69,8 +69,24 @@ export const serve = async ({ Server, manifest, prerendered }) => {
     return response;
   });
 
+  app.onError((_, c) => {
+    return c.text('Internal Server Error', { status: 500 });
+  });
+
   Bun.serve({
     fetch: app.fetch,
+    error: (err) => {
+      if (err.code === 'ENOENT') {
+        return new Response('Not Found', {
+          status: 404,
+        });
+      }
+
+      return new Response('Internal Server Error', {
+        status: 500,
+      });
+    },
     port: 3000,
+    idleTimeout: 0,
   });
 };
