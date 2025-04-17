@@ -22,6 +22,7 @@ export type ArtifactBase = {
   file: string;
   source: string;
   selections: Selection[];
+  hash: bigint;
   meta: Record<string, string>;
 };
 

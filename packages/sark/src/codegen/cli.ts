@@ -10,9 +10,9 @@ const main = async () => {
   const resolvedSchemaPath = path.join(projectDir, schemaPath);
 
   const schema = await getSchema(resolvedSchemaPath);
-  const artifacts = await getAllArtifacts(schema, projectDir);
+  const artifacts = await getAllArtifacts(schema.schema, projectDir);
 
-  await writeArtifactAssets(resolvedOutDir, schema, artifacts);
+  await writeArtifactAssets(resolvedOutDir, schema.schema, artifacts);
   await writePublicAssets(resolvedOutDir, artifacts);
   await writeMiscAssets(resolvedOutDir);
   await writeTypeAssets(resolvedOutDir, projectDir, artifacts);
