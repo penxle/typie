@@ -207,7 +207,7 @@ PostView.implement({
       type: PostOptionView,
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
-          name: 'PostOptions(postId)',
+          name: 'PostView.option',
           load: async (ids) => {
             return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
           },
@@ -238,7 +238,7 @@ PostView.implement({
       type: [Comment],
       resolve: async (post, _, ctx) => {
         const optionLoader = ctx.loader({
-          name: 'PostOptions(postId)',
+          name: 'PostView.option',
           load: async (ids) => {
             return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
           },
@@ -442,7 +442,6 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
-        ctx,
       });
 
       const nextEntityOrder = await db
@@ -554,10 +553,7 @@ builder.mutationFields((t) => ({
     input: { postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }) },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
-        .select({
-          id: Entities.id,
-          siteId: Entities.siteId,
-        })
+        .select({ id: Entities.id, siteId: Entities.siteId })
         .from(Entities)
         .innerJoin(Posts, eq(Entities.id, Posts.entityId))
         .where(eq(Posts.id, input.postId))
@@ -566,7 +562,6 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
-        ctx,
       });
 
       await db
@@ -610,7 +605,7 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  unlockPasswordedPost: t.fieldWithInput({
+  unlockPostView: t.fieldWithInput({
     type: PostView,
     input: {
       postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
@@ -618,9 +613,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const postOption = await db
-        .select({
-          password: PostOptions.password,
-        })
+        .select({ password: PostOptions.password })
         .from(PostOptions)
         .where(eq(PostOptions.postId, input.postId))
         .then(firstOrThrow);
@@ -629,7 +622,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_password' });
       }
 
-      await redis.set(`post:password-unlock:${input.postId}:${ctx.deviceId}`, 'true', 'EX', 60 * 60 * 24);
+      await redis.setex(`postview:unlock:${input.postId}:${ctx.deviceId}`, 60 * 60 * 24, 'true');
 
       return input.postId;
     },

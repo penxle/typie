@@ -16,14 +16,6 @@ export const EntityType = {
   POST: 'POST',
 } as const;
 
-export type JobState = keyof typeof JobState;
-export const JobState = {
-  PENDING: 'PENDING',
-  RUNNING: 'RUNNING',
-  COMPLETED: 'COMPLETED',
-  FAILED: 'FAILED',
-} as const;
-
 export type NotificationCategory = keyof typeof NotificationCategory;
 export const NotificationCategory = {
   ANNOUNCEMENT: 'ANNOUNCEMENT',

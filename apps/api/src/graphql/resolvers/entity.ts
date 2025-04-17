@@ -222,49 +222,47 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
-        .select({
-          id: Entities.id,
-          siteId: Entities.siteId,
-        })
+        .select({ id: Entities.id, siteId: Entities.siteId })
         .from(Entities)
         .where(and(eq(Entities.id, input.entityId), eq(Entities.userId, ctx.session.userId)))
         .then(firstOrThrow);
 
-      const parentEntity = input.parentEntityId
-        ? await db
-            .select({
-              id: Entities.id,
-              siteId: Entities.siteId,
-            })
-            .from(Entities)
-            .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.userId, ctx.session.userId)))
-            .then(firstOrThrow)
-        : null;
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+      });
 
-      await assertSitePermission({ userId: ctx.session.userId, siteId: entity.siteId, ctx });
+      if (input.parentEntityId) {
+        const parentEntity = await db
+          .select({ id: Entities.id, siteId: Entities.siteId })
+          .from(Entities)
+          .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.userId, ctx.session.userId)))
+          .then(firstOrThrow);
 
-      if (parentEntity) {
         if (parentEntity.siteId !== entity.siteId) {
           throw new TypieError({ code: 'cross_site' });
         }
 
-        const ancestors = await db.execute<{ id: string }>(sql`
-          WITH RECURSIVE sq AS (
-            SELECT ${Entities.id}, ${Entities.parentId}
-            FROM ${Entities}
-            WHERE ${eq(Entities.id, parentEntity.id)}
-            UNION ALL
-            SELECT ${Entities.id}, ${Entities.parentId}
-            FROM ${Entities}
-            JOIN sq ON ${Entities.id} = sq.parent_id
-            WHERE sq.parent_id IS NOT NULL
+        const hasCycle = await db
+          .execute<{ exists: boolean }>(
+            sql`
+              WITH RECURSIVE sq AS (
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                WHERE ${eq(Entities.id, parentEntity.id)}
+                UNION ALL
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                JOIN sq ON ${Entities.id} = sq.parent_id
+              )
+              SELECT EXISTS (
+                SELECT 1 FROM sq WHERE ${eq(sql`id`, entity.id)}
+              ) as exists
+            `,
           )
-          SELECT id
-          FROM sq
-          WHERE ${eq(sql`id`, entity.id)}
-        `);
+          .then(firstOrThrow);
 
-        if (ancestors.length > 0) {
+        if (hasCycle.exists) {
           throw new TypieError({ code: 'circular_reference' });
         }
       }
@@ -272,7 +270,7 @@ builder.mutationFields((t) => ({
       const updatedEntity = await db
         .update(Entities)
         .set({
-          parentId: parentEntity?.id ?? null,
+          parentId: input.parentEntityId,
           order: encode(
             generateJitteredKeyBetween(
               input.previousOrder ? decode(input.previousOrder) : null,
