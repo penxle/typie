@@ -116,23 +116,21 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const folder = await db
-        .select({
-          id: Folders.id,
-          siteId: Entities.siteId,
-        })
+        .select({ siteId: Entities.siteId })
         .from(Folders)
         .innerJoin(Entities, eq(Folders.entityId, Entities.id))
         .where(and(eq(Folders.id, input.folderId), eq(Entities.userId, ctx.session.userId)))
         .then(firstOrThrow);
 
-      await assertSitePermission({ userId: ctx.session.userId, siteId: folder.siteId, ctx });
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: folder.siteId,
+      });
 
       const renamedFolder = await db
         .update(Folders)
-        .set({
-          name: input.name,
-        })
-        .where(eq(Folders.id, folder.id))
+        .set({ name: input.name })
+        .where(eq(Folders.id, input.folderId))
         .returning()
         .then(firstOrThrow);
 
@@ -160,30 +158,25 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: folder.siteId,
-        ctx,
       });
 
-      const recursiveChildEntityIds = await db
-        .execute<{ id: string }>(
-          sql`
-            WITH RECURSIVE child_entities AS (
-              SELECT id FROM entities WHERE parent_id = ${folder.entityId}
-              UNION ALL
-              SELECT e.id FROM entities e
-              INNER JOIN child_entities ON e.parent_id = child_entities.id
-            )
-            SELECT id FROM child_entities;
-          `,
-        )
-        .then((rows) => rows.map((row) => row.id));
+      const descendants = await db.execute<{ id: string }>(
+        sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
+            UNION ALL
+            SELECT ${Entities.id} FROM ${Entities}
+            JOIN sq ON ${Entities.parentId} = sq.id
+          )
+          SELECT id FROM sq;
+        `,
+      );
 
       await db.transaction(async (tx) => {
         await tx
           .update(Entities)
-          .set({
-            state: EntityState.DELETED,
-          })
-          .where(inArray(Entities.id, [folder.entityId, ...recursiveChildEntityIds]));
+          .set({ state: EntityState.DELETED })
+          .where(inArray(Entities.id, [folder.entityId, ...descendants.map(({ id }) => id)]));
       });
 
       pubsub.publish('site:update', folder.siteId, { scope: 'site' });

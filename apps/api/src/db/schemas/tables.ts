@@ -167,7 +167,7 @@ export const PaymentMethods = pgTable(
   (t) => [
     uniqueIndex()
       .on(t.userId)
-      .where(sql`${t.state} = 'ACTIVE'`),
+      .where(eq(t.state, sql`'ACTIVE'`)),
   ],
 );
 

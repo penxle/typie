@@ -8,7 +8,6 @@ function createPgEnum<T extends string>(enumName: string, obj: Record<string, T>
 export const _CommentState = createPgEnum('_comment_state', E.CommentState);
 export const _EntityState = createPgEnum('_entity_state', E.EntityState);
 export const _EntityType = createPgEnum('_entity_type', E.EntityType);
-export const _JobState = createPgEnum('_job_state', E.JobState);
 export const _NotificationCategory = createPgEnum('_notification_category', E.NotificationCategory);
 export const _NotificationState = createPgEnum('_notification_state', E.NotificationState);
 export const _PaymentInvoiceState = createPgEnum('_payment_invoice_state', E.PaymentInvoiceState);

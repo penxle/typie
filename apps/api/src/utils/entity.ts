@@ -25,7 +25,6 @@ export const checkEntityPermission = async ({ entityId, userId, ctx }: CheckEnti
   return assertSitePermission({
     siteId: entity.siteId,
     userId,
-    ctx,
   })
     .then(() => true)
     .catch(() => false);

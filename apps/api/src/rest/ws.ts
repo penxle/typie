@@ -1,11 +1,13 @@
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import Redis from 'ioredis';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
 import { PostDocumentSyncMessageKind } from '@/const';
+import { db, firstOrThrow, PostContents } from '@/db';
 import { env } from '@/env';
 import { enqueueJob } from '@/mq';
-import { decode, encode, getPostDocument } from '@/utils';
+import { decode, encode } from '@/utils';
 import { upgradeWebSocket } from '@/ws';
 import type { ServerWebSocket } from 'bun';
 import type { WSContext } from 'hono/ws';
@@ -117,3 +119,34 @@ ws.get(
     };
   }),
 );
+
+const getPostDocument = async (postId: string) => {
+  const { update, vector } = await db
+    .select({ update: PostContents.update, vector: PostContents.vector })
+    .from(PostContents)
+    .where(eq(PostContents.postId, postId))
+    .then(firstOrThrow);
+
+  const buffers = await redis.smembersBuffer(`post:document:updates:${postId}`);
+  if (buffers.length === 0) {
+    return {
+      update,
+      vector,
+    };
+  }
+
+  const pendingUpdates = buffers.map((buffer) => {
+    const data = new Uint8Array(buffer);
+    const sepIdx = data.indexOf(0);
+
+    return data.slice(sepIdx + 1);
+  });
+
+  const updatedUpdate = Y.mergeUpdatesV2([update, ...pendingUpdates]);
+  const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
+
+  return {
+    update: updatedUpdate,
+    vector: updatedVector,
+  };
+};

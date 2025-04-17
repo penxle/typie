@@ -228,13 +228,6 @@ The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://
 """
 scalar JSON
 
-enum JobState {
-  COMPLETED
-  FAILED
-  PENDING
-  RUNNING
-}
-
 input LoginWithEmailInput {
   email: String!
   password: String!
@@ -282,7 +275,7 @@ type Mutation {
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
-  unlockPasswordedPost(input: UnlockPasswordedPostInput!): PostView!
+  unlockPostView(input: UnlockPostViewInput!): PostView!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
@@ -528,7 +521,7 @@ input UnfurlEmbedInput {
   url: String!
 }
 
-input UnlockPasswordedPostInput {
+input UnlockPostViewInput {
   password: String!
   postId: ID!
 }
