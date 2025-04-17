@@ -270,6 +270,7 @@ type Mutation {
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
+  unlockPasswordedPost(input: UnlockPasswordedPostInput!): PostView!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
@@ -378,17 +379,23 @@ type PostReaction {
 }
 
 type PostView implements IPost {
-  body: JSON!
+  body: JSON
   comments: [Comment!]!
   coverImage: Image
   entity: EntityView!
   excerpt: String!
+  hiddenReason: PostViewHiddenReason
   id: ID!
   maxWidth: Int!
   option: PostOptionView!
   reactions: [PostReaction!]!
   subtitle: String
   title: String!
+}
+
+enum PostViewHiddenReason {
+  AGE
+  PASSWORD
 }
 
 enum PostVisibility {
@@ -491,6 +498,11 @@ type Subscription {
 
 input UnfurlEmbedInput {
   url: String!
+}
+
+input UnlockPasswordedPostInput {
+  password: String!
+  postId: ID!
 }
 
 input UpdateEmailInput {

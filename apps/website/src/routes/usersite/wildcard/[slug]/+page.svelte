@@ -23,7 +23,7 @@
             body
             excerpt
             maxWidth
-
+            hiddenReason
             coverImage {
               id
               ...Img_image
@@ -119,12 +119,16 @@
         <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
       </div>
 
-      {#if $query.entityView.node.option.allowCopies}
-        <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
-      {:else}
-        <ProtectiveRegion>
+      {#if $query.entityView.node.body}
+        {#if $query.entityView.node.option.allowCopies}
           <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
-        </ProtectiveRegion>
+        {:else}
+          <ProtectiveRegion>
+            <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
+          </ProtectiveRegion>
+        {/if}
+      {:else if $query.entityView.node.hiddenReason === 'PASSWORD'}
+        비밀번호 걸려있음! (TODO: 비밀번호 입력창)
       {/if}
     </div>
   </div>
