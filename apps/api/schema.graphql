@@ -141,10 +141,6 @@ type File implements Blob {
   url: String!
 }
 
-input FinalizeIdentityVerificationInput {
-  identityVerificationId: String!
-}
-
 input FinalizePreorderPaymentInput {
   email: String!
   paymentId: String!
@@ -258,7 +254,6 @@ type Mutation {
   deletePost(input: DeletePostInput!): Post!
   duplicatePost(input: DuplicatePostInput!): Post!
   enrollPlan(input: EnrollPlanInput!): UserPlan!
-  finalizeIdentityVerification(input: FinalizeIdentityVerificationInput!): UserPersonalIdentity!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
@@ -280,6 +275,7 @@ type Mutation {
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
   updateUser(input: UpdateUserInput!): User!
+  verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): UserPersonalIdentity!
 }
 
 type Notification {
@@ -575,13 +571,9 @@ type User {
 }
 
 type UserPersonalIdentity {
-  birthday: DateTime!
+  birthDate: DateTime!
   expiresAt: DateTime!
   id: ID!
-}
-
-enum UserPersonalIdentityKind {
-  PHONE
 }
 
 type UserPlan {
@@ -605,4 +597,8 @@ enum UserPlanState {
 enum UserState {
   ACTIVE
   DEACTIVATED
+}
+
+input VerifyPersonalIdentityInput {
+  identityVerificationId: String!
 }

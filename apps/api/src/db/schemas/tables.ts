@@ -406,10 +406,10 @@ export const UserPersonalIdentities = pgTable('user_personal_identities', {
     .unique()
     .references(() => Users.id),
   name: text('name').notNull(),
-  birthday: datetime('birthday').notNull(),
+  birthDate: datetime('birth_date').notNull(),
+  gender: text('gender').notNull(),
   phoneNumber: text('phone_number'),
-  ci: text('ci').notNull(),
-  kind: E._UserPersonalIdentityKind('kind').notNull().default('PHONE'),
+  ci: text('ci').notNull().unique(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

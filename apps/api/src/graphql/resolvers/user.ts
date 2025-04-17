@@ -22,7 +22,7 @@ import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import { EntityState, PaymentMethodState, SiteState, UserPlanState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
-import { finalizeIdentityVerificationByPhone } from '@/utils/identity-verification';
+import * as portone from '@/external/portone';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
 import {
@@ -177,7 +177,7 @@ UserPersonalIdentity.implement({
   isTypeOf: isTypeOf(TableCode.USER_PERSONAL_IDENTITIES),
   fields: (t) => ({
     id: t.exposeID('id'),
-    birthday: t.expose('birthday', { type: 'DateTime' }),
+    birthDate: t.expose('birthDate', { type: 'DateTime' }),
     expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
   }),
 });
@@ -288,14 +288,56 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  finalizeIdentityVerification: t.withAuth({ session: true }).fieldWithInput({
+  verifyPersonalIdentity: t.withAuth({ session: true }).fieldWithInput({
     type: UserPersonalIdentity,
     input: { identityVerificationId: t.input.string() },
     resolve: async (_, { input }, ctx) => {
-      return await finalizeIdentityVerificationByPhone({
-        userId: ctx.session.userId,
+      const resp = await portone.getIdentityVerification({
         identityVerificationId: input.identityVerificationId,
       });
+
+      if (resp.status !== 'succeeded') {
+        throw new TypieError({ code: 'identity_verification_failed' });
+      }
+
+      const existingIdentity = await db
+        .select({ id: UserPersonalIdentities.id, ci: UserPersonalIdentities.ci })
+        .from(UserPersonalIdentities)
+        .where(eq(UserPersonalIdentities.userId, ctx.session.userId))
+        .then(first);
+
+      if (existingIdentity) {
+        if (existingIdentity.ci !== resp.ci) {
+          throw new TypieError({ code: 'identity_not_match' });
+        }
+
+        return await db
+          .update(UserPersonalIdentities)
+          .set({
+            name: resp.name,
+            birthDate: dayjs.kst(resp.birthDate).startOf('day'),
+            phoneNumber: resp.phoneNumber,
+            ci: resp.ci,
+            expiresAt: dayjs.kst().add(1, 'year').startOf('day'),
+          })
+          .where(eq(UserPersonalIdentities.id, existingIdentity.id))
+          .returning()
+          .then(firstOrThrow);
+      }
+
+      return await db
+        .insert(UserPersonalIdentities)
+        .values({
+          userId: ctx.session.userId,
+          name: resp.name,
+          birthDate: dayjs.kst(resp.birthDate).startOf('day'),
+          gender: resp.gender,
+          phoneNumber: resp.phoneNumber,
+          ci: resp.ci,
+          expiresAt: dayjs.kst().add(1, 'year').startOf('day'),
+        })
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 }));

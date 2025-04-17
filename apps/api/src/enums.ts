@@ -99,11 +99,6 @@ export const SiteState = {
   DELETED: 'DELETED',
 } as const;
 
-export type UserPersonalIdentityKind = keyof typeof UserPersonalIdentityKind;
-export const UserPersonalIdentityKind = {
-  PHONE: 'PHONE',
-} as const;
-
 export type UserPlanBillingCycle = keyof typeof UserPlanBillingCycle;
 export const UserPlanBillingCycle = {
   MONTHLY: 'MONTHLY',

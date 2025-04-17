@@ -188,7 +188,7 @@ PostView.implement({
 
           const identity = await db
             .select({
-              birthday: UserPersonalIdentities.birthday,
+              birthday: UserPersonalIdentities.birthDate,
               expiresAt: UserPersonalIdentities.expiresAt,
             })
             .from(UserPersonalIdentities)
