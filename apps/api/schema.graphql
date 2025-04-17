@@ -172,7 +172,6 @@ interface IEntity {
   id: ID!
   order: Binary!
   permalink: String!
-  site: Site!
   slug: String!
   url: String!
 }
