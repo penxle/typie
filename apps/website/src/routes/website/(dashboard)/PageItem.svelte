@@ -264,6 +264,7 @@
               Dialog.confirm({
                 title: '폴더 삭제',
                 message: '정말로 이 폴더를 삭제하시겠어요?',
+                action: 'danger',
                 actionLabel: '삭제',
                 actionHandler: async () => {
                   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -374,6 +375,7 @@
             Dialog.confirm({
               title: '포스트 삭제',
               message: '정말로 이 포스트를 삭제하시겠어요?',
+              action: 'danger',
               actionLabel: '삭제',
               actionHandler: async () => {
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
