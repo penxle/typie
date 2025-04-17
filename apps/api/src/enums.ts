@@ -61,11 +61,11 @@ export const PostAgeRating = {
   R19: 'R19',
 } as const;
 
-export type PostViewHiddenReason = keyof typeof PostViewHiddenReason;
-export const PostViewHiddenReason = {
-  PASSWORD: 'PASSWORD',
-  AGE_RATING: 'AGE_RATING',
-  INVALID_IDENTITY: 'INVALID_IDENTITY',
+export type PostViewBodyUnavailableReason = keyof typeof PostViewBodyUnavailableReason;
+export const PostViewBodyUnavailableReason = {
+  REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',
+  REQUIRE_IDENTITY_VERIFICATION: 'REQUIRE_IDENTITY_VERIFICATION',
+  REQUIRE_MINIMUM_AGE: 'REQUIRE_MINIMUM_AGE',
 } as const;
 
 export type PostVisibility = keyof typeof PostVisibility;

@@ -2,6 +2,7 @@ import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
+import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
 import {
@@ -17,13 +18,14 @@ import {
   Posts,
   PostSnapshots,
   TableCode,
+  UserPersonalIdentities,
   validateDbId,
 } from '@/db';
-import { EntityState, EntityType, PostAgeRating, PostViewHiddenReason, PostVisibility } from '@/enums';
+import { EntityState, EntityType, PostAgeRating, PostViewBodyUnavailableReason, PostVisibility } from '@/enums';
 import { TypieError } from '@/errors';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
-import { checkPostHiddenReason, decode, encode, makeText, makeYDoc } from '@/utils';
+import { decode, encode, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import {
@@ -155,19 +157,80 @@ PostView.implement({
   interfaces: [IPost],
   fields: (t) => ({
     body: t.field({
-      type: 'JSON',
-      nullable: true,
+      type: t.builder.unionType('PostViewBody', {
+        types: [
+          t.builder.simpleObject('PostViewBodyAvailable', {
+            fields: (t) => ({ content: t.field({ type: 'JSON' }) }),
+          }),
+          t.builder.simpleObject('PostViewBodyUnavailable', {
+            fields: (t) => ({ reason: t.field({ type: PostViewBodyUnavailableReason }) }),
+          }),
+        ],
+      }),
       resolve: async (self, _, ctx) => {
-        if (
-          (await checkPostHiddenReason({
-            postId: self.id,
-            userId: ctx.session?.userId,
-            deviceId: ctx.deviceId,
-            entityId: self.entityId,
-            ctx,
-          })) !== null
-        ) {
-          return null;
+        const optionLoader = ctx.loader({
+          name: 'PostView.option',
+          load: async (ids) => {
+            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        const option = await optionLoader.load(self.id);
+
+        if (option.ageRating !== PostAgeRating.ALL) {
+          if (!ctx.session) {
+            return {
+              __typename: 'PostViewBodyUnavailable',
+              reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION,
+            };
+          }
+
+          const identity = await db
+            .select({
+              birthday: UserPersonalIdentities.birthday,
+              expiresAt: UserPersonalIdentities.expiresAt,
+            })
+            .from(UserPersonalIdentities)
+            .where(eq(UserPersonalIdentities.userId, ctx.session.userId))
+            .then(first);
+
+          if (!identity) {
+            return {
+              __typename: 'PostViewBodyUnavailable',
+              reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION,
+            };
+          }
+
+          if (identity.expiresAt.isBefore(dayjs())) {
+            return {
+              __typename: 'PostViewBodyUnavailable',
+              reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION,
+            };
+          }
+
+          const minAge = match(option.ageRating)
+            .with(PostAgeRating.R15, () => 15)
+            .with(PostAgeRating.R19, () => 19)
+            .exhaustive();
+
+          if (getKoreanAge(identity.birthday) < minAge) {
+            return {
+              __typename: 'PostViewBodyUnavailable',
+              reason: PostViewBodyUnavailableReason.REQUIRE_MINIMUM_AGE,
+            };
+          }
+        }
+
+        if (option.password !== null) {
+          const passwordUnlock = await redis.get(`postview:unlock:${self.id}:${ctx.deviceId}`);
+
+          if (passwordUnlock !== 'true') {
+            return {
+              __typename: 'PostViewBodyUnavailable',
+              reason: PostViewBodyUnavailableReason.REQUIRE_PASSWORD,
+            };
+          }
         }
 
         const loader = ctx.loader({
@@ -183,21 +246,10 @@ PostView.implement({
 
         const content = await loader.load(self.id);
 
-        return content.body;
-      },
-    }),
-
-    hiddenReason: t.field({
-      type: PostViewHiddenReason,
-      nullable: true,
-      resolve: async (self, _, ctx) => {
-        return await checkPostHiddenReason({
-          postId: self.id,
-          userId: ctx.session?.userId,
-          deviceId: ctx.deviceId,
-          entityId: self.entityId,
-          ctx,
-        });
+        return {
+          __typename: 'PostViewBodyAvailable',
+          content: content.body,
+        };
       },
     }),
 
@@ -250,7 +302,7 @@ PostView.implement({
           return [];
         }
 
-        const commentLoader = ctx.loader({
+        const commentsLoader = ctx.loader({
           name: 'PostView.comments',
           many: true,
           load: async (ids) => {
@@ -259,7 +311,7 @@ PostView.implement({
           key: ({ postId }) => postId,
         });
 
-        return await commentLoader.load(post.id);
+        return await commentsLoader.load(post.id);
       },
     }),
   }),
