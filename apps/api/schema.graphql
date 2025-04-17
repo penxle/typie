@@ -23,6 +23,7 @@ type Comment {
   content: String
   createdAt: DateTime!
   id: ID!
+  profile: SiteProfile
   state: CommentState!
 }
 
@@ -54,6 +55,10 @@ input CreatePostReactionInput {
 
 input CreatePreorderPaymentInput {
   email: String!
+}
+
+input CreateSiteProfileInput {
+  siteId: ID!
 }
 
 scalar DateTime
@@ -270,6 +275,7 @@ type Mutation {
   createPost(input: CreatePostInput!): Post!
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
+  createSiteProfile(input: CreateSiteProfileInput!): SiteProfile!
   createWsSession: String!
   deleteComment(input: DeleteCommentInput!): Comment!
   deleteFolder(input: DeleteFolderInput!): Folder!
@@ -541,6 +547,11 @@ type Site implements ISite {
   view: SiteView!
 }
 
+type SiteProfile {
+  id: ID!
+  name: String!
+}
+
 enum SiteState {
   ACTIVE
   DELETED
@@ -551,6 +562,7 @@ union SiteUpdateStreamPayload = Entity | Site
 type SiteView implements ISite {
   id: ID!
   myMasqueradeName: String!
+  mySiteProfile: SiteProfile
   name: String!
   slug: String!
   url: String!
