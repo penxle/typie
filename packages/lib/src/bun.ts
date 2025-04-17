@@ -3,7 +3,7 @@ import IPAddr from 'ipaddr.js';
 import * as R from 'remeda';
 import type { Context } from 'hono';
 
-const proxies = process.env.TRUSTED_PROXIES?.split(',').map(IPAddr.process) ?? [];
+const proxies = process.env.TRUSTED_PROXIES?.split(',').map((v) => IPAddr.process(v)) ?? [];
 
 export const getClientAddress = (c: Context) => {
   try {
