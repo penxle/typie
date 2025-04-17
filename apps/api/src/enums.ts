@@ -62,10 +62,18 @@ export const PlanAvailability = {
   PRIVATE: 'PRIVATE',
 } as const;
 
+export type PostAgeRating = keyof typeof PostAgeRating;
+export const PostAgeRating = {
+  ALL: 'ALL',
+  R15: 'R15',
+  R19: 'R19',
+} as const;
+
 export type PostViewHiddenReason = keyof typeof PostViewHiddenReason;
 export const PostViewHiddenReason = {
   PASSWORD: 'PASSWORD',
-  AGE: 'AGE',
+  AGE_RATING: 'AGE_RATING',
+  INVALID_IDENTITY: 'INVALID_IDENTITY',
 } as const;
 
 export type PostVisibility = keyof typeof PostVisibility;
@@ -97,6 +105,11 @@ export type SiteState = keyof typeof SiteState;
 export const SiteState = {
   ACTIVE: 'ACTIVE',
   DELETED: 'DELETED',
+} as const;
+
+export type UserPersonalIdentityKind = keyof typeof UserPersonalIdentityKind;
+export const UserPersonalIdentityKind = {
+  PHONE: 'PHONE',
 } as const;
 
 export type UserPlanBillingCycle = keyof typeof UserPlanBillingCycle;

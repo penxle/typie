@@ -62,6 +62,7 @@ export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPaym
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const Site = createObjectRef('Site', T.Sites);
 export const User = createObjectRef('User', T.Users);
+export const UserPersonalIdentity = createObjectRef('UserPersonalIdentity', T.UserPersonalIdentities);
 export const UserPlan = createObjectRef('UserPlan', T.UserPlans);
 
 export const EntityView = createObjectRef('EntityView', T.Entities);
