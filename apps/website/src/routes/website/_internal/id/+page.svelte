@@ -2,9 +2,9 @@
   import * as PortOne from '@portone/browser-sdk/v2';
   import { graphql } from '$graphql';
 
-  const finalizeIdentityVerification = graphql(`
-    mutation IdPage_FinalizeIdentityVerification_Mutation($input: FinalizeIdentityVerificationInput!) {
-      finalizeIdentityVerification(input: $input) {
+  const verifyPersonalIdentity = graphql(`
+    mutation IdPage_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
+      verifyPersonalIdentity(input: $input) {
         id
       }
     }
@@ -22,7 +22,7 @@
       return;
     }
 
-    await finalizeIdentityVerification({ identityVerificationId: resp.identityVerificationId });
+    await verifyPersonalIdentity({ identityVerificationId: resp.identityVerificationId });
   };
 </script>
 
