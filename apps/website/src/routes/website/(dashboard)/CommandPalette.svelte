@@ -49,7 +49,7 @@
   );
 
   const searchQuery = graphql(`
-    query DashboardLayout_CommandPalette_Search_Query($siteId: ID!, $query: String!) @manual {
+    query DashboardLayout_CommandPalette_Search_Query($siteId: ID!, $query: String!) @client {
       search(siteId: $siteId, query: $query) {
         totalHits
 
@@ -132,7 +132,7 @@
 
   const debouncedSearch = R.funnel(
     async (query: string) => {
-      await searchQuery.refetch({ siteId: $site.id, query });
+      await searchQuery.load({ siteId: $site.id, query });
       if (selectedResultIndex !== -1) {
         selectedResultIndex = null;
       }

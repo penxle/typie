@@ -1,6 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
-import { gql } from '@typie/gql/vite';
 import { svg } from '@typie/lib/vite';
+import { sark } from '@typie/sark/vite';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
 import icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
@@ -15,7 +15,7 @@ export default defineConfig({
         typie: FileSystemIconLoader('./src/icons'),
       },
     }),
-    gql(),
+    sark(),
     sveltekit(),
   ],
   server: {

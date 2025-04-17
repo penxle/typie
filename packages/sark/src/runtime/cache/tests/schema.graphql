@@ -1,0 +1,67 @@
+type Query {
+  get(id: ID!): Entity
+  find(filter: String!, kind: Kind): [Result!]!
+  value: String
+  me: User
+}
+
+type Mutation {
+  save(id: ID!, data: Input!): Entity!
+}
+
+interface Entity {
+  id: ID!
+  name: String!
+  time: Date
+}
+
+type User {
+  id: ID!
+  name: String
+  email: String
+  sites: [Site!]!
+}
+
+type Site {
+  id: ID!
+  name: String!
+  url: String
+}
+
+type A implements Entity {
+  id: ID!
+  name: String!
+  num: Float
+  ref: A
+  list: [A!]
+  data: B
+  time: Date
+  kind: Kind
+}
+
+type B {
+  text: String
+  tags: [String!]
+}
+
+union Result = A | B
+
+input Input {
+  name: String
+  num: Float
+  kind: Kind
+  data: SubInput
+}
+
+input SubInput {
+  text: String
+  tags: [String!]
+}
+
+enum Kind {
+  X
+  Y
+}
+
+scalar Date
+scalar Float

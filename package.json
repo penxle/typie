@@ -17,7 +17,8 @@
     "lint:spellcheck": "cspell --no-progress --relative '**/*'",
     "lint:svelte": "turbo run lint:svelte",
     "lint:syncpack": "syncpack lint",
-    "lint:typecheck": "turbo run lint:typecheck"
+    "lint:typecheck": "turbo run lint:typecheck",
+    "test": "turbo run test"
   },
   "devDependencies": {
     "@typie/lintconfig": "workspace:*",

@@ -137,9 +137,9 @@
         "@types/mixpanel-browser": "^2.54.0",
         "@typie/adapter-bun": "workspace:*",
         "@typie/glyphr": "workspace:*",
-        "@typie/gql": "workspace:*",
         "@typie/lib": "workspace:*",
         "@typie/pulumi": "workspace:*",
+        "@typie/sark": "workspace:*",
         "@typie/tsconfig": "workspace:*",
         "body-scroll-lock-upgrade": "^1.1.0",
         "comlink": "^4.4.2",
@@ -184,32 +184,6 @@
         "hono": "^4.7.6",
         "tsup": "^8.4.0",
         "typescript": "^5.8.3",
-      },
-    },
-    "packages/gql": {
-      "name": "@typie/gql",
-      "version": "0.0.1",
-      "bin": {
-        "gql": "./bin/index.ts",
-      },
-      "devDependencies": {
-        "@sindresorhus/string-hash": "^2.0.0",
-        "@sveltejs/kit": "^2.20.5",
-        "@typie/tsconfig": "workspace:*",
-        "fast-glob": "^3.3.3",
-        "fast-json-stable-stringify": "^2.1.0",
-        "graphql": "^16.10.0",
-        "graphql-sse": "^2.5.4",
-        "nanoid": "^5.1.5",
-        "recast": "^0.23.11",
-        "remeda": "^2.21.2",
-        "rxjs": "^7.8.2",
-        "svelte": "^5.26.2",
-        "ts-pattern": "^5.7.0",
-        "tsup": "^8.4.0",
-        "typescript": "^5.8.3",
-        "vite": "^6.2.6",
-        "vitest": "^3.1.1",
       },
     },
     "packages/lib": {
@@ -264,6 +238,31 @@
         "@typie/tsconfig": "workspace:*",
         "ts-pattern": "^5.7.0",
         "typescript": "^5.8.3",
+      },
+    },
+    "packages/sark": {
+      "name": "@typie/sark",
+      "version": "0.0.1",
+      "bin": {
+        "sark": "./bin/sark.ts",
+      },
+      "devDependencies": {
+        "@sveltejs/kit": "^2.20.5",
+        "@typie/tsconfig": "workspace:*",
+        "fast-glob": "^3.3.3",
+        "fast-json-stable-stringify": "^2.1.0",
+        "graphql": "^16.10.0",
+        "graphql-sse": "^2.5.4",
+        "nanoid": "^5.1.5",
+        "rapidhash-js": "^1.0.4",
+        "recast": "^0.23.11",
+        "svelte": "^5.26.2",
+        "ts-pattern": "^5.7.0",
+        "tsup": "^8.4.0",
+        "typescript": "^5.8.3",
+        "vite": "^6.2.6",
+        "vitest": "^3.1.1",
+        "wonka": "^6.3.5",
       },
     },
     "packages/tsconfig": {
@@ -1399,8 +1398,6 @@
 
     "@typie/glyphr": ["@typie/glyphr@workspace:lib/glyphr"],
 
-    "@typie/gql": ["@typie/gql@workspace:packages/gql"],
-
     "@typie/infrastructure": ["@typie/infrastructure@workspace:apps/infrastructure"],
 
     "@typie/lib": ["@typie/lib@workspace:packages/lib"],
@@ -1410,6 +1407,8 @@
     "@typie/literoom": ["@typie/literoom@workspace:apps/literoom"],
 
     "@typie/pulumi": ["@typie/pulumi@workspace:packages/pulumi"],
+
+    "@typie/sark": ["@typie/sark@workspace:packages/sark"],
 
     "@typie/tsconfig": ["@typie/tsconfig@workspace:packages/tsconfig"],
 
@@ -2727,6 +2726,8 @@
 
     "quick-lru": ["quick-lru@5.1.1", "", {}, "sha512-WuyALRjWPDGtt/wzJiadO5AXY+8hZ80hVpe6MyivgraREW751X3SbhRvG3eLKOYN+8VEvqLcf3wdnt44Z4S4SA=="],
 
+    "rapidhash-js": ["rapidhash-js@1.0.4", "", {}, "sha512-9Fb8PucIog4bm2E70rkWBBAKdu53nRaWhkpqBXFmDd7uFmrFroFfbyEo7ejgrYEDPh2Ahu2TgDCKOIkOwlDh4Q=="],
+
     "rc": ["rc@1.2.8", "", { "dependencies": { "deep-extend": "^0.6.0", "ini": "~1.3.0", "minimist": "^1.2.0", "strip-json-comments": "~2.0.1" }, "bin": { "rc": "./cli.js" } }, "sha512-y3bGgqKj3QBdxLbLkomlohkvsA8gdAiUQlSBJnBhfn+BPxg4bc62d8TcBW15wavDfgexCgccckhcZvywyQYPOw=="],
 
     "react": ["react@19.1.0", "", {}, "sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg=="],
@@ -2822,8 +2823,6 @@
     "rrweb-snapshot": ["rrweb-snapshot@2.0.0-alpha.18", "", { "dependencies": { "postcss": "^8.4.38" } }, "sha512-hBHZL/NfgQX6wO1D9mpwqFu1NJPpim+moIcKhFEjVTZVRUfCln+LOugRc4teVTCISYHN8Cw5e2iNTWCSm+SkoA=="],
 
     "run-parallel": ["run-parallel@1.2.0", "", { "dependencies": { "queue-microtask": "^1.2.2" } }, "sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA=="],
-
-    "rxjs": ["rxjs@7.8.2", "", { "dependencies": { "tslib": "^2.1.0" } }, "sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA=="],
 
     "sade": ["sade@1.8.1", "", { "dependencies": { "mri": "^1.1.0" } }, "sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A=="],
 
@@ -2991,7 +2990,7 @@
 
     "supports-preserve-symlinks-flag": ["supports-preserve-symlinks-flag@1.0.0", "", {}, "sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w=="],
 
-    "svelte": ["svelte@5.26.2", "", { "dependencies": { "@ampproject/remapping": "^2.3.0", "@jridgewell/sourcemap-codec": "^1.5.0", "@sveltejs/acorn-typescript": "^1.0.5", "@types/estree": "^1.0.5", "acorn": "^8.12.1", "aria-query": "^5.3.1", "axobject-query": "^4.1.0", "clsx": "^2.1.1", "esm-env": "^1.2.1", "esrap": "^1.4.6", "is-reference": "^3.0.3", "locate-character": "^3.0.0", "magic-string": "^0.30.11", "zimmerframe": "^1.1.2" } }, "sha512-e2TEcGK2YKVwDWYy5OsptVclYgDvfY1E/8IzPiOq63uG/GDo/j5VUYTC9EinQNraoZalbMWN+5f5TYC1QlAqOw=="],
+    "svelte": ["svelte@5.27.0", "", { "dependencies": { "@ampproject/remapping": "^2.3.0", "@jridgewell/sourcemap-codec": "^1.5.0", "@sveltejs/acorn-typescript": "^1.0.5", "@types/estree": "^1.0.5", "acorn": "^8.12.1", "aria-query": "^5.3.1", "axobject-query": "^4.1.0", "clsx": "^2.1.1", "esm-env": "^1.2.1", "esrap": "^1.4.6", "is-reference": "^3.0.3", "locate-character": "^3.0.0", "magic-string": "^0.30.11", "zimmerframe": "^1.1.2" } }, "sha512-Uai13Ydt1ZE+bUHme6b9U38PCYVNCqBRoBMkUKbFbKiD7kHWjdUUrklYAQZJxyKK81qII4mrBwe/YmvEMSlC9w=="],
 
     "svelte-check": ["svelte-check@4.1.6", "", { "dependencies": { "@jridgewell/trace-mapping": "^0.3.25", "chokidar": "^4.0.1", "fdir": "^6.2.0", "picocolors": "^1.0.0", "sade": "^1.7.4" }, "peerDependencies": { "svelte": "^4.0.0 || ^5.0.0-next.0", "typescript": ">=5.0.0" }, "bin": { "svelte-check": "bin/svelte-check" } }, "sha512-P7w/6tdSfk3zEVvfsgrp3h3DFC75jCdZjTQvgGJtjPORs1n7/v2VMPIoty3PWv7jnfEm3x0G/p9wH4pecTb0Wg=="],
 
@@ -3216,6 +3215,8 @@
     "which-typed-array": ["which-typed-array@1.1.19", "", { "dependencies": { "available-typed-arrays": "^1.0.7", "call-bind": "^1.0.8", "call-bound": "^1.0.4", "for-each": "^0.3.5", "get-proto": "^1.0.1", "gopd": "^1.2.0", "has-tostringtag": "^1.0.2" } }, "sha512-rEvr90Bck4WZt9HHFC4DJMsjvu7x+r6bImz0/BrbWb7A2djJ8hnZMrWnHo9F8ssv0OMErasDhftrfROTyqSDrw=="],
 
     "why-is-node-running": ["why-is-node-running@2.3.0", "", { "dependencies": { "siginfo": "^2.0.0", "stackback": "0.0.2" }, "bin": { "why-is-node-running": "cli.js" } }, "sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w=="],
+
+    "wonka": ["wonka@6.3.5", "", {}, "sha512-SSil+ecw6B4/Dm7Pf2sAshKQ5hWFvfyGlfPbEd6A14dOH6VDjrmbY86u6nZvy9omGwwIPFR8V41+of1EezgoUw=="],
 
     "word-wrap": ["word-wrap@1.2.5", "", {}, "sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA=="],
 
