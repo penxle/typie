@@ -62,6 +62,12 @@ export const PlanAvailability = {
   PRIVATE: 'PRIVATE',
 } as const;
 
+export type PostViewHiddenReason = keyof typeof PostViewHiddenReason;
+export const PostViewHiddenReason = {
+  PASSWORD: 'PASSWORD',
+  AGE: 'AGE',
+} as const;
+
 export type PostVisibility = keyof typeof PostVisibility;
 export const PostVisibility = {
   UNLISTED: 'UNLISTED',

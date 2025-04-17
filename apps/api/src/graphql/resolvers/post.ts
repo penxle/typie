@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import * as Y from 'yjs';
+import { redis } from '@/cache';
 import {
   Comments,
   db,
@@ -18,11 +19,12 @@ import {
   TableCode,
   validateDbId,
 } from '@/db';
-import { EntityState, EntityType, PostVisibility } from '@/enums';
+import { EntityState, EntityType, PostViewHiddenReason, PostVisibility } from '@/enums';
 import { TypieError } from '@/errors';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { decode, encode, makeText, makeYDoc } from '@/utils';
+import { checkEntityPermission } from '@/utils/entity';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import {
@@ -155,7 +157,28 @@ PostView.implement({
   fields: (t) => ({
     body: t.field({
       type: 'JSON',
+      nullable: true,
       resolve: async (self, _, ctx) => {
+        if (!(await checkEntityPermission({ entityId: self.entityId, userId: ctx.session?.userId, ctx }))) {
+          const postOptionLoader = ctx.loader({
+            name: 'PostOptions(postId)',
+            load: async (ids) => {
+              return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
+            },
+            key: ({ postId }) => postId,
+          });
+
+          const option = await postOptionLoader.load(self.id);
+
+          if (option.password) {
+            const passwordUnlock = await redis.get(`post:password-unlock:${self.id}:${ctx.deviceId}`);
+
+            if (!passwordUnlock) {
+              return null;
+            }
+          }
+        }
+
         const loader = ctx.loader({
           name: 'PostView.body',
           load: async (ids) => {
@@ -173,13 +196,37 @@ PostView.implement({
       },
     }),
 
+    hiddenReason: t.field({
+      type: PostViewHiddenReason,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const postOptionLoader = ctx.loader({
+          name: 'PostOptions(postId)',
+          load: async (ids) => {
+            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        const option = await postOptionLoader.load(self.id);
+
+        if (option.password) {
+          const passwordUnlock = await redis.get(`post:password-unlock:${self.id}:${ctx.deviceId}`);
+
+          if (!passwordUnlock) {
+            return PostViewHiddenReason.PASSWORD;
+          }
+        }
+      },
+    }),
+
     entity: t.expose('entityId', { type: EntityView }),
 
     option: t.field({
       type: PostOptionView,
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
-          name: 'PostView.option',
+          name: 'PostOptions(postId)',
           load: async (ids) => {
             return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
           },
@@ -210,7 +257,7 @@ PostView.implement({
       type: [Comment],
       resolve: async (post, _, ctx) => {
         const optionLoader = ctx.loader({
-          name: 'PostView.option',
+          name: 'PostOptions(postId)',
           load: async (ids) => {
             return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
           },
@@ -576,6 +623,31 @@ builder.mutationFields((t) => ({
         .where(eq(PostOptions.postId, input.postId))
         .returning()
         .then(firstOrThrow);
+    },
+  }),
+
+  unlockPasswordedPost: t.fieldWithInput({
+    type: PostView,
+    input: {
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+      password: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const postOption = await db
+        .select({
+          password: PostOptions.password,
+        })
+        .from(PostOptions)
+        .where(eq(PostOptions.postId, input.postId))
+        .then(firstOrThrow);
+
+      if (postOption.password !== input.password) {
+        throw new TypieError({ code: 'invalid_password' });
+      }
+
+      await redis.set(`post:password-unlock:${input.postId}:${ctx.deviceId}`, 'true', 'EX', 60 * 60 * 24);
+
+      return input.postId;
     },
   }),
 
