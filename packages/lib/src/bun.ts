@@ -3,6 +3,8 @@ import IPAddr from 'ipaddr.js';
 import * as R from 'remeda';
 import type { Context } from 'hono';
 
+const proxies = process.env.TRUSTED_PROXIES?.split(',').map(IPAddr.process) ?? [];
+
 export const getClientAddress = (c: Context) => {
   try {
     const cf = c.req.header('CloudFront-Viewer-Address');
@@ -19,6 +21,7 @@ export const getClientAddress = (c: Context) => {
         R.map((v) => v.trim()),
         R.filter((v) => IPAddr.isValid(v)),
         R.map((v) => IPAddr.process(v)),
+        R.filter((v) => !proxies.some((p) => p.match(v))),
         R.findLast((v) => v.range() !== 'private'),
       );
 
