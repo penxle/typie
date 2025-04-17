@@ -127,8 +127,8 @@ Post.implement({
 
         const change = await db
           .select({
-            additions: sum(PostCharacterCountChanges.additions),
-            deletions: sum(PostCharacterCountChanges.deletions),
+            additions: sum(PostCharacterCountChanges.additions).mapWith(Number),
+            deletions: sum(PostCharacterCountChanges.deletions).mapWith(Number),
           })
           .from(PostCharacterCountChanges)
           .where(
@@ -139,12 +139,12 @@ Post.implement({
               lt(PostCharacterCountChanges.timestamp, startOfDay.add(1, 'day')),
             ),
           )
-          .then(first);
+          .then(firstOrThrow);
 
         return {
           date: startOfDay,
-          additions: Number(change?.additions ?? 0),
-          deletions: Number(change?.deletions ?? 0),
+          additions: change.additions ?? 0,
+          deletions: change.deletions ?? 0,
         };
       },
     }),
@@ -428,8 +428,8 @@ builder.mutationFields((t) => ({
             userId: ctx.session.userId,
             siteId: input.siteId,
             parentId: input.parentEntityId,
-            slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
-            permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
+            slug: generateSlug(),
+            permalink: generatePermalink(),
             type: EntityType.POST,
             order: generateEntityOrder({ lower: last?.order, upper: null }),
           })
@@ -550,8 +550,8 @@ builder.mutationFields((t) => ({
             userId: ctx.session.userId,
             siteId: entity.siteId,
             parentId: entity.parentEntityId,
-            slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
-            permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
+            slug: generateSlug(),
+            permalink: generatePermalink(),
             type: EntityType.POST,
             order: generateEntityOrder({ lower: entity.order, upper: nextEntity?.order }),
           })
@@ -718,3 +718,10 @@ builder.mutationFields((t) => ({
     },
   }),
 }));
+
+/**
+ * * Utils
+ */
+
+const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
+const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
