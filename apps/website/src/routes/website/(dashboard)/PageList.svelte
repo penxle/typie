@@ -367,7 +367,8 @@
         await moveEntity({
           entityId: dragging.entity.id,
           parentEntityId: targetItem.id,
-          nextOrder: targetItem.children ? targetItem.children[0]?.order : undefined,
+          lowerOrder: null,
+          upperOrder: targetItem.children ? targetItem.children[0]?.order : undefined,
         });
 
         // eslint-disable-next-line unicorn/no-negated-condition
@@ -375,28 +376,28 @@
         // line indicator
         const targetList = nodeMap.get(dropTarget.list);
 
-        let nextOrder = null;
-        let previousOrder = null;
+        let lowerOrder = null;
+        let upperOrder = null;
 
         const children = targetList?.children;
 
         if (dropTarget.indicatorPosition === 0 || !children || children.length === 0) {
           // 맨 앞
-          nextOrder = children ? children[0]?.order : undefined;
+          upperOrder = children ? children[0]?.order : undefined;
         } else if (dropTarget.indicatorPosition === children.length) {
           // 맨 뒤
-          previousOrder = children.at(-1)?.order;
+          lowerOrder = children.at(-1)?.order;
         } else {
           // 중간
-          previousOrder = children[dropTarget.indicatorPosition - 1]?.order;
-          nextOrder = children[dropTarget.indicatorPosition]?.order;
+          lowerOrder = children[dropTarget.indicatorPosition - 1]?.order;
+          upperOrder = children[dropTarget.indicatorPosition]?.order;
         }
 
         await moveEntity({
           entityId: dragging.entity.id,
           parentEntityId: targetList?.id,
-          nextOrder,
-          previousOrder,
+          lowerOrder,
+          upperOrder,
         });
       } else {
         // invalid drop target

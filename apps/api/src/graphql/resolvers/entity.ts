@@ -1,13 +1,12 @@
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
-import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { match } from 'ts-pattern';
 import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, SiteState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
-import { decode, encode } from '@/utils';
+import { generateEntityOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site, SiteView } from '../objects';
@@ -21,7 +20,7 @@ IEntity.implement({
     id: t.exposeID('id'),
     slug: t.exposeString('slug'),
     permalink: t.exposeString('permalink'),
-    order: t.expose('order', { type: 'Binary' }),
+    order: t.exposeString('order'),
 
     url: t.string({ resolve: (self) => `${env.USERSITE_URL.replace('*.', '')}/${self.permalink}` }),
   }),
@@ -217,8 +216,8 @@ builder.mutationFields((t) => ({
     input: {
       entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
       parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
-      previousOrder: t.input.field({ type: 'Binary', required: false }),
-      nextOrder: t.input.field({ type: 'Binary', required: false }),
+      lowerOrder: t.input.string({ required: false }),
+      upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
@@ -271,12 +270,10 @@ builder.mutationFields((t) => ({
         .update(Entities)
         .set({
           parentId: input.parentEntityId,
-          order: encode(
-            generateJitteredKeyBetween(
-              input.previousOrder ? decode(input.previousOrder) : null,
-              input.nextOrder ? decode(input.nextOrder) : null,
-            ),
-          ),
+          order: generateEntityOrder({
+            lower: input.lowerOrder,
+            upper: input.upperOrder,
+          }),
         })
         .where(eq(Entities.id, entity.id))
         .returning()

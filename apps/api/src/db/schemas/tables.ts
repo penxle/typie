@@ -84,7 +84,7 @@ export const Entities = pgTable(
     slug: text('slug').notNull(),
     permalink: text('permalink').notNull(),
     type: E._EntityType('type').notNull(),
-    order: bytea('order').notNull(),
+    order: text('order').notNull(),
     state: E._EntityState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()

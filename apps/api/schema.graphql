@@ -102,7 +102,7 @@ type Entity implements IEntity {
   children: [Entity!]!
   id: ID!
   node: EntityNode!
-  order: Binary!
+  order: String!
   permalink: String!
   site: Site!
   slug: String!
@@ -125,7 +125,7 @@ type EntityView implements IEntity {
   children: [EntityView!]!
   id: ID!
   node: EntityViewNode!
-  order: Binary!
+  order: String!
   permalink: String!
   site: SiteView!
   slug: String!
@@ -166,7 +166,7 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 
 interface IEntity {
   id: ID!
-  order: Binary!
+  order: String!
   permalink: String!
   slug: String!
   url: String!
@@ -235,9 +235,9 @@ input MarkNotificationAsReadInput {
 
 input MoveEntityInput {
   entityId: ID!
-  nextOrder: Binary
+  lowerOrder: String
   parentEntityId: ID
-  previousOrder: Binary
+  upperOrder: String
 }
 
 type Mutation {
