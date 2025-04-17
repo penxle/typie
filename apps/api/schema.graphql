@@ -141,6 +141,10 @@ type File implements Blob {
   url: String!
 }
 
+input FinalizeIdentityVerificationInput {
+  identityVerificationId: String!
+}
+
 input FinalizePreorderPaymentInput {
   email: String!
   paymentId: String!
@@ -188,6 +192,7 @@ interface IPost {
 }
 
 interface IPostOption {
+  ageRating: PostAgeRating!
   allowComments: Boolean!
   allowCopies: Boolean!
   allowReactions: Boolean!
@@ -254,6 +259,7 @@ type Mutation {
   deletePost(input: DeletePostInput!): Post!
   duplicatePost(input: DuplicatePostInput!): Post!
   enrollPlan(input: EnrollPlanInput!): UserPlan!
+  finalizeIdentityVerification(input: FinalizeIdentityVerificationInput!): UserPersonalIdentity!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
@@ -275,7 +281,6 @@ type Mutation {
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
   updateUser(input: UpdateUserInput!): User!
-  verifyIdentity(input: VerifyIdentityInput!): Boolean!
 }
 
 type Notification {
@@ -354,7 +359,14 @@ type Post implements IPost {
   updatedAt: DateTime!
 }
 
+enum PostAgeRating {
+  ALL
+  R15
+  R19
+}
+
 type PostOption implements IPostOption {
+  ageRating: PostAgeRating!
   allowComments: Boolean!
   allowCopies: Boolean!
   allowReactions: Boolean!
@@ -364,6 +376,7 @@ type PostOption implements IPostOption {
 }
 
 type PostOptionView implements IPostOption {
+  ageRating: PostAgeRating!
   allowComments: Boolean!
   allowCopies: Boolean!
   allowReactions: Boolean!
@@ -394,7 +407,8 @@ type PostView implements IPost {
 }
 
 enum PostViewHiddenReason {
-  AGE
+  AGE_RATING
+  INVALID_IDENTITY
   PASSWORD
 }
 
@@ -517,6 +531,7 @@ input UpdatePaymentMethodInput {
 }
 
 input UpdatePostOptionInput {
+  ageRating: PostAgeRating!
   allowComments: Boolean!
   allowCopies: Boolean!
   allowReactions: Boolean!
@@ -537,9 +552,20 @@ type User {
   name: String!
   notifications: [Notification!]!
   paymentMethod: PaymentMethod
+  personalIdentity: UserPersonalIdentity
   plan: UserPlan
   recentPosts: [Post!]!
   sites: [Site!]!
+}
+
+type UserPersonalIdentity {
+  birthday: DateTime!
+  expiresAt: DateTime!
+  id: ID!
+}
+
+enum UserPersonalIdentityKind {
+  PHONE
 }
 
 type UserPlan {
@@ -563,8 +589,4 @@ enum UserPlanState {
 enum UserState {
   ACTIVE
   DEACTIVATED
-}
-
-input VerifyIdentityInput {
-  identityVerificationId: String!
 }

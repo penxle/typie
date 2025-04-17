@@ -1,6 +1,6 @@
 <script lang="ts">
   import { z } from 'zod';
-  import { PostVisibility } from '@/enums';
+  import { PostAgeRating, PostVisibility } from '@/enums';
   import CheckIcon from '~icons/lucide/check';
   import CopyIcon from '~icons/lucide/copy';
   import ExternalLinkIcon from '~icons/lucide/external-link';
@@ -45,6 +45,7 @@
           allowComments
           allowReactions
           allowCopies
+          ageRating
         }
       }
     `),
@@ -79,7 +80,7 @@
       visibility: z.nativeEnum(PostVisibility),
       passwordProtected: z.boolean(),
       password: z.string().nullish(),
-      ageRestriction: z.string(),
+      ageRestriction: z.nativeEnum(PostAgeRating),
       allowComments: z.boolean(),
       allowReactions: z.boolean(),
       disallowCopies: z.boolean(),
@@ -93,13 +94,14 @@
         allowComments: data.allowComments,
         allowReactions: data.allowReactions,
         allowCopies: !data.disallowCopies,
+        ageRating: data.ageRestriction,
       });
     },
     defaultValues: {
       visibility: $post.option.visibility,
       passwordProtected: $post.option.password !== null,
       password: $post.option.password,
-      ageRestriction: 'none',
+      ageRestriction: $post.option.ageRating,
       allowComments: $post.option.allowComments,
       allowReactions: $post.option.allowReactions,
       disallowCopies: !$post.option.allowCopies,
@@ -303,9 +305,9 @@
             <SegmentButtons
               style={css.raw({ width: '150px' })}
               items={[
-                { value: 'none', label: '없음' },
-                { value: '15', label: '15세' },
-                { value: '18', label: '성인' },
+                { value: PostAgeRating.ALL, label: '없음' },
+                { value: PostAgeRating.R15, label: '15세' },
+                { value: PostAgeRating.R19, label: '성인' },
               ]}
               onselect={(value) => (form.fields.ageRestriction = value)}
               size="sm"

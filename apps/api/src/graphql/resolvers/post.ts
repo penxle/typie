@@ -19,12 +19,11 @@ import {
   TableCode,
   validateDbId,
 } from '@/db';
-import { EntityState, EntityType, PostViewHiddenReason, PostVisibility } from '@/enums';
+import { EntityState, EntityType, PostAgeRating, PostViewHiddenReason, PostVisibility } from '@/enums';
 import { TypieError } from '@/errors';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
-import { decode, encode, makeText, makeYDoc } from '@/utils';
-import { checkEntityPermission } from '@/utils/entity';
+import { checkPostHiddenReason, decode, encode, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import {
@@ -159,24 +158,16 @@ PostView.implement({
       type: 'JSON',
       nullable: true,
       resolve: async (self, _, ctx) => {
-        if (!(await checkEntityPermission({ entityId: self.entityId, userId: ctx.session?.userId, ctx }))) {
-          const postOptionLoader = ctx.loader({
-            name: 'PostOptions(postId)',
-            load: async (ids) => {
-              return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
-            },
-            key: ({ postId }) => postId,
-          });
-
-          const option = await postOptionLoader.load(self.id);
-
-          if (option.password) {
-            const passwordUnlock = await redis.get(`post:password-unlock:${self.id}:${ctx.deviceId}`);
-
-            if (!passwordUnlock) {
-              return null;
-            }
-          }
+        if (
+          (await checkPostHiddenReason({
+            postId: self.id,
+            userId: ctx.session?.userId,
+            deviceId: ctx.deviceId,
+            entityId: self.entityId,
+            ctx,
+          })) !== null
+        ) {
+          return null;
         }
 
         const loader = ctx.loader({
@@ -200,23 +191,13 @@ PostView.implement({
       type: PostViewHiddenReason,
       nullable: true,
       resolve: async (self, _, ctx) => {
-        const postOptionLoader = ctx.loader({
-          name: 'PostOptions(postId)',
-          load: async (ids) => {
-            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
-          },
-          key: ({ postId }) => postId,
+        return await checkPostHiddenReason({
+          postId: self.id,
+          userId: ctx.session?.userId,
+          deviceId: ctx.deviceId,
+          entityId: self.entityId,
+          ctx,
         });
-
-        const option = await postOptionLoader.load(self.id);
-
-        if (option.password) {
-          const passwordUnlock = await redis.get(`post:password-unlock:${self.id}:${ctx.deviceId}`);
-
-          if (!passwordUnlock) {
-            return PostViewHiddenReason.PASSWORD;
-          }
-        }
       },
     }),
 
@@ -291,6 +272,7 @@ IPostOption.implement({
     allowComments: t.exposeBoolean('allowComments'),
     allowReactions: t.exposeBoolean('allowReactions'),
     allowCopies: t.exposeBoolean('allowCopies'),
+    ageRating: t.expose('ageRating', { type: PostAgeRating }),
   }),
 });
 
@@ -609,6 +591,7 @@ builder.mutationFields((t) => ({
       allowComments: t.input.boolean(),
       allowReactions: t.input.boolean(),
       allowCopies: t.input.boolean(),
+      ageRating: t.input.field({ type: PostAgeRating }),
     },
     resolve: async (_, { input }) => {
       return await db
@@ -619,6 +602,7 @@ builder.mutationFields((t) => ({
           allowComments: input.allowComments,
           allowReactions: input.allowReactions,
           allowCopies: input.allowCopies,
+          ageRating: input.ageRating,
         })
         .where(eq(PostOptions.postId, input.postId))
         .returning()

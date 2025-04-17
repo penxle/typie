@@ -13,6 +13,7 @@ import {
   Posts,
   Sites,
   TableCode,
+  UserPersonalIdentities,
   UserPlans,
   Users,
 } from '@/db';
@@ -21,10 +22,21 @@ import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import { EntityState, PaymentMethodState, SiteState, UserPlanState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
-import * as portone from '@/external/portone';
+import { finalizeIdentityVerificationByPhone } from '@/utils/identity-verification';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
-import { CharacterCountChange, Image, isTypeOf, Notification, PaymentMethod, Post, Site, User, UserPlan } from '../objects';
+import {
+  CharacterCountChange,
+  Image,
+  isTypeOf,
+  Notification,
+  PaymentMethod,
+  Post,
+  Site,
+  User,
+  UserPersonalIdentity,
+  UserPlan,
+} from '../objects';
 
 /**
  * * Types
@@ -150,6 +162,23 @@ User.implement({
         return await db.select().from(Notifications).where(eq(Notifications.userId, user.id)).orderBy(desc(Notifications.createdAt));
       },
     }),
+
+    personalIdentity: t.field({
+      type: UserPersonalIdentity,
+      nullable: true,
+      resolve: async (user) => {
+        return await db.select().from(UserPersonalIdentities).where(eq(UserPersonalIdentities.userId, user.id)).then(first);
+      },
+    }),
+  }),
+});
+
+UserPersonalIdentity.implement({
+  isTypeOf: isTypeOf(TableCode.USER_PERSONAL_IDENTITIES),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    birthday: t.expose('birthday', { type: 'DateTime' }),
+    expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
   }),
 });
 
@@ -259,17 +288,14 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  verifyIdentity: t.fieldWithInput({
-    type: 'Boolean',
+  finalizeIdentityVerification: t.withAuth({ session: true }).fieldWithInput({
+    type: UserPersonalIdentity,
     input: { identityVerificationId: t.input.string() },
-    resolve: async (_, { input }) => {
-      const resp = await portone.getIdentityVerification({ identityVerificationId: input.identityVerificationId });
-
-      if (resp.status !== 'succeeded') {
-        throw new TypieError({ code: 'identity_verification_failed' });
-      }
-
-      return true;
+    resolve: async (_, { input }, ctx) => {
+      return await finalizeIdentityVerificationByPhone({
+        userId: ctx.session.userId,
+        identityVerificationId: input.identityVerificationId,
+      });
     },
   }),
 }));

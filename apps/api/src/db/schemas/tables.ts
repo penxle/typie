@@ -297,6 +297,7 @@ export const PostOptions = pgTable('post_options', {
   allowComments: boolean('allow_comments').notNull().default(true),
   allowReactions: boolean('allow_reactions').notNull().default(true),
   allowCopies: boolean('allow_copies').notNull().default(false),
+  ageRating: E._PostAgeRating('age_rating').notNull().default('ALL'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -395,6 +396,25 @@ export const Users = pgTable(
       .where(eq(t.state, sql`'ACTIVE'`)),
   ],
 );
+
+export const UserPersonalIdentities = pgTable('user_personal_identities', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_PERSONAL_IDENTITIES)),
+  userId: text('user_id')
+    .notNull()
+    .unique()
+    .references(() => Users.id),
+  name: text('name').notNull(),
+  birthday: datetime('birthday').notNull(),
+  phoneNumber: text('phone_number'),
+  ci: text('ci').notNull(),
+  kind: E._UserPersonalIdentityKind('kind').notNull().default('PHONE'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  expiresAt: datetime('expires_at').notNull(),
+});
 
 export const UserPlans = pgTable('user_plans', {
   id: text('id')
