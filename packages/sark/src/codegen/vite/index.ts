@@ -19,11 +19,11 @@ export const sark = (options?: SarkOptions): Plugin => {
   let resolvedOutDir: string;
   let resolvedSchemaPath: string;
 
-  let schema: graphql.GraphQLSchema;
+  let schema: { schema: graphql.GraphQLSchema; hash: bigint };
   let artifacts: Artifact[] = [];
 
   const writeArtifacts = async () => {
-    await writeArtifactAssets(resolvedOutDir, schema, artifacts);
+    await writeArtifactAssets(resolvedOutDir, schema.schema, artifacts);
     await writePublicAssets(resolvedOutDir, artifacts);
     await writeTypeAssets(resolvedOutDir, projectDir, artifacts);
     await writeMiscAssets(resolvedOutDir);
@@ -62,21 +62,30 @@ export const sark = (options?: SarkOptions): Plugin => {
 
     async buildStart() {
       schema = await getSchema(resolvedSchemaPath);
-      artifacts = await getAllArtifacts(schema, projectDir);
+      artifacts = await getAllArtifacts(schema.schema, projectDir);
       await writeArtifacts();
     },
 
-    async watchChange(id) {
+    async watchChange(id, { event }) {
       if (id === resolvedSchemaPath) {
-        console.log('😼 Schema changed');
-        schema = await getSchema(resolvedSchemaPath);
-        artifacts = await getAllArtifacts(schema, projectDir);
-        await writeArtifacts();
+        const newSchema = await getSchema(resolvedSchemaPath);
+        if (schema.hash !== newSchema.hash) {
+          console.log('😼 Schema change detected');
+          schema = newSchema;
+          artifacts = await getAllArtifacts(schema.schema, projectDir);
+          await writeArtifacts();
+        }
       } else if (artifacts.some((artifact) => artifact.file === id)) {
-        console.log('😼 Artifact changed');
-        const newArtifacts = await getArtifacts(schema, id);
-        artifacts = artifacts.filter((artifact) => artifact.file !== id);
-        artifacts.push(...newArtifacts);
+        const newArtifacts = await getArtifacts(schema.schema, id);
+        if (newArtifacts.some((artifact) => artifact.hash !== artifacts.find((a) => a.file === id)?.hash)) {
+          console.log('😼 Artifact change detected');
+          artifacts = artifacts.filter((artifact) => artifact.file !== id);
+          artifacts.push(...newArtifacts);
+          await writeArtifacts();
+        }
+      } else if (event === 'create' && id.endsWith('.svelte')) {
+        console.log('😼 New file detected', id);
+        artifacts = await getAllArtifacts(schema.schema, projectDir);
         await writeArtifacts();
       }
     },

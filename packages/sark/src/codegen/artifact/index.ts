@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import fg from 'fast-glob';
 import * as graphql from 'graphql';
+import { rapidhash } from 'rapidhash-js';
 import { preprocess } from 'svelte/compiler';
 import { match } from 'ts-pattern';
 import * as AST from '../ast';
@@ -9,7 +10,7 @@ import { buildVariables } from '../parser/variables';
 import { hasDirective } from '../utils';
 import type { Artifact } from '../../types';
 
-export const getSchema = async (schemaPath: string): Promise<graphql.GraphQLSchema> => {
+export const getSchema = async (schemaPath: string) => {
   try {
     const source = await fs.readFile(schemaPath, 'utf8');
     const schema = graphql.buildSchema(source, { noLocation: true });
@@ -19,7 +20,10 @@ export const getSchema = async (schemaPath: string): Promise<graphql.GraphQLSche
       throw new Error(errors.map((e) => e.message).join('\n'));
     }
 
-    return schema;
+    return {
+      schema,
+      hash: rapidhash(source),
+    };
   } catch (err) {
     throw new Error(`Failed to process schema: ${String(err)}`);
   }
@@ -74,6 +78,7 @@ export const getArtifact = (schema: graphql.GraphQLSchema, filePath: string, sou
         meta,
         variables: buildVariables(schema, definition.variableDefinitions),
         selections: buildSelections(schema, root, definition.selectionSet),
+        hash: rapidhash(source),
       };
     } else if (definition.kind === 'FragmentDefinition') {
       const on = schema.getType(definition.typeCondition.name.value);
@@ -104,6 +109,7 @@ export const getArtifact = (schema: graphql.GraphQLSchema, filePath: string, sou
         node: definition,
         meta: {},
         selections: buildSelections(schema, on, definition.selectionSet),
+        hash: rapidhash(source),
       };
     } else {
       throw new Error(`Expected definition to be an operation or fragment`);
@@ -142,7 +148,7 @@ export const getArtifacts = async (schema: graphql.GraphQLSchema, filePath: stri
         if (node.callee.type === 'Identifier' && node.callee.name === 'graphql' && node.arguments[0].type === 'TemplateLiteral') {
           const source = node.arguments[0].quasis[0].value.raw;
           try {
-            const artifact = getArtifact(schema, filePath, source) as unknown as Artifact;
+            const artifact = getArtifact(schema, filePath, source);
             artifacts.push(artifact);
           } catch (err) {
             console.error('Error processing artifact:', err);
@@ -159,7 +165,7 @@ export const getArtifacts = async (schema: graphql.GraphQLSchema, filePath: stri
   }
 };
 
-export const getAllArtifacts = async (schema: graphql.GraphQLSchema, projectDir: string): Promise<Artifact[]> => {
+export const getAllArtifacts = async (schema: graphql.GraphQLSchema, projectDir: string) => {
   try {
     const allArtifacts: Artifact[] = [];
     const files = await fg('**/*.svelte', { cwd: projectDir, absolute: true });
