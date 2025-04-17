@@ -164,6 +164,7 @@
 
               characterCountChange {
                 additions
+                deletions
               }
             }
           }

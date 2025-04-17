@@ -6,6 +6,7 @@ type AppPreference = {
   toolbarHidden: boolean;
   focusDuration: number;
   restDuration: number;
+  characterCountChangeMode: 'additions' | 'difference';
 };
 
 type AppState = {
@@ -46,6 +47,7 @@ export const setupAppContext = () => {
       toolbarHidden: false,
       focusDuration: 30,
       restDuration: 10,
+      characterCountChangeMode: 'additions',
     }),
     state: appState,
     timerState: new SessionStore('typie:timer', {
