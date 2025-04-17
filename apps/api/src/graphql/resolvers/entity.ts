@@ -22,7 +22,6 @@ IEntity.implement({
     slug: t.exposeString('slug'),
     permalink: t.exposeString('permalink'),
     order: t.expose('order', { type: 'Binary' }),
-    site: t.expose('siteId', { type: Site }),
 
     url: t.string({ resolve: (self) => `${env.USERSITE_URL.replace('*.', '')}/${self.permalink}` }),
   }),
@@ -32,6 +31,8 @@ Entity.implement({
   isTypeOf: isTypeOf(TableCode.ENTITIES),
   interfaces: [IEntity],
   fields: (t) => ({
+    site: t.expose('siteId', { type: Site }),
+
     node: t.field({
       type: EntityNode,
       resolve: async (self, _, ctx) => {
@@ -107,10 +108,7 @@ EntityView.implement({
   isTypeOf: isTypeOf(TableCode.ENTITIES),
   interfaces: [IEntity],
   fields: (t) => ({
-    site: t.field({
-      type: SiteView,
-      resolve: async (self) => self.siteId,
-    }),
+    site: t.expose('siteId', { type: SiteView }),
 
     node: t.field({
       type: EntityViewNode,
