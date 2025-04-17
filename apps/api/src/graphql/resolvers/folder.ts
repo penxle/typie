@@ -1,10 +1,9 @@
 import { faker } from '@faker-js/faker';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { pubsub } from '@/pubsub';
-import { decode, encode } from '@/utils';
+import { generateEntityOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
@@ -87,7 +86,7 @@ builder.mutationFields((t) => ({
             slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
             permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
             type: EntityType.FOLDER,
-            order: encode(generateJitteredKeyBetween(last ? decode(last.order) : null, null)),
+            order: generateEntityOrder({ lower: last?.order, upper: null }),
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);

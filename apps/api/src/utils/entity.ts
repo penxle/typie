@@ -1,5 +1,6 @@
 import { getText } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
+import { generateJitteredKeyBetween, indexCharacterSet } from 'fractional-indexing-jittered';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { schema, textSerializers } from '@/pm';
@@ -33,4 +34,10 @@ export const makeText = (body: JSONContent) => {
     blockSeparator: '\n',
     textSerializers,
   }).trim();
+};
+
+const charSet = indexCharacterSet({ chars: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' });
+type GenerateEntityOrderParams = { lower: string | null | undefined; upper: string | null | undefined };
+export const generateEntityOrder = ({ lower, upper }: GenerateEntityOrderParams) => {
+  return generateJitteredKeyBetween(lower ?? null, upper ?? null, charSet);
 };

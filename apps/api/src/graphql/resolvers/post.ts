@@ -1,7 +1,6 @@
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
-import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
@@ -25,7 +24,7 @@ import { EntityState, EntityType, PostAgeRating, PostViewBodyUnavailableReason, 
 import { TypieError } from '@/errors';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
-import { decode, encode, getKoreanAge, makeText, makeYDoc } from '@/utils';
+import { generateEntityOrder, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import {
@@ -432,7 +431,7 @@ builder.mutationFields((t) => ({
             slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
             permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
             type: EntityType.POST,
-            order: encode(generateJitteredKeyBetween(last ? decode(last.order) : null, null)),
+            order: generateEntityOrder({ lower: last?.order, upper: null }),
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);
@@ -554,7 +553,7 @@ builder.mutationFields((t) => ({
             slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
             permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
             type: EntityType.POST,
-            order: encode(generateJitteredKeyBetween(nextEntityOrder ? decode(nextEntityOrder) : null, null)),
+            order: generateEntityOrder({ lower: nextEntityOrder, upper: null }),
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);
