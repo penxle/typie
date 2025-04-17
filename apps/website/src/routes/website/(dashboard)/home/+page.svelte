@@ -131,11 +131,23 @@
           onoutroend={() => {
             updateGreeting();
           }}
-          transition:typewriter
+          transition:typewriter={{ speed: 50, delay: 200 }}
         >
           {greeting}
         </span>
       {/if}
+
+      <div
+        class={css({
+          width: '2px',
+          height: '36px',
+          backgroundColor: 'gray.950',
+          animationName: 'blink',
+          animationDuration: '1.25s',
+          animationIterationCount: 'infinite',
+          animationTimingFunction: 'step-end',
+        })}
+      ></div>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '16px' })}>
