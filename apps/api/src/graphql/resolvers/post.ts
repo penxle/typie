@@ -495,7 +495,7 @@ builder.mutationFields((t) => ({
         siteId: entity.siteId,
       });
 
-      const nextEntityOrder = await db
+      const nextEntity = await db
         .select({ order: Entities.order })
         .from(Entities)
         .where(
@@ -507,7 +507,7 @@ builder.mutationFields((t) => ({
         )
         .orderBy(asc(Entities.order))
         .limit(1)
-        .then((rows) => rows[0]?.order ?? null);
+        .then(first);
 
       const post = await db
         .select({
@@ -553,7 +553,7 @@ builder.mutationFields((t) => ({
             slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
             permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
             type: EntityType.POST,
-            order: generateEntityOrder({ lower: nextEntityOrder, upper: null }),
+            order: generateEntityOrder({ lower: entity.order, upper: nextEntity?.order }),
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);
