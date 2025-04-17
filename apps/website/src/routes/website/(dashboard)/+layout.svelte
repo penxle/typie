@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { graphql } from '$graphql';
   import { setupAppContext } from '$lib/context';
   import { flex } from '$styled-system/patterns';
@@ -14,6 +15,7 @@
 
         sites {
           id
+          name
 
           entities {
             __typename
@@ -183,11 +185,13 @@
   setupAppContext();
 
   $effect(() => {
-    const unsubscribe = siteUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
+    return untrack(() => {
+      const unsubscribe = siteUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
 
-    return () => {
-      unsubscribe();
-    };
+      return () => {
+        unsubscribe();
+      };
+    });
   });
 </script>
 

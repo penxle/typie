@@ -8,7 +8,7 @@ target/
 .env.local
 
 .svelte-kit/
-.gql/
+.sark/
 styled-system/
 !packages/styled-system/
 

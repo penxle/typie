@@ -11,7 +11,7 @@ export default {
       '@/*': '../api/src/*',
       '$assets/*': './src/assets/*',
       '$styled-system/*': './styled-system/*',
-      $graphql: '.gql',
+      $graphql: './.sark',
     },
     files: {
       hooks: {
@@ -27,7 +27,7 @@ export default {
         ...config,
         compilerOptions: {
           ...config.compilerOptions,
-          rootDirs: [...config.compilerOptions.rootDirs, '../.gql/types'],
+          rootDirs: [...config.compilerOptions.rootDirs, '../.sark/types'],
         },
         include: [...config.include, '../pulumi/**/*.ts', '../scripts/**/*.ts'],
       }),

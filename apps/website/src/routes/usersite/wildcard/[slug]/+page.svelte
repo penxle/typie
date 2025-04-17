@@ -45,7 +45,7 @@
   `);
 
   const meQuery = graphql(`
-    query UsersiteWildcardSlugPage_Me_Query @manual {
+    query UsersiteWildcardSlugPage_Me_Query @client {
       me {
         id
 
@@ -58,7 +58,7 @@
 
   const load = async () => {
     try {
-      await meQuery.refetch();
+      await meQuery.load();
     } finally {
       loading = false;
     }

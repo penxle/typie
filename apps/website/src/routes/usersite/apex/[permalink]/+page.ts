@@ -5,6 +5,6 @@ export const _UsersiteApexPermalinkPage_Query_Variables: UsersiteApexPermalinkPa
   permalink: params.permalink,
 });
 
-export const _UsersiteApexPermalinkPage_Query_AfterLoad: UsersiteApexPermalinkPage_Query_AfterLoad = (query) => {
+export const _UsersiteApexPermalinkPage_Query_AfterLoad: UsersiteApexPermalinkPage_Query_AfterLoad = ({ query }) => {
   redirect(302, `${query.entityViewByPermalink.site.url}/${query.entityViewByPermalink.slug}`);
 };

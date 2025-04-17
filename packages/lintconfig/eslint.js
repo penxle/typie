@@ -29,6 +29,7 @@ export default defineConfig([
       'no-undef': 'off',
       'object-shorthand': ['error', 'always'],
       '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
+      '@typescript-eslint/no-empty-object-type': ['error', { allowObjectTypes: 'always' }],
       'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
       'import/first': 'error',
       'import/newline-after-import': ['error', { considerComments: true }],
@@ -70,6 +71,7 @@ export default defineConfig([
       'unicorn/prefer-switch': 'off',
       'unicorn/prefer-ternary': 'off',
       'unicorn/prevent-abbreviations': 'off',
+      'unicorn/throw-new-error': 'off',
     },
   },
   {

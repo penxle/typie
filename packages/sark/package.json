@@ -1,0 +1,42 @@
+{
+  "name": "@typie/sark",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/runtime/index.ts",
+    "./internal": "./src/runtime/internal/index.ts",
+    "./vite": {
+      "import": "./dist/vite.js",
+      "types": "./dist/vite.d.ts"
+    }
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "sark": "./bin/sark.ts"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint:typecheck": "tsc",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "^2.20.5",
+    "@typie/tsconfig": "workspace:*",
+    "fast-glob": "^3.3.3",
+    "fast-json-stable-stringify": "^2.1.0",
+    "graphql": "^16.10.0",
+    "graphql-sse": "^2.5.4",
+    "nanoid": "^5.1.5",
+    "rapidhash-js": "^1.0.4",
+    "recast": "^0.23.11",
+    "svelte": "^5.26.2",
+    "ts-pattern": "^5.7.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.2.6",
+    "vitest": "^3.1.1",
+    "wonka": "^6.3.5"
+  }
+}

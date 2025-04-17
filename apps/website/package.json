@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "codegen": "svelte-kit sync && panda codegen && gql",
+    "codegen": "svelte-kit sync && panda codegen && sark codegen",
     "dev": "doppler run -- vite dev",
     "lint:svelte": "svelte-check --fail-on-warnings"
   },
@@ -27,9 +27,9 @@
     "@types/mixpanel-browser": "^2.54.0",
     "@typie/adapter-bun": "workspace:*",
     "@typie/glyphr": "workspace:*",
-    "@typie/gql": "workspace:*",
     "@typie/lib": "workspace:*",
     "@typie/pulumi": "workspace:*",
+    "@typie/sark": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "body-scroll-lock-upgrade": "^1.1.0",
     "comlink": "^4.4.2",

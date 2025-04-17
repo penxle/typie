@@ -4,7 +4,7 @@
   "tasks": {
     "codegen": {
       "dependsOn": ["^build"],
-      "outputs": [".svelte-kit/**", ".gql/**", "styled-system/**"]
+      "outputs": [".svelte-kit/**", ".sark/**", "styled-system/**"]
     },
     "build": {
       "dependsOn": ["codegen", "^build"],
@@ -20,6 +20,10 @@
     },
     "lint:typecheck": {
       "dependsOn": ["codegen"]
+    },
+    "test": {
+      "dependsOn": ["codegen"],
+      "outputs": ["coverage/**"]
     }
   }
 }
