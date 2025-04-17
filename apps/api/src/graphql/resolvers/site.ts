@@ -4,22 +4,28 @@ import { db, Entities, firstOrThrow, Sites, TableCode, validateDbId } from '@/db
 import { EntityState } from '@/enums';
 import { env } from '@/env';
 import { pubsub } from '@/pubsub';
+import { generateRandomName } from '@/utils/name';
 import { builder } from '../builder';
-import { Entity, isTypeOf, Site } from '../objects';
+import { Entity, ISite, isTypeOf, Site, SiteView } from '../objects';
 
 /**
  * * Types
  */
 
-Site.implement({
-  isTypeOf: isTypeOf(TableCode.SITES),
+ISite.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     slug: t.exposeString('slug'),
     name: t.exposeString('name'),
 
     url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', self.slug) }),
+  }),
+});
 
+Site.implement({
+  isTypeOf: isTypeOf(TableCode.SITES),
+  interfaces: [ISite],
+  fields: (t) => ({
     entities: t.field({
       type: [Entity],
       resolve: async (self, _, ctx) => {
@@ -37,6 +43,18 @@ Site.implement({
         });
 
         return await loader.load(self.id);
+      },
+    }),
+  }),
+});
+
+SiteView.implement({
+  isTypeOf: isTypeOf(TableCode.SITES),
+  interfaces: [ISite],
+  fields: (t) => ({
+    myMasqueradeName: t.string({
+      resolve: async (self, _, ctx) => {
+        return generateRandomName(`${self.id}:${ctx.session?.userId ?? ctx.deviceId}`);
       },
     }),
   }),

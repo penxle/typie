@@ -127,7 +127,7 @@ type EntityView implements IEntity {
   node: EntityViewNode!
   order: Binary!
   permalink: String!
-  site: Site!
+  site: SiteView!
   slug: String!
   url: String!
 }
@@ -198,6 +198,13 @@ interface IPostOption {
   allowReactions: Boolean!
   id: ID!
   visibility: PostVisibility!
+}
+
+interface ISite {
+  id: ID!
+  name: String!
+  slug: String!
+  url: String!
 }
 
 type Image implements Blob {
@@ -491,7 +498,7 @@ enum SingleSignOnProvider {
   NAVER
 }
 
-type Site {
+type Site implements ISite {
   entities: [Entity!]!
   id: ID!
   name: String!
@@ -505,6 +512,14 @@ enum SiteState {
 }
 
 union SiteUpdateStreamPayload = Entity | Site
+
+type SiteView implements ISite {
+  id: ID!
+  myMasqueradeName: String!
+  name: String!
+  slug: String!
+  url: String!
+}
 
 type Subscription {
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!

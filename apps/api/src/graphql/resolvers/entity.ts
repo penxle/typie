@@ -10,7 +10,7 @@ import { pubsub } from '@/pubsub';
 import { decode, encode } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site } from '../objects';
+import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site, SiteView } from '../objects';
 
 /**
  * * Types
@@ -107,6 +107,11 @@ EntityView.implement({
   isTypeOf: isTypeOf(TableCode.ENTITIES),
   interfaces: [IEntity],
   fields: (t) => ({
+    site: t.field({
+      type: SiteView,
+      resolve: async (self) => self.siteId,
+    }),
+
     node: t.field({
       type: EntityViewNode,
       resolve: async (self, _, ctx) => {
