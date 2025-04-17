@@ -391,12 +391,11 @@ type PostReaction {
 }
 
 type PostView implements IPost {
-  body: JSON
+  body: PostViewBody!
   comments: [Comment!]!
   coverImage: Image
   entity: EntityView!
   excerpt: String!
-  hiddenReason: PostViewHiddenReason
   id: ID!
   maxWidth: Int!
   option: PostOptionView!
@@ -405,10 +404,20 @@ type PostView implements IPost {
   title: String!
 }
 
-enum PostViewHiddenReason {
-  AGE_RATING
-  INVALID_IDENTITY
-  PASSWORD
+union PostViewBody = PostViewBodyAvailable | PostViewBodyUnavailable
+
+type PostViewBodyAvailable {
+  content: JSON!
+}
+
+type PostViewBodyUnavailable {
+  reason: PostViewBodyUnavailableReason!
+}
+
+enum PostViewBodyUnavailableReason {
+  REQUIRE_IDENTITY_VERIFICATION
+  REQUIRE_MINIMUM_AGE
+  REQUIRE_PASSWORD
 }
 
 enum PostVisibility {

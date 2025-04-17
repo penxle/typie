@@ -20,18 +20,29 @@
             id
             title
             subtitle
-            body
             excerpt
             maxWidth
-            hiddenReason
+
+            option {
+              id
+              allowCopies
+            }
+
             coverImage {
               id
               ...Img_image
             }
 
-            option {
-              id
-              allowCopies
+            body {
+              __typename
+
+              ... on PostViewBodyAvailable {
+                content
+              }
+
+              ... on PostViewBodyUnavailable {
+                reason
+              }
             }
           }
 
@@ -119,16 +130,18 @@
         <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
       </div>
 
-      {#if $query.entityView.node.body}
+      {#if $query.entityView.node.body.__typename === 'PostViewBodyAvailable'}
         {#if $query.entityView.node.option.allowCopies}
-          <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
+          <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body.content} />
         {:else}
           <ProtectiveRegion>
-            <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body} />
+            <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body.content} />
           </ProtectiveRegion>
         {/if}
-      {:else if $query.entityView.node.hiddenReason === 'PASSWORD'}
-        비밀번호 걸려있음! (TODO: 비밀번호 입력창)
+      {:else if $query.entityView.node.body.__typename === 'PostViewBodyUnavailable'}
+        <div class={css({ fontSize: '16px', fontWeight: 'medium' })}>
+          {$query.entityView.node.body.reason}
+        </div>
       {/if}
     </div>
   </div>
