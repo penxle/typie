@@ -21,6 +21,7 @@ export const TableCode = {
   PREORDER_PAYMENTS: 'PP',
   PREORDER_USERS: 'PU',
   SITES: 'S',
+  SITE_PROFILES: 'SPR',
   USERS: 'U',
   USER_PERSONAL_IDENTITIES: 'UPI',
   USER_PLANS: 'UPL',
