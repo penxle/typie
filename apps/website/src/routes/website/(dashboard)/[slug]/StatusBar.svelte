@@ -1,10 +1,9 @@
 <script lang="ts">
   import { match } from 'ts-pattern';
-  import IconTarget from '~icons/lucide/target';
   import { fragment, graphql } from '$graphql';
-  import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import StatusBarCharacterCountChangeWidget from './StatusBarCharacterCountChangeWidget.svelte';
   import StatusBarCharacterCountWidget from './StatusBarCharacterCountWidget.svelte';
   import Timer from './Timer.svelte';
   import type { Editor } from '@tiptap/core';
@@ -25,9 +24,7 @@
       fragment Editor_StatusBar_post on Post {
         id
 
-        characterCountChange {
-          additions
-        }
+        ...Editor_StatusBarCharacterCountChangeWidget_post
       }
     `),
   );
@@ -57,8 +54,5 @@
 
   <StatusBarCharacterCountWidget {editor} />
 
-  <div class={flex({ alignItems: 'center', gap: '6px' })}>
-    <Icon style={{ color: 'gray.500' }} icon={IconTarget} size={14} />
-    <div class={css({ fontSize: '14px' })}>오늘 {$post.characterCountChange.additions}자 씀</div>
-  </div>
+  <StatusBarCharacterCountChangeWidget {$post} />
 </div>
