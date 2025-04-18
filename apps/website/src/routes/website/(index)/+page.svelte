@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { graphql } from '$graphql';
-  import { Dialog, Helmet } from '$lib/components';
+  import { Helmet, Modal } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import CtaSection from './CtaSection.svelte';
@@ -61,7 +61,7 @@
   <Footer />
 </div>
 
-<Dialog bind:open={confirmOpen}>
+<Modal bind:open={confirmOpen}>
   <form class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })} method="dialog">
     타이피 사전 등록이 완료되었어요!
 
@@ -80,4 +80,4 @@
       감사합니다. 오픈일에 만나요!
     </button>
   </form>
-</Dialog>
+</Modal>
