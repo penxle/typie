@@ -639,7 +639,19 @@ builder.mutationFields((t) => ({
       allowReaction: t.input.boolean(),
       protectContent: t.input.boolean(),
     },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
+      const post = await db
+        .select({ siteId: Entities.siteId })
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(eq(Posts.id, input.postId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: post.siteId,
+      });
+
       return await db
         .update(PostOptions)
         .set({
