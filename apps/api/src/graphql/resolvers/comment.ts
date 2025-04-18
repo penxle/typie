@@ -1,9 +1,9 @@
 import { and, eq } from 'drizzle-orm';
-import { Comments, db, Entities, firstOrThrow, PostOptions, Posts, TableCode, validateDbId } from '@/db';
+import { Comments, db, Entities, firstOrThrow, PostOptions, Posts, SiteProfiles, TableCode, validateDbId } from '@/db';
 import { CommentState, EntityState } from '@/enums';
 import { TypieError } from '@/errors';
 import { builder } from '../builder';
-import { Comment, isTypeOf } from '../objects';
+import { Comment, isTypeOf, SiteProfile } from '../objects';
 
 Comment.implement({
   isTypeOf: isTypeOf(TableCode.COMMENTS),
@@ -11,6 +11,12 @@ Comment.implement({
     id: t.exposeID('id'),
     state: t.expose('state', { type: CommentState }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+
+    profile: t.field({
+      type: SiteProfile,
+      nullable: true,
+      resolve: (self) => (self.state === CommentState.ACTIVE ? self.profileId : null),
+    }),
 
     content: t.string({
       nullable: true,
@@ -28,17 +34,24 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const post = await db
-        .select({ id: Posts.id })
+        .select({ id: Posts.id, siteId: Entities.siteId })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .innerJoin(PostOptions, eq(Posts.id, PostOptions.postId))
         .where(and(eq(Posts.id, input.postId), eq(Entities.state, EntityState.ACTIVE), eq(PostOptions.allowComment, true)))
         .then(firstOrThrow);
 
+      const profile = await db
+        .select({ id: SiteProfiles.id })
+        .from(SiteProfiles)
+        .where(and(eq(SiteProfiles.siteId, post.siteId), eq(SiteProfiles.userId, ctx.session.userId)))
+        .then(firstOrThrow);
+
       return await db
         .insert(Comments)
         .values({
           postId: post.id,
+          profileId: profile.id,
           userId: ctx.session.userId,
           content: input.content,
         })

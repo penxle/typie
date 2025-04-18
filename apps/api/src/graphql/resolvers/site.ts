@@ -1,12 +1,12 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, Sites, TableCode, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, SiteProfiles, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState } from '@/enums';
 import { env } from '@/env';
 import { pubsub } from '@/pubsub';
 import { generateRandomName } from '@/utils/name';
 import { builder } from '../builder';
-import { Entity, ISite, isTypeOf, Site, SiteView } from '../objects';
+import { Entity, ISite, isTypeOf, Site, SiteProfile, SiteView } from '../objects';
 
 /**
  * * Types
@@ -57,6 +57,30 @@ SiteView.implement({
         return generateRandomName(`${self.id}:${ctx.session?.userId ?? ctx.deviceId}`);
       },
     }),
+
+    mySiteProfile: t.field({
+      type: SiteProfile,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        if (!ctx.session) {
+          return null;
+        }
+
+        return await db
+          .select()
+          .from(SiteProfiles)
+          .where(and(eq(SiteProfiles.siteId, self.id), eq(SiteProfiles.userId, ctx.session.userId)))
+          .then(first);
+      },
+    }),
+  }),
+});
+
+SiteProfile.implement({
+  isTypeOf: isTypeOf(TableCode.SITE_PROFILES),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    name: t.exposeString('name'),
   }),
 });
 
@@ -70,6 +94,30 @@ builder.queryFields((t) => ({
     args: { siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }) },
     resolve: async (_, args) => {
       return args.siteId;
+    },
+  }),
+}));
+
+/**
+ * * Mutations
+ */
+
+builder.mutationFields((t) => ({
+  createSiteProfile: t.withAuth({ session: true }).fieldWithInput({
+    type: SiteProfile,
+    input: { siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }) },
+    resolve: async (_, { input }, ctx) => {
+      const site = await db.select({ id: Sites.id }).from(Sites).where(eq(Sites.id, input.siteId)).then(firstOrThrow);
+
+      return await db
+        .insert(SiteProfiles)
+        .values({
+          siteId: site.id,
+          userId: ctx.session.userId,
+          name: generateRandomName(`${site.id}:${ctx.session.userId}`),
+        })
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 }));
