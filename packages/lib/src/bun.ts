@@ -10,7 +10,12 @@ export const getClientAddress = (c: Context) => {
     const cf = c.req.header('CloudFront-Viewer-Address');
     if (cf) {
       const [ip] = cf.split(/:\d+$/);
-      return IPAddr.process(ip).toString();
+      return IPAddr.parse(ip).toString();
+    }
+
+    const sveltekit = c.req.header('x-sveltekit-ip');
+    if (sveltekit) {
+      return IPAddr.parse(sveltekit).toString();
     }
 
     const xff = c.req.header('X-Forwarded-For');
@@ -32,7 +37,7 @@ export const getClientAddress = (c: Context) => {
 
     const ip = getConnInfo(c).remote.address;
     if (ip) {
-      return IPAddr.process(ip).toString();
+      return IPAddr.parse(ip).toString();
     }
   } catch {
     // pass
