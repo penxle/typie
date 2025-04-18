@@ -153,10 +153,25 @@ type Folder implements IFolder {
   name: String!
 }
 
+type FolderOption implements IFolderOption {
+  id: ID!
+  visibility: FolderVisibility!
+}
+
+type FolderOptionView implements IFolderOption {
+  id: ID!
+  visibility: FolderVisibility!
+}
+
 type FolderView implements IFolder {
   entity: EntityView!
   id: ID!
   name: String!
+}
+
+enum FolderVisibility {
+  PRIVATE
+  UNLISTED
 }
 
 input GenerateSingleSignOnAuthorizationUrlInput {
@@ -175,6 +190,11 @@ interface IEntity {
 interface IFolder {
   id: ID!
   name: String!
+}
+
+interface IFolderOption {
+  id: ID!
+  visibility: FolderVisibility!
 }
 
 interface IPost {

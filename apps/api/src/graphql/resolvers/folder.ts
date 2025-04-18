@@ -1,12 +1,12 @@
 import { faker } from '@faker-js/faker';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType } from '@/enums';
+import { EntityState, EntityType, FolderVisibility } from '@/enums';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
+import { Entity, EntityView, Folder, FolderOption, FolderOptionView, FolderView, IFolder, IFolderOption, isTypeOf } from '../objects';
 
 /**
  * * Types
@@ -33,6 +33,23 @@ FolderView.implement({
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
   }),
+});
+
+IFolderOption.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    visibility: t.expose('visibility', { type: FolderVisibility }),
+  }),
+});
+
+FolderOption.implement({
+  isTypeOf: isTypeOf(TableCode.FOLDER_OPTIONS),
+  interfaces: [IFolderOption],
+});
+
+FolderOptionView.implement({
+  isTypeOf: isTypeOf(TableCode.FOLDER_OPTIONS),
+  interfaces: [IFolderOption],
 });
 
 /**

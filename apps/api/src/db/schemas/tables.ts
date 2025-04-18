@@ -52,6 +52,20 @@ export const Folders = pgTable('folders', {
     .default(sql`now()`),
 });
 
+export const FolderOptions = pgTable('folder_options', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.FOLDER_OPTIONS)),
+  folderId: text('folder_id')
+    .notNull()
+    .unique()
+    .references(() => Folders.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  visibility: E._FolderVisibility('visibility').notNull().default('PRIVATE'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Embeds = pgTable('embeds', {
   id: text('id')
     .primaryKey()
