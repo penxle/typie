@@ -3,7 +3,6 @@ import { and, asc, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
 import {
-  catchUniqueViolationAndThrow,
   db,
   Entities,
   first,
@@ -301,14 +300,24 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'identity_verification_failed' });
       }
 
-      const existingIdentity = await db
+      const existingIdentityWithSameCi = await db
+        .select({ userId: UserPersonalIdentities.userId })
+        .from(UserPersonalIdentities)
+        .where(eq(UserPersonalIdentities.ci, resp.ci))
+        .then(first);
+
+      if (existingIdentityWithSameCi && existingIdentityWithSameCi.userId !== ctx.session.userId) {
+        throw new TypieError({ code: 'same_identity_exists' });
+      }
+
+      const existingIdentityWithSameUser = await db
         .select({ id: UserPersonalIdentities.id, ci: UserPersonalIdentities.ci })
         .from(UserPersonalIdentities)
         .where(eq(UserPersonalIdentities.userId, ctx.session.userId))
         .then(first);
 
-      if (existingIdentity) {
-        if (existingIdentity.ci !== resp.ci) {
+      if (existingIdentityWithSameUser) {
+        if (existingIdentityWithSameUser.ci !== resp.ci) {
           throw new TypieError({ code: 'identity_not_match' });
         }
 
@@ -321,7 +330,7 @@ builder.mutationFields((t) => ({
             ci: resp.ci,
             expiresAt: dayjs.kst().add(1, 'year').startOf('day'),
           })
-          .where(eq(UserPersonalIdentities.id, existingIdentity.id))
+          .where(eq(UserPersonalIdentities.id, existingIdentityWithSameUser.id))
           .returning()
           .then(firstOrThrow);
       }
@@ -338,8 +347,7 @@ builder.mutationFields((t) => ({
           expiresAt: dayjs.kst().add(1, 'year').startOf('day'),
         })
         .returning()
-        .then(firstOrThrow)
-        .catch(catchUniqueViolationAndThrow(() => new TypieError({ code: 'identity_already_verified_by_other' })));
+        .then(firstOrThrow);
     },
   }),
 }));
