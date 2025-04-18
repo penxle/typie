@@ -5,7 +5,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Dialog } from '$lib/components';
+  import { Modal } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
@@ -77,7 +77,7 @@
   };
 </script>
 
-<Dialog onsubmit={handleSubmit} bind:open>
+<Modal onsubmit={handleSubmit} bind:open>
   <form class={flex({ direction: 'column', gap: '20px' })} method="dialog">
     <Logo class={css({ marginBottom: '20px', height: '20px', color: 'brand.500' })} />
 
@@ -183,9 +183,9 @@
     <br />
     · 결제 취소가 필요할 경우 고객센터로 문의 부탁드립니다.
   </p>
-</Dialog>
+</Modal>
 
-<Dialog bind:open={confirmOpen}>
+<Modal bind:open={confirmOpen}>
   <form class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })} method="dialog">
     타이피 사전 등록이 완료되었어요!
 
@@ -204,4 +204,4 @@
       감사합니다. 오픈일에 만나요!
     </button>
   </form>
-</Dialog>
+</Modal>

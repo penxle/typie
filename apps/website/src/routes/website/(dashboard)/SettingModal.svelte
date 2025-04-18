@@ -4,7 +4,7 @@
   import { TypieError } from '@/errors';
   import UserIcon from '~icons/lucide/user';
   import { fragment, graphql } from '$graphql';
-  import { Button, Dialog, Icon } from '$lib/components';
+  import { Button, Icon, Modal } from '$lib/components';
   import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -68,7 +68,7 @@
   };
 </script>
 
-<Dialog style={css.raw({ padding: '0', maxWidth: '1080px' })} bind:open>
+<Modal style={css.raw({ padding: '0', maxWidth: '1080px' })} bind:open>
   <div class={flex({ minHeight: '520px' })}>
     <div class={css({ flex: 'none', paddingY: '28px', paddingX: '20px', width: '240px', backgroundColor: 'gray.50' })}>
       <div class={flex({ align: 'center', gap: '4px', fontSize: '14px', color: 'gray.600' })}>
@@ -154,4 +154,4 @@
       </div>
     </div>
   </div>
-</Dialog>
+</Modal>
