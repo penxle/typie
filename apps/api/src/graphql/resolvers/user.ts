@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
 import {
+  catchUniqueViolationAndThrow,
   db,
   Entities,
   first,
@@ -337,7 +338,8 @@ builder.mutationFields((t) => ({
           expiresAt: dayjs.kst().add(1, 'year').startOf('day'),
         })
         .returning()
-        .then(firstOrThrow);
+        .then(firstOrThrow)
+        .catch(catchUniqueViolationAndThrow(() => new TypieError({ code: 'identity_already_verified_by_other' })));
     },
   }),
 }));
