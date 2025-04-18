@@ -55,8 +55,8 @@
     }
   `);
 
-  const meQuery = graphql(`
-    query UsersiteWildcardSlugPage_Me_Query @client {
+  const clientQuery = graphql(`
+    query UsersiteWildcardSlugPage_Client_Query @client {
       me {
         id
 
@@ -69,7 +69,7 @@
 
   const load = async () => {
     try {
-      await meQuery.load();
+      await clientQuery.load();
     } finally {
       loading = false;
     }
@@ -87,7 +87,7 @@
     title={$query.entityView.node.title}
   />
 
-  <Header $user={$meQuery?.me ?? null} {loading} />
+  <Header $user={$clientQuery?.me ?? null} {loading} />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen', backgroundColor: 'gray.100' })}>
     <div

@@ -57,7 +57,7 @@
     } catch (err) {
       const errorMessages: Record<string, string> = {
         identity_verification_failed: '인증에 실패했습니다.',
-        identity_already_verified_by_other: '이미 다른 계정에 인증된 정보입니다.',
+        same_identity_exists: '이미 다른 계정에 인증된 정보입니다.',
       };
 
       if (err instanceof TypieError) {
