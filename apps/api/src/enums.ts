@@ -60,8 +60,8 @@ export const PlanAvailability = {
   PRIVATE: 'PRIVATE',
 } as const;
 
-export type PostAgeRating = keyof typeof PostAgeRating;
-export const PostAgeRating = {
+export type PostContentRating = keyof typeof PostContentRating;
+export const PostContentRating = {
   ALL: 'ALL',
   R15: 'R15',
   R19: 'R19',

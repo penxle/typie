@@ -247,14 +247,14 @@ export const PostCharacterCountChanges = pgTable(
     postId: text('post_id')
       .notNull()
       .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    timestamp: datetime('timestamp').notNull(),
+    bucket: datetime('bucket').notNull(),
     additions: integer('additions').notNull().default(0),
     deletions: integer('deletions').notNull().default(0),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [uniqueIndex().on(t.userId, t.postId, t.timestamp)],
+  (t) => [uniqueIndex().on(t.userId, t.postId, t.bucket)],
 );
 
 export const PostContents = pgTable('post_contents', {
@@ -308,10 +308,10 @@ export const PostOptions = pgTable('post_options', {
     .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   visibility: E._PostVisibility('visibility').notNull().default('PRIVATE'),
   password: text('password'),
-  allowComments: boolean('allow_comments').notNull().default(true),
-  allowReactions: boolean('allow_reactions').notNull().default(true),
-  allowCopies: boolean('allow_copies').notNull().default(false),
-  ageRating: E._PostAgeRating('age_rating').notNull().default('ALL'),
+  contentRating: E._PostContentRating('content_rating').notNull().default('ALL'),
+  allowComment: boolean('allow_comment').notNull().default(true),
+  allowReaction: boolean('allow_reaction').notNull().default(true),
+  protectContent: boolean('protect_content').notNull().default(true),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

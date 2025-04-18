@@ -86,12 +86,12 @@ export const PostDocumentUpdateJob = defineJob('post:document:update', async (po
             .values({
               postId,
               userId,
-              timestamp: dayjs().startOf('hour'),
+              bucket: dayjs().startOf('hour'),
               additions: Math.max(characterCountDelta, 0),
               deletions: Math.max(-characterCountDelta, 0),
             })
             .onConflictDoUpdate({
-              target: [PostCharacterCountChanges.userId, PostCharacterCountChanges.postId, PostCharacterCountChanges.timestamp],
+              target: [PostCharacterCountChanges.userId, PostCharacterCountChanges.postId, PostCharacterCountChanges.bucket],
               set: {
                 additions: characterCountDelta > 0 ? sql`${PostCharacterCountChanges.additions} + ${characterCountDelta}` : undefined,
                 deletions: characterCountDelta < 0 ? sql`${PostCharacterCountChanges.deletions} + ${-characterCountDelta}` : undefined,

@@ -136,7 +136,7 @@ User.implement({
       resolve: async (self) => {
         const startOfTomorrow = dayjs.kst().startOf('day').add(1, 'day');
 
-        const date = sql<string>`DATE(${PostCharacterCountChanges.timestamp} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.utc);
+        const date = sql<string>`DATE(${PostCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.utc);
         return await db
           .select({
             date,
@@ -147,8 +147,8 @@ User.implement({
           .where(
             and(
               eq(PostCharacterCountChanges.userId, self.id),
-              gte(PostCharacterCountChanges.timestamp, startOfTomorrow.subtract(365, 'days')),
-              lt(PostCharacterCountChanges.timestamp, startOfTomorrow),
+              gte(PostCharacterCountChanges.bucket, startOfTomorrow.subtract(365, 'days')),
+              lt(PostCharacterCountChanges.bucket, startOfTomorrow),
             ),
           )
           .groupBy(date)
