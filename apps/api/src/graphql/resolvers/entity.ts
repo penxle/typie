@@ -1,8 +1,8 @@
-import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType, SiteState } from '@/enums';
+import { db, Entities, firstOrThrow, FolderOptions, Folders, PostOptions, Posts, Sites, TableCode, validateDbId } from '@/db';
+import { EntityState, EntityType, FolderVisibility, PostVisibility, SiteState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -141,9 +141,26 @@ EntityView.implement({
           many: true,
           load: async (ids) => {
             return await db
-              .select()
+              .select(getTableColumns(Entities))
               .from(Entities)
-              .where(and(inArray(Entities.parentId, ids), eq(Entities.state, EntityState.ACTIVE)))
+              .leftJoin(Posts, eq(Entities.id, Posts.entityId))
+              .leftJoin(PostOptions, eq(Posts.id, PostOptions.postId))
+              .leftJoin(Folders, eq(Entities.id, Folders.entityId))
+              .leftJoin(FolderOptions, eq(Folders.id, FolderOptions.folderId))
+              .where(
+                and(
+                  inArray(Entities.parentId, ids),
+                  eq(Entities.state, EntityState.ACTIVE),
+                  or(
+                    and(
+                      eq(Entities.type, EntityType.FOLDER),
+                      isNotNull(Folders.id),
+                      eq(FolderOptions.visibility, FolderVisibility.UNLISTED),
+                    ),
+                    and(eq(Entities.type, EntityType.POST), isNotNull(Posts.id), eq(PostOptions.visibility, PostVisibility.UNLISTED)),
+                  ),
+                ),
+              )
               .orderBy(asc(Entities.order));
           },
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
