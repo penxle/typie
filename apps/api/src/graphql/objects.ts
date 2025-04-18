@@ -43,6 +43,7 @@ export const isTypeOf = (tableCode: string) => (self: unknown) => {
 
 export const IEntity = createInterfaceRef('IEntity', T.Entities);
 export const IFolder = createInterfaceRef('IFolder', T.Folders);
+export const IFolderOption = createInterfaceRef('IFolderOption', T.FolderOptions);
 export const IPost = createInterfaceRef('IPost', T.Posts);
 export const IPostOption = createInterfaceRef('IPostOption', T.PostOptions);
 export const ISite = createInterfaceRef('ISite', T.Sites);
@@ -52,6 +53,7 @@ export const Embed = createObjectRef('Embed', T.Embeds);
 export const Entity = createObjectRef('Entity', T.Entities);
 export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
+export const FolderOption = createObjectRef('FolderOption', T.FolderOptions);
 export const Image = createObjectRef('Image', T.Images);
 export const Notification = createObjectRef('Notification', T.Notifications);
 export const PaymentMethod = createObjectRef('PaymentMethod', T.PaymentMethods);
@@ -68,6 +70,7 @@ export const UserPlan = createObjectRef('UserPlan', T.UserPlans);
 
 export const EntityView = createObjectRef('EntityView', T.Entities);
 export const FolderView = createObjectRef('FolderView', T.Folders);
+export const FolderOptionView = createObjectRef('FolderOptionView', T.FolderOptions);
 export const PostView = createObjectRef('PostView', T.Posts);
 export const PostOptionView = createObjectRef('PostOptionView', T.PostOptions);
 export const SiteView = createObjectRef('SiteView', T.Sites);

@@ -16,6 +16,12 @@ export const EntityType = {
   POST: 'POST',
 } as const;
 
+export type FolderVisibility = keyof typeof FolderVisibility;
+export const FolderVisibility = {
+  UNLISTED: 'UNLISTED',
+  PRIVATE: 'PRIVATE',
+} as const;
+
 export type NotificationCategory = keyof typeof NotificationCategory;
 export const NotificationCategory = {
   ANNOUNCEMENT: 'ANNOUNCEMENT',

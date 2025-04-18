@@ -2,10 +2,11 @@
 
 export const TableCode = {
   COMMENTS: 'C',
-  FILES: 'FILE',
-  FOLDERS: 'F',
   EMBEDS: 'EMBD',
   ENTITIES: 'E',
+  FILES: 'FILE',
+  FOLDERS: 'F',
+  FOLDER_OPTIONS: 'FO',
   IMAGES: 'IMG',
   NOTIFICATIONS: 'NT',
   PAYMENT_INVOICES: 'PYIV',
