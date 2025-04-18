@@ -1,7 +1,6 @@
 <script lang="ts">
   import { sineInOut } from 'svelte/easing';
   import { fade } from 'svelte/transition';
-  import BellIcon from '~icons/lucide/bell';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import HomeIcon from '~icons/lucide/home';
   import PanelLeftCloseIcon from '~icons/lucide/panel-left-close';
@@ -14,6 +13,7 @@
   import { getAppContext } from '$lib/context';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import Notification from './Notification.svelte';
   import PageList from './PageList.svelte';
   import UserMenu from './UserMenu.svelte';
   import type { DashboardLayout_Sidebar_user } from '$graphql';
@@ -37,6 +37,7 @@
         }
 
         ...DashboardLayout_UserMenu_user
+        ...DashboardLayout_Notification_user
       }
     `),
   );
@@ -177,7 +178,6 @@
           fontSize: '14px',
           backgroundColor: 'gray.100',
           pointerEvents: 'none',
-          // boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.05)]',
         })}
         placeholder="검색"
         type="text"
@@ -233,24 +233,7 @@
       </li>
 
       <li>
-        <button
-          class={cx(
-            'group',
-            flex({
-              alignItems: 'center',
-              gap: '8px',
-              paddingX: '8px',
-              paddingY: '6px',
-              borderRadius: '6px',
-              width: 'full',
-              _hover: { backgroundColor: 'gray.100' },
-            }),
-          )}
-          type="button"
-        >
-          <Icon style={{ color: 'gray.500', _groupHover: { color: 'gray.800' } }} icon={BellIcon} size={16} />
-          <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.700', _groupHover: { color: 'gray.950' } })}>알림</span>
-        </button>
+        <Notification {$user} />
       </li>
     </ul>
 
