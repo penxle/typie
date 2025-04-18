@@ -32,7 +32,7 @@ builder.mutationFields((t) => ({
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .innerJoin(PostOptions, eq(Posts.id, PostOptions.postId))
-        .where(and(eq(Posts.id, input.postId), eq(Entities.state, EntityState.ACTIVE), eq(PostOptions.allowComments, true)))
+        .where(and(eq(Posts.id, input.postId), eq(Entities.state, EntityState.ACTIVE), eq(PostOptions.allowComment, true)))
         .then(firstOrThrow);
 
       return await db

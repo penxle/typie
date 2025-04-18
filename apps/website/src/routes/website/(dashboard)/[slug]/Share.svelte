@@ -1,6 +1,6 @@
 <script lang="ts">
   import { z } from 'zod';
-  import { PostAgeRating, PostVisibility } from '@/enums';
+  import { PostContentRating, PostVisibility } from '@/enums';
   import CheckIcon from '~icons/lucide/check';
   import CopyIcon from '~icons/lucide/copy';
   import ExternalLinkIcon from '~icons/lucide/external-link';
@@ -42,10 +42,10 @@
           id
           visibility
           password
-          allowComments
-          allowReactions
-          allowCopies
-          ageRating
+          contentRating
+          allowComment
+          allowReaction
+          protectContent
         }
       }
     `),
@@ -55,6 +55,12 @@
     mutation Editor_Share_UpdatePostOption_Mutation($input: UpdatePostOptionInput!) {
       updatePostOption(input: $input) {
         id
+        visibility
+        password
+        contentRating
+        allowComment
+        allowReaction
+        protectContent
       }
     }
   `);
@@ -78,33 +84,33 @@
   const form = createForm({
     schema: z.object({
       visibility: z.nativeEnum(PostVisibility),
-      passwordProtected: z.boolean(),
+      hasPassword: z.boolean(),
       password: z.string().nullish(),
-      ageRestriction: z.nativeEnum(PostAgeRating),
-      allowComments: z.boolean(),
-      allowReactions: z.boolean(),
-      disallowCopies: z.boolean(),
+      contentRating: z.nativeEnum(PostContentRating),
+      allowComment: z.boolean(),
+      allowReaction: z.boolean(),
+      protectContent: z.boolean(),
     }),
     submitOn: 'change',
     onSubmit: async (data) => {
       await updatePostOption({
         postId: $post.id,
         visibility: data.visibility,
-        password: data.passwordProtected ? data.password : null,
-        allowComments: data.allowComments,
-        allowReactions: data.allowReactions,
-        allowCopies: !data.disallowCopies,
-        ageRating: data.ageRestriction,
+        password: data.hasPassword ? data.password : null,
+        contentRating: data.contentRating,
+        allowComment: data.allowComment,
+        allowReaction: data.allowReaction,
+        protectContent: data.protectContent,
       });
     },
     defaultValues: {
       visibility: $post.option.visibility,
-      passwordProtected: $post.option.password !== null,
+      hasPassword: $post.option.password !== null,
       password: $post.option.password,
-      ageRestriction: $post.option.ageRating,
-      allowComments: $post.option.allowComments,
-      allowReactions: $post.option.allowReactions,
-      disallowCopies: !$post.option.allowCopies,
+      contentRating: $post.option.contentRating,
+      allowComment: $post.option.allowComment,
+      allowReaction: $post.option.allowReaction,
+      protectContent: $post.option.protectContent,
     },
   });
 
@@ -254,10 +260,10 @@
                 <div class={css({ fontSize: '12px' })}>비밀번호 보호</div>
               </div>
 
-              <Switch bind:checked={form.fields.passwordProtected} />
+              <Switch bind:checked={form.fields.hasPassword} />
             </div>
 
-            {#if form.fields.passwordProtected}
+            {#if form.fields.hasPassword}
               <div class={flex({ position: 'relative' })}>
                 <input
                   class={css({
@@ -305,13 +311,13 @@
             <SegmentButtons
               style={css.raw({ width: '150px' })}
               items={[
-                { value: PostAgeRating.ALL, label: '없음' },
-                { value: PostAgeRating.R15, label: '15세' },
-                { value: PostAgeRating.R19, label: '성인' },
+                { value: PostContentRating.ALL, label: '없음' },
+                { value: PostContentRating.R15, label: '15세' },
+                { value: PostContentRating.R19, label: '성인' },
               ]}
-              onselect={(value) => (form.fields.ageRestriction = value)}
+              onselect={(value) => (form.fields.contentRating = value)}
               size="sm"
-              value={form.fields.ageRestriction}
+              value={form.fields.contentRating}
             />
           </div>
         </div>
@@ -331,9 +337,9 @@
                 { value: true, label: '로그인한 누구나' },
                 { value: false, label: '비허용' },
               ]}
-              onselect={(value) => (form.fields.allowComments = value)}
+              onselect={(value) => (form.fields.allowComment = value)}
               size="sm"
-              value={form.fields.allowComments}
+              value={form.fields.allowComment}
             />
           </div>
 
@@ -349,9 +355,9 @@
                 { value: true, label: '누구나' },
                 { value: false, label: '비허용' },
               ]}
-              onselect={(value) => (form.fields.allowReactions = value)}
+              onselect={(value) => (form.fields.allowReaction = value)}
               size="sm"
-              value={form.fields.allowReactions}
+              value={form.fields.allowReaction}
             />
           </div>
 
@@ -364,7 +370,7 @@
               </div>
             </div>
 
-            <Switch bind:checked={form.fields.disallowCopies} />
+            <Switch bind:checked={form.fields.protectContent} />
           </div>
         </div>
 

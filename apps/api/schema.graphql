@@ -207,11 +207,11 @@ interface IPost {
 }
 
 interface IPostOption {
-  ageRating: PostAgeRating!
-  allowComments: Boolean!
-  allowCopies: Boolean!
-  allowReactions: Boolean!
+  allowComment: Boolean!
+  allowReaction: Boolean!
+  contentRating: PostContentRating!
   id: ID!
+  protectContent: Boolean!
   visibility: PostVisibility!
 }
 
@@ -374,29 +374,29 @@ type Post implements IPost {
   updatedAt: DateTime!
 }
 
-enum PostAgeRating {
+enum PostContentRating {
   ALL
   R15
   R19
 }
 
 type PostOption implements IPostOption {
-  ageRating: PostAgeRating!
-  allowComments: Boolean!
-  allowCopies: Boolean!
-  allowReactions: Boolean!
+  allowComment: Boolean!
+  allowReaction: Boolean!
+  contentRating: PostContentRating!
   id: ID!
   password: String
+  protectContent: Boolean!
   visibility: PostVisibility!
 }
 
 type PostOptionView implements IPostOption {
-  ageRating: PostAgeRating!
-  allowComments: Boolean!
-  allowCopies: Boolean!
-  allowReactions: Boolean!
+  allowComment: Boolean!
+  allowReaction: Boolean!
+  contentRating: PostContentRating!
   hasPassword: Boolean!
   id: ID!
+  protectContent: Boolean!
   visibility: PostVisibility!
 }
 
@@ -563,12 +563,12 @@ input UpdatePaymentMethodInput {
 }
 
 input UpdatePostOptionInput {
-  ageRating: PostAgeRating!
-  allowComments: Boolean!
-  allowCopies: Boolean!
-  allowReactions: Boolean!
+  allowComment: Boolean!
+  allowReaction: Boolean!
+  contentRating: PostContentRating!
   password: String
   postId: ID!
+  protectContent: Boolean!
   visibility: PostVisibility!
 }
 

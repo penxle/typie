@@ -25,7 +25,7 @@
 
             option {
               id
-              allowCopies
+              protectContent
             }
 
             coverImage {
@@ -131,7 +131,7 @@
       </div>
 
       {#if $query.entityView.node.body.__typename === 'PostViewBodyAvailable'}
-        {#if $query.entityView.node.option.allowCopies}
+        {#if $query.entityView.node.option.protectContent}
           <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body.content} />
         {:else}
           <ProtectiveRegion>

@@ -20,7 +20,7 @@ import {
   UserPersonalIdentities,
   validateDbId,
 } from '@/db';
-import { EntityState, EntityType, PostAgeRating, PostViewBodyUnavailableReason, PostVisibility } from '@/enums';
+import { EntityState, EntityType, PostContentRating, PostViewBodyUnavailableReason, PostVisibility } from '@/enums';
 import { TypieError } from '@/errors';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
@@ -135,8 +135,8 @@ Post.implement({
             and(
               eq(PostCharacterCountChanges.userId, ctx.session.userId),
               eq(PostCharacterCountChanges.postId, post.id),
-              gte(PostCharacterCountChanges.timestamp, startOfDay),
-              lt(PostCharacterCountChanges.timestamp, startOfDay.add(1, 'day')),
+              gte(PostCharacterCountChanges.bucket, startOfDay),
+              lt(PostCharacterCountChanges.bucket, startOfDay.add(1, 'day')),
             ),
           )
           .then(firstOrThrow);
@@ -177,7 +177,7 @@ PostView.implement({
 
         const option = await optionLoader.load(self.id);
 
-        if (option.ageRating !== PostAgeRating.ALL) {
+        if (option.contentRating !== PostContentRating.ALL) {
           if (!ctx.session) {
             return {
               __typename: 'PostViewBodyUnavailable',
@@ -208,9 +208,9 @@ PostView.implement({
             };
           }
 
-          const minAge = match(option.ageRating)
-            .with(PostAgeRating.R15, () => 15)
-            .with(PostAgeRating.R19, () => 19)
+          const minAge = match(option.contentRating)
+            .with(PostContentRating.R15, () => 15)
+            .with(PostContentRating.R19, () => 19)
             .exhaustive();
 
           if (getKoreanAge(identity.birthday) < minAge) {
@@ -297,7 +297,7 @@ PostView.implement({
         });
 
         const option = await optionLoader.load(post.id);
-        if (!option.allowComments) {
+        if (!option.allowComment) {
           return [];
         }
 
@@ -320,10 +320,10 @@ IPostOption.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     visibility: t.expose('visibility', { type: PostVisibility }),
-    allowComments: t.exposeBoolean('allowComments'),
-    allowReactions: t.exposeBoolean('allowReactions'),
-    allowCopies: t.exposeBoolean('allowCopies'),
-    ageRating: t.expose('ageRating', { type: PostAgeRating }),
+    contentRating: t.expose('contentRating', { type: PostContentRating }),
+    allowComment: t.exposeBoolean('allowComment'),
+    allowReaction: t.exposeBoolean('allowReaction'),
+    protectContent: t.exposeBoolean('protectContent'),
   }),
 });
 
@@ -520,9 +520,9 @@ builder.mutationFields((t) => ({
             text: PostContents.text,
           },
           option: {
-            allowComments: PostOptions.allowComments,
-            allowReactions: PostOptions.allowReactions,
-            allowCopies: PostOptions.allowCopies,
+            allowComment: PostOptions.allowComment,
+            allowReaction: PostOptions.allowReaction,
+            protectContent: PostOptions.protectContent,
             password: PostOptions.password,
           },
         })
@@ -634,10 +634,10 @@ builder.mutationFields((t) => ({
       postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
       visibility: t.input.field({ type: PostVisibility }),
       password: t.input.string({ required: false }),
-      allowComments: t.input.boolean(),
-      allowReactions: t.input.boolean(),
-      allowCopies: t.input.boolean(),
-      ageRating: t.input.field({ type: PostAgeRating }),
+      contentRating: t.input.field({ type: PostContentRating }),
+      allowComment: t.input.boolean(),
+      allowReaction: t.input.boolean(),
+      protectContent: t.input.boolean(),
     },
     resolve: async (_, { input }) => {
       return await db
@@ -645,10 +645,10 @@ builder.mutationFields((t) => ({
         .set({
           visibility: input.visibility,
           password: input.password,
-          allowComments: input.allowComments,
-          allowReactions: input.allowReactions,
-          allowCopies: input.allowCopies,
-          ageRating: input.ageRating,
+          contentRating: input.contentRating,
+          allowComment: input.allowComment,
+          allowReaction: input.allowReaction,
+          protectContent: input.protectContent,
         })
         .where(eq(PostOptions.postId, input.postId))
         .returning()
@@ -689,7 +689,7 @@ builder.mutationFields((t) => ({
       const post = await db
         .select({
           state: Entities.state,
-          allowReactions: PostOptions.allowReactions,
+          allowReaction: PostOptions.allowReaction,
         })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
@@ -701,7 +701,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'not_found' });
       }
 
-      if (!post.allowReactions) {
+      if (!post.allowReaction) {
         throw new TypieError({ code: 'reaction_disallowed' });
       }
 
