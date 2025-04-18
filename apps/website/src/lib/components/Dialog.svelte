@@ -2,13 +2,15 @@
   import { css } from '$styled-system/css';
   import type { Snippet } from 'svelte';
   import type { HTMLDialogAttributes } from 'svelte/elements';
+  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     open: boolean;
     children: Snippet;
-  } & HTMLDialogAttributes;
+    style?: SystemStyleObject;
+  } & Omit<HTMLDialogAttributes, 'style'>;
 
-  let { open = $bindable(), children, ...rest }: Props = $props();
+  let { open = $bindable(), children, style, ...rest }: Props = $props();
 
   let dialogEl: HTMLDialogElement;
   let showModal = (dialog: HTMLDialogElement) => dialog.showModal();
@@ -75,22 +77,25 @@
     })}
   >
     <div
-      class={css({
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        flexGrow: '1',
-        borderWidth: '1px',
-        borderRadius: '[20px]',
-        backgroundColor: 'white',
-        padding: '20px',
-        pointerEvents: 'auto',
-        height: '[fit-content]',
-        width: 'full',
-        maxWidth: '720px',
-        maxHeight: '738px',
-        overflow: 'hidden',
-      })}
+      class={css(
+        {
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          flexGrow: '1',
+          borderWidth: '1px',
+          borderRadius: '16px',
+          backgroundColor: 'white',
+          padding: '20px',
+          pointerEvents: 'auto',
+          height: '[fit-content]',
+          width: 'full',
+          maxWidth: '720px',
+          maxHeight: '738px',
+          overflow: 'hidden',
+        },
+        style,
+      )}
     >
       <div class={css({ height: 'full', overflowY: 'auto' })}>
         <section class={css({ display: 'contents' })}>
