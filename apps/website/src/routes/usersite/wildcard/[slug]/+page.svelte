@@ -1,8 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { z } from 'zod';
+  import { TypieError } from '@/errors';
+  import LockKeyholeIcon from '~icons/lucide/lock-keyhole';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Helmet, HorizontalDivider, Img, ProtectiveRegion } from '$lib/components';
+  import { Button, Helmet, HorizontalDivider, Icon, Img, ProtectiveRegion, TextInput } from '$lib/components';
+  import { createForm, FormError } from '$lib/form';
   import { TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -64,6 +68,43 @@
       }
     }
   `);
+
+  const unlockPostView = graphql(`
+    mutation UsersiteWildcardSlugPage_UnlockPostView_Mutation($input: UnlockPostViewInput!) {
+      unlockPostView(input: $input) {
+        id
+
+        body {
+          __typename
+
+          ... on PostViewBodyAvailable {
+            content
+          }
+
+          ... on PostViewBodyUnavailable {
+            reason
+          }
+        }
+      }
+    }
+  `);
+
+  const form = createForm({
+    schema: z.object({
+      password: z.string(),
+    }),
+    onSubmit: async (data) => {
+      await unlockPostView({
+        postId: $query.entityView.node.id,
+        password: data.password,
+      });
+    },
+    onError: (error) => {
+      if (error instanceof TypieError && error.code === 'invalid_password') {
+        throw new FormError('password', '비밀번호가 올바르지 않습니다.');
+      }
+    },
+  });
 
   let loading = $state(true);
 
@@ -139,8 +180,58 @@
           </ProtectiveRegion>
         {/if}
       {:else if $query.entityView.node.body.__typename === 'PostViewBodyUnavailable'}
-        <div class={css({ fontSize: '16px', fontWeight: 'medium' })}>
-          {$query.entityView.node.body.reason}
+        <div class={css({ marginTop: '42px', fontSize: '16px', fontWeight: 'medium' })}>
+          {#if $query.entityView.node.body.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
+            <div class={flex({ direction: 'column', align: 'center', gap: '16px' })}>
+              {#if loading}
+                <div
+                  class={css({
+                    marginTop: '12px',
+                    borderRadius: '4px',
+                    backgroundColor: 'gray.100',
+                    width: '190px',
+                    height: '22px',
+                  })}
+                ></div>
+
+                <div class={css({ borderRadius: '8px', backgroundColor: 'gray.100', width: '92px', height: '36px' })}></div>
+              {:else}
+                <p class={css({ marginTop: '12px' })}>본인 인증이 필요한 글이에요.</p>
+
+                {#if $clientQuery?.me}
+                  <!-- TODO: 설정 모달 바로 띄우기 -->
+                  <Button style={css.raw({ width: '92px' })} external href={`${env.PUBLIC_WEBSITE_URL}/home`} type="link">본인 인증</Button>
+                {:else}
+                  <p>로그인 후 본인인증을 진행해 주세요.</p>
+
+                  <Button external href={`${env.PUBLIC_WEBSITE_URL}/auth/login`} type="link">로그인 후 본인 인증하기</Button>
+                {/if}
+              {/if}
+            </div>
+          {:else if $query.entityView.node.body.reason === 'REQUIRE_MINIMUM_AGE'}
+            <p>이 글은 연령 기준에 따라 현재 계정으로는 열람이 제한되어 있어요.</p>
+          {:else if $query.entityView.node.body.reason === 'REQUIRE_PASSWORD'}
+            <form class={flex({ direction: 'column', align: 'center' })} onsubmit={form.handleSubmit}>
+              <Icon icon={LockKeyholeIcon} size={32} />
+              <p class={css({ marginTop: '12px', marginBottom: '16px' })}>해당 내용은 비밀번호 입력이 필요해요</p>
+
+              <div class={flex({ direction: 'column', align: 'center', gap: '8px' })}>
+                <TextInput
+                  id="password"
+                  style={css.raw({ width: '280px' })}
+                  placeholder="비밀번호를 입력하세요"
+                  bind:value={form.fields.password}
+                />
+                {#if form.errors.password}
+                  <p class={css({ color: 'red.500', fontSize: '14px' })}>{form.errors.password}</p>
+                {/if}
+
+                <Button style={css.raw({ width: '92px' })} type="submit">확인</Button>
+              </div>
+            </form>
+          {:else}
+            {$query.entityView.node.body.reason}
+          {/if}
         </div>
       {/if}
     </div>
