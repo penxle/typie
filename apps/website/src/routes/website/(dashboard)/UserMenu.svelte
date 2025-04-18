@@ -8,6 +8,7 @@
   import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import SettingModal from './SettingModal.svelte';
   import type { DashboardLayout_UserMenu_user } from '$graphql';
 
   type Props = {
@@ -23,6 +24,8 @@
         id
         name
         email
+
+        ...DashboardLayout_SettingModal_user
 
         avatar {
           id
@@ -49,6 +52,7 @@
 
   let open = $state(false);
   let clientWidth = $state(0);
+  let settingModalOpen = $state(false);
 
   const app = getAppContext();
 
@@ -129,7 +133,14 @@
 
     <div class={css({ marginX: '4px', height: '1px', backgroundColor: 'gray.100' })}></div>
 
-    <button class={css({ paddingX: '8px', paddingY: '4px', textAlign: 'left', _hover: { backgroundColor: 'gray.100' } })} type="button">
+    <button
+      class={css({ paddingX: '8px', paddingY: '4px', textAlign: 'left', _hover: { backgroundColor: 'gray.100' } })}
+      onclick={() => {
+        open = false;
+        settingModalOpen = true;
+      }}
+      type="button"
+    >
       설정
     </button>
 
@@ -164,3 +175,5 @@
     </button>
   </div>
 {/if}
+
+<SettingModal {$user} bind:open={settingModalOpen} />
