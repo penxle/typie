@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type { RequestHandler } from './$types';
 
-const handler: RequestHandler = async ({ url, request, params, fetch }) => {
+const handler: RequestHandler = async ({ url, request, params }) => {
   const headers = new Headers(request.headers);
   headers.delete('host');
 
