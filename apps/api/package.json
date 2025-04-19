@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsup",
-    "dev": "doppler run -- bun --watch src/main.ts",
+    "dev": "doppler run -- bun --bun --watch src/main.ts",
     "dev:email": "email dev --port 3001 --dir src/email/templates",
     "lint:typecheck": "tsc"
   },
