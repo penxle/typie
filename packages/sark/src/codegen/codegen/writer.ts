@@ -164,6 +164,20 @@ export const writePublicAssets = async (outDir: string, artifacts: Artifact[]) =
       source: AST.b.stringLiteral('@typie/sark/internal'),
       specifiers: [AST.b.importSpecifier.from({ imported: AST.b.identifier('CacheFacade') })],
     }),
+    AST.b.exportNamedDeclaration.from({
+      declaration: null,
+      specifiers: [
+        AST.b.exportSpecifier.from({
+          local: AST.b.identifier('Optional'),
+          exported: AST.b.identifier('Optional'),
+        }),
+        AST.b.exportSpecifier.from({
+          local: AST.b.identifier('List'),
+          exported: AST.b.identifier('List'),
+        }),
+      ],
+      source: AST.b.stringLiteral('@typie/sark/internal'),
+    }),
     AST.b.exportAllDeclaration(AST.b.stringLiteral('./public/functions')),
     AST.b.exportAllDeclaration(AST.b.stringLiteral('./public/types')),
     AST.b.exportNamedDeclaration.from({

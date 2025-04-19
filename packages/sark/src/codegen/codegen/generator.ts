@@ -171,6 +171,8 @@ export const buildGraphQLFunctions = (artifacts: Artifact[]): AST.Program => {
         AST.b.importSpecifier(AST.b.identifier('MutationStore')),
         AST.b.importSpecifier(AST.b.identifier('SubscriptionStore')),
         AST.b.importSpecifier(AST.b.identifier('FragmentStore')),
+        AST.b.importSpecifier(AST.b.identifier('List')),
+        AST.b.importSpecifier(AST.b.identifier('Optional')),
       ],
     }),
     ...artifacts.map((artifact) =>
@@ -235,7 +237,10 @@ export const buildGraphQLFunctions = (artifacts: Artifact[]): AST.Program => {
               AST.b.identifier.from({
                 name: 'prop',
                 typeAnnotation: AST.b.tsTypeAnnotation(
-                  AST.b.tsArrayType(AST.b.tsTypeReference(AST.b.identifier(`types.${artifact.name}`))),
+                  AST.b.tsTypeReference.from({
+                    typeName: AST.b.identifier('List'),
+                    typeParameters: AST.b.tsTypeParameterInstantiation([AST.b.tsTypeReference(AST.b.identifier(`types.${artifact.name}`))]),
+                  }),
                 ),
               }),
               AST.b.identifier.from({
@@ -247,7 +252,10 @@ export const buildGraphQLFunctions = (artifacts: Artifact[]): AST.Program => {
               AST.b.tsTypeReference.from({
                 typeName: AST.b.identifier(`FragmentStore`),
                 typeParameters: AST.b.tsTypeParameterInstantiation([
-                  AST.b.tsArrayType(AST.b.tsTypeReference(AST.b.identifier(artifact.name))),
+                  AST.b.tsTypeReference.from({
+                    typeName: AST.b.identifier('List'),
+                    typeParameters: AST.b.tsTypeParameterInstantiation([AST.b.tsTypeReference(AST.b.identifier(artifact.name))]),
+                  }),
                 ]),
               }),
             ),
@@ -260,7 +268,10 @@ export const buildGraphQLFunctions = (artifacts: Artifact[]): AST.Program => {
               AST.b.identifier.from({
                 name: 'prop',
                 typeAnnotation: AST.b.tsTypeAnnotation(
-                  AST.b.tsUnionType([AST.b.tsTypeReference(AST.b.identifier(`types.${artifact.name}`)), AST.b.tsNullKeyword()]),
+                  AST.b.tsTypeReference.from({
+                    typeName: AST.b.identifier('Optional'),
+                    typeParameters: AST.b.tsTypeParameterInstantiation([AST.b.tsTypeReference(AST.b.identifier(`types.${artifact.name}`))]),
+                  }),
                 ),
               }),
               AST.b.identifier.from({
@@ -269,13 +280,15 @@ export const buildGraphQLFunctions = (artifacts: Artifact[]): AST.Program => {
               }),
             ],
             returnType: AST.b.tsTypeAnnotation(
-              AST.b.tsUnionType([
-                AST.b.tsTypeReference.from({
-                  typeName: AST.b.identifier(`FragmentStore`),
-                  typeParameters: AST.b.tsTypeParameterInstantiation([AST.b.tsTypeReference(AST.b.identifier(artifact.name))]),
-                }),
-                AST.b.tsNullKeyword(),
-              ]),
+              AST.b.tsTypeReference.from({
+                typeName: AST.b.identifier(`FragmentStore`),
+                typeParameters: AST.b.tsTypeParameterInstantiation([
+                  AST.b.tsTypeReference.from({
+                    typeName: AST.b.identifier('Optional'),
+                    typeParameters: AST.b.tsTypeParameterInstantiation([AST.b.tsTypeReference(AST.b.identifier(artifact.name))]),
+                  }),
+                ]),
+              }),
             ),
           }),
         ),
