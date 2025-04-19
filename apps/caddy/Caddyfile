@@ -1,0 +1,3 @@
+:4100, :4200, :4300 {
+  reverse_proxy localhost:4000
+}

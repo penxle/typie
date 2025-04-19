@@ -4,7 +4,7 @@ import type { $ArtifactSchema, ArtifactSchema, IsEmpty } from '../../../types';
 
 export type MutationStore<T extends $ArtifactSchema<'mutation'>> =
   IsEmpty<T['$input']> extends true
-    ? () => Promise<T['$output']>
+    ? () => Promise<T['$output'][keyof T['$output']]>
     : (input: T['$input'] extends { input: infer U } ? U : never) => Promise<T['$output'][keyof T['$output']]>;
 
 export function createMutationStore<T extends $ArtifactSchema<'mutation'>>(schema: ArtifactSchema<T>): MutationStore<T> {

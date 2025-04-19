@@ -33,7 +33,7 @@
 
       Toast.success('비밀번호가 재설정되었어요');
 
-      await goto('/auth/login', { replaceState: true });
+      await goto('/login', { replaceState: true });
     },
     onError: (error) => {
       if (error instanceof TypieError && error.code === 'invalid_code') {

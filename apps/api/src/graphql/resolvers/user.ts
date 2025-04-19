@@ -236,7 +236,7 @@ builder.mutationFields((t) => ({
         body: EmailUpdateEmail({
           name: user.name,
           email,
-          verificationUrl: `${env.WEBSITE_URL}/auth/update-email?code=${code}`,
+          verificationUrl: `${env.AUTH_URL}/update-email?code=${code}`,
         }),
       });
 
@@ -348,6 +348,17 @@ builder.mutationFields((t) => ({
         })
         .returning()
         .then(firstOrThrow);
+    },
+  }),
+
+  createWsSession: t.withAuth({ session: true }).field({
+    type: 'String',
+    resolve: async (_, __, ctx) => {
+      const token = nanoid(64);
+
+      await redis.setex(`user:ws:${token}`, 60 * 10, JSON.stringify({ userId: ctx.session.userId }));
+
+      return token;
     },
   }),
 }));

@@ -1,4 +1,3 @@
-export * from './access-token';
 export * from './date';
 export * from './entity';
 export * from './image-generation';

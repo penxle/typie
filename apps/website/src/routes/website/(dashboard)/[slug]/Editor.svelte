@@ -8,7 +8,7 @@
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostDocumentSyncMessageKind } from '@/const';
+  import { PostDocumentSyncMessageKind, WsMessageKind } from '@/const';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { autosize } from '$lib/actions';
@@ -77,6 +77,12 @@
     `),
   );
 
+  const createWsSession = graphql(`
+    mutation Editor_CreateWsSession_Mutation {
+      createWsSession
+    }
+  `);
+
   let toolbarEl = $state<HTMLDivElement>();
   let toolbarSticked = $state(false);
 
@@ -100,13 +106,15 @@
   const encoder = new TextEncoder();
 
   const ws = createWebSocket({
-    onopen: () => {
+    onopen: async () => {
       connectionStatus = 'connecting';
-      ws.send(PostDocumentSyncMessageKind.INIT, encoder.encode($query.post.id));
+
+      const session = await createWsSession();
+      ws.send(WsMessageKind.ESTABLISH, encoder.encode(session));
     },
     onmessage: (type, data) => {
-      if (type === PostDocumentSyncMessageKind.HEARTBEAT) {
-        lastHeartbeatAt = dayjs();
+      if (type === WsMessageKind.ESTABLISH) {
+        ws.send(PostDocumentSyncMessageKind.INIT, encoder.encode($query.post.id));
       } else if (type === PostDocumentSyncMessageKind.INIT) {
         connectionStatus = 'connected';
         forceSync();
@@ -120,6 +128,8 @@
       } else if (type === PostDocumentSyncMessageKind.PRESENCE) {
         const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
         ws.send(PostDocumentSyncMessageKind.AWARENESS, update);
+      } else if (type === WsMessageKind.HEARTBEAT) {
+        lastHeartbeatAt = dayjs();
       }
     },
     onclose: () => {

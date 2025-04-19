@@ -7,15 +7,16 @@ const createOAuthClient = () => {
   return new OAuth2Client({
     clientId: env.GOOGLE_OAUTH_CLIENT_ID,
     clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET,
-    redirectUri: `${env.WEBSITE_URL}/auth/sso/google`,
+    redirectUri: `${env.AUTH_URL}/sso/google`,
   });
 };
 
-export const generateAuthorizationUrl = (email?: string) => {
+export const generateAuthorizationUrl = (state: string, email?: string | null) => {
   const client = createOAuthClient();
   return client.generateAuthUrl({
     scope: ['email', 'profile'],
-    login_hint: email,
+    state,
+    login_hint: email ?? undefined,
   });
 };
 

@@ -1,24 +1,25 @@
 <script lang="ts">
+  import qs from 'query-string';
   import { z } from 'zod';
   import { SingleSignOnProvider } from '@/enums';
   import { TypieError } from '@/errors';
-  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
+  import { serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+
+  const loginWithEmail = graphql(`
+    mutation LoginPage_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {
+      loginWithEmail(input: $input)
+    }
+  `);
 
   const generateSingleSignOnAuthorizationUrl = graphql(`
     mutation LoginPage_GenerateSingleSignOnAuthorizationUrl_Mutation($input: GenerateSingleSignOnAuthorizationUrlInput!) {
       generateSingleSignOnAuthorizationUrl(input: $input)
-    }
-  `);
-
-  const loginWithEmail = graphql(`
-    mutation LoginPage_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {
-      loginWithEmail(input: $input) {
-        id
-      }
     }
   `);
 
@@ -33,7 +34,15 @@
         password: data.password,
       });
 
-      await goto('/');
+      location.href = qs.stringifyUrl({
+        url: `${env.PUBLIC_AUTH_URL}/authorize`,
+        query: {
+          client_id: env.PUBLIC_OIDC_CLIENT_ID,
+          response_type: 'code',
+          redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+          state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+        },
+      });
     },
     onError: (error) => {
       if (error instanceof TypieError) {
@@ -91,7 +100,9 @@
       </button>
 
       <div class={css({ textAlign: 'center', marginTop: '8px' })}>
-        <a class={css({ color: 'gray.600', textDecoration: 'underline' })} href="/auth/forgot-password">비밀번호를 잊으셨나요?</a>
+        <a class={css({ color: 'gray.600', textDecoration: 'underline' })} href={`/forgot-password${page.url.search}`}>
+          비밀번호를 잊으셨나요?
+        </a>
       </div>
     </form>
 
@@ -115,6 +126,10 @@
         onclick={async () => {
           const url = await generateSingleSignOnAuthorizationUrl({
             provider: SingleSignOnProvider.GOOGLE,
+            state: serializeOAuthState({
+              redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+              state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+            }),
           });
 
           location.href = url;
@@ -137,6 +152,10 @@
         onclick={async () => {
           const url = await generateSingleSignOnAuthorizationUrl({
             provider: SingleSignOnProvider.KAKAO,
+            state: serializeOAuthState({
+              redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+              state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+            }),
           });
 
           location.href = url;
@@ -159,6 +178,10 @@
         onclick={async () => {
           const url = await generateSingleSignOnAuthorizationUrl({
             provider: SingleSignOnProvider.NAVER,
+            state: serializeOAuthState({
+              redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+              state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+            }),
           });
 
           location.href = url;
@@ -170,7 +193,7 @@
 
       <div class={css({ textAlign: 'center', marginTop: '16px' })}>
         <p>
-          계정이 없으신가요? <a class={css({ textDecoration: 'underline' })} href="/auth/signup">이메일로 회원가입</a>
+          계정이 없으신가요? <a class={css({ textDecoration: 'underline' })} href={`/signup${page.url.search}`}>이메일로 회원가입</a>
         </p>
       </div>
     </div>

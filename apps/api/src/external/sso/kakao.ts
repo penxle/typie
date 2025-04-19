@@ -4,13 +4,14 @@ import { SingleSignOnProvider } from '@/enums';
 import { env } from '@/env';
 import type { ExternalUser } from './types';
 
-export const generateAuthorizationUrl = () => {
+export const generateAuthorizationUrl = (state: string) => {
   return qs.stringifyUrl({
     url: 'https://kauth.kakao.com/oauth/authorize',
     query: {
       response_type: 'code',
       client_id: env.KAKAO_CLIENT_ID,
-      redirect_uri: `${env.WEBSITE_URL}/auth/sso/kakao`,
+      redirect_uri: `${env.AUTH_URL}/sso/kakao`,
+      state,
     },
   });
 };
@@ -25,7 +26,7 @@ export const authorizeUser = async (code: string): Promise<ExternalUser> => {
         grant_type: 'authorization_code',
         client_id: env.KAKAO_CLIENT_ID,
         client_secret: env.KAKAO_CLIENT_SECRET,
-        redirect_uri: `${env.WEBSITE_URL}/auth/sso/kakao`,
+        redirect_uri: `${env.AUTH_URL}/sso/kakao`,
         code,
       }),
     })

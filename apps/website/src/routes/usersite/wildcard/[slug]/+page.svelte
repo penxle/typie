@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { Helmet, HorizontalDivider, Img, ProtectiveRegion } from '$lib/components';
@@ -10,6 +9,12 @@
 
   const query = graphql(`
     query UsersiteWildcardSlugPage_Query($origin: String!, $slug: String!) {
+      me {
+        id
+
+        ...UsersiteWildcardSlugPage_Header_user
+      }
+
       entityView(origin: $origin, slug: $slug) {
         id
 
@@ -54,30 +59,6 @@
       }
     }
   `);
-
-  const clientQuery = graphql(`
-    query UsersiteWildcardSlugPage_Client_Query @client {
-      me {
-        id
-
-        ...UsersiteWildcardSlugPage_Header_user
-      }
-    }
-  `);
-
-  let loading = $state(true);
-
-  const load = async () => {
-    try {
-      await clientQuery.load();
-    } finally {
-      loading = false;
-    }
-  };
-
-  onMount(() => {
-    load();
-  });
 </script>
 
 {#if $query.entityView.node.__typename === 'PostView'}
@@ -87,7 +68,7 @@
     title={$query.entityView.node.title}
   />
 
-  <Header $user={$clientQuery?.me ?? null} {loading} />
+  <Header $user={$query.me} />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen', backgroundColor: 'gray.100' })}>
     <div
