@@ -6,10 +6,10 @@
   import { Button, Img } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import type { UsersiteWildcardSlugPage_Header_user } from '$graphql';
+  import type { Optional, UsersiteWildcardSlugPage_Header_user } from '$graphql';
 
   type Props = {
-    $user: UsersiteWildcardSlugPage_Header_user | null;
+    $user: Optional<UsersiteWildcardSlugPage_Header_user>;
     loading: boolean;
   };
 

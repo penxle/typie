@@ -1,6 +1,22 @@
 import type { Readable } from 'svelte/store';
 import type { $ArtifactSchema } from '../../../types';
 
-export type FragmentStore<T extends $ArtifactSchema<'fragment'> | $ArtifactSchema<'fragment'>[]> = Readable<
-  T extends (infer U extends $ArtifactSchema<'fragment'>)[] ? U['$output'][] : T extends $ArtifactSchema<'fragment'> ? T['$output'] : never
+type FragmentKey = ` $$_${string}`;
+type FragmentRef = Record<FragmentKey, never | undefined>;
+
+export type Optional<T extends FragmentRef> = (T & { readonly __optional?: unique symbol }) | null | undefined;
+export type List<T extends FragmentRef> = T[] & { readonly __list?: unique symbol };
+
+type OutputOf<S> = S extends { $output: infer O } ? O : never;
+
+export type FragmentStore<
+  T extends $ArtifactSchema<'fragment'> | List<$ArtifactSchema<'fragment'>> | Optional<$ArtifactSchema<'fragment'>>,
+> = Readable<
+  T extends $ArtifactSchema<'fragment'>
+    ? OutputOf<T>
+    : T extends List<infer U>
+      ? OutputOf<U>[]
+      : T extends Optional<infer U>
+        ? OutputOf<U> | null | undefined
+        : never
 >;
