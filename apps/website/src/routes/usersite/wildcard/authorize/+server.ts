@@ -5,7 +5,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { deserializeOAuthState } from '$lib/utils';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ url, cookies, fetch }) => {
+export const GET: RequestHandler = async ({ url, cookies }) => {
   const code = url.searchParams.get('code');
   const error = url.searchParams.get('error');
   const state = url.searchParams.get('state');

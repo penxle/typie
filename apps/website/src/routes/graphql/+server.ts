@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ request, cookies, fetch }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
   const accessToken = cookies.get('typie-at');
   const deviceId = cookies.get('typie-did');
 
