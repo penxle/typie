@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build",
     "codegen": "svelte-kit sync && panda codegen && sark codegen",
-    "dev": "doppler run -- vite dev",
+    "dev": "doppler run -- bun --bun vite dev",
     "lint:svelte": "svelte-check --fail-on-warnings"
   },
   "devDependencies": {
