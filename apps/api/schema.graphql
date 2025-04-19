@@ -177,6 +177,7 @@ enum FolderVisibility {
 input GenerateSingleSignOnAuthorizationUrlInput {
   email: String
   provider: SingleSignOnProvider!
+  state: String!
 }
 
 interface IEntity {
@@ -261,14 +262,15 @@ input MoveEntityInput {
 }
 
 type Mutation {
-  authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): User!
-  authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): User!
+  authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): String!
+  authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlan: UserPlan!
   createComment(input: CreateCommentInput!): Comment!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
+  createWsSession: String!
   deleteComment(input: DeleteCommentInput!): Comment!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deletePost(input: DeletePostInput!): Post!
@@ -277,8 +279,7 @@ type Mutation {
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
-  loginWithEmail(input: LoginWithEmailInput!): User!
-  logout: Boolean!
+  loginWithEmail(input: LoginWithEmailInput!): Boolean!
   markAllNotificationsAsRead: [Notification!]!
   markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
   moveEntity(input: MoveEntityInput!): Entity!
@@ -507,6 +508,7 @@ input SendSignUpEmailInput {
   email: String!
   name: String!
   password: String!
+  state: String!
 }
 
 enum SingleSignOnProvider {

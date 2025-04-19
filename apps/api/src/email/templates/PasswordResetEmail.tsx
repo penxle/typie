@@ -19,7 +19,7 @@ const Email = ({ resetUrl }: Props) => {
 };
 
 Email.PreviewProps = {
-  resetUrl: 'https://typie.co/auth/reset-password?code=123456',
+  resetUrl: 'https://auth.typie.co/reset-password?code=123456',
 };
 
 export default Email;

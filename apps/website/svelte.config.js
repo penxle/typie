@@ -21,6 +21,7 @@ export default {
       },
     },
     paths: { relative: false },
+    csrf: { checkOrigin: false },
     output: { preloadStrategy: 'preload-mjs' },
     typescript: {
       config: (config) => ({

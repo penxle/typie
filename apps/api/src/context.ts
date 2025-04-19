@@ -3,12 +3,10 @@ import DataLoader from 'dataloader';
 import dayjs from 'dayjs';
 import { eq } from 'drizzle-orm';
 import stringify from 'fast-json-stable-stringify';
-import { getCookie, setCookie } from 'hono/cookie';
+import { setCookie } from 'hono/cookie';
 import { nanoid } from 'nanoid';
 import * as R from 'remeda';
-import { env } from '@/env';
-import { db, first, UserSessions } from './db';
-import { decodeAccessToken } from './utils';
+import { db, first, UserAccessTokens } from '@/db';
 import type { Context as HonoContext } from 'hono';
 
 type LoaderParams<Key, Result, SortKey, Nullability extends boolean, Many extends boolean> = {
@@ -41,7 +39,8 @@ type DefaultContext = {
 
 export type SessionContext = {
   session: {
-    id: string;
+    sessionId: string;
+    tokenId: string;
     userId: string;
   };
 };
@@ -57,15 +56,14 @@ export type Env = {
 };
 
 export const deriveContext = async (c: ServerContext): Promise<Context> => {
-  let deviceId = getCookie(c, 'typie-did');
+  let deviceId = c.req.header('X-Device-Id');
   if (!deviceId) {
     deviceId = nanoid(32);
     setCookie(c, 'typie-did', deviceId, {
       path: '/',
-      domain: env.COOKIE_DOMAIN,
       httpOnly: true,
       secure: true,
-      sameSite: 'none',
+      sameSite: 'lax',
       maxAge: dayjs.duration(1, 'year').asSeconds(),
     });
   }
@@ -111,22 +109,25 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
     ' $loaders': new Map(),
   };
 
-  const accessToken = getCookie(c, 'typie-at');
+  const authorization = c.req.header('Authorization');
+  const accessToken = authorization?.match(/^Bearer\s+(.+)$/)?.[1];
   if (accessToken) {
-    const sessionId = await decodeAccessToken(accessToken);
-    if (sessionId) {
-      const session = await db
-        .select({ id: UserSessions.id, userId: UserSessions.userId })
-        .from(UserSessions)
-        .where(eq(UserSessions.id, sessionId))
-        .then(first);
+    const token = await db
+      .select({
+        id: UserAccessTokens.id,
+        userId: UserAccessTokens.userId,
+        sessionId: UserAccessTokens.sessionId,
+      })
+      .from(UserAccessTokens)
+      .where(eq(UserAccessTokens.token, accessToken))
+      .then(first);
 
-      if (session) {
-        ctx.session = {
-          id: session.id,
-          userId: session.userId,
-        };
-      }
+    if (token) {
+      ctx.session = {
+        sessionId: token.sessionId,
+        tokenId: token.id,
+        userId: token.userId,
+      };
     }
   }
 

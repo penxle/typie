@@ -1,22 +1,22 @@
 <script lang="ts">
+  import qs from 'query-string';
   import { onMount } from 'svelte';
   import { match } from 'ts-pattern';
   import { SingleSignOnProvider } from '@/enums';
-  import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
+  import { deserializeOAuthState } from '$lib/utils';
   import { center } from '$styled-system/patterns';
 
   const authorizeSingleSignOn = graphql(`
     mutation SSOProviderPage_AuthorizeSingleSignOn_Mutation($input: AuthorizeSingleSignOnInput!) {
-      authorizeSingleSignOn(input: $input) {
-        id
-      }
+      authorizeSingleSignOn(input: $input)
     }
   `);
 
   onMount(async () => {
-    await authorizeSingleSignOn({
+    const resp = await authorizeSingleSignOn({
       provider: match(page.params.provider)
         .with('google', () => SingleSignOnProvider.GOOGLE)
         .with('kakao', () => SingleSignOnProvider.KAKAO)
@@ -25,7 +25,14 @@
       params: Object.fromEntries(page.url.searchParams),
     });
 
-    await goto('/', { replaceState: true });
+    location.href = qs.stringifyUrl({
+      url: `${env.PUBLIC_AUTH_URL}/authorize`,
+      query: {
+        client_id: env.PUBLIC_OIDC_CLIENT_ID,
+        response_type: 'code',
+        ...deserializeOAuthState(resp),
+      },
+    });
   });
 </script>
 

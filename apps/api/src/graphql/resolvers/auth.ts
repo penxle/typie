@@ -1,7 +1,7 @@
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
-import { deleteCookie, setCookie } from 'hono/cookie';
+import { setCookie } from 'hono/cookie';
 import ky from 'ky';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
@@ -13,9 +13,8 @@ import { SingleSignOnProvider, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { google, kakao, naver } from '@/external/sso';
-import { encodeAccessToken, generateRandomAvatar, persistBlobAsImage } from '@/utils';
+import { generateRandomAvatar, persistBlobAsImage } from '@/utils';
 import { builder } from '../builder';
-import { User } from '../objects';
 import type { UserContext } from '@/context';
 import type { Transaction } from '@/db';
 
@@ -25,8 +24,11 @@ import type { Transaction } from '@/db';
 
 builder.mutationFields((t) => ({
   loginWithEmail: t.fieldWithInput({
-    type: User,
-    input: { email: t.input.string(), password: t.input.string() },
+    type: 'Boolean',
+    input: {
+      email: t.input.string(),
+      password: t.input.string(),
+    },
     resolve: async (_, { input }, ctx) => {
       const email = input.email.toLowerCase();
 
@@ -48,15 +50,20 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_credentials' });
       }
 
-      await createSessionAndSetCookie(ctx, user.id);
+      await createSession(ctx, user.id);
 
-      return user.id;
+      return true;
     },
   }),
 
   sendSignUpEmail: t.fieldWithInput({
     type: 'Boolean',
-    input: { email: t.input.string(), password: t.input.string(), name: t.input.string() },
+    input: {
+      email: t.input.string(),
+      password: t.input.string(),
+      name: t.input.string(),
+      state: t.input.string(),
+    },
     resolve: async (_, { input }) => {
       const email = input.email.toLowerCase();
 
@@ -79,6 +86,7 @@ builder.mutationFields((t) => ({
           email,
           password: await Bun.password.hash(input.password),
           name: input.name,
+          state: input.state,
         }),
       );
 
@@ -86,7 +94,7 @@ builder.mutationFields((t) => ({
         recipient: input.email,
         subject: '[타이피] 이메일 주소를 인증해 주세요',
         body: SignUpEmail({
-          verificationUrl: `${env.WEBSITE_URL}/auth/email?code=${code}`,
+          verificationUrl: `${env.AUTH_URL}/email?code=${code}`,
         }),
       });
 
@@ -95,7 +103,7 @@ builder.mutationFields((t) => ({
   }),
 
   authorizeSignUpEmail: t.fieldWithInput({
-    type: User,
+    type: 'String',
     input: { code: t.input.string() },
     resolve: async (_, { input }, ctx) => {
       const data = await redis.get(`auth:email:${input.code}`);
@@ -103,7 +111,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_code' });
       }
 
-      const { email, password, name } = JSON.parse(data);
+      const { email, password, name, state } = JSON.parse(data);
 
       const existingUser = await db
         .select({ id: Users.id })
@@ -132,9 +140,9 @@ builder.mutationFields((t) => ({
 
       await redis.del(`auth:email:${input.code}`);
 
-      await createSessionAndSetCookie(ctx, user.id);
+      await createSession(ctx, user.id);
 
-      return user.id;
+      return state;
     },
   }),
 
@@ -142,20 +150,24 @@ builder.mutationFields((t) => ({
     type: 'String',
     input: {
       provider: t.input.field({ type: SingleSignOnProvider }),
-      email: t.input.field({ type: 'String', required: false }),
+      email: t.input.string({ required: false }),
+      state: t.input.string(),
     },
     resolve: async (_, { input }) => {
       return match(input.provider)
-        .with(SingleSignOnProvider.GOOGLE, () => google.generateAuthorizationUrl(input.email ?? undefined))
-        .with(SingleSignOnProvider.NAVER, () => naver.generateAuthorizationUrl())
-        .with(SingleSignOnProvider.KAKAO, () => kakao.generateAuthorizationUrl())
+        .with(SingleSignOnProvider.GOOGLE, () => google.generateAuthorizationUrl(input.state, input.email))
+        .with(SingleSignOnProvider.NAVER, () => naver.generateAuthorizationUrl(input.state))
+        .with(SingleSignOnProvider.KAKAO, () => kakao.generateAuthorizationUrl(input.state))
         .exhaustive();
     },
   }),
 
   authorizeSingleSignOn: t.fieldWithInput({
-    type: User,
-    input: { provider: t.input.field({ type: SingleSignOnProvider }), params: t.input.field({ type: 'JSON' }) },
+    type: 'String',
+    input: {
+      provider: t.input.field({ type: SingleSignOnProvider }),
+      params: t.input.field({ type: 'JSON' }),
+    },
     resolve: async (_, { input }, ctx) => {
       const externalUser = await match(input.provider)
         .with(SingleSignOnProvider.GOOGLE, () => google.authorizeUser(input.params.code))
@@ -170,9 +182,9 @@ builder.mutationFields((t) => ({
         .then(first);
 
       if (sso) {
-        await createSessionAndSetCookie(ctx, sso.userId);
+        await createSession(ctx, sso.userId);
 
-        return sso.userId;
+        return input.params.state;
       }
 
       const existingUser = await db
@@ -189,9 +201,9 @@ builder.mutationFields((t) => ({
           email: externalUser.email,
         });
 
-        await createSessionAndSetCookie(ctx, existingUser.id);
+        await createSession(ctx, existingUser.id);
 
-        return existingUser.id;
+        return input.params.state;
       }
 
       const user = await db.transaction(async (tx) => {
@@ -220,9 +232,9 @@ builder.mutationFields((t) => ({
         return user;
       });
 
-      await createSessionAndSetCookie(ctx, user.id);
+      await createSession(ctx, user.id);
 
-      return user.id;
+      return input.params.state;
     },
   }),
 
@@ -256,7 +268,7 @@ builder.mutationFields((t) => ({
         recipient: input.email,
         subject: '[타이피] 비밀번호를 재설정해 주세요',
         body: PasswordResetEmail({
-          resetUrl: `${env.WEBSITE_URL}/auth/reset-password?code=${code}`,
+          resetUrl: `${env.AUTH_URL}/reset-password?code=${code}`,
         }),
       });
 
@@ -285,45 +297,36 @@ builder.mutationFields((t) => ({
       return true;
     },
   }),
-
-  logout: t.withAuth({ session: true }).field({
-    type: 'Boolean',
-    resolve: async (_, __, ctx) => {
-      await db.delete(UserSessions).where(eq(UserSessions.id, ctx.session.id));
-
-      deleteCookie(ctx.c, 'typie-at', {
-        path: '/',
-        domain: env.COOKIE_DOMAIN,
-      });
-
-      return true;
-    },
-  }),
 }));
 
 /*
  * * Utils
  */
 
-const createSessionAndSetCookie = async (ctx: UserContext, userId: string) => {
-  const session = await db.insert(UserSessions).values({ userId }).returning({ id: UserSessions.id }).then(firstOrThrow);
-  const accessToken = await encodeAccessToken(session.id);
+const createSession = async (ctx: UserContext, userId: string) => {
+  const token = nanoid(64);
+  const expiresAt = dayjs().add(1, 'year');
 
-  setCookie(ctx.c, 'typie-at', accessToken, {
+  await db.insert(UserSessions).values({
+    userId,
+    token,
+    expiresAt,
+  });
+
+  setCookie(ctx.c, 'typie-st', token, {
     path: '/',
-    domain: env.COOKIE_DOMAIN,
     httpOnly: true,
     secure: true,
-    sameSite: 'none',
-    maxAge: dayjs.duration(1, 'year').asSeconds(),
+    sameSite: 'lax',
+    expires: expiresAt.toDate(),
   });
 };
 
 type CreateUserParams = { email: string; name: string; avatarId: string };
-const createUser = async (tx: Transaction, { email, name, avatarId }: CreateUserParams) => {
-  const name_ = name.trim().slice(0, 20);
+const createUser = async (tx: Transaction, { email, name: _name, avatarId }: CreateUserParams) => {
+  const name = _name.trim().slice(0, 20);
 
-  const user = await tx.insert(Users).values({ email, name: name_, avatarId }).returning({ id: Users.id }).then(firstOrThrow);
+  const user = await tx.insert(Users).values({ email, name, avatarId }).returning({ id: Users.id }).then(firstOrThrow);
 
   await tx.insert(Sites).values({
     userId: user.id,
@@ -332,7 +335,7 @@ const createUser = async (tx: Transaction, { email, name, avatarId }: CreateUser
       faker.word.noun({ length: { min: 4, max: 6 } }),
       faker.string.numeric({ length: { min: 3, max: 4 } }),
     ].join('-'),
-    name: `${name_}의 사이트`,
+    name: `${name}의 사이트`,
   });
 
   await tx.update(Images).set({ userId: user.id }).where(eq(Images.id, avatarId));

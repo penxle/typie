@@ -133,12 +133,54 @@ const usersiteIngress = new k8s.networking.v1.Ingress('usersite', {
   },
 });
 
+const authIngress = new k8s.networking.v1.Ingress('auth', {
+  metadata: {
+    name: 'auth',
+    namespace: app.service.metadata.namespace,
+    annotations: {
+      'alb.ingress.kubernetes.io/group.name': 'public-alb',
+      'alb.ingress.kubernetes.io/group.order': '40',
+      'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
+      'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
+      ...(stack === 'prod' && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
+    },
+  },
+  spec: {
+    ingressClassName: 'alb',
+    rules: [
+      {
+        host: match(stack)
+          .with('prod', () => 'auth.typie.co')
+          .with('dev', () => 'auth.typie.dev')
+          .run(),
+        http: {
+          paths: [
+            {
+              path: '/',
+              pathType: 'Prefix',
+              backend: {
+                service: {
+                  name: app.service.metadata.name,
+                  port: { number: app.service.spec.ports[0].port },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  },
+});
+
 if (stack === 'prod') {
   const websiteZone = aws.route53.getZoneOutput({ name: 'typie.co' });
   const websiteCertificate = aws.acm.getCertificateOutput({ domain: 'typie.co', statuses: ['ISSUED'] }, { provider });
 
   const usersiteZone = aws.route53.getZoneOutput({ name: 'typie.me' });
   const usersiteCertificate = aws.acm.getCertificateOutput({ domain: 'typie.me', statuses: ['ISSUED'] }, { provider });
+
+  const authZone = aws.route53.getZoneOutput({ name: 'typie.co' });
+  const authCertificate = aws.acm.getCertificateOutput({ domain: 'typie.co', statuses: ['ISSUED'] }, { provider });
 
   const websiteDistribution = new aws.cloudfront.Distribution('website', {
     enabled: true,
@@ -232,6 +274,52 @@ if (stack === 'prod') {
     waitForDeployment: false,
   });
 
+  const authDistribution = new aws.cloudfront.Distribution('auth', {
+    enabled: true,
+    aliases: ['auth.typie.co'],
+    httpVersion: 'http2and3',
+
+    origins: [
+      {
+        originId: 'alb',
+        domainName: authIngress.status.loadBalancer.ingress[0].hostname,
+        customOriginConfig: {
+          httpPort: 80,
+          httpsPort: 443,
+          originProtocolPolicy: 'https-only',
+          originSslProtocols: ['TLSv1.2'],
+          originReadTimeout: 60,
+          originKeepaliveTimeout: 60,
+        },
+      },
+    ],
+
+    defaultCacheBehavior: {
+      targetOriginId: 'alb',
+      compress: true,
+      viewerProtocolPolicy: 'redirect-to-https',
+      allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+      cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
+      cachePolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_CACHE_POLICY_ID'),
+      originRequestPolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_ORIGIN_REQUEST_POLICY_ID'),
+      responseHeadersPolicyId: ref.requireOutput('AWS_CLOUDFRONT_DYNAMIC_RESPONSE_HEADERS_POLICY_ID'),
+    },
+
+    restrictions: {
+      geoRestriction: {
+        restrictionType: 'none',
+      },
+    },
+
+    viewerCertificate: {
+      acmCertificateArn: authCertificate.arn,
+      sslSupportMethod: 'sni-only',
+      minimumProtocolVersion: 'TLSv1.2_2021',
+    },
+
+    waitForDeployment: false,
+  });
+
   new aws.route53.Record('website', {
     name: 'typie.co',
     type: 'A',
@@ -266,6 +354,19 @@ if (stack === 'prod') {
       {
         name: usersiteDistribution.domainName,
         zoneId: usersiteDistribution.hostedZoneId,
+        evaluateTargetHealth: false,
+      },
+    ],
+  });
+
+  new aws.route53.Record('auth', {
+    name: 'auth.typie.co',
+    type: 'A',
+    zoneId: authZone.zoneId,
+    aliases: [
+      {
+        name: authDistribution.domainName,
+        zoneId: authDistribution.hostedZoneId,
         evaluateTargetHealth: false,
       },
     ],

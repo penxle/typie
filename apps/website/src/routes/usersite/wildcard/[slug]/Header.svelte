@@ -1,19 +1,21 @@
 <script lang="ts">
+  import qs from 'query-string';
+  import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { Button, Img } from '$lib/components';
+  import { serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import type { Optional, UsersiteWildcardSlugPage_Header_user } from '$graphql';
 
   type Props = {
     $user: Optional<UsersiteWildcardSlugPage_Header_user>;
-    loading: boolean;
   };
 
-  let { $user: _user, loading }: Props = $props();
+  let { $user: _user }: Props = $props();
 
   const user = fragment(
     _user,
@@ -31,12 +33,6 @@
     `),
   );
 
-  const logout = graphql(`
-    mutation UsersiteWildcardSlugPage_Header_Logout_Mutation {
-      logout
-    }
-  `);
-
   let open = $state(false);
 
   const { anchor, floating } = createFloatingActions({
@@ -46,6 +42,18 @@
       open = false;
     },
   });
+
+  const authorizeUrl = $derived(
+    qs.stringifyUrl({
+      url: `${env.PUBLIC_AUTH_URL}/authorize`,
+      query: {
+        client_id: env.PUBLIC_OIDC_CLIENT_ID,
+        response_type: 'code',
+        redirect_uri: `${page.url.origin}/authorize`,
+        state: serializeOAuthState({ redirect_uri: page.url.href }),
+      },
+    }),
+  );
 </script>
 
 <div
@@ -63,9 +71,7 @@
 >
   <Logo class={css({ flexShrink: '0', height: '18px', color: 'brand.500' })} />
 
-  {#if loading && !$user}
-    <div class={css({ borderRadius: '6px', backgroundColor: 'gray.100', size: '32px' })}></div>
-  {:else if $user}
+  {#if $user}
     <button onclick={() => (open = true)} type="button" use:anchor>
       <Img
         style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'gray.100', borderRadius: '6px' })}
@@ -75,7 +81,7 @@
       />
     </button>
   {:else}
-    <Button external href={`${env.PUBLIC_WEBSITE_URL}/auth/login`} size="sm" type="link" variant="primary">시작하기</Button>
+    <Button external href={authorizeUrl} size="sm" type="link" variant="primary">시작하기</Button>
   {/if}
 </div>
 
@@ -107,9 +113,13 @@
     </a>
     <button
       class={css({ borderRadius: '3px', paddingX: '8px', paddingY: '4px', textAlign: 'left', _hover: { backgroundColor: 'gray.100' } })}
-      onclick={async () => {
-        await logout();
-        location.reload();
+      onclick={() => {
+        location.href = qs.stringifyUrl({
+          url: `${env.PUBLIC_AUTH_URL}/logout`,
+          query: {
+            redirect_uri: page.url.href,
+          },
+        });
       }}
       type="button"
     >

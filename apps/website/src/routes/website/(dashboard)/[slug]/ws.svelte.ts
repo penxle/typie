@@ -1,10 +1,10 @@
 import { env } from '$env/dynamic/public';
 
 export function createWebSocket(handlers: {
-  onopen?: () => void;
-  onclose?: () => void;
-  onerror?: () => void;
-  onmessage?: (type: number, data: Uint8Array) => void;
+  onopen?: () => void | Promise<void>;
+  onclose?: () => void | Promise<void>;
+  onerror?: () => void | Promise<void>;
+  onmessage?: (type: number, data: Uint8Array) => void | Promise<void>;
 }) {
   let ws: WebSocket | null = null;
   let isClosing = false;
@@ -12,28 +12,29 @@ export function createWebSocket(handlers: {
   const connect = () => {
     ws = new WebSocket(env.PUBLIC_WS_URL);
 
-    ws.addEventListener('open', () => {
-      handlers.onopen?.();
+    ws.addEventListener('open', async () => {
+      await handlers.onopen?.();
     });
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', async () => {
       if (!isClosing) {
         setTimeout(connect, 1000);
       }
 
-      handlers.onclose?.();
+      await handlers.onclose?.();
     });
 
-    ws.addEventListener('error', () => {
-      handlers.onerror?.();
+    ws.addEventListener('error', async () => {
+      await handlers.onerror?.();
     });
 
     ws.addEventListener('message', async (event) => {
-      const data = new Uint8Array(await event.data.arrayBuffer());
+      const buffer = await event.data.arrayBuffer();
+      const data = new Uint8Array(buffer);
       const type = data[0];
       const payload = data.slice(1);
 
-      handlers.onmessage?.(type, payload);
+      await handlers.onmessage?.(type, payload);
     });
   };
 

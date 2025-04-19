@@ -18,7 +18,7 @@ const Email = ({ verificationUrl }: Props) => {
 };
 
 Email.PreviewProps = {
-  verificationUrl: 'https://typie.co/auth/email?code=123456',
+  verificationUrl: 'https://auth.typie.co/email?code=123456',
 };
 
 export default Email;

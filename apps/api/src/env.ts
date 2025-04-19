@@ -1,8 +1,7 @@
 import { z } from 'zod';
 
 const schema = z.object({
-  ACCESS_TOKEN_JWK: z.string(),
-  COOKIE_DOMAIN: z.string(),
+  AUTH_URL: z.string(),
   DATABASE_URL: z.string(),
   GOOGLE_OAUTH_CLIENT_ID: z.string(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string(),
@@ -13,6 +12,9 @@ const schema = z.object({
   MEILISEARCH_API_KEY: z.string(),
   NAVER_CLIENT_ID: z.string(),
   NAVER_CLIENT_SECRET: z.string(),
+  OIDC_CLIENT_ID: z.string(),
+  OIDC_CLIENT_SECRET: z.string(),
+  OIDC_JWK: z.string(),
   PORTONE_API_SECRET: z.string(),
   PORTONE_CHANNEL_KEY: z.string(),
   PUBLIC_PULUMI_STACK: z.string().optional(),

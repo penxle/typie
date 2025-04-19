@@ -1,9 +1,12 @@
 <script lang="ts">
   import { z } from 'zod';
   import { TypieError } from '@/errors';
+  import { page } from '$app/state';
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
   import { Toast } from '$lib/notification';
+  import { serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
 
@@ -30,6 +33,10 @@
         email: data.email,
         name: data.name,
         password: data.password,
+        state: serializeOAuthState({
+          redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+          state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+        }),
       });
 
       Toast.success('이메일을 보냈어요');

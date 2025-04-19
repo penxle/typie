@@ -1,11 +1,10 @@
 import { error } from '@sveltejs/kit';
 import { cacheExchange, createClient, errorExchange, fetchExchange, GraphQLError, sseExchange } from '@typie/sark';
 import { TypieError } from '@/errors';
-import { env } from '$env/dynamic/public';
 
 // eslint-disable-next-line import/no-default-export
 export default createClient({
-  url: `${env.PUBLIC_API_URL}/graphql`,
+  url: `/graphql`,
   fetchOptions: {
     credentials: 'include',
   },
@@ -23,7 +22,7 @@ export default createClient({
     }),
     cacheExchange(),
     fetchExchange(),
-    sseExchange(`${env.PUBLIC_API_URL}/graphql`, {
+    sseExchange('/graphql', {
       credentials: 'include',
     }),
   ],

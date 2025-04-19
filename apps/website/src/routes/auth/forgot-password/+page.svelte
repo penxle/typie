@@ -1,6 +1,7 @@
 <script lang="ts">
   import { z } from 'zod';
   import { TypieError } from '@/errors';
+  import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { createForm, FormError } from '$lib/form';
   import { Toast } from '$lib/notification';
@@ -65,7 +66,7 @@
 
     <div class={css({ textAlign: 'center', marginTop: '16px' })}>
       <p>
-        <a class={css({ textDecoration: 'underline' })} href="/auth/login">로그인 페이지로 돌아가기</a>
+        <a class={css({ textDecoration: 'underline' })} href={`/login${page.url.search}`}>로그인 페이지로 돌아가기</a>
       </p>
     </div>
   </div>

@@ -4,13 +4,14 @@ import { SingleSignOnProvider } from '@/enums';
 import { env } from '@/env';
 import type { ExternalUser } from './types';
 
-export const generateAuthorizationUrl = () => {
+export const generateAuthorizationUrl = (state: string) => {
   return qs.stringifyUrl({
     url: 'https://nid.naver.com/oauth2.0/authorize',
     query: {
       response_type: 'code',
       client_id: env.NAVER_CLIENT_ID,
-      redirect_uri: `${env.WEBSITE_URL}/auth/sso/naver`,
+      redirect_uri: `${env.AUTH_URL}/sso/naver`,
+      state,
     },
   });
 };

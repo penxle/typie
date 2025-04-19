@@ -59,3 +59,43 @@ new aws.route53.Record('k3._domainkey.typie.co', {
   records: ['dkim3.mcsv.net'],
   ttl: 300,
 });
+
+new aws.route53.Record('local.typie.dev', {
+  zoneId: zones.typie_dev.zoneId,
+  type: 'A',
+  name: 'local.typie.dev',
+  records: ['127.0.0.1'],
+  ttl: 300,
+});
+
+new aws.route53.Record('api.local.typie.dev', {
+  zoneId: zones.typie_dev.zoneId,
+  type: 'A',
+  name: 'api.local.typie.dev',
+  records: ['127.0.0.1'],
+  ttl: 300,
+});
+
+new aws.route53.Record('auth.local.typie.dev', {
+  zoneId: zones.typie_dev.zoneId,
+  type: 'A',
+  name: 'auth.local.typie.dev',
+  records: ['127.0.0.1'],
+  ttl: 300,
+});
+
+new aws.route53.Record('usersite.local.typie.dev', {
+  zoneId: zones.typie_dev.zoneId,
+  type: 'A',
+  name: 'usersite.local.typie.dev',
+  records: ['127.0.0.1'],
+  ttl: 300,
+});
+
+new aws.route53.Record('*.usersite.local.typie.dev', {
+  zoneId: zones.typie_dev.zoneId,
+  type: 'A',
+  name: '*.usersite.local.typie.dev',
+  records: ['127.0.0.1'],
+  ttl: 300,
+});

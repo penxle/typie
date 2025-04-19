@@ -23,6 +23,7 @@ export const TableCode = {
   PREORDER_USERS: 'PU',
   SITES: 'S',
   USERS: 'U',
+  USER_ACCESS_TOKENS: 'UAT',
   USER_PERSONAL_IDENTITIES: 'UPI',
   USER_PLANS: 'UPL',
   USER_SESSIONS: 'USES',

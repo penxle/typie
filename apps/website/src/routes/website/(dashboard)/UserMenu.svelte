@@ -1,7 +1,8 @@
 <script lang="ts">
+  import qs from 'query-string';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ExternalLinkIcon from '~icons/lucide/external-link';
-  import { goto } from '$app/navigation';
+  import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { Icon, Img } from '$lib/components';
@@ -43,12 +44,6 @@
       }
     `),
   );
-
-  const logout = graphql(`
-    mutation DashboardLayout_UserMenu_Logout_Mutation {
-      logout
-    }
-  `);
 
   let open = $state(false);
   let clientWidth = $state(0);
@@ -165,9 +160,13 @@
 
     <button
       class={css({ paddingX: '8px', paddingY: '4px', textAlign: 'left', _hover: { backgroundColor: 'gray.100' } })}
-      onclick={async () => {
-        await logout();
-        await goto('/');
+      onclick={() => {
+        location.href = qs.stringifyUrl({
+          url: `${env.PUBLIC_AUTH_URL}/logout`,
+          query: {
+            redirect_uri: env.PUBLIC_WEBSITE_URL,
+          },
+        });
       }}
       type="button"
     >
