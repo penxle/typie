@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, FolderOptions, Folders, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, FolderVisibility } from '@/enums';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder } from '@/utils';
@@ -198,6 +198,34 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', folder.siteId, { scope: 'site' });
 
       return folder.id;
+    },
+  }),
+
+  updateFolderOption: t.withAuth({ session: true }).fieldWithInput({
+    type: FolderOption,
+    input: {
+      folderId: t.input.id({ validate: validateDbId(TableCode.FOLDERS) }),
+      visibility: t.input.field({ type: FolderVisibility }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const folder = await db
+        .select({ siteId: Entities.siteId })
+        .from(Folders)
+        .innerJoin(Entities, eq(Folders.entityId, Entities.id))
+        .where(and(eq(Folders.id, input.folderId)))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: folder.siteId,
+      });
+
+      return await db
+        .update(FolderOptions)
+        .set({ visibility: input.visibility })
+        .where(eq(FolderOptions.folderId, input.folderId))
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 }));
