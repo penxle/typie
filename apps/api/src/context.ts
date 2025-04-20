@@ -1,12 +1,15 @@
 import { getClientAddress } from '@typie/lib';
 import DataLoader from 'dataloader';
 import dayjs from 'dayjs';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import stringify from 'fast-json-stable-stringify';
 import { setCookie } from 'hono/cookie';
+import { HTTPException } from 'hono/http-exception';
+import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import * as R from 'remeda';
-import { db, first, UserAccessTokens } from '@/db';
+import { db, firstOrThrow, UserSessions } from '@/db';
+import { publicKey } from '@/utils';
 import type { Context as HonoContext } from 'hono';
 
 type LoaderParams<Key, Result, SortKey, Nullability extends boolean, Many extends boolean> = {
@@ -39,8 +42,7 @@ type DefaultContext = {
 
 export type SessionContext = {
   session: {
-    sessionId: string;
-    tokenId: string;
+    id: string;
     userId: string;
   };
 };
@@ -112,22 +114,26 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
   const authorization = c.req.header('Authorization');
   const accessToken = authorization?.match(/^Bearer\s+(.+)$/)?.[1];
   if (accessToken) {
-    const token = await db
-      .select({
-        id: UserAccessTokens.id,
-        userId: UserAccessTokens.userId,
-        sessionId: UserAccessTokens.sessionId,
-      })
-      .from(UserAccessTokens)
-      .where(eq(UserAccessTokens.token, accessToken))
-      .then(first);
+    try {
+      const { payload } = await jose.jwtVerify(accessToken, publicKey);
+      const { sub, sid } = payload;
 
-    if (token) {
+      if (!sub || !sid) {
+        throw new Error('Invalid access token');
+      }
+
+      const session = await db
+        .select({ id: UserSessions.id, userId: UserSessions.userId })
+        .from(UserSessions)
+        .where(and(eq(UserSessions.id, sid as string), eq(UserSessions.userId, sub)))
+        .then(firstOrThrow);
+
       ctx.session = {
-        sessionId: token.sessionId,
-        tokenId: token.id,
-        userId: token.userId,
+        id: session.id,
+        userId: session.userId,
       };
+    } catch {
+      throw new HTTPException(401);
     }
   }
 

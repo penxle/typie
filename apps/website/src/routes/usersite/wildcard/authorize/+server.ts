@@ -51,13 +51,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
   });
 
   if (!response.ok) {
-    const headers = new Headers(response.headers);
-    headers.delete('Content-Encoding');
-
-    return new Response(response.body, {
-      status: response.status,
-      headers,
-    });
+    return response;
   }
 
   const data = await response.json();
