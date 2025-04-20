@@ -51,12 +51,17 @@ const dynamicCachePolicy = new aws.cloudfront.CachePolicy('dynamic', {
   maxTtl: 31_536_000,
 
   parametersInCacheKeyAndForwardedToOrigin: {
-    enableAcceptEncodingBrotli: true,
-    enableAcceptEncodingGzip: true,
+    enableAcceptEncodingBrotli: false,
+    enableAcceptEncodingGzip: false,
 
     cookiesConfig: { cookieBehavior: 'none' },
     queryStringsConfig: { queryStringBehavior: 'none' },
-    headersConfig: { headerBehavior: 'none' },
+    headersConfig: {
+      headerBehavior: 'whitelist',
+      headers: {
+        items: ['Accept-Encoding'],
+      },
+    },
   },
 });
 
