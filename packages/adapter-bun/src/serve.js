@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { getClientAddress } from '@typie/lib';
 import { Hono } from 'hono';
+import { compress } from 'hono-compress';
 
 /**
  * @typedef {Object} ServeParams
@@ -20,6 +21,8 @@ export const serve = async ({ Server, manifest, prerendered }) => {
   await sveltekit.init({ env: process.env });
 
   const app = new Hono();
+
+  app.use('*', compress());
 
   app.get('/healthz', (c) => c.json({ '*': true }));
 
