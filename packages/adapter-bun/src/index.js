@@ -55,7 +55,7 @@ export const bun = () => {
         format: 'esm',
         target: 'esnext',
 
-        noExternal: [/.*/],
+        external: ['hono-compress'],
 
         esbuildOptions: (options) => {
           options.chunkNames = 'chunks/[name]-[hash]';
