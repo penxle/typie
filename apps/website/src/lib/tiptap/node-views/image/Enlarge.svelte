@@ -3,7 +3,7 @@
   import { Tween } from 'svelte/motion';
   import XIcon from '~icons/lucide/x';
   import { portal, scrollLock } from '$lib/actions';
-  import { Icon, Img, ProtectiveRegion } from '$lib/components';
+  import { ContentProtect, Icon, Img } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import type { NodeViewProps } from '../../lib';
@@ -76,7 +76,7 @@
 <svelte:window onclickcapture={handleClose} onkeydown={(e) => e.key === 'Escape' && handleClose()} />
 
 <div class={css({ position: 'fixed', inset: '0', size: 'full', zIndex: '50' })} use:portal use:scrollLock>
-  <ProtectiveRegion>
+  <ContentProtect>
     <div class={css({ position: 'fixed', inset: '0', size: 'full', paddingX: '[5vw]', paddingY: '[5vh]' })}>
       <div bind:this={targetEl} class={css({ size: 'full' })}></div>
     </div>
@@ -126,5 +126,5 @@
         />
       </div>
     {/if}
-  </ProtectiveRegion>
+  </ContentProtect>
 </div>

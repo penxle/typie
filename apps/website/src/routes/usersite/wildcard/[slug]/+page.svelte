@@ -1,7 +1,7 @@
 <script lang="ts">
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Helmet, HorizontalDivider, Img, ProtectiveRegion } from '$lib/components';
+  import { ContentProtect, Helmet, HorizontalDivider, Img } from '$lib/components';
   import { TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -113,11 +113,11 @@
 
       {#if $query.entityView.node.body.__typename === 'PostViewBodyAvailable'}
         {#if $query.entityView.node.option.protectContent}
-          <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body.content} />
-        {:else}
-          <ProtectiveRegion>
+          <ContentProtect>
             <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body.content} />
-          </ProtectiveRegion>
+          </ContentProtect>
+        {:else}
+          <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body.content} />
         {/if}
       {:else if $query.entityView.node.body.__typename === 'PostViewBodyUnavailable'}
         <div class={css({ fontSize: '16px', fontWeight: 'medium' })}>
