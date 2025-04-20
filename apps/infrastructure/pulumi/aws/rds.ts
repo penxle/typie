@@ -19,9 +19,9 @@ const subnetGroup = new aws.rds.SubnetGroup('private', {
   subnetIds: [subnets.private.az1.id, subnets.private.az2.id],
 });
 
-const parameterGroup = new aws.rds.ClusterParameterGroup('typie-aurora-postgresql16', {
-  name: 'typie-aurora-postgresql16',
-  family: 'aurora-postgresql16',
+const parameterGroup = new aws.rds.ClusterParameterGroup('typie-aurora-postgresql17', {
+  name: 'typie-aurora-postgresql17',
+  family: 'aurora-postgresql17',
 
   parameters: [
     { name: 'default_toast_compression', value: 'lz4' },
@@ -36,7 +36,7 @@ const cluster = new aws.rds.Cluster('typie', {
 
   engine: 'aurora-postgresql',
   engineMode: 'provisioned',
-  engineVersion: '16.6',
+  engineVersion: '17.4',
 
   dbClusterParameterGroupName: parameterGroup.name,
 
@@ -57,6 +57,7 @@ const cluster = new aws.rds.Cluster('typie', {
   masterUsername: 'root',
   masterPassword: password.result,
 
+  allowMajorVersionUpgrade: true,
   applyImmediately: true,
 });
 
@@ -107,7 +108,7 @@ const devCluster = new aws.rds.Cluster('typie-dev', {
 
   engine: 'aurora-postgresql',
   engineMode: 'provisioned',
-  engineVersion: '16.6',
+  engineVersion: '17.4',
 
   dbClusterParameterGroupName: parameterGroup.name,
 
@@ -128,6 +129,7 @@ const devCluster = new aws.rds.Cluster('typie-dev', {
   masterUsername: 'root',
   masterPassword: devPassword.result,
 
+  allowMajorVersionUpgrade: true,
   applyImmediately: true,
 });
 
