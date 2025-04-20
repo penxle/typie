@@ -293,6 +293,7 @@ type Mutation {
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateEmail(input: UpdateEmailInput!): Boolean!
+  updateFolderOption(input: UpdateFolderOptionInput!): FolderOption!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
   updateUser(input: UpdateUserInput!): User!
@@ -555,6 +556,11 @@ input UnlockPostViewInput {
 
 input UpdateEmailInput {
   code: String!
+}
+
+input UpdateFolderOptionInput {
+  folderId: ID!
+  visibility: FolderVisibility!
 }
 
 input UpdatePaymentMethodInput {
