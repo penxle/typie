@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import * as jose from 'jose';
-import { base64 } from 'rfc4648';
+import { base64url } from 'rfc4648';
 
 if (!process.argv[2]) {
   console.error('Usage: bun scripts/generate-jwk.ts <kid>');
@@ -21,4 +21,4 @@ console.log(JSON.stringify(jwk, undefined, 2));
 
 console.log();
 console.log('Environment variable representation:');
-console.log(base64.stringify(new TextEncoder().encode(JSON.stringify(jwk))));
+console.log(base64url.stringify(new TextEncoder().encode(JSON.stringify(jwk)), { pad: false }));

@@ -7,7 +7,7 @@ import { deleteCookie, getCookie } from 'hono/cookie';
 import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
-import { base64, base64url } from 'rfc4648';
+import { base64url } from 'rfc4648';
 import { redis } from '@/cache';
 import { db, first, UserAccessTokens, UserSessions } from '@/db';
 import { env } from '@/env';
@@ -328,7 +328,7 @@ const createTokens = async ({ clientId, userId, scope, expiresAt }: CreateTokens
   return { accessToken, idToken };
 };
 
-const jwk = JSON.parse(decode(base64.parse(env.OIDC_JWK))) as jose.JWK;
+const jwk = JSON.parse(decode(base64url.parse(env.OIDC_JWK, { loose: true }))) as jose.JWK;
 const publicJwk = { kid: jwk.kid, kty: jwk.kty, alg: jwk.alg, crv: jwk.crv, x: jwk.x };
 
 const privateKey = await jose.importJWK(jwk, jwk.alg);
