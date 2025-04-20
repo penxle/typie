@@ -1,4 +1,4 @@
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { and, eq, gt } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { Hono } from 'hono';
@@ -43,15 +43,15 @@ auth.get('/authorize', async (c) => {
   const { client_id, redirect_uri, response_type, scope, state, prompt } = c.req.query();
 
   if (!client_id || !redirect_uri || !response_type) {
-    return c.json({ error: 'invalid_request' }, 400);
+    return c.json({ error: 'invalid_request', error_description: 'Required parameters are missing.' }, 400);
   }
 
   if (response_type !== 'code') {
-    return c.json({ error: 'unsupported_response_type' }, 400);
+    return c.json({ error: 'unsupported_response_type', error_description: 'Only code response type is supported.' }, 400);
   }
 
   if (!validateClient({ clientId: client_id, redirectUri: redirect_uri })) {
-    return c.json({ error: 'invalid_client' }, 400);
+    return c.json({ error: 'invalid_client', error_description: 'Client validation failed.' }, 400);
   }
 
   const token = getCookie(c, 'typie-st');
@@ -96,6 +96,7 @@ auth.get('/authorize', async (c) => {
         url: redirect_uri,
         query: {
           error: 'login_required',
+          error_description: 'User authentication is required.',
           state,
         },
       }),
@@ -117,27 +118,27 @@ auth.post('/token', async (c) => {
   const { grant_type, code, redirect_uri, client_id, client_secret } = await c.req.parseBody<Record<string, string>>();
 
   if (!client_id) {
-    return c.json({ error: 'invalid_client' }, 401);
+    return c.json({ error: 'invalid_client', error_description: 'Client ID is missing.' }, 401);
   }
 
   if (!validateClient({ clientId: client_id, clientSecret: client_secret, redirectUri: redirect_uri })) {
-    return c.json({ error: 'invalid_client' }, 401);
+    return c.json({ error: 'invalid_client', error_description: 'Client authentication failed.' }, 401);
   }
 
   if (grant_type === 'authorization_code') {
     if (!code || !redirect_uri) {
-      return c.json({ error: 'invalid_request' }, 400);
+      return c.json({ error: 'invalid_request', error_description: 'Code and redirect_uri are required parameters.' }, 400);
     }
 
     const result = await redis.getdel(`auth:code:${code}`);
     if (!result) {
-      return c.json({ error: 'invalid_grant' }, 400);
+      return c.json({ error: 'invalid_grant', error_description: 'Invalid or expired authorization code.' }, 400);
     }
 
     const authCode = JSON.parse(result) as AuthorizationCode;
 
     if (authCode.clientId !== client_id || authCode.redirectUri !== redirect_uri) {
-      return c.json({ error: 'invalid_grant' }, 400);
+      return c.json({ error: 'invalid_grant', error_description: 'Authorization code parameters do not match.' }, 400);
     }
 
     const session = await db
@@ -150,7 +151,7 @@ auth.post('/token', async (c) => {
       .then(first);
 
     if (!session) {
-      return c.json({ error: 'invalid_grant' }, 400);
+      return c.json({ error: 'invalid_grant', error_description: 'Session has expired or does not exist.' }, 400);
     }
 
     const expiresIn = dayjs.duration(1, 'year');
@@ -181,7 +182,7 @@ auth.post('/token', async (c) => {
     });
   }
 
-  return c.json({ error: 'unsupported_grant_type' }, 400);
+  return c.json({ error: 'unsupported_grant_type', error_description: 'Only authorization_code grant type is supported.' }, 400);
 });
 
 auth.get('/userinfo', async (c) => {
@@ -189,19 +190,19 @@ auth.get('/userinfo', async (c) => {
   const accessToken = authorization?.match(/^Bearer\s+(.+)$/)?.[1];
 
   if (!accessToken) {
-    return c.json({ error: 'invalid_token' }, 401);
+    return c.json({ error: 'invalid_token', error_description: 'Missing or invalid Authorization header.' }, 401);
   }
 
   try {
     const { payload } = await jose.jwtVerify(accessToken, publicKey);
 
     if (!payload.sub) {
-      return c.json({ error: 'invalid_token' }, 401);
+      return c.json({ error: 'invalid_token', error_description: 'Token missing sub claim.' }, 401);
     }
 
     return c.json({ sub: payload.sub });
   } catch {
-    return c.json({ error: 'invalid_token' }, 401);
+    return c.json({ error: 'invalid_token', error_description: 'Invalid or expired access token.' }, 401);
   }
 });
 
@@ -209,18 +210,18 @@ auth.get('/logout', async (c) => {
   const { redirect_uri } = c.req.query();
 
   if (!redirect_uri) {
-    return c.json({ error: 'invalid_request' }, 400);
+    return c.json({ error: 'invalid_request', error_description: 'redirect_uri is required.' }, 400);
   }
 
   const token = getCookie(c, 'typie-st');
   if (!token) {
-    return c.json({ error: 'invalid_request' }, 400);
+    return c.json({ error: 'invalid_request', error_description: 'No active session found.' }, 400);
   }
 
   const session = await db.select({ id: UserSessions.id }).from(UserSessions).where(eq(UserSessions.token, token)).then(first);
 
   if (!session) {
-    return c.json({ error: 'invalid_request' }, 400);
+    return c.json({ error: 'invalid_request', error_description: 'Invalid session.' }, 400);
   }
 
   await db.transaction(async (tx) => {
@@ -270,7 +271,7 @@ type CreateTokensParams = {
   clientId: string;
   userId: string;
   scope: string;
-  expiresAt: Dayjs;
+  expiresAt: dayjs.Dayjs;
 };
 
 const createTokens = async ({ clientId, userId, scope, expiresAt }: CreateTokensParams) => {
