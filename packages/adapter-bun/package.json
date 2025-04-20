@@ -12,13 +12,15 @@
   "scripts": {
     "lint:typecheck": "tsc"
   },
+  "dependencies": {
+    "hono-compress": "^0.7.0"
+  },
   "devDependencies": {
     "@sveltejs/kit": "^2.20.5",
     "@types/bun": "^1.2.9",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "hono": "^4.7.6",
-    "hono-compress": "^0.7.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3"
   }
