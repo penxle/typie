@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import dayjs from 'dayjs';
 import { and, eq, gt } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
@@ -6,7 +7,7 @@ import { deleteCookie, getCookie } from 'hono/cookie';
 import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
-import { base64 } from 'rfc4648';
+import { base64, base64url } from 'rfc4648';
 import { redis } from '@/cache';
 import { db, first, UserAccessTokens, UserSessions } from '@/db';
 import { env } from '@/env';
@@ -29,6 +30,7 @@ auth.get('/.well-known/openid-configuration', (c) => {
     token_endpoint_auth_methods_supported: ['client_secret_post'],
     claim_types_supported: ['normal'],
     claims_supported: ['sub'],
+    code_challenge_methods_supported: ['S256'],
   });
 });
 
@@ -40,7 +42,7 @@ auth.get('/jwks', async (c) => {
 });
 
 auth.get('/authorize', async (c) => {
-  const { client_id, redirect_uri, response_type, scope, state, prompt } = c.req.query();
+  const { client_id, redirect_uri, response_type, scope, state, prompt, code_challenge, code_challenge_method } = c.req.query();
 
   if (!client_id || !redirect_uri || !response_type) {
     return c.json({ error: 'invalid_request', error_description: 'Required parameters are missing.' }, 400);
@@ -52,6 +54,10 @@ auth.get('/authorize', async (c) => {
 
   if (!validateClient({ clientId: client_id, redirectUri: redirect_uri })) {
     return c.json({ error: 'invalid_client', error_description: 'Client validation failed.' }, 400);
+  }
+
+  if (code_challenge && code_challenge_method !== 'S256') {
+    return c.json({ error: 'invalid_request', error_description: 'Only S256 code_challenge_method is supported.' }, 400);
   }
 
   const token = getCookie(c, 'typie-st');
@@ -74,6 +80,8 @@ auth.get('/authorize', async (c) => {
         clientId: client_id,
         redirectUri: redirect_uri,
         scope: scope || 'openid',
+        codeChallenge: code_challenge,
+        codeChallengeMethod: code_challenge_method,
       };
 
       await redis.setex(`auth:code:${code}`, 60 * 10, JSON.stringify(authCode));
@@ -115,7 +123,7 @@ auth.get('/authorize', async (c) => {
 });
 
 auth.post('/token', async (c) => {
-  const { grant_type, code, redirect_uri, client_id, client_secret } = await c.req.parseBody<Record<string, string>>();
+  const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier } = await c.req.parseBody<Record<string, string>>();
 
   if (!client_id) {
     return c.json({ error: 'invalid_client', error_description: 'Client ID is missing.' }, 401);
@@ -139,6 +147,19 @@ auth.post('/token', async (c) => {
 
     if (authCode.clientId !== client_id || authCode.redirectUri !== redirect_uri) {
       return c.json({ error: 'invalid_grant', error_description: 'Authorization code parameters do not match.' }, 400);
+    }
+
+    if (authCode.codeChallenge) {
+      if (!code_verifier) {
+        return c.json({ error: 'invalid_request', error_description: 'code_verifier is required.' }, 400);
+      }
+
+      const hash = createHash('sha256').update(code_verifier).digest();
+      const codeChallenge = base64url.stringify(hash, { pad: false });
+
+      if (codeChallenge !== authCode.codeChallenge) {
+        return c.json({ error: 'invalid_grant', error_description: 'code_verifier is invalid.' }, 400);
+      }
     }
 
     const session = await db
@@ -239,6 +260,8 @@ type AuthorizationCode = {
   clientId: string;
   redirectUri: string;
   scope: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
 };
 
 type ValidateClientParams = {
