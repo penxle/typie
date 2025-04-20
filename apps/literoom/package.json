@@ -10,8 +10,8 @@
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.787.0",
-    "@pulumi/aws": "^6.76.0",
-    "@pulumi/pulumi": "^3.162.0",
+    "@pulumi/aws": "^6.77.1",
+    "@pulumi/pulumi": "^3.163.0",
     "@typie/tsconfig": "workspace:*",
     "sharp": "^0.34.1",
     "tsup": "^8.4.0",
