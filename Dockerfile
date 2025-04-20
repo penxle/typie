@@ -11,7 +11,7 @@ ENV TURBO_REMOTE_ONLY=true
 ENV NODE_ENV=production
 
 COPY . .
-RUN bun install --frozen-lockfile --ignore-scripts
+RUN bun install --frozen-lockfile
 RUN bun run build
 
 FROM base AS deps
