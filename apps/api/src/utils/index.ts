@@ -1,3 +1,4 @@
+export * from './auth';
 export * from './date';
 export * from './entity';
 export * from './image-generation';

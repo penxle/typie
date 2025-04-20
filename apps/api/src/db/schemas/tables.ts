@@ -411,29 +411,6 @@ export const Users = pgTable(
   ],
 );
 
-export const UserAccessTokens = pgTable(
-  'user_access_tokens',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.USER_ACCESS_TOKENS)),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
-    sessionId: text('session_id')
-      .notNull()
-      .references(() => UserSessions.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
-    clientId: text('client_id').notNull(),
-    token: text('token').notNull().unique(),
-    scope: text('scope').notNull(),
-    expiresAt: datetime('expires_at').notNull(),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.userId)],
-);
-
 export const UserPersonalIdentities = pgTable('user_personal_identities', {
   id: text('id')
     .primaryKey()

@@ -9,9 +9,9 @@ import { nanoid } from 'nanoid';
 import qs from 'query-string';
 import { base64url } from 'rfc4648';
 import { redis } from '@/cache';
-import { db, first, UserAccessTokens, UserSessions } from '@/db';
+import { db, first, UserSessions } from '@/db';
 import { env } from '@/env';
-import { decode } from '@/utils';
+import { jwk, privateKey, publicKey } from '@/utils';
 import type { Env } from '@/context';
 
 export const auth = new Hono<Env>();
@@ -178,21 +178,35 @@ auth.post('/token', async (c) => {
     const expiresIn = dayjs.duration(1, 'year');
     const expiresAt = dayjs().add(expiresIn);
 
-    const { accessToken, idToken } = await createTokens({
-      clientId: client_id,
-      userId: session.userId,
-      scope: authCode.scope,
-      expiresAt,
-    });
+    const now = dayjs().unix();
 
-    await db.insert(UserAccessTokens).values({
-      userId: session.userId,
-      sessionId: session.id,
-      clientId: client_id,
-      token: accessToken,
+    const accessToken = await new jose.SignJWT({
+      iss: env.AUTH_URL,
+      sub: session.userId,
+      aud: client_id,
+      exp: expiresAt.unix(),
+      iat: now,
+      sid: session.id,
       scope: authCode.scope,
-      expiresAt,
-    });
+    })
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      .setProtectedHeader({ alg: jwk.alg!, kid: jwk.kid })
+      .sign(privateKey);
+
+    let idToken;
+
+    if (authCode.scope.includes('openid')) {
+      idToken = await new jose.SignJWT({
+        iss: env.AUTH_URL,
+        sub: session.userId,
+        aud: client_id,
+        exp: expiresAt.unix(),
+        iat: now,
+      })
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        .setProtectedHeader({ alg: jwk.alg!, kid: jwk.kid })
+        .sign(privateKey);
+    }
 
     return c.json({
       access_token: accessToken,
@@ -245,10 +259,7 @@ auth.get('/logout', async (c) => {
     return c.json({ error: 'invalid_request', error_description: 'Invalid session.' }, 400);
   }
 
-  await db.transaction(async (tx) => {
-    await tx.delete(UserAccessTokens).where(eq(UserAccessTokens.sessionId, session.id));
-    await tx.delete(UserSessions).where(eq(UserSessions.id, session.id));
-  });
+  await db.delete(UserSessions).where(eq(UserSessions.id, session.id));
 
   deleteCookie(c, 'typie-st');
 
@@ -267,7 +278,7 @@ type AuthorizationCode = {
 type ValidateClientParams = {
   clientId: string;
   clientSecret?: string;
-  redirectUri?: string;
+  redirectUri: string;
 };
 
 const pattern = new RegExp(`^${escape(env.USERSITE_URL).replace(String.raw`\*\.`, String.raw`(([^.]+)\.)?`)}$`);
@@ -280,56 +291,10 @@ const validateClient = ({ clientId, clientSecret, redirectUri }: ValidateClientP
     return false;
   }
 
-  if (redirectUri) {
-    const url = new URL(redirectUri);
-    if ((url.origin === env.WEBSITE_URL || pattern.test(url.origin)) && url.pathname === '/authorize') {
-      return true;
-    }
+  const url = new URL(redirectUri);
+  if ((url.origin === env.WEBSITE_URL || pattern.test(url.origin)) && url.pathname === '/authorize') {
+    return true;
   }
 
   return true;
 };
-
-type CreateTokensParams = {
-  clientId: string;
-  userId: string;
-  scope: string;
-  expiresAt: dayjs.Dayjs;
-};
-
-const createTokens = async ({ clientId, userId, scope, expiresAt }: CreateTokensParams) => {
-  const now = dayjs().unix();
-
-  const accessToken = await new jose.SignJWT({
-    iss: env.AUTH_URL,
-    sub: userId,
-    aud: clientId,
-    exp: expiresAt.unix(),
-    iat: now,
-    scope,
-  })
-    .setProtectedHeader({ alg: jwk.alg as string, kid: jwk.kid })
-    .sign(privateKey);
-
-  let idToken;
-
-  if (scope.includes('openid')) {
-    idToken = await new jose.SignJWT({
-      iss: env.AUTH_URL,
-      sub: userId,
-      aud: clientId,
-      exp: expiresAt.unix(),
-      iat: now,
-    })
-      .setProtectedHeader({ alg: jwk.alg as string, kid: jwk.kid })
-      .sign(privateKey);
-  }
-
-  return { accessToken, idToken };
-};
-
-const jwk = JSON.parse(decode(base64url.parse(env.OIDC_JWK, { loose: true }))) as jose.JWK;
-const publicJwk = { kid: jwk.kid, kty: jwk.kty, alg: jwk.alg, crv: jwk.crv, x: jwk.x };
-
-const privateKey = await jose.importJWK(jwk, jwk.alg);
-const publicKey = await jose.importJWK(publicJwk, jwk.alg);
