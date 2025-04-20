@@ -13,7 +13,7 @@ export const getClientAddress = (c: Context) => {
       return IPAddr.parse(ip).toString();
     }
 
-    const sveltekit = c.req.header('x-sveltekit-ip');
+    const sveltekit = c.req.header('X-Client-IP');
     if (sveltekit) {
       return IPAddr.parse(sveltekit).toString();
     }
