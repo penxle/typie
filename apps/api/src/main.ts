@@ -2,6 +2,7 @@ import '@/instrument';
 import '@typie/lib/dayjs';
 import '@/mq';
 
+import { logger } from '@typie/lib';
 import { Hono } from 'hono';
 import { deriveContext } from '@/context';
 import { env } from '@/env';
@@ -22,7 +23,13 @@ app.use('*', async (c, next) => {
 app.route('/', rest);
 app.route('/graphql', yoga);
 
-app.onError((_, c) => {
+app.notFound((c) => {
+  return c.text('Not Found', { status: 404 });
+});
+
+app.onError((err, c) => {
+  logger.error(err);
+
   return c.text('Internal Server Error', { status: 500 });
 });
 
@@ -34,6 +41,8 @@ const server = Bun.serve({
         status: 404,
       });
     }
+
+    logger.error(err);
 
     return new Response('Internal Server Error', {
       status: 500,
