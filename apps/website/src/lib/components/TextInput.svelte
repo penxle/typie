@@ -23,7 +23,7 @@
     name,
     value = $bindable(),
     style,
-    size = 'lg',
+    size = 'md',
     element = $bindable(),
     leftIcon,
     rightIcon,
@@ -47,7 +47,6 @@
       display: 'flex',
       alignItems: 'center',
       borderWidth: '1px',
-      borderColor: 'gray.300',
       color: 'gray.500',
       backgroundColor: 'white',
       transition: 'common',
@@ -71,7 +70,7 @@
         backgroundColor: 'gray.200',
         borderColor: 'gray.200',
       },
-      '&:has(input[aria-invalid])': {
+      '&:has(input[aria-invalid="true"])': {
         borderColor: 'red.600',
         '&:has(input:focus)': {
           borderColor: 'red.600',
@@ -85,23 +84,22 @@
     variants: {
       size: {
         sm: {
-          borderRadius: '6px',
+          borderRadius: '4px',
           paddingX: '12px',
           height: '32px',
-          fontSize: '14px',
+          fontSize: '13px',
         },
         md: {
-          borderRadius: '8px',
+          borderRadius: '6px',
           paddingX: '12px',
           height: '38px',
           fontSize: '14px',
-          fontWeight: 'medium',
         },
         lg: {
-          borderRadius: '10px',
+          borderRadius: '8px',
           paddingX: '16px',
           height: '44px',
-          fontSize: '16px',
+          fontSize: '15px',
         },
       },
     },

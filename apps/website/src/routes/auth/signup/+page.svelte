@@ -2,13 +2,15 @@
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { page } from '$app/state';
+  import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
+  import { Button, Checkbox, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { Toast } from '$lib/notification';
   import { serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
+  import { flex } from '$styled-system/patterns';
 
   const sendSignUpEmail = graphql(`
     mutation SignUpPage_SendSignUpEmail_Mutation($input: SendSignUpEmailInput!) {
@@ -23,6 +25,10 @@
         email: z.string({ required_error: '이메일을 입력해주세요.' }).email('올바른 이메일 형식을 입력해주세요.'),
         password: z.string({ required_error: '비밀번호를 입력해주세요.' }).nonempty('비밀번호를 입력해주세요.'),
         confirmPassword: z.string({ required_error: '비밀번호 확인을 입력해주세요.' }).nonempty('비밀번호 확인을 입력해주세요.'),
+        termsAgreed: z.boolean().refine((val) => val === true, {
+          message: '이용약관 및 개인정보처리방침에 동의해주세요.',
+        }),
+        marketingAgreed: z.boolean().optional(),
       })
       .refine((data) => data.password === data.confirmPassword, {
         path: ['confirmPassword'],
@@ -46,81 +52,130 @@
         throw new FormError('email', '이미 사용중인 이메일입니다.');
       }
     },
+    defaultValues: {
+      termsAgreed: false,
+      marketingAgreed: false,
+    },
   });
 </script>
 
-<div class={center({ width: 'screen', height: 'screen' })}>
-  <div class={flex({ direction: 'column', gap: { base: '24px' }, maxWidth: '400px', width: 'full', padding: { base: '16px' } })}>
-    <h1 class={css({ fontSize: { base: '24px' }, fontWeight: 'bold', textAlign: 'center' })}>회원가입</h1>
+<div class={flex({ flexDirection: 'column', gap: '24px' })}>
+  <div class={flex({ justifyContent: 'flex-start' })}>
+    <Logo class={css({ height: '20px' })} />
+  </div>
 
-    <form class={flex({ direction: 'column', gap: { base: '16px' } })} onsubmit={form.handleSubmit}>
-      <div class={flex({ direction: 'column', gap: { base: '8px' } })}>
-        <label for="name">이름</label>
-        <input
-          id="name"
-          class={css({ borderWidth: '1px', padding: '8px', borderRadius: '4px' })}
-          placeholder="이름을 입력하세요"
-          type="text"
-          bind:value={form.fields.name}
-        />
+  <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>타이피 계정을 만들어볼까요?</h1>
+
+    <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+      이미 계정이 있으신가요?
+      <a
+        class={css({
+          display: 'inline-flex',
+          alignItems: 'center',
+          fontWeight: 'medium',
+          color: 'gray.950',
+          _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' },
+        })}
+        href={`/login${page.url.search}`}
+      >
+        로그인하기
+      </a>
+    </div>
+  </div>
+
+  <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
+    <div class={flex({ direction: 'column', gap: '12px' })}>
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="name">닉네임</label>
+
+        <TextInput id="name" aria-invalid={!!form.errors.name} autofocus placeholder="굴러다니는 너구리" bind:value={form.fields.name} />
 
         {#if form.errors.name}
-          <p class={css({ color: 'red.500' })}>{form.errors.name}</p>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
         {/if}
       </div>
 
-      <div class={flex({ direction: 'column', gap: { base: '8px' } })}>
-        <label for="email">이메일</label>
-        <input
-          id="email"
-          class={css({ borderWidth: '1px', padding: '8px', borderRadius: '4px' })}
-          placeholder="이메일을 입력하세요"
-          type="text"
-          bind:value={form.fields.email}
-        />
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="email">이메일</label>
+
+        <TextInput id="email" aria-invalid={!!form.errors.email} placeholder="me@example.com" bind:value={form.fields.email} />
 
         {#if form.errors.email}
-          <p class={css({ color: 'red.500' })}>{form.errors.email}</p>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.email}</div>
         {/if}
       </div>
 
-      <div class={flex({ direction: 'column', gap: { base: '8px' } })}>
-        <label for="password">비밀번호</label>
-        <input
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="password">비밀번호</label>
+
+        <TextInput
           id="password"
-          class={css({ borderWidth: '1px', padding: '8px', borderRadius: '4px' })}
-          placeholder="비밀번호를 입력하세요"
+          aria-invalid={!!form.errors.password}
+          placeholder="********"
           type="password"
           bind:value={form.fields.password}
         />
 
         {#if form.errors.password}
-          <p class={css({ color: 'red.500' })}>{form.errors.password}</p>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.password}</div>
         {/if}
       </div>
 
-      <div class={flex({ direction: 'column', gap: { base: '8px' } })}>
-        <label for="confirmPassword">비밀번호 확인</label>
-        <input
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="confirmPassword">비밀번호 확인</label>
+
+        <TextInput
           id="confirmPassword"
-          class={css({ borderWidth: '1px', padding: '8px', borderRadius: '4px' })}
-          placeholder="비밀번호를 다시 입력하세요"
+          aria-invalid={!!form.errors.confirmPassword}
+          placeholder="********"
           type="password"
           bind:value={form.fields.confirmPassword}
         />
 
         {#if form.errors.confirmPassword}
-          <p class={css({ color: 'red.500' })}>{form.errors.confirmPassword}</p>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.confirmPassword}</div>
         {/if}
       </div>
 
-      <button
-        class={css({ backgroundColor: '[#000000]', color: '[#FFFFFF]', padding: '12px', borderRadius: '4px', fontWeight: '[500]' })}
-        disabled={form.state.isLoading}
-        type="submit"
-      >
-        {form.state.isLoading ? '처리 중...' : '가입하기'}
-      </button>
-    </form>
-  </div>
+      <div class={flex({ direction: 'column', gap: '12px', marginTop: '8px' })}>
+        <div class={flex({ direction: 'column', gap: '4px' })}>
+          <Checkbox id="termsAgreed" name="termsAgreed" aria-invalid={!!form.errors.termsAgreed} bind:checked={form.fields.termsAgreed}>
+            <span class={flex({ fontSize: '14px', color: 'gray.700' })}>
+              <a
+                class={css({ textDecoration: 'underline', color: 'gray.900' })}
+                href="https://help.typie.co/legal/terms"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                이용약관
+              </a>
+
+              <span>&nbsp;및&nbsp;</span>
+
+              <a
+                class={css({ textDecoration: 'underline', color: 'gray.900' })}
+                href="https://help.typie.co/legal/privacy"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                개인정보처리방침
+              </a>
+              에 동의해요 (필수)
+            </span>
+          </Checkbox>
+
+          {#if form.errors.termsAgreed}
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.termsAgreed}</div>
+          {/if}
+        </div>
+
+        <Checkbox id="marketingAgreed" name="marketingAgreed" bind:checked={form.fields.marketingAgreed}>
+          <span class={css({ fontSize: '14px', color: 'gray.700' })}>마케팅 정보 수신에 동의해요 (선택)</span>
+        </Checkbox>
+      </div>
+    </div>
+
+    <Button style={css.raw({ height: '40px' })} loading={form.state.isLoading} size="lg" type="submit">가입하기</Button>
+  </form>
 </div>

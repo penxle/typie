@@ -3,11 +3,13 @@
   import { TypieError } from '@/errors';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
+  import { Button, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
+  import { flex } from '$styled-system/patterns';
 
   const resetPassword = graphql(`
     mutation ResetPasswordPage_ResetPassword_Mutation($input: ResetPasswordInput!) {
@@ -43,50 +45,50 @@
   });
 </script>
 
-<div class={center({ width: 'screen', height: 'screen' })}>
-  <div class={flex({ direction: 'column', gap: { base: '24px' }, maxWidth: '400px', width: 'full', padding: { base: '16px' } })}>
-    <h1 class={css({ fontSize: { base: '24px' }, fontWeight: 'bold', textAlign: 'center' })}>비밀번호 재설정</h1>
+<div class={flex({ flexDirection: 'column', gap: '24px' })}>
+  <div class={flex({ justifyContent: 'flex-start' })}>
+    <Logo class={css({ height: '20px' })} />
+  </div>
 
-    <p class={css({ textAlign: 'center' })}>새로운 비밀번호를 입력해주세요.</p>
+  <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>비밀번호를 변경하세요</h1>
 
-    <form class={flex({ direction: 'column', gap: { base: '16px' } })} onsubmit={form.handleSubmit}>
-      <div class={flex({ direction: 'column', gap: { base: '8px' } })}>
-        <label for="password">새 비밀번호</label>
-        <input
+    <div class={css({ fontSize: '14px', color: 'gray.500' })}>새로운 비밀번호를 입력해주세요.</div>
+  </div>
+
+  <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
+    <div class={flex({ direction: 'column', gap: '12px' })}>
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="password">새 비밀번호</label>
+        <TextInput
           id="password"
-          class={css({ borderWidth: '1px', padding: '8px', borderRadius: '4px' })}
+          aria-invalid={!!form.errors.password}
           placeholder="새 비밀번호를 입력하세요"
           type="password"
           bind:value={form.fields.password}
         />
 
         {#if form.errors.password}
-          <p class={css({ color: 'red.500' })}>{form.errors.password}</p>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.password}</div>
         {/if}
       </div>
 
-      <div class={flex({ direction: 'column', gap: { base: '8px' } })}>
-        <label for="confirmPassword">비밀번호 확인</label>
-        <input
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="confirmPassword">비밀번호 확인</label>
+        <TextInput
           id="confirmPassword"
-          class={css({ borderWidth: '1px', padding: '8px', borderRadius: '4px' })}
+          aria-invalid={!!form.errors.confirmPassword}
           placeholder="비밀번호를 다시 입력하세요"
           type="password"
           bind:value={form.fields.confirmPassword}
         />
 
         {#if form.errors.confirmPassword}
-          <p class={css({ color: 'red.500' })}>{form.errors.confirmPassword}</p>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.confirmPassword}</div>
         {/if}
       </div>
+    </div>
 
-      <button
-        class={css({ backgroundColor: '[#000000]', color: '[#FFFFFF]', padding: '12px', borderRadius: '4px', fontWeight: '[500]' })}
-        disabled={form.state.isLoading}
-        type="submit"
-      >
-        {form.state.isLoading ? '처리 중...' : '비밀번호 재설정'}
-      </button>
-    </form>
-  </div>
+    <Button style={css.raw({ height: '40px' })} loading={form.state.isLoading} size="lg" type="submit">비밀번호 변경하기</Button>
+  </form>
 </div>
