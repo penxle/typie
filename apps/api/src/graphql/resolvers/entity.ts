@@ -170,6 +170,38 @@ EntityView.implement({
         return await loader.load(self.id);
       },
     }),
+
+    ancestors: t.field({
+      type: [EntityView],
+      resolve: async (self) => {
+        const rows = await db.execute<{ id: string }>(sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id}, ${Entities.parentId}, 0 AS depth
+            FROM ${Entities}
+            WHERE ${eq(Entities.id, self.id)}
+            UNION ALL
+            SELECT ${Entities.id}, ${Entities.parentId}, sq.depth + 1
+            FROM ${Entities}
+            LEFT JOIN ${Posts} ON ${eq(Entities.id, Posts.entityId)}
+            LEFT JOIN ${PostOptions} ON ${eq(Posts.id, PostOptions.postId)}
+            LEFT JOIN ${Folders} ON ${eq(Entities.id, Folders.entityId)}
+            LEFT JOIN ${FolderOptions} ON ${eq(Folders.id, FolderOptions.folderId)}
+            JOIN sq ON ${Entities.id} = sq.parent_id
+            WHERE sq.parent_id IS NOT NULL AND
+            ${or(
+              and(eq(Entities.type, EntityType.FOLDER), isNotNull(Folders.id), eq(FolderOptions.visibility, FolderVisibility.UNLISTED)),
+              and(eq(Entities.type, EntityType.POST), isNotNull(Posts.id), eq(PostOptions.visibility, PostVisibility.UNLISTED)),
+            )}
+          ) 
+          SELECT id
+          FROM sq
+          WHERE ${ne(sql`id`, self.id)}
+          ORDER BY depth DESC
+        `);
+
+        return rows.map(({ id }) => id);
+      },
+    }),
   }),
 });
 

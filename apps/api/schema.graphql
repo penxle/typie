@@ -122,6 +122,7 @@ enum EntityType {
 }
 
 type EntityView implements IEntity {
+  ancestors: [EntityView!]!
   children: [EntityView!]!
   id: ID!
   node: EntityViewNode!
