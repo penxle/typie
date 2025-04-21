@@ -69,7 +69,7 @@
     backgroundColor: 'white',
   })}
 >
-  <Logo class={css({ flexShrink: '0', height: '18px', color: 'brand.500' })} />
+  <Logo class={css({ flexShrink: '0', height: '20px' })} />
 
   {#if $user}
     <button onclick={() => (open = true)} type="button" use:anchor>

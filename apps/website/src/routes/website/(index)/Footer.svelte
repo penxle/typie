@@ -17,7 +17,7 @@
     })}
   >
     <div>
-      <Logo class={css({ height: '24px', color: 'brand.500' })} />
+      <Logo class={css({ height: '24px' })} />
     </div>
     <div class={flex({ direction: 'column', gap: '30px' })}>
       <div class={css({ fontWeight: '[500]' })}>(주) 펜슬컴퍼니</div>
