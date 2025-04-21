@@ -28,6 +28,8 @@
       class={flex({
         alignItems: 'center',
         gap: '8px',
+        borderTopRadius: '8px',
+        borderBottomRadius: open ? '0' : '8px',
         paddingX: '12px',
         paddingY: '8px',
         color: 'gray.500',
