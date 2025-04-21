@@ -48,7 +48,7 @@ const app = new typie.App('api', {
           Condition: {
             StringEquals: {
               'ses:FromAddress': 'hello@typie.co',
-              'ses:FromDisplayName': 'Typie',
+              'ses:FromDisplayName': 'typie',
             },
           },
         },

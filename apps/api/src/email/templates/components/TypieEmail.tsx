@@ -13,12 +13,12 @@ const TypieEmail = ({ preview, children }: Props) => {
           dangerouslySetInnerHTML={{
             __html: `
           @media (prefers-color-scheme: dark) {
-            .logo-light { display: none !important; }
-            .logo-dark { display: block !important; }
+            .light-mode-logo { display: none !important; }
+            .dark-mode-logo { display: block !important; }
           }
           @media (prefers-color-scheme: light) {
-            .logo-light { display: block !important; }
-            .logo-dark { display: none !important; }
+            .light-mode-logo { display: block !important; }
+            .dark-mode-logo { display: none !important; }
           }
         `,
           }}
@@ -29,24 +29,24 @@ const TypieEmail = ({ preview, children }: Props) => {
         <Body className="bg-white font-sans">
           <Container className="mx-auto py-[48px] px-[24px] max-w-[520px]">
             <Img
-              src="https://typie.net/email/logo-black.png"
-              height="32"
+              src="https://typie.net/email/logo-black.png?v=1"
+              height="24"
               alt="타이피 로고"
-              className="logo-light h-[32px] w-auto object-cover mb-[24px]"
+              className="light-mode-logo h-[24px] w-auto object-cover mb-[24px]"
             />
             <Img
-              src="https://typie.net/email/logo-white.png"
-              height="32"
+              src="https://typie.net/email/logo-white.png?v=1"
+              height="24"
               alt="타이피 로고"
-              className="logo-dark h-[32px] w-auto object-cover mb-[24px]"
+              className="dark-mode-logo h-[24px] w-auto object-cover mb-[24px]"
               style={{ display: 'none' }}
             />
 
             {children}
 
-            <Hr className="border-[#eaeaea] my-[36px]" />
+            <Hr className="border-zinc-200 my-[36px]" />
 
-            <Text className="text-[12px] text-[#6b6b6b] m-0 text-left">(주)펜슬컴퍼니 | 서울특별시 강남구 강남대로100길 14, 6층</Text>
+            <Text className="text-[12px] text-zinc-500 m-0 text-left">(주)펜슬컴퍼니 | 서울특별시 강남구 강남대로100길 14, 6층</Text>
           </Container>
         </Body>
       </Tailwind>
