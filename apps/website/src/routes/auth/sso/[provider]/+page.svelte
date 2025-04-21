@@ -4,10 +4,13 @@
   import { match } from 'ts-pattern';
   import { SingleSignOnProvider } from '@/enums';
   import { page } from '$app/state';
+  import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
+  import { RingSpinner } from '$lib/components';
   import { deserializeOAuthState } from '$lib/utils';
-  import { center } from '$styled-system/patterns';
+  import { css } from '$styled-system/css';
+  import { center, flex } from '$styled-system/patterns';
 
   const authorizeSingleSignOn = graphql(`
     mutation SSOProviderPage_AuthorizeSingleSignOn_Mutation($input: AuthorizeSingleSignOnInput!) {
@@ -36,6 +39,17 @@
   });
 </script>
 
-<div class={center({ width: 'screen', height: 'screen' })}>
-  <div>logging in with {page.params.provider}...</div>
+<div class={flex({ flexDirection: 'column', gap: '24px' })}>
+  <div class={flex({ justifyContent: 'flex-start' })}>
+    <Logo class={css({ height: '20px' })} />
+  </div>
+
+  <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>로그인 중...</h1>
+    <div class={css({ fontSize: '14px', color: 'gray.500' })}>잠시만 기다려주세요.</div>
+  </div>
+
+  <div class={center({ height: '100px' })}>
+    <RingSpinner style={css.raw({ size: '50px', color: 'brand.500' })} />
+  </div>
 </div>

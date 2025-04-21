@@ -1,4 +1,5 @@
 export { default as Button } from './Button.svelte';
+export { default as Checkbox } from './Checkbox.svelte';
 export { default as ContentProtect } from './ContentProtect.svelte';
 export { default as Helmet } from './Helmet.svelte';
 export { default as HorizontalDivider } from './HorizontalDivider.svelte';

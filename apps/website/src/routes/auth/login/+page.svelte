@@ -3,9 +3,14 @@
   import { z } from 'zod';
   import { SingleSignOnProvider } from '@/enums';
   import { TypieError } from '@/errors';
+  import NaverIcon from '~icons/simple-icons/naver';
+  import GoogleIcon from '~icons/typie/google';
+  import KakaoIcon from '~icons/typie/kakao';
   import { page } from '$app/state';
+  import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
+  import { Button, Icon, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
@@ -54,148 +59,136 @@
       }
     },
   });
+
+  const singleSignOn = async (provider: SingleSignOnProvider) => {
+    const url = await generateSingleSignOnAuthorizationUrl({
+      provider,
+      state: serializeOAuthState({
+        redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+        state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+      }),
+    });
+
+    location.href = url;
+  };
 </script>
 
-<div class={center({ width: 'screen', height: 'screen' })}>
-  <div class={flex({ direction: 'column', gap: { base: '24px' }, maxWidth: '400px', width: 'full', padding: { base: '16px' } })}>
-    <h1 class={css({ fontSize: { base: '24px' }, fontWeight: 'bold', textAlign: 'center' })}>로그인</h1>
+<div class={flex({ flexDirection: 'column', gap: '24px' })}>
+  <div class={flex({ justifyContent: 'flex-start' })}>
+    <Logo class={css({ height: '20px' })} />
+  </div>
 
-    <form class={flex({ direction: 'column', gap: { base: '16px' } })} onsubmit={form.handleSubmit}>
-      <div class={flex({ direction: 'column', gap: { base: '8px' } })}>
-        <label for="email">이메일</label>
-        <input
-          id="email"
-          class={css({ borderWidth: '1px', padding: '8px', borderRadius: '4px' })}
-          placeholder="이메일을 입력하세요"
-          type="text"
-          bind:value={form.fields.email}
-        />
+  <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>타이피에 오신 것을 환영해요!</h1>
+
+    <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+      아직 계정이 없으신가요?
+      <a
+        class={css({
+          display: 'inline-flex',
+          alignItems: 'center',
+          fontWeight: 'medium',
+          color: 'gray.950',
+          _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' },
+        })}
+        href={`/signup${page.url.search}`}
+      >
+        이메일로 회원가입하기
+      </a>
+    </div>
+  </div>
+
+  <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
+    <div class={flex({ direction: 'column', gap: '12px' })}>
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="email">이메일</label>
+
+        <TextInput id="email" aria-invalid={!!form.errors.email} placeholder="me@example.com" bind:value={form.fields.email} />
 
         {#if form.errors.email}
-          <p class={css({ color: 'red.500' })}>{form.errors.email}</p>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.email}</div>
         {/if}
       </div>
 
-      <div class={flex({ direction: 'column', gap: { base: '8px' } })}>
-        <label for="password">비밀번호</label>
-        <input
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="password">비밀번호</label>
+
+        <TextInput
           id="password"
-          class={css({ borderWidth: '1px', padding: '8px', borderRadius: '4px' })}
-          placeholder="비밀번호를 입력하세요"
+          aria-invalid={!!form.errors.password}
+          placeholder="********"
           type="password"
           bind:value={form.fields.password}
         />
 
         {#if form.errors.password}
-          <p class={css({ color: 'red.500' })}>{form.errors.password}</p>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.password}</div>
         {/if}
       </div>
+    </div>
 
-      <button
-        class={css({ backgroundColor: '[#000000]', color: '[#FFFFFF]', padding: '12px', borderRadius: '4px', fontWeight: '[500]' })}
-        disabled={form.state.isLoading}
-        type="submit"
-      >
-        {form.state.isLoading ? '처리 중...' : '로그인'}
-      </button>
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <Button style={css.raw({ height: '40px' })} loading={form.state.isLoading} size="lg" type="submit">로그인</Button>
 
-      <div class={css({ textAlign: 'center', marginTop: '8px' })}>
-        <a class={css({ color: 'gray.600', textDecoration: 'underline' })} href={`/forgot-password${page.url.search}`}>
+      <div class={center()}>
+        <a
+          class={css({ fontSize: '13px', color: 'gray.700', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
+          href={`/forgot-password${page.url.search}`}
+        >
           비밀번호를 잊으셨나요?
         </a>
       </div>
-    </form>
-
-    <div class={flex({ alignItems: 'center', gap: '8px' })}>
-      <hr class={css({ flex: '1' })} />
-      <span class={css({ color: 'gray.500' })}>또는</span>
-      <hr class={css({ flex: '1' })} />
     </div>
+  </form>
 
-    <div class={flex({ direction: 'column', gap: { base: '16px' } })}>
-      <button
-        class={css({
-          borderWidth: '1px',
-          padding: '12px',
-          borderRadius: '4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-        })}
-        onclick={async () => {
-          const url = await generateSingleSignOnAuthorizationUrl({
-            provider: SingleSignOnProvider.GOOGLE,
-            state: serializeOAuthState({
-              redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
-              state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
-            }),
-          });
+  <div class={flex({ alignItems: 'center', gap: '16px', userSelect: 'none' })}>
+    <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
+    <span class={css({ fontSize: '14px', color: 'gray.500' })}>간편 로그인</span>
+    <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
+  </div>
 
-          location.href = url;
-        }}
-        type="button"
-      >
-        구글로 시작하기
-      </button>
+  <div class={flex({ justifyContent: 'space-between', gap: '16px', height: '40px' })}>
+    <button
+      class={center({
+        flex: '1',
+        borderWidth: '1px',
+        borderRadius: '8px',
+        backgroundColor: 'white',
+      })}
+      onclick={() => singleSignOn(SingleSignOnProvider.GOOGLE)}
+      type="button"
+    >
+      <Icon icon={GoogleIcon} />
+    </button>
 
-      <button
-        class={css({
-          borderWidth: '1px',
-          padding: '12px',
-          borderRadius: '4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-        })}
-        onclick={async () => {
-          const url = await generateSingleSignOnAuthorizationUrl({
-            provider: SingleSignOnProvider.KAKAO,
-            state: serializeOAuthState({
-              redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
-              state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
-            }),
-          });
+    <button
+      class={center({
+        flex: '1',
+        borderWidth: '1px',
+        borderColor: '[#FEE500]',
+        borderRadius: '8px',
+        color: 'black',
+        backgroundColor: '[#FEE500]',
+      })}
+      onclick={() => singleSignOn(SingleSignOnProvider.KAKAO)}
+      type="button"
+    >
+      <Icon icon={KakaoIcon} />
+    </button>
 
-          location.href = url;
-        }}
-        type="button"
-      >
-        카카오로 시작하기
-      </button>
-
-      <button
-        class={css({
-          borderWidth: '1px',
-          padding: '12px',
-          borderRadius: '4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-        })}
-        onclick={async () => {
-          const url = await generateSingleSignOnAuthorizationUrl({
-            provider: SingleSignOnProvider.NAVER,
-            state: serializeOAuthState({
-              redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
-              state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
-            }),
-          });
-
-          location.href = url;
-        }}
-        type="button"
-      >
-        네이버로 시작하기
-      </button>
-
-      <div class={css({ textAlign: 'center', marginTop: '16px' })}>
-        <p>
-          계정이 없으신가요? <a class={css({ textDecoration: 'underline' })} href={`/signup${page.url.search}`}>이메일로 회원가입</a>
-        </p>
-      </div>
-    </div>
+    <button
+      class={center({
+        flex: '1',
+        borderWidth: '1px',
+        borderColor: '[#03C75A]',
+        borderRadius: '8px',
+        color: 'white',
+        backgroundColor: '[#03C75A]',
+      })}
+      onclick={() => singleSignOn(SingleSignOnProvider.NAVER)}
+      type="button"
+    >
+      <Icon icon={NaverIcon} />
+    </button>
   </div>
 </div>
