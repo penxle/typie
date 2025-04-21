@@ -4,7 +4,6 @@
   import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
   import LockIcon from '~icons/lucide/lock';
   import MessageCircleIcon from '~icons/lucide/message-circle';
-  import ShareIcon from '~icons/lucide/share';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';
   import SmileIcon from '~icons/lucide/smile';
   import { env } from '$env/dynamic/public';
@@ -16,6 +15,7 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Header from './Header.svelte';
+  import ShareLinkPopover from './ShareLinkPopover.svelte';
 
   const query = graphql(`
     query UsersiteWildcardSlugPage_Query($origin: String!, $slug: String!) {
@@ -61,6 +61,11 @@
             coverImage {
               id
               ...Img_image
+            }
+
+            entity {
+              id
+              url
             }
 
             body {
@@ -210,9 +215,7 @@
           </div>
 
           <div class={flex({ align: 'center', marginLeft: 'auto', gap: '16px', color: 'gray.600' })}>
-            <button type="button">
-              <Icon icon={ShareIcon} size={18} />
-            </button>
+            <ShareLinkPopover href={$query.entityView.node.entity.url} />
 
             <button type="button">
               <Icon icon={EllipsisVerticalIcon} size={18} />
@@ -245,9 +248,7 @@
           <!-- TODO: 이모지 -->
 
           <div class={flex({ align: 'center', gap: '16px', marginLeft: 'auto', color: 'gray.600' })}>
-            <button type="button">
-              <Icon icon={ShareIcon} size={18} />
-            </button>
+            <ShareLinkPopover href={$query.entityView.node.entity.url} />
 
             <button type="button">
               <Icon icon={EllipsisVerticalIcon} size={18} />

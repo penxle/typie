@@ -13,6 +13,7 @@
     "@ctrl/tinycolor": "^4.1.0",
     "@floating-ui/dom": "^1.6.13",
     "@iconify-json/lucide": "^1.2.37",
+    "@iconify-json/simple-icons": "^1.2.32",
     "@pandacss/dev": "^0.53.4",
     "@portone/browser-sdk": "^0.0.17",
     "@pulumi/aws": "^6.77.1",
