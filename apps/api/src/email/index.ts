@@ -12,7 +12,7 @@ type SendEmailParams = {
 export const sendEmail = async ({ subject, recipient, body }: SendEmailParams) => {
   await aws.ses.send(
     new SendEmailCommand({
-      Source: 'Typie <hello@typie.co>',
+      Source: 'typie <hello@typie.co>',
       Destination: {
         ToAddresses: [recipient],
       },
