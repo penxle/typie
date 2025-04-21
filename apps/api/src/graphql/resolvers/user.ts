@@ -16,10 +16,11 @@ import {
   UserPersonalIdentities,
   UserPlans,
   Users,
+  UserSingleSignOns,
 } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { EntityState, PaymentMethodState, SiteState, UserPlanState, UserState } from '@/enums';
+import { EntityState, PaymentMethodState, SingleSignOnProvider, SiteState, UserPlanState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
@@ -36,6 +37,7 @@ import {
   User,
   UserPersonalIdentity,
   UserPlan,
+  UserSingleSignOn,
 } from '../objects';
 
 /**
@@ -170,6 +172,13 @@ User.implement({
         return await db.select().from(UserPersonalIdentities).where(eq(UserPersonalIdentities.userId, user.id)).then(first);
       },
     }),
+
+    singleSignOns: t.field({
+      type: [UserSingleSignOn],
+      resolve: async (user) => {
+        return await db.select().from(UserSingleSignOns).where(eq(UserSingleSignOns.userId, user.id));
+      },
+    }),
   }),
 });
 
@@ -179,6 +188,15 @@ UserPersonalIdentity.implement({
     id: t.exposeID('id'),
     birthDate: t.expose('birthDate', { type: 'DateTime' }),
     expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
+  }),
+});
+
+UserSingleSignOn.implement({
+  isTypeOf: isTypeOf(TableCode.USER_SINGLE_SIGN_ONS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    provider: t.expose('provider', { type: SingleSignOnProvider }),
+    email: t.exposeString('email'),
   }),
 });
 

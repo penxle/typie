@@ -67,6 +67,7 @@ export const Site = createObjectRef('Site', T.Sites);
 export const User = createObjectRef('User', T.Users);
 export const UserPersonalIdentity = createObjectRef('UserPersonalIdentity', T.UserPersonalIdentities);
 export const UserPlan = createObjectRef('UserPlan', T.UserPlans);
+export const UserSingleSignOn = createObjectRef('UserSingleSignOn', T.UserSingleSignOns);
 
 export const EntityView = createObjectRef('EntityView', T.Entities);
 export const FolderView = createObjectRef('FolderView', T.Folders);
