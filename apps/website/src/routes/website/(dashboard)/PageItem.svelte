@@ -8,6 +8,7 @@
   import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import PencilIcon from '~icons/lucide/pencil';
+  import ShareIcon from '~icons/lucide/share';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
@@ -16,6 +17,7 @@
   import { css, cx } from '$styled-system/css';
   import { maxDepth } from './const';
   import PageList from './PageList.svelte';
+  import ShareFolderModal from './ShareFolderModal.svelte';
   import type { Entity, RootEntity } from './types';
 
   type Props = {
@@ -35,6 +37,7 @@
   let editing = $state(false);
   let inputEl = $state<HTMLInputElement>();
   let name = $state('');
+  let shareFolderOpen = $state(false);
 
   $effect(() => {
     if (entity.node?.__typename === 'Folder') name = entity.node.name;
@@ -203,7 +206,13 @@
             />
           </form>
         {:else}
-          <span class={css({ fontSize: '14px', flexGrow: '1', truncate: true })}>{name}</span>
+          <div class={css({ display: 'flex', alignItems: 'flex-start', gap: '2px', flexGrow: '1', truncate: true })}>
+            <span class={css({ fontSize: '14px', truncate: true })}>{name}</span>
+
+            {#if entity.node.option.visibility === 'UNLISTED'}
+              <div class={css({ flex: 'none', borderRadius: 'full', size: '4px', backgroundColor: 'brand.500' })}></div>
+            {/if}
+          </div>
         {/if}
 
         <Menu placement="bottom-start">
@@ -233,6 +242,14 @@
           >
             <Icon icon={PencilIcon} size={12} />
             <span>폴더 이름 변경</span>
+          </MenuItem>
+          <MenuItem
+            onclick={() => {
+              shareFolderOpen = true;
+            }}
+          >
+            <Icon icon={ShareIcon} size={12} />
+            <span>폴더 공유</span>
           </MenuItem>
 
           {#if depth < maxDepth - 1}
@@ -391,3 +408,5 @@
     </a>
   {/if}
 </li>
+
+<ShareFolderModal {entity} bind:open={shareFolderOpen} />

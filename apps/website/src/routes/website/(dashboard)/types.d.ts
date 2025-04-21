@@ -21,6 +21,7 @@ export type Entity = {
   node?: Post | Folder;
   children?: Entity[];
   order: string;
+  url: string;
 };
 
 export type Folder = {
@@ -28,6 +29,12 @@ export type Folder = {
   id: string;
   name: string;
   entity?: Entity;
+  option: FolderOption;
+};
+
+export type FolderOption = {
+  id: string;
+  visibility: 'PRIVATE' | 'UNLISTED';
 };
 
 export type Post = {

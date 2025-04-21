@@ -21,6 +21,7 @@
             __typename
             id
             slug
+            url
             order
 
             node {
@@ -28,6 +29,11 @@
                 __typename
                 id
                 name
+
+                option {
+                  id
+                  visibility
+                }
               }
 
               ... on Post {
@@ -41,6 +47,7 @@
               __typename
               id
               slug
+              url
               order
 
               node {
@@ -48,6 +55,11 @@
                   __typename
                   id
                   name
+
+                  option {
+                    id
+                    visibility
+                  }
                 }
 
                 ... on Post {
@@ -61,6 +73,7 @@
                 __typename
                 id
                 slug
+                url
                 order
 
                 node {
@@ -68,6 +81,11 @@
                     __typename
                     id
                     name
+
+                    option {
+                      id
+                      visibility
+                    }
                   }
 
                   ... on Post {
@@ -104,6 +122,7 @@
                 id
                 name
               }
+
               ... on Post {
                 id
                 title
@@ -117,7 +136,6 @@
 
               node {
                 ... on Folder {
-                  __typename
                   id
                   name
                 }
@@ -134,11 +152,6 @@
                 order
 
                 node {
-                  ... on Folder {
-                    id
-                    name
-                  }
-
                   ... on Post {
                     id
                     title
