@@ -227,12 +227,12 @@
     <div class={flex({ alignItems: 'center', gap: '6px' })}>
       {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
         {#if ancestor.node.__typename === 'Folder'}
-          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.500' })}>{ancestor.node.name}</div>
-          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.200' })}>/</div>
+          <div class={css({ fontSize: '14px', color: 'gray.400' })}>{ancestor.node.name}</div>
+          <div class={css({ fontSize: '14px', color: 'gray.300' })}>/</div>
         {/if}
       {/each}
 
-      <div class={css({ fontSize: '14px', fontWeight: 'medium' })}>{effectiveTitle}</div>
+      <div class={css({ fontSize: '14px' })}>{effectiveTitle}</div>
     </div>
 
     <Share $post={$query.post} />
