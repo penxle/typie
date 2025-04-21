@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ request, url, cookies, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
   const accessToken = cookies.get('typie-at');
   const deviceId = cookies.get('typie-did');
 
@@ -17,8 +17,7 @@ export const POST: RequestHandler = async ({ request, url, cookies, getClientAdd
   });
 
   if (response.status === 401) {
-    cookies.delete('typie-at', { path: '/', domain: url.hostname });
-    cookies.delete('typie-at', { path: '/', domain: `.${url.hostname}` });
+    cookies.delete('typie-at', { path: '/' });
   }
 
   return response;
