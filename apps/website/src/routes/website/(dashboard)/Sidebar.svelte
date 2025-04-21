@@ -139,7 +139,7 @@
     inert={!app.preference.current.sidebarExpanded && !app.state.sidebarTriggered}
   >
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', marginX: '16px' })}>
-      <Logo class={css({ flexShrink: '0', height: '18px', color: 'brand.500' })} />
+      <Logo class={css({ flexShrink: '0', height: '20px' })} />
 
       {#if app.preference.current.sidebarExpanded}
         <button
