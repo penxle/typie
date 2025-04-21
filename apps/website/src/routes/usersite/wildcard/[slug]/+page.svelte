@@ -1,13 +1,18 @@
 <script lang="ts">
   import { z } from 'zod';
   import { TypieError } from '@/errors';
+  import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
   import LockIcon from '~icons/lucide/lock';
+  import MessageCircleIcon from '~icons/lucide/message-circle';
+  import ShareIcon from '~icons/lucide/share';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';
+  import SmileIcon from '~icons/lucide/smile';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { Button, ContentProtect, Helmet, HorizontalDivider, Icon, Img, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { TiptapRenderer } from '$lib/tiptap';
+  import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Header from './Header.svelte';
@@ -23,6 +28,19 @@
       entityView(origin: $origin, slug: $slug) {
         id
 
+        ancestors {
+          id
+
+          node {
+            __typename
+
+            ... on FolderView {
+              id
+              name
+            }
+          }
+        }
+
         node {
           __typename
 
@@ -36,6 +54,8 @@
             option {
               id
               protectContent
+              allowReaction
+              allowComment
             }
 
             coverImage {
@@ -53,6 +73,14 @@
               ... on PostViewBodyUnavailable {
                 reason
               }
+            }
+
+            reactions {
+              id
+            }
+
+            comments {
+              id
             }
           }
 
@@ -112,7 +140,7 @@
 
   <Header $user={$query.me} />
 
-  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen', backgroundColor: 'gray.100' })}>
+  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen' })}>
     <div
       style:--prosemirror-max-width={`${$query.entityView.node.maxWidth}px`}
       class={flex({
@@ -120,7 +148,8 @@
         alignItems: 'center',
         flexGrow: '1',
         paddingX: '20px',
-        paddingY: '80px',
+        paddingTop: '50px',
+        paddingBottom: '80px',
         width: 'full',
         maxWidth: '1200px',
         backgroundColor: 'white',
@@ -140,7 +169,20 @@
       {/if}
 
       <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-        <div class={css({ fontSize: '28px', fontWeight: 'bold' })}>
+        <div class={flex({ alignItems: 'center', gap: '6px' })}>
+          {#each $query.entityView.ancestors as ancestor (ancestor.id)}
+            {#if ancestor.node.__typename === 'FolderView'}
+              <div class={css({ fontSize: '14px', color: 'gray.400' })}>{ancestor.node.name}</div>
+              <div class={css({ fontSize: '14px', color: 'gray.300' })}>/</div>
+            {/if}
+          {/each}
+
+          {#if $query.entityView.ancestors.length > 0}
+            <div class={css({ fontSize: '14px' })}>{$query.entityView.node.title}</div>
+          {/if}
+        </div>
+
+        <div class={css({ marginTop: '12px', fontSize: '28px', fontWeight: 'bold' })}>
           {$query.entityView.node.title}
         </div>
 
@@ -150,7 +192,35 @@
           </div>
         {/if}
 
-        <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+        <div class={flex({ align: 'center', justify: 'space-between', marginTop: '20px', paddingBottom: '10px' })}>
+          <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'gray.400' })}>
+            {#if $query.entityView.node.option.allowReaction && $query.entityView.node.reactions.length > 0}
+              <div class={flex({ align: 'center', gap: '3px' })}>
+                <Icon icon={SmileIcon} />
+                <span class={css({ marginTop: '1px' })}>{comma($query.entityView.node.reactions.length)}</span>
+              </div>
+            {/if}
+
+            {#if $query.entityView.node.option.allowComment && $query.entityView.node.comments.length > 0}
+              <div class={flex({ align: 'center', gap: '3px' })}>
+                <Icon icon={MessageCircleIcon} />
+                <span class={css({ marginTop: '1px' })}>{comma($query.entityView.node.comments.length)}</span>
+              </div>
+            {/if}
+          </div>
+
+          <div class={flex({ align: 'center', marginLeft: 'auto', gap: '16px', color: 'gray.600' })}>
+            <button type="button">
+              <Icon icon={ShareIcon} size={18} />
+            </button>
+
+            <button type="button">
+              <Icon icon={EllipsisVerticalIcon} size={18} />
+            </button>
+          </div>
+        </div>
+
+        <HorizontalDivider style={css.raw({ marginBottom: '20px' })} />
       </div>
 
       {#if $query.entityView.node.body.__typename === 'PostViewBodyAvailable'}
@@ -161,6 +231,29 @@
         {:else}
           <TiptapRenderer style={css.raw({ width: 'full' })} content={$query.entityView.node.body.content} />
         {/if}
+
+        <div
+          class={flex({
+            align: 'center',
+            justify: 'space-between',
+            marginTop: '20px',
+            paddingBottom: '10px',
+            width: 'full',
+            maxWidth: 'var(--prosemirror-max-width)',
+          })}
+        >
+          <!-- TODO: 이모지 -->
+
+          <div class={flex({ align: 'center', gap: '16px', marginLeft: 'auto', color: 'gray.600' })}>
+            <button type="button">
+              <Icon icon={ShareIcon} size={18} />
+            </button>
+
+            <button type="button">
+              <Icon icon={EllipsisVerticalIcon} size={18} />
+            </button>
+          </div>
+        </div>
       {:else if $query.entityView.node.body.__typename === 'PostViewBodyUnavailable'}
         <div class={css({ marginTop: '42px', fontSize: '16px', fontWeight: 'medium' })}>
           {#if $query.entityView.node.body.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
