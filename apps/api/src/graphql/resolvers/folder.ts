@@ -108,7 +108,7 @@ builder.mutationFields((t) => ({
           .returning({ id: Entities.id })
           .then(firstOrThrow);
 
-        return await tx
+        const folder = await tx
           .insert(Folders)
           .values({
             entityId: entity.id,
@@ -116,6 +116,12 @@ builder.mutationFields((t) => ({
           })
           .returning()
           .then(firstOrThrow);
+
+        await tx.insert(FolderOptions).values({
+          folderId: folder.id,
+        });
+
+        return folder;
       });
 
       pubsub.publish('site:update', input.siteId, { scope: 'site' });
