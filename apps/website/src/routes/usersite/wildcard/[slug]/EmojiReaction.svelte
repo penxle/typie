@@ -37,6 +37,15 @@
     mutation UsersiteWildcardSlugPage_EmojiReaction_CreatePostReaction_Mutation($input: CreatePostReactionInput!) {
       createPostReaction(input: $input) {
         id
+
+        postView {
+          id
+
+          reactions {
+            id
+            emoji
+          }
+        }
       }
     }
   `);
