@@ -2,6 +2,8 @@
   import qs from 'query-string';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ExternalLinkIcon from '~icons/lucide/external-link';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
@@ -25,7 +27,6 @@
         id
         name
         email
-
         ...DashboardLayout_SettingModal_user
 
         avatar {
@@ -63,6 +64,14 @@
     if (!app.state.sidebarTriggered) {
       open = false;
     }
+  });
+
+  $effect(() => {
+    settingModalOpen =
+      page.url.searchParams.get('tab') === 'settings/personal' ||
+      page.url.searchParams.get('tab') === 'settings/space' ||
+      page.url.searchParams.get('tab') === 'settings/verification' ||
+      page.url.searchParams.get('tab') === 'settings/billing';
   });
 </script>
 
@@ -132,7 +141,7 @@
       class={css({ paddingX: '8px', paddingY: '4px', textAlign: 'left', _hover: { backgroundColor: 'gray.100' } })}
       onclick={() => {
         open = false;
-        settingModalOpen = true;
+        goto('?tab=settings/personal');
       }}
       type="button"
     >
