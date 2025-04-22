@@ -8,12 +8,12 @@
     open: boolean;
     children: Snippet;
     style?: SystemStyleObject;
+    onclose?: () => void;
   } & Omit<HTMLDialogAttributes, 'style'>;
 
-  let { open = $bindable(), children, style, ...rest }: Props = $props();
+  let { open = $bindable(), children, style, onclose, ...rest }: Props = $props();
 
   let dialogEl: HTMLDialogElement;
-  let showModal = (dialog: HTMLDialogElement) => dialog.showModal();
 
   $effect(() => {
     if (dialogEl)
@@ -44,7 +44,7 @@
       open = false;
     }
   }}
-  use:showModal
+  onclose={() => onclose?.()}
   {...rest}
   onsubmit={(e) => {
     e.preventDefault();
@@ -53,55 +53,57 @@
     rest.onsubmit?.(e);
   }}
 >
-  <div
-    class={css({ position: 'absolute', inset: '0', backgroundColor: 'gray.900/24' })}
-    onclick={() => {
-      open = false;
-    }}
-    onkeypress={null}
-    role="button"
-    tabindex="-1"
-  ></div>
-
-  <div
-    class={css({
-      position: 'absolute',
-      inset: '0',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: { base: '20px', lg: '40px' },
-      width: 'full',
-      margin: 'auto',
-      pointerEvents: 'none',
-    })}
-  >
+  {#if open}
     <div
-      class={css(
-        {
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          flexGrow: '1',
-          borderWidth: '1px',
-          borderRadius: '16px',
-          backgroundColor: 'white',
-          padding: '20px',
-          pointerEvents: 'auto',
-          height: '[fit-content]',
-          width: 'full',
-          maxWidth: '720px',
-          maxHeight: '738px',
-          overflow: 'hidden',
-        },
-        style,
-      )}
+      class={css({ position: 'absolute', inset: '0', backgroundColor: 'gray.900/24' })}
+      onclick={() => {
+        open = false;
+      }}
+      onkeypress={null}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class={css({
+        position: 'absolute',
+        inset: '0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: { base: '20px', lg: '40px' },
+        width: 'full',
+        margin: 'auto',
+        pointerEvents: 'none',
+      })}
     >
-      <div class={css({ height: 'full', overflowY: 'auto' })}>
-        <section class={css({ display: 'contents' })}>
-          {@render children()}
-        </section>
+      <div
+        class={css(
+          {
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            flexGrow: '1',
+            borderWidth: '1px',
+            borderRadius: '16px',
+            backgroundColor: 'white',
+            padding: '20px',
+            pointerEvents: 'auto',
+            height: '[fit-content]',
+            width: 'full',
+            maxWidth: '720px',
+            maxHeight: '738px',
+            overflow: 'hidden',
+          },
+          style,
+        )}
+      >
+        <div class={css({ height: 'full', overflowY: 'auto' })}>
+          <section class={css({ display: 'contents' })}>
+            {@render children()}
+          </section>
+        </div>
       </div>
     </div>
-  </div>
+  {/if}
 </dialog>
