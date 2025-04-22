@@ -348,7 +348,8 @@ PostReaction.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     emoji: t.expose('emoji', { type: 'String' }),
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+
+    postView: t.expose('postId', { type: PostView }),
   }),
 });
 

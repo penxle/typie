@@ -407,9 +407,9 @@ type PostOptionView implements IPostOption {
 }
 
 type PostReaction {
-  createdAt: DateTime!
   emoji: String!
   id: ID!
+  postView: PostView!
 }
 
 type PostView implements IPost {
