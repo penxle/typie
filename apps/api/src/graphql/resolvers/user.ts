@@ -16,6 +16,7 @@ import {
   UserPersonalIdentities,
   UserPlans,
   Users,
+  UserSessions,
   UserSingleSignOns,
 } from '@/db';
 import { sendEmail } from '@/email';
@@ -307,27 +308,37 @@ builder.mutationFields((t) => ({
   }),
 
   deleteUser: t.withAuth({ session: true }).field({
-    type: User,
+    type: 'Boolean',
     resolve: async (_, __, ctx) => {
-      return db.transaction(async (tx) => {
-        // TODO: 나중에 사이트-유저 관계가 1:N으로 변경되면 엔티티 삭제 로직 변경 필요
+      await db.transaction(async (tx) => {
+        await tx
+          .update(Entities)
+          .set({ state: EntityState.DELETED })
+          .where(
+            inArray(
+              Entities.id,
+              tx
+                .select({ id: Entities.id })
+                .from(Entities)
+                .innerJoin(Sites, eq(Entities.siteId, Sites.id))
+                .where(eq(Sites.userId, ctx.session.userId)),
+            ),
+          );
 
-        const entityIds = await tx
-          .select({ id: Entities.id })
-          .from(Entities)
-          .innerJoin(Sites, eq(Entities.siteId, Sites.id))
-          .where(eq(Sites.userId, ctx.session.userId))
-          .then((result) => result.map((row) => row.id));
+        await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.userId, ctx.session.userId));
 
-        await tx.update(Entities).set({ state: EntityState.DELETED }).where(inArray(Entities.id, entityIds));
+        await tx.delete(UserPlans).where(eq(UserPlans.userId, ctx.session.userId));
+        await tx.update(PaymentMethods).set({ state: PaymentMethodState.DEACTIVATED }).where(eq(PaymentMethods.userId, ctx.session.userId));
 
-        return await tx
-          .update(Users)
-          .set({ state: UserState.DEACTIVATED })
-          .where(eq(Users.id, ctx.session.userId))
-          .returning()
-          .then(firstOrThrow);
+        await tx.delete(UserPersonalIdentities).where(eq(UserPersonalIdentities.userId, ctx.session.userId));
+
+        await tx.delete(UserSingleSignOns).where(eq(UserSingleSignOns.userId, ctx.session.userId));
+        await tx.delete(UserSessions).where(eq(UserSessions.userId, ctx.session.userId));
+
+        await tx.update(Users).set({ state: UserState.DEACTIVATED }).where(eq(Users.id, ctx.session.userId));
       });
+
+      return true;
     },
   }),
 
