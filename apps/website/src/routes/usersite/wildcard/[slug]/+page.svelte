@@ -14,6 +14,7 @@
   import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import EmojiReaction from './EmojiReaction.svelte';
   import FolderView from './FolderView.svelte';
   import Header from './Header.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
@@ -54,6 +55,7 @@
             subtitle
             excerpt
             maxWidth
+            ...UsersiteWildcardSlugPage_EmojiReaction_postView
 
             option {
               id
@@ -81,6 +83,7 @@
 
             reactions {
               id
+              emoji
             }
 
             comments {
@@ -242,13 +245,14 @@
           class={flex({
             align: 'center',
             justify: 'space-between',
+            gap: '8px',
             marginTop: '20px',
             paddingBottom: '10px',
             width: 'full',
             maxWidth: 'var(--prosemirror-max-width)',
           })}
         >
-          <!-- TODO: 이모지 -->
+          <EmojiReaction $postView={$query.entityView.node} />
 
           <div class={flex({ align: 'center', gap: '16px', marginLeft: 'auto', color: 'gray.600' })}>
             <ShareLinkPopover href={$query.entityView.url} />
