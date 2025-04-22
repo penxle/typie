@@ -7,7 +7,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { RingSpinner } from '$lib/components';
+  import { Helmet, RingSpinner } from '$lib/components';
   import { deserializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -38,6 +38,8 @@
     });
   });
 </script>
+
+<Helmet title="로그인 중..." />
 
 <div class={flex({ flexDirection: 'column', gap: '24px' })}>
   <div class={flex({ justifyContent: 'flex-start' })}>
