@@ -128,6 +128,7 @@
         "@floating-ui/dom": "^1.6.13",
         "@iconify-json/lucide": "^1.2.37",
         "@iconify-json/simple-icons": "^1.2.32",
+        "@iconify-json/twemoji": "^1.2.2",
         "@pandacss/dev": "^0.53.4",
         "@portone/browser-sdk": "^0.0.17",
         "@pulumi/aws": "^6.77.1",
@@ -673,6 +674,8 @@
     "@iconify-json/lucide": ["@iconify-json/lucide@1.2.37", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-fiI8A8prb0WPvc5YDIbW1SVlRKwJpR3YGBe41U0Gen1/B9I41K9miU2yAk1e6NVLEdkj17hG0hdaQrAIbs+2Pw=="],
 
     "@iconify-json/simple-icons": ["@iconify-json/simple-icons@1.2.32", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-gxgLq0raip7SJaeJ0302vwhsqupQttS21B93Ci1kA/++B+hIgGw71HzTOWQoUhwjlrdWcoVUxSvpPJoMs7oURg=="],
+
+    "@iconify-json/twemoji": ["@iconify-json/twemoji@1.2.2", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-ckWEY5KhIQgdFd9VGvfhecTtYUx3ihXycwlZcEws87LxuvIThMHNBCblrQQ5afhbGMfg21dF+z9F+ODMRDYHMg=="],
 
     "@iconify/types": ["@iconify/types@2.0.0", "", {}, "sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg=="],
 
