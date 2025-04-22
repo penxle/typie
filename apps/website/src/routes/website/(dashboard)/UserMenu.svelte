@@ -2,8 +2,7 @@
   import qs from 'query-string';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ExternalLinkIcon from '~icons/lucide/external-link';
-  import { goto } from '$app/navigation';
-  import { page } from '$app/state';
+  import { pushState } from '$app/navigation';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
@@ -11,7 +10,7 @@
   import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
-  import SettingModal from './SettingModal.svelte';
+  import PreferenceModal from './@preference/PreferenceModal.svelte';
   import type { DashboardLayout_UserMenu_user } from '$graphql';
 
   type Props = {
@@ -27,7 +26,6 @@
         id
         name
         email
-        ...DashboardLayout_SettingModal_user
 
         avatar {
           id
@@ -42,13 +40,14 @@
             name
           }
         }
+
+        ...DashboardLayout_PreferenceModal_user
       }
     `),
   );
 
   let open = $state(false);
   let clientWidth = $state(0);
-  let settingModalOpen = $state(false);
 
   const app = getAppContext();
 
@@ -64,14 +63,6 @@
     if (!app.state.sidebarTriggered) {
       open = false;
     }
-  });
-
-  $effect(() => {
-    settingModalOpen =
-      page.url.searchParams.get('tab') === 'settings/personal' ||
-      page.url.searchParams.get('tab') === 'settings/space' ||
-      page.url.searchParams.get('tab') === 'settings/verification' ||
-      page.url.searchParams.get('tab') === 'settings/billing';
   });
 </script>
 
@@ -141,7 +132,7 @@
       class={css({ paddingX: '8px', paddingY: '4px', textAlign: 'left', _hover: { backgroundColor: 'gray.100' } })}
       onclick={() => {
         open = false;
-        goto('?tab=settings/personal');
+        pushState('', { shallowRoute: '/preference/account' });
       }}
       type="button"
     >
@@ -184,4 +175,4 @@
   </div>
 {/if}
 
-<SettingModal {$user} bind:open={settingModalOpen} />
+<PreferenceModal {$user} />

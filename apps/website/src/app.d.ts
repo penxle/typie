@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/consistent-type-definitions */
+
 import 'unplugin-icons/types/svelte';
 
 declare global {
@@ -5,7 +7,10 @@ declare global {
     // interface Error {}
     // interface Locals {}
     // interface PageData {}
-    // interface PageState {}
     // interface Platform {}
+
+    interface PageState {
+      shallowRoute?: string;
+    }
   }
 }

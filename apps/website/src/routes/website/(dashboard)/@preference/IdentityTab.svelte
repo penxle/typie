@@ -6,10 +6,10 @@
   import { Button } from '$lib/components';
   import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
-  import type { DashboardLayout_VerificationSetting_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_IdentityTab_user } from '$graphql';
 
   type Props = {
-    $user: DashboardLayout_VerificationSetting_user;
+    $user: DashboardLayout_PreferenceModal_IdentityTab_user;
   };
 
   let { $user: _user }: Props = $props();
@@ -17,7 +17,7 @@
   const user = fragment(
     _user,
     graphql(`
-      fragment DashboardLayout_VerificationSetting_user on User {
+      fragment DashboardLayout_PreferenceModal_IdentityTab_user on User {
         id
 
         personalIdentity {
@@ -29,7 +29,7 @@
   );
 
   const verifyPersonalIdentity = graphql(`
-    mutation DashboardLayout_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
+    mutation DashboardLayout_PreferenceModal_IdentityTab_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
       verifyPersonalIdentity(input: $input) {
         id
         expiresAt
