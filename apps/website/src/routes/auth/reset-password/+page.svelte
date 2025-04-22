@@ -5,7 +5,7 @@
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
-  import { Button, TextInput } from '$lib/components';
+  import { Button, Helmet, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
@@ -44,6 +44,8 @@
     },
   });
 </script>
+
+<Helmet title="비밀번호 변경" />
 
 <div class={flex({ flexDirection: 'column', gap: '24px' })}>
   <div class={flex({ justifyContent: 'flex-start' })}>

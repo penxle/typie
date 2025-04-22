@@ -2,7 +2,7 @@
   import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
   import FolderIcon from '~icons/lucide/folder';
   import { fragment, graphql } from '$graphql';
-  import { HorizontalDivider, Icon, Img } from '$lib/components';
+  import { Helmet, HorizontalDivider, Icon, Img } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex, grid } from '$styled-system/patterns';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
@@ -72,16 +72,17 @@
     `),
   );
 
-  let folders = $derived.by(() => {
-    return $entityView.children.filter((child) => child.node.__typename === 'FolderView');
-  });
-
-  let posts = $derived.by(() => {
-    return $entityView.children.filter((child) => child.node.__typename === 'PostView');
-  });
+  const folders = $derived($entityView.children.filter((child) => child.node.__typename === 'FolderView'));
+  const posts = $derived($entityView.children.filter((child) => child.node.__typename === 'PostView'));
 </script>
 
 {#if $entityView.node.__typename === 'FolderView'}
+  <Helmet
+    description={`${$entityView.node.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
+    image={{ size: 'large', src: 'https://typie.net/opengraph/default.png' }}
+    title={$entityView.node.name}
+  />
+
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen' })}>
     <div
       class={flex({
@@ -115,6 +116,7 @@
           {#if folders.length > 0}
             <span>폴더 {folders.length}개</span>
           {/if}
+
           {#if posts.length > 0}
             <span>포스트 {posts.length}개</span>
           {/if}

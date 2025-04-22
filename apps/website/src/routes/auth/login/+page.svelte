@@ -10,7 +10,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Button, Icon, TextInput } from '$lib/components';
+  import { Button, Helmet, Icon, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
@@ -72,6 +72,12 @@
     location.href = url;
   };
 </script>
+
+<Helmet
+  description="지금 타이피에 로그인하고 바로 글쓰기를 시작해보세요."
+  image={{ size: 'large', src: 'https://typie.net/opengraph/default.png' }}
+  title="로그인"
+/>
 
 <div class={flex({ flexDirection: 'column', gap: '24px' })}>
   <div class={flex({ justifyContent: 'flex-start' })}>

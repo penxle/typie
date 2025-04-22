@@ -4,7 +4,7 @@
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
-  import { RingSpinner } from '$lib/components';
+  import { Helmet, RingSpinner } from '$lib/components';
   import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -26,6 +26,8 @@
     await goto('/', { replaceState: true });
   });
 </script>
+
+<Helmet title="이메일 변경 중..." />
 
 <div class={flex({ flexDirection: 'column', gap: '24px' })}>
   <div class={flex({ justifyContent: 'flex-start' })}>
