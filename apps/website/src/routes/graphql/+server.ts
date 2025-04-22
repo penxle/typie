@@ -20,5 +20,12 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     cookies.delete('typie-at', { path: '/' });
   }
 
-  return response;
+  const headers = new Headers(response.headers);
+  headers.delete('Transfer-Encoding');
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 };
