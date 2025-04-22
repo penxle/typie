@@ -38,7 +38,7 @@
       createPostReaction(input: $input) {
         id
 
-        postView {
+        post {
           id
 
           reactions {
