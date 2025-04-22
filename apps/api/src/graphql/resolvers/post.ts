@@ -81,6 +81,8 @@ Post.implement({
   isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
+    view: t.expose('id', { type: PostView }),
+
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
 
     update: t.field({

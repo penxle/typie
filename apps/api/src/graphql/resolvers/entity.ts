@@ -30,6 +30,8 @@ Entity.implement({
   isTypeOf: isTypeOf(TableCode.ENTITIES),
   interfaces: [IEntity],
   fields: (t) => ({
+    view: t.expose('id', { type: EntityView }),
+
     site: t.expose('siteId', { type: Site }),
 
     node: t.field({

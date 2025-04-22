@@ -108,6 +108,7 @@ type Entity implements IEntity {
   site: Site!
   slug: String!
   url: String!
+  view: EntityView!
 }
 
 union EntityNode = Folder | Post
@@ -154,6 +155,7 @@ type Folder implements IFolder {
   id: ID!
   name: String!
   option: FolderOption!
+  view: FolderView!
 }
 
 type FolderOption implements IFolderOption {
@@ -379,6 +381,7 @@ type Post implements IPost {
   title: String!
   update: Binary!
   updatedAt: DateTime!
+  view: PostView!
 }
 
 enum PostContentRating {
@@ -529,6 +532,7 @@ type Site implements ISite {
   name: String!
   slug: String!
   url: String!
+  view: SiteView!
 }
 
 enum SiteState {

@@ -27,6 +27,8 @@ Site.implement({
   isTypeOf: isTypeOf(TableCode.SITES),
   interfaces: [ISite],
   fields: (t) => ({
+    view: t.expose('id', { type: SiteView }),
+
     entities: t.field({
       type: [Entity],
       resolve: async (self, _, ctx) => {
