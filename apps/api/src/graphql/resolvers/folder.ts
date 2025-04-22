@@ -93,6 +93,11 @@ builder.mutationFields((t) => ({
       name: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: input.siteId,
+      });
+
       if (input.parentEntityId) {
         await db
           .select({ id: Entities.id })
@@ -169,7 +174,7 @@ builder.mutationFields((t) => ({
         .select({ siteId: Entities.siteId })
         .from(Folders)
         .innerJoin(Entities, eq(Folders.entityId, Entities.id))
-        .where(and(eq(Folders.id, input.folderId), eq(Entities.userId, ctx.session.userId)))
+        .where(eq(Folders.id, input.folderId))
         .then(firstOrThrow);
 
       await assertSitePermission({

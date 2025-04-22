@@ -5,6 +5,7 @@ import { EntityState } from '@/enums';
 import { env } from '@/env';
 import { pubsub } from '@/pubsub';
 import { generateRandomName } from '@/utils/name';
+import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Entity, ISite, isTypeOf, Site, SiteView } from '../objects';
 
@@ -68,7 +69,12 @@ builder.queryFields((t) => ({
   site: t.withAuth({ session: true }).field({
     type: Site,
     args: { siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }) },
-    resolve: async (_, args) => {
+    resolve: async (_, args, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: args.siteId,
+      });
+
       return args.siteId;
     },
   }),
@@ -85,6 +91,11 @@ builder.subscriptionFields((t) => ({
     }),
     args: { siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }) },
     subscribe: async (_, args, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: args.siteId,
+      });
+
       const repeater = pubsub.subscribe('site:update', args.siteId);
 
       ctx.c.req.raw.signal.addEventListener('abort', () => {
