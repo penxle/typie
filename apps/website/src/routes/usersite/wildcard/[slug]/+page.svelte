@@ -273,7 +273,12 @@
               <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'gray.600' })}>본인 인증이 필요한 글이에요</p>
 
               {#if $query.me}
-                <Button style={css.raw({ width: 'full', height: '44px' })} external href={`${env.PUBLIC_WEBSITE_URL}/home`} type="link">
+                <Button
+                  style={css.raw({ width: 'full', height: '44px' })}
+                  external
+                  href={`${env.PUBLIC_WEBSITE_URL}/home?tab=settings/verification`}
+                  type="link"
+                >
                   본인 인증
                 </Button>
               {:else}
