@@ -26,18 +26,19 @@ Folder.implement({
     view: t.expose('id', { type: FolderView }),
 
     entity: t.expose('entityId', { type: Entity }),
+
     option: t.field({
       type: FolderOption,
       resolve: async (self, _, ctx) => {
-        const folderLoader = ctx.loader({
-          name: 'FolderOptions(folderId)',
+        const loader = ctx.loader({
+          name: 'Folder.option',
           load: async (ids) => {
             return await db.select().from(FolderOptions).where(inArray(FolderOptions.folderId, ids));
           },
           key: ({ folderId }) => folderId,
         });
 
-        return await folderLoader.load(self.id);
+        return await loader.load(self.id);
       },
     }),
   }),
@@ -48,18 +49,19 @@ FolderView.implement({
   interfaces: [IFolder],
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
+
     option: t.field({
       type: FolderOptionView,
       resolve: async (self, _, ctx) => {
-        const folderLoader = ctx.loader({
-          name: 'FolderOptions(folderId)',
+        const loader = ctx.loader({
+          name: 'FolderView.option',
           load: async (ids) => {
             return await db.select().from(FolderOptions).where(inArray(FolderOptions.folderId, ids));
           },
           key: ({ folderId }) => folderId,
         });
 
-        return await folderLoader.load(self.id);
+        return await loader.load(self.id);
       },
     }),
   }),

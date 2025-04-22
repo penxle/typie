@@ -139,9 +139,8 @@ export const Notifications = pgTable('notifications', {
   userId: text('user_id')
     .notNull()
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  category: E._NotificationCategory('category').notNull(),
-  state: E._NotificationState('state').notNull().default('UNREAD'),
   data: jsonb('data').notNull().$type<NotificationData>(),
+  state: E._NotificationState('state').notNull().default('UNREAD'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

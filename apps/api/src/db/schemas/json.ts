@@ -8,15 +8,15 @@ export const defaultPlanRules: PlanRules = {
   writePost: false,
 };
 
-export type CommentNotificationData = {
-  category: typeof NotificationCategory.COMMENT;
-  commentId: string;
-};
-
-export type AnnouncementNotificationData = {
+export type NotificationAnnouncementData = {
   category: typeof NotificationCategory.ANNOUNCEMENT;
   message: string;
   link?: string;
 };
 
-export type NotificationData = CommentNotificationData | AnnouncementNotificationData;
+export type NotificationCommentData = {
+  category: typeof NotificationCategory.COMMENT;
+  commentId: string;
+};
+
+export type NotificationData = NotificationAnnouncementData | NotificationCommentData;

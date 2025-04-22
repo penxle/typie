@@ -351,7 +351,7 @@ PostReaction.implement({
     id: t.exposeID('id'),
     emoji: t.expose('emoji', { type: 'String' }),
 
-    postView: t.expose('postId', { type: PostView }),
+    post: t.expose('postId', { type: PostView }),
   }),
 });
 
