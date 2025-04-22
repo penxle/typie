@@ -105,7 +105,7 @@
       <div>
         <a
           class={center({ borderRadius: '16px', backgroundColor: 'gray.100', size: '60px' })}
-          href={`https://share.planet.moe/share=${href}`}
+          href={`https://share.planet.moe/share?text=${href}`}
           rel="noopener noreferrer"
           target="_blank"
         >
