@@ -167,7 +167,7 @@
             href={`/${post.entity.slug}`}
           >
             {#if post.coverImage}
-              <Img $image={post.coverImage} alt={`${post.title} 커버 이미지`} ratio={5 / 2} size="full" />
+              <Img $image={post.coverImage} alt={`${post.title} 커버 이미지`} progressive ratio={5 / 2} size="full" />
             {:else}
               <div class={css({ width: 'full', aspectRatio: '[5/2]', backgroundColor: 'gray.100' })}></div>
             {/if}
