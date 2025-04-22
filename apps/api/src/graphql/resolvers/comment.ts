@@ -1,7 +1,8 @@
 import { and, eq } from 'drizzle-orm';
 import { Comments, db, Entities, firstOrThrow, PostOptions, Posts, TableCode, validateDbId } from '@/db';
-import { CommentState, EntityState } from '@/enums';
+import { CommentState, EntityState, NotificationCategory } from '@/enums';
 import { TypieError } from '@/errors';
+import { enqueueJob } from '@/mq';
 import { builder } from '../builder';
 import { Comment, isTypeOf } from '../objects';
 
@@ -28,14 +29,14 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const post = await db
-        .select({ id: Posts.id })
+        .select({ id: Posts.id, userId: Entities.userId })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .innerJoin(PostOptions, eq(Posts.id, PostOptions.postId))
         .where(and(eq(Posts.id, input.postId), eq(Entities.state, EntityState.ACTIVE), eq(PostOptions.allowComment, true)))
         .then(firstOrThrow);
 
-      return await db
+      const comment = await db
         .insert(Comments)
         .values({
           postId: post.id,
@@ -44,6 +45,16 @@ builder.mutationFields((t) => ({
         })
         .returning()
         .then(firstOrThrow);
+
+      await enqueueJob('notification:create', {
+        userId: post.userId,
+        data: {
+          category: NotificationCategory.COMMENT,
+          commentId: comment.id,
+        },
+      });
+
+      return comment;
     },
   }),
 
