@@ -1,53 +1,54 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { match } from 'ts-pattern';
-import { db, firstOrThrow, Notifications, TableCode, validateDbId } from '@/db';
+import { Comments, db, firstOrThrow, Notifications, TableCode, validateDbId } from '@/db';
 import { NotificationCategory, NotificationState } from '@/enums';
 import { builder } from '../builder';
-import { Comment, Notification, PostView } from '../objects';
-import type { AnnouncementNotificationData, CommentNotificationData } from '@/db/schemas/json';
+import { Comment, Notification, Post } from '../objects';
+import type { NotificationAnnouncementData, NotificationCommentData } from '@/db/schemas/json';
 
 Notification.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     state: t.expose('state', { type: NotificationState }),
-    category: t.expose('category', { type: NotificationCategory }),
     data: t.expose('data', { type: NotificationData }),
   }),
 });
 
-const CommentNotificationDataRef = builder.objectRef<CommentNotificationData>('CommentNotificationData').implement({
-  fields: (t) => ({
-    comment: t.field({
-      type: Comment,
-      resolve: (data) => data.commentId,
-    }),
-
-    post: t.field({
-      type: PostView,
-      resolve: async (data, _, ctx) => {
-        const commentLoader = Comment.getDataloader(ctx);
-
-        const comment = await commentLoader.load(data.commentId);
-
-        return comment.postId;
-      },
-    }),
-  }),
-});
-
-const AnnouncementNotificationDataRef = builder.objectRef<AnnouncementNotificationData>('AnnouncementNotificationData').implement({
+const NotificationAnnouncementData = builder.objectRef<NotificationAnnouncementData>('NotificationAnnouncementData').implement({
   fields: (t) => ({
     message: t.exposeString('message'),
     link: t.exposeString('link', { nullable: true }),
   }),
 });
 
+const NotificationCommentData = builder.objectRef<NotificationCommentData>('NotificationCommentData').implement({
+  fields: (t) => ({
+    comment: t.expose('commentId', { type: Comment }),
+
+    post: t.field({
+      type: Post,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'NotificationCommentData.post',
+          load: (ids) => {
+            return db.select({ id: Comments.id, postId: Comments.postId }).from(Comments).where(inArray(Comments.id, ids));
+          },
+          key: ({ id }) => id,
+        });
+
+        const comment = await loader.load(self.commentId);
+        return comment.postId;
+      },
+    }),
+  }),
+});
+
 const NotificationData = builder.unionType('NotificationData', {
-  types: [CommentNotificationDataRef, AnnouncementNotificationDataRef],
-  resolveType: (data) =>
-    match(data.category)
-      .with(NotificationCategory.COMMENT, () => CommentNotificationDataRef)
-      .with(NotificationCategory.ANNOUNCEMENT, () => AnnouncementNotificationDataRef)
+  types: [NotificationCommentData, NotificationAnnouncementData],
+  resolveType: (self) =>
+    match(self.category)
+      .with(NotificationCategory.COMMENT, () => NotificationCommentData)
+      .with(NotificationCategory.ANNOUNCEMENT, () => NotificationAnnouncementData)
       .exhaustive(),
 });
 

@@ -1,8 +1,3 @@
-type AnnouncementNotificationData {
-  link: String
-  message: String!
-}
-
 input AuthorizeSignUpEmailInput {
   code: String!
 }
@@ -29,11 +24,6 @@ type Comment {
   createdAt: DateTime!
   id: ID!
   state: CommentState!
-}
-
-type CommentNotificationData {
-  comment: Comment!
-  post: PostView!
 }
 
 enum CommentState {
@@ -308,10 +298,14 @@ type Mutation {
 }
 
 type Notification {
-  category: NotificationCategory!
   data: NotificationData!
   id: ID!
   state: NotificationState!
+}
+
+type NotificationAnnouncementData {
+  link: String
+  message: String!
 }
 
 enum NotificationCategory {
@@ -319,7 +313,12 @@ enum NotificationCategory {
   COMMENT
 }
 
-union NotificationData = AnnouncementNotificationData | CommentNotificationData
+type NotificationCommentData {
+  comment: Comment!
+  post: Post!
+}
+
+union NotificationData = NotificationAnnouncementData | NotificationCommentData
 
 enum NotificationState {
   READ
@@ -413,7 +412,7 @@ type PostOptionView implements IPostOption {
 type PostReaction {
   emoji: String!
   id: ID!
-  postView: PostView!
+  post: PostView!
 }
 
 type PostView implements IPost {
