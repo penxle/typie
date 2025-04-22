@@ -4,10 +4,11 @@ import Redis from 'ioredis';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
 import { PostDocumentSyncMessageKind, WsMessageKind } from '@/const';
-import { db, firstOrThrow, PostContents } from '@/db';
+import { db, Entities, firstOrThrow, PostContents, Posts } from '@/db';
 import { env } from '@/env';
 import { enqueueJob } from '@/mq';
 import { decode, encode } from '@/utils';
+import { assertSitePermission } from '@/utils/permission';
 import { upgradeWebSocket } from '@/ws';
 import type { ServerWebSocket } from 'bun';
 import type { WSContext } from 'hono/ws';
@@ -87,7 +88,25 @@ ws.get(
         }
 
         if (type === PostDocumentSyncMessageKind.INIT) {
-          currentPostId = decode(payload);
+          const postId = decode(payload);
+
+          try {
+            const entity = await db
+              .select({ siteId: Entities.siteId })
+              .from(Entities)
+              .innerJoin(Posts, eq(Entities.id, Posts.entityId))
+              .where(eq(Posts.id, postId))
+              .then(firstOrThrow);
+
+            await assertSitePermission({
+              userId: currentUserId,
+              siteId: entity.siteId,
+            });
+
+            currentPostId = postId;
+          } catch {
+            return;
+          }
           send(ws, PostDocumentSyncMessageKind.INIT, new Uint8Array());
 
           if (!clients.has(currentPostId)) {

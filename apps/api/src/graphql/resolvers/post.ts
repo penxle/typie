@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
@@ -361,13 +361,20 @@ builder.queryFields((t) => ({
   post: t.withAuth({ session: true }).field({
     type: Post,
     args: { slug: t.arg.string() },
-    resolve: async (_, args) => {
-      return await db
-        .select(getTableColumns(Posts))
+    resolve: async (_, args, ctx) => {
+      const { post, entity } = await db
+        .select({ post: Posts, entity: { siteId: Entities.siteId } })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .where(eq(Entities.slug, args.slug))
         .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+      });
+
+      return post;
     },
   }),
 }));
@@ -384,6 +391,11 @@ builder.mutationFields((t) => ({
       parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: input.siteId,
+      });
+
       const title = null;
       const subtitle = null;
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

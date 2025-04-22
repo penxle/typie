@@ -56,7 +56,7 @@ builder.mutationFields((t) => ({
         .from(Comments)
         .innerJoin(Posts, eq(Comments.postId, Posts.id))
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .where(and(eq(Comments.id, input.commentId), eq(Comments.userId, ctx.session.userId)))
+        .where(eq(Comments.id, input.commentId))
         .then(firstOrThrow);
 
       if (comment.userId !== ctx.session.userId && entity.userId !== ctx.session.userId) {

@@ -214,11 +214,18 @@ builder.queryFields((t) => ({
     type: Entity,
     args: { entityId: t.arg.id({ validate: validateDbId(TableCode.ENTITIES) }) },
     resolve: async (_, args, ctx) => {
-      return await db
+      const entity = await db
         .select()
         .from(Entities)
         .where(and(eq(Entities.id, args.entityId), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+      });
+
+      return entity;
     },
   }),
 
@@ -272,7 +279,7 @@ builder.mutationFields((t) => ({
       const entity = await db
         .select({ id: Entities.id, siteId: Entities.siteId })
         .from(Entities)
-        .where(and(eq(Entities.id, input.entityId), eq(Entities.userId, ctx.session.userId)))
+        .where(eq(Entities.id, input.entityId))
         .then(firstOrThrow);
 
       await assertSitePermission({
@@ -282,14 +289,10 @@ builder.mutationFields((t) => ({
 
       if (input.parentEntityId) {
         const parentEntity = await db
-          .select({ id: Entities.id, siteId: Entities.siteId })
+          .select({ id: Entities.id })
           .from(Entities)
-          .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.userId, ctx.session.userId)))
+          .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.siteId, entity.siteId)))
           .then(firstOrThrow);
-
-        if (parentEntity.siteId !== entity.siteId) {
-          throw new TypieError({ code: 'cross_site' });
-        }
 
         const hasCycle = await db
           .execute<{ exists: boolean }>(
