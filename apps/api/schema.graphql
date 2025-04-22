@@ -277,6 +277,7 @@ type Mutation {
   deleteComment(input: DeleteCommentInput!): Comment!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deletePost(input: DeletePostInput!): Post!
+  deleteUser: User!
   duplicatePost(input: DuplicatePostInput!): Post!
   enrollPlan(input: EnrollPlanInput!): UserPlan!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
