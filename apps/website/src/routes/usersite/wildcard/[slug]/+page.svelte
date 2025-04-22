@@ -14,6 +14,7 @@
   import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import FolderView from './FolderView.svelte';
   import Header from './Header.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
 
@@ -27,9 +28,12 @@
 
       entityView(origin: $origin, slug: $slug) {
         id
+        url
+        ...UsersiteWildcardSlugPage_FolderView_entityView
 
         ancestors {
           id
+          url
 
           node {
             __typename
@@ -61,11 +65,6 @@
             coverImage {
               id
               ...Img_image
-            }
-
-            entity {
-              id
-              url
             }
 
             body {
@@ -140,14 +139,14 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
+<Header $user={$query.me} />
+
 {#if $query.entityView.node.__typename === 'PostView'}
   <Helmet
     description={$query.entityView.node.excerpt}
     image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${$query.entityView.id}` }}
     title={$query.entityView.node.title}
   />
-
-  <Header $user={$query.me} />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen' })}>
     <div
@@ -219,7 +218,7 @@
           </div>
 
           <div class={flex({ align: 'center', marginLeft: 'auto', gap: '16px', color: 'gray.600' })}>
-            <ShareLinkPopover href={$query.entityView.node.entity.url} />
+            <ShareLinkPopover href={$query.entityView.url} />
 
             <button type="button">
               <Icon icon={EllipsisVerticalIcon} size={18} />
@@ -252,7 +251,7 @@
           <!-- TODO: 이모지 -->
 
           <div class={flex({ align: 'center', gap: '16px', marginLeft: 'auto', color: 'gray.600' })}>
-            <ShareLinkPopover href={$query.entityView.node.entity.url} />
+            <ShareLinkPopover href={$query.entityView.url} />
 
             <button type="button">
               <Icon icon={EllipsisVerticalIcon} size={18} />
@@ -323,4 +322,6 @@
       {/if}
     </div>
   </div>
+{:else}
+  <FolderView $entityView={$query.entityView} />
 {/if}
