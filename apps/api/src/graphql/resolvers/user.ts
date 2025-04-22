@@ -306,6 +306,31 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  deleteUser: t.withAuth({ session: true }).field({
+    type: User,
+    resolve: async (_, __, ctx) => {
+      return db.transaction(async (tx) => {
+        // TODO: 나중에 사이트-유저 관계가 1:N으로 변경되면 엔티티 삭제 로직 변경 필요
+
+        const entityIds = await tx
+          .select({ id: Entities.id })
+          .from(Entities)
+          .innerJoin(Sites, eq(Entities.siteId, Sites.id))
+          .where(eq(Sites.userId, ctx.session.userId))
+          .then((result) => result.map((row) => row.id));
+
+        await tx.update(Entities).set({ state: EntityState.DELETED }).where(inArray(Entities.id, entityIds));
+
+        return await tx
+          .update(Users)
+          .set({ state: UserState.DEACTIVATED })
+          .where(eq(Users.id, ctx.session.userId))
+          .returning()
+          .then(firstOrThrow);
+      });
+    },
+  }),
+
   verifyPersonalIdentity: t.withAuth({ session: true }).fieldWithInput({
     type: UserPersonalIdentity,
     input: { identityVerificationId: t.input.string() },
