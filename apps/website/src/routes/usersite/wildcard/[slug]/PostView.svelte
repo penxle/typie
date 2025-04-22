@@ -16,6 +16,8 @@
   import { comma, serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import Comment from './Comment.svelte';
+  import CommentInput from './CommentInput.svelte';
   import EmojiReaction from './EmojiReaction.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { Optional, UsersiteWildcardSlugPage_PostView_entityView, UsersiteWildcardSlugPage_PostView_user } from '$graphql';
@@ -89,6 +91,7 @@
 
             comments {
               id
+              ...UsersiteWildcardSlugPage_Comment_comment
             }
 
             ...UsersiteWildcardSlugPage_EmojiReaction_postView
@@ -283,6 +286,24 @@
             </button>
           </div>
         </div>
+
+        {#if $entityView.node.option.allowComment}
+          <div
+            class={flex({ direction: 'column', gap: '24px', marginTop: '24px', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}
+          >
+            <p class={css({ fontWeight: 'semibold' })}>댓글 {$entityView.node.comments.length}</p>
+
+            <CommentInput postId={$entityView.node.id} />
+
+            {#each $entityView.node.comments as comment, i (comment.id)}
+              {#if i !== 0}
+                <HorizontalDivider />
+              {/if}
+
+              <Comment $comment={comment} />
+            {/each}
+          </div>
+        {/if}
       {:else if $entityView.node.body.__typename === 'PostViewBodyUnavailable'}
         <div class={css({ marginTop: '42px', fontSize: '16px', fontWeight: 'medium' })}>
           {#if $entityView.node.body.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
