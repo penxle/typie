@@ -67,6 +67,7 @@
     paddingX: '20px',
     height: '52px',
     backgroundColor: 'white',
+    zIndex: '50',
   })}
 >
   <Logo class={css({ flexShrink: '0', height: '20px' })} />
