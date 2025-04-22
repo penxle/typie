@@ -76,6 +76,10 @@
   const posts = $derived($entityView.children.filter((child) => child.node.__typename === 'PostView'));
 </script>
 
+<svelte:head>
+  <meta name="robots" content="noindex, nofollow" />
+</svelte:head>
+
 {#if $entityView.node.__typename === 'FolderView'}
   <Helmet
     description={`${$entityView.node.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
