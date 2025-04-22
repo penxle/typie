@@ -3,7 +3,7 @@ import { match } from 'ts-pattern';
 import { db, firstOrThrow, Notifications, TableCode, validateDbId } from '@/db';
 import { NotificationCategory, NotificationState } from '@/enums';
 import { builder } from '../builder';
-import { Comment, Notification } from '../objects';
+import { Comment, Notification, PostView } from '../objects';
 import type { AnnouncementNotificationData, CommentNotificationData } from '@/db/schemas/json';
 
 Notification.implement({
@@ -20,6 +20,17 @@ const CommentNotificationDataRef = builder.objectRef<CommentNotificationData>('C
     comment: t.field({
       type: Comment,
       resolve: (data) => data.commentId,
+    }),
+
+    post: t.field({
+      type: PostView,
+      resolve: async (data, _, ctx) => {
+        const commentLoader = Comment.getDataloader(ctx);
+
+        const comment = await commentLoader.load(data.commentId);
+
+        return comment.postId;
+      },
     }),
   }),
 });

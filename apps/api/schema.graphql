@@ -33,6 +33,7 @@ type Comment {
 
 type CommentNotificationData {
   comment: Comment!
+  post: PostView!
 }
 
 enum CommentState {
