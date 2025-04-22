@@ -1,5 +1,5 @@
-import { error } from '@sveltejs/kit';
-import { cacheExchange, createClient, errorExchange, fetchExchange, GraphQLError, sseExchange } from '@typie/sark';
+import { error, redirect } from '@sveltejs/kit';
+import { cacheExchange, createClient, errorExchange, fetchExchange, GraphQLError, NetworkError, sseExchange } from '@typie/sark';
 import { TypieError } from '@/errors';
 
 // eslint-disable-next-line import/no-default-export
@@ -26,9 +26,17 @@ export default createClient({
       credentials: 'include',
     }),
   ],
-  onError: (err) => {
+  onError: (err, event) => {
     if (err instanceof TypieError) {
       error(err.status, { message: err.message });
+    }
+
+    if (err instanceof NetworkError) {
+      if (err.statusCode === 401) {
+        redirect(302, event.url.href);
+      }
+
+      error(err.statusCode ?? 500, { message: err.message });
     }
   },
 });
