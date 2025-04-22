@@ -23,6 +23,8 @@ Folder.implement({
   isTypeOf: isTypeOf(TableCode.FOLDERS),
   interfaces: [IFolder],
   fields: (t) => ({
+    view: t.expose('id', { type: FolderView }),
+
     entity: t.expose('entityId', { type: Entity }),
     option: t.field({
       type: FolderOption,
