@@ -82,7 +82,7 @@
       {#each Object.keys(emojis) as emoji (emoji)}
         <li>
           <button
-            class={center({ borderRadius: '4px', padding: '2px', size: 'full', _hover: { backgroundColor: 'gray.200' } })}
+            class={center({ borderRadius: '4px', padding: '2px', size: 'full', _supportHover: { backgroundColor: 'gray.200' } })}
             onclick={async () => {
               await createPostReaction({ postId: $postView.id, emoji });
             }}

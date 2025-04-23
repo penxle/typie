@@ -5,7 +5,7 @@
   import XIcon from '~icons/lucide/x';
   import MastodonIcon from '~icons/simple-icons/mastodon';
   import TwitterIcon from '~icons/simple-icons/twitter';
-  import { createFloatingActions } from '$lib/actions';
+  import { createFloatingActions, portal } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -53,18 +53,43 @@
 {#if open}
   <div
     class={css({
+      position: 'fixed',
+      inset: '0',
+      zIndex: '1',
+      lgDown: {
+        backgroundColor: 'gray.900/30',
+        transition: 'opacity',
+        zIndex: '50',
+      },
+    })}
+    onclick={() => (open = false)}
+    onkeypress={null}
+    role="button"
+    tabindex="-1"
+    use:portal
+  ></div>
+
+  <div
+    class={css({
       display: 'flex',
       flexDirection: 'column',
       gap: '10px',
-      borderWidth: '1px',
       borderColor: 'gray.200',
-      borderRadius: '12px',
       paddingX: '18px',
       backgroundColor: 'white',
       width: 'full',
-      maxWidth: '360px',
       boxShadow: 'xlarge',
       zIndex: '50',
+      lgDown: {
+        position: '[fixed!]',
+        top: '[initial!]',
+        bottom: '[0!]',
+        left: '[0!]',
+        right: '[0!]',
+        borderTopWidth: '1px',
+        borderTopRadius: '12px',
+      },
+      lg: { borderWidth: '1px', borderRadius: '12px', maxWidth: '360px' },
     })}
     use:floating
   >

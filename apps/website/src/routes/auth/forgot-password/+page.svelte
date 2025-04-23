@@ -43,9 +43,11 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>비밀번호 재설정하기</h1>
+    <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>비밀번호 재설정하기</h1>
 
-    <div class={css({ fontSize: '14px', color: 'gray.500' })}>가입한 이메일을 입력하시면 비밀번호 재설정 링크를 보내드려요.</div>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500', wordBreak: 'keep-all' })}>
+      가입한 이메일을 입력하시면 비밀번호 재설정 링크를 보내드려요.
+    </div>
   </div>
 
   <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
