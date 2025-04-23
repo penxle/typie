@@ -41,7 +41,9 @@
         editor = new Ref(e);
       },
 
-      onCreate: oncreate,
+      onCreate: () => {
+        oncreate?.();
+      },
     });
 
     editor = new Ref(e);
