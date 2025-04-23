@@ -7,7 +7,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Button, Helmet } from '$lib/components';
+  import { Helmet } from '$lib/components';
   import { setupAppContext } from '$lib/context';
   import { TiptapEditor, TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
@@ -60,7 +60,31 @@
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
         <Logo class={css({ height: '24px' })} />
 
-        <Button href={env.PUBLIC_AUTH_URL} size="sm" type="link">시작하기</Button>
+        <a
+          style:--background-color={token('colors.brand.500')}
+          style:--border-color={token('colors.brand.500')}
+          style:--border-accent-color={token('colors.white')}
+          class={css({
+            borderWidth: '2px',
+            borderColor: 'transparent',
+            borderRadius: '4px',
+            paddingX: '12px',
+            paddingY: '6px',
+            fontSize: '13px',
+            fontWeight: 'semibold',
+            color: 'white',
+            background:
+              '[linear-gradient(var(--background-color), var(--background-color)) padding-box, conic-gradient(from var(--angle), var(--border-color), var(--border-accent-color) 10%, var(--border-color) 20%) border-box]',
+            animationName: '[rotate]',
+            animationDuration: '2s',
+            animationTimingFunction: 'linear',
+            animationIterationCount: 'infinite',
+            _hover: { animationPlayState: 'paused' },
+          })}
+          href={env.PUBLIC_AUTH_URL}
+        >
+          시작하기
+        </a>
       </div>
 
       <div class={css({ marginX: '-14px', height: '1px', backgroundColor: 'gray.200' })}></div>
@@ -105,3 +129,17 @@
     {/if}
   </div>
 </div>
+
+<style>
+  @keyframes -global-rotate {
+    to {
+      --angle: 360deg;
+    }
+  }
+
+  @property --angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+</style>
