@@ -99,6 +99,7 @@ export const Entities = pgTable(
     permalink: text('permalink').notNull(),
     type: E._EntityType('type').notNull(),
     order: text('order').notNull(),
+    depth: integer('depth').notNull().default(0),
     state: E._EntityState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()
