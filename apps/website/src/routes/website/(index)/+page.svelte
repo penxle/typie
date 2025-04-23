@@ -62,7 +62,7 @@
 </div>
 
 <Modal bind:open={confirmOpen}>
-  <form class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })} method="dialog">
+  <div class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })}>
     타이피 사전 등록이 완료되었어요!
 
     <button
@@ -75,9 +75,10 @@
         backgroundColor: '[#4A2DA0]',
         width: 'full',
       })}
-      type="submit"
+      onclick={() => (confirmOpen = false)}
+      type="button"
     >
       감사합니다. 오픈일에 만나요!
     </button>
-  </form>
+  </div>
 </Modal>
