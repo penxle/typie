@@ -499,6 +499,7 @@ builder.mutationFields((t) => ({
           siteId: Entities.siteId,
           parentEntityId: Entities.parentId,
           order: Entities.order,
+          depth: Entities.depth,
         })
         .from(Entities)
         .innerJoin(Posts, eq(Entities.id, Posts.entityId))
@@ -569,6 +570,7 @@ builder.mutationFields((t) => ({
             permalink: generatePermalink(),
             type: EntityType.POST,
             order: generateEntityOrder({ lower: entity.order, upper: nextEntity?.order }),
+            depth: entity.depth,
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);

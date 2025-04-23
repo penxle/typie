@@ -21,6 +21,7 @@ IEntity.implement({
     slug: t.exposeString('slug'),
     permalink: t.exposeString('permalink'),
     order: t.exposeString('order'),
+    depth: t.exposeInt('depth'),
 
     url: t.string({ resolve: (self) => `${env.USERSITE_URL.replace('*.', '')}/${self.permalink}` }),
   }),
@@ -289,9 +290,10 @@ builder.mutationFields((t) => ({
         siteId: entity.siteId,
       });
 
+      let depth = 0;
       if (input.parentEntityId) {
         const parentEntity = await db
-          .select({ id: Entities.id })
+          .select({ id: Entities.id, depth: Entities.depth })
           .from(Entities)
           .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.siteId, entity.siteId)))
           .then(firstOrThrow);
@@ -318,6 +320,8 @@ builder.mutationFields((t) => ({
         if (hasCycle.exists) {
           throw new TypieError({ code: 'circular_reference' });
         }
+
+        depth = parentEntity.depth + 1;
       }
 
       const updatedEntity = await db
@@ -328,6 +332,7 @@ builder.mutationFields((t) => ({
             lower: input.lowerOrder,
             upper: input.upperOrder,
           }),
+          depth,
         })
         .where(eq(Entities.id, entity.id))
         .returning()

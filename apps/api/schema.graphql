@@ -91,6 +91,7 @@ input EnrollPlanInput {
 type Entity implements IEntity {
   ancestors: [Entity!]!
   children: [Entity!]!
+  depth: Int!
   id: ID!
   node: EntityNode!
   order: String!
@@ -116,6 +117,7 @@ enum EntityType {
 type EntityView implements IEntity {
   ancestors: [EntityView!]!
   children: [EntityView!]!
+  depth: Int!
   id: ID!
   node: EntityViewNode!
   order: String!
@@ -177,6 +179,7 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 }
 
 interface IEntity {
+  depth: Int!
   id: ID!
   order: String!
   permalink: String!
