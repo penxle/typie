@@ -18,6 +18,7 @@ import {
   Users,
   UserSessions,
   UserSingleSignOns,
+  validateDbId,
 } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
@@ -301,9 +302,15 @@ builder.mutationFields((t) => ({
     type: User,
     input: {
       name: t.input.string({ validate: { schema: userSchema.name } }),
+      avatarId: t.input.id({ validate: validateDbId(TableCode.IMAGES) }),
     },
     resolve: async (_, { input }, ctx) => {
-      return await db.update(Users).set({ name: input.name }).where(eq(Users.id, ctx.session.userId)).returning().then(firstOrThrow);
+      return await db
+        .update(Users)
+        .set({ name: input.name, avatarId: input.avatarId })
+        .where(eq(Users.id, ctx.session.userId))
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 
