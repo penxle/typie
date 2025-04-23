@@ -121,7 +121,7 @@
       borderRadius: '12px',
       paddingX: '6px',
       backgroundColor: 'white',
-      boxShadow: 'large',
+      boxShadow: 'small',
       width: '360px',
       height: '272px',
       overflowY: 'auto',

@@ -23,7 +23,7 @@
       width: 'full',
       maxWidth: '400px',
       backgroundColor: 'white',
-      boxShadow: 'large',
+      boxShadow: 'medium',
       textAlign: 'center',
       zIndex: '1',
     })}

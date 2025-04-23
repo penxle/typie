@@ -157,7 +157,7 @@
         paddingY: '6px',
         backgroundColor: 'white',
         minWidth: '120px',
-        boxShadow: 'xlarge',
+        boxShadow: 'small',
         overflowY: 'auto',
         zIndex: '50',
       },

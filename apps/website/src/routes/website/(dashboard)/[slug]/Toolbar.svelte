@@ -67,7 +67,7 @@
       width: 'full',
       maxWidth: '1200px',
       backgroundColor: 'gray.50',
-      boxShadow: '[0px 0px 1px 0px rgba(80, 84, 90, 0.08), 0px 1px 4px 0px rgba(80, 84, 90, 0.08), 0px 2px 8px 0px rgba(80, 84, 90, 0.12)]',
+      boxShadow: 'small',
       pointerEvents: 'auto',
       transitionProperty: 'transform',
       transitionDuration: '200ms',

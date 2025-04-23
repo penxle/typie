@@ -78,7 +78,7 @@
       paddingX: '18px',
       backgroundColor: 'white',
       width: 'full',
-      boxShadow: 'xlarge',
+      boxShadow: 'small',
       zIndex: '50',
       lgDown: {
         position: '[fixed!]',

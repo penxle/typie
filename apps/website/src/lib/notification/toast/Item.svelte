@@ -37,7 +37,7 @@
     maxWidth: '402px',
     height: '38px',
     backgroundColor: 'gray.50',
-    boxShadow: 'xlarge',
+    boxShadow: 'small',
     overflow: 'hidden',
     pointerEvents: 'auto',
   })}

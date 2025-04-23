@@ -99,7 +99,7 @@
       color: 'gray.700',
       backgroundColor: 'white',
       width: '160px',
-      boxShadow: 'large',
+      boxShadow: 'small',
       zIndex: '50',
     })}
     use:floating

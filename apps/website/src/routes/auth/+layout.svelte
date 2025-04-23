@@ -35,7 +35,7 @@
       maxWidth: '400px',
       width: 'full',
       backgroundColor: 'white',
-      boxShadow: 'large',
+      boxShadow: 'medium',
     })}
   >
     {@render children?.()}
