@@ -408,9 +408,10 @@ builder.mutationFields((t) => ({
       const doc = makeYDoc({ title, subtitle, body });
       const snapshot = Y.snapshot(doc);
 
+      let depth = 0;
       if (input.parentEntityId) {
-        await db
-          .select({ id: Entities.id })
+        const parentEntity = await db
+          .select({ id: Entities.id, depth: Entities.depth })
           .from(Entities)
           .where(
             and(
@@ -421,6 +422,8 @@ builder.mutationFields((t) => ({
             ),
           )
           .then(firstOrThrow);
+
+        depth = parentEntity.depth + 1;
       }
 
       const last = await db
@@ -447,6 +450,7 @@ builder.mutationFields((t) => ({
             permalink: generatePermalink(),
             type: EntityType.POST,
             order: generateEntityOrder({ lower: last?.order, upper: null }),
+            depth,
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);

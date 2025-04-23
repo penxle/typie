@@ -168,6 +168,10 @@ export const writePublicAssets = async (outDir: string, artifacts: Artifact[]) =
       declaration: null,
       specifiers: [
         AST.b.exportSpecifier.from({
+          local: AST.b.identifier('FragmentType'),
+          exported: AST.b.identifier('FragmentType'),
+        }),
+        AST.b.exportSpecifier.from({
           local: AST.b.identifier('Optional'),
           exported: AST.b.identifier('Optional'),
         }),

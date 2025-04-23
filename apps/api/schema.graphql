@@ -95,6 +95,7 @@ type Entity implements IEntity {
   id: ID!
   node: EntityNode!
   order: String!
+  parent: Entity
   permalink: String!
   site: Site!
   slug: String!

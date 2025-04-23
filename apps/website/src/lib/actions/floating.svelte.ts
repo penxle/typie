@@ -116,7 +116,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
 
     setTimeout(() => {
       cleanupClickHandler?.();
-      // eslint-disable-next-line unicorn/prefer-global-this
+
       cleanupClickHandler = on(window, 'click', handleClick);
     }, 0);
   };

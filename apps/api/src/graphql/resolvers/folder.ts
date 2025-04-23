@@ -102,9 +102,10 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
+      let depth = 0;
       if (input.parentEntityId) {
-        await db
-          .select({ id: Entities.id })
+        const parentEntity = await db
+          .select({ id: Entities.id, depth: Entities.depth })
           .from(Entities)
           .where(
             and(
@@ -115,6 +116,8 @@ builder.mutationFields((t) => ({
             ),
           )
           .then(firstOrThrow);
+
+        depth = parentEntity.depth + 1;
       }
 
       const last = await db
@@ -141,6 +144,7 @@ builder.mutationFields((t) => ({
             permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
             type: EntityType.FOLDER,
             order: generateEntityOrder({ lower: last?.order, upper: null }),
+            depth,
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);

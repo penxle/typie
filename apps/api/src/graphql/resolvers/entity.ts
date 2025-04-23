@@ -34,6 +34,7 @@ Entity.implement({
     view: t.expose('id', { type: EntityView }),
 
     site: t.expose('siteId', { type: Site }),
+    parent: t.expose('parentId', { type: Entity, nullable: true }),
 
     node: t.field({
       type: EntityNode,
@@ -280,7 +281,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
-        .select({ id: Entities.id, siteId: Entities.siteId })
+        .select({ id: Entities.id, siteId: Entities.siteId, depth: Entities.depth })
         .from(Entities)
         .where(eq(Entities.id, input.entityId))
         .then(firstOrThrow);
@@ -324,19 +325,40 @@ builder.mutationFields((t) => ({
         depth = parentEntity.depth + 1;
       }
 
-      const updatedEntity = await db
-        .update(Entities)
-        .set({
-          parentId: input.parentEntityId,
-          order: generateEntityOrder({
-            lower: input.lowerOrder,
-            upper: input.upperOrder,
-          }),
-          depth,
-        })
-        .where(eq(Entities.id, entity.id))
-        .returning()
-        .then(firstOrThrow);
+      const depthDelta = depth - entity.depth;
+
+      const updatedEntity = await db.transaction(async (tx) => {
+        const updatedEntity = await tx
+          .update(Entities)
+          .set({
+            parentId: input.parentEntityId,
+            order: generateEntityOrder({
+              lower: input.lowerOrder,
+              upper: input.upperOrder,
+            }),
+            depth,
+          })
+          .where(eq(Entities.id, entity.id))
+          .returning()
+          .then(firstOrThrow);
+
+        await tx.execute(sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id}, ${Entities.depth}
+            FROM ${Entities}
+            WHERE ${eq(Entities.parentId, entity.id)}
+            UNION ALL
+            SELECT ${Entities.id}, ${Entities.depth}
+            FROM ${Entities}
+            JOIN sq ON ${Entities.parentId} = sq.id
+          )
+          UPDATE ${Entities}
+          SET depth = depth + ${depthDelta}
+          WHERE id IN (SELECT id FROM sq)
+        `);
+
+        return updatedEntity;
+      });
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
 

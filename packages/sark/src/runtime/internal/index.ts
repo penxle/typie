@@ -1,7 +1,7 @@
 export { handleError } from './error';
 export { fragment, graphql } from './functions';
 export { loadQuery } from './load';
-export type { FragmentStore, List, Optional } from './stores/fragment';
+export type { FragmentStore, FragmentType, List, Optional } from './stores/fragment';
 export type { MutationStore } from './stores/mutation';
 export { createMutationStore } from './stores/mutation';
 export type { QueryStore } from './stores/query';

@@ -17,87 +17,6 @@
           id
           name
 
-          entities {
-            __typename
-            id
-            slug
-            url
-            order
-
-            node {
-              ... on Folder {
-                __typename
-                id
-                name
-
-                option {
-                  id
-                  visibility
-                }
-              }
-
-              ... on Post {
-                __typename
-                id
-                title
-              }
-            }
-
-            children {
-              __typename
-              id
-              slug
-              url
-              order
-
-              node {
-                ... on Folder {
-                  __typename
-                  id
-                  name
-
-                  option {
-                    id
-                    visibility
-                  }
-                }
-
-                ... on Post {
-                  __typename
-                  id
-                  title
-                }
-              }
-
-              children {
-                __typename
-                id
-                slug
-                url
-                order
-
-                node {
-                  ... on Folder {
-                    __typename
-                    id
-                    name
-
-                    option {
-                      id
-                      visibility
-                    }
-                  }
-
-                  ... on Post {
-                    __typename
-                    id
-                    title
-                  }
-                }
-              }
-            }
-          }
-
           ...DashboardLayout_CommandPalette_site
         }
 
@@ -112,60 +31,15 @@
         ... on Site {
           id
 
-          entities {
-            id
-            slug
-            order
-
-            node {
-              ... on Folder {
-                id
-                name
-              }
-
-              ... on Post {
-                id
-                title
-              }
-            }
-
-            children {
-              id
-              slug
-              order
-
-              node {
-                ... on Folder {
-                  id
-                  name
-                }
-
-                ... on Post {
-                  id
-                  title
-                }
-              }
-
-              children {
-                id
-                slug
-                order
-
-                node {
-                  ... on Post {
-                    id
-                    title
-                  }
-                }
-              }
-            }
-          }
+          ...DashboardLayout_EntityTree_site
         }
 
         ... on Entity {
           id
 
           node {
+            __typename
+
             ... on Folder {
               id
               name
@@ -179,16 +53,6 @@
                 additions
                 deletions
               }
-            }
-          }
-
-          children {
-            id
-            order
-
-            children {
-              id
-              order
             }
           }
         }
@@ -210,7 +74,7 @@
 </script>
 
 <div class={flex({ position: 'relative', alignItems: 'flex-start', height: 'screen' })}>
-  <Sidebar $user={$query.me} entities={$query.me.sites[0].entities} />
+  <Sidebar $user={$query.me} />
 
   <div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full', overflowY: 'auto' })}>
     {@render children()}

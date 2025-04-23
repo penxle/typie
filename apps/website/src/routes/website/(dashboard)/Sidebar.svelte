@@ -13,18 +13,16 @@
   import { getAppContext } from '$lib/context';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import EntityTree from './@tree/EntityTree.svelte';
   import Notification from './Notification.svelte';
-  import PageList from './PageList.svelte';
   import UserMenu from './UserMenu.svelte';
   import type { DashboardLayout_Sidebar_user } from '$graphql';
-  import type { Entity } from './types';
 
   type Props = {
     $user: DashboardLayout_Sidebar_user;
-    entities: Entity[];
   };
 
-  let { $user: _user, entities }: Props = $props();
+  let { $user: _user }: Props = $props();
 
   const user = fragment(
     _user,
@@ -34,6 +32,7 @@
 
         sites {
           id
+          ...DashboardLayout_EntityTree_site
         }
 
         ...DashboardLayout_UserMenu_user
@@ -222,12 +221,13 @@
               paddingY: '6px',
               borderRadius: '6px',
               width: 'full',
+              transition: 'common',
               _hover: { backgroundColor: 'gray.100' },
             }),
           )}
           href="/home"
         >
-          <Icon style={{ color: 'gray.500', _groupHover: { color: 'gray.800' } }} icon={HomeIcon} size={16} />
+          <Icon style={css.raw({ color: 'gray.500', _groupHover: { color: 'gray.800' } })} icon={HomeIcon} size={16} />
           <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.700', _groupHover: { color: 'gray.950' } })}>홈</span>
         </a>
       </li>
@@ -245,6 +245,7 @@
           borderRadius: '6px',
           size: '24px',
           color: 'gray.500',
+          transition: 'common',
           _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
         })}
         onclick={async () => {
@@ -260,6 +261,7 @@
           borderRadius: '6px',
           size: '24px',
           color: 'gray.500',
+          transition: 'common',
           _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
         })}
         onclick={async () => {
@@ -277,7 +279,7 @@
 
     <div class={css({ position: 'relative', flexGrow: '1', overflow: 'hidden' })}>
       <div class={css({ paddingX: '16px', overflow: 'auto', height: 'full' })}>
-        <PageList {entities} siteId={$user.sites[0].id} />
+        <EntityTree $site={$user.sites[0]} />
       </div>
 
       <div

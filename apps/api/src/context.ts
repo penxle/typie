@@ -1,3 +1,4 @@
+import { clearAllDataLoaders } from '@pothos/plugin-dataloader';
 import { getClientAddress } from '@typie/lib';
 import DataLoader from 'dataloader';
 import dayjs from 'dayjs';
@@ -38,6 +39,8 @@ type DefaultContext = {
     params: LoaderParams<Key, Result, SortKey, Nullability, Many>,
   ) => DataLoader<Key, FinalResult, string>;
   ' $loaders': Map<string, DataLoader<unknown, unknown>>;
+
+  clearLoaders: () => void;
 };
 
 export type SessionContext = {
@@ -101,7 +104,7 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
             return new Error(`DataLoader(${name}): Missing key`);
           });
         },
-        { cache: false },
+        { cacheKeyFn: (key) => stringify(key) },
       );
 
       ctx[' $loaders'].set(name, loader);
@@ -109,6 +112,10 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
       return loader as never;
     },
     ' $loaders': new Map(),
+    clearLoaders: () => {
+      ctx[' $loaders'].clear();
+      clearAllDataLoaders(ctx);
+    },
   };
 
   const authorization = c.req.header('Authorization');

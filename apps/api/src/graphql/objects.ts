@@ -1,4 +1,5 @@
 import { asc, inArray } from 'drizzle-orm';
+import stringify from 'fast-json-stable-stringify';
 import { db, decodeDbId } from '@/db';
 import * as T from '@/db/schemas/tables';
 import { builder } from './builder';
@@ -21,7 +22,7 @@ const makeLoadableFields = <T extends TableConfig>(
   sort: true,
   cacheResolved: true,
   loaderOptions: {
-    cache: false,
+    cacheKeyFn: (key) => stringify(key),
   },
 });
 
