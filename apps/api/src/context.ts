@@ -39,8 +39,6 @@ type DefaultContext = {
     params: LoaderParams<Key, Result, SortKey, Nullability, Many>,
   ) => DataLoader<Key, FinalResult, string>;
   ' $loaders': Map<string, DataLoader<unknown, unknown>>;
-
-  clearLoaders: () => void;
 };
 
 export type SessionContext = {
@@ -112,10 +110,6 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
       return loader as never;
     },
     ' $loaders': new Map(),
-    clearLoaders: () => {
-      ctx[' $loaders'].clear();
-      clearAllDataLoaders(ctx);
-    },
   };
 
   const authorization = c.req.header('Authorization');
@@ -145,4 +139,12 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
   }
 
   return ctx;
+};
+
+export const clearLoaders = (ctx: Context) => {
+  for (const loader of ctx[' $loaders'].values()) {
+    loader.clearAll();
+  }
+
+  clearAllDataLoaders(ctx);
 };
