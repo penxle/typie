@@ -133,7 +133,7 @@
         borderRightWidth: '1px',
         borderRightRadius: '12px',
         backgroundColor: 'white',
-        boxShadow: '[2px 0 8px -1px rgba(0, 0, 0, 0.1)]',
+        boxShadow: 'medium',
       },
     )}
     inert={!app.preference.current.sidebarExpanded && !app.state.sidebarTriggered}

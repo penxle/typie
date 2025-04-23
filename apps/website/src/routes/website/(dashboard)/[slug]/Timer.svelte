@@ -115,7 +115,7 @@
       padding: '16px',
       backgroundColor: 'white',
       minWidth: '240px',
-      boxShadow: 'xlarge',
+      boxShadow: 'small',
       overflowY: 'auto',
       zIndex: '50',
     })}
@@ -307,7 +307,7 @@
         backgroundColor: 'white',
         borderRadius: '12px',
         minWidth: '320px',
-        boxShadow: 'xlarge',
+        boxShadow: 'medium',
       })}
     >
       <div class={css({ fontSize: '20px', fontWeight: 'bold' })}>휴식 시간</div>

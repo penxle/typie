@@ -39,7 +39,7 @@
     paddingY: '12px',
     width: 'full',
     backgroundColor: 'white',
-    boxShadow: 'xlarge',
+    boxShadow: 'small',
     pointerEvents: 'auto',
   })}
   onintroend={() => (progress.target = 0)}

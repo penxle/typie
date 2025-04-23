@@ -157,7 +157,7 @@
       paddingY: '16px',
       width: '360px',
       backgroundColor: 'white',
-      boxShadow: 'xlarge',
+      boxShadow: 'small',
       zIndex: '50',
     })}
     use:floating

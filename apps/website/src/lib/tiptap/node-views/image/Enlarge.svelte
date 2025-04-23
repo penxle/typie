@@ -92,7 +92,7 @@
             color: 'gray.500',
             size: '40px',
             backgroundColor: 'white',
-            boxShadow: 'xlarge',
+            boxShadow: 'small',
             zIndex: '30',
             _hover: {
               borderColor: 'gray.500',

@@ -75,7 +75,7 @@
         borderRadius: '12px',
         padding: '8px',
         backgroundColor: 'white',
-        boxShadow: 'large',
+        boxShadow: 'small',
       })}
       use:floating
     >

@@ -67,7 +67,7 @@
     width: '210px',
     maxHeight: '340px',
     overflow: 'auto',
-    boxShadow: 'xlarge',
+    boxShadow: 'small',
   })}
   role="menu"
 >

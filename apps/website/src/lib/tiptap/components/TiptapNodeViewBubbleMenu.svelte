@@ -57,7 +57,7 @@
       borderWidth: '1px',
       borderColor: 'gray.300',
       backgroundColor: 'white',
-      boxShadow: '[2px 2px 8px 0 {colors.gray.900/15}]',
+      boxShadow: 'small',
     })}
     use:floating
   >
