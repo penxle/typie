@@ -39,6 +39,8 @@
   let termsChecked = $state(false);
 
   const handleSubmit = async () => {
+    open = false;
+
     const payment = await createPreorderPayment({
       email,
     });
@@ -77,8 +79,8 @@
   };
 </script>
 
-<Modal onsubmit={handleSubmit} bind:open>
-  <form class={flex({ direction: 'column', gap: '20px' })} method="dialog">
+<Modal bind:open>
+  <form class={flex({ direction: 'column', gap: '20px' })} onsubmit={handleSubmit}>
     <Logo class={css({ marginBottom: '20px', height: '20px' })} />
 
     <div class={flex({ direction: 'column' })}>
@@ -186,7 +188,7 @@
 </Modal>
 
 <Modal bind:open={confirmOpen}>
-  <form class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })} method="dialog">
+  <div class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })}>
     타이피 사전 등록이 완료되었어요!
 
     <button
@@ -199,9 +201,12 @@
         backgroundColor: '[#4A2DA0]',
         width: 'full',
       })}
-      type="submit"
+      onclick={() => {
+        confirmOpen = false;
+      }}
+      type="button"
     >
       감사합니다. 오픈일에 만나요!
     </button>
-  </form>
+  </div>
 </Modal>

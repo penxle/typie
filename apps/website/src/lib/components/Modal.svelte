@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { portal } from '$lib/actions';
   import { css } from '$styled-system/css';
   import type { Snippet } from 'svelte';
-  import type { HTMLDialogAttributes } from 'svelte/elements';
   import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
@@ -9,55 +9,20 @@
     children: Snippet;
     style?: SystemStyleObject;
     onclose?: () => void;
-  } & Omit<HTMLDialogAttributes, 'style'>;
+  };
 
-  let { open = $bindable(), children, style, onclose, ...rest }: Props = $props();
-
-  let dialogEl: HTMLDialogElement;
-
-  $effect(() => {
-    if (dialogEl)
-      if (open) {
-        dialogEl.showModal();
-        // document.body.style.overflow = 'hidden';
-      } else {
-        dialogEl.close();
-        // document.body.style.overflow = '';
-      }
-  });
+  let { open = $bindable(), children, style, onclose }: Props = $props();
 </script>
 
-<dialog
-  bind:this={dialogEl}
-  class={css({
-    width: 'full',
-    height: 'full',
-    maxWidth: '[unset]',
-    maxHeight: '[unset]',
-    '& ::backdrop': {
-      display: 'none',
-    },
-  })}
-  onclick={(e) => {
-    if (e.target === dialogEl) {
-      dialogEl.close();
-      open = false;
-    }
-  }}
-  onclose={() => onclose?.()}
-  {...rest}
-  onsubmit={(e) => {
-    e.preventDefault();
-    dialogEl.close();
-    open = false;
-    rest.onsubmit?.(e);
-  }}
->
-  {#if open}
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (open = false)} />
+
+{#if open}
+  <div class={css({ position: 'fixed', inset: '0', zIndex: '50' })} use:portal>
     <div
       class={css({ position: 'absolute', inset: '0', backgroundColor: 'gray.900/24' })}
       onclick={() => {
         open = false;
+        onclose?.();
       }}
       onkeypress={null}
       role="button"
@@ -105,5 +70,5 @@
         </div>
       </div>
     </div>
-  {/if}
-</dialog>
+  </div>
+{/if}
