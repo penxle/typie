@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { match } from 'ts-pattern';
+import { clearLoaders } from '@/context';
 import { db, Entities, first, firstOrThrow, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState } from '@/enums';
 import { env } from '@/env';
@@ -137,7 +138,7 @@ builder.subscriptionFields((t) => ({
       return repeater;
     },
     resolve: async (payload, args, ctx) => {
-      ctx.clearLoaders();
+      clearLoaders(ctx);
 
       return match(payload)
         .with({ scope: 'site' }, () => db.select().from(Sites).where(eq(Sites.id, args.siteId)).then(firstOrThrow))
