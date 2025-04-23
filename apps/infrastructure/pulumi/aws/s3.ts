@@ -3,7 +3,6 @@ import * as pulumi from '@pulumi/pulumi';
 
 const cdn = new aws.s3.BucketV2('cdn', {
   bucket: 'typie-cdn',
-  forceDestroy: true,
 });
 
 new aws.s3.BucketPolicy('cdn', {
@@ -23,7 +22,6 @@ new aws.s3.BucketPolicy('cdn', {
 
 const usercontents = new aws.s3.BucketV2('usercontents', {
   bucket: 'typie-usercontents',
-  forceDestroy: true,
 });
 
 new aws.s3.BucketPolicy('usercontents', {
@@ -59,7 +57,6 @@ new aws.s3.BucketLifecycleConfigurationV2('usercontents', {
 
 const uploads = new aws.s3.BucketV2('uploads', {
   bucket: 'typie-uploads',
-  forceDestroy: true,
 });
 
 new aws.s3.BucketLifecycleConfigurationV2('uploads', {
@@ -81,7 +78,7 @@ new aws.s3.BucketCorsConfigurationV2('uploads', {
     {
       allowedHeaders: ['*'],
       allowedMethods: ['POST'],
-      allowedOrigins: ['https://typie.co', 'https://typie.dev', 'http://localhost:4000'],
+      allowedOrigins: ['https://typie.co', 'https://typie.dev', 'http://localhost:4100'],
     },
   ],
 });

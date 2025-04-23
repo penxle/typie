@@ -136,7 +136,9 @@ builder.subscriptionFields((t) => ({
 
       return repeater;
     },
-    resolve: async (payload, args) => {
+    resolve: async (payload, args, ctx) => {
+      ctx.clearLoaders();
+
       return match(payload)
         .with({ scope: 'site' }, () => db.select().from(Sites).where(eq(Sites.id, args.siteId)).then(firstOrThrow))
         .with({ scope: 'entity' }, ({ entityId }) => db.select().from(Entities).where(eq(Entities.id, entityId)).then(firstOrThrow))

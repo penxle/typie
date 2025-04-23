@@ -336,6 +336,16 @@ export const buildGraphQLTypes = (artifacts: Artifact[]): AST.Program => {
   for (const artifact of artifacts) {
     if (artifact.kind === 'fragment') {
       program.body.push(
+        AST.b.importDeclaration.from({
+          importKind: 'type',
+          source: AST.b.stringLiteral(`../artifacts/fragments/${artifact.name}`),
+          specifiers: [
+            AST.b.importSpecifier.from({
+              imported: AST.b.identifier(artifact.name),
+              local: AST.b.identifier(`_${artifact.name}`),
+            }),
+          ],
+        }),
         AST.b.exportNamedDeclaration(
           AST.b.tsTypeAliasDeclaration.from({
             id: AST.b.identifier(`${artifact.name}`),
@@ -343,7 +353,7 @@ export const buildGraphQLTypes = (artifacts: Artifact[]): AST.Program => {
               AST.b.tsPropertySignature.from({
                 key: AST.b.stringLiteral(` $$_${artifact.name}`),
                 optional: true,
-                typeAnnotation: AST.b.tsTypeAnnotation(AST.b.tsNeverKeyword()),
+                typeAnnotation: AST.b.tsTypeAnnotation(AST.b.tsTypeReference(AST.b.identifier(`_${artifact.name}`))),
               }),
             ]),
           }),
