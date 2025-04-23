@@ -17,7 +17,7 @@
   import SettingsIcon from '~icons/lucide/settings';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import XIcon from '~icons/lucide/x';
-  import { beforeNavigate, goto } from '$app/navigation';
+  import { beforeNavigate, goto, pushState } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
@@ -124,8 +124,8 @@
       name: '설정 열기',
       aliases: [],
       icon: SettingsIcon,
-      action: async () => {
-        // TODO: 설정 창 열기
+      action: () => {
+        pushState('', { shallowRoute: '/preference/account' });
       },
     },
   ]);
