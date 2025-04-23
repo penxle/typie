@@ -1,39 +1,48 @@
 <script lang="ts">
-  import { page } from '$app/state';
+  import { base64 } from 'rfc4648';
+  import { onMount } from 'svelte';
+  import * as YAwareness from 'y-protocols/awareness';
+  import * as Y from 'yjs';
+  import { browser } from '$app/environment';
+  import Logo from '$assets/logos/logo.svg?component';
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Helmet, Modal } from '$lib/components';
+  import { Button, Helmet } from '$lib/components';
+  import { setupAppContext } from '$lib/context';
+  import { TiptapEditor, TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
-  import CtaSection from './CtaSection.svelte';
-  import EditorSection from './EditorSection.svelte';
-  import FaqSection from './FaqSection.svelte';
-  import FocusSection from './FocusSection.svelte';
-  import Footer from './Footer.svelte';
-  import HeroSection from './HeroSection.svelte';
-  import ShareSection from './ShareSection.svelte';
+  import { center, flex } from '$styled-system/patterns';
+  import { token } from '$styled-system/tokens';
+  import { YState } from '../(dashboard)/[slug]/state.svelte';
+  import Toolbar from '../(dashboard)/[slug]/Toolbar.svelte';
+  import type { Editor } from '@tiptap/core';
+  import type { Ref } from '$lib/utils';
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = graphql(`
     query IndexPage_Query {
       me {
         id
       }
+
+      welcome {
+        body
+        update
+      }
     }
   `);
 
-  let confirmOpen = $state(false);
+  const app = setupAppContext();
+  app.can.hideToolbar = false;
 
-  $effect(() => {
-    const message = page.url.searchParams.get('message');
-    if (message) {
-      alert(message);
-    }
-  });
+  let editor = $state<Ref<Editor>>();
 
-  $effect(() => {
-    if (page.url.searchParams.get('success') === '1') {
-      confirmOpen = true;
-    }
+  const doc = new Y.Doc();
+  const awareness = new YAwareness.Awareness(doc);
+
+  const maxWidth = new YState<number>(doc, 'maxWidth', 800);
+
+  onMount(() => {
+    Y.applyUpdateV2(doc, base64.parse($query.welcome.update), 'remote');
   });
 </script>
 
@@ -45,40 +54,42 @@
   trailing={null}
 />
 
-<div class={css({ wordBreak: 'keep-all', color: '[#282738]', backgroundColor: '[#FFFDF8]', overflow: 'hidden' })}>
-  <HeroSection />
+<div class={center({ flexDirection: 'column', position: 'fixed', top: '0', insetX: '0', zIndex: '40', pointerEvents: 'none' })}>
+  <Toolbar {doc} {editor} sticked={true}>
+    <div class={flex({ flexDirection: 'column', gap: '14px' })}>
+      <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
+        <Logo class={css({ height: '24px' })} />
 
-  <EditorSection />
+        <Button href={env.PUBLIC_AUTH_URL} size="sm" type="link">시작하기</Button>
+      </div>
 
-  <FocusSection />
-
-  <ShareSection />
-
-  <CtaSection />
-
-  <FaqSection />
-
-  <Footer />
+      <div class={css({ marginX: '-14px', height: '1px', backgroundColor: 'gray.200' })}></div>
+    </div>
+  </Toolbar>
 </div>
 
-<Modal bind:open={confirmOpen}>
-  <div class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })}>
-    타이피 사전 등록이 완료되었어요!
-
-    <button
-      class={css({
-        borderRadius: '8px',
-        paddingX: '20px',
-        paddingY: '12px',
-        fontSize: '12px',
-        color: 'white',
-        backgroundColor: '[#4A2DA0]',
-        width: 'full',
-      })}
-      onclick={() => (confirmOpen = false)}
-      type="button"
-    >
-      감사합니다. 오픈일에 만나요!
-    </button>
+<div
+  style:--grid-line-color={token('colors.gray.100')}
+  style:--cross-line-color={token('colors.gray.50')}
+  style:--grid-size="30px"
+  style:--line-thickness="1px"
+  class={flex({
+    flexDirection: 'column',
+    alignItems: 'center',
+    width: 'screen',
+    height: 'screen',
+    backgroundColor: 'white',
+    backgroundImage:
+      '[repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size))]',
+    backgroundSize: 'var(--grid-size) var(--grid-size)',
+    overflow: 'scroll',
+  })}
+>
+  <div style:--prosemirror-max-width={`${maxWidth.current}px`} class={flex({ paddingTop: '240px', width: 'full', maxWidth: '1000px' })}>
+    {#if browser}
+      <TiptapEditor style={css.raw({ width: 'full' })} {awareness} {doc} bind:editor />
+    {:else}
+      <TiptapRenderer style={css.raw({ width: 'full', paddingBottom: '80px' })} content={$query.welcome.body} />
+    {/if}
   </div>
-</Modal>
+</div>

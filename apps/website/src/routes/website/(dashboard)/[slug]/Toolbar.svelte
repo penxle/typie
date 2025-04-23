@@ -39,6 +39,7 @@
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { Snippet } from 'svelte';
   import type * as Y from 'yjs';
   import type { Ref } from '$lib/utils';
 
@@ -46,9 +47,10 @@
     editor?: Ref<Editor>;
     doc: Y.Doc;
     sticked: boolean;
+    children?: Snippet;
   };
 
-  let { editor, doc, sticked }: Props = $props();
+  let { editor, doc, sticked, children }: Props = $props();
 
   const app = getAppContext();
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
@@ -81,6 +83,8 @@
   role="toolbar"
   tabindex="-1"
 >
+  {@render children?.()}
+
   <div class={flex({ alignItems: 'center', gap: '8px', width: 'full' })}>
     <ToolbarButton
       disabled={!editor?.current.can().setImage()}
@@ -256,7 +260,7 @@
 
     <div class={css({ flexGrow: '1' })}></div>
 
-    {#if sticked}
+    {#if sticked && app.can.hideToolbar}
       <div class={css({ alignSelf: 'flex-start' })}>
         <ToolbarButton
           style={css.raw({ backgroundColor: 'transparent' })}

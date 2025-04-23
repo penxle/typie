@@ -478,6 +478,7 @@ type Query {
   post(slug: String!): Post!
   search(query: String!, siteId: ID!): SearchResult!
   site(siteId: ID!): Site!
+  welcome: Welcome!
 }
 
 input RenameFolderInput {
@@ -655,4 +656,9 @@ enum UserState {
 
 input VerifyPersonalIdentityInput {
   identityVerificationId: String!
+}
+
+type Welcome {
+  body: JSON!
+  update: Binary!
 }
