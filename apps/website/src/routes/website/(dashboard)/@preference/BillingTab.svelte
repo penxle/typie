@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fragment, graphql } from '$graphql';
   import { css } from '$styled-system/css';
+  import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_PreferenceModal_BillingTab_user } from '$graphql';
 
   type Props = {
@@ -19,6 +20,8 @@
   );
 </script>
 
-<p class={css({ fontSize: '24px', fontWeight: 'bold' })}>결제 설정</p>
+<div class={flex({ direction: 'column', gap: '24px' })}>
+  <p class={css({ fontSize: '20px', fontWeight: 'bold' })}>결제 설정</p>
 
-{$user.id}
+  {$user.id}
+</div>
