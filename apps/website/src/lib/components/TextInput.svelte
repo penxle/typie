@@ -66,9 +66,9 @@
         borderColor: 'gray.200',
       },
       '&:has(input:read-only)': {
-        color: 'gray.500',
-        backgroundColor: 'gray.200',
-        borderColor: 'gray.200',
+        color: 'gray.400',
+        backgroundColor: 'gray.50',
+        borderColor: 'gray.100',
       },
       '&:has(input[aria-invalid="true"])': {
         borderColor: 'red.600',

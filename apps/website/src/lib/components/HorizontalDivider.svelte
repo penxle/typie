@@ -21,7 +21,7 @@
     variants: {
       color: {
         primary: { backgroundColor: 'gray.200' },
-        secondary: { backgroundColor: 'gray.200' },
+        secondary: { backgroundColor: 'gray.100' },
       },
     },
   });

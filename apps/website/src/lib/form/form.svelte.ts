@@ -29,6 +29,7 @@ type FormFieldErrors<T> = {
 
 type FormState = {
   isLoading: boolean;
+  isDirty: boolean;
 };
 
 type CreateFormOptions<T, D extends Partial<T>> = {
@@ -53,6 +54,7 @@ export const createForm = <T extends Record<string, unknown>, D extends Partial<
 ): CreateFormReturn<T, D> => {
   const formState = $state<FormState>({
     isLoading: false,
+    isDirty: false,
   });
 
   const formData = $state<Partial<T>>(options.defaultValues ?? {});
@@ -97,12 +99,15 @@ export const createForm = <T extends Record<string, unknown>, D extends Partial<
       }
     } finally {
       formState.isLoading = false;
+      formState.isDirty = false;
     }
   };
 
   const fields = new Proxy(formData, {
     set: (target, prop, value) => {
       target[prop as keyof T] = value;
+
+      formState.isDirty = true;
 
       if (options.submitOn === 'change') {
         handleSubmit();

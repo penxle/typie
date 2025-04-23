@@ -73,23 +73,25 @@
   const currentTab = $derived(tabs.find((tab) => tab.path === page.state.shallowRoute));
 </script>
 
-<Modal style={css.raw({ padding: '0', maxWidth: '1080px' })} onclose={() => history.back()} open={!!currentTab}>
-  <div class={flex({ minHeight: '520px' })}>
+<Modal
+  style={css.raw({ padding: '0', maxWidth: '1080px', height: 'full', maxHeight: '600px' })}
+  onclose={() => history.back()}
+  open={!!currentTab}
+>
+  <div class={flex({ height: 'full' })}>
     <div class={css({ flex: 'none', paddingY: '28px', paddingX: '8px', width: '240px', backgroundColor: 'gray.50' })}>
-      <nav class={flex({ direction: 'column', gap: '2px' })}>
+      <nav class={flex({ direction: 'column', gap: '4px' })}>
         {#each tabs as { icon, path, label } (path)}
           <button
             class={flex({
               align: 'center',
               gap: '4px',
-              borderRadius: '2px',
-              paddingX: '8px',
-              paddingY: '5px',
+              borderRadius: '4px',
+              padding: '8px',
               fontSize: '14px',
-              fontWeight: 'medium',
-              color: 'gray.600',
+              color: 'gray.700',
               _hover: { backgroundColor: 'gray.200' },
-              _selected: { color: 'gray.900', backgroundColor: 'gray.100' },
+              _selected: { color: 'gray.900', fontWeight: 'semibold', backgroundColor: 'gray.100' },
             })}
             aria-selected={currentTab?.path === path}
             onclick={() => {
@@ -105,7 +107,7 @@
       </nav>
     </div>
 
-    <div class={css({ paddingY: '28px', paddingX: '32px', width: 'full' })}>
+    <div class={css({ paddingX: '24px', paddingY: '30px', width: 'full', overflowY: 'auto' })}>
       {#if currentTab}
         {@const Component = currentTab.component}
 
