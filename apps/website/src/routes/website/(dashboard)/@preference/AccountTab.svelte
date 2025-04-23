@@ -60,7 +60,7 @@
       name: z.string({ required_error: '이름을 입력해주세요.' }).nonempty('이름을 입력해주세요.'),
     }),
     onSubmit: async (data) => {
-      await updateUser({ name: data.name });
+      await updateUser({ name: data.name, avatarId: $user.avatar.id });
     },
     defaultValues: {
       name: $user.name,
