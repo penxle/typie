@@ -87,7 +87,19 @@
 >
   <div style:--prosemirror-max-width={`${maxWidth.current}px`} class={flex({ paddingTop: '240px', width: 'full', maxWidth: '1000px' })}>
     {#if browser}
-      <TiptapEditor style={css.raw({ width: 'full' })} {awareness} {doc} bind:editor />
+      <div
+        class={css({ display: 'contents', '& a': { cursor: 'pointer' } })}
+        onclick={(e) => {
+          const anchor = (e.target as HTMLElement).closest('a');
+          if (anchor) {
+            e.preventDefault();
+            window.open(anchor.href, '_blank');
+          }
+        }}
+        role="none"
+      >
+        <TiptapEditor style={css.raw({ width: 'full' })} {awareness} {doc} bind:editor />
+      </div>
     {:else}
       <TiptapRenderer style={css.raw({ width: 'full', paddingBottom: '80px' })} content={$query.welcome.body} />
     {/if}
