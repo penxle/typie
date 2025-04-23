@@ -296,6 +296,7 @@ type Mutation {
   updateFolderOption(input: UpdateFolderOptionInput!): FolderOption!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
   updatePostOption(input: UpdatePostOptionInput!): PostOption!
+  updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): UserPersonalIdentity!
 }
@@ -589,6 +590,11 @@ input UpdatePostOptionInput {
   postId: ID!
   protectContent: Boolean!
   visibility: PostVisibility!
+}
+
+input UpdateSiteSlugInput {
+  siteId: ID!
+  slug: String!
 }
 
 input UpdateUserInput {
