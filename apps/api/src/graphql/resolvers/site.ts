@@ -1,11 +1,13 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, Sites, TableCode, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState } from '@/enums';
 import { env } from '@/env';
+import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
 import { generateRandomName } from '@/utils/name';
 import { assertSitePermission } from '@/utils/permission';
+import { siteSchema } from '@/validation';
 import { builder } from '../builder';
 import { Entity, ISite, isTypeOf, Site, SiteView } from '../objects';
 
@@ -78,6 +80,34 @@ builder.queryFields((t) => ({
       });
 
       return args.siteId;
+    },
+  }),
+}));
+
+/**
+ * * Mutations
+ */
+
+builder.mutationFields((t) => ({
+  updateSiteSlug: t.withAuth({ session: true }).fieldWithInput({
+    type: Site,
+    input: {
+      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
+      slug: t.input.string({ validate: { schema: siteSchema.slug } }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: input.siteId,
+      });
+
+      const slugExistSite = await db.select({ id: Sites.id }).from(Sites).where(eq(Sites.slug, input.slug)).then(first);
+
+      if (slugExistSite) {
+        throw new TypieError({ code: 'site_slug_already_exists' });
+      }
+
+      return await db.update(Sites).set({ slug: input.slug }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
     },
   }),
 }));

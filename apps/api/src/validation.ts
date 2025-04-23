@@ -1,7 +1,24 @@
 import { z } from 'zod';
 
+const UNAVAILABLE_SITE_SLUGS = {
+  EXACT: ['admin', 'app', 'cname', 'dev', 'docs', 'help', 'template', 'www'],
+};
+
 export const userSchema = {
   name: z.string().trim().min(1, '이름을 입력해주세요').max(20, '이름은 20자를 넘을 수 없어요'),
+};
+
+export const siteSchema = {
+  slug: z
+    .string({ required_error: '사이트 주소를 입력해 주세요' })
+    .trim()
+    .toLowerCase()
+    .min(4, { message: '사이트 주소는 4글자 이상이여야 해요' })
+    .max(63, { message: '사이트 주소는 63글자를 넘을 수 없어요' })
+    .regex(/^[\da-z-]+$/, { message: '사이트 주소는 소문자, 숫자, 하이픈만 사용할 수 있어요' })
+    .regex(/^[\da-z][\da-z-]*[\da-z]$/, { message: '사이트 주소는 하이픈으로 시작하거나 끝날 수 없어요' })
+    .refine((str) => !str.includes('--'), { message: '하이픈을 연속으로 사용할 수 없어요' })
+    .refine((str) => !UNAVAILABLE_SITE_SLUGS.EXACT.includes(str), { message: '사용할 수 없는 사이트 주소에요' }),
 };
 
 export const cardSchema = {
