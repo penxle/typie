@@ -47,8 +47,8 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>로그인 중...</h1>
-    <div class={css({ fontSize: '14px', color: 'gray.500' })}>잠시만 기다려주세요.</div>
+    <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>로그인 중...</h1>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>잠시만 기다려주세요.</div>
   </div>
 
   <div class={center({ height: '100px' })}>

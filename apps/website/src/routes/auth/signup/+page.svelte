@@ -71,9 +71,9 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>타이피 계정을 만들어볼까요?</h1>
+    <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>타이피 계정을 만들어볼까요?</h1>
 
-    <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>
       이미 계정이 있으신가요?
       <a
         class={css({
@@ -146,8 +146,14 @@
 
       <div class={flex({ direction: 'column', gap: '12px', marginTop: '8px' })}>
         <div class={flex({ direction: 'column', gap: '4px' })}>
-          <Checkbox id="termsAgreed" name="termsAgreed" aria-invalid={!!form.errors.termsAgreed} bind:checked={form.fields.termsAgreed}>
-            <span class={flex({ fontSize: '14px', color: 'gray.700' })}>
+          <Checkbox
+            id="termsAgreed"
+            name="termsAgreed"
+            aria-invalid={!!form.errors.termsAgreed}
+            size="sm"
+            bind:checked={form.fields.termsAgreed}
+          >
+            <span class={flex({ wrap: 'wrap', fontSize: { base: '13px', lg: '14px' }, color: 'gray.700' })}>
               <a
                 class={css({ textDecoration: 'underline', color: 'gray.900' })}
                 href="https://help.typie.co/legal/terms"
@@ -167,7 +173,10 @@
               >
                 개인정보처리방침
               </a>
-              에 동의해요 (필수)
+
+              <span>에&nbsp;</span>
+              <span>동의해요&nbsp;</span>
+              <span>(필수)</span>
             </span>
           </Checkbox>
 
@@ -176,8 +185,8 @@
           {/if}
         </div>
 
-        <Checkbox id="marketingAgreed" name="marketingAgreed" bind:checked={form.fields.marketingAgreed}>
-          <span class={css({ fontSize: '14px', color: 'gray.700' })}>마케팅 정보 수신에 동의해요 (선택)</span>
+        <Checkbox id="marketingAgreed" name="marketingAgreed" size="sm" bind:checked={form.fields.marketingAgreed}>
+          <span class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.700' })}>마케팅 정보 수신에 동의해요 (선택)</span>
         </Checkbox>
       </div>
     </div>

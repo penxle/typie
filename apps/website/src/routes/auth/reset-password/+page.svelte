@@ -53,9 +53,9 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>비밀번호를 변경하세요</h1>
+    <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>비밀번호를 변경하세요</h1>
 
-    <div class={css({ fontSize: '14px', color: 'gray.500' })}>새로운 비밀번호를 입력해주세요.</div>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>새로운 비밀번호를 입력해주세요.</div>
   </div>
 
   <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>

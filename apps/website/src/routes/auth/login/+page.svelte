@@ -85,9 +85,9 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>타이피에 오신 것을 환영해요!</h1>
+    <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>타이피에 오신 것을 환영해요!</h1>
 
-    <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>
       아직 계정이 없으신가요?
       <a
         class={css({
@@ -153,7 +153,7 @@
     <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
   </div>
 
-  <div class={flex({ justifyContent: 'space-between', gap: '16px', height: '40px' })}>
+  <div class={flex({ justifyContent: 'space-between', gap: '16px', height: { base: '36px', lg: '40px' } })}>
     <button
       class={center({
         flex: '1',

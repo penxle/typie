@@ -93,7 +93,7 @@
         flexDirection: 'column',
         flexGrow: '1',
         paddingX: '20px',
-        paddingTop: '50px',
+        paddingTop: { base: '24px', lg: '50px' },
         paddingBottom: '80px',
         width: 'full',
         maxWidth: '860px',
@@ -113,10 +113,10 @@
         {/if}
       </div>
 
-      <h1 class={css({ marginTop: '12px', fontSize: '28px', fontWeight: 'bold' })}>{$entityView.node.name}</h1>
+      <h1 class={css({ marginTop: '12px', fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>{$entityView.node.name}</h1>
 
-      <div class={flex({ align: 'center', justify: 'space-between', gap: '24px', marginTop: '20px' })}>
-        <div class={css({ fontWeight: 'medium', color: 'gray.400' })}>
+      <div class={flex({ align: 'center', justify: 'space-between', gap: '24px', marginTop: { base: '12px', lg: '20px' } })}>
+        <div class={css({ fontWeight: 'medium', color: 'gray.400', lgDown: { fontSize: '14px' } })}>
           {#if folders.length > 0}
             <span>폴더 {folders.length}개</span>
           {/if}
@@ -135,8 +135,8 @@
         </div>
       </div>
 
-      <div class={flex({ direction: 'column', gap: '20px', marginTop: '60px' })}>
-        <div class={grid({ columns: 3, gap: '10px' })}>
+      <div class={flex({ direction: 'column', gap: '20px', marginTop: { base: '48px', lg: '60px' } })}>
+        <div class={grid({ columns: { base: 1, lg: 3 }, gap: '10px' })}>
           {#each folders as folder (folder.id)}
             {#if folder.node.__typename === 'FolderView'}
               <a
@@ -179,7 +179,7 @@
                   gap: '24px',
                   paddingX: '16px',
                   paddingY: '8px',
-                  height: '96px',
+                  height: { base: '64px', lg: '96px' },
                   _last: { borderBottomRadius: '12px' },
                   _hover: { backgroundColor: 'gray.100' },
                 })}
