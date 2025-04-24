@@ -2,7 +2,7 @@ import { env } from '$env/dynamic/public';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
-  const accessToken = cookies.get('typie-at');
+  const accessToken = cookies.get('typie-at2');
   const deviceId = cookies.get('typie-did');
 
   const response = await fetch(`${env.PUBLIC_API_URL}/graphql`, {
@@ -17,7 +17,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
   });
 
   if (response.status === 401) {
-    cookies.delete('typie-at', { path: '/' });
+    cookies.delete('typie-at2', { path: '/' });
   }
 
   const headers = new Headers(response.headers);
