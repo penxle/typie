@@ -1,4 +1,4 @@
-import { pipe, subscribe, take, toPromise } from 'wonka';
+import { concat, fromValue, makeSubject, pipe, subscribe, switchMap, take, toPromise } from 'wonka';
 import { getClient } from '../../client/internal';
 import type { Readable, Subscriber } from 'svelte/store';
 import type { $ArtifactSchema, ArtifactSchema, IsEmpty } from '../../../types';
@@ -21,10 +21,14 @@ export function createQueryStore<T extends $ArtifactSchema<'query'>>(schema: Art
   let variables: T['$input'] = {};
   let context: Partial<OperationContext> | undefined;
 
+  const variables$ = makeSubject<T['$input']>();
+
   return {
     load: async (_variables?: T['$input'] | null, _context?: Partial<OperationContext>) => {
       variables = _variables ?? {};
       context = _context;
+
+      variables$.next(variables);
 
       const operation = client.createOperation({
         schema,
@@ -53,19 +57,20 @@ export function createQueryStore<T extends $ArtifactSchema<'query'>>(schema: Art
 
       run(data);
 
-      const operation = client.createOperation({
-        schema,
-        variables,
-        context: {
-          ...context,
-          requestPolicy: 'cache-only',
-        },
-      });
-
-      const result$ = client.executeOperation(operation);
-
       const subscription = pipe(
-        result$,
+        concat([fromValue(variables), variables$.source]),
+        switchMap((variables) => {
+          const operation = client.createOperation({
+            schema,
+            variables,
+            context: {
+              ...context,
+              requestPolicy: 'cache-only',
+            },
+          });
+
+          return client.executeOperation(operation);
+        }),
         subscribe((result) => {
           if (result.type === 'data') {
             data = result.data as T['$output'];
