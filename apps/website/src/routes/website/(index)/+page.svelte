@@ -1,6 +1,8 @@
 <script lang="ts">
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
+  import { sineOut } from 'svelte/easing';
+  import { fly } from 'svelte/transition';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { browser } from '$app/environment';
@@ -35,6 +37,7 @@
   app.can.hideToolbar = false;
 
   let editor = $state<Ref<Editor>>();
+  let loaded = $state(false);
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -43,6 +46,7 @@
 
   onMount(() => {
     Y.applyUpdateV2(doc, base64.parse($query.welcome.update), 'remote');
+    loaded = true;
   });
 </script>
 
@@ -54,43 +58,48 @@
   trailing={null}
 />
 
-<div class={center({ flexDirection: 'column', position: 'fixed', top: '0', insetX: '0', zIndex: '40', pointerEvents: 'none' })}>
-  <Toolbar {doc} {editor} sticked={true}>
-    <div class={flex({ flexDirection: 'column', gap: '14px' })}>
-      <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-        <Logo class={css({ height: '24px' })} />
+{#if loaded}
+  <div
+    class={center({ flexDirection: 'column', position: 'fixed', top: '0', insetX: '0', zIndex: '40', pointerEvents: 'none' })}
+    in:fly={{ y: -10, easing: sineOut }}
+  >
+    <Toolbar {doc} {editor} sticked={true}>
+      <div class={flex({ flexDirection: 'column', gap: '14px' })}>
+        <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
+          <Logo class={css({ height: '24px' })} />
 
-        <a
-          style:--background-color={token('colors.brand.500')}
-          style:--border-color={token('colors.brand.500')}
-          style:--border-accent-color={token('colors.white')}
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'transparent',
-            borderRadius: '4px',
-            paddingX: '12px',
-            paddingY: '6px',
-            fontSize: '13px',
-            fontWeight: 'semibold',
-            color: 'white',
-            background:
-              '[linear-gradient(var(--background-color), var(--background-color)) padding-box, conic-gradient(from var(--angle), var(--border-color), var(--border-accent-color) 10%, var(--border-color) 20%) border-box]',
-            animationName: '[rotate]',
-            animationDuration: '2s',
-            animationTimingFunction: 'linear',
-            animationIterationCount: 'infinite',
-            _hover: { animationPlayState: 'paused' },
-          })}
-          href={env.PUBLIC_AUTH_URL}
-        >
-          시작하기
-        </a>
+          <a
+            style:--background-color={token('colors.brand.500')}
+            style:--border-color={token('colors.brand.500')}
+            style:--border-accent-color={token('colors.white')}
+            class={css({
+              borderWidth: '2px',
+              borderColor: 'transparent',
+              borderRadius: '4px',
+              paddingX: '12px',
+              paddingY: '6px',
+              fontSize: '13px',
+              fontWeight: 'semibold',
+              color: 'white',
+              background:
+                '[linear-gradient(var(--background-color), var(--background-color)) padding-box, conic-gradient(from var(--angle), var(--border-color), var(--border-accent-color) 10%, var(--border-color) 20%) border-box]',
+              animationName: '[rotate]',
+              animationDuration: '2s',
+              animationTimingFunction: 'linear',
+              animationIterationCount: 'infinite',
+              _hover: { animationPlayState: 'paused' },
+            })}
+            href={env.PUBLIC_AUTH_URL}
+          >
+            시작하기
+          </a>
+        </div>
+
+        <div class={css({ marginX: '-14px', height: '1px', backgroundColor: 'gray.200' })}></div>
       </div>
-
-      <div class={css({ marginX: '-14px', height: '1px', backgroundColor: 'gray.200' })}></div>
-    </div>
-  </Toolbar>
-</div>
+    </Toolbar>
+  </div>
+{/if}
 
 <div
   style:--grid-line-color={token('colors.gray.100')}
