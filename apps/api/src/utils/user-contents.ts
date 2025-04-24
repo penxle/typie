@@ -1,9 +1,11 @@
 import path from 'node:path';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
+import qs from 'query-string';
 import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
 import { db, firstOrThrow, Images } from '@/db';
+import { env } from '@/env';
 import * as aws from '@/external/aws';
 
 type PersistBlobAsImageParams = { userId?: string; file: File };
@@ -48,10 +50,10 @@ export const persistBlobAsImage = async ({ userId, file }: PersistBlobAsImagePar
         Key: `images/${key}`,
         Body: Buffer.from(buffer),
         ContentType: mimetype,
-        Metadata: {
-          name: encodeURIComponent(file.name),
-          'user-id': userId ?? '',
-        },
+        Tagging: qs.stringify({
+          UserId: userId ?? 'anonymous',
+          Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+        }),
       }),
     );
 

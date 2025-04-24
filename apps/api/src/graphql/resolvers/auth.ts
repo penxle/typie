@@ -1,3 +1,4 @@
+import { GetObjectTaggingCommand, PutObjectTaggingCommand } from '@aws-sdk/client-s3';
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
@@ -12,6 +13,7 @@ import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
+import * as aws from '@/external/aws';
 import { google, kakao, naver } from '@/external/sso';
 import { generateRandomAvatar, persistBlobAsImage } from '@/utils';
 import { builder } from '../builder';
@@ -338,7 +340,34 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId }: Cre
     name: `${name}의 사이트`,
   });
 
-  await tx.update(Images).set({ userId: user.id }).where(eq(Images.id, avatarId));
+  const avatar = await tx
+    .update(Images)
+    .set({ userId: user.id })
+    .where(eq(Images.id, avatarId))
+    .returning({ path: Images.path })
+    .then(firstOrThrow);
+
+  const tagging = await aws.s3.send(
+    new GetObjectTaggingCommand({
+      Bucket: 'typie-usercontents',
+      Key: `images/${avatar.path}`,
+    }),
+  );
+
+  const tags: Record<string, string> = {
+    ...Object.fromEntries(tagging.TagSet?.map((tag) => [tag.Key, tag.Value]) ?? []),
+    UserId: user.id,
+  };
+
+  await aws.s3.send(
+    new PutObjectTaggingCommand({
+      Bucket: 'typie-usercontents',
+      Key: `images/${avatar.path}`,
+      Tagging: {
+        TagSet: Object.entries(tags).map(([key, value]) => ({ Key: key, Value: value })),
+      },
+    }),
+  );
 
   return user;
 };
