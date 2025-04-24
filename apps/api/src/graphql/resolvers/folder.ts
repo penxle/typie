@@ -100,6 +100,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: input.siteId,
+        ctx,
       });
 
       let depth = 0;
@@ -188,6 +189,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: folder.siteId,
+        ctx,
       });
 
       const renamedFolder = await db
@@ -221,6 +223,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: folder.siteId,
+        ctx,
       });
 
       const descendants = await db.execute<{ id: string }>(
@@ -265,6 +268,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: folder.siteId,
+        ctx,
       });
 
       return await db

@@ -227,6 +227,7 @@ builder.queryFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
+        ctx,
       });
 
       return entity;
@@ -289,6 +290,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
+        ctx,
       });
 
       let depth = 0;

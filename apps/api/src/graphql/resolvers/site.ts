@@ -78,6 +78,7 @@ builder.queryFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: args.siteId,
+        ctx,
       });
 
       return args.siteId;
@@ -100,6 +101,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: input.siteId,
+        ctx,
       });
 
       const slugExistSite = await db.select({ id: Sites.id }).from(Sites).where(eq(Sites.slug, input.slug)).then(first);
@@ -127,6 +129,7 @@ builder.subscriptionFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: args.siteId,
+        ctx,
       });
 
       const repeater = pubsub.subscribe('site:update', args.siteId);

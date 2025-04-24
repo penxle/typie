@@ -374,6 +374,7 @@ builder.queryFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
+        ctx,
       });
 
       return post;
@@ -396,6 +397,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: input.siteId,
+        ctx,
       });
 
       const title = null;
@@ -513,6 +515,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
+        ctx,
       });
 
       const nextEntity = await db
@@ -634,6 +637,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
+        ctx,
       });
 
       await db
@@ -671,6 +675,7 @@ builder.mutationFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: post.siteId,
+        ctx,
       });
 
       return await db

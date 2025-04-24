@@ -47,6 +47,7 @@ builder.queryFields((t) => ({
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: args.siteId,
+        ctx,
       });
 
       const result = await meili.multiSearch({
