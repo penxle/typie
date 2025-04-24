@@ -46,7 +46,7 @@ Image.implement({
  */
 
 builder.mutationFields((t) => ({
-  issueBlobUploadUrl: t.withAuth({ session: true }).fieldWithInput({
+  issueBlobUploadUrl: t.fieldWithInput({
     type: t.builder.simpleObject('IssueBlobUploadUrlResult', {
       fields: (t) => ({
         path: t.string(),
@@ -68,7 +68,7 @@ builder.mutationFields((t) => ({
         ],
         Fields: {
           'x-amz-meta-name': encodeURIComponent(input.filename),
-          'x-amz-meta-user-id': ctx.session.userId,
+          'x-amz-meta-user-id': ctx.session?.userId ?? '',
         },
         Expires: 60 * 5, // 5 minutes
       });
@@ -81,7 +81,7 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  persistBlobAsFile: t.withAuth({ session: true }).fieldWithInput({
+  persistBlobAsFile: t.fieldWithInput({
     type: File,
     input: { path: t.input.string() },
     resolve: async (_, { input }, ctx) => {
@@ -105,7 +105,7 @@ builder.mutationFields((t) => ({
           ContentDisposition: `attachment; filename="${fileName}"`,
           Metadata: {
             name: fileName,
-            'user-id': ctx.session.userId,
+            'user-id': ctx.session?.userId ?? '',
           },
         }),
       );
@@ -114,7 +114,7 @@ builder.mutationFields((t) => ({
       return await db
         .insert(Files)
         .values({
-          userId: ctx.session.userId,
+          userId: ctx.session?.userId,
           name: decodeURIComponent(fileName),
           size: head.ContentLength!,
           format: head.ContentType ?? 'application/octet-stream',
@@ -126,7 +126,7 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  persistBlobAsImage: t.withAuth({ session: true }).fieldWithInput({
+  persistBlobAsImage: t.fieldWithInput({
     type: Image,
     input: {
       path: t.input.string(),
@@ -191,7 +191,7 @@ builder.mutationFields((t) => ({
           Metadata: {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             name: object.Metadata!.name,
-            'user-id': ctx.session.userId,
+            'user-id': ctx.session?.userId ?? '',
           },
         }),
       );
@@ -200,7 +200,7 @@ builder.mutationFields((t) => ({
       return await db
         .insert(Images)
         .values({
-          userId: ctx.session.userId,
+          userId: ctx.session?.userId,
           name: decodeURIComponent(object.Metadata!.name),
           size: data.length,
           format: mimetype,
