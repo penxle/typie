@@ -474,6 +474,7 @@ type Query {
   entity(entityId: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   entityViewByPermalink(permalink: String!): EntityView!
+  image(imageId: ID!): Image!
   me: User
   post(slug: String!): Post!
   search(query: String!, siteId: ID!): SearchResult!
