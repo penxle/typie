@@ -66,7 +66,6 @@
       flexDirection: 'column',
       gap: '14px',
       borderRadius: '12px',
-      marginX: '20px',
       paddingX: '14px',
       paddingY: '12px',
       width: 'full',
@@ -278,7 +277,7 @@
     {/if}
   </div>
 
-  <div class={flex({ alignItems: 'center', gap: '10px', width: 'full', maxWidth: '1200px' })}>
+  <div class={flex({ alignItems: 'center', gap: '10px', wrap: 'wrap', width: 'full', maxWidth: '1200px' })}>
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
       <ToolbarButton
         style={css.raw({ borderRightRadius: '0' })}

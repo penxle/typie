@@ -223,16 +223,16 @@
 <Helmet title={`${effectiveTitle} 작성 중`} />
 
 <TopBar>
-  <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
+  <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '6px' })}>
     <div class={flex({ alignItems: 'center', gap: '6px' })}>
       {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
         {#if ancestor.node.__typename === 'Folder'}
-          <div class={css({ fontSize: '14px', color: 'gray.400' })}>{ancestor.node.name}</div>
+          <div class={css({ fontSize: '14px', color: 'gray.400', truncate: true })}>{ancestor.node.name}</div>
           <div class={css({ fontSize: '14px', color: 'gray.300' })}>/</div>
         {/if}
       {/each}
 
-      <div class={css({ fontSize: '14px' })}>{effectiveTitle}</div>
+      <div class={css({ flex: 'none', fontSize: '14px' })}>{effectiveTitle}</div>
     </div>
 
     <Share $post={$query.post} />
@@ -241,14 +241,14 @@
 
 <HorizontalDivider />
 
-<div class={flex({ position: 'relative', flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'scroll' })}>
+<div class={flex({ position: 'relative', flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'auto' })}>
   <Cover {doc} />
 
   <div
     bind:this={toolbarEl}
     class={css({ position: 'sticky', top: '20px', left: '0', right: '0', width: 'full', zIndex: '40', pointerEvents: 'none' })}
   >
-    <div class={center({ position: 'absolute', top: '-20px', insetX: '0' })}>
+    <div class={center({ position: 'absolute', top: '-20px', insetX: '0', paddingX: '60px' })}>
       <Toolbar {doc} {editor} sticked={toolbarSticked} />
     </div>
   </div>
@@ -260,6 +260,7 @@
       alignItems: 'center',
       flexGrow: '1',
       paddingTop: '120px',
+      paddingX: '60px',
       width: 'full',
       maxWidth: '1200px',
       backgroundColor: 'white',
@@ -291,7 +292,7 @@
 
       <textarea
         bind:this={subtitleEl}
-        class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', resize: 'none' })}
+        class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
         autocapitalize="off"
         autocomplete="off"
         maxlength="100"
