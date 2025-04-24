@@ -50,7 +50,6 @@ new aws.iam.UserPolicy('developer@team', {
         Condition: {
           StringEquals: {
             'ses:FromAddress': 'hello@typie.co',
-            'ses:FromDisplayName': 'typie',
           },
         },
       },
