@@ -368,7 +368,7 @@ builder.queryFields((t) => ({
         .select({ post: Posts, entity: { siteId: Entities.siteId } })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .where(eq(Entities.slug, args.slug))
+        .where(and(eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
 
       await assertSitePermission({
