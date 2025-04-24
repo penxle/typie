@@ -1,10 +1,12 @@
 import path from 'node:path';
 import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
+import qs from 'query-string';
 import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
 import { db, Files, firstOrThrow, Images, TableCode } from '@/db';
+import { env } from '@/env';
 import * as aws from '@/external/aws';
 import { builder } from '../builder';
 import { Blob, File, Image, isTypeOf } from '../objects';
@@ -68,7 +70,7 @@ builder.mutationFields((t) => ({
         ],
         Fields: {
           'x-amz-meta-name': encodeURIComponent(input.filename),
-          'x-amz-meta-user-id': ctx.session?.userId ?? '',
+          'x-amz-meta-user-id': ctx.session?.userId ?? 'anonymous',
         },
         Expires: 60 * 5, // 5 minutes
       });
@@ -100,13 +102,14 @@ builder.mutationFields((t) => ({
           Bucket: 'typie-usercontents',
           Key: `files/${input.path}`,
           CopySource: `typie-uploads/${input.path}`,
-          MetadataDirective: 'REPLACE',
           ContentType: head.ContentType,
           ContentDisposition: `attachment; filename="${fileName}"`,
-          Metadata: {
-            name: fileName,
-            'user-id': ctx.session?.userId ?? '',
-          },
+          MetadataDirective: 'REPLACE',
+          TaggingDirective: 'REPLACE',
+          Tagging: qs.stringify({
+            UserId: ctx.session?.userId ?? 'anonymous',
+            Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+          }),
         }),
       );
 
@@ -188,11 +191,10 @@ builder.mutationFields((t) => ({
           Key: `images/${input.path}`,
           Body: data,
           ContentType: mimetype,
-          Metadata: {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            name: object.Metadata!.name,
-            'user-id': ctx.session?.userId ?? '',
-          },
+          Tagging: qs.stringify({
+            UserId: ctx.session?.userId ?? 'anonymous',
+            Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+          }),
         }),
       );
 
