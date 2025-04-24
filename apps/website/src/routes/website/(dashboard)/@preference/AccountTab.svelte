@@ -1,13 +1,15 @@
 <script lang="ts">
   import { z } from 'zod';
+  import UploadIcon from '~icons/lucide/upload';
   import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';
   import { fragment, graphql } from '$graphql';
-  import { Button, HorizontalDivider, Icon, Img, TextInput } from '$lib/components';
+  import { Button, HorizontalDivider, Icon, LoadableImg, TextInput } from '$lib/components';
   import { createForm } from '$lib/form';
   import { Dialog } from '$lib/notification';
-  import { css } from '$styled-system/css';
+  import { uploadBlobAsImage } from '$lib/utils';
+  import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import UpdateEmailModal from './UpdateEmailModal.svelte';
   import type { DashboardLayout_PreferenceModal_AccountTab_user } from '$graphql';
@@ -45,6 +47,10 @@
       updateUser(input: $input) {
         id
         name
+
+        avatar {
+          id
+        }
       }
     }
   `);
@@ -58,12 +64,14 @@
   const form = createForm({
     schema: z.object({
       name: z.string({ required_error: '이름을 입력해주세요.' }).nonempty('이름을 입력해주세요.'),
+      avatarId: z.string(),
     }),
     onSubmit: async (data) => {
-      await updateUser({ name: data.name, avatarId: $user.avatar.id });
+      await updateUser({ name: data.name, avatarId: data.avatarId });
     },
     defaultValues: {
       name: $user.name,
+      avatarId: $user.avatar.id,
     },
   });
 
@@ -74,31 +82,70 @@
   <p class={css({ fontSize: '20px', fontWeight: 'bold' })}>계정 설정</p>
 
   <div class={flex({ direction: 'column', gap: '8px' })}>
-    <p class={css({ fontWeight: 'medium' })}>프로필 사진</p>
+    <p class={css({ fontWeight: 'medium' })}>프로필</p>
 
-    <Img
-      style={css.raw({ size: '64px', borderWidth: '1px', borderColor: 'gray.100', borderRadius: '12px' })}
-      $image={$user.avatar}
-      alt={`${$user.name}의 아바타`}
-      size={64}
-    />
-  </div>
+    <form class={flex({ direction: 'column', gap: '12px', width: 'full', maxWidth: '500px' })} onsubmit={form.handleSubmit}>
+      <label class={cx('group', center({ position: 'relative', size: '64px', cursor: 'pointer' }))}>
+        <LoadableImg
+          id={form.fields.avatarId}
+          style={css.raw({ size: '64px', borderWidth: '1px', borderColor: 'gray.100', borderRadius: '12px' })}
+          alt={`${$user.name}의 아바타`}
+          size={64}
+        />
 
-  <HorizontalDivider color="secondary" />
+        <div
+          class={css({
+            display: 'none',
+            _groupHover: {
+              position: 'absolute',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '12px',
+              size: 'full',
+              backgroundColor: 'gray.900/16',
+              color: 'white',
+            },
+          })}
+        >
+          <Icon icon={UploadIcon} size={28} />
+        </div>
 
-  <div class={flex({ direction: 'column', gap: '8px' })}>
-    <p class={css({ fontWeight: 'medium' })}>이름</p>
+        <input
+          accept="image/*"
+          hidden
+          onchange={async (event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            if (!file) {
+              return;
+            }
 
-    <form class={flex({ gap: '12px' })} onsubmit={form.handleSubmit}>
-      <div class={css({ width: 'full', maxWidth: '380px' })}>
-        <TextInput id="name" style={css.raw({ width: 'full' })} bind:value={form.fields.name} />
+            const resp = await uploadBlobAsImage(file, {
+              ensureAlpha: true,
+              resize: { width: 512, height: 512, fit: 'contain', background: '#00000000' },
+              format: 'png',
+            });
 
-        {#if form.errors.name}
-          <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
-        {/if}
-      </div>
+            form.fields.avatarId = resp.id;
+          }}
+          type="file"
+        />
+      </label>
 
-      <Button style={css.raw({ flex: 'none', height: '38px' })} disabled={!form.state.isDirty} type="submit">변경</Button>
+      <TextInput id="name" style={css.raw({ width: 'full' })} bind:value={form.fields.name} />
+
+      {#if form.errors.name}
+        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
+      {/if}
+
+      <Button
+        style={css.raw({ flex: 'none', marginLeft: 'auto', width: '104px', height: '38px' })}
+        disabled={!form.state.isDirty}
+        type="submit"
+      >
+        변경
+      </Button>
     </form>
   </div>
 
@@ -107,10 +154,12 @@
   <div class={flex({ direction: 'column', gap: '8px' })}>
     <p class={css({ fontWeight: 'medium' })}>이메일 주소</p>
 
-    <div class={flex({ gap: '12px' })}>
-      <TextInput id="name" style={css.raw({ width: 'full', maxWidth: '380px' })} readonly bind:value={$user.email} />
+    <div class={flex({ gap: '12px', width: 'full', maxWidth: '500px' })}>
+      <TextInput id="name" style={css.raw({ width: 'full' })} readonly bind:value={$user.email} />
 
-      <Button style={css.raw({ flex: 'none', height: '38px' })} onclick={() => (updateEmailOpen = true)}>이메일 변경</Button>
+      <Button style={css.raw({ flex: 'none', width: '104px', height: '38px' })} onclick={() => (updateEmailOpen = true)}>
+        이메일 변경
+      </Button>
     </div>
   </div>
 

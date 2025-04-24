@@ -5,7 +5,7 @@ import qs from 'query-string';
 import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
-import { db, Files, firstOrThrow, Images, TableCode } from '@/db';
+import { db, Files, firstOrThrow, Images, TableCode, validateDbId } from '@/db';
 import { env } from '@/env';
 import * as aws from '@/external/aws';
 import { builder } from '../builder';
@@ -42,6 +42,20 @@ Image.implement({
     url: t.string({ resolve: (blob) => `https://typie.net/images/${blob.path}` }),
   }),
 });
+
+/**
+ * * Queries
+ */
+
+builder.queryFields((t) => ({
+  image: t.field({
+    type: Image,
+    args: { imageId: t.arg.id({ validate: validateDbId(TableCode.IMAGES) }) },
+    resolve: async (_, args) => {
+      return args.imageId;
+    },
+  }),
+}));
 
 /**
  * * Mutations
