@@ -273,6 +273,10 @@
         autocomplete="off"
         maxlength="100"
         onkeydown={(e) => {
+          if (e.isComposing) {
+            return;
+          }
+
           if (e.key === 'Enter' || e.key === 'ArrowDown') {
             e.preventDefault();
             subtitleEl?.focus();
@@ -292,6 +296,10 @@
         autocomplete="off"
         maxlength="100"
         onkeydown={(e) => {
+          if (e.isComposing) {
+            return;
+          }
+
           if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
             e.preventDefault();
             titleEl?.focus();
