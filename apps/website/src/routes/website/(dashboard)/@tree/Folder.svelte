@@ -167,6 +167,7 @@
             fontSize: '14px',
             fontWeight: 'medium',
             color: 'gray.600',
+            minWidth: '0',
           })}
           defaultValue={$folder.name}
           onblur={(e) => e.currentTarget.form?.requestSubmit()}
