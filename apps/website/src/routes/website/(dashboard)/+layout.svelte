@@ -1,8 +1,12 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
   import { setupAppContext } from '$lib/context';
-  import { flex } from '$styled-system/patterns';
+  import { isMobileDevice } from '$lib/utils';
+  import { css } from '$styled-system/css';
+  import { center, flex } from '$styled-system/patterns';
+  import { token } from '$styled-system/tokens';
   import CommandPalette from './CommandPalette.svelte';
   import Sidebar from './Sidebar.svelte';
 
@@ -12,6 +16,7 @@
     query DashboardLayout_Query {
       me @required {
         id
+        email
 
         sites {
           id
@@ -73,12 +78,71 @@
   });
 </script>
 
-<div class={flex({ position: 'relative', alignItems: 'flex-start', height: 'screen' })}>
-  <Sidebar $user={$query.me} />
+{#if isMobileDevice()}
+  <div
+    style:--grid-line-color={token('colors.brand.100')}
+    style:--cross-line-color={token('colors.brand.50')}
+    style:--grid-size="30px"
+    style:--line-thickness="1px"
+    class={center({
+      padding: '20px',
+      width: 'screen',
+      height: 'screen',
+      overflowY: 'auto',
+      backgroundColor: 'white',
+      backgroundImage:
+        '[repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size))]',
+      backgroundSize: 'var(--grid-size) var(--grid-size)',
+    })}
+  >
+    <div
+      class={css({
+        borderRadius: '12px',
+        padding: { base: '24px', lg: '48px' },
+        maxWidth: '400px',
+        width: 'full',
+        backgroundColor: 'white',
+        boxShadow: 'medium',
+      })}
+    >
+      <div class={flex({ flexDirection: 'column', gap: '24px' })}>
+        <div class={flex({ justifyContent: 'flex-start' })}>
+          <Logo class={css({ height: '20px' })} />
+        </div>
 
-  <div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full', overflowY: 'auto' })}>
-    {@render children()}
+        <div class={flex({ flexDirection: 'column', gap: '4px', wordBreak: 'keep-all' })}>
+          <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>
+            아직 모바일에서는 서비스를 제공하지 않아요
+          </h1>
+
+          <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>
+            PC에서 접속하시면 타이피의 모든 기능을 이용하실 수 있어요.
+          </div>
+        </div>
+
+        <div class={css({ borderRadius: '6px', paddingY: '8px', textAlign: 'center', backgroundColor: 'gray.50' })}>
+          <p class={css({ fontSize: '13px', color: 'gray.500' })}>현재 로그인 정보</p>
+          <p class={css({ marginTop: '2px', fontSize: '14px' })}>{$query.me.email}</p>
+        </div>
+
+        <div class={flex({ alignItems: 'center', gap: '16px', userSelect: 'none' })}>
+          <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
+          <span class={css({ fontSize: '14px', color: 'gray.500' })}>또는</span>
+          <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
+        </div>
+
+        <a class={css({ marginX: 'auto', fontSize: '13px', color: 'brand.500' })} href="https://penxle.channel.io/home">문의하기</a>
+      </div>
+    </div>
   </div>
-</div>
+{:else}
+  <div class={flex({ position: 'relative', alignItems: 'flex-start', height: 'screen' })}>
+    <Sidebar $user={$query.me} />
+
+    <div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full', overflowY: 'auto' })}>
+      {@render children()}
+    </div>
+  </div>
+{/if}
 
 <CommandPalette $site={$query.me.sites[0]} />

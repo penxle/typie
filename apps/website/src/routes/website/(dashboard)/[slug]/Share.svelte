@@ -132,18 +132,20 @@
 
 <div class={flex({ alignItems: 'center', gap: '12px', userSelect: 'none' })}>
   {#if form.fields.visibility === PostVisibility.PRIVATE}
-    <div class={center({ gap: '6px', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'gray.100' })}>
+    <div class={center({ gap: '6px', flex: 'none', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'gray.100' })}>
       <div class={css({ size: '6px', borderRadius: 'full', bg: 'gray.500' })}></div>
       <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>비공개 중</div>
     </div>
   {:else if form.fields.visibility === PostVisibility.UNLISTED}
-    <div class={center({ gap: '6px', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'brand.100' })}>
+    <div
+      class={center({ gap: '6px', flex: 'none', borderRadius: 'full', paddingX: '10px', paddingY: '4px', backgroundColor: 'brand.100' })}
+    >
       <div class={css({ size: '6px', borderRadius: 'full', bg: 'brand.500' })}></div>
       <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'brand.700' })}>링크 공개 중</div>
     </div>
   {/if}
 
-  <div use:anchor>
+  <div class={css({ flex: 'none' })} use:anchor>
     <Button onclick={() => (open = true)} size="sm" variant="secondary">공유</Button>
   </div>
 </div>
