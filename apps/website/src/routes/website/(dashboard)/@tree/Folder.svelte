@@ -122,6 +122,7 @@
         paddingY: '6px',
         borderRadius: '6px',
         transition: 'common',
+        cursor: 'pointer',
         _hover: { backgroundColor: 'gray.100' },
       }),
     )}
