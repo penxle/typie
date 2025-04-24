@@ -12,7 +12,7 @@
   "devDependencies": {
     "@ctrl/tinycolor": "^4.1.0",
     "@floating-ui/dom": "^1.6.13",
-    "@iconify-json/lucide": "^1.2.37",
+    "@iconify-json/lucide": "^1.2.39",
     "@iconify-json/simple-icons": "^1.2.32",
     "@iconify-json/twemoji": "^1.2.2",
     "@pandacss/dev": "^0.53.4",

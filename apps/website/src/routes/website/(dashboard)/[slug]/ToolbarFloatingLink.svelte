@@ -77,16 +77,7 @@
   });
 </script>
 
-<form
-  class={flex({
-    alignItems: 'center',
-    gap: '4px',
-    borderWidth: '1px',
-    borderRadius: '4px',
-    padding: '4px',
-  })}
-  onsubmit={form.handleSubmit}
->
+<form class={flex({ alignItems: 'center', gap: '4px', padding: '4px' })} onsubmit={form.handleSubmit}>
   <TextInput autofocus placeholder="https://..." size="sm" bind:value={form.fields.url} />
 
   <Button size="sm" type="submit">삽입</Button>

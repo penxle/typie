@@ -127,7 +127,17 @@
 {/if}
 
 {#if opened}
-  <div class={css({ backgroundColor: 'white', zIndex: '50' })} use:floatingAction>
+  <div
+    class={css({
+      borderWidth: '1px',
+      borderRadius: '12px',
+      backgroundColor: 'white',
+      zIndex: '50',
+      boxShadow: 'small',
+      overflow: 'hidden',
+    })}
+    use:floatingAction
+  >
     {@render floating({ close })}
   </div>
 {/if}
