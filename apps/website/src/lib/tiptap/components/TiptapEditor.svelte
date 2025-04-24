@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Editor } from '@tiptap/core';
+  import { Editor, Extension } from '@tiptap/core';
   import { onMount } from 'svelte';
   import { Ref } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { Collaboration } from '../extensions/collaboration';
-  import { extensions } from '../schema';
+  import { extensions as defaultExtensions } from '../schema';
   import type { EditorView } from '@tiptap/pm/view';
   import type * as YAwareness from 'y-protocols/awareness';
   import type * as Y from 'yjs';
@@ -15,18 +15,19 @@
     editor?: Ref<Editor>;
     doc?: Y.Doc;
     awareness?: YAwareness.Awareness;
+    extensions?: Extension[];
     onkeydown?: (view: EditorView, event: KeyboardEvent) => void;
     oncreate?: () => void;
   };
 
-  let { style, editor = $bindable(), doc, awareness, onkeydown, oncreate }: Props = $props();
+  let { style, editor = $bindable(), doc, awareness, extensions, onkeydown, oncreate }: Props = $props();
 
   let element = $state<HTMLDivElement>();
 
   onMount(() => {
     const e = new Editor({
       element,
-      extensions: [...extensions, ...(doc && awareness ? [Collaboration.configure({ doc, awareness })] : [])],
+      extensions: [...defaultExtensions, ...(extensions ?? []), ...(doc && awareness ? [Collaboration.configure({ doc, awareness })] : [])],
       injectCSS: false,
 
       editorProps: {

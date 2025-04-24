@@ -17,6 +17,7 @@
   import { token } from '$styled-system/tokens';
   import { YState } from '../(dashboard)/[slug]/state.svelte';
   import Toolbar from '../(dashboard)/[slug]/Toolbar.svelte';
+  import { Highlight } from './highlight';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
 
@@ -38,6 +39,7 @@
 
   let editor = $state<Ref<Editor>>();
   let loaded = $state(false);
+  let highlight = $state(false);
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -47,6 +49,10 @@
   onMount(() => {
     Y.applyUpdateV2(doc, base64.parse($query.welcome.update), 'remote');
     loaded = true;
+
+    setTimeout(() => {
+      highlight = true;
+    }, 500);
   });
 </script>
 
@@ -78,8 +84,8 @@
               borderRadius: '4px',
               paddingX: '12px',
               paddingY: '6px',
-              fontSize: '13px',
-              fontWeight: 'semibold',
+              fontSize: '14px',
+              fontWeight: 'bold',
               color: 'white',
               background:
                 '[linear-gradient(var(--background-color), var(--background-color)) padding-box, conic-gradient(from var(--angle), var(--border-color), var(--border-accent-color) 10%, var(--border-color) 20%) border-box]',
@@ -121,6 +127,7 @@
   <div style:--prosemirror-max-width={`${maxWidth.current}px`} class={flex({ paddingTop: '240px', width: 'full', maxWidth: '1000px' })}>
     {#if browser}
       <div
+        style:--highlight-progress={highlight ? '1' : '0'}
         class={css({ display: 'contents', '& a': { cursor: 'pointer' } })}
         onclick={(e) => {
           const anchor = (e.target as HTMLElement).closest('a');
@@ -131,7 +138,7 @@
         }}
         role="none"
       >
-        <TiptapEditor style={css.raw({ width: 'full' })} {awareness} {doc} bind:editor />
+        <TiptapEditor style={css.raw({ width: 'full' })} {awareness} {doc} extensions={[Highlight]} bind:editor />
       </div>
     {:else}
       <TiptapRenderer style={css.raw({ width: 'full', paddingBottom: '80px' })} content={$query.welcome.body} />
