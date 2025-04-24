@@ -250,9 +250,23 @@ builder.queryFields((t) => ({
         .then(firstOrThrow);
 
       return await db
-        .select()
+        .select(getTableColumns(Entities))
         .from(Entities)
-        .where(and(eq(Entities.siteId, site.id), eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
+        .leftJoin(Posts, eq(Entities.id, Posts.entityId))
+        .leftJoin(PostOptions, eq(Posts.id, PostOptions.postId))
+        .leftJoin(Folders, eq(Entities.id, Folders.entityId))
+        .leftJoin(FolderOptions, eq(Folders.id, FolderOptions.folderId))
+        .where(
+          and(
+            eq(Entities.siteId, site.id),
+            eq(Entities.slug, args.slug),
+            eq(Entities.state, EntityState.ACTIVE),
+            or(
+              and(eq(Entities.type, EntityType.FOLDER), isNotNull(Folders.id), eq(FolderOptions.visibility, FolderVisibility.UNLISTED)),
+              and(eq(Entities.type, EntityType.POST), isNotNull(Posts.id), eq(PostOptions.visibility, PostVisibility.UNLISTED)),
+            ),
+          ),
+        )
         .then(firstOrThrow);
     },
   }),
@@ -262,9 +276,22 @@ builder.queryFields((t) => ({
     args: { permalink: t.arg.string() },
     resolve: async (_, args) => {
       return await db
-        .select()
+        .select(getTableColumns(Entities))
         .from(Entities)
-        .where(and(eq(Entities.permalink, args.permalink), eq(Entities.state, EntityState.ACTIVE)))
+        .leftJoin(Posts, eq(Entities.id, Posts.entityId))
+        .leftJoin(PostOptions, eq(Posts.id, PostOptions.postId))
+        .leftJoin(Folders, eq(Entities.id, Folders.entityId))
+        .leftJoin(FolderOptions, eq(Folders.id, FolderOptions.folderId))
+        .where(
+          and(
+            eq(Entities.permalink, args.permalink),
+            eq(Entities.state, EntityState.ACTIVE),
+            or(
+              and(eq(Entities.type, EntityType.FOLDER), isNotNull(Folders.id), eq(FolderOptions.visibility, FolderVisibility.UNLISTED)),
+              and(eq(Entities.type, EntityType.POST), isNotNull(Posts.id), eq(PostOptions.visibility, PostVisibility.UNLISTED)),
+            ),
+          ),
+        )
         .then(firstOrThrow);
     },
   }),
