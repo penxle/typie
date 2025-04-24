@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
+  import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import BoldIcon from '~icons/lucide/bold';
   import ChevronsDownIcon from '~icons/lucide/chevrons-down';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
@@ -15,6 +17,7 @@
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
   import RedoIcon from '~icons/lucide/redo';
+  import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import SettingsIcon from '~icons/lucide/settings';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import TableIcon from '~icons/lucide/table';
@@ -24,7 +27,7 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
-  import { SegmentButtons, VerticalDivider } from '$lib/components';
+  import { Icon, SegmentButtons, VerticalDivider } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { defaultValues, values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
@@ -69,7 +72,7 @@
       width: 'full',
       maxWidth: '1200px',
       backgroundColor: 'gray.50',
-      boxShadow: 'small',
+      boxShadow: 'medium',
       pointerEvents: 'auto',
       transitionProperty: 'transform',
       transitionDuration: '200ms',
@@ -316,7 +319,7 @@
         {/snippet}
 
         {#snippet floating({ close })}
-          <div class={grid({ columns: 10, gap: '8px', borderWidth: '1px', borderRadius: '4px', padding: '8px' })}>
+          <div class={grid({ columns: 10, gap: '8px', padding: '8px' })}>
             {#each values.textColor as { label, value, hex } (value)}
               <button
                 style:background-color={hex}
@@ -593,14 +596,15 @@
         <div
           class={flex({
             flexDirection: 'column',
-            gap: '16px',
-            borderWidth: '1px',
-            borderRadius: '4px',
+            gap: '8px',
             padding: '16px',
           })}
         >
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px' })}>
-            <div class={css({ fontSize: '13px', fontWeight: 'medium' })}>본문 폭</div>
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'gray.500' })} icon={RulerDimensionLineIcon} />
+              <div class={css({ fontSize: '12px' })}>본문 폭</div>
+            </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons
                 items={[
@@ -617,8 +621,11 @@
             </div>
           </div>
 
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px' })}>
-            <div class={css({ fontSize: '13px', fontWeight: 'medium' })}>문단 들여쓰기</div>
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'gray.500' })} icon={ArrowRightToLineIcon} />
+              <div class={css({ fontSize: '12px' })}>첫 줄 들여쓰기</div>
+            </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons
                 items={[
@@ -636,8 +643,11 @@
             </div>
           </div>
 
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px' })}>
-            <div class={css({ fontSize: '13px', fontWeight: 'medium' })}>문단 사이 간격</div>
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'gray.500' })} icon={AlignVerticalSpaceAroundIcon} />
+              <div class={css({ fontSize: '12px' })}>문단 사이 간격</div>
+            </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons
                 items={[

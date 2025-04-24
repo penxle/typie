@@ -16,9 +16,6 @@
     {
       display: 'flex',
       flexDirection: 'column',
-      backgroundColor: 'white',
-      borderWidth: '1px',
-      borderRadius: '4px',
       '& > button:not(:first-of-type)': { borderTopWidth: '1px', borderTopColor: 'gray.100' },
     },
     style,
