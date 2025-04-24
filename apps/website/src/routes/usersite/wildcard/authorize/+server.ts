@@ -56,7 +56,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 
   const data = await response.json();
 
-  cookies.set('typie-at', data.access_token, {
+  cookies.set('typie-at2', data.access_token, {
     path: '/',
     httpOnly: true,
     secure: true,
