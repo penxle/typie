@@ -1,9 +1,8 @@
 <script lang="ts">
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import ChevronUpIcon from '~icons/lucide/chevron-up';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FilePlusIcon from '~icons/lucide/file-plus';
-  import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import PencilIcon from '~icons/lucide/pencil';
   import ShareIcon from '~icons/lucide/share';
@@ -41,6 +40,11 @@
           site {
             id
           }
+        }
+
+        folderOption: option {
+          id
+          visibility
         }
 
         ...DashboardLayout_ShareFolderModal_folder
@@ -115,16 +119,26 @@
   <summary
     class={cx(
       'group',
-      flex({
-        alignItems: 'center',
-        gap: '6px',
-        paddingX: '8px',
-        paddingY: '6px',
-        borderRadius: '6px',
-        transition: 'common',
-        cursor: 'pointer',
-        _hover: { backgroundColor: 'gray.100' },
-      }),
+      css(
+        {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          paddingX: '8px',
+          paddingY: '6px',
+          borderRadius: '6px',
+          transition: 'common',
+          cursor: 'pointer',
+          _hover: { backgroundColor: 'gray.100' },
+        },
+        $folder.entity.depth > 0 && {
+          borderLeftWidth: '1px',
+          borderLeftRadius: '0',
+          marginLeft: '-1px',
+          paddingLeft: '14px',
+          _hover: { borderLeftColor: 'gray.900' },
+        },
+      ),
     )}
     aria-selected="false"
     data-anchor={$entities.length > 0}
@@ -135,13 +149,14 @@
     }}
     role="treeitem"
   >
-    <Icon style={css.raw({ color: 'gray.500', _groupHover: { display: 'none' } })} icon={FolderIcon} size={14} />
+    <div
+      class={css(
+        { flex: 'none', borderRadius: 'full', backgroundColor: 'gray.200', size: '4px' },
+        $folder.folderOption.visibility === 'UNLISTED' && { backgroundColor: 'brand.500' },
+      )}
+    ></div>
 
-    <Icon
-      style={css.raw({ color: 'gray.500', display: 'none', _groupHover: { display: 'block' } })}
-      icon={open ? ChevronUpIcon : ChevronDownIcon}
-      size={14}
-    />
+    <Icon style={css.raw({ color: 'gray.500' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
 
     {#if editing}
       <form
@@ -199,7 +214,7 @@
           <div
             class={css(
               {
-                display: 'flex',
+                display: 'none',
                 justifyContent: 'center',
                 alignItems: 'center',
                 borderRadius: '4px',
@@ -208,9 +223,9 @@
                 opacity: '0',
                 transition: 'common',
                 _hover: { backgroundColor: 'gray.200' },
-                _groupHover: { opacity: '100' },
+                _groupHover: { display: 'block', opacity: '100' },
               },
-              open && { opacity: '100' },
+              open && { display: 'block', opacity: '100' },
             )}
           >
             <Icon icon={EllipsisIcon} size={14} />
@@ -286,7 +301,7 @@
     {/if}
   </summary>
 
-  <div class={flex({ flexDirection: 'column', marginLeft: '24px' })} aria-hidden={!open} role="tree">
+  <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
     {#each $entities as entity (entity.id)}
       <Entity $entity={entity} />
     {:else}

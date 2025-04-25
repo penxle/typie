@@ -8,7 +8,6 @@
   import { Icon, Menu, MenuItem } from '$lib/components';
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_EntityTree_Post_post } from '$graphql';
 
   type Props = {
@@ -29,6 +28,11 @@
           depth
           order
           slug
+        }
+
+        postOption: option {
+          id
+          visibility
         }
       }
     `),
@@ -59,15 +63,25 @@
 <a
   class={cx(
     'group',
-    flex({
-      alignItems: 'center',
-      gap: '6px',
-      paddingX: '8px',
-      paddingY: '6px',
-      borderRadius: '6px',
-      transition: 'common',
-      _hover: { backgroundColor: 'gray.100' },
-    }),
+    css(
+      {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        paddingX: '8px',
+        paddingY: '6px',
+        borderRadius: '6px',
+        transition: 'common',
+        _hover: { backgroundColor: 'gray.100' },
+      },
+      $post.entity.depth > 0 && {
+        borderLeftWidth: '1px',
+        borderLeftRadius: '0',
+        marginLeft: '-1px',
+        paddingLeft: '14px',
+        _hover: { borderLeftColor: 'gray.900' },
+      },
+    ),
   )}
   aria-selected="false"
   data-depth={$post.entity.depth}
@@ -78,6 +92,13 @@
   href="/{$post.entity.slug}"
   role="treeitem"
 >
+  <div
+    class={css(
+      { flex: 'none', borderRadius: 'full', backgroundColor: 'gray.200', size: '4px' },
+      $post.postOption.visibility === 'UNLISTED' && { backgroundColor: 'brand.500' },
+    )}
+  ></div>
+
   <Icon style={css.raw({ color: 'gray.500' })} icon={FileIcon} size={14} />
 
   <span
@@ -98,18 +119,16 @@
       <div
         class={css(
           {
-            display: 'flex',
+            display: 'none',
             justifyContent: 'center',
             alignItems: 'center',
             borderRadius: '4px',
             size: '16px',
             color: 'gray.400',
-            opacity: '0',
-            transition: 'common',
             _hover: { backgroundColor: 'gray.200' },
-            _groupHover: { opacity: '100' },
+            _groupHover: { display: 'block', opacity: '100' },
           },
-          open && { opacity: '100' },
+          open && { display: 'block', opacity: '100' },
         )}
       >
         <Icon icon={EllipsisIcon} size={14} />
