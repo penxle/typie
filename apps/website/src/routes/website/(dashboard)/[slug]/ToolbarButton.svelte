@@ -26,12 +26,14 @@
         justifyContent: 'center',
         alignItems: 'center',
         flexDirection: 'column',
-        gap: '2px',
-        borderRadius: '6px',
-        size: '40px',
+        gap: '4px',
+        borderRadius: '4px',
+        size: '48px',
+        color: 'gray.700',
+        transition: 'common',
         _enabled: {
-          _hover: { backgroundColor: 'gray.100' },
-          _pressed: { backgroundColor: 'gray.100' },
+          _hover: { color: 'brand.400' },
+          _pressed: { color: 'brand.400' },
         },
         _disabled: { opacity: '50' },
       },
@@ -43,7 +45,7 @@
     type="button"
   >
     <ToolbarIcon {icon} />
-    <span class={css({ fontSize: '10px' })}>{label}</span>
+    <span class={css({ fontSize: '11px' })}>{label}</span>
   </button>
 {:else if size === 'small'}
   <ToolbarTooltip {label}>
@@ -53,12 +55,12 @@
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          borderRadius: '6px',
+          borderRadius: '4px',
           size: '24px',
-          backgroundColor: 'gray.100',
+          color: 'gray.700',
           _enabled: {
-            _hover: { backgroundColor: 'gray.200' },
-            _pressed: { backgroundColor: 'gray.200' },
+            _hover: { color: 'brand.400' },
+            _pressed: { color: 'brand.400' },
           },
           _disabled: { opacity: '50' },
         },

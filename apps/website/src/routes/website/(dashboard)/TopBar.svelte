@@ -17,7 +17,7 @@
   const app = getAppContext();
 </script>
 
-<div class={flex({ alignItems: 'center', flexShrink: '0', position: 'sticky', top: '0', paddingX: '12px', height: '48px' })}>
+<div class={flex({ alignItems: 'center', flexShrink: '0', position: 'sticky', top: '0', paddingLeft: '16px', height: '36px' })}>
   {#if !app.preference.current.sidebarExpanded}
     <button
       class={center({ borderRadius: '6px', size: '24px', _hover: { backgroundColor: 'gray.100' } })}
@@ -30,7 +30,7 @@
   {/if}
 
   {#if children}
-    <div class={css({ flexGrow: '1', paddingX: '8px' })}>
+    <div class={css({ flexGrow: '1' })}>
       {@render children()}
     </div>
   {/if}

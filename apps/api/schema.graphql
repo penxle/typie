@@ -376,6 +376,7 @@ enum PlanAvailability {
 type Post implements IPost {
   characterCountChange: CharacterCountChange!
   coverImage: Image
+  createdAt: DateTime!
   entity: Entity!
   excerpt: String!
   id: ID!
@@ -534,6 +535,7 @@ enum SingleSignOnProvider {
 
 type Site implements ISite {
   entities: [Entity!]!
+  firstEntity(type: EntityType!): Entity
   id: ID!
   name: String!
   slug: String!

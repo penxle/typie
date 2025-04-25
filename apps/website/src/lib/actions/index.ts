@@ -1,5 +1,7 @@
 export * from './autosize.svelte';
 export * from './floating.svelte';
 export * from './hover.svelte';
+export * from './outside-click.svelte';
 export * from './portal.svelte';
 export * from './scroll-lock.svelte';
+export * from './tooltip.svelte';

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
   import { createFloatingActions } from '$lib/actions';
   import { css } from '$styled-system/css';
   import type { Snippet } from 'svelte';
@@ -15,8 +16,17 @@
 
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
-    offset: 4,
+    offset: 12,
   });
+
+  const onclick = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+
+    show = false;
+  };
 
   const onmouseenter = () => {
     if (timer) {
@@ -25,7 +35,7 @@
 
     timer = setTimeout(() => {
       show = true;
-    }, 500);
+    }, 1000);
   };
 
   const onmouseleave = () => {
@@ -46,25 +56,27 @@
   });
 </script>
 
-<div {onmouseenter} {onmouseleave} role="presentation" use:anchor>
+<div {onclick} {onmouseenter} {onmouseleave} role="none" use:anchor>
   {@render children()}
 </div>
 
 {#if show}
   <div
     class={css({
-      borderRadius: '2px',
-      paddingX: '10px',
-      paddingY: '6px',
+      borderRadius: '4px',
+      paddingX: '8px',
+      paddingY: '4px',
       fontSize: '12px',
       fontWeight: 'medium',
-      color: 'gray.100',
-      backgroundColor: 'gray.600',
+      color: 'white',
+      backgroundColor: 'gray.700',
+      boxShadow: 'medium',
       zIndex: '50',
       pointerEvents: 'none',
     })}
     role="tooltip"
     use:floating
+    in:fade={{ duration: 100 }}
   >
     {label}
   </div>

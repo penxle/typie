@@ -1,16 +1,12 @@
 <script lang="ts">
   import qs from 'query-string';
-  import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import ExternalLinkIcon from '~icons/lucide/external-link';
   import { pushState } from '$app/navigation';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
-  import { createFloatingActions } from '$lib/actions';
-  import { Icon, Img } from '$lib/components';
-  import { getAppContext } from '$lib/context';
+  import { tooltip } from '$lib/actions';
+  import { Img, Modal } from '$lib/components';
   import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
-  import PreferenceModal from './@preference/PreferenceModal.svelte';
+  import { center } from '$styled-system/patterns';
   import type { DashboardLayout_UserMenu_user } from '$graphql';
 
   type Props = {
@@ -40,139 +36,107 @@
             name
           }
         }
-
-        ...DashboardLayout_PreferenceModal_user
       }
     `),
   );
 
   let open = $state(false);
-  let clientWidth = $state(0);
-
-  const app = getAppContext();
-
-  const { anchor, floating } = createFloatingActions({
-    placement: 'top',
-    offset: 4,
-    onClickOutside: () => {
-      open = false;
-    },
-  });
-
-  $effect(() => {
-    if (!app.state.sidebarTriggered) {
-      open = false;
-    }
-  });
 </script>
 
 <button
-  class={flex({
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginX: '8px',
-    marginTop: '6px',
-    marginBottom: '10px',
-    borderRadius: '6px',
-    paddingX: '8px',
-    paddingY: '6px',
-    textAlign: 'left',
-    transitionProperty: 'background-color',
-    transitionDuration: '200ms',
-    transitionTimingFunction: 'ease',
-    _hover: { backgroundColor: 'gray.100' },
+  class={center({
+    borderRadius: 'full',
+    size: '32px',
+    overflow: 'hidden',
+    userSelect: 'none',
+    transition: 'common',
+    _hover: { transform: 'scale(1.05)' },
   })}
   onclick={() => (open = true)}
   type="button"
-  bind:clientWidth
-  use:anchor
+  use:tooltip={{ message: '프로필', placement: 'right', offset: 12 }}
 >
-  <div class={flex({ align: 'center', gap: '8px' })}>
-    <Img style={css.raw({ size: '32px', borderRadius: '6px' })} $image={$user.avatar} alt={`${$user.name}의 아바타`} size={32} />
-
-    <div class={flex({ flexDirection: 'column' })}>
-      <div class={css({ fontSize: '13px', fontWeight: 'medium' })}>
-        {$user.name}
-      </div>
-
-      <div class={css({ fontSize: '12px', color: 'gray.500' })}>
-        {$user.plan?.plan.name ?? '무료'} 플랜 이용중
-      </div>
-    </div>
-  </div>
-
-  <div class={center({ size: '24px', color: 'gray.500', _hover: { color: 'gray.700', backgroundColor: 'gray.100' } })}>
-    <Icon icon={ChevronDownIcon} size={16} />
-  </div>
+  <Img style={css.raw({ size: 'full' })} $image={$user.avatar} alt={`${$user.name}의 아바타`} size={32} />
 </button>
 
-{#if open}
+<Modal style={css.raw({ alignItems: 'center', borderWidth: '0', maxWidth: '300px' })} bind:open>
   <div
-    style:width={`${clientWidth}px`}
-    class={flex({
-      flexDirection: 'column',
-      gap: '4px',
-      borderWidth: '1px',
-      borderRadius: '6px',
-      padding: '4px',
-      fontSize: '13px',
-      color: 'gray.700',
-      backgroundColor: 'white',
-      zIndex: '50',
+    class={css({
+      position: 'relative',
+      marginBottom: '40px',
+      width: 'full',
+      height: '100px',
+      background: '[linear-gradient(to right, #4776e6, #8e54e9)]',
     })}
-    use:floating
   >
-    <div class={flex({ flexDirection: 'column', gap: '4px', paddingX: '8px', paddingY: '4px' })}>
-      <div class={css({ color: 'gray.500', fontWeight: 'medium', letterSpacing: '[0]' })}>{$user.email}</div>
-    </div>
-
-    <div class={css({ marginX: '4px', height: '1px', backgroundColor: 'gray.100' })}></div>
-
-    <button
-      class={css({ paddingX: '8px', paddingY: '4px', textAlign: 'left', _hover: { backgroundColor: 'gray.100' } })}
-      onclick={() => {
-        open = false;
-        pushState('', { shallowRoute: '/preference/account' });
-      }}
-      type="button"
-    >
-      설정
-    </button>
-
-    <a
-      class={flex({
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingX: '8px',
-        paddingY: '4px',
-        textAlign: 'left',
-        _hover: { backgroundColor: 'gray.100' },
+    <Img
+      style={css.raw({
+        position: 'absolute',
+        bottom: '0',
+        left: '1/2',
+        borderWidth: '4px',
+        borderColor: 'white',
+        borderRadius: 'full',
+        translate: 'auto',
+        translateX: '-1/2',
+        translateY: '1/2',
+        size: '80px',
       })}
-      href="https://help.typie.co"
-      rel="noopener noreferrer"
-      target="_blank"
-    >
-      <span>도움말</span>
-      <Icon style={css.raw({ color: 'gray.500' })} icon={ExternalLinkIcon} size={14} />
-    </a>
-
-    <div class={css({ marginX: '4px', height: '1px', backgroundColor: 'gray.100' })}></div>
-
-    <button
-      class={css({ paddingX: '8px', paddingY: '4px', textAlign: 'left', _hover: { backgroundColor: 'gray.100' } })}
-      onclick={() => {
-        location.href = qs.stringifyUrl({
-          url: `${env.PUBLIC_AUTH_URL}/logout`,
-          query: {
-            redirect_uri: env.PUBLIC_WEBSITE_URL,
-          },
-        });
-      }}
-      type="button"
-    >
-      로그아웃
-    </button>
+      $image={$user.avatar}
+      alt={`${$user.name}의 아바타`}
+      size={128}
+    />
   </div>
-{/if}
 
-<PreferenceModal {$user} />
+  <div class={css({ fontSize: '15px', fontWeight: 'semibold', lineClamp: '1' })}>{$user.name}</div>
+
+  <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.500', letterSpacing: '[0]' })}>{$user.email}</div>
+
+  <div class={css({ marginTop: '16px', width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+
+  <button
+    class={css({
+      paddingX: '16px',
+      paddingY: '8px',
+      width: 'full',
+      fontSize: '14px',
+      fontWeight: 'medium',
+      color: 'gray.700',
+      transition: 'common',
+      _hover: { backgroundColor: 'gray.100' },
+    })}
+    onclick={() => {
+      pushState('', { shallowRoute: '/preference/account' });
+      open = false;
+    }}
+    type="button"
+  >
+    설정
+  </button>
+
+  <div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+
+  <button
+    class={css({
+      paddingX: '16px',
+      paddingY: '8px',
+      width: 'full',
+      fontSize: '14px',
+      fontWeight: 'medium',
+      color: 'red.500',
+      transition: 'common',
+      _hover: { backgroundColor: 'red.50' },
+    })}
+    onclick={() => {
+      location.href = qs.stringifyUrl({
+        url: `${env.PUBLIC_AUTH_URL}/logout`,
+        query: {
+          redirect_uri: env.PUBLIC_WEBSITE_URL,
+        },
+      });
+    }}
+    type="button"
+  >
+    로그아웃
+  </button>
+</Modal>

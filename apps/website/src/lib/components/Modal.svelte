@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { sineOut } from 'svelte/easing';
+  import { fade, fly } from 'svelte/transition';
   import { portal } from '$lib/actions';
   import { css } from '$styled-system/css';
+  import { center } from '$styled-system/patterns';
   import type { Snippet } from 'svelte';
   import type { SystemStyleObject } from '$styled-system/types';
 
@@ -12,63 +15,50 @@
   };
 
   let { open = $bindable(), children, style, onclose }: Props = $props();
+
+  const close = () => {
+    open = false;
+    onclose?.();
+  };
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (open = false)} />
 
 {#if open}
-  <div class={css({ position: 'fixed', inset: '0', zIndex: '50' })} use:portal>
+  <div class={center({ position: 'fixed', inset: '0', zIndex: '50' })} use:portal>
     <div
-      class={css({ position: 'absolute', inset: '0', backgroundColor: 'gray.900/24' })}
-      onclick={() => {
-        open = false;
-        onclose?.();
-      }}
-      onkeypress={null}
-      role="button"
-      tabindex="-1"
+      class={css({
+        position: 'fixed',
+        inset: '0',
+        backgroundColor: 'black/25',
+        backdropFilter: 'auto',
+        backdropBlur: '4px',
+      })}
+      onclick={close}
+      role="none"
+      transition:fade|global={{ duration: 150, easing: sineOut }}
     ></div>
 
     <div
-      class={css({
-        position: 'absolute',
-        inset: '0',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: { base: '20px', lg: '40px' },
-        width: 'full',
-        margin: 'auto',
-        pointerEvents: 'none',
-      })}
+      class={css(
+        {
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          borderWidth: '1px',
+          borderRadius: '12px',
+          width: 'full',
+          maxWidth: '720px',
+          height: 'fit',
+          backgroundColor: 'white',
+          boxShadow: 'large',
+          overflow: 'scroll',
+        },
+        style,
+      )}
+      transition:fly|global={{ y: 5, duration: 150, easing: sineOut }}
     >
-      <div
-        class={css(
-          {
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-            flexGrow: '1',
-            borderWidth: '1px',
-            borderRadius: '16px',
-            backgroundColor: 'white',
-            padding: '20px',
-            pointerEvents: 'auto',
-            height: '[fit-content]',
-            width: 'full',
-            maxWidth: '720px',
-            maxHeight: '738px',
-            overflow: 'hidden',
-          },
-          style,
-        )}
-      >
-        <div class={css({ height: 'full', overflowY: 'auto' })}>
-          <section class={css({ display: 'contents' })}>
-            {@render children()}
-          </section>
-        </div>
-      </div>
+      {@render children()}
     </div>
   </div>
 {/if}

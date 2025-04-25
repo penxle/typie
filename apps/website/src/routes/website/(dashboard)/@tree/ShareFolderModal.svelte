@@ -65,7 +65,7 @@
   };
 </script>
 
-<Modal style={css.raw({ maxWidth: '440px' })} bind:open>
+<Modal style={css.raw({ padding: '16px', maxWidth: '440px' })} bind:open>
   <div class={flex({ flexDirection: 'column', gap: '16px' })}>
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', userSelect: 'none' })}>

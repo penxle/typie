@@ -25,7 +25,9 @@
       paddingX: '16px',
       paddingY: '8px',
       textAlign: 'left',
-      _hover: { backgroundColor: 'gray.100' },
+      fontSize: '13px',
+      color: active ? 'brand.400' : 'gray.700',
+      _hover: { color: 'brand.400' },
     },
     style,
   )}
@@ -35,6 +37,6 @@
   {@render children()}
 
   {#if active}
-    <Icon style={css.raw({ color: 'brand.500' })} icon={CheckIcon} size={16} />
+    <Icon icon={CheckIcon} size={16} />
   {/if}
 </button>
