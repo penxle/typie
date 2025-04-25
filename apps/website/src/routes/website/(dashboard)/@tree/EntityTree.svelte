@@ -150,7 +150,7 @@
 
         dragging.drop = {
           lowerOrder: offsetElement?.dataset.order,
-          upperOrder: (offsetElement ? (offsetElement.nextElementSibling as HTMLElement | null) : targetElement)?.dataset.order,
+          upperOrder: targetElement.dataset.order,
         };
       } else {
         offsetElement = getNextElement(tree, targetElement, '[data-id]');
@@ -160,7 +160,7 @@
         parentElement = thisElement.closest<HTMLElement>(`[data-id]:not([data-id="${thisElement.dataset.id}"])`);
 
         dragging.drop = {
-          lowerOrder: (offsetElement ? (offsetElement.previousElementSibling as HTMLElement | null) : targetElement)?.dataset.order,
+          lowerOrder: targetElement.dataset.order,
           upperOrder: offsetElement?.dataset.order,
         };
       }
@@ -189,7 +189,7 @@
 
       const depthDelta = draggingMaxDepth - draggingDepth + (dragging.element.dataset.type === 'folder' ? 1 : 0);
 
-      if (parentDepth + depthDelta >= maxDepth) {
+      if (parentDepth + depthDelta > maxDepth) {
         dragging.indicator = {};
         dragging.drop = undefined;
         return;
