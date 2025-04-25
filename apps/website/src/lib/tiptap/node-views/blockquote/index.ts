@@ -10,6 +10,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     blockquote: {
       toggleBlockquote: (type?: Blockquote) => ReturnType;
+      insertBlockquoteAt: (pos: number, type?: Blockquote) => ReturnType;
     };
   }
 }
@@ -54,6 +55,11 @@ export const Blockquote = createNodeView(Component, {
           } else {
             return commands.wrapIn(this.name, { type });
           }
+        },
+      insertBlockquoteAt:
+        (pos, type) =>
+        ({ chain }) => {
+          return chain().insertContentAt(pos, { type: 'paragraph' }).focus().wrapIn(this.name, { type }).run();
         },
     };
   },

@@ -6,6 +6,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     file: {
       setFile: () => ReturnType;
+      insertFileAt: (pos: number) => ReturnType;
     };
   }
 }
@@ -33,6 +34,11 @@ export const File = createNodeView(Component, {
           }
 
           return commands.insertContent({ type: this.name });
+        },
+      insertFileAt:
+        (pos) =>
+        ({ commands }) => {
+          return commands.insertContentAt(pos, { type: this.name });
         },
     };
   },

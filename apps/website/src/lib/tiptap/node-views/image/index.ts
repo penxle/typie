@@ -6,6 +6,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     image: {
       setImage: () => ReturnType;
+      insertImageAt: (pos: number) => ReturnType;
     };
   }
 }
@@ -35,6 +36,11 @@ export const Image = createNodeView(Component, {
           }
 
           return commands.insertContent({ type: this.name });
+        },
+      insertImageAt:
+        (pos) =>
+        ({ commands }) => {
+          return commands.insertContentAt(pos, { type: this.name });
         },
     };
   },

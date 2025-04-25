@@ -10,6 +10,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     horizontalRule: {
       setHorizontalRule: (type?: HorizontalRule) => ReturnType;
+      insertHorizontalRuleAt: (pos: number, type?: HorizontalRule) => ReturnType;
     };
   }
 }
@@ -54,6 +55,11 @@ export const HorizontalRule = createNodeView(Component, {
 
             return commands.insertContent({ type: this.name, attrs: { type } });
           }
+        },
+      insertHorizontalRuleAt:
+        (pos, type) =>
+        ({ commands }) => {
+          return commands.insertContentAt(pos, { type: this.name, attrs: { type } });
         },
     };
   },

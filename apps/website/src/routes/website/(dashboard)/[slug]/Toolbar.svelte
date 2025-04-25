@@ -89,41 +89,51 @@
 
   <div class={flex({ alignItems: 'center', gap: '8px', width: 'full' })}>
     <ToolbarButton
-      disabled={!editor?.current.can().setImage()}
       icon={ImageIcon}
       label="이미지"
       onclick={() => {
-        editor?.current.chain().focus().setImage().run();
+        if (editor) {
+          if (editor.current.can().setImage()) {
+            editor.current.chain().focus().setImage().run();
+          } else {
+            editor.current.chain().insertImageAt(editor.current.state.selection.$to.pos).run();
+          }
+        }
       }}
       size="large"
     />
 
     <ToolbarButton
-      disabled={!editor?.current.can().setFile()}
       icon={PaperclipIcon}
       label="파일"
       onclick={() => {
-        editor?.current.chain().focus().setFile().run();
+        if (editor) {
+          if (editor.current.can().setFile()) {
+            editor.current.chain().focus().setFile().run();
+          } else {
+            editor.current.chain().insertFileAt(editor.current.state.selection.$to.pos).run();
+          }
+        }
       }}
       size="large"
     />
 
     <ToolbarButton
-      disabled={!editor?.current.can().setEmbed()}
       icon={FileUpIcon}
       label="임베드"
       onclick={() => {
-        editor?.current.chain().focus().setEmbed().run();
+        if (editor) {
+          if (editor.current.can().setEmbed()) {
+            editor.current.chain().focus().setEmbed().run();
+          } else {
+            editor.current.chain().insertEmbedAt(editor.current.state.selection.$to.pos).run();
+          }
+        }
       }}
       size="large"
     />
 
-    <ToolbarDropdownButton
-      active={editor?.current.isActive('horizontal_rule')}
-      disabled={!editor?.current.can().setHorizontalRule()}
-      label="구분선"
-      size="large"
-    >
+    <ToolbarDropdownButton active={editor?.current.isActive('horizontal_rule')} label="구분선" size="large">
       {#snippet anchor()}
         <ToolbarIcon icon={HorizontalRuleIcon} />
       {/snippet}
@@ -134,8 +144,14 @@
             <ToolbarDropdownMenuItem
               style={css.raw({ justifyContent: 'center', height: '48px' })}
               onclick={() => {
-                editor?.current.chain().focus().setHorizontalRule(type).run();
-                close();
+                if (editor) {
+                  if (editor.current.can().setHorizontalRule(type)) {
+                    editor.current.chain().focus().setHorizontalRule(type).run();
+                  } else {
+                    editor.current.chain().insertHorizontalRuleAt(editor.current.state.selection.$to.pos, type).run();
+                  }
+                  close();
+                }
               }}
             >
               <Component />
@@ -145,12 +161,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton
-      active={editor?.current.isActive('blockquote')}
-      disabled={!editor?.current.can().toggleBlockquote()}
-      label="인용구"
-      size="large"
-    >
+    <ToolbarDropdownButton active={editor?.current.isActive('blockquote')} label="인용구" size="large">
       {#snippet anchor()}
         <ToolbarIcon icon={QuoteIcon} />
       {/snippet}
@@ -161,8 +172,14 @@
             <ToolbarDropdownMenuItem
               style={css.raw({ height: '48px' })}
               onclick={() => {
-                editor?.current.chain().focus().toggleBlockquote(type).run();
-                close();
+                if (editor) {
+                  if (editor.current.can().toggleBlockquote(type)) {
+                    editor.current.chain().focus().toggleBlockquote(type).run();
+                  } else {
+                    editor.current.chain().insertBlockquoteAt(editor.current.state.selection.$to.pos, type).run();
+                  }
+                  close();
+                }
               }}
             >
               <Component />
@@ -173,11 +190,19 @@
     </ToolbarDropdownButton>
 
     <ToolbarButton
-      disabled={!editor?.current.can().toggleCallout()}
+      active={editor?.current.isActive('callout')}
       icon={GalleryVerticalEndIcon}
       label="콜아웃"
       onclick={() => {
-        editor?.current.chain().focus().toggleCallout().run();
+        if (editor) {
+          if (editor.current.can().toggleCallout()) {
+            console.log('toggleCallout');
+            editor.current.chain().focus().toggleCallout().run();
+          } else {
+            console.log('insertCalloutAt');
+            editor.current.chain().insertCalloutAt(editor.current.state.selection.$to.pos).run();
+          }
+        }
       }}
       size="large"
     />
@@ -241,21 +266,31 @@
     </ToolbarDropdownButton>
 
     <ToolbarButton
-      disabled={!editor?.current.can().setCodeBlock()}
       icon={CodeIcon}
       label="코드"
       onclick={() => {
-        editor?.current.chain().focus().setCodeBlock().run();
+        if (editor) {
+          if (editor.current.can().setCodeBlock()) {
+            editor.current.chain().focus().setCodeBlock().run();
+          } else {
+            editor.current.chain().insertCodeBlockAt(editor.current.state.selection.$to.pos).run();
+          }
+        }
       }}
       size="large"
     />
 
     <ToolbarButton
-      disabled={!editor?.current.can().setHtmlBlock()}
       icon={CodeXmlIcon}
       label="HTML"
       onclick={() => {
-        editor?.current.chain().focus().setHtmlBlock().run();
+        if (editor) {
+          if (editor.current.can().setHtmlBlock()) {
+            editor.current.chain().focus().setHtmlBlock().run();
+          } else {
+            editor.current.chain().insertHtmlBlockAt(editor.current.state.selection.$to.pos).run();
+          }
+        }
       }}
       size="large"
     />

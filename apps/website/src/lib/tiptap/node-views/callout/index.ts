@@ -10,6 +10,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     callout: {
       toggleCallout: () => ReturnType;
+      insertCalloutAt: (pos: number) => ReturnType;
     };
   }
 }
@@ -52,6 +53,11 @@ export const Callout = createNodeView(Component, {
           } else {
             return commands.wrapIn(this.name);
           }
+        },
+      insertCalloutAt:
+        (pos) =>
+        ({ chain }) => {
+          return chain().insertContentAt(pos, { type: 'paragraph' }).focus().wrapIn(this.name).run();
         },
     };
   },

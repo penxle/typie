@@ -6,6 +6,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     embed: {
       setEmbed: () => ReturnType;
+      insertEmbedAt: (pos: number) => ReturnType;
     };
   }
 }
@@ -36,6 +37,11 @@ export const Embed = createNodeView(Component, {
           }
 
           return commands.insertContent({ type: this.name });
+        },
+      insertEmbedAt:
+        (pos) =>
+        ({ commands }) => {
+          return commands.insertContentAt(pos, { type: this.name });
         },
     };
   },

@@ -6,6 +6,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     codeBlock: {
       setCodeBlock: () => ReturnType;
+      insertCodeBlockAt: (pos: number) => ReturnType;
     };
   }
 }
@@ -39,6 +40,11 @@ export const CodeBlock = createNodeView(Component, {
           }
 
           return commands.insertContent({ type: this.name });
+        },
+      insertCodeBlockAt:
+        (pos) =>
+        ({ chain }) => {
+          return chain().insertContentAt(pos, { type: this.name }).focus().run();
         },
     };
   },
