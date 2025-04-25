@@ -1,8 +1,8 @@
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
 import { db, Entities, first, firstOrThrow, Sites, TableCode, validateDbId } from '@/db';
-import { EntityState } from '@/enums';
+import { EntityState, EntityType } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -49,6 +49,37 @@ Site.implement({
         });
 
         return await loader.load(self.id);
+      },
+    }),
+
+    firstEntity: t.field({
+      type: Entity,
+      nullable: true,
+      args: { type: t.arg({ type: EntityType }) },
+      resolve: async (self, args) => {
+        const row = await db
+          .execute<{ id: string }>(
+            sql`
+              WITH RECURSIVE sq AS (
+                SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.type}, ${Entities.order}, ${Entities.state}, ARRAY[${Entities.order}] as path_array, 1 as depth
+                FROM ${Entities}
+                WHERE ${and(eq(Entities.siteId, self.id), isNull(Entities.parentId), eq(Entities.state, EntityState.ACTIVE))}
+                UNION ALL
+                SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.type}, ${Entities.order}, ${Entities.state}, sq.path_array || ${Entities.order}, sq.depth + 1
+                FROM ${Entities}
+                JOIN sq ON ${Entities.parentId} = sq.id
+                WHERE ${eq(Entities.state, EntityState.ACTIVE)}
+              )
+              SELECT sq.id
+              FROM sq
+              WHERE sq.type = ${args.type}
+              ORDER BY sq.path_array
+              LIMIT 1;
+            `,
+          )
+          .then(first);
+
+        return row?.id;
       },
     }),
   }),

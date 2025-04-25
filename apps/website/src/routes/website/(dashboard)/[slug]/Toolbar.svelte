@@ -2,9 +2,7 @@
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import BoldIcon from '~icons/lucide/bold';
-  import ChevronsDownIcon from '~icons/lucide/chevrons-down';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
-  import ChevronsUpIcon from '~icons/lucide/chevrons-up';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
   import FileUpIcon from '~icons/lucide/file-up';
@@ -27,8 +25,7 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
-  import { Icon, SegmentButtons, VerticalDivider } from '$lib/components';
-  import { getAppContext } from '$lib/context';
+  import { HorizontalDivider, Icon, SegmentButtons, VerticalDivider } from '$lib/components';
   import { defaultValues, values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
   import { center, flex, grid } from '$styled-system/patterns';
@@ -42,52 +39,33 @@
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Snippet } from 'svelte';
   import type * as Y from 'yjs';
   import type { Ref } from '$lib/utils';
 
   type Props = {
     editor?: Ref<Editor>;
     doc: Y.Doc;
-    sticked: boolean;
-    children?: Snippet;
   };
 
-  let { editor, doc, sticked, children }: Props = $props();
+  let { editor, doc }: Props = $props();
 
-  const app = getAppContext();
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
 </script>
 
 <div
-  class={css(
-    {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '14px',
-      borderRadius: '12px',
-      paddingX: '14px',
-      paddingY: '12px',
-      width: 'full',
-      maxWidth: '1200px',
-      backgroundColor: 'gray.50',
-      boxShadow: 'medium',
-      pointerEvents: 'auto',
-      transitionProperty: 'transform',
-      transitionDuration: '200ms',
-      transitionTimingFunction: 'ease',
-      _hover: { transform: 'translateY(0)' },
-    },
-    app.preference.current.toolbarHidden && { transform: 'translateY(-90%)', willChange: 'transform' },
-    sticked ? { borderTopRadius: '0' } : { transform: 'translateY(0)' },
-    app.state.toolbarActive && { transform: 'translateY(0)' },
-  )}
+  class={css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    borderBottomWidth: '1px',
+    borderBottomColor: 'gray.100',
+    paddingY: '8px',
+    zIndex: '10',
+  })}
   role="toolbar"
   tabindex="-1"
 >
-  {@render children?.()}
-
-  <div class={flex({ alignItems: 'center', gap: '8px', width: 'full' })}>
+  <div class={flex({ alignItems: 'center', gap: '4px', paddingX: '16px' })}>
     <ToolbarButton
       disabled={!editor?.current.can().setImage()}
       icon={ImageIcon}
@@ -221,7 +199,7 @@
           >
             <div class={flex({ alignItems: 'center', gap: '4px' })}>
               <ToolbarIcon icon={ListIcon} />
-              <div class={css({ fontSize: '14px' })}>순서 없는 목록</div>
+              순서 없는 목록
             </div>
           </ToolbarDropdownMenuItem>
 
@@ -233,7 +211,7 @@
           >
             <div class={flex({ alignItems: 'center', gap: '4px' })}>
               <ToolbarIcon icon={ListOrderedIcon} />
-              <div class={css({ fontSize: '14px' })}>순서 있는 목록</div>
+              순서 있는 목록
             </div>
           </ToolbarDropdownMenuItem>
         </ToolbarDropdownMenu>
@@ -259,25 +237,11 @@
       }}
       size="large"
     />
-
-    <div class={css({ flexGrow: '1' })}></div>
-
-    {#if sticked && app.can.hideToolbar}
-      <div class={css({ alignSelf: 'flex-start' })}>
-        <ToolbarButton
-          style={css.raw({ backgroundColor: 'transparent' })}
-          icon={app.preference.current.toolbarHidden ? ChevronsDownIcon : ChevronsUpIcon}
-          label={app.preference.current.toolbarHidden ? '툴바 고정하기' : '툴바 접기'}
-          onclick={() => {
-            app.preference.current.toolbarHidden = !app.preference.current.toolbarHidden;
-          }}
-          size="small"
-        />
-      </div>
-    {/if}
   </div>
 
-  <div class={flex({ alignItems: 'center', gap: '10px', wrap: 'wrap', width: 'full', maxWidth: '1200px' })}>
+  <HorizontalDivider color="secondary" />
+
+  <div class={flex({ alignItems: 'center', gap: '10px', paddingLeft: '20px', paddingRight: '12px' })}>
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
       <ToolbarButton
         style={css.raw({ borderRightRadius: '0' })}
@@ -305,7 +269,13 @@
     <VerticalDivider style={css.raw({ height: '12px' })} />
 
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <ToolbarDropdownButton chevron disabled={!editor?.current.can().setTextColor(defaultValues.textColor)} label="글씨 색" size="small">
+      <ToolbarDropdownButton
+        chevron
+        disabled={!editor?.current.can().setTextColor(defaultValues.textColor)}
+        label="글씨 색"
+        placement="bottom-start"
+        size="small"
+      >
         {#snippet anchor()}
           <div class={center({ size: '20px' })}>
             <div
@@ -350,7 +320,7 @@
         size="small"
       >
         {#snippet anchor()}
-          <div class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>
+          <div class={css({ flexGrow: '1', fontSize: '14px', color: 'gray.700' })}>
             {values.fontFamily.find(
               ({ value }) => value === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily),
             )?.label}
@@ -361,7 +331,6 @@
           <ToolbarDropdownMenu>
             {#each values.fontFamily as { label, value } (value)}
               <ToolbarDropdownMenuItem
-                style={css.raw({ fontSize: '14px' })}
                 active={(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily) === value}
                 onclick={() => {
                   editor?.current.chain().focus().setFontFamily(value).run();
@@ -383,7 +352,7 @@
         size="small"
       >
         {#snippet anchor()}
-          <div class={css({ flexGrow: '1', fontSize: '14px', fontWeight: 'medium' })}>
+          <div class={css({ flexGrow: '1', fontSize: '14px', color: 'gray.700' })}>
             {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontSize ?? defaultValues.fontSize))
               ?.label}
           </div>
@@ -393,7 +362,6 @@
           <ToolbarDropdownMenu>
             {#each values.fontSize as { label, value } (value)}
               <ToolbarDropdownMenuItem
-                style={css.raw({ fontSize: '14px' })}
                 active={(editor?.current.getAttributes('text_style').fontSize ?? defaultValues.fontSize) === value}
                 onclick={() => {
                   editor?.current.chain().focus().setFontSize(value).run();
@@ -587,8 +555,8 @@
     <div class={css({ flexGrow: '1' })}></div>
 
     <ToolbarDropdownButton label="본문 설정" placement="bottom-end" size="small">
-      {#snippet anchor()}
-        <ToolbarIcon icon={SettingsIcon} />
+      {#snippet anchor({ opened })}
+        <ToolbarIcon style={css.raw({ transform: opened ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={SettingsIcon} />
       {/snippet}
 
       {#snippet floating()}
@@ -602,7 +570,7 @@
           <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
               <Icon style={css.raw({ color: 'gray.500' })} icon={RulerDimensionLineIcon} />
-              <div class={css({ fontSize: '12px' })}>본문 폭</div>
+              <div class={css({ fontSize: '13px', color: 'gray.700' })}>본문 폭</div>
             </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons
@@ -623,7 +591,7 @@
           <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
               <Icon style={css.raw({ color: 'gray.500' })} icon={ArrowRightToLineIcon} />
-              <div class={css({ fontSize: '12px' })}>첫 줄 들여쓰기</div>
+              <div class={css({ fontSize: '13px', color: 'gray.700' })}>첫 줄 들여쓰기</div>
             </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons
@@ -645,7 +613,7 @@
           <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
               <Icon style={css.raw({ color: 'gray.500' })} icon={AlignVerticalSpaceAroundIcon} />
-              <div class={css({ fontSize: '12px' })}>문단 사이 간격</div>
+              <div class={css({ fontSize: '13px', color: 'gray.700' })}>문단 사이 간격</div>
             </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons

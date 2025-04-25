@@ -83,6 +83,7 @@ Post.implement({
   fields: (t) => ({
     view: t.expose('id', { type: PostView }),
 
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
 
     update: t.field({

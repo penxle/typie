@@ -5,23 +5,24 @@
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import { on } from 'svelte/events';
+  import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostDocumentSyncMessageKind, WsMessageKind } from '@/const';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import LibraryBigIcon from '~icons/lucide/library-big';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
-  import { autosize } from '$lib/actions';
-  import { Helmet, HorizontalDivider } from '$lib/components';
+  import { autosize, tooltip } from '$lib/actions';
+  import { Helmet, HorizontalDivider, Icon } from '$lib/components';
   import { Tip } from '$lib/notification';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
+  import { flex } from '$styled-system/patterns';
   import TopBar from '../TopBar.svelte';
-  import Cover from './Cover.svelte';
-  import Share from './Share.svelte';
+  import Panel from './Panel.svelte';
   import { YState } from './state.svelte';
-  import StatusBar from './StatusBar.svelte';
   import Toolbar from './Toolbar.svelte';
   import { createWebSocket } from './ws.svelte';
   import type { Editor } from '@tiptap/core';
@@ -70,8 +71,7 @@
             }
           }
 
-          ...Editor_Share_post
-          ...Editor_StatusBar_post
+          ...Editor_Panel_post
         }
       }
     `),
@@ -82,9 +82,6 @@
       createWsSession
     }
   `);
-
-  let toolbarEl = $state<HTMLDivElement>();
-  let toolbarSticked = $state(false);
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -197,154 +194,145 @@
       doc.destroy();
     };
   });
-
-  $effect(() => {
-    if (!toolbarEl) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          toolbarSticked = !entry.isIntersecting;
-        }
-      },
-      { root: toolbarEl.parentElement, rootMargin: '-21px', threshold: 1 },
-    );
-
-    observer.observe(toolbarEl);
-
-    return () => {
-      observer.disconnect();
-    };
-  });
 </script>
 
 <Helmet title={`${effectiveTitle} 작성 중`} />
 
-<TopBar>
-  <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '6px' })}>
-    <div class={flex({ alignItems: 'center', gap: '6px' })}>
-      {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
-        {#if ancestor.node.__typename === 'Folder'}
-          <div class={css({ fontSize: '14px', color: 'gray.400', truncate: true })}>{ancestor.node.name}</div>
-          <div class={css({ fontSize: '14px', color: 'gray.300' })}>/</div>
-        {/if}
-      {/each}
+<div class={flex({ height: 'full' })}>
+  <div class={flex({ flexDirection: 'column', flexGrow: '1' })}>
+    <TopBar>
+      <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '6px', paddingLeft: '8px', paddingRight: '12px' })}>
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <Icon style={css.raw({ color: 'gray.400' })} icon={LibraryBigIcon} size={12} />
 
-      <div class={css({ flex: 'none', fontSize: '14px' })}>{effectiveTitle}</div>
-    </div>
+          <div class={css({ flex: 'none', fontSize: '12px', color: 'gray.400' })}>내 스페이스</div>
+          <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
 
-    <Share $post={$query.post} />
-  </div>
-</TopBar>
+          {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
+            {#if ancestor.node.__typename === 'Folder'}
+              <div class={css({ fontSize: '12px', color: 'gray.400' })}>{ancestor.node.name}</div>
+              <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
+            {/if}
+          {/each}
 
-<HorizontalDivider />
+          <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>{effectiveTitle}</div>
+        </div>
 
-<div class={flex({ position: 'relative', flexDirection: 'column', alignItems: 'center', flexGrow: '1', overflow: 'auto' })}>
-  <Cover {doc} />
+        <div
+          style:background-color={match(connectionStatus)
+            .with('connecting', () => '#eab308')
+            .with('connected', () => '#22c55e')
+            .with('disconnected', () => '#ef4444')
+            .exhaustive()}
+          class={css({ size: '8px', borderRadius: 'full' })}
+          use:tooltip={{
+            message: match(connectionStatus)
+              .with('connecting', () => '서버 연결 중...')
+              .with('connected', () => '실시간 저장 중')
+              .with('disconnected', () => '서버 연결 끊김')
+              .exhaustive(),
+            placement: 'left',
+            offset: 12,
+            delay: 0,
+          }}
+        ></div>
+      </div>
+    </TopBar>
 
-  <div
-    bind:this={toolbarEl}
-    class={css({ position: 'sticky', top: '20px', left: '0', right: '0', width: 'full', zIndex: '40', pointerEvents: 'none' })}
-  >
-    <div class={center({ position: 'absolute', top: '-20px', insetX: '0', paddingX: '60px' })}>
-      <Toolbar {doc} {editor} sticked={toolbarSticked} />
-    </div>
-  </div>
+    <HorizontalDivider color="secondary" />
 
-  <div
-    style:--prosemirror-max-width={`${maxWidth.current}px`}
-    class={flex({
-      flexDirection: 'column',
-      alignItems: 'center',
-      flexGrow: '1',
-      paddingTop: '120px',
-      paddingX: '60px',
-      width: 'full',
-      maxWidth: '1200px',
-      backgroundColor: 'white',
-    })}
-  >
-    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-      <textarea
-        bind:this={titleEl}
-        class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-        autocapitalize="off"
-        autocomplete="off"
-        maxlength="100"
-        onkeydown={(e) => {
-          if (e.isComposing) {
-            return;
-          }
+    <Toolbar {doc} {editor} />
 
-          if (e.key === 'Enter' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            subtitleEl?.focus();
-          }
-        }}
-        placeholder="제목을 입력하세요"
-        rows={1}
-        spellcheck="false"
-        bind:value={title.current}
-        use:autosize
-      ></textarea>
+    <div class={css({ position: 'relative', flexGrow: '1', overflow: 'auto' })}>
+      <div
+        style:--prosemirror-max-width={`${maxWidth.current}px`}
+        class={flex({
+          flexDirection: 'column',
+          alignItems: 'center',
+          flexGrow: '1',
+          paddingTop: '60px',
+          width: 'full',
+        })}
+      >
+        <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+          <textarea
+            bind:this={titleEl}
+            class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+            autocapitalize="off"
+            autocomplete="off"
+            maxlength="100"
+            onkeydown={(e) => {
+              if (e.isComposing) {
+                return;
+              }
 
-      <textarea
-        bind:this={subtitleEl}
-        class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
-        autocapitalize="off"
-        autocomplete="off"
-        maxlength="100"
-        onkeydown={(e) => {
-          if (e.isComposing) {
-            return;
-          }
+              if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                subtitleEl?.focus();
+              }
+            }}
+            placeholder="제목을 입력하세요"
+            rows={1}
+            spellcheck="false"
+            bind:value={title.current}
+            use:autosize
+          ></textarea>
 
-          if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
-            e.preventDefault();
+          <textarea
+            bind:this={subtitleEl}
+            class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
+            autocapitalize="off"
+            autocomplete="off"
+            maxlength="100"
+            onkeydown={(e) => {
+              if (e.isComposing) {
+                return;
+              }
+
+              if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
+                e.preventDefault();
+                titleEl?.focus();
+              }
+
+              if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+                e.preventDefault();
+                editor?.current.chain().focus().setTextSelection(2).run();
+              }
+            }}
+            placeholder="부제목을 입력하세요"
+            rows={1}
+            spellcheck="false"
+            bind:value={subtitle.current}
+            use:autosize
+          ></textarea>
+
+          <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+        </div>
+
+        <TiptapEditor
+          style={css.raw({ flexGrow: '1', width: 'full' })}
+          {awareness}
+          {doc}
+          oncreate={() => {
             titleEl?.focus();
-          }
+          }}
+          onkeydown={(view, e) => {
+            const { doc, selection } = view.state;
+            const { anchor } = selection;
 
-          if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
-            e.preventDefault();
-            editor?.current.chain().focus().setTextSelection(2).run();
-          }
-        }}
-        placeholder="부제목을 입력하세요"
-        rows={1}
-        spellcheck="false"
-        bind:value={subtitle.current}
-        use:autosize
-      ></textarea>
-
-      <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+            if (
+              ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+              (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+            ) {
+              e.preventDefault();
+              subtitleEl?.focus();
+            }
+          }}
+          bind:editor
+        />
+      </div>
     </div>
-
-    <TiptapEditor
-      style={css.raw({ flexGrow: '1', width: 'full' })}
-      {awareness}
-      {doc}
-      oncreate={() => {
-        titleEl?.focus();
-      }}
-      onkeydown={(view, e) => {
-        const { doc, selection } = view.state;
-        const { anchor } = selection;
-
-        if (
-          ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
-          (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
-        ) {
-          e.preventDefault();
-          subtitleEl?.focus();
-        }
-      }}
-      bind:editor
-    />
   </div>
+
+  <Panel $post={$query.post} {editor} />
 </div>
-
-<HorizontalDivider />
-
-<StatusBar $post={$query.post} {connectionStatus} {editor} />

@@ -8,6 +8,7 @@
   import { Icon, Menu, MenuItem } from '$lib/components';
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
+  import { center } from '$styled-system/patterns';
   import type { DashboardLayout_EntityTree_Post_post } from '$graphql';
 
   type Props = {
@@ -73,13 +74,14 @@
         borderRadius: '6px',
         transition: 'common',
         _hover: { backgroundColor: 'gray.100' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'gray.100' },
       },
       $post.entity.depth > 0 && {
         borderLeftWidth: '1px',
         borderLeftRadius: '0',
         marginLeft: '-1px',
         paddingLeft: '14px',
-        _hover: { borderLeftColor: 'gray.900' },
+        _hover: { borderLeftColor: 'gray.300' },
       },
     ),
   )}
@@ -117,19 +119,17 @@
   <Menu placement="bottom-start">
     {#snippet button({ open })}
       <div
-        class={css(
-          {
-            display: 'none',
-            justifyContent: 'center',
-            alignItems: 'center',
-            borderRadius: '4px',
-            size: '16px',
-            color: 'gray.400',
-            _hover: { backgroundColor: 'gray.200' },
-            _groupHover: { display: 'block', opacity: '100' },
-          },
-          open && { display: 'block', opacity: '100' },
-        )}
+        class={center({
+          borderRadius: '4px',
+          size: '16px',
+          color: 'gray.400',
+          opacity: '0',
+          transition: 'common',
+          _hover: { backgroundColor: 'gray.200' },
+          _groupHover: { opacity: '100' },
+          _pressed: { backgroundColor: 'gray.200', opacity: '100' },
+        })}
+        aria-pressed={open}
       >
         <Icon icon={EllipsisIcon} size={14} />
       </div>

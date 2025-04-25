@@ -1,8 +1,5 @@
 <script lang="ts">
-  import { cubicOut } from 'svelte/easing';
-  import { fade } from 'svelte/transition';
-  import { scrollLock } from '$lib/actions';
-  import { Button } from '$lib/components';
+  import { Button, Modal } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import { store } from './store';
@@ -17,47 +14,16 @@
   const dismiss = () => store.update((v) => v.filter((t) => t.id !== dialog.id));
 </script>
 
-<svelte:window
-  onkeydown={(e) => {
-    if (e.key === 'Escape') {
-      if (dialog.type === 'confirm') {
-        dialog.cancelHandler?.();
-      }
-
-      dismiss();
+<Modal
+  style={css.raw({ gap: '36px', maxWidth: '400px' })}
+  onclose={() => {
+    if (dialog.type === 'confirm') {
+      dialog.cancelHandler?.();
     }
+
+    dismiss();
   }}
-/>
-
-<div
-  class={css({
-    position: 'absolute',
-    inset: '0',
-    backgroundColor: 'black/25',
-    pointerEvents: 'auto',
-  })}
-  onclick={() => dismiss()}
-  onkeypress={null}
-  role="button"
-  tabindex="-1"
-  transition:fade={{ duration: 300, easing: cubicOut }}
-></div>
-
-<div
-  class={flex({
-    flexDirection: 'column',
-    gap: '36px',
-    borderRadius: '12px',
-    width: 'full',
-    maxWidth: '400px',
-    backgroundColor: 'white',
-    boxShadow: 'large',
-    overflow: 'hidden',
-    zIndex: '1',
-    pointerEvents: 'auto',
-  })}
-  use:scrollLock
-  transition:fade={{ duration: 150, easing: cubicOut }}
+  open={true}
 >
   <div class={flex({ flexDirection: 'column', gap: '12px', paddingTop: '24px', paddingX: '24px' })}>
     <div class={css({ fontSize: '18px', fontWeight: 'semibold' })}>
@@ -70,8 +36,7 @@
   </div>
 
   <div
-    class={css({
-      display: 'flex',
+    class={flex({
       flexDirection: 'row-reverse',
       justifyContent: 'space-between',
       gap: '8px',
@@ -105,4 +70,4 @@
       </Button>
     {/if}
   </div>
-</div>
+</Modal>

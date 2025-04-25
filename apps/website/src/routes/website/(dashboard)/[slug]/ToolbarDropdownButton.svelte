@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { createFloatingActions } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
@@ -18,21 +18,11 @@
     disabled?: boolean;
     chevron?: boolean;
     placement?: Placement;
-    anchor: Snippet<[{ open: () => void }]>;
+    anchor: Snippet<[{ open: () => void; opened: boolean }]>;
     floating: Snippet<[{ close: () => void }]>;
   };
 
-  let {
-    style,
-    size,
-    label,
-    active = false,
-    disabled = false,
-    chevron = false,
-    placement = 'bottom-start',
-    anchor,
-    floating,
-  }: Props = $props();
+  let { style, size, label, active = false, disabled = false, chevron = false, placement = 'bottom', anchor, floating }: Props = $props();
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
     placement,
@@ -65,13 +55,14 @@
         justifyContent: 'center',
         alignItems: 'center',
         flexDirection: 'column',
-        gap: '2px',
-        borderRadius: '6px',
-        size: '40px',
-        color: active ? 'brand.500' : undefined,
+        gap: '4px',
+        borderRadius: '4px',
+        size: '48px',
+        color: active ? 'brand.400' : 'gray.700',
+        transition: 'common',
         _enabled: {
-          _hover: { backgroundColor: 'gray.100' },
-          _pressed: { backgroundColor: 'gray.100' },
+          _hover: { color: 'brand.400' },
+          _pressed: { color: 'brand.400' },
         },
         _disabled: { opacity: '50' },
       },
@@ -83,8 +74,8 @@
     type="button"
     use:anchorAction
   >
-    {@render anchor({ open })}
-    <span class={css({ fontSize: '10px' })}>{label}</span>
+    {@render anchor({ open, opened })}
+    <span class={css({ fontSize: '11px' })}>{label}</span>
   </button>
 {:else if size === 'small'}
   <ToolbarTooltip {label}>
@@ -95,16 +86,16 @@
           justifyContent: 'center',
           alignItems: 'center',
           gap: '2px',
-          borderRadius: '6px',
+          borderRadius: '4px',
           paddingX: chevron ? '4px' : '0',
           width: chevron ? 'fit' : '24px',
           height: '24px',
           textAlign: 'left',
-          color: active ? 'brand.500' : undefined,
-          backgroundColor: 'gray.100',
+          color: active ? 'brand.400' : 'gray.700',
+          transition: 'common',
           _enabled: {
-            _hover: { backgroundColor: 'gray.200' },
-            _pressed: { backgroundColor: 'gray.200' },
+            _hover: { color: 'brand.400' },
+            _pressed: { color: 'brand.400' },
           },
           _disabled: { opacity: '50' },
         },
@@ -117,10 +108,18 @@
       type="button"
       use:anchorAction
     >
-      {@render anchor({ open })}
+      {@render anchor({ open, opened })}
 
       {#if chevron}
-        <Icon style={css.raw({ color: 'gray.500' })} icon={opened ? ChevronUpIcon : ChevronDownIcon} size={16} />
+        <Icon
+          style={css.raw({
+            color: 'gray.500',
+            transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
+            transitionDuration: '150ms',
+          })}
+          icon={ChevronDownIcon}
+          size={16}
+        />
       {/if}
     </button>
   </ToolbarTooltip>
@@ -130,13 +129,15 @@
   <div
     class={css({
       borderWidth: '1px',
-      borderRadius: '12px',
+      borderColor: 'gray.100',
+      borderBottomRadius: '4px',
       backgroundColor: 'white',
       zIndex: '50',
       boxShadow: 'small',
       overflow: 'hidden',
     })}
     use:floatingAction
+    in:fly={{ y: -5, duration: 150 }}
   >
     {@render floating({ close })}
   </div>

@@ -13,7 +13,6 @@ export const globalCss = defineGlobalStyles({
     backgroundColor: 'transparent',
 
     textRendering: 'inherit',
-    textShadow: 'inherit',
   },
 
   '*, *::before, *::after': {
@@ -39,7 +38,6 @@ export const globalCss = defineGlobalStyles({
     MozOsxFontSmoothing: 'grayscale',
 
     textRendering: 'optimizeLegibility',
-    textShadow: '[0 0 1px rgba(0, 0, 0, 0.1), 0 0 0 rgba(0, 0, 0, 0.1)]',
   },
 
   a: {

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { setContext, tick } from 'svelte';
   import { afterNavigate } from '$app/navigation';
-  import { css, cx } from '$styled-system/css';
-  import { createFloatingActions } from '../actions/index';
+  import { createFloatingActions, portal } from '$lib/actions';
+  import { css } from '$styled-system/css';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { Snippet } from 'svelte';
   import type { SystemStyleObject } from '$styled-system/types';
@@ -127,7 +127,7 @@
 
 <button
   bind:this={buttonEl}
-  class={cx(css(style), 'menu-button')}
+  class={css(style)}
   aria-expanded={open}
   onclick={(e) => {
     e.preventDefault();
@@ -143,6 +143,8 @@
 </button>
 
 {#if open}
+  <div class={css({ position: 'fixed', inset: '0', zIndex: '50' })} onclick={close} role="none" use:portal></div>
+
   <ul
     bind:this={menuEl}
     style:width={setFullWidth ? `${buttonEl?.getBoundingClientRect().width}px` : undefined}
@@ -153,10 +155,10 @@
         gap: '2px',
         borderWidth: '1px',
         borderColor: 'gray.200',
-        borderRadius: '12px',
-        paddingY: '6px',
-        backgroundColor: 'white',
+        borderRadius: '4px',
+        paddingY: '4px',
         minWidth: '120px',
+        backgroundColor: 'white',
         boxShadow: 'small',
         overflowY: 'auto',
         zIndex: '50',

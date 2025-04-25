@@ -73,11 +73,7 @@
   const currentTab = $derived(tabs.find((tab) => tab.path === page.state.shallowRoute));
 </script>
 
-<Modal
-  style={css.raw({ padding: '0', maxWidth: '1080px', height: 'full', maxHeight: '600px' })}
-  onclose={() => history.back()}
-  open={!!currentTab}
->
+<Modal style={css.raw({ maxWidth: '1080px', height: 'full', maxHeight: '600px' })} onclose={() => history.back()} open={!!currentTab}>
   <div class={flex({ height: 'full' })}>
     <div class={css({ flex: 'none', paddingY: '28px', paddingX: '8px', width: '240px', backgroundColor: 'gray.50' })}>
       <nav class={flex({ direction: 'column', gap: '4px' })}>

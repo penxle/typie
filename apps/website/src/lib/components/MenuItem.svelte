@@ -58,15 +58,14 @@
     cva({
       base: flex.raw({
         alignItems: 'center',
-        gap: '10px', // NOTE: override 하는 workaround: style에 columnGap을 넘기기
-        borderRadius: '6px',
-        marginX: '6px',
-        paddingX: '12px',
-        paddingY: '7px',
-        fontSize: '14px',
+        gap: '10px',
+        borderRadius: '4px',
+        marginX: '4px',
+        paddingX: '8px',
+        paddingY: '4px',
+        fontSize: '13px',
         fontWeight: 'medium',
         textAlign: 'left',
-        color: 'gray.500',
         _enabled: {
           _hover: {
             backgroundColor: 'gray.100',
@@ -75,11 +74,9 @@
             backgroundColor: 'gray.200',
           },
           _active: {
-            color: 'gray.950',
             backgroundColor: 'gray.100',
           },
           _selected: {
-            color: 'gray.950',
             backgroundColor: 'gray.100',
           },
         },
@@ -90,7 +87,7 @@
       variants: {
         variant: {
           default: {
-            color: 'gray.500',
+            color: 'gray.700',
           },
           danger: {
             color: 'red.600',

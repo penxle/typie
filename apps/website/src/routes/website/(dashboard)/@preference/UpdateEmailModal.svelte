@@ -39,7 +39,7 @@
   });
 </script>
 
-<Modal style={css.raw({ maxWidth: '440px' })} bind:open>
+<Modal style={css.raw({ padding: '16px', maxWidth: '440px' })} bind:open>
   <p class={css({ paddingBottom: '20px', fontSize: '18px', textAlign: 'center', fontWeight: 'semibold' })}>이메일 변경</p>
 
   <div class={flex({ direction: 'column', gap: '36px' })}>

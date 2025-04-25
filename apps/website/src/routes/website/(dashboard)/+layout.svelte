@@ -21,11 +21,10 @@
         sites {
           id
           name
-
-          ...DashboardLayout_CommandPalette_site
         }
 
         ...DashboardLayout_Sidebar_user
+        ...DashboardLayout_CommandPalette_user
       }
     }
   `);
@@ -136,13 +135,31 @@
     </div>
   </div>
 {:else}
-  <div class={flex({ position: 'relative', alignItems: 'flex-start', height: 'screen' })}>
+  <div
+    class={flex({
+      position: 'relative',
+      alignItems: 'stretch',
+      height: 'screen',
+      backgroundColor: 'gray.100',
+    })}
+  >
     <Sidebar $user={$query.me} />
 
-    <div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full', overflowY: 'auto' })}>
+    <div
+      class={css({
+        flexGrow: '1',
+        borderWidth: '[0.5px]',
+        borderRadius: '4px',
+        marginY: '8px',
+        marginRight: '8px',
+        backgroundColor: 'white',
+        boxShadow: '[0 3px 6px -2px {colors.gray.950/3}, 0 1px 1px {colors.gray.950/5}]',
+        overflowY: 'auto',
+      })}
+    >
       {@render children()}
     </div>
   </div>
 {/if}
 
-<CommandPalette $site={$query.me.sites[0]} />
+<CommandPalette $user={$query.me} />

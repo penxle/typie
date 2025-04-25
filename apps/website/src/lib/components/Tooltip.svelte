@@ -37,17 +37,16 @@
   <div
     class={css(
       {
-        borderRadius: '6px',
-        paddingX: '12px',
-        paddingY: '8px',
+        borderRadius: '4px',
+        paddingX: '8px',
+        paddingY: '4px',
         fontSize: '12px',
         fontWeight: 'medium',
-        backgroundColor: { base: 'gray.800', _dark: 'gray.500' },
         color: 'white',
+        backgroundColor: 'gray.700',
+        boxShadow: 'medium',
         zIndex: '50',
-        maxWidth: '220px',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'keep-all',
+        pointerEvents: 'none',
       },
       tooltipStyle,
     )}
@@ -60,7 +59,7 @@
       class={css({
         borderTopLeftRadius: '2px',
         size: '8px',
-        backgroundColor: { base: 'gray.800', _dark: 'gray.500' },
+        backgroundColor: 'gray.700',
       })}
       use:arrow
     ></div>

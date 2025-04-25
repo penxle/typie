@@ -19,9 +19,9 @@
     base: {
       activeIndicator: {
         position: 'absolute',
-        borderRadius: '6px',
+        borderRadius: '4px',
         background: 'white',
-        borderWidth: '1px',
+        boxShadow: 'small',
         transition: '[left 100ms cubic-bezier(0.3, 0, 0, 1)]',
       },
       button: {
@@ -72,7 +72,7 @@
       gap: '4px',
       flexShrink: '0',
       padding: '4px',
-      borderRadius: '10px',
+      borderRadius: '8px',
       backgroundColor: 'gray.100',
     },
     style,
