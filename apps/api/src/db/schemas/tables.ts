@@ -18,6 +18,9 @@ export const Comments = pgTable('comments', {
   userId: text('user_id')
     .notNull()
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  profileId: text('profile_id')
+    .notNull()
+    .references(() => SiteProfiles.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   state: E._CommentState('state').notNull().default('ACTIVE'),
   content: text('content').notNull(),
   createdAt: datetime('created_at')
@@ -384,6 +387,26 @@ export const Sites = pgTable(
       .on(t.slug)
       .where(eq(t.state, sql`'ACTIVE'`)),
   ],
+);
+
+export const SiteProfiles = pgTable(
+  'site_profiles',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.SITE_PROFILES)),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.siteId, t.userId)],
 );
 
 export const Users = pgTable(
