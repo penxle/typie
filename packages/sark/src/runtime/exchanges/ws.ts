@@ -1,10 +1,11 @@
-import { createClient } from 'graphql-sse';
+import { createClient } from 'graphql-ws';
+import { match, P } from 'ts-pattern';
 import { filter, make, merge, mergeMap, pipe, takeUntil } from 'wonka';
 import { GraphQLError, NetworkError } from '../types';
-import type { ClientOptions } from 'graphql-sse';
+import type { ClientOptions } from 'graphql-ws';
 import type { Exchange, GraphQLOperation, OperationResult } from '../types';
 
-export const sseExchange = (url: string, options?: Omit<ClientOptions, 'url'>): Exchange => {
+export const wsExchange = (url: string, options?: Omit<ClientOptions, 'url'>): Exchange => {
   return ({ forward }) => {
     return (ops$) => {
       const client = createClient({ url, ...options });
@@ -43,11 +44,16 @@ export const sseExchange = (url: string, options?: Omit<ClientOptions, 'url'>): 
                   }
                 },
                 error: (error) => {
+                  const message = match(error)
+                    .with(P.instanceOf(CloseEvent), (e) => e.reason)
+                    .with(P.instanceOf(Error), (e) => e.message)
+                    .otherwise(String);
+
                   observer.next({
                     type: 'error' as const,
                     operation,
                     error: new NetworkError({
-                      message: error instanceof Error ? error.message : String(error),
+                      message,
                     }),
                   });
 

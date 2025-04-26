@@ -36,6 +36,7 @@
     "body-scroll-lock-upgrade": "^1.1.0",
     "comlink": "^4.4.2",
     "es-hangul": "^2.3.2",
+    "graphql-ws": "^6.0.4",
     "ky": "^1.8.1",
     "linkifyjs": "^4.2.0",
     "match-sorter": "^8.0.0",

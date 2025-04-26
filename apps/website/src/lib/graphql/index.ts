@@ -1,6 +1,8 @@
 import { error, redirect } from '@sveltejs/kit';
-import { cacheExchange, createClient, errorExchange, fetchExchange, GraphQLError, NetworkError, sseExchange } from '@typie/sark';
+import { cacheExchange, createClient, errorExchange, fetchExchange, GraphQLError, NetworkError, wsExchange } from '@typie/sark';
+import ky from 'ky';
 import { TypieError } from '@/errors';
+import { env } from '$env/dynamic/public';
 
 // eslint-disable-next-line import/no-default-export
 export default createClient({
@@ -22,8 +24,26 @@ export default createClient({
     }),
     cacheExchange(),
     fetchExchange(),
-    sseExchange('/graphql', {
-      credentials: 'include',
+    wsExchange(`${env.PUBLIC_API_URL}/graphql`, {
+      connectionParams: async () => {
+        const resp = await ky
+          .post(`/graphql`, {
+            json: {
+              operationName: 'WsExchange_CreateWsSession_Mutation',
+              query: /* GraphQL */ `
+                mutation WsExchange_CreateWsSession_Mutation {
+                  createWsSession
+                }
+              `,
+            },
+          })
+          .json<{ data: { createWsSession: string } }>();
+
+        return {
+          session: resp.data.createWsSession,
+        };
+      },
+      retryAttempts: Infinity,
     }),
   ],
   onError: (err, event) => {
