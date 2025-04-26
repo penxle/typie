@@ -12,16 +12,19 @@
   import * as Y from 'yjs';
   import { PostSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import ElipsisIcon from '~icons/lucide/ellipsis';
   import LibraryBigIcon from '~icons/lucide/library-big';
+  import PanelRightCloseIcon from '~icons/lucide/panel-right-close';
+  import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { autosize, tooltip } from '$lib/actions';
   import { Helmet, HorizontalDivider, Icon } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { Tip } from '$lib/notification';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
-  import TopBar from '../TopBar.svelte';
+  import { center, flex } from '$styled-system/patterns';
   import Panel from './Panel.svelte';
   import { YState } from './state.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -93,6 +96,7 @@
     }
   `);
 
+  const app = getAppContext();
   const clientId = nanoid();
 
   let titleEl = $state<HTMLTextAreaElement>();
@@ -240,44 +244,90 @@
 
 <div class={flex({ height: 'full' })}>
   <div class={flex({ flexDirection: 'column', flexGrow: '1' })}>
-    <TopBar>
-      <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '6px', paddingLeft: '8px', paddingRight: '12px' })}>
-        <div class={flex({ alignItems: 'center', gap: '4px' })}>
-          <Icon style={css.raw({ color: 'gray.400' })} icon={LibraryBigIcon} size={12} />
+    <div
+      class={flex({
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '6px',
+        flexShrink: '0',
+        paddingLeft: '24px',
+        paddingRight: '8px',
+        height: '36px',
+      })}
+    >
+      <div class={flex({ alignItems: 'center', gap: '4px' })}>
+        <Icon style={css.raw({ color: 'gray.400' })} icon={LibraryBigIcon} size={12} />
 
-          <div class={css({ flex: 'none', fontSize: '12px', color: 'gray.400' })}>내 스페이스</div>
-          <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
+        <div class={css({ flex: 'none', fontSize: '12px', color: 'gray.400' })}>내 스페이스</div>
+        <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
 
-          {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
-            {#if ancestor.node.__typename === 'Folder'}
-              <div class={css({ fontSize: '12px', color: 'gray.400' })}>{ancestor.node.name}</div>
-              <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
-            {/if}
-          {/each}
+        {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
+          {#if ancestor.node.__typename === 'Folder'}
+            <div class={css({ fontSize: '12px', color: 'gray.400' })}>{ancestor.node.name}</div>
+            <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
+          {/if}
+        {/each}
 
-          <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>{effectiveTitle}</div>
+        <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>{effectiveTitle}</div>
+      </div>
+
+      <div class={flex({ alignItems: 'center', gap: '12px' })}>
+        <div class={center({ size: '24px' })}>
+          <div
+            style:background-color={match(connectionStatus)
+              .with('connecting', () => '#eab308')
+              .with('connected', () => '#22c55e')
+              .with('disconnected', () => '#ef4444')
+              .exhaustive()}
+            class={css({ size: '8px', borderRadius: 'full' })}
+            use:tooltip={{
+              message: match(connectionStatus)
+                .with('connecting', () => '서버 연결 중...')
+                .with('connected', () => '실시간 저장 중')
+                .with('disconnected', () => '서버 연결 끊김')
+                .exhaustive(),
+              placement: 'left',
+              offset: 12,
+              delay: 0,
+            }}
+          ></div>
         </div>
 
-        <div
-          style:background-color={match(connectionStatus)
-            .with('connecting', () => '#eab308')
-            .with('connected', () => '#22c55e')
-            .with('disconnected', () => '#ef4444')
-            .exhaustive()}
-          class={css({ size: '8px', borderRadius: 'full' })}
-          use:tooltip={{
-            message: match(connectionStatus)
-              .with('connecting', () => '서버 연결 중...')
-              .with('connected', () => '실시간 저장 중')
-              .with('disconnected', () => '서버 연결 끊김')
-              .exhaustive(),
-            placement: 'left',
-            offset: 12,
-            delay: 0,
-          }}
-        ></div>
+        <button
+          class={center({
+            borderRadius: '4px',
+            size: '24px',
+            color: 'gray.500',
+            transition: 'common',
+            _hover: {
+              color: 'gray.700',
+              backgroundColor: 'gray.100',
+            },
+          })}
+          type="button"
+        >
+          <Icon icon={ElipsisIcon} size={16} />
+        </button>
+
+        <button
+          class={center({
+            borderRadius: '4px',
+            size: '24px',
+            color: 'gray.500',
+            transition: 'common',
+            _hover: { backgroundColor: 'gray.100' },
+          })}
+          onclick={() => (app.preference.current.panelExpanded = !app.preference.current.panelExpanded)}
+          type="button"
+        >
+          <Icon
+            style={css.raw({ color: 'gray.500' })}
+            icon={app.preference.current.panelExpanded ? PanelRightCloseIcon : PanelRightOpenIcon}
+            size={16}
+          />
+        </button>
       </div>
-    </TopBar>
+    </div>
 
     <HorizontalDivider color="secondary" />
 

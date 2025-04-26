@@ -3,7 +3,6 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { createFloatingActions } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import ToolbarTooltip from './ToolbarTooltip.svelte';
   import type { Placement } from '@floating-ui/dom';
@@ -34,16 +33,12 @@
 
   let opened = $state(false);
 
-  const app = getAppContext();
-
   const open = () => {
     opened = true;
-    app.state.toolbarActive = true;
   };
 
   const close = () => {
     opened = false;
-    app.state.toolbarActive = false;
   };
 </script>
 
