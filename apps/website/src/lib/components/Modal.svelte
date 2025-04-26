@@ -52,7 +52,7 @@
           height: 'fit',
           backgroundColor: 'white',
           boxShadow: 'large',
-          overflow: 'scroll',
+          overflowY: 'auto',
         },
         style,
       )}

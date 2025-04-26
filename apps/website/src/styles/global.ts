@@ -40,6 +40,12 @@ export const globalCss = defineGlobalStyles({
     textRendering: 'optimizeLegibility',
   },
 
+  body: {
+    width: 'screen',
+    height: 'screen',
+    overflow: 'hidden',
+  },
+
   a: {
     textDecoration: 'inherit',
   },
@@ -91,6 +97,37 @@ export const globalCss = defineGlobalStyles({
 
   '::-webkit-details-marker': {
     display: 'none',
+  },
+
+  '@supports selector(::-webkit-scrollbar)': {
+    '::-webkit-scrollbar': {
+      width: '10px',
+      height: '10px',
+    },
+
+    '::-webkit-scrollbar-track': {
+      backgroundColor: '{colors.transparent}',
+    },
+
+    '::-webkit-scrollbar-thumb': {
+      borderWidth: '2px',
+      borderStyle: 'solid',
+      borderColor: '{colors.transparent}',
+      borderRadius: 'full',
+      backgroundColor: '{colors.gray.200}',
+      backgroundClip: 'content-box',
+    },
+
+    '::-webkit-scrollbar-thumb:hover': {
+      backgroundColor: '{colors.gray.300}',
+    },
+  },
+
+  '@supports not selector(::-webkit-scrollbar)': {
+    html: {
+      scrollbarWidth: 'thin',
+      scrollbarColor: '{colors.gray.200} {colors.transparent}',
+    },
   },
 });
 
