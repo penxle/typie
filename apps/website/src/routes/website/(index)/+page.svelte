@@ -10,7 +10,6 @@
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { Helmet } from '$lib/components';
-  import { setupAppContext } from '$lib/context';
   import { TiptapEditor, TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -33,9 +32,6 @@
       }
     }
   `);
-
-  const app = setupAppContext();
-  app.can.hideToolbar = false;
 
   let editor = $state<Ref<Editor>>();
   let loaded = $state(false);

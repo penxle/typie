@@ -3,20 +3,13 @@ import { LocalStore, SessionStore } from '../state';
 
 type AppPreference = {
   sidebarExpanded: boolean;
-  toolbarHidden: boolean;
+  panelExpanded: boolean;
   focusDuration: number;
   restDuration: number;
-  characterCountChangeMode: 'additions' | 'difference';
-};
-
-type AppCan = {
-  hideToolbar: boolean;
 };
 
 type AppState = {
-  sidebarTriggered: boolean;
   commandPaletteOpen: boolean;
-  toolbarActive: boolean;
 };
 
 type AppTimerState = {
@@ -28,7 +21,6 @@ type AppTimerState = {
 
 type AppContext = {
   preference: LocalStore<AppPreference>;
-  can: AppCan;
   state: AppState;
   timerState: SessionStore<AppTimerState>;
 };
@@ -40,25 +32,17 @@ export const getAppContext = () => {
 };
 
 export const setupAppContext = () => {
-  const can = $state<AppCan>({
-    hideToolbar: true,
-  });
-
   const appState = $state<AppState>({
-    sidebarTriggered: false,
     commandPaletteOpen: false,
-    toolbarActive: false,
   });
 
   const context: AppContext = {
     preference: new LocalStore('typie:pref', {
       sidebarExpanded: true,
-      toolbarHidden: false,
+      panelExpanded: false,
       focusDuration: 30,
       restDuration: 10,
-      characterCountChangeMode: 'additions',
     }),
-    can,
     state: appState,
     timerState: new SessionStore('typie:timer', {
       status: 'init',

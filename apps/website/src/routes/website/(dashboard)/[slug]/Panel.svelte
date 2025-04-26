@@ -2,6 +2,7 @@
   import dayjs from 'dayjs';
   import { PostVisibility } from '@/enums';
   import { fragment, graphql } from '$graphql';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import PanelCharacterCountChangeWidget from './PanelCharacterCountChangeWidget.svelte';
@@ -36,79 +37,98 @@
       }
     `),
   );
+
+  const app = getAppContext();
 </script>
 
 <aside
-  class={flex({
-    flexDirection: 'column',
-    flexShrink: 0,
-    gap: '24px',
-    borderLeftWidth: '1px',
-    borderLeftColor: 'gray.100',
-    padding: '20px',
-    minWidth: '200px',
-    width: '[15vw]',
-    maxWidth: '240px',
+  style:--min-width="200px"
+  style:--width="50vw"
+  style:--max-width="240px"
+  class={css({
+    minWidth: app.preference.current.panelExpanded ? 'var(--min-width)' : '0',
+    width: 'var(--width)',
+    maxWidth: app.preference.current.panelExpanded ? 'var(--max-width)' : '0',
+    opacity: app.preference.current.panelExpanded ? '100' : '0',
+    transitionProperty: 'min-width, max-width, opacity',
+    transitionDuration: '0.2s',
+    transitionTimingFunction: 'ease',
+    willChange: 'min-width, max-width, opacity',
+    overflowX: 'hidden',
   })}
 >
-  <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-    <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>공유 상태</div>
+  <div
+    class={flex({
+      flexDirection: 'column',
+      flexShrink: 0,
+      gap: '24px',
+      borderLeftWidth: '1px',
+      borderLeftColor: 'gray.100',
+      padding: '20px',
+      minWidth: 'var(--min-width)',
+      width: 'var(--width)',
+      maxWidth: 'var(--max-width)',
+    })}
+  >
+    <div class={flex({ flexDirection: 'column', gap: '6px' })}>
+      <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>공유 상태</div>
 
-      <Share {$post} />
+        <Share {$post} />
+      </div>
+
+      {#if $post.option.visibility === PostVisibility.UNLISTED}
+        <div
+          class={css({
+            borderRadius: '4px',
+            paddingX: '8px',
+            paddingY: '4px',
+            width: 'fit',
+            fontSize: '12px',
+            fontWeight: 'semibold',
+            color: 'blue.500',
+            backgroundColor: 'blue.100',
+            userSelect: 'none',
+          })}
+        >
+          링크 공개
+        </div>
+      {:else if $post.option.visibility === PostVisibility.PRIVATE}
+        <div
+          class={css({
+            borderRadius: '4px',
+            paddingX: '8px',
+            paddingY: '4px',
+            width: 'fit',
+            fontSize: '12px',
+            fontWeight: 'semibold',
+            color: 'gray.600',
+            backgroundColor: 'gray.200',
+            userSelect: 'none',
+          })}
+        >
+          비공개
+        </div>
+      {/if}
     </div>
 
-    {#if $post.option.visibility === PostVisibility.UNLISTED}
-      <div
-        class={css({
-          borderRadius: '4px',
-          paddingX: '8px',
-          paddingY: '4px',
-          width: 'fit',
-          fontSize: '12px',
-          fontWeight: 'semibold',
-          color: 'blue.500',
-          backgroundColor: 'blue.100',
-          userSelect: 'none',
-        })}
-      >
-        링크 공개
+    <div class={flex({ flexDirection: 'column', gap: '6px' })}>
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>최초 생성 시각</div>
+      <div class={css({ fontSize: '13px', color: 'gray.700' })}>{dayjs($post.createdAt).formatAsDateTime()}</div>
+    </div>
+
+    <div class={flex({ flexDirection: 'column', gap: '6px' })}>
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>마지막 수정 시각</div>
+      <div class={css({ fontSize: '13px', color: 'gray.700' })}>{dayjs($post.updatedAt).formatAsDateTime()}</div>
+    </div>
+
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>본문 정보</div>
+
+      <div class={flex({ flexDirection: 'column' })}>
+        <PanelCharacterCountWidget {editor} />
+        <PanelCharacterCountChangeWidget {$post} />
       </div>
-    {:else if $post.option.visibility === PostVisibility.PRIVATE}
-      <div
-        class={css({
-          borderRadius: '4px',
-          paddingX: '8px',
-          paddingY: '4px',
-          width: 'fit',
-          fontSize: '12px',
-          fontWeight: 'semibold',
-          color: 'gray.600',
-          backgroundColor: 'gray.200',
-          userSelect: 'none',
-        })}
-      >
-        비공개
-      </div>
-    {/if}
-  </div>
-
-  <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-    <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>최초 생성 시각</div>
-    <div class={css({ fontSize: '13px', color: 'gray.700' })}>{dayjs($post.createdAt).formatAsDateTime()}</div>
-  </div>
-
-  <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-    <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>마지막 수정 시각</div>
-    <div class={css({ fontSize: '13px', color: 'gray.700' })}>{dayjs($post.updatedAt).formatAsDateTime()}</div>
-  </div>
-
-  <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>본문 정보</div>
-
-    <div class={flex({ flexDirection: 'column' })}>
-      <PanelCharacterCountWidget {editor} />
-      <PanelCharacterCountChangeWidget {$post} />
     </div>
   </div>
 </aside>
