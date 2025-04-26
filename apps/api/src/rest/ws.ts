@@ -23,7 +23,7 @@ const clients = new Map<string, Set<WSContext<ServerWebSocket>>>();
 
 const send = (ws: WSContext<ServerWebSocket>, type: number, payload: Uint8Array) => {
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(new Uint8Array([type, ...payload]));
+    ws.send(new Uint8Array([type, ...payload]), { compress: true });
   }
 };
 
@@ -62,13 +62,13 @@ ws.get(
 
         if (type === WsMessageKind.ESTABLISH) {
           const token = decode(payload);
-          const value = await redis.getdel(`user:ws:${token}`);
-          if (!value) {
+          const session = await redis.getdel(`user:ws:${token}`);
+          if (!session) {
             ws.close(3401, 'Unauthorized');
             return;
           }
 
-          const { userId } = JSON.parse(value);
+          const { userId } = JSON.parse(session);
           if (!userId) {
             ws.close(3401, 'Unauthorized');
             return;
@@ -107,6 +107,7 @@ ws.get(
           } catch {
             return;
           }
+
           send(ws, PostDocumentSyncMessageKind.INIT, new Uint8Array());
 
           if (!clients.has(currentPostId)) {

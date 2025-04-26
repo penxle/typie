@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { deriveContext } from '@/context';
 import { env } from '@/env';
-import { yoga } from '@/graphql';
+import { graphql } from '@/graphql';
 import { rest } from '@/rest';
 import { websocket } from '@/ws';
 import type { Env } from '@/context';
@@ -22,7 +22,7 @@ app.use('*', async (c, next) => {
 });
 
 app.route('/', rest);
-app.route('/graphql', yoga);
+app.route('/graphql', graphql);
 
 app.notFound((c) => {
   return c.text('Not Found', { status: 404 });

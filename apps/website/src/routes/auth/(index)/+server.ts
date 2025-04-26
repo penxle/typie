@@ -15,5 +15,5 @@ export const GET: RequestHandler = async () => {
     },
   });
 
-  redirect(301, url);
+  redirect(302, url);
 };
