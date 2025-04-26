@@ -43,7 +43,6 @@ export default createClient({
           session: resp.data.createWsSession,
         };
       },
-      retryAttempts: Infinity,
     }),
   ],
   onError: (err, event) => {

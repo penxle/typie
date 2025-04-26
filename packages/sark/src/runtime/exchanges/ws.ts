@@ -9,9 +9,42 @@ import type { Exchange, GraphQLOperation, OperationResult } from '../types';
 export const wsExchange = (url: string, options?: Omit<ClientOptions, 'url'>): Exchange => {
   return ({ forward }) => {
     return (ops$) => {
+      let socket: WebSocket | undefined;
+      let timer: NodeJS.Timeout | undefined;
+
       const client = createClient({
         url,
         generateID: () => nanoid(),
+        shouldRetry: () => true,
+        retryAttempts: Infinity,
+        keepAlive: 10_000,
+        on: {
+          connected: (_socket) => {
+            socket = _socket as WebSocket;
+          },
+          ping: (received) => {
+            if (!received)
+              timer = setTimeout(() => {
+                if (socket?.readyState === WebSocket.OPEN) {
+                  socket.close(4408, 'Request Timeout');
+                }
+              }, 5000);
+          },
+          pong: (received) => {
+            if (received && timer) {
+              clearTimeout(timer);
+              timer = undefined;
+            }
+          },
+          closed: () => {
+            socket = undefined;
+
+            if (timer) {
+              clearTimeout(timer);
+              timer = undefined;
+            }
+          },
+        },
         ...options,
       });
 
