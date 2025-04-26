@@ -1,4 +1,5 @@
 import { createClient } from 'graphql-ws';
+import { nanoid } from 'nanoid';
 import { match, P } from 'ts-pattern';
 import { filter, make, merge, mergeMap, pipe, takeUntil } from 'wonka';
 import { GraphQLError, NetworkError } from '../types';
@@ -8,17 +9,21 @@ import type { Exchange, GraphQLOperation, OperationResult } from '../types';
 export const wsExchange = (url: string, options?: Omit<ClientOptions, 'url'>): Exchange => {
   return ({ forward }) => {
     return (ops$) => {
-      const client = createClient({ url, ...options });
+      const client = createClient({
+        url,
+        generateID: () => nanoid(),
+        ...options,
+      });
 
       const forward$ = pipe(
         ops$,
-        filter((operation) => operation.type !== 'subscription'),
+        filter((operation) => operation.type === 'teardown' || operation.context.transport !== 'ws'),
         forward,
       );
 
       const subscription$ = pipe(
         ops$,
-        filter((operation): operation is GraphQLOperation => operation.type === 'subscription'),
+        filter((operation): operation is GraphQLOperation => operation.type !== 'teardown' && operation.context.transport === 'ws'),
         mergeMap((operation) => {
           const subscription$ = make<OperationResult>((observer) => {
             return client.subscribe(

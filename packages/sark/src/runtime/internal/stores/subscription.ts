@@ -26,6 +26,7 @@ export function createSubscriptionStore<T extends $ArtifactSchema<'subscription'
         schema,
         variables: variables ?? {},
         context: {
+          transport: 'ws',
           ...context,
           requestPolicy: 'network-only',
         },

@@ -64,6 +64,7 @@ export class SarkClient {
         fetch: context?.fetch,
         fetchOptions: { ...this.fetchOptions, ...context?.fetchOptions },
         requestPolicy: context?.requestPolicy ?? 'cache-first',
+        transport: context?.transport ?? 'fetch',
         extensions: context?.extensions,
         _meta: context?._meta ?? {},
       },

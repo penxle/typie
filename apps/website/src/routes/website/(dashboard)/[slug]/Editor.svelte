@@ -2,6 +2,7 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import dayjs from 'dayjs';
+  import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import { on } from 'svelte/events';
@@ -9,7 +10,7 @@
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostDocumentSyncMessageKind, WsMessageKind } from '@/const';
+  import { PostSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import LibraryBigIcon from '~icons/lucide/library-big';
   import { browser } from '$app/environment';
@@ -24,7 +25,6 @@
   import Panel from './Panel.svelte';
   import { YState } from './state.svelte';
   import Toolbar from './Toolbar.svelte';
-  import { createWebSocket } from './ws.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Editor_query } from '$graphql';
   import type { Ref } from '$lib/utils';
@@ -77,11 +77,23 @@
     `),
   );
 
-  const createWsSession = graphql(`
-    mutation Editor_CreateWsSession_Mutation {
-      createWsSession
+  const syncPost = graphql(`
+    mutation Editor_SyncPost_Mutation($input: SyncPostInput!) {
+      syncPost(input: $input)
     }
   `);
+
+  const postSyncStream = graphql(`
+    subscription Editor_PostSyncStream_Subscription($clientId: String!, $postId: ID!) {
+      postSyncStream(clientId: $clientId, postId: $postId) {
+        postId
+        type
+        data
+      }
+    }
+  `);
+
+  const clientId = nanoid();
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -100,59 +112,86 @@
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
-  const encoder = new TextEncoder();
-
-  const ws = createWebSocket({
-    onopen: async () => {
-      connectionStatus = 'connecting';
-
-      const session = await createWsSession();
-      ws.send(WsMessageKind.ESTABLISH, encoder.encode(session));
-    },
-    onmessage: (type, data) => {
-      if (type === WsMessageKind.ESTABLISH) {
-        ws.send(PostDocumentSyncMessageKind.INIT, encoder.encode($query.post.id));
-      } else if (type === PostDocumentSyncMessageKind.INIT) {
-        connectionStatus = 'connected';
-        forceSync();
-      } else if (type === PostDocumentSyncMessageKind.UPDATE) {
-        Y.applyUpdateV2(doc, data, 'remote');
-      } else if (type === PostDocumentSyncMessageKind.VECTOR) {
-        const update = Y.encodeStateAsUpdateV2(doc, data);
-        ws.send(PostDocumentSyncMessageKind.UPDATE, update);
-      } else if (type === PostDocumentSyncMessageKind.AWARENESS) {
-        YAwareness.applyAwarenessUpdate(awareness, data, 'remote');
-      } else if (type === PostDocumentSyncMessageKind.PRESENCE) {
-        const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
-        ws.send(PostDocumentSyncMessageKind.AWARENESS, update);
-      } else if (type === WsMessageKind.HEARTBEAT) {
-        lastHeartbeatAt = dayjs();
-      }
-    },
-    onclose: () => {
-      connectionStatus = 'disconnected';
-    },
-  });
-
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote') {
-      ws.send(PostDocumentSyncMessageKind.UPDATE, update);
+      await syncPost(
+        {
+          clientId,
+          postId: $query.post.id,
+          type: PostSyncType.UPDATE,
+          data: base64.stringify(update),
+        },
+        { transport: 'ws' },
+      );
     }
   });
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
     if (browser && origin !== 'remote') {
       const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
-      ws.send(PostDocumentSyncMessageKind.AWARENESS, update);
+
+      await syncPost(
+        {
+          clientId,
+          postId: $query.post.id,
+          type: PostSyncType.AWARENESS,
+          data: base64.stringify(update),
+        },
+        { transport: 'ws' },
+      );
     }
   });
 
   const forceSync = async () => {
     const vector = Y.encodeStateVector(doc);
-    ws.send(PostDocumentSyncMessageKind.VECTOR, vector);
+
+    await syncPost(
+      {
+        clientId,
+        postId: $query.post.id,
+        type: PostSyncType.VECTOR,
+        data: base64.stringify(vector),
+      },
+      { transport: 'ws' },
+    );
   };
 
   onMount(() => {
+    const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
+      if (payload.type === PostSyncType.HEARTBEAT) {
+        lastHeartbeatAt = dayjs(payload.data);
+        connectionStatus = 'connected';
+      } else if (payload.type === PostSyncType.UPDATE) {
+        Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
+      } else if (payload.type === PostSyncType.VECTOR) {
+        const update = Y.encodeStateAsUpdateV2(doc, base64.parse(payload.data));
+
+        await syncPost(
+          {
+            clientId,
+            postId: $query.post.id,
+            type: PostSyncType.UPDATE,
+            data: base64.stringify(update),
+          },
+          { transport: 'ws' },
+        );
+      } else if (payload.type === PostSyncType.AWARENESS) {
+        YAwareness.applyAwarenessUpdate(awareness, base64.parse(payload.data), 'remote');
+      } else if (payload.type === PostSyncType.PRESENCE) {
+        const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
+
+        await syncPost(
+          {
+            clientId,
+            postId: $query.post.id,
+            type: PostSyncType.AWARENESS,
+            data: base64.stringify(update),
+          },
+          { transport: 'ws' },
+        );
+      }
+    });
+
     const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
     persistence.on('synced', () => forceSync());
 
@@ -167,7 +206,7 @@
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
     const heartbeatInterval = setInterval(() => {
       if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
-        ws.reconnect();
+        connectionStatus = 'disconnected';
       }
     }, 1000);
 
@@ -188,6 +227,7 @@
       clearInterval(heartbeatInterval);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
+      unsubscribe();
 
       persistence.destroy();
       awareness.destroy();

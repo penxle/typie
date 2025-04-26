@@ -67,6 +67,15 @@ export const PostContentRating = {
   R19: 'R19',
 } as const;
 
+export type PostSyncType = keyof typeof PostSyncType;
+export const PostSyncType = {
+  HEARTBEAT: 'HEARTBEAT',
+  UPDATE: 'UPDATE',
+  VECTOR: 'VECTOR',
+  AWARENESS: 'AWARENESS',
+  PRESENCE: 'PRESENCE',
+} as const;
+
 export type PostViewBodyUnavailableReason = keyof typeof PostViewBodyUnavailableReason;
 export const PostViewBodyUnavailableReason = {
   REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',

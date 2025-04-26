@@ -1,5 +1,5 @@
 import { makeServer } from 'graphql-ws';
-import { createGraphQLError, createYoga, useExecutionCancellation } from 'graphql-yoga';
+import { createYoga, useExecutionCancellation } from 'graphql-yoga';
 import { Hono } from 'hono';
 import { redis } from '@/cache';
 import { upgradeWebSocket } from '@/ws';
@@ -26,26 +26,27 @@ const server = makeServer<{ session: string }, { c: ServerContext }>({
   execute: (args: any) => args.rootValue.execute(args),
   subscribe: (args: any) => args.rootValue.subscribe(args),
   /* eslint-enable @typescript-eslint/no-explicit-any */
-  onSubscribe: async (ctx, _, payload) => {
+  onConnect: async (ctx) => {
     if (!ctx.connectionParams?.session) {
-      return [createGraphQLError('Unauthorized')];
+      return false;
     }
 
     const session = await redis.getdel(`user:ws:${ctx.connectionParams.session}`);
     if (!session) {
-      return [createGraphQLError('Unauthorized')];
+      return false;
     }
 
     const { userId } = JSON.parse(session);
     if (!userId) {
-      return [createGraphQLError('Unauthorized')];
+      return false;
     }
 
     ctx.extra.c.var.context.session = {
       id: ctx.connectionParams.session,
       userId,
     };
-
+  },
+  onSubscribe: async (ctx, _, payload) => {
     const { schema, parse, validate, execute, subscribe, contextFactory } = app.getEnveloped({
       ...ctx.extra,
     });
