@@ -97,7 +97,7 @@
   <button
     class={css({
       paddingX: '16px',
-      paddingY: '8px',
+      paddingY: '12px',
       width: 'full',
       fontSize: '14px',
       fontWeight: 'medium',
@@ -119,7 +119,7 @@
   <button
     class={css({
       paddingX: '16px',
-      paddingY: '8px',
+      paddingY: '12px',
       width: 'full',
       fontSize: '14px',
       fontWeight: 'medium',

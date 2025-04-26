@@ -66,7 +66,7 @@
     backgroundColor: 'white',
     width: '210px',
     maxHeight: '340px',
-    overflow: 'auto',
+    overflowY: 'auto',
     boxShadow: 'small',
   })}
   role="menu"

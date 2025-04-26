@@ -283,7 +283,7 @@
 
     <Toolbar {doc} {editor} />
 
-    <div class={css({ position: 'relative', flexGrow: '1', overflow: 'auto' })}>
+    <div class={css({ position: 'relative', flexGrow: '1', overflowY: 'auto', scrollbarGutter: 'stable' })}>
       <div
         style:--prosemirror-max-width={`${maxWidth.current}px`}
         class={flex({
