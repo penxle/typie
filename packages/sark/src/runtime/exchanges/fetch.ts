@@ -59,7 +59,8 @@ export const fetchExchange = (): Exchange => {
       const forward$ = pipe(
         ops$,
         filter(
-          (operation) => (operation.type !== 'query' && operation.type !== 'mutation') || operation.context.requestPolicy === 'cache-only',
+          (operation) =>
+            operation.type === 'teardown' || operation.context.transport !== 'fetch' || operation.context.requestPolicy === 'cache-only',
         ),
         forward,
       );
@@ -68,7 +69,7 @@ export const fetchExchange = (): Exchange => {
         ops$,
         filter(
           (operation): operation is GraphQLOperation =>
-            (operation.type === 'query' || operation.type === 'mutation') && operation.context.requestPolicy !== 'cache-only',
+            operation.type !== 'teardown' && operation.context.transport === 'fetch' && operation.context.requestPolicy !== 'cache-only',
         ),
         mergeMap((operation) => {
           const iter = makeRequest(operation);

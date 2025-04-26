@@ -49,6 +49,7 @@ export const createOperation = ({ url, name, kind, source, variables, context }:
   context: {
     url: url ?? 'https://example.com/graphql',
     requestPolicy: 'cache-first',
+    transport: 'fetch',
     ...context,
   },
 });

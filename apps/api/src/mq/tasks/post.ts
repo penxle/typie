@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { eq, sql } from 'drizzle-orm';
 import * as R from 'remeda';
+import { base64 } from 'rfc4648';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
@@ -8,14 +9,14 @@ import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, Po
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { meili } from '@/search';
-import { decode, makeText } from '@/utils';
+import { makeText } from '@/utils';
 import { defineJob } from '../types';
 
 const getCharacterCount = (text: string) => text.replaceAll(/\s+/g, ' ').trim().length;
 
-export const PostDocumentUpdateJob = defineJob('post:document:update', async (postId: string) => {
-  const buffers = await redis.smembersBuffer(`post:document:updates:${postId}`);
-  if (buffers.length === 0) {
+export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: string) => {
+  const updates = await redis.smembers(`post:sync:updates:${postId}`);
+  if (updates.length === 0) {
     return;
   }
 
@@ -36,16 +37,8 @@ export const PostDocumentUpdateJob = defineJob('post:document:update', async (po
       .for('update')
       .then(firstOrThrow);
 
-    const updates = R.groupBy(
-      buffers.map((buffer) => {
-        const data = new Uint8Array(buffer);
-        const sepIdx = data.indexOf(0);
-
-        const userId = decode(data.slice(0, sepIdx));
-        const update = data.slice(sepIdx + 1);
-
-        return { userId, update };
-      }),
+    const pendingUpdates = R.groupBy(
+      updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
       ({ userId }) => userId,
     );
 
@@ -55,9 +48,9 @@ export const PostDocumentUpdateJob = defineJob('post:document:update', async (po
     let prevCharacterCount = getCharacterCount(post.text);
     let order = 0;
 
-    for (const [userId, data] of Object.entries(updates)) {
+    for (const [userId, data] of Object.entries(pendingUpdates)) {
       const prevSnapshot = Y.snapshot(doc);
-      const update = Y.mergeUpdatesV2(data.map(({ update }) => update));
+      const update = Y.mergeUpdatesV2(data.map(({ data }) => base64.parse(data)));
 
       Y.applyUpdateV2(doc, update);
       const snapshot = Y.snapshot(doc);
@@ -159,7 +152,7 @@ export const PostDocumentUpdateJob = defineJob('post:document:update', async (po
     }
   });
 
-  await redis.srem(`post:document:updates:${postId}`, ...buffers);
+  await redis.srem(`post:sync:updates:${postId}`, ...updates);
 
   if (snapshotUpdated) {
     const { siteId, entityId } = await db

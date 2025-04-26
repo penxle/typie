@@ -1,8 +1,8 @@
 import { CreateNotificationJob } from './notification';
-import { PostDocumentUpdateJob } from './post';
+import { PostSyncCollectJob } from './post';
 import { TestCron } from './test';
 
-export const jobs = [PostDocumentUpdateJob, CreateNotificationJob];
+export const jobs = [PostSyncCollectJob, CreateNotificationJob];
 export const crons = [TestCron];
 
 export type Jobs = typeof jobs;

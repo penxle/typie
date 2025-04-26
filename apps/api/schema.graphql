@@ -291,6 +291,7 @@ type Mutation {
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
+  syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateEmail(input: UpdateEmailInput!): Boolean!
@@ -419,6 +420,20 @@ type PostReaction {
   emoji: String!
   id: ID!
   post: PostView!
+}
+
+type PostSyncStreamPayload {
+  data: String!
+  postId: ID!
+  type: PostSyncType!
+}
+
+enum PostSyncType {
+  AWARENESS
+  HEARTBEAT
+  PRESENCE
+  UPDATE
+  VECTOR
 }
 
 type PostView implements IPost {
@@ -559,7 +574,15 @@ type SiteView implements ISite {
 }
 
 type Subscription {
+  postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
+}
+
+input SyncPostInput {
+  clientId: String!
+  data: String!
+  postId: ID!
+  type: PostSyncType!
 }
 
 input UnfurlEmbedInput {

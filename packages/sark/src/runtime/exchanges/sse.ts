@@ -11,13 +11,13 @@ export const sseExchange = (url: string, options?: Omit<ClientOptions, 'url'>): 
 
       const forward$ = pipe(
         ops$,
-        filter((operation) => operation.type !== 'subscription'),
+        filter((operation) => operation.type === 'teardown' || operation.context.transport !== 'sse'),
         forward,
       );
 
       const subscription$ = pipe(
         ops$,
-        filter((operation): operation is GraphQLOperation => operation.type === 'subscription'),
+        filter((operation): operation is GraphQLOperation => operation.type !== 'teardown' && operation.context.transport === 'sse'),
         mergeMap((operation) => {
           const subscription$ = make<OperationResult>((observer) => {
             return client.subscribe(

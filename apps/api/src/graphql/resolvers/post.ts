@@ -1,6 +1,8 @@
 import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { filter, pipe, Repeater } from 'graphql-yoga';
+import { base64 } from 'rfc4648';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
@@ -20,8 +22,9 @@ import {
   UserPersonalIdentities,
   validateDbId,
 } from '@/db';
-import { EntityState, EntityType, PostContentRating, PostViewBodyUnavailableReason, PostVisibility } from '@/enums';
+import { EntityState, EntityType, PostContentRating, PostSyncType, PostViewBodyUnavailableReason, PostVisibility } from '@/enums';
 import { TypieError } from '@/errors';
+import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, getKoreanAge, makeText, makeYDoc } from '@/utils';
@@ -751,6 +754,149 @@ builder.mutationFields((t) => ({
         .then(firstOrThrow);
     },
   }),
+
+  syncPost: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: {
+      clientId: t.input.string(),
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+      type: t.input.field({ type: PostSyncType }),
+      data: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const post = await db
+        .select({ siteId: Entities.siteId })
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(eq(Posts.id, input.postId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: post.siteId,
+      });
+
+      if (input.type === PostSyncType.UPDATE) {
+        pubsub.publish('post:sync', input.postId, {
+          target: `!${input.clientId}`,
+          type: PostSyncType.UPDATE,
+          data: input.data,
+        });
+
+        await redis.sadd(
+          `post:sync:updates:${input.postId}`,
+          JSON.stringify({
+            userId: ctx.session.userId,
+            data: input.data,
+          }),
+        );
+
+        await enqueueJob('post:sync:collect', input.postId);
+      } else if (input.type === PostSyncType.VECTOR) {
+        const state = await getPostDocument(input.postId);
+        const update = Y.diffUpdateV2(state.update, base64.parse(input.data));
+
+        pubsub.publish('post:sync', input.postId, {
+          target: input.clientId,
+          type: PostSyncType.UPDATE,
+          data: base64.stringify(update),
+        });
+
+        pubsub.publish('post:sync', input.postId, {
+          target: input.clientId,
+          type: PostSyncType.VECTOR,
+          data: base64.stringify(state.vector),
+        });
+      } else if (input.type === PostSyncType.AWARENESS) {
+        pubsub.publish('post:sync', input.postId, {
+          target: `!${input.clientId}`,
+          type: PostSyncType.AWARENESS,
+          data: input.data,
+        });
+      }
+
+      return true;
+    },
+  }),
+}));
+
+/**
+ * * Subscriptions
+ */
+
+builder.subscriptionFields((t) => ({
+  postSyncStream: t.withAuth({ session: true }).field({
+    type: t.builder.simpleObject('PostSyncStreamPayload', {
+      fields: (t) => ({
+        postId: t.id(),
+        type: t.field({ type: PostSyncType }),
+        data: t.string(),
+      }),
+    }),
+    args: {
+      clientId: t.arg.string(),
+      postId: t.arg.id({ validate: validateDbId(TableCode.POSTS) }),
+    },
+    subscribe: async (_, args, ctx) => {
+      const post = await db
+        .select({ siteId: Entities.siteId })
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(eq(Posts.id, args.postId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: post.siteId,
+      });
+
+      pubsub.publish('post:sync', args.postId, {
+        target: `!${args.clientId}`,
+        type: PostSyncType.PRESENCE,
+        data: '',
+      });
+
+      const repeater = Repeater.merge([
+        pubsub.subscribe('post:sync', args.postId),
+        new Repeater<{ target: string; type: PostSyncType; data: string }>(async (push, stop) => {
+          const heartbeat = () => {
+            push({
+              target: args.clientId,
+              type: PostSyncType.HEARTBEAT,
+              data: dayjs().toISOString(),
+            });
+          };
+
+          heartbeat();
+          const interval = setInterval(heartbeat, 1000);
+
+          await stop;
+
+          clearInterval(interval);
+        }),
+      ]);
+
+      return pipe(
+        repeater,
+        filter(({ target }) => {
+          if (target === '*') {
+            return true;
+          } else if (target.startsWith('!')) {
+            return target.slice(1) !== args.clientId;
+          } else {
+            return target === args.clientId;
+          }
+        }),
+      );
+    },
+    resolve: async (payload, args) => {
+      return {
+        postId: args.postId,
+        type: payload.type,
+        data: payload.data,
+      };
+    },
+  }),
 }));
 
 /**
@@ -759,3 +905,32 @@ builder.mutationFields((t) => ({
 
 const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
 const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
+
+const getPostDocument = async (postId: string) => {
+  const { update, vector } = await db
+    .select({ update: PostContents.update, vector: PostContents.vector })
+    .from(PostContents)
+    .where(eq(PostContents.postId, postId))
+    .then(firstOrThrow);
+
+  const updates = await redis.smembers(`post:sync:updates:${postId}`);
+  if (updates.length === 0) {
+    return {
+      update,
+      vector,
+    };
+  }
+
+  const pendingUpdates = updates.map((update) => {
+    const { data } = JSON.parse(update);
+    return base64.parse(data);
+  });
+
+  const updatedUpdate = Y.mergeUpdatesV2([update, ...pendingUpdates]);
+  const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
+
+  return {
+    update: updatedUpdate,
+    vector: updatedVector,
+  };
+};
