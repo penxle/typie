@@ -38,6 +38,9 @@ export const globalCss = defineGlobalStyles({
     MozOsxFontSmoothing: 'grayscale',
 
     textRendering: 'optimizeLegibility',
+
+    scrollbarWidth: 'thin',
+    scrollbarColor: '{colors.gray.200} {colors.transparent}',
   },
 
   body: {
@@ -99,35 +102,26 @@ export const globalCss = defineGlobalStyles({
     display: 'none',
   },
 
-  '@supports selector(::-webkit-scrollbar)': {
-    '::-webkit-scrollbar': {
-      width: '10px',
-      height: '10px',
-    },
-
-    '::-webkit-scrollbar-track': {
-      backgroundColor: '{colors.transparent}',
-    },
-
-    '::-webkit-scrollbar-thumb': {
-      borderWidth: '2px',
-      borderStyle: 'solid',
-      borderColor: '{colors.transparent}',
-      borderRadius: 'full',
-      backgroundColor: '{colors.gray.200}',
-      backgroundClip: 'content-box',
-    },
-
-    '::-webkit-scrollbar-thumb:hover': {
-      backgroundColor: '{colors.gray.300}',
-    },
+  '::-webkit-scrollbar': {
+    width: '10px',
+    height: '10px',
   },
 
-  '@supports not selector(::-webkit-scrollbar)': {
-    html: {
-      scrollbarWidth: 'thin',
-      scrollbarColor: '{colors.gray.200} {colors.transparent}',
-    },
+  '::-webkit-scrollbar-track': {
+    backgroundColor: '{colors.transparent}',
+  },
+
+  '::-webkit-scrollbar-thumb': {
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: '{colors.transparent}',
+    borderRadius: 'full',
+    backgroundColor: '{colors.gray.200}',
+    backgroundClip: 'content-box',
+  },
+
+  '::-webkit-scrollbar-thumb:hover': {
+    backgroundColor: '{colors.gray.300}',
   },
 });
 
