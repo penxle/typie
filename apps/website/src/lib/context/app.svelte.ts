@@ -2,12 +2,14 @@ import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
 
 type AppPreference = {
+  spaceExpanded: 'open' | 'closed' | false;
   panelExpanded: boolean;
   focusDuration: number;
   restDuration: number;
 };
 
 type AppState = {
+  spaceOpen: boolean;
   commandPaletteOpen: boolean;
 };
 
@@ -32,11 +34,13 @@ export const getAppContext = () => {
 
 export const setupAppContext = () => {
   const appState = $state<AppState>({
+    spaceOpen: false,
     commandPaletteOpen: false,
   });
 
   const context: AppContext = {
     preference: new LocalStore<AppPreference>('typie:pref', {
+      spaceExpanded: false,
       panelExpanded: true,
       focusDuration: 30,
       restDuration: 10,

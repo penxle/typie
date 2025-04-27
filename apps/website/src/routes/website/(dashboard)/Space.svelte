@@ -1,15 +1,16 @@
 <script lang="ts">
   import FolderPlusIcon from '~icons/lucide/folder-plus';
-  import LibraryBigIcon from '~icons/lucide/library-big';
+  import PinIcon from '~icons/lucide/pin';
+  import PinOffIcon from '~icons/lucide/pin-off';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { portal, tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import EntityTree from './@tree/EntityTree.svelte';
-  import SidebarButton from './SidebarButton.svelte';
   import type { DashboardLayout_Space_site } from '$graphql';
 
   type Props = {
@@ -50,50 +51,86 @@
     }
   `);
 
-  let open = $state(false);
+  const app = getAppContext();
 </script>
 
-<SidebarButton active={open} icon={LibraryBigIcon} label="내 스페이스" onclick={() => (open = true)} />
-
-{#if open}
-  <div class={css({ position: 'fixed', inset: '0' })} onclick={() => (open = false)} role="none" use:portal></div>
+{#if app.state.spaceOpen && !app.preference.current.spaceExpanded}
+  <div
+    class={css({ position: 'fixed', inset: '0', zIndex: '40' })}
+    onclick={() => (app.state.spaceOpen = false)}
+    role="none"
+    use:portal
+  ></div>
 {/if}
 
 <div
-  class={css({
-    position: 'fixed',
-    left: open ? '64px' : '59px',
-    insetY: '0',
-    width: '0',
-    backgroundColor: 'white',
-    boxShadow: 'small',
-    opacity: open ? '100' : '0',
-    zIndex: '50',
-    transitionProperty: 'left, opacity',
-    transitionDuration: '100ms',
-    transitionTimingFunction: 'cubic-bezier(0.33, 1, 0.68, 1)',
-    overflowX: 'hidden',
-  })}
-  ontransitionend={(e) => {
-    if (!open) {
-      e.currentTarget.style.width = '0';
+  style:--min-width="240px"
+  style:--width="15vw"
+  style:--max-width="300px"
+  class={css(
+    app.preference.current.spaceExpanded
+      ? {
+          position: 'relative',
+          marginY: '8px',
+          marginRight: app.preference.current.spaceExpanded === 'open' ? '8px' : '0',
+          minWidth: app.preference.current.spaceExpanded === 'open' ? 'var(--min-width)' : '0',
+          maxWidth: app.preference.current.spaceExpanded === 'open' ? 'var(--max-width)' : '0',
+          opacity: app.preference.current.spaceExpanded === 'open' ? '100' : '0',
+          transitionProperty: 'min-width, max-width, opacity, position, margin-block',
+          transitionDuration: '150ms',
+          transitionTimingFunction: 'ease',
+        }
+      : {
+          position: 'fixed',
+          left: app.state.spaceOpen ? '64px' : '59px',
+          insetY: '0',
+          minWidth: 'var(--min-width)',
+          width: 'var(--fixed-width, 0)',
+          maxWidth: 'var(--max-width)',
+          opacity: app.state.spaceOpen ? '100' : '0',
+          zIndex: '50',
+          transitionProperty: 'left, opacity, position, margin-block',
+          transitionDuration: '150ms',
+          transitionTimingFunction: 'ease',
+        },
+  )}
+  ontransitionendcapture={(e) => {
+    if (!app.preference.current.spaceExpanded && !app.state.spaceOpen) {
+      e.currentTarget.style.setProperty('--fixed-width', '0');
     }
   }}
-  ontransitionstart={(e) => {
-    if (open) {
-      e.currentTarget.style.width = '350px';
+  ontransitionstartcapture={(e) => {
+    if (!app.preference.current.spaceExpanded && app.state.spaceOpen) {
+      e.currentTarget.style.setProperty('--fixed-width', 'var(--width)');
     }
   }}
-  use:portal
 >
   <div
-    class={flex({
-      flexDirection: 'column',
-      borderRightWidth: '1px',
-      borderRightColor: 'gray.100',
-      borderRightRadius: '4px',
-      size: 'full',
-    })}
+    class={flex(
+      app.preference.current.spaceExpanded
+        ? {
+            flexDirection: 'column',
+            borderWidth: '[0.5px]',
+            borderRadius: '4px',
+            minWidth: 'var(--min-width)',
+            width: 'var(--width)',
+            maxWidth: 'var(--max-width)',
+            height: 'full',
+            backgroundColor: 'white',
+            boxShadow: '[0 3px 6px -2px {colors.gray.950/3}, 0 1px 1px {colors.gray.950/5}]',
+            overflow: 'hidden',
+          }
+        : {
+            flexDirection: 'column',
+            borderRightWidth: '1px',
+            borderRightColor: 'gray.100',
+            borderRightRadius: '4px',
+            backgroundColor: 'white',
+            boxShadow: 'small',
+            size: 'full',
+            overflow: 'hidden',
+          },
+    )}
   >
     <div
       class={flex({
@@ -106,7 +143,31 @@
         backgroundColor: 'white',
       })}
     >
-      <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>내 스페이스</span>
+      <div class={flex({ alignItems: 'center', gap: '4px' })}>
+        <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>내 스페이스</span>
+
+        <button
+          class={center({
+            borderRadius: '4px',
+            size: '20px',
+            color: 'gray.500',
+            transition: 'common',
+            _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+          })}
+          onclick={() => {
+            if (app.preference.current.spaceExpanded) {
+              app.state.spaceOpen = app.preference.current.spaceExpanded === 'open';
+              app.preference.current.spaceExpanded = false;
+            } else {
+              app.preference.current.spaceExpanded = app.state.spaceOpen ? 'open' : 'closed';
+            }
+          }}
+          type="button"
+          use:tooltip={{ message: app.preference.current.spaceExpanded ? '패널 고정 해제' : '패널 고정' }}
+        >
+          <Icon icon={app.preference.current.spaceExpanded ? PinOffIcon : PinIcon} size={14} />
+        </button>
+      </div>
 
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
         <button
