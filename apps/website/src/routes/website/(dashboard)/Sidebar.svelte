@@ -95,7 +95,7 @@
       await goto(`/${resp.entity.slug}`);
     }}
     type="button"
-    use:tooltip={{ message: '새 포스트', placement: 'right', offset: 12 }}
+    use:tooltip={{ message: '새 포스트 생성', placement: 'right', offset: 12 }}
   >
     <Icon icon={PlusIcon} size={20} />
   </button>

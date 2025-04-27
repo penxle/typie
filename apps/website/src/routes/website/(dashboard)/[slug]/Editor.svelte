@@ -385,6 +385,7 @@
           })}
           onclick={() => (app.preference.current.panelExpanded = !app.preference.current.panelExpanded)}
           type="button"
+          use:tooltip={{ message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기' }}
         >
           <Icon
             style={css.raw({ color: 'gray.500' })}
@@ -407,6 +408,7 @@
           alignItems: 'center',
           flexGrow: '1',
           paddingTop: '60px',
+          paddingX: '80px',
           width: 'full',
         })}
       >

@@ -70,6 +70,7 @@
   style:--overflow="hidden"
   class={css(
     {
+      flexShrink: '0',
       transitionDuration: '150ms',
       transitionTimingFunction: 'ease',
     },
