@@ -69,6 +69,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (element, { message, plac
       const component = mount(Tooltip, {
         target: document.body,
         props,
+        intro: true,
       });
 
       return () => {

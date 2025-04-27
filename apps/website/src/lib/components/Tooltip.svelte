@@ -52,7 +52,7 @@
     )}
     role="tooltip"
     use:floating
-    transition:scale={{ start: 0.9, duration: 200 }}
+    transition:scale|global={{ start: 0.9, duration: 200 }}
   >
     {message}
     <div

@@ -76,7 +76,7 @@
     })}
     role="tooltip"
     use:floating
-    in:fade={{ duration: 100 }}
+    in:fade|global={{ duration: 150 }}
   >
     {label}
   </div>
