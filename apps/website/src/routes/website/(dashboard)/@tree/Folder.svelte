@@ -1,15 +1,15 @@
 <script lang="ts">
+  import BlendIcon from '~icons/lucide/blend';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EllipsisIcon from '~icons/lucide/ellipsis';
-  import FilePlusIcon from '~icons/lucide/file-plus';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
-  import PencilIcon from '~icons/lucide/pencil';
-  import ShareIcon from '~icons/lucide/share';
-  import Trash2Icon from '~icons/lucide/trash-2';
+  import PencilIcon from '~icons/lucide/pencil-line';
+  import SquarePenIcon from '~icons/lucide/square-pen';
+  import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
-  import { Icon, Menu, MenuItem } from '$lib/components';
+  import { HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -229,26 +229,28 @@
           </div>
         {/snippet}
 
-        <MenuItem
-          onclick={() => {
-            editing = true;
-          }}
-        >
-          <Icon icon={PencilIcon} size={12} />
-          <span>폴더 이름 변경</span>
-        </MenuItem>
+        <MenuItem icon={PencilIcon} onclick={() => (editing = true)}>이름 변경</MenuItem>
+        <MenuItem icon={BlendIcon} onclick={() => (shareFolderOpen = true)}>공유</MenuItem>
+
+        <HorizontalDivider color="secondary" />
 
         <MenuItem
-          onclick={() => {
-            shareFolderOpen = true;
+          icon={SquarePenIcon}
+          onclick={async () => {
+            const resp = await createPost({
+              siteId: $folder.entity.site.id,
+              parentEntityId: $folder.entity.id,
+            });
+
+            await goto(`/${resp.entity.slug}`);
           }}
         >
-          <Icon icon={ShareIcon} size={12} />
-          <span>폴더 공유</span>
+          하위 포스트 생성
         </MenuItem>
 
         {#if $folder.entity.depth < maxDepth - 1}
           <MenuItem
+            icon={FolderPlusIcon}
             onclick={async () => {
               await createFolder({
                 siteId: $folder.entity.site.id,
@@ -259,26 +261,14 @@
               open = true;
             }}
           >
-            <Icon icon={FolderPlusIcon} size={12} />
-            <span>하위 폴더 생성</span>
+            하위 폴더 생성
           </MenuItem>
         {/if}
 
-        <MenuItem
-          onclick={async () => {
-            const resp = await createPost({
-              siteId: $folder.entity.site.id,
-              parentEntityId: $folder.entity.id,
-            });
-
-            await goto(`/${resp.entity.slug}`);
-          }}
-        >
-          <Icon icon={FilePlusIcon} size={12} />
-          <span>하위 포스트 생성</span>
-        </MenuItem>
+        <HorizontalDivider color="secondary" />
 
         <MenuItem
+          icon={TrashIcon}
           onclick={async () => {
             Dialog.confirm({
               title: '폴더 삭제',
@@ -290,9 +280,9 @@
               },
             });
           }}
+          variant="danger"
         >
-          <Icon icon={Trash2Icon} size={12} />
-          <span>폴더 삭제</span>
+          삭제
         </MenuItem>
       </Menu>
     {/if}
