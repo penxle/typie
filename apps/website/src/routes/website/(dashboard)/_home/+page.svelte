@@ -8,7 +8,6 @@
   import { typewriter } from '$lib/transitions';
   import { css } from '$styled-system/css';
   import { center, flex, grid } from '$styled-system/patterns';
-  import TopBar from '../TopBar.svelte';
   import ActivityGrid from './ActivityGrid.svelte';
 
   const query = graphql(`
@@ -107,8 +106,6 @@
 </script>
 
 <Helmet title="홈" />
-
-<TopBar />
 
 <div class={center({ flexDirection: 'column', flexGrow: '1', width: 'full' })}>
   <div class={flex({ flexDirection: 'column', flexGrow: '1', gap: '100px', marginY: '64px', width: 'full', maxWidth: '1000px' })}>

@@ -9,9 +9,6 @@
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
-  import HomeIcon from '~icons/lucide/home';
-  import PanelLeftCloseIcon from '~icons/lucide/panel-left-close';
-  import PanelLeftOpenIcon from '~icons/lucide/panel-left-open';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -106,22 +103,6 @@
         });
 
         await goto(`/${resp.entity.slug}`);
-      },
-    },
-    {
-      name: app.preference.current.sidebarExpanded ? '사이드바 닫기' : '사이드바 열기',
-      aliases: [],
-      icon: app.preference.current.sidebarExpanded ? PanelLeftCloseIcon : PanelLeftOpenIcon,
-      action: () => {
-        app.preference.current.sidebarExpanded = !app.preference.current.sidebarExpanded;
-      },
-    },
-    {
-      name: '홈으로 가기',
-      aliases: [],
-      icon: HomeIcon,
-      action: async () => {
-        await goto('/home');
       },
     },
     {
