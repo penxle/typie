@@ -10,11 +10,11 @@
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Entity from './Entity.svelte';
-  import ShareFolderModal from './ShareFolderModal.svelte';
   import { maxDepth } from './utils';
   import type { DashboardLayout_EntityTree_Folder_entity, DashboardLayout_EntityTree_Folder_folder, List } from '$graphql';
 
@@ -46,8 +46,6 @@
           id
           visibility
         }
-
-        ...DashboardLayout_ShareFolderModal_folder
       }
     `),
   );
@@ -101,12 +99,12 @@
     }
   `);
 
+  const app = getAppContext();
+
   let inputEl = $state<HTMLInputElement>();
 
   let open = $state(false);
   let editing = $state(false);
-
-  let shareFolderOpen = $state(false);
 
   $effect(() => {
     if (editing) {
@@ -230,7 +228,7 @@
         {/snippet}
 
         <MenuItem icon={PencilIcon} onclick={() => (editing = true)}>이름 변경</MenuItem>
-        <MenuItem icon={BlendIcon} onclick={() => (shareFolderOpen = true)}>공유</MenuItem>
+        <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $folder.entity.id)}>공유</MenuItem>
 
         <HorizontalDivider color="secondary" />
 
@@ -298,5 +296,3 @@
     {/each}
   </div>
 </details>
-
-<ShareFolderModal {$folder} bind:open={shareFolderOpen} />

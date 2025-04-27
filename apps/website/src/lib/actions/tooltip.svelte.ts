@@ -10,9 +10,13 @@ type Parameter = {
   placement?: Placement;
   offset?: number;
   delay?: number;
+  keepOnClick?: boolean;
 };
 
-export const tooltip: Action<HTMLElement, Parameter> = (element, { message, placement = 'bottom', offset = 8, delay = 500 }: Parameter) => {
+export const tooltip: Action<HTMLElement, Parameter> = (
+  element,
+  { message, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false }: Parameter,
+) => {
   let show = $state(false);
   let timer = $state<NodeJS.Timeout>();
 
@@ -47,13 +51,22 @@ export const tooltip: Action<HTMLElement, Parameter> = (element, { message, plac
       show = false;
     });
 
-    const click = on(element, 'click', () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
+    const click = on(
+      element,
+      'click',
+      () => {
+        if (keepOnClick) {
+          return;
+        }
 
-      show = false;
-    });
+        if (timer) {
+          clearTimeout(timer);
+        }
+
+        show = false;
+      },
+      { capture: true },
+    );
 
     anchor(element);
 

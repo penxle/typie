@@ -7,7 +7,6 @@
   import { flex } from '$styled-system/patterns';
   import PanelCharacterCountChangeWidget from './PanelCharacterCountChangeWidget.svelte';
   import PanelCharacterCountWidget from './PanelCharacterCountWidget.svelte';
-  import Share from './Share.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Editor_Panel_post } from '$graphql';
   import type { Ref } from '$lib/utils';
@@ -27,13 +26,16 @@
         createdAt
         updatedAt
 
+        entity {
+          id
+        }
+
         option {
           id
           visibility
         }
 
         ...Editor_Panel_CharacterCountChangeWidget_post
-        ...Editor_Share_post
       }
     `),
   );
@@ -74,7 +76,13 @@
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
         <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>공유 상태</div>
 
-        <Share {$post} />
+        <button
+          class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.500', transition: 'common', _hover: { color: 'gray.700' } })}
+          onclick={() => (app.state.shareOpen = $post.entity.id)}
+          type="button"
+        >
+          설정
+        </button>
       </div>
 
       {#if $post.option.visibility === PostVisibility.UNLISTED}

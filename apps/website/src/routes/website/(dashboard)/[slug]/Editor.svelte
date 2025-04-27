@@ -342,14 +342,7 @@
             </button>
           {/snippet}
 
-          <MenuItem
-            icon={BlendIcon}
-            onclick={() => {
-              //
-            }}
-          >
-            공유
-          </MenuItem>
+          <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $query.post.entity.id)}>공유</MenuItem>
 
           <MenuItem
             icon={CopyIcon}

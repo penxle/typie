@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
@@ -6,6 +7,7 @@
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
@@ -59,6 +61,8 @@
       }
     }
   `);
+
+  const app = getAppContext();
 </script>
 
 <a
@@ -134,6 +138,8 @@
         <Icon icon={EllipsisIcon} size={14} />
       </div>
     {/snippet}
+
+    <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $post.entity.id)}>공유</MenuItem>
 
     <MenuItem
       icon={CopyIcon}
