@@ -2,7 +2,6 @@ import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
 
 type AppPreference = {
-  sidebarExpanded: boolean;
   panelExpanded: boolean;
   focusDuration: number;
   restDuration: number;
@@ -37,14 +36,13 @@ export const setupAppContext = () => {
   });
 
   const context: AppContext = {
-    preference: new LocalStore('typie:pref', {
-      sidebarExpanded: true,
-      panelExpanded: false,
+    preference: new LocalStore<AppPreference>('typie:pref', {
+      panelExpanded: true,
       focusDuration: 30,
       restDuration: 10,
     }),
     state: appState,
-    timerState: new SessionStore('typie:timer', {
+    timerState: new SessionStore<AppTimerState>('typie:timer', {
       status: 'init',
       currentTime: 0,
       paused: false,
