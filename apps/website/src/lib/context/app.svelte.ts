@@ -11,6 +11,7 @@ type AppPreference = {
 type AppState = {
   spaceOpen: boolean;
   commandPaletteOpen: boolean;
+  shareOpen: string | false;
 };
 
 type AppTimerState = {
@@ -36,6 +37,7 @@ export const setupAppContext = () => {
   const appState = $state<AppState>({
     spaceOpen: false,
     commandPaletteOpen: false,
+    shareOpen: false,
   });
 
   const context: AppContext = {

@@ -7,6 +7,7 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
+  import ShareModal from './@share/ShareModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import Sidebar from './Sidebar.svelte';
 
@@ -163,3 +164,4 @@
 {/if}
 
 <CommandPalette $user={$query.me} />
+<ShareModal />
