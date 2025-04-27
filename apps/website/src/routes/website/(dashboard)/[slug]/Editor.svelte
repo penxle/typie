@@ -11,17 +11,21 @@
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostSyncType } from '@/enums';
+  import BlendIcon from '~icons/lucide/blend';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import CopyIcon from '~icons/lucide/copy';
   import ElipsisIcon from '~icons/lucide/ellipsis';
   import LibraryBigIcon from '~icons/lucide/library-big';
   import PanelRightCloseIcon from '~icons/lucide/panel-right-close';
   import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
+  import TrashIcon from '~icons/lucide/trash';
   import { browser } from '$app/environment';
+  import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { autosize, tooltip } from '$lib/actions';
-  import { Helmet, HorizontalDivider, Icon } from '$lib/components';
+  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { Tip } from '$lib/notification';
+  import { Dialog, Tip } from '$lib/notification';
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -83,6 +87,27 @@
   const syncPost = graphql(`
     mutation Editor_SyncPost_Mutation($input: SyncPostInput!) {
       syncPost(input: $input)
+    }
+  `);
+
+  const duplicatePost = graphql(`
+    mutation Editor_DuplicatePost_Mutation($input: DuplicatePostInput!) {
+      duplicatePost(input: $input) {
+        id
+
+        entity {
+          id
+          slug
+        }
+      }
+    }
+  `);
+
+  const deletePost = graphql(`
+    mutation Editor_DeletePost_Mutation($input: DeletePostInput!) {
+      deletePost(input: $input) {
+        id
+      }
     }
   `);
 
@@ -271,7 +296,7 @@
         <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>{effectiveTitle}</div>
       </div>
 
-      <div class={flex({ alignItems: 'center', gap: '12px' })}>
+      <div class={flex({ alignItems: 'center', gap: '4px' })}>
         <div class={center({ size: '24px' })}>
           <div
             style:background-color={match(connectionStatus)
@@ -293,21 +318,69 @@
           ></div>
         </div>
 
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '24px',
-            color: 'gray.500',
-            transition: 'common',
-            _hover: {
-              color: 'gray.700',
-              backgroundColor: 'gray.100',
-            },
-          })}
-          type="button"
-        >
-          <Icon icon={ElipsisIcon} size={16} />
-        </button>
+        <Menu>
+          {#snippet button({ open })}
+            <button
+              class={center({
+                borderRadius: '4px',
+                size: '24px',
+                color: 'gray.500',
+                transition: 'common',
+                _hover: {
+                  color: 'gray.700',
+                  backgroundColor: 'gray.100',
+                },
+                _pressed: {
+                  color: 'gray.700',
+                  backgroundColor: 'gray.100',
+                },
+              })}
+              aria-pressed={open}
+              type="button"
+            >
+              <Icon icon={ElipsisIcon} size={16} />
+            </button>
+          {/snippet}
+
+          <MenuItem
+            icon={BlendIcon}
+            onclick={() => {
+              //
+            }}
+          >
+            공유
+          </MenuItem>
+
+          <MenuItem
+            icon={CopyIcon}
+            onclick={async () => {
+              const resp = await duplicatePost({ postId: $query.post.id });
+              await goto(`/${resp.entity.slug}`);
+            }}
+          >
+            복제
+          </MenuItem>
+
+          <HorizontalDivider color="secondary" />
+
+          <MenuItem
+            icon={TrashIcon}
+            onclick={() => {
+              Dialog.confirm({
+                title: '포스트 삭제',
+                message: '정말 이 포스트를 삭제하시겠어요?',
+                action: 'danger',
+                actionLabel: '삭제',
+                actionHandler: async () => {
+                  await deletePost({ postId: $query.post.id });
+                },
+              });
+            }}
+            variant="danger"
+          >
+            삭제
+          </MenuItem>
+        </Menu>
 
         <button
           class={center({

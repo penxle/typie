@@ -2,10 +2,10 @@
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
-  import Trash2Icon from '~icons/lucide/trash-2';
+  import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
-  import { Icon, Menu, MenuItem } from '$lib/components';
+  import { HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
@@ -136,16 +136,19 @@
     {/snippet}
 
     <MenuItem
+      icon={CopyIcon}
       onclick={async () => {
         const resp = await duplicatePost({ postId: $post.id });
         await goto(`/${resp.entity.slug}`);
       }}
     >
-      <Icon icon={CopyIcon} size={12} />
-      <span>포스트 복제</span>
+      복제
     </MenuItem>
 
+    <HorizontalDivider color="secondary" />
+
     <MenuItem
+      icon={TrashIcon}
       onclick={async () => {
         Dialog.confirm({
           title: '포스트 삭제',
@@ -157,9 +160,9 @@
           },
         });
       }}
+      variant="danger"
     >
-      <Icon icon={Trash2Icon} size={12} />
-      <span>포스트 삭제</span>
+      삭제
     </MenuItem>
   </Menu>
 </a>

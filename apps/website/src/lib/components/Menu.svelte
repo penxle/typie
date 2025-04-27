@@ -1,5 +1,6 @@
 <script lang="ts">
   import { setContext, tick } from 'svelte';
+  import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
   import { createFloatingActions, portal } from '$lib/actions';
   import { css } from '$styled-system/css';
@@ -154,10 +155,9 @@
         flexDirection: 'column',
         gap: '2px',
         borderWidth: '1px',
-        borderColor: 'gray.200',
-        borderRadius: '4px',
-        paddingY: '4px',
-        minWidth: '120px',
+        borderRadius: '8px',
+        paddingY: '2px',
+        minWidth: '160px',
         backgroundColor: 'white',
         boxShadow: 'small',
         overflowY: 'auto',
@@ -168,6 +168,7 @@
     )}
     role="menu"
     use:floating
+    transition:scale={{ start: 0.95, duration: 150 }}
   >
     {#if action}
       <li>
