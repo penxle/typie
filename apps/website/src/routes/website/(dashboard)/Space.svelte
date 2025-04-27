@@ -1,7 +1,7 @@
 <script lang="ts">
   import FolderPlusIcon from '~icons/lucide/folder-plus';
-  import PinIcon from '~icons/lucide/pin';
-  import PinOffIcon from '~icons/lucide/pin-off';
+  import PanelLeftIcon from '~icons/lucide/panel-left';
+  import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
@@ -67,6 +67,7 @@
   style:--min-width="240px"
   style:--width="15vw"
   style:--max-width="300px"
+  style:--overflow="hidden"
   class={css(
     {
       transitionDuration: '150ms',
@@ -80,28 +81,31 @@
           minWidth: app.preference.current.spaceExpanded === 'open' ? 'var(--min-width)' : '0',
           maxWidth: app.preference.current.spaceExpanded === 'open' ? 'var(--max-width)' : '0',
           opacity: app.preference.current.spaceExpanded === 'open' ? '100' : '0',
-          transitionProperty: 'min-width, max-width, opacity, position, margin',
+          transitionProperty: 'min-width, max-width, opacity, position, margin-block',
         }
       : {
           position: 'fixed',
           left: app.state.spaceOpen ? '64px' : '59px',
           insetY: '0',
-          minWidth: 'var(--min-width)',
-          width: 'var(--fixed-width, 0)',
-          maxWidth: 'var(--max-width)',
+          minWidth: app.state.spaceOpen ? 'var(--min-width)' : '0',
+          width: app.state.spaceOpen ? 'var(--fixed-width, 0)' : '0',
+          maxWidth: app.state.spaceOpen ? 'var(--max-width)' : '0',
           opacity: app.state.spaceOpen ? '100' : '0',
           zIndex: '50',
-          transitionProperty: 'left, opacity, position, margin',
+          transitionProperty: 'left, opacity, position, margin-block',
+          overflow: 'var(--overflow)',
         },
   )}
   ontransitionendcapture={(e) => {
     if (!app.preference.current.spaceExpanded && !app.state.spaceOpen) {
       e.currentTarget.style.setProperty('--fixed-width', '0');
+      e.currentTarget.style.setProperty('--overflow', 'hidden');
     }
   }}
   ontransitionstartcapture={(e) => {
     if (!app.preference.current.spaceExpanded && app.state.spaceOpen) {
       e.currentTarget.style.setProperty('--fixed-width', 'var(--width)');
+      e.currentTarget.style.setProperty('--overflow', 'visible');
     }
   }}
 >
@@ -167,7 +171,7 @@
           type="button"
           use:tooltip={{ message: app.preference.current.spaceExpanded ? '패널 고정 해제' : '패널 고정' }}
         >
-          <Icon icon={app.preference.current.spaceExpanded ? PinOffIcon : PinIcon} size={14} />
+          <Icon icon={app.preference.current.spaceExpanded ? PanelLeftDashedIcon : PanelLeftIcon} size={14} />
         </button>
       </div>
 
