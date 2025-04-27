@@ -43,7 +43,7 @@
 
 <aside
   style:--min-width="200px"
-  style:--width="50vw"
+  style:--width="15vw"
   style:--max-width="240px"
   class={css({
     minWidth: app.preference.current.panelExpanded ? 'var(--min-width)' : '0',
@@ -51,7 +51,7 @@
     maxWidth: app.preference.current.panelExpanded ? 'var(--max-width)' : '0',
     opacity: app.preference.current.panelExpanded ? '100' : '0',
     transitionProperty: 'min-width, max-width, opacity',
-    transitionDuration: '0.2s',
+    transitionDuration: '200ms',
     transitionTimingFunction: 'ease',
     willChange: 'min-width, max-width, opacity',
     overflowX: 'hidden',

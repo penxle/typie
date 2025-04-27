@@ -1,6 +1,7 @@
 <script lang="ts">
   import CircleHelpIcon from '~icons/lucide/circle-help';
   import CogIcon from '~icons/lucide/cog';
+  import LibraryBigIcon from '~icons/lucide/library-big';
   import PlusIcon from '~icons/lucide/plus';
   import SearchIcon from '~icons/lucide/search';
   import { goto, pushState } from '$app/navigation';
@@ -42,8 +43,6 @@
     `),
   );
 
-  const app = getAppContext();
-
   const createPost = graphql(`
     mutation DashboardLayout_Sidebar_CreatePost_Mutation($input: CreatePostInput!) {
       createPost(input: $input) {
@@ -56,17 +55,18 @@
       }
     }
   `);
+
+  const app = getAppContext();
 </script>
 
 <aside
   class={flex({
     flexDirection: 'column',
-    flexShrink: '0',
     alignItems: 'center',
     gap: '24px',
+    flexShrink: '0',
     paddingY: '12px',
     width: '64px',
-    height: 'full',
   })}
 >
   <Favicon class={css({ flexShrink: '0', borderRadius: '8px', size: '32px' })} />
@@ -101,7 +101,18 @@
   </button>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <Space $site={$user.sites[0]} />
+    <SidebarButton
+      active={app.preference.current.spaceExpanded === false ? app.state.spaceOpen : app.preference.current.spaceExpanded === 'open'}
+      icon={LibraryBigIcon}
+      label="내 스페이스"
+      onclick={() => {
+        if (app.preference.current.spaceExpanded === false) {
+          app.state.spaceOpen = !app.state.spaceOpen;
+        } else {
+          app.preference.current.spaceExpanded = app.preference.current.spaceExpanded === 'open' ? 'closed' : 'open';
+        }
+      }}
+    />
     <SidebarButton icon={SearchIcon} label="검색" onclick={() => (app.state.commandPaletteOpen = true)} />
     <Notification {$user} />
   </div>
@@ -115,5 +126,7 @@
 
   <UserMenu {$user} />
 </aside>
+
+<Space $site={$user.sites[0]} />
 
 <PreferenceModal {$user} />
