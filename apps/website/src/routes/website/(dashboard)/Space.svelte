@@ -68,17 +68,19 @@
   style:--width="15vw"
   style:--max-width="300px"
   class={css(
+    {
+      transitionDuration: '150ms',
+      transitionTimingFunction: 'ease',
+    },
     app.preference.current.spaceExpanded
       ? {
           position: 'relative',
           marginY: '8px',
-          marginRight: app.preference.current.spaceExpanded === 'open' ? '8px' : '0',
+          marginRight: app.preference.current.spaceExpanded === 'open' ? '4px' : '0',
           minWidth: app.preference.current.spaceExpanded === 'open' ? 'var(--min-width)' : '0',
           maxWidth: app.preference.current.spaceExpanded === 'open' ? 'var(--max-width)' : '0',
           opacity: app.preference.current.spaceExpanded === 'open' ? '100' : '0',
-          transitionProperty: 'min-width, max-width, opacity, position, margin-block',
-          transitionDuration: '150ms',
-          transitionTimingFunction: 'ease',
+          transitionProperty: 'min-width, max-width, opacity, position, margin',
         }
       : {
           position: 'fixed',
@@ -89,9 +91,7 @@
           maxWidth: 'var(--max-width)',
           opacity: app.state.spaceOpen ? '100' : '0',
           zIndex: '50',
-          transitionProperty: 'left, opacity, position, margin-block',
-          transitionDuration: '150ms',
-          transitionTimingFunction: 'ease',
+          transitionProperty: 'left, opacity, position, margin',
         },
   )}
   ontransitionendcapture={(e) => {
@@ -106,29 +106,31 @@
   }}
 >
   <div
-    class={flex(
+    class={css(
+      {
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 'var(--min-width)',
+        width: 'var(--width)',
+        maxWidth: 'var(--max-width)',
+        height: 'full',
+        backgroundColor: 'white',
+        transitionProperty: 'border, border-radius, box-shadow',
+        transitionDuration: '150ms',
+        transitionTimingFunction: 'ease',
+        overflow: 'hidden',
+      },
       app.preference.current.spaceExpanded
         ? {
-            flexDirection: 'column',
             borderWidth: '[0.5px]',
             borderRadius: '4px',
-            minWidth: 'var(--min-width)',
-            width: 'var(--width)',
-            maxWidth: 'var(--max-width)',
-            height: 'full',
-            backgroundColor: 'white',
             boxShadow: '[0 3px 6px -2px {colors.gray.950/3}, 0 1px 1px {colors.gray.950/5}]',
-            overflow: 'hidden',
           }
         : {
-            flexDirection: 'column',
+            borderColor: 'gray.100',
             borderRightWidth: '1px',
-            borderRightColor: 'gray.100',
             borderRightRadius: '4px',
-            backgroundColor: 'white',
             boxShadow: 'small',
-            size: 'full',
-            overflow: 'hidden',
           },
     )}
   >
