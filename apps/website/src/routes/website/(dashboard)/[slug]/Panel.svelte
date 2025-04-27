@@ -48,6 +48,7 @@
   style:--width="15vw"
   style:--max-width="240px"
   class={css({
+    flexShrink: '0',
     minWidth: app.preference.current.panelExpanded ? 'var(--min-width)' : '0',
     width: 'var(--width)',
     maxWidth: app.preference.current.panelExpanded ? 'var(--max-width)' : '0',
@@ -62,7 +63,6 @@
   <div
     class={flex({
       flexDirection: 'column',
-      flexShrink: 0,
       gap: '24px',
       borderLeftWidth: '1px',
       borderLeftColor: 'gray.100',
