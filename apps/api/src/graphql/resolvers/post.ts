@@ -12,6 +12,7 @@ import {
   Entities,
   first,
   firstOrThrow,
+  firstOrThrowWith,
   PostCharacterCountChanges,
   PostContents,
   PostReactions,
@@ -22,7 +23,7 @@ import {
   validateDbId,
 } from '@/db';
 import { EntityState, EntityType, EntityVisibility, PostContentRating, PostSyncType, PostViewBodyUnavailableReason } from '@/enums';
-import { TypieError } from '@/errors';
+import { NotFoundError, TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
@@ -292,11 +293,13 @@ builder.queryFields((t) => ({
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .where(eq(Entities.slug, args.slug))
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
 
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
+      }).catch(() => {
+        throw new NotFoundError();
       });
 
       return post;
