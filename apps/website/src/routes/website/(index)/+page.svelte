@@ -29,8 +29,9 @@
       welcome {
         body
         update
-        name
       }
+
+      randomName
     }
   `);
 
@@ -137,7 +138,7 @@
     {#if browser}
       <div
         style:--highlight-progress={highlight ? '1' : '0'}
-        style:--highlight-name={`"${$query.welcome.name}"`}
+        style:--highlight-name={`"${$query.randomName}"`}
         class={css({ display: 'contents', '& a': { cursor: 'pointer' } })}
         onclick={(e) => {
           const anchor = (e.target as HTMLElement).closest('a');

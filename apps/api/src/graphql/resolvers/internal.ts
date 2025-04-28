@@ -18,6 +18,13 @@ builder.queryFields((t) => ({
     },
   }),
 
+  randomName: t.field({
+    type: 'String',
+    resolve: () => {
+      return generateRandomName(nanoid());
+    },
+  }),
+
   welcome: t.field({
     type: builder.simpleObject('Welcome', {
       fields: (t) => ({
