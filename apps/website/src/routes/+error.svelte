@@ -31,16 +31,24 @@
   >
     <Logo class={css({ height: '20px' })} />
 
-    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>앗! 문제가 발생했어요</h1>
+    <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>
+      {#if page.status === 404}
+        존재하지 않는 페이지에요
+      {:else}
+        앗! 문제가 발생했어요
+      {/if}
+    </h1>
     <div class={css({ fontSize: '14px', color: 'gray.500' })}>
-      {#if error?.code === 'unexpected_error'}
+      {#if page.status === 404}
+        입력한 주소를 다시 한 번 확인해주세요.
+      {:else if error?.code === 'unexpected_error'}
         잠시 후 다시 시도해주세요.
       {:else if error?.message}
         {error.message}
       {/if}
     </div>
 
-    <Button style={css.raw({ width: 'full', height: '40px' })} href="/" size="lg" type="link">홈페이지로 돌아가기</Button>
+    <Button style={css.raw({ width: 'full', height: '40px' })} href="/" size="lg" type="link">홈으로 돌아가기</Button>
 
     {#if error?.eventId}
       <p class={css({ fontFamily: 'mono', fontSize: '12px', color: 'gray.300' })}>코드: {error.eventId}</p>
