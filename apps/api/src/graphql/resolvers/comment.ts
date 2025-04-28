@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { Comments, db, Entities, firstOrThrow, PostOptions, Posts, TableCode, validateDbId } from '@/db';
+import { Comments, db, Entities, firstOrThrow, Posts, TableCode, validateDbId } from '@/db';
 import { CommentState, EntityState, NotificationCategory } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -32,8 +32,7 @@ builder.mutationFields((t) => ({
         .select({ id: Posts.id, userId: Entities.userId })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .innerJoin(PostOptions, eq(Posts.id, PostOptions.postId))
-        .where(and(eq(Posts.id, input.postId), eq(Entities.state, EntityState.ACTIVE), eq(PostOptions.allowComment, true)))
+        .where(and(eq(Posts.id, input.postId), eq(Entities.state, EntityState.ACTIVE), eq(Posts.allowComment, true)))
         .then(firstOrThrow);
 
       const comment = await db

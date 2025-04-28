@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -31,10 +32,6 @@
           depth
           order
           slug
-        }
-
-        postOption: option {
-          id
           visibility
         }
       }
@@ -101,7 +98,7 @@
   <div
     class={css(
       { flex: 'none', borderRadius: 'full', backgroundColor: 'gray.200', size: '4px' },
-      $post.postOption.visibility === 'UNLISTED' && { backgroundColor: 'brand.500' },
+      $post.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'brand.500' },
     )}
   ></div>
 

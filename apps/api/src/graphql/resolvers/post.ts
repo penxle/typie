@@ -14,7 +14,6 @@ import {
   firstOrThrow,
   PostCharacterCountChanges,
   PostContents,
-  PostOptions,
   PostReactions,
   Posts,
   PostSnapshots,
@@ -22,7 +21,7 @@ import {
   UserPersonalIdentities,
   validateDbId,
 } from '@/db';
-import { EntityState, EntityType, PostContentRating, PostSyncType, PostViewBodyUnavailableReason, PostVisibility } from '@/enums';
+import { EntityState, EntityType, EntityVisibility, PostContentRating, PostSyncType, PostViewBodyUnavailableReason } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
@@ -30,21 +29,7 @@ import { pubsub } from '@/pubsub';
 import { generateEntityOrder, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import {
-  CharacterCountChange,
-  Comment,
-  Entity,
-  EntityView,
-  Image,
-  IPost,
-  IPostOption,
-  isTypeOf,
-  Post,
-  PostOption,
-  PostOptionView,
-  PostReaction,
-  PostView,
-} from '../objects';
+import { CharacterCountChange, Comment, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostView } from '../objects';
 
 /**
  * * Types
@@ -57,6 +42,11 @@ IPost.implement({
     subtitle: t.exposeString('subtitle', { nullable: true }),
     maxWidth: t.exposeInt('maxWidth'),
     coverImage: t.expose('coverImageId', { type: Image, nullable: true }),
+
+    contentRating: t.expose('contentRating', { type: PostContentRating }),
+    allowComment: t.exposeBoolean('allowComment'),
+    allowReaction: t.exposeBoolean('allowReaction'),
+    protectContent: t.exposeBoolean('protectContent'),
 
     excerpt: t.string({
       resolve: async (self, _, ctx) => {
@@ -89,6 +79,8 @@ Post.implement({
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
 
+    password: t.exposeString('password', { nullable: true }),
+
     update: t.field({
       type: 'Binary',
       resolve: async (self, _, ctx) => {
@@ -110,21 +102,6 @@ Post.implement({
     }),
 
     entity: t.expose('entityId', { type: Entity }),
-
-    option: t.field({
-      type: PostOption,
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'Post.option',
-          load: async (ids) => {
-            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
-          },
-          key: ({ postId }) => postId,
-        });
-
-        return await loader.load(self.id);
-      },
-    }),
 
     characterCountChange: t.withAuth({ session: true }).field({
       type: CharacterCountChange,
@@ -161,6 +138,8 @@ PostView.implement({
   isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
+    hasPassword: t.boolean({ resolve: (self) => !!self.password }),
+
     body: t.field({
       type: t.builder.unionType('PostViewBody', {
         types: [
@@ -173,17 +152,7 @@ PostView.implement({
         ],
       }),
       resolve: async (self, _, ctx) => {
-        const optionLoader = ctx.loader({
-          name: 'PostView.option',
-          load: async (ids) => {
-            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
-          },
-          key: ({ postId }) => postId,
-        });
-
-        const option = await optionLoader.load(self.id);
-
-        if (option.contentRating !== PostContentRating.ALL) {
+        if (self.contentRating !== PostContentRating.ALL) {
           if (!ctx.session) {
             return {
               __typename: 'PostViewBodyUnavailable',
@@ -214,7 +183,7 @@ PostView.implement({
             };
           }
 
-          const minAge = match(option.contentRating)
+          const minAge = match(self.contentRating)
             .with(PostContentRating.R15, () => 15)
             .with(PostContentRating.R19, () => 19)
             .exhaustive();
@@ -227,7 +196,7 @@ PostView.implement({
           }
         }
 
-        if (option.password !== null) {
+        if (self.password !== null) {
           const passwordUnlock = await redis.get(`postview:unlock:${self.id}:${ctx.deviceId}`);
 
           if (passwordUnlock !== 'true') {
@@ -260,24 +229,9 @@ PostView.implement({
 
     entity: t.expose('entityId', { type: EntityView }),
 
-    option: t.field({
-      type: PostOptionView,
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'PostView.option',
-          load: async (ids) => {
-            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
-          },
-          key: ({ postId }) => postId,
-        });
-
-        return await loader.load(self.id);
-      },
-    }),
-
     reactions: t.field({
       type: [PostReaction],
-      resolve: async (post, _, ctx) => {
+      resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
           name: 'PostView.reactions',
           many: true,
@@ -287,23 +241,14 @@ PostView.implement({
           key: ({ postId }) => postId,
         });
 
-        return await loader.load(post.id);
+        return await loader.load(self.id);
       },
     }),
 
     comments: t.field({
       type: [Comment],
-      resolve: async (post, _, ctx) => {
-        const optionLoader = ctx.loader({
-          name: 'PostView.option',
-          load: async (ids) => {
-            return await db.select().from(PostOptions).where(inArray(PostOptions.postId, ids));
-          },
-          key: ({ postId }) => postId,
-        });
-
-        const option = await optionLoader.load(post.id);
-        if (!option.allowComment) {
+      resolve: async (self, _, ctx) => {
+        if (!self.allowComment) {
           return [];
         }
 
@@ -316,36 +261,9 @@ PostView.implement({
           key: ({ postId }) => postId,
         });
 
-        return await commentsLoader.load(post.id);
+        return await commentsLoader.load(self.id);
       },
     }),
-  }),
-});
-
-IPostOption.implement({
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    visibility: t.expose('visibility', { type: PostVisibility }),
-    contentRating: t.expose('contentRating', { type: PostContentRating }),
-    allowComment: t.exposeBoolean('allowComment'),
-    allowReaction: t.exposeBoolean('allowReaction'),
-    protectContent: t.exposeBoolean('protectContent'),
-  }),
-});
-
-PostOption.implement({
-  isTypeOf: isTypeOf(TableCode.POST_OPTIONS),
-  interfaces: [IPostOption],
-  fields: (t) => ({
-    password: t.exposeString('password', { nullable: true }),
-  }),
-});
-
-PostOptionView.implement({
-  isTypeOf: isTypeOf(TableCode.POST_OPTIONS),
-  interfaces: [IPostOption],
-  fields: (t) => ({
-    hasPassword: t.boolean({ resolve: (self) => !!self.password }),
   }),
 });
 
@@ -483,10 +401,6 @@ builder.mutationFields((t) => ({
           snapshot: Y.encodeSnapshotV2(snapshot),
         });
 
-        await tx.insert(PostOptions).values({
-          postId: post.id,
-        });
-
         return post;
       });
 
@@ -539,20 +453,17 @@ builder.mutationFields((t) => ({
           subtitle: Posts.subtitle,
           maxWidth: Posts.maxWidth,
           coverImageId: Posts.coverImageId,
+          allowComment: Posts.allowComment,
+          allowReaction: Posts.allowReaction,
+          protectContent: Posts.protectContent,
+          password: Posts.password,
           content: {
             body: PostContents.body,
             text: PostContents.text,
           },
-          option: {
-            allowComment: PostOptions.allowComment,
-            allowReaction: PostOptions.allowReaction,
-            protectContent: PostOptions.protectContent,
-            password: PostOptions.password,
-          },
         })
         .from(Posts)
         .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
-        .innerJoin(PostOptions, eq(Posts.id, PostOptions.postId))
         .where(eq(Posts.id, input.postId))
         .then(firstOrThrow);
 
@@ -591,6 +502,10 @@ builder.mutationFields((t) => ({
             subtitle: post.subtitle,
             maxWidth: post.maxWidth,
             coverImageId: post.coverImageId,
+            allowComment: post.allowComment,
+            allowReaction: post.allowReaction,
+            protectContent: post.protectContent,
+            password: post.password,
           })
           .returning()
           .then(firstOrThrow);
@@ -607,12 +522,6 @@ builder.mutationFields((t) => ({
           userId: ctx.session.userId,
           postId: newPost.id,
           snapshot: Y.encodeSnapshotV2(snapshot),
-        });
-
-        await tx.insert(PostOptions).values({
-          postId: newPost.id,
-          visibility: PostVisibility.PRIVATE,
-          ...post.option,
         });
 
         return newPost;
@@ -654,10 +563,10 @@ builder.mutationFields((t) => ({
   }),
 
   updatePostOption: t.withAuth({ session: true }).fieldWithInput({
-    type: PostOption,
+    type: Post,
     input: {
       postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
-      visibility: t.input.field({ type: PostVisibility }),
+      visibility: t.input.field({ type: EntityVisibility }),
       password: t.input.string({ required: false }),
       contentRating: t.input.field({ type: PostContentRating }),
       allowComment: t.input.boolean(),
@@ -666,7 +575,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const post = await db
-        .select({ siteId: Entities.siteId })
+        .select({ siteId: Entities.siteId, entityId: Entities.id })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .where(eq(Posts.id, input.postId))
@@ -677,19 +586,27 @@ builder.mutationFields((t) => ({
         siteId: post.siteId,
       });
 
-      return await db
-        .update(PostOptions)
-        .set({
-          visibility: input.visibility,
-          password: input.password,
-          contentRating: input.contentRating,
-          allowComment: input.allowComment,
-          allowReaction: input.allowReaction,
-          protectContent: input.protectContent,
-        })
-        .where(eq(PostOptions.postId, input.postId))
-        .returning()
-        .then(firstOrThrow);
+      return await db.transaction(async (tx) => {
+        await tx
+          .update(Entities)
+          .set({
+            visibility: input.visibility,
+          })
+          .where(eq(Entities.id, post.entityId));
+
+        return await tx
+          .update(Posts)
+          .set({
+            password: input.password,
+            contentRating: input.contentRating,
+            allowComment: input.allowComment,
+            allowReaction: input.allowReaction,
+            protectContent: input.protectContent,
+          })
+          .where(eq(Posts.id, input.postId))
+          .returning()
+          .then(firstOrThrow);
+      });
     },
   }),
 
@@ -700,13 +617,9 @@ builder.mutationFields((t) => ({
       password: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
-      const postOption = await db
-        .select({ password: PostOptions.password })
-        .from(PostOptions)
-        .where(eq(PostOptions.postId, input.postId))
-        .then(firstOrThrow);
+      const post = await db.select({ password: Posts.password }).from(Posts).where(eq(Posts.id, input.postId)).then(firstOrThrow);
 
-      if (postOption.password !== input.password) {
+      if (post.password !== input.password) {
         throw new TypieError({ code: 'invalid_password' });
       }
 
@@ -726,11 +639,10 @@ builder.mutationFields((t) => ({
       const post = await db
         .select({
           state: Entities.state,
-          allowReaction: PostOptions.allowReaction,
+          allowReaction: Posts.allowReaction,
         })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .innerJoin(PostOptions, eq(Posts.id, PostOptions.postId))
         .where(eq(Posts.id, input.postId))
         .then(first);
 

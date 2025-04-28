@@ -57,13 +57,9 @@
             subtitle
             excerpt
             maxWidth
-
-            option {
-              id
-              protectContent
-              allowReaction
-              allowComment
-            }
+            protectContent
+            allowReaction
+            allowComment
 
             coverImage {
               id
@@ -232,14 +228,14 @@
 
           <div class={flex({ align: 'center', justify: 'space-between', marginTop: '20px', paddingBottom: '10px' })}>
             <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'gray.400' })}>
-              {#if $entityView.node.option.allowReaction && $entityView.node.reactions.length > 0}
+              {#if $entityView.node.allowReaction && $entityView.node.reactions.length > 0}
                 <div class={flex({ align: 'center', gap: '3px' })}>
                   <Icon icon={SmileIcon} />
                   <span class={css({ marginTop: '1px' })}>{comma($entityView.node.reactions.length)}</span>
                 </div>
               {/if}
 
-              {#if $entityView.node.option.allowComment && $entityView.node.comments.length > 0}
+              {#if $entityView.node.allowComment && $entityView.node.comments.length > 0}
                 <div class={flex({ align: 'center', gap: '3px' })}>
                   <Icon icon={MessageCircleIcon} />
                   <span class={css({ marginTop: '1px' })}>{comma($entityView.node.comments.length)}</span>
@@ -260,7 +256,7 @@
         </div>
 
         {#if $entityView.node.body.__typename === 'PostViewBodyAvailable'}
-          {#if $entityView.node.option.protectContent}
+          {#if $entityView.node.protectContent}
             <ContentProtect>
               <TiptapRenderer style={css.raw({ width: 'full' })} content={$entityView.node.body.content} />
             </ContentProtect>

@@ -1,12 +1,12 @@
 import { faker } from '@faker-js/faker';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { db, Entities, first, firstOrThrow, FolderOptions, Folders, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType, FolderVisibility } from '@/enums';
+import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
+import { EntityState, EntityType, EntityVisibility } from '@/enums';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Entity, EntityView, Folder, FolderOption, FolderOptionView, FolderView, IFolder, IFolderOption, isTypeOf } from '../objects';
+import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
 
 /**
  * * Types
@@ -26,21 +26,6 @@ Folder.implement({
     view: t.expose('id', { type: FolderView }),
 
     entity: t.expose('entityId', { type: Entity }),
-
-    option: t.field({
-      type: FolderOption,
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'Folder.option',
-          load: async (ids) => {
-            return await db.select().from(FolderOptions).where(inArray(FolderOptions.folderId, ids));
-          },
-          key: ({ folderId }) => folderId,
-        });
-
-        return await loader.load(self.id);
-      },
-    }),
   }),
 });
 
@@ -49,39 +34,7 @@ FolderView.implement({
   interfaces: [IFolder],
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
-
-    option: t.field({
-      type: FolderOptionView,
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'FolderView.option',
-          load: async (ids) => {
-            return await db.select().from(FolderOptions).where(inArray(FolderOptions.folderId, ids));
-          },
-          key: ({ folderId }) => folderId,
-        });
-
-        return await loader.load(self.id);
-      },
-    }),
   }),
-});
-
-IFolderOption.implement({
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    visibility: t.expose('visibility', { type: FolderVisibility }),
-  }),
-});
-
-FolderOption.implement({
-  isTypeOf: isTypeOf(TableCode.FOLDER_OPTIONS),
-  interfaces: [IFolderOption],
-});
-
-FolderOptionView.implement({
-  isTypeOf: isTypeOf(TableCode.FOLDER_OPTIONS),
-  interfaces: [IFolderOption],
 });
 
 /**
@@ -157,10 +110,6 @@ builder.mutationFields((t) => ({
           })
           .returning()
           .then(firstOrThrow);
-
-        await tx.insert(FolderOptions).values({
-          folderId: folder.id,
-        });
 
         return folder;
       });
@@ -249,14 +198,14 @@ builder.mutationFields((t) => ({
   }),
 
   updateFolderOption: t.withAuth({ session: true }).fieldWithInput({
-    type: FolderOption,
+    type: Folder,
     input: {
       folderId: t.input.id({ validate: validateDbId(TableCode.FOLDERS) }),
-      visibility: t.input.field({ type: FolderVisibility }),
+      visibility: t.input.field({ type: EntityVisibility }),
     },
     resolve: async (_, { input }, ctx) => {
-      const folder = await db
-        .select({ siteId: Entities.siteId })
+      const { folder, siteId } = await db
+        .select({ folder: Folders, siteId: Entities.siteId })
         .from(Folders)
         .innerJoin(Entities, eq(Folders.entityId, Entities.id))
         .where(and(eq(Folders.id, input.folderId)))
@@ -264,15 +213,17 @@ builder.mutationFields((t) => ({
 
       await assertSitePermission({
         userId: ctx.session.userId,
-        siteId: folder.siteId,
+        siteId,
       });
 
-      return await db
-        .update(FolderOptions)
+      await db
+        .update(Entities)
         .set({ visibility: input.visibility })
-        .where(eq(FolderOptions.folderId, input.folderId))
+        .where(eq(Entities.id, folder.entityId))
         .returning()
         .then(firstOrThrow);
+
+      return folder;
     },
   }),
 }));

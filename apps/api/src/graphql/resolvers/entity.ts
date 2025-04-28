@@ -1,8 +1,8 @@
-import { and, asc, eq, getTableColumns, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, FolderOptions, Folders, PostOptions, Posts, Sites, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType, FolderVisibility, PostVisibility, SiteState } from '@/enums';
+import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
+import { EntityState, EntityType, EntityVisibility, SiteState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -22,6 +22,7 @@ IEntity.implement({
     permalink: t.exposeString('permalink'),
     order: t.exposeString('order'),
     depth: t.exposeInt('depth'),
+    visibility: t.expose('visibility', { type: EntityVisibility }),
 
     url: t.string({ resolve: (self) => `${env.USERSITE_URL.replace('*.', '')}/${self.permalink}` }),
   }),
@@ -147,22 +148,11 @@ EntityView.implement({
             return await db
               .select(getTableColumns(Entities))
               .from(Entities)
-              .leftJoin(Posts, eq(Entities.id, Posts.entityId))
-              .leftJoin(PostOptions, eq(Posts.id, PostOptions.postId))
-              .leftJoin(Folders, eq(Entities.id, Folders.entityId))
-              .leftJoin(FolderOptions, eq(Folders.id, FolderOptions.folderId))
               .where(
                 and(
                   inArray(Entities.parentId, ids),
                   eq(Entities.state, EntityState.ACTIVE),
-                  or(
-                    and(
-                      eq(Entities.type, EntityType.FOLDER),
-                      isNotNull(Folders.id),
-                      eq(FolderOptions.visibility, FolderVisibility.UNLISTED),
-                    ),
-                    and(eq(Entities.type, EntityType.POST), isNotNull(Posts.id), eq(PostOptions.visibility, PostVisibility.UNLISTED)),
-                  ),
+                  eq(Entities.visibility, EntityVisibility.UNLISTED),
                 ),
               )
               .orderBy(asc(Entities.order));
@@ -186,16 +176,9 @@ EntityView.implement({
             UNION ALL
             SELECT ${Entities.id}, ${Entities.parentId}, sq.depth + 1
             FROM ${Entities}
-            LEFT JOIN ${Posts} ON ${eq(Entities.id, Posts.entityId)}
-            LEFT JOIN ${PostOptions} ON ${eq(Posts.id, PostOptions.postId)}
-            LEFT JOIN ${Folders} ON ${eq(Entities.id, Folders.entityId)}
-            LEFT JOIN ${FolderOptions} ON ${eq(Folders.id, FolderOptions.folderId)}
             JOIN sq ON ${Entities.id} = sq.parent_id
             WHERE sq.parent_id IS NOT NULL AND
-            ${or(
-              and(eq(Entities.type, EntityType.FOLDER), isNotNull(Folders.id), eq(FolderOptions.visibility, FolderVisibility.UNLISTED)),
-              and(eq(Entities.type, EntityType.POST), isNotNull(Posts.id), eq(PostOptions.visibility, PostVisibility.UNLISTED)),
-            )}
+            ${eq(Entities.visibility, EntityVisibility.UNLISTED)}
           ) 
           SELECT id
           FROM sq
@@ -252,19 +235,12 @@ builder.queryFields((t) => ({
       return await db
         .select(getTableColumns(Entities))
         .from(Entities)
-        .leftJoin(Posts, eq(Entities.id, Posts.entityId))
-        .leftJoin(PostOptions, eq(Posts.id, PostOptions.postId))
-        .leftJoin(Folders, eq(Entities.id, Folders.entityId))
-        .leftJoin(FolderOptions, eq(Folders.id, FolderOptions.folderId))
         .where(
           and(
             eq(Entities.siteId, site.id),
             eq(Entities.slug, args.slug),
             eq(Entities.state, EntityState.ACTIVE),
-            or(
-              and(eq(Entities.type, EntityType.FOLDER), isNotNull(Folders.id), eq(FolderOptions.visibility, FolderVisibility.UNLISTED)),
-              and(eq(Entities.type, EntityType.POST), isNotNull(Posts.id), eq(PostOptions.visibility, PostVisibility.UNLISTED)),
-            ),
+            eq(Entities.visibility, EntityVisibility.UNLISTED),
           ),
         )
         .then(firstOrThrow);
@@ -278,18 +254,11 @@ builder.queryFields((t) => ({
       return await db
         .select(getTableColumns(Entities))
         .from(Entities)
-        .leftJoin(Posts, eq(Entities.id, Posts.entityId))
-        .leftJoin(PostOptions, eq(Posts.id, PostOptions.postId))
-        .leftJoin(Folders, eq(Entities.id, Folders.entityId))
-        .leftJoin(FolderOptions, eq(Folders.id, FolderOptions.folderId))
         .where(
           and(
             eq(Entities.permalink, args.permalink),
             eq(Entities.state, EntityState.ACTIVE),
-            or(
-              and(eq(Entities.type, EntityType.FOLDER), isNotNull(Folders.id), eq(FolderOptions.visibility, FolderVisibility.UNLISTED)),
-              and(eq(Entities.type, EntityType.POST), isNotNull(Posts.id), eq(PostOptions.visibility, PostVisibility.UNLISTED)),
-            ),
+            eq(Entities.visibility, EntityVisibility.UNLISTED),
           ),
         )
         .then(firstOrThrow);

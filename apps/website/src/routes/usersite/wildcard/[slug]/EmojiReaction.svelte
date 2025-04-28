@@ -19,11 +19,7 @@
     graphql(`
       fragment UsersiteWildcardSlugPage_EmojiReaction_postView on PostView {
         id
-
-        option {
-          id
-          allowReaction
-        }
+        allowReaction
 
         reactions {
           id
@@ -61,7 +57,7 @@
   });
 </script>
 
-{#if $postView.option.allowReaction}
+{#if $postView.allowReaction}
   <button onclick={() => (open = true)} type="button" use:anchor>
     <Icon icon={HeartPlusIcon} />
   </button>

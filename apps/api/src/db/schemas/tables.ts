@@ -52,20 +52,6 @@ export const Folders = pgTable('folders', {
     .default(sql`now()`),
 });
 
-export const FolderOptions = pgTable('folder_options', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.FOLDER_OPTIONS)),
-  folderId: text('folder_id')
-    .notNull()
-    .unique()
-    .references(() => Folders.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  visibility: E._FolderVisibility('visibility').notNull().default('PRIVATE'),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
-
 export const Embeds = pgTable('embeds', {
   id: text('id')
     .primaryKey()
@@ -101,6 +87,7 @@ export const Entities = pgTable(
     order: text('order').notNull(),
     depth: integer('depth').notNull().default(0),
     state: E._EntityState('state').notNull().default('ACTIVE'),
+    visibility: E._EntityVisibility('visibility').notNull().default('PRIVATE'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
@@ -227,6 +214,11 @@ export const Posts = pgTable('posts', {
   subtitle: text('subtitle'),
   maxWidth: integer('max_width').notNull().default(800),
   coverImageId: text('cover_image_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  password: text('password'),
+  contentRating: E._PostContentRating('content_rating').notNull().default('ALL'),
+  allowComment: boolean('allow_comment').notNull().default(true),
+  allowReaction: boolean('allow_reaction').notNull().default(true),
+  protectContent: boolean('protect_content').notNull().default(true),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -297,25 +289,6 @@ export const PostSnapshots = pgTable(
   },
   (t) => [index().on(t.postId, t.createdAt, t.order)],
 );
-
-export const PostOptions = pgTable('post_options', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.POST_OPTIONS)),
-  postId: text('post_id')
-    .notNull()
-    .unique()
-    .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  visibility: E._PostVisibility('visibility').notNull().default('PRIVATE'),
-  password: text('password'),
-  contentRating: E._PostContentRating('content_rating').notNull().default('ALL'),
-  allowComment: boolean('allow_comment').notNull().default(true),
-  allowReaction: boolean('allow_reaction').notNull().default(true),
-  protectContent: boolean('protect_content').notNull().default(true),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
 
 export const PostReactions = pgTable(
   'post_reactions',

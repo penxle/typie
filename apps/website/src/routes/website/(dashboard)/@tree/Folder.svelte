@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -36,15 +37,11 @@
           id
           order
           depth
+          visibility
 
           site {
             id
           }
-        }
-
-        folderOption: option {
-          id
-          visibility
         }
       }
     `),
@@ -151,7 +148,7 @@
     <div
       class={css(
         { flex: 'none', borderRadius: 'full', backgroundColor: 'gray.200', size: '4px' },
-        $folder.folderOption.visibility === 'UNLISTED' && { backgroundColor: 'brand.500' },
+        $folder.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'brand.500' },
       )}
     ></div>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { z } from 'zod';
-  import { PostContentRating, PostVisibility } from '@/enums';
+  import { EntityVisibility, PostContentRating } from '@/enums';
   import BanIcon from '~icons/lucide/ban';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
@@ -35,20 +35,16 @@
       fragment DashboardLayout_Share_Post_post on Post {
         id
         title
+        password
+        contentRating
+        allowComment
+        allowReaction
+        protectContent
 
         entity {
           id
           url
-        }
-
-        po: option {
-          id
           visibility
-          password
-          contentRating
-          allowComment
-          allowReaction
-          protectContent
         }
       }
     `),
@@ -58,12 +54,16 @@
     mutation DashboardLayout_Share_Post_UpdatePostOption_Mutation($input: UpdatePostOptionInput!) {
       updatePostOption(input: $input) {
         id
-        visibility
         password
         contentRating
         allowComment
         allowReaction
         protectContent
+
+        entity {
+          id
+          visibility
+        }
       }
     }
   `);
@@ -75,7 +75,7 @@
 
   const form = createForm({
     schema: z.object({
-      visibility: z.nativeEnum(PostVisibility),
+      visibility: z.nativeEnum(EntityVisibility),
       hasPassword: z.boolean(),
       password: z.string().nullish(),
       contentRating: z.nativeEnum(PostContentRating),
@@ -96,13 +96,13 @@
       });
     },
     defaultValues: {
-      visibility: $post.po.visibility,
-      hasPassword: $post.po.password !== null,
-      password: $post.po.password,
-      contentRating: $post.po.contentRating,
-      allowComment: $post.po.allowComment,
-      allowReaction: $post.po.allowReaction,
-      protectContent: $post.po.protectContent,
+      visibility: $post.entity.visibility,
+      hasPassword: $post.password !== null,
+      password: $post.password,
+      contentRating: $post.contentRating,
+      allowComment: $post.allowComment,
+      allowReaction: $post.allowReaction,
+      protectContent: $post.protectContent,
     },
   });
 
@@ -130,7 +130,7 @@
     type="button"
     use:tooltip={{
       message:
-        form.fields.visibility === PostVisibility.PRIVATE
+        form.fields.visibility === EntityVisibility.PRIVATE
           ? '지금은 링크가 있어도 나만 볼 수 있어요'
           : '링크가 있는 누구나 포스트를 볼 수 있어요',
       placement: 'top',
@@ -165,13 +165,13 @@
             icon: LinkIcon,
             label: '링크가 있는 사람',
             description: '링크가 있는 누구나 볼 수 있어요.',
-            value: PostVisibility.UNLISTED,
+            value: EntityVisibility.UNLISTED,
           },
           {
             icon: LockIcon,
             label: '비공개',
             description: '나만 볼 수 있어요.',
-            value: PostVisibility.PRIVATE,
+            value: EntityVisibility.PRIVATE,
           },
         ]}
         bind:value={form.fields.visibility}
