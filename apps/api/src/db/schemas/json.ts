@@ -1,11 +1,11 @@
 import { NotificationCategory } from '@/enums';
 
 export type PlanRules = {
-  writePost: boolean;
+  postCount: number;
 };
 
 export const defaultPlanRules: PlanRules = {
-  writePost: false,
+  postCount: 1,
 };
 
 export type NotificationAnnouncementData = {

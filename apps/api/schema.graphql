@@ -356,11 +356,16 @@ type Plan {
   fee: Int!
   id: ID!
   name: String!
+  rules: PlanRule!
 }
 
 enum PlanAvailability {
   PRIVATE
   PUBLIC
+}
+
+type PlanRule {
+  postCount: Int!
 }
 
 type Post implements IPost {
