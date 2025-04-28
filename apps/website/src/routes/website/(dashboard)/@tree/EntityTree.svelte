@@ -4,7 +4,7 @@
   import { fragment, graphql } from '$graphql';
   import { portal } from '$lib/actions';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
   import Entity from './Entity.svelte';
   import { getNextElement, getPreviousElement, maxDepth } from './utils';
   import type { PointerEventHandler } from 'svelte/elements';
@@ -252,6 +252,7 @@
     flexDirection: 'column',
     paddingTop: '8px',
     paddingBottom: '48px',
+    height: 'full',
     userSelect: 'none',
     touchAction: 'none',
   })}
@@ -262,6 +263,10 @@
 >
   {#each $site.entities as entity (entity.id)}
     <Entity $entity={entity} />
+  {:else}
+    <div class={center({ flexGrow: '1' })}>
+      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.400' })}>아직 포스트가 없어요</p>
+    </div>
   {/each}
 </div>
 
