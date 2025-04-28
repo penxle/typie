@@ -13,6 +13,7 @@ import {
   Users,
   validateDbId,
 } from '@/db';
+import { defaultPlanRules } from '@/db/schemas/json';
 import {
   PaymentInvoiceState,
   PaymentMethodState,
@@ -27,6 +28,7 @@ import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
 import { cardSchema } from '@/validation';
 import { builder } from '../builder';
 import { isTypeOf, PaymentMethod, Plan, UserPlan } from '../objects';
+import type { PlanRules } from '@/db/schemas/json';
 
 /**
  * * Types
@@ -41,12 +43,21 @@ PaymentMethod.implement({
   }),
 });
 
+const PlanRule = builder.objectRef<Partial<PlanRules>>('PlanRule');
+PlanRule.implement({
+  fields: (t) => ({
+    postCount: t.int({ resolve: (self) => self.postCount ?? defaultPlanRules.postCount }),
+  }),
+});
+
 Plan.implement({
   isTypeOf: isTypeOf(TableCode.PLANS),
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
     fee: t.exposeInt('fee'),
+
+    rules: t.expose('rules', { type: PlanRule }),
   }),
 });
 
