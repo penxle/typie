@@ -58,16 +58,14 @@
 
 <div
   class={flex({
-    align: 'center',
-    justify: 'space-between',
-    position: 'sticky',
-    top: '0',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexShrink: '0',
     borderBottomWidth: '1px',
     borderBottomColor: 'gray.200',
     paddingX: '20px',
     height: '52px',
     backgroundColor: 'white',
-    zIndex: '50',
   })}
 >
   <Logo class={css({ flexShrink: '0', height: '20px' })} />
