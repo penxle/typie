@@ -1,6 +1,6 @@
 <script lang="ts">
   import dayjs from 'dayjs';
-  import { PostVisibility } from '@/enums';
+  import { EntityVisibility } from '@/enums';
   import { fragment, graphql } from '$graphql';
   import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
@@ -27,10 +27,6 @@
         updatedAt
 
         entity {
-          id
-        }
-
-        option {
           id
           visibility
         }
@@ -85,7 +81,7 @@
         </button>
       </div>
 
-      {#if $post.option.visibility === PostVisibility.UNLISTED}
+      {#if $post.entity.visibility === EntityVisibility.UNLISTED}
         <div
           class={css({
             borderRadius: '4px',
@@ -101,7 +97,7 @@
         >
           링크 공개
         </div>
-      {:else if $post.option.visibility === PostVisibility.PRIVATE}
+      {:else if $post.entity.visibility === EntityVisibility.PRIVATE}
         <div
           class={css({
             borderRadius: '4px',

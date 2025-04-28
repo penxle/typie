@@ -101,6 +101,7 @@ type Entity implements IEntity {
   slug: String!
   url: String!
   view: EntityView!
+  visibility: EntityVisibility!
 }
 
 union EntityNode = Folder | Post
@@ -126,9 +127,15 @@ type EntityView implements IEntity {
   site: SiteView!
   slug: String!
   url: String!
+  visibility: EntityVisibility!
 }
 
 union EntityViewNode = FolderView | PostView
+
+enum EntityVisibility {
+  PRIVATE
+  UNLISTED
+}
 
 type File implements Blob {
   id: ID!
@@ -147,30 +154,13 @@ type Folder implements IFolder {
   entity: Entity!
   id: ID!
   name: String!
-  option: FolderOption!
   view: FolderView!
-}
-
-type FolderOption implements IFolderOption {
-  id: ID!
-  visibility: FolderVisibility!
-}
-
-type FolderOptionView implements IFolderOption {
-  id: ID!
-  visibility: FolderVisibility!
 }
 
 type FolderView implements IFolder {
   entity: EntityView!
   id: ID!
   name: String!
-  option: FolderOptionView!
-}
-
-enum FolderVisibility {
-  PRIVATE
-  UNLISTED
 }
 
 input GenerateSingleSignOnAuthorizationUrlInput {
@@ -186,6 +176,7 @@ interface IEntity {
   permalink: String!
   slug: String!
   url: String!
+  visibility: EntityVisibility!
 }
 
 interface IFolder {
@@ -193,27 +184,17 @@ interface IFolder {
   name: String!
 }
 
-interface IFolderOption {
-  id: ID!
-  visibility: FolderVisibility!
-}
-
 interface IPost {
+  allowComment: Boolean!
+  allowReaction: Boolean!
+  contentRating: PostContentRating!
   coverImage: Image
   excerpt: String!
   id: ID!
   maxWidth: Int!
+  protectContent: Boolean!
   subtitle: String
   title: String!
-}
-
-interface IPostOption {
-  allowComment: Boolean!
-  allowReaction: Boolean!
-  contentRating: PostContentRating!
-  id: ID!
-  protectContent: Boolean!
-  visibility: PostVisibility!
 }
 
 interface ISite {
@@ -296,9 +277,9 @@ type Mutation {
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateEmail(input: UpdateEmailInput!): Boolean!
-  updateFolderOption(input: UpdateFolderOptionInput!): FolderOption!
+  updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
-  updatePostOption(input: UpdatePostOptionInput!): PostOption!
+  updatePostOption(input: UpdatePostOptionInput!): Post!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): UserPersonalIdentity!
@@ -376,14 +357,18 @@ enum PlanAvailability {
 }
 
 type Post implements IPost {
+  allowComment: Boolean!
+  allowReaction: Boolean!
   characterCountChange: CharacterCountChange!
+  contentRating: PostContentRating!
   coverImage: Image
   createdAt: DateTime!
   entity: Entity!
   excerpt: String!
   id: ID!
   maxWidth: Int!
-  option: PostOption!
+  password: String
+  protectContent: Boolean!
   subtitle: String
   title: String!
   update: Binary!
@@ -395,26 +380,6 @@ enum PostContentRating {
   ALL
   R15
   R19
-}
-
-type PostOption implements IPostOption {
-  allowComment: Boolean!
-  allowReaction: Boolean!
-  contentRating: PostContentRating!
-  id: ID!
-  password: String
-  protectContent: Boolean!
-  visibility: PostVisibility!
-}
-
-type PostOptionView implements IPostOption {
-  allowComment: Boolean!
-  allowReaction: Boolean!
-  contentRating: PostContentRating!
-  hasPassword: Boolean!
-  id: ID!
-  protectContent: Boolean!
-  visibility: PostVisibility!
 }
 
 type PostReaction {
@@ -438,14 +403,18 @@ enum PostSyncType {
 }
 
 type PostView implements IPost {
+  allowComment: Boolean!
+  allowReaction: Boolean!
   body: PostViewBody!
   comments: [Comment!]!
+  contentRating: PostContentRating!
   coverImage: Image
   entity: EntityView!
   excerpt: String!
+  hasPassword: Boolean!
   id: ID!
   maxWidth: Int!
-  option: PostOptionView!
+  protectContent: Boolean!
   reactions: [PostReaction!]!
   subtitle: String
   title: String!
@@ -465,11 +434,6 @@ enum PostViewBodyUnavailableReason {
   REQUIRE_IDENTITY_VERIFICATION
   REQUIRE_MINIMUM_AGE
   REQUIRE_PASSWORD
-}
-
-enum PostVisibility {
-  PRIVATE
-  UNLISTED
 }
 
 type PreorderPayment {
@@ -603,7 +567,7 @@ input UpdateEmailInput {
 
 input UpdateFolderOptionInput {
   folderId: ID!
-  visibility: FolderVisibility!
+  visibility: EntityVisibility!
 }
 
 input UpdatePaymentMethodInput {
@@ -620,7 +584,7 @@ input UpdatePostOptionInput {
   password: String
   postId: ID!
   protectContent: Boolean!
-  visibility: PostVisibility!
+  visibility: EntityVisibility!
 }
 
 input UpdateSiteSlugInput {

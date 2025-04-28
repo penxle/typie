@@ -1,6 +1,6 @@
 <script lang="ts">
   import { z } from 'zod';
-  import { FolderVisibility } from '@/enums';
+  import { EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import LinkIcon from '~icons/lucide/link';
@@ -26,14 +26,10 @@
         id
         name
 
-        fo: option {
-          id
-          visibility
-        }
-
         entity {
           id
           url
+          visibility
         }
       }
     `),
@@ -43,7 +39,11 @@
     mutation DashboardLayout_Share_Folder_UpdateFolderOption_Mutation($input: UpdateFolderOptionInput!) {
       updateFolderOption(input: $input) {
         id
-        visibility
+
+        entity {
+          id
+          visibility
+        }
       }
     }
   `);
@@ -53,7 +53,7 @@
 
   const form = createForm({
     schema: z.object({
-      visibility: z.nativeEnum(FolderVisibility),
+      visibility: z.nativeEnum(EntityVisibility),
     }),
     submitOn: 'change',
     onSubmit: async (data) => {
@@ -63,7 +63,7 @@
       });
     },
     defaultValues: {
-      visibility: $folder.fo.visibility,
+      visibility: $folder.entity.visibility,
     },
   });
 
@@ -91,7 +91,7 @@
     type="button"
     use:tooltip={{
       message:
-        form.fields.visibility === FolderVisibility.PRIVATE
+        form.fields.visibility === EntityVisibility.PRIVATE
           ? '지금은 링크가 있어도 나만 볼 수 있어요'
           : '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 포스트를 볼 수 있어요',
       placement: 'top',
@@ -126,13 +126,13 @@
             icon: LinkIcon,
             label: '링크가 있는 사람',
             description: '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 포스트를 볼 수 있어요.',
-            value: FolderVisibility.UNLISTED,
+            value: EntityVisibility.UNLISTED,
           },
           {
             icon: LockIcon,
             label: '비공개',
             description: '나만 볼 수 있어요.',
-            value: FolderVisibility.PRIVATE,
+            value: EntityVisibility.PRIVATE,
           },
         ]}
         bind:value={form.fields.visibility}

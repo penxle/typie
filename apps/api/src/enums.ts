@@ -16,8 +16,8 @@ export const EntityType = {
   POST: 'POST',
 } as const;
 
-export type FolderVisibility = keyof typeof FolderVisibility;
-export const FolderVisibility = {
+export type EntityVisibility = keyof typeof EntityVisibility;
+export const EntityVisibility = {
   UNLISTED: 'UNLISTED',
   PRIVATE: 'PRIVATE',
 } as const;
@@ -81,12 +81,6 @@ export const PostViewBodyUnavailableReason = {
   REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',
   REQUIRE_IDENTITY_VERIFICATION: 'REQUIRE_IDENTITY_VERIFICATION',
   REQUIRE_MINIMUM_AGE: 'REQUIRE_MINIMUM_AGE',
-} as const;
-
-export type PostVisibility = keyof typeof PostVisibility;
-export const PostVisibility = {
-  UNLISTED: 'UNLISTED',
-  PRIVATE: 'PRIVATE',
 } as const;
 
 export type PreorderPaymentState = keyof typeof PreorderPaymentState;
