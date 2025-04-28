@@ -15,7 +15,7 @@
 
 <style>
   svg {
-    stroke-width: 5px;
+    stroke-width: 4px;
     animation: svg;
     animation-duration: 2000ms;
     animation-timing-function: linear;

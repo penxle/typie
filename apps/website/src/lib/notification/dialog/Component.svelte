@@ -33,6 +33,10 @@
     <div class={css({ fontSize: '15px', color: 'gray.700' })}>
       {dialog.message}
     </div>
+
+    {#if dialog.children}
+      {@render dialog.children()}
+    {/if}
   </div>
 
   <div
