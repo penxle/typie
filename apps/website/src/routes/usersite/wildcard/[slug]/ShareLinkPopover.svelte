@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
   import CheckIcon from '~icons/lucide/check';
   import CopyIcon from '~icons/lucide/copy';
   import ShareIcon from '~icons/lucide/share';
@@ -24,7 +25,7 @@
 
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
-    offset: 4,
+    offset: 8,
     onClickOutside: () => {
       open = false;
     },
@@ -46,8 +47,13 @@
   };
 </script>
 
-<button onclick={() => (open = true)} type="button" use:anchor>
-  <Icon icon={ShareIcon} size={18} />
+<button
+  class={css({ marginLeft: 'auto', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'gray.100' } })}
+  onclick={() => (open = true)}
+  type="button"
+  use:anchor
+>
+  <Icon icon={ShareIcon} size={16} />
 </button>
 
 {#if open}
@@ -67,13 +73,14 @@
     role="button"
     tabindex="-1"
     use:portal
+    transition:fade={{ duration: 100 }}
   ></div>
 
   <div
     class={css({
       display: 'flex',
       flexDirection: 'column',
-      gap: '10px',
+      gap: '12px',
       borderColor: 'gray.200',
       paddingX: '18px',
       backgroundColor: 'white',
@@ -87,11 +94,12 @@
         left: '[0!]',
         right: '[0!]',
         borderTopWidth: '1px',
-        borderTopRadius: '12px',
+        borderTopRadius: '8px',
       },
-      lg: { borderWidth: '1px', borderRadius: '12px', maxWidth: '360px' },
+      lg: { borderWidth: '1px', borderRadius: '8px', maxWidth: '360px' },
     })}
     use:floating
+    transition:fade={{ duration: 100 }}
   >
     <div class={css({ position: 'relative', marginY: '14px', fontWeight: 'medium', textAlign: 'center' })}>
       공유하기
@@ -117,7 +125,7 @@
     <div class={flex({ gap: '32px', marginX: 'auto' })}>
       <div>
         <a
-          class={center({ borderRadius: '16px', backgroundColor: 'gray.100', size: '60px' })}
+          class={center({ borderRadius: '12px', backgroundColor: 'gray.100', size: '60px', _hover: { backgroundColor: 'gray.200' } })}
           href={`https://x.com/intent/post?text=${href}`}
           rel="noopener noreferrer"
           target="_blank"
@@ -129,7 +137,7 @@
 
       <div>
         <a
-          class={center({ borderRadius: '16px', backgroundColor: 'gray.100', size: '60px' })}
+          class={center({ borderRadius: '12px', backgroundColor: 'gray.100', size: '60px', _hover: { backgroundColor: 'gray.200' } })}
           href={`https://share.planet.moe/share?text=${href}`}
           rel="noopener noreferrer"
           target="_blank"
