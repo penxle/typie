@@ -128,7 +128,7 @@
 
   const spinnerRecipe = cva({
     base: {
-      height: 'full',
+      height: '[1lh]',
     },
     variants: {
       color: {
