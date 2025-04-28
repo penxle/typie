@@ -42,6 +42,7 @@
 
         ... on Entity {
           id
+          state
 
           node {
             __typename

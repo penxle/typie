@@ -69,7 +69,9 @@
     width: '64px',
   })}
 >
-  <Favicon class={css({ flexShrink: '0', borderRadius: '8px', size: '32px' })} />
+  <a class={css({ flexShrink: '0', borderRadius: '8px', size: '32px', overflow: 'hidden' })} href="/home">
+    <Favicon class={css({ size: 'full' })} />
+  </a>
 
   <button
     class={center({

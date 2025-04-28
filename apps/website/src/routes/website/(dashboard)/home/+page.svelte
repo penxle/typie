@@ -39,7 +39,7 @@
 
 <Helmet title="홈" />
 
-<div class={center({ flexDirection: 'column', gap: '20px', size: 'full' })}>
+<div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>
   <Icon style={css.raw({ size: '56px', color: 'gray.700', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
