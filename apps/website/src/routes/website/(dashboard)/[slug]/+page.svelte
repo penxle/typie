@@ -2,7 +2,7 @@
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
   import { graphql } from '$graphql';
-  import { Icon } from '$lib/components';
+  import { Helmet, Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Editor from './Editor.svelte';
@@ -28,6 +28,8 @@
     <Editor {$query} />
   {/key}
 {:else}
+  <Helmet title="삭제된 포스트" />
+
   <div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>
     <Icon style={css.raw({ size: '56px', color: 'gray.700', '& *': { strokeWidth: '[1.25px]' } })} icon={FileXIcon} />
 
