@@ -250,9 +250,7 @@
   bind:this={tree}
   class={flex({
     flexDirection: 'column',
-    paddingTop: '8px',
-    paddingBottom: '48px',
-    height: 'full',
+    minHeight: 'full',
     userSelect: 'none',
     touchAction: 'none',
   })}
