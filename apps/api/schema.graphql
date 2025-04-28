@@ -100,6 +100,7 @@ type Entity implements IEntity {
   permalink: String!
   site: Site!
   slug: String!
+  state: EntityState!
   type: EntityType!
   url: String!
   view: EntityView!
@@ -128,6 +129,7 @@ type EntityView implements IEntity {
   permalink: String!
   site: SiteView!
   slug: String!
+  state: EntityState!
   type: EntityType!
   url: String!
   visibility: EntityVisibility!
@@ -178,6 +180,7 @@ interface IEntity {
   order: String!
   permalink: String!
   slug: String!
+  state: EntityState!
   type: EntityType!
   url: String!
   visibility: EntityVisibility!

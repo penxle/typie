@@ -290,7 +290,7 @@ builder.queryFields((t) => ({
         .select({ post: Posts, entity: { siteId: Entities.siteId } })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .where(and(eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
+        .where(eq(Entities.slug, args.slug))
         .then(firstOrThrow);
 
       await assertSitePermission({
@@ -557,6 +557,7 @@ builder.mutationFields((t) => ({
         .where(eq(Entities.id, entity.id));
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
 
       return input.postId;
     },

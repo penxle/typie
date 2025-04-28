@@ -18,6 +18,7 @@ import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site
 IEntity.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
+    state: t.expose('state', { type: EntityState }),
     type: t.expose('type', { type: EntityType }),
     slug: t.exposeString('slug'),
     permalink: t.exposeString('permalink'),
@@ -226,11 +227,7 @@ builder.queryFields((t) => ({
     type: Entity,
     args: { entityId: t.arg.id({ validate: validateDbId(TableCode.ENTITIES) }) },
     resolve: async (_, args, ctx) => {
-      const entity = await db
-        .select()
-        .from(Entities)
-        .where(and(eq(Entities.id, args.entityId), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
-        .then(firstOrThrow);
+      const entity = await db.select().from(Entities).where(eq(Entities.id, args.entityId)).then(firstOrThrow);
 
       await assertSitePermission({
         userId: ctx.session.userId,

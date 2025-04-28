@@ -184,14 +184,14 @@ builder.mutationFields((t) => ({
         `,
       );
 
-      await db.transaction(async (tx) => {
-        await tx
-          .update(Entities)
-          .set({ state: EntityState.DELETED })
-          .where(inArray(Entities.id, [folder.entityId, ...descendants.map(({ id }) => id)]));
-      });
+      const entityIds = [folder.entityId, ...descendants.map(({ id }) => id)];
+
+      await db.update(Entities).set({ state: EntityState.DELETED }).where(inArray(Entities.id, entityIds));
 
       pubsub.publish('site:update', folder.siteId, { scope: 'site' });
+      for (const entityId of entityIds) {
+        pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId });
+      }
 
       return folder.id;
     },
