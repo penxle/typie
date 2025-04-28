@@ -20,14 +20,14 @@
     "@types/bun": "^1.2.10",
     "@typie/tsconfig": "workspace:*",
     "dayjs": "^1.11.13",
-    "hono": "^4.7.7",
+    "hono": "^4.7.8",
     "ipaddr.js": "^2.2.0",
     "pino": "^9.6.0",
     "remeda": "^2.21.3",
-    "svelte": "^5.28.1",
+    "svelte": "^5.28.2",
     "svgo": "^3.3.2",
     "typescript": "^5.8.3",
-    "vite": "^6.3.2",
+    "vite": "^6.3.3",
     "xmlbuilder2": "^3.1.1"
   }
 }

@@ -20,7 +20,7 @@
     "@types/bun": "^1.2.10",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
-    "hono": "^4.7.7",
+    "hono": "^4.7.8",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3"
   }
