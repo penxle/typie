@@ -1,10 +1,10 @@
 import { and, asc, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
-import { db, Entities, firstOrThrow, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
+import { db, Entities, firstOrThrow, firstOrThrowWith, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility, SiteState } from '@/enums';
 import { env } from '@/env';
-import { TypieError } from '@/errors';
+import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
@@ -227,11 +227,13 @@ builder.queryFields((t) => ({
     type: Entity,
     args: { entityId: t.arg.id({ validate: validateDbId(TableCode.ENTITIES) }) },
     resolve: async (_, args, ctx) => {
-      const entity = await db.select().from(Entities).where(eq(Entities.id, args.entityId)).then(firstOrThrow);
+      const entity = await db.select().from(Entities).where(eq(Entities.id, args.entityId)).then(firstOrThrowWith(new NotFoundError()));
 
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: entity.siteId,
+      }).catch(() => {
+        throw new NotFoundError();
       });
 
       return entity;
@@ -252,18 +254,20 @@ builder.queryFields((t) => ({
         .select({ id: Sites.id })
         .from(Sites)
         .where(and(eq(Sites.slug, slug), eq(Sites.state, SiteState.ACTIVE)))
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
 
       const entity = await db
         .select(getTableColumns(Entities))
         .from(Entities)
         .where(and(eq(Entities.siteId, site.id), eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
 
       if (entity.visibility === EntityVisibility.PRIVATE) {
         await assertSitePermission({
           userId: ctx.session?.userId,
           siteId: entity.siteId,
+        }).catch(() => {
+          throw new NotFoundError();
         });
       }
 
@@ -279,12 +283,14 @@ builder.queryFields((t) => ({
         .select(getTableColumns(Entities))
         .from(Entities)
         .where(and(eq(Entities.permalink, args.permalink), eq(Entities.state, EntityState.ACTIVE)))
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
 
       if (entity.visibility === EntityVisibility.PRIVATE) {
         await assertSitePermission({
           userId: ctx.session?.userId,
           siteId: entity.siteId,
+        }).catch(() => {
+          throw new NotFoundError();
         });
       }
 

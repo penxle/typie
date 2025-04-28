@@ -17,3 +17,9 @@ export class TypieError extends GraphQLError {
     this.status = status ?? 500;
   }
 }
+
+export class NotFoundError extends TypieError {
+  constructor() {
+    super({ code: 'not_found', status: 404 });
+  }
+}
