@@ -25,7 +25,7 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (open = false)} />
 
 {#if open}
-  <div class={center({ position: 'fixed', inset: '0', zIndex: '50', padding: '20px' })} use:portal>
+  <div class={center({ position: 'fixed', inset: '0', zIndex: '50', padding: '20px', userSelect: 'none' })} use:portal>
     <div
       class={css({
         position: 'fixed',
@@ -53,6 +53,7 @@
           backgroundColor: 'white',
           boxShadow: 'large',
           overflowY: 'auto',
+          userSelect: 'text',
         },
         style,
       )}
