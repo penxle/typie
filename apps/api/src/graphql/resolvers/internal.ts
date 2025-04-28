@@ -10,6 +10,13 @@ import { builder } from '../builder';
  */
 
 builder.queryFields((t) => ({
+  seed: t.field({
+    type: 'Float',
+    resolve: () => {
+      return Math.random();
+    },
+  }),
+
   welcome: t.field({
     type: builder.simpleObject('Welcome', {
       fields: (t) => ({

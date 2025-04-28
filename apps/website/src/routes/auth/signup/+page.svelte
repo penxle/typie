@@ -1,6 +1,7 @@
 <script lang="ts">
   import { z } from 'zod';
   import { TypieError } from '@/errors';
+  import { generateRandomName } from '@/utils/name';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
@@ -12,6 +13,12 @@
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
+  const query = graphql(`
+    query SignUpPage_Query {
+      seed
+    }
+  `);
+
   const sendSignUpEmail = graphql(`
     mutation SignUpPage_SendSignUpEmail_Mutation($input: SendSignUpEmailInput!) {
       sendSignUpEmail(input: $input)
@@ -21,7 +28,7 @@
   const form = createForm({
     schema: z
       .object({
-        name: z.string({ required_error: '이름을 입력해주세요.' }).nonempty('이름을 입력해주세요.'),
+        name: z.string({ required_error: '닉네임을 입력해주세요.' }).nonempty('닉네임을 입력해주세요.'),
         email: z.string({ required_error: '이메일을 입력해주세요.' }).email('올바른 이메일 형식을 입력해주세요.'),
         password: z.string({ required_error: '비밀번호를 입력해주세요.' }).nonempty('비밀번호를 입력해주세요.'),
         confirmPassword: z.string({ required_error: '비밀번호 확인을 입력해주세요.' }).nonempty('비밀번호 확인을 입력해주세요.'),
@@ -57,6 +64,8 @@
       marketingAgreed: false,
     },
   });
+
+  const name = $derived(generateRandomName(String($query.seed)));
 </script>
 
 <Helmet
@@ -93,19 +102,9 @@
   <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
     <div class={flex({ direction: 'column', gap: '12px' })}>
       <div class={flex({ direction: 'column', gap: '4px' })}>
-        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="name">닉네임</label>
-
-        <TextInput id="name" aria-invalid={!!form.errors.name} autofocus placeholder="굴러다니는 너구리" bind:value={form.fields.name} />
-
-        {#if form.errors.name}
-          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
-        {/if}
-      </div>
-
-      <div class={flex({ direction: 'column', gap: '4px' })}>
         <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="email">이메일</label>
 
-        <TextInput id="email" aria-invalid={!!form.errors.email} placeholder="me@example.com" bind:value={form.fields.email} />
+        <TextInput id="email" aria-invalid={!!form.errors.email} autofocus placeholder="me@example.com" bind:value={form.fields.email} />
 
         {#if form.errors.email}
           <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.email}</div>
@@ -141,6 +140,16 @@
 
         {#if form.errors.confirmPassword}
           <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.confirmPassword}</div>
+        {/if}
+      </div>
+
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="name">닉네임</label>
+
+        <TextInput id="name" aria-invalid={!!form.errors.name} placeholder={name} bind:value={form.fields.name} />
+
+        {#if form.errors.name}
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
         {/if}
       </div>
 
