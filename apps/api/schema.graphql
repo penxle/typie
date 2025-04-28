@@ -494,6 +494,7 @@ type Query {
   me: User
   post(slug: String!): Post!
   search(query: String!, siteId: ID!): SearchResult!
+  seed: Float!
   site(siteId: ID!): Site!
   welcome: Welcome!
 }
