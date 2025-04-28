@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, getTableColumns, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
 import {
@@ -9,6 +9,7 @@ import {
   firstOrThrow,
   Notifications,
   PaymentMethods,
+  Plans,
   PostCharacterCountChanges,
   Posts,
   Sites,
@@ -20,6 +21,7 @@ import {
   UserSingleSignOns,
   validateDbId,
 } from '@/db';
+import { defaultPlanRules } from '@/db/schemas/json';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import { EntityState, PaymentMethodState, SingleSignOnProvider, SiteState, UserPlanState, UserState } from '@/enums';
@@ -34,6 +36,7 @@ import {
   isTypeOf,
   Notification,
   PaymentMethod,
+  PlanRule,
   Post,
   Site,
   User,
@@ -110,6 +113,27 @@ User.implement({
         });
 
         return await loader.load(self.id);
+      },
+    }),
+
+    planRule: t.field({
+      type: PlanRule,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'User.planRule',
+          nullable: true,
+          load: async (ids) => {
+            return await db
+              .select({ ...getTableColumns(Plans), userId: UserPlans.userId })
+              .from(Plans)
+              .innerJoin(UserPlans, eq(Plans.id, UserPlans.planId))
+              .where(and(inArray(UserPlans.userId, ids), inArray(UserPlans.state, [UserPlanState.ACTIVE, UserPlanState.CANCELED])));
+          },
+          key: (row) => row?.userId,
+        });
+
+        const plan = await loader.load(self.id);
+        return plan?.rules ?? defaultPlanRules;
       },
     }),
 

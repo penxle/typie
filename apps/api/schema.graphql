@@ -620,6 +620,7 @@ type User {
   paymentMethod: PaymentMethod
   personalIdentity: UserPersonalIdentity
   plan: UserPlan
+  planRule: PlanRule!
   recentPosts: [Post!]!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!

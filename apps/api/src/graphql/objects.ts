@@ -5,6 +5,7 @@ import * as T from '@/db/schemas/tables';
 import { builder } from './builder';
 import type { DataLoaderOptions } from '@pothos/plugin-dataloader';
 import type { AnyPgColumn, AnyPgTable, PgTable, TableConfig } from 'drizzle-orm/pg-core';
+import type { PlanRules } from '@/db/schemas/json';
 import type { Builder } from './builder';
 
 type IdColumn = AnyPgColumn<{ data: string; notNull: true }>;
@@ -89,3 +90,5 @@ export const CharacterCountChange = builder.simpleObject('CharacterCountChange',
     deletions: t.int(),
   }),
 });
+
+export const PlanRule = builder.objectRef<Partial<PlanRules>>('PlanRule');

@@ -27,8 +27,7 @@ import * as portone from '@/external/portone';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
 import { cardSchema } from '@/validation';
 import { builder } from '../builder';
-import { isTypeOf, PaymentMethod, Plan, UserPlan } from '../objects';
-import type { PlanRules } from '@/db/schemas/json';
+import { isTypeOf, PaymentMethod, Plan, PlanRule, UserPlan } from '../objects';
 
 /**
  * * Types
@@ -43,13 +42,6 @@ PaymentMethod.implement({
   }),
 });
 
-const PlanRule = builder.objectRef<Partial<PlanRules>>('PlanRule');
-PlanRule.implement({
-  fields: (t) => ({
-    maxPostCount: t.int({ resolve: (self) => self.maxPostCount ?? defaultPlanRules.maxPostCount }),
-  }),
-});
-
 Plan.implement({
   isTypeOf: isTypeOf(TableCode.PLANS),
   fields: (t) => ({
@@ -58,6 +50,12 @@ Plan.implement({
     fee: t.exposeInt('fee'),
 
     rules: t.expose('rules', { type: PlanRule }),
+  }),
+});
+
+PlanRule.implement({
+  fields: (t) => ({
+    maxPostCount: t.int({ resolve: (self) => self.maxPostCount ?? defaultPlanRules.maxPostCount }),
   }),
 });
 
