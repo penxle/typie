@@ -1,5 +1,7 @@
 <script generics="T" lang="ts">
   import CheckIcon from '~icons/lucide/check';
+  import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { Icon, Menu, MenuItem } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -16,9 +18,10 @@
       value: T;
     }[];
     onselect?: (value: T) => void;
+    chevron?: boolean;
   };
 
-  let { style, value = $bindable(), items = [], onselect }: Props = $props();
+  let { style, value = $bindable(), items = [], onselect, chevron = true }: Props = $props();
 
   const item = $derived(items.find((item) => item.value === value));
 </script>
@@ -47,13 +50,23 @@
       type="button"
     >
       {#if item}
-        {#if item.icon}
-          <Icon style={css.raw({ color: 'gray.500' })} icon={item.icon} size={14} />
-        {/if}
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          {#if item.icon}
+            <Icon style={css.raw({ color: 'gray.500' })} icon={item.icon} size={14} />
+          {/if}
 
-        <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>
-          {item.label}
-        </span>
+          <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>
+            {item.label}
+          </span>
+        </div>
+
+        {#if chevron}
+          <Icon
+            style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5px]' } })}
+            icon={open ? ChevronUpIcon : ChevronDownIcon}
+            size={14}
+          />
+        {/if}
       {/if}
     </button>
   {/snippet}
