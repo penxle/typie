@@ -57,6 +57,8 @@ UserPlan.implement({
     fee: t.exposeInt('fee'),
     billingCycle: t.expose('billingCycle', { type: UserPlanBillingCycle }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+    expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
+    state: t.expose('state', { type: UserPlanState }),
 
     plan: t.expose('planId', { type: Plan }),
   }),
