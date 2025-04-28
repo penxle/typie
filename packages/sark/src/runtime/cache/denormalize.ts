@@ -59,14 +59,7 @@ export const denormalize = (
 
             const fieldValue = (value as Record<string, unknown>)[fieldKey];
             if (fieldValue === undefined) {
-              if (parent) {
-                const compatibleTypes = getCompatibleTypes(parent.type);
-                if (compatibleTypes.includes(selection.type.name)) {
-                  partial = true;
-                }
-              } else {
-                partial = true;
-              }
+              partial = true;
             } else {
               fields[selection.alias || selection.name] = fieldValue;
             }
@@ -83,15 +76,9 @@ export const denormalize = (
             }
 
             const fieldValue = (value as Record<string, unknown>)[fieldKey];
+
             if (fieldValue === undefined) {
-              if (parent) {
-                const compatibleTypes = getCompatibleTypes(parent.type);
-                if (compatibleTypes.includes(selection.type.name)) {
-                  partial = true;
-                }
-              } else {
-                partial = true;
-              }
+              partial = true;
             } else {
               fields[selection.alias || selection.name] = denormalizeField(selection, selection.children, fieldValue);
             }
