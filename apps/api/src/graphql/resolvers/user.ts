@@ -79,13 +79,14 @@ User.implement({
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
           name: 'User.paymentMethod',
+          nullable: true,
           load: async (ids) => {
             return await db
               .select()
               .from(PaymentMethods)
               .where(and(inArray(PaymentMethods.userId, ids), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)));
           },
-          key: ({ userId }) => userId,
+          key: (row) => row?.userId,
         });
 
         return await loader.load(self.id);

@@ -625,9 +625,11 @@ type UserPersonalIdentity {
 type UserPlan {
   billingCycle: UserPlanBillingCycle!
   createdAt: DateTime!
+  expiresAt: DateTime!
   fee: Int!
   id: ID!
   plan: Plan!
+  state: UserPlanState!
 }
 
 enum UserPlanBillingCycle {
