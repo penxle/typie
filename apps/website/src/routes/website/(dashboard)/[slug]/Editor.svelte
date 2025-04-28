@@ -249,6 +249,9 @@
       }
     });
 
+    app.state.ancestors = $query.post.entity.ancestors.map((ancestor) => ancestor.id);
+    app.state.current = $query.post.entity.id;
+
     return () => {
       off();
 
@@ -366,6 +369,8 @@
                 actionLabel: '삭제',
                 actionHandler: async () => {
                   await deletePost({ postId: $query.post.id });
+                  app.state.ancestors = [];
+                  app.state.current = undefined;
                 },
               });
             }}

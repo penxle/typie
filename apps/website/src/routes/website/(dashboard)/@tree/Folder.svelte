@@ -112,6 +112,7 @@
   `);
 
   const app = getAppContext();
+  const active = $derived(app.state.ancestors.includes($folder.entity.id));
 
   let inputEl = $state<HTMLInputElement>();
 
@@ -122,6 +123,12 @@
   $effect(() => {
     if (editing) {
       inputEl?.select();
+    }
+  });
+
+  $effect.pre(() => {
+    if (active) {
+      open = true;
     }
   });
 </script>

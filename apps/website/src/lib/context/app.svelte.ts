@@ -9,6 +9,9 @@ type AppPreference = {
 };
 
 type AppState = {
+  ancestors: string[];
+  current?: string;
+
   spaceOpen: boolean;
   commandPaletteOpen: boolean;
   shareOpen: string | false;
@@ -35,6 +38,7 @@ export const getAppContext = () => {
 
 export const setupAppContext = () => {
   const appState = $state<AppState>({
+    ancestors: [],
     spaceOpen: false,
     commandPaletteOpen: false,
     shareOpen: false,
