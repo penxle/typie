@@ -44,7 +44,7 @@
 </script>
 
 <aside
-  style:--min-width="200px"
+  style:--min-width="220px"
   style:--width="15vw"
   style:--max-width="240px"
   class={css({
