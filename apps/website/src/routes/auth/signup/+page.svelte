@@ -57,6 +57,7 @@
           redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
           state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
         }),
+        marketingAgreed: data.marketingAgreed ?? false,
       });
 
       Toast.success('이메일을 보냈어요');

@@ -7,7 +7,7 @@ import ky from 'ky';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, Images, Sites, Users, UserSessions, UserSingleSignOns } from '@/db';
+import { db, first, firstOrThrow, Images, Sites, UserMarketingConsents, Users, UserSessions, UserSingleSignOns } from '@/db';
 import { sendEmail } from '@/email';
 import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
@@ -65,6 +65,7 @@ builder.mutationFields((t) => ({
       password: t.input.string(),
       name: t.input.string(),
       state: t.input.string(),
+      marketingAgreed: t.input.boolean(),
     },
     resolve: async (_, { input }) => {
       const email = input.email.toLowerCase();
@@ -89,6 +90,7 @@ builder.mutationFields((t) => ({
           password: await Bun.password.hash(input.password),
           name: input.name,
           state: input.state,
+          marketingAgreed: input.marketingAgreed,
         }),
       );
 
@@ -113,7 +115,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_code' });
       }
 
-      const { email, password, name, state } = JSON.parse(data);
+      const { email, password, name, state, marketingAgreed } = JSON.parse(data);
 
       const existingUser = await db
         .select({ id: Users.id })
@@ -136,6 +138,12 @@ builder.mutationFields((t) => ({
         });
 
         await tx.update(Users).set({ password }).where(eq(Users.id, user.id));
+
+        if (marketingAgreed) {
+          await tx.insert(UserMarketingConsents).values({
+            userId: user.id,
+          });
+        }
 
         return user;
       });
