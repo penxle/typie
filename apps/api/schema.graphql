@@ -365,7 +365,7 @@ enum PlanAvailability {
 }
 
 type PlanRule {
-  postCount: Int!
+  maxPostCount: Int!
 }
 
 type Post implements IPost {

@@ -323,7 +323,7 @@ builder.mutationFields((t) => ({
 
       await assertPlanRule({
         userId: ctx.session.userId,
-        rule: 'postCount',
+        rule: 'maxPostCount',
       });
 
       const title = null;
@@ -424,7 +424,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       await assertPlanRule({
         userId: ctx.session.userId,
-        rule: 'postCount',
+        rule: 'maxPostCount',
       });
 
       const entity = await db
