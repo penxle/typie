@@ -4,17 +4,19 @@
   import { portal } from '$lib/actions';
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
+  import RingSpinner from './RingSpinner.svelte';
   import type { Snippet } from 'svelte';
   import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     open: boolean;
+    loading?: boolean;
     children: Snippet;
     style?: SystemStyleObject;
     onclose?: () => void;
   };
 
-  let { open = $bindable(), children, style, onclose }: Props = $props();
+  let { open = $bindable(), children, style, onclose, loading = false }: Props = $props();
 
   const close = () => {
     open = false;
@@ -39,27 +41,31 @@
       transition:fade|global={{ duration: 150, easing: sineOut }}
     ></div>
 
-    <div
-      class={css(
-        {
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          borderWidth: '1px',
-          borderRadius: '12px',
-          width: 'full',
-          maxWidth: '720px',
-          height: 'fit',
-          backgroundColor: 'white',
-          boxShadow: 'large',
-          overflowY: 'auto',
-          userSelect: 'text',
-        },
-        style,
-      )}
-      transition:fly|global={{ y: 5, duration: 150, easing: sineOut }}
-    >
-      {@render children()}
-    </div>
+    {#if loading}
+      <RingSpinner style={css.raw({ size: '40px', color: 'gray.500' })} />
+    {:else}
+      <div
+        class={css(
+          {
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            borderWidth: '1px',
+            borderRadius: '12px',
+            width: 'full',
+            maxWidth: '720px',
+            height: 'fit',
+            backgroundColor: 'white',
+            boxShadow: 'large',
+            overflowY: 'auto',
+            userSelect: 'text',
+          },
+          style,
+        )}
+        transition:fly|global={{ y: 5, duration: 150, easing: sineOut }}
+      >
+        {@render children()}
+      </div>
+    {/if}
   </div>
 {/if}

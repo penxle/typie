@@ -46,17 +46,18 @@
   });
 </script>
 
-{#if loaded && $query}
-  <Modal
-    style={css.raw({
-      maxWidth: '400px',
-    })}
-    onclose={() => {
-      app.state.shareOpen = false;
-      loaded = false;
-    }}
-    open
-  >
+<Modal
+  style={css.raw({
+    maxWidth: '400px',
+  })}
+  loading={!loaded || !query}
+  onclose={() => {
+    app.state.shareOpen = false;
+    loaded = false;
+  }}
+  open={!!app.state.shareOpen}
+>
+  {#if loaded && $query}
     {#key $query.entity.id}
       {#if $query.entity.node.__typename === 'Post'}
         <Post $post={$query.entity.node} />
@@ -64,5 +65,5 @@
         <Folder $folder={$query.entity.node} />
       {/if}
     {/key}
-  </Modal>
-{/if}
+  {/if}
+</Modal>
