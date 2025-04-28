@@ -4,7 +4,7 @@
   import { graphql } from '$graphql';
   import { Button, Modal, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
-  import { Toast } from '$lib/notification';
+  import { Dialog } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
@@ -29,7 +29,10 @@
       await sendEmailUpdateEmail({ email: data.email });
 
       open = false;
-      Toast.success('이메일 변경을 위한 확인 메일이 전송되었어요.');
+      Dialog.alert({
+        title: '이메일 변경',
+        message: '변경할 이메일로 인증 메일을 발송했어요. 메일함을 확인해주세요.',
+      });
     },
     onError: (error) => {
       if (error instanceof TypieError && error.code === 'user_email_exists') {
