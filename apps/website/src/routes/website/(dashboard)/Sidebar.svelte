@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TypieError } from '@/errors';
   import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
   import CircleHelpIcon from '~icons/lucide/circle-help';
   import CogIcon from '~icons/lucide/cog';
@@ -40,6 +41,7 @@
 
         ...DashboardLayout_UserMenu_user
         ...DashboardLayout_Notification_user
+        ...DashboardLayout_Posts_user
         ...DashboardLayout_PreferenceModal_user
       }
     `),
@@ -92,11 +94,17 @@
       },
     })}
     onclick={async () => {
-      const resp = await createPost({
-        siteId: $user.sites[0].id,
-      });
+      try {
+        const resp = await createPost({
+          siteId: $user.sites[0].id,
+        });
 
-      await goto(`/${resp.entity.slug}`);
+        await goto(`/${resp.entity.slug}`);
+      } catch (err) {
+        if (err instanceof TypieError && err.code === 'max_post_count_reached') {
+          pushState('', { shallowRoute: '/preference/billing' });
+        }
+      }
     }}
     type="button"
     use:tooltip={{ message: '새 포스트 생성', placement: 'right', offset: 12 }}
@@ -135,7 +143,7 @@
   <UserMenu {$user} />
 </aside>
 
-<Posts $site={$user.sites[0]} />
+<Posts $site={$user.sites[0]} {$user} />
 
 <PreferenceModal {$user} />
 <StatsModal />

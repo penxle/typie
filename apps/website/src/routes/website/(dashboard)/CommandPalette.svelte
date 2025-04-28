@@ -5,6 +5,7 @@
   import * as R from 'remeda';
   import { tick } from 'svelte';
   import { match } from 'ts-pattern';
+  import { TypieError } from '@/errors';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
@@ -98,11 +99,17 @@
       aliases: ['새 포스트 생성', '새 글 쓰기', '새 글 생성'],
       icon: SquarePenIcon,
       action: async () => {
-        const resp = await createPost({
-          siteId: $user.sites[0].id,
-        });
+        try {
+          const resp = await createPost({
+            siteId: $user.sites[0].id,
+          });
 
-        await goto(`/${resp.entity.slug}`);
+          await goto(`/${resp.entity.slug}`);
+        } catch (err) {
+          if (err instanceof TypieError && err.code === 'max_post_count_reached') {
+            pushState('', { shallowRoute: '/preference/billing' });
+          }
+        }
       },
     },
     {
