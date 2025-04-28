@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
 import { db, first, PostContents } from '@/db';
 import { schema } from '@/pm';
-import { makeYDoc } from '@/utils';
+import { generateRandomName, makeYDoc } from '@/utils';
 import { builder } from '../builder';
 
 /**
@@ -22,6 +23,7 @@ builder.queryFields((t) => ({
       fields: (t) => ({
         body: t.field({ type: 'JSON' }),
         update: t.field({ type: 'Binary' }),
+        name: t.string(),
       }),
     }),
     resolve: async () => {
@@ -37,10 +39,26 @@ builder.queryFields((t) => ({
       const yDoc = makeYDoc({ body });
       const update = Y.encodeStateAsUpdateV2(yDoc);
 
+      const name = generateRandomName(nanoid());
+
       return {
         body,
         update,
+        name,
       };
+    },
+  }),
+}));
+
+/**
+ * * Mutations
+ */
+
+builder.mutationFields((t) => ({
+  generateRandomName: t.field({
+    type: 'String',
+    resolve: () => {
+      return generateRandomName(nanoid());
     },
   }),
 }));

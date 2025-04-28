@@ -278,6 +278,7 @@ type Mutation {
   duplicatePost(input: DuplicatePostInput!): Post!
   enrollPlan(input: EnrollPlanInput!): UserPlan!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
+  generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
   loginWithEmail(input: LoginWithEmailInput!): Boolean!
@@ -687,5 +688,6 @@ input VerifyPersonalIdentityInput {
 
 type Welcome {
   body: JSON!
+  name: String!
   update: Binary!
 }

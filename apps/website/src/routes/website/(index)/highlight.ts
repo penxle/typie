@@ -1,8 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { nanoid } from 'nanoid';
-import { generateRandomName } from '@/utils/name';
 import { css } from '$styled-system/css';
 
 const text = '글쓰기 앱을 만나보세요';
@@ -11,7 +9,6 @@ export const Highlight = Extension.create({
   name: 'highlight',
 
   addProseMirrorPlugins() {
-    const name = generateRandomName(nanoid());
     let status = 'initial';
 
     return [
@@ -30,7 +27,7 @@ export const Highlight = Extension.create({
               if (index !== undefined && index !== -1) {
                 decorations.push(
                   Decoration.inline(pos + index, pos + index + text.length, {
-                    style: `--name: "${name}"`,
+                    style: `--name: var(--highlight-name)`,
                     class: css({
                       position: 'relative',
                       display: 'inline-block',
