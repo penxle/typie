@@ -46,7 +46,7 @@ PaymentMethod.implement({
 const PlanRule = builder.objectRef<Partial<PlanRules>>('PlanRule');
 PlanRule.implement({
   fields: (t) => ({
-    postCount: t.int({ resolve: (self) => self.postCount ?? defaultPlanRules.postCount }),
+    maxPostCount: t.int({ resolve: (self) => self.maxPostCount ?? defaultPlanRules.maxPostCount }),
   }),
 });
 

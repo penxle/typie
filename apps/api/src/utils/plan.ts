@@ -10,11 +10,9 @@ type GetPlanParams<T extends keyof PlanRules> = {
   rule: T;
 };
 
-export const getPlanRule = async <T extends keyof PlanRules>({ userId, rule }: GetPlanParams<T>) => {
+const getPlanRuleValue = async <T extends keyof PlanRules>({ userId, rule }: GetPlanParams<T>) => {
   const plan = await db
-    .select({
-      rules: Plans.rules,
-    })
+    .select({ rules: Plans.rules })
     .from(Plans)
     .innerJoin(UserPlans, eq(Plans.id, UserPlans.planId))
     .where(eq(UserPlans.userId, userId))
@@ -24,23 +22,23 @@ export const getPlanRule = async <T extends keyof PlanRules>({ userId, rule }: G
 };
 
 export const assertPlanRule = async <T extends keyof PlanRules>({ userId, rule }: GetPlanParams<T>) => {
-  const planRule = await getPlanRule({ userId, rule });
+  const value = await getPlanRuleValue({ userId, rule });
 
-  if (planRule === -1) {
+  if (value === -1) {
     return;
   }
 
   switch (rule) {
-    case 'postCount': {
-      const userPostCount = await db
+    case 'maxPostCount': {
+      const postCount = await db
         .select({ count: count() })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .where(and(eq(Entities.userId, userId), eq(Entities.state, EntityState.ACTIVE)))
         .then((result) => result[0]?.count ?? 0);
 
-      if (userPostCount >= planRule) {
-        throw new TypieError({ code: 'post_limit_reached' });
+      if (postCount >= value) {
+        throw new TypieError({ code: 'max_post_count_reached' });
       }
 
       break;
