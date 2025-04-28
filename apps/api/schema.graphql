@@ -623,6 +623,7 @@ type User {
   recentPosts: [Post!]!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
+  usage: UserUsage!
 }
 
 type UserPersonalIdentity {
@@ -660,6 +661,10 @@ type UserSingleSignOn {
 enum UserState {
   ACTIVE
   DEACTIVATED
+}
+
+type UserUsage {
+  postCount: Int!
 }
 
 input VerifyPersonalIdentityInput {
