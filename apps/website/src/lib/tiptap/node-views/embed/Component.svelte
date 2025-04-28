@@ -123,6 +123,7 @@
           {#if attrs.thumbnailUrl}
             <img
               class={css({
+                flexShrink: '0',
                 borderTopRightRadius: '5px',
                 borderBottomRightRadius: '5px',
                 size: '118px',
