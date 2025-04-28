@@ -244,7 +244,7 @@ builder.queryFields((t) => ({
   entityView: t.field({
     type: EntityView,
     args: { origin: t.arg.string(), slug: t.arg.string() },
-    resolve: async (_, args) => {
+    resolve: async (_, args, ctx) => {
       const pattern = new RegExp(`^${escape(env.USERSITE_URL).replace(String.raw`\*\.`, String.raw`([^.]+)\.`)}$`);
       const slug = args.origin.match(pattern)?.[1];
       if (!slug) {
@@ -257,36 +257,41 @@ builder.queryFields((t) => ({
         .where(and(eq(Sites.slug, slug), eq(Sites.state, SiteState.ACTIVE)))
         .then(firstOrThrow);
 
-      return await db
+      const entity = await db
         .select(getTableColumns(Entities))
         .from(Entities)
-        .where(
-          and(
-            eq(Entities.siteId, site.id),
-            eq(Entities.slug, args.slug),
-            eq(Entities.state, EntityState.ACTIVE),
-            eq(Entities.visibility, EntityVisibility.UNLISTED),
-          ),
-        )
+        .where(and(eq(Entities.siteId, site.id), eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
+
+      if (entity.visibility === EntityVisibility.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session?.userId,
+          siteId: entity.siteId,
+        });
+      }
+
+      return entity;
     },
   }),
 
   entityViewByPermalink: t.field({
     type: EntityView,
     args: { permalink: t.arg.string() },
-    resolve: async (_, args) => {
-      return await db
+    resolve: async (_, args, ctx) => {
+      const entity = await db
         .select(getTableColumns(Entities))
         .from(Entities)
-        .where(
-          and(
-            eq(Entities.permalink, args.permalink),
-            eq(Entities.state, EntityState.ACTIVE),
-            eq(Entities.visibility, EntityVisibility.UNLISTED),
-          ),
-        )
+        .where(and(eq(Entities.permalink, args.permalink), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
+
+      if (entity.visibility === EntityVisibility.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session?.userId,
+          siteId: entity.siteId,
+        });
+      }
+
+      return entity;
     },
   }),
 }));
