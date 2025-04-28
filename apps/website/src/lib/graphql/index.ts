@@ -47,7 +47,10 @@ export default createClient({
   ],
   onError: (err, event) => {
     if (err instanceof TypieError) {
-      error(err.status, { message: err.message });
+      error(err.status, {
+        message: err.message,
+        code: err.code,
+      });
     }
 
     if (err instanceof NetworkError) {
@@ -55,7 +58,17 @@ export default createClient({
         redirect(302, event.url.href);
       }
 
-      error(err.statusCode ?? 500, { message: err.message });
+      error(err.statusCode ?? 500, {
+        message: err.message,
+      });
+    }
+
+    if (err instanceof GraphQLError) {
+      error(500, {
+        message: err.message,
+        code: err.extensions?.code as string | undefined,
+        eventId: err.extensions?.eventId as string | undefined,
+      });
     }
   },
 });

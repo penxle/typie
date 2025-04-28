@@ -17,29 +17,33 @@
     class={flex({
       flexDirection: 'column',
       alignItems: 'center',
-      gap: '16px',
+      gap: '20px',
       borderRadius: '12px',
-      padding: '48px',
+      marginX: '20px',
+      padding: { base: '24px', lg: '48px' },
       width: 'full',
       maxWidth: '400px',
       backgroundColor: 'white',
-      boxShadow: 'medium',
       textAlign: 'center',
+      boxShadow: 'medium',
       zIndex: '1',
     })}
   >
     <Logo class={css({ height: '20px' })} />
 
     <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>앗! 문제가 발생했어요</h1>
-
-    {#if error?.message}
-      <p class={css({ fontSize: '14px', color: 'gray.600' })}>{error.message}</p>
-    {/if}
-
-    {#if page.status}
-      <p class={css({ fontSize: '12px', color: 'gray.400' })}>에러 코드: {page.status}</p>
-    {/if}
+    <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+      {#if error?.code === 'unexpected_error'}
+        잠시 후 다시 시도해주세요.
+      {:else if error?.message}
+        {error.message}
+      {/if}
+    </div>
 
     <Button style={css.raw({ width: 'full', height: '40px' })} href="/" size="lg" type="link">홈페이지로 돌아가기</Button>
+
+    {#if error?.eventId}
+      <p class={css({ fontFamily: 'mono', fontSize: '12px', color: 'gray.300' })}>코드: {error.eventId}</p>
+    {/if}
   </div>
 </div>

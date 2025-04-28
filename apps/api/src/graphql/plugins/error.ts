@@ -12,10 +12,16 @@ class UnexpectedError extends GraphQLError {
 
   constructor(error: Error) {
     const eventId = Sentry.captureException(error);
+    const originalError = dev ? error : undefined;
 
     super(dev ? error.message : 'Unexpected error', {
-      extensions: { type: 'UnexpectedError', code: 'UNEXPECTED_ERROR', eventId },
-      originalError: dev ? error : undefined,
+      extensions: {
+        type: 'UnexpectedError',
+        code: dev ? 'unexpected_error_dev' : 'unexpected_error',
+        eventId,
+        originalError,
+      },
+      originalError,
     });
 
     this.eventId = eventId;
