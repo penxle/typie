@@ -143,7 +143,7 @@ User.implement({
       resolve: async (self) => {
         const startOfTomorrow = dayjs.kst().startOf('day').add(1, 'day');
 
-        const date = sql<string>`DATE(${PostCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.utc);
+        const date = sql<string>`DATE(${PostCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
         return await db
           .select({
             date,

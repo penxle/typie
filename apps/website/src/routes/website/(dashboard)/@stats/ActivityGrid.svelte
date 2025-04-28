@@ -49,9 +49,11 @@
     const max = Math.max(...numbers);
     const range = max - min;
 
+    const changes = Object.fromEntries($user.characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
+
     let currentDate = startDate;
     while (!currentDate.isAfter(endDate)) {
-      const change = $user.characterCountChanges.find(({ date }) => dayjs(date).kst({ keepLocalTime: true }).isSame(currentDate, 'day'));
+      const change = changes[currentDate.unix()];
       if (change) {
         if (change.additions === 0) {
           activities.push({ date: currentDate, additions: 0, level: 0 });
