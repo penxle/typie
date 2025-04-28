@@ -172,7 +172,7 @@
     title={$entityView.node.title}
   />
 
-  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen' })}>
+  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full' })}>
     <div
       style:--prosemirror-max-width={`${$entityView.node.maxWidth}px`}
       class={flex({

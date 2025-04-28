@@ -87,7 +87,7 @@
     title={$entityView.node.name}
   />
 
-  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'screen' })}>
+  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full' })}>
     <div
       class={flex({
         flexDirection: 'column',
