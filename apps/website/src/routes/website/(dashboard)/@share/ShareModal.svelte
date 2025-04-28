@@ -57,10 +57,12 @@
     }}
     open
   >
-    {#if $query.entity.node.__typename === 'Post'}
-      <Post $post={$query.entity.node} />
-    {:else if $query.entity.node.__typename === 'Folder'}
-      <Folder $folder={$query.entity.node} />
-    {/if}
+    {#key $query.entity.id}
+      {#if $query.entity.node.__typename === 'Post'}
+        <Post $post={$query.entity.node} />
+      {:else if $query.entity.node.__typename === 'Folder'}
+        <Folder $folder={$query.entity.node} />
+      {/if}
+    {/key}
   </Modal>
 {/if}
