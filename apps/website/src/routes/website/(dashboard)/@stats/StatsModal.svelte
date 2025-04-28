@@ -21,7 +21,6 @@
 
   const load = async () => {
     if (app.state.statsOpen) {
-      loaded = false;
       await query.load();
       loaded = true;
     }
@@ -32,19 +31,20 @@
   });
 </script>
 
-{#if loaded && $query}
-  <Modal
-    style={css.raw({
-      gap: '16px',
-      maxWidth: '800px',
-      padding: '24px',
-    })}
-    onclose={() => {
-      app.state.statsOpen = false;
-      loaded = false;
-    }}
-    open={app.state.statsOpen}
-  >
+<Modal
+  style={css.raw({
+    gap: '16px',
+    maxWidth: '800px',
+    padding: '24px',
+  })}
+  loading={!loaded || !query}
+  onclose={() => {
+    app.state.statsOpen = false;
+    loaded = false;
+  }}
+  open={app.state.statsOpen}
+>
+  {#if loaded && $query}
     <div class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.700' })}>나의 글쓰기 통계</div>
 
     <div class={flex({ flexDirection: 'column', gap: '16px' })}>
@@ -52,5 +52,5 @@
 
       <ActivityGrid $user={$query.me} />
     </div>
-  </Modal>
-{/if}
+  {/if}
+</Modal>
