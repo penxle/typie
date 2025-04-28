@@ -15,6 +15,7 @@ type AppState = {
   spaceOpen: boolean;
   commandPaletteOpen: boolean;
   shareOpen: string | false;
+  statsOpen: boolean;
 };
 
 type AppTimerState = {
@@ -42,6 +43,7 @@ export const setupAppContext = () => {
     spaceOpen: false,
     commandPaletteOpen: false,
     shareOpen: false,
+    statsOpen: false,
   });
 
   const context: AppContext = {

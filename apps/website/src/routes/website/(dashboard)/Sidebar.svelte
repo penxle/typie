@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
   import CircleHelpIcon from '~icons/lucide/circle-help';
   import CogIcon from '~icons/lucide/cog';
   import LibraryBigIcon from '~icons/lucide/library-big';
@@ -13,6 +14,7 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
+  import StatsModal from './@stats/StatsModal.svelte';
   import Notification from './Notification.svelte';
   import SidebarButton from './SidebarButton.svelte';
   import Space from './Space.svelte';
@@ -119,6 +121,10 @@
     <Notification {$user} />
   </div>
 
+  <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+    <SidebarButton icon={ChartNoAxesCombinedIcon} label="통계" onclick={() => (app.state.statsOpen = true)} />
+  </div>
+
   <div class={css({ flexGrow: '1' })}></div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
@@ -132,3 +138,4 @@
 <Space $site={$user.sites[0]} />
 
 <PreferenceModal {$user} />
+<StatsModal />
