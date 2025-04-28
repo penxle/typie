@@ -1058,12 +1058,7 @@ describe('Cache', () => {
 
     const result = cache.readQuery(schema, {});
 
-    expect(result).toEqual({
-      get: {
-        __typename: 'A',
-        id: '1',
-      },
-    });
+    expect(result).toBeNull();
   });
 
   test('invalidate를 사용해 전체 엔티티를 무효화한다', () => {
