@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
 import {
@@ -113,6 +113,8 @@ User.implement({
       },
     }),
 
+    usage: t.expose('id', { type: UserUsage }),
+
     recentPosts: t.field({
       type: [Post],
       resolve: async (self, _, ctx) => {
@@ -200,6 +202,22 @@ UserSingleSignOn.implement({
     id: t.exposeID('id'),
     provider: t.expose('provider', { type: SingleSignOnProvider }),
     email: t.exposeString('email'),
+  }),
+});
+
+const UserUsage = builder.objectRef<string>('UserUsage');
+UserUsage.implement({
+  fields: (t) => ({
+    postCount: t.int({
+      resolve: async (userId) => {
+        return await db
+          .select({ count: count() })
+          .from(Posts)
+          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+          .where(and(eq(Entities.userId, userId), eq(Entities.state, EntityState.ACTIVE)))
+          .then((result) => result[0]?.count ?? 0);
+      },
+    }),
   }),
 });
 
