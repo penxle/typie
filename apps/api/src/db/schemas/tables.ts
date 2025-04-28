@@ -384,6 +384,19 @@ export const Users = pgTable(
   ],
 );
 
+export const UserMarketingConsents = pgTable('user_marketing_consents', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_MARKETING_CONSENTS)),
+  userId: text('user_id')
+    .notNull()
+    .unique()
+    .references(() => Users.id),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const UserPersonalIdentities = pgTable('user_personal_identities', {
   id: text('id')
     .primaryKey()

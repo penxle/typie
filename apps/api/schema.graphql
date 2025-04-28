@@ -508,6 +508,7 @@ input SendPasswordResetEmailInput {
 
 input SendSignUpEmailInput {
   email: String!
+  marketingAgreed: Boolean!
   name: String!
   password: String!
   state: String!
