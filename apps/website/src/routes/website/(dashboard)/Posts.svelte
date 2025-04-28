@@ -11,10 +11,10 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import EntityTree from './@tree/EntityTree.svelte';
-  import type { DashboardLayout_Space_site } from '$graphql';
+  import type { DashboardLayout_Posts_site } from '$graphql';
 
   type Props = {
-    $site: DashboardLayout_Space_site;
+    $site: DashboardLayout_Posts_site;
   };
 
   let { $site: _site }: Props = $props();
@@ -22,7 +22,7 @@
   const site = fragment(
     _site,
     graphql(`
-      fragment DashboardLayout_Space_site on Site {
+      fragment DashboardLayout_Posts_site on Site {
         id
 
         ...DashboardLayout_EntityTree_site
@@ -31,7 +31,7 @@
   );
 
   const createPost = graphql(`
-    mutation DashboardLayout_Space_CreatePost_Mutation($input: CreatePostInput!) {
+    mutation DashboardLayout_Posts_CreatePost_Mutation($input: CreatePostInput!) {
       createPost(input: $input) {
         id
 
@@ -44,7 +44,7 @@
   `);
 
   const createFolder = graphql(`
-    mutation DashboardLayout_Space_CreateFolder_Mutation($input: CreateFolderInput!) {
+    mutation DashboardLayout_Posts_CreateFolder_Mutation($input: CreateFolderInput!) {
       createFolder(input: $input) {
         id
       }
@@ -54,10 +54,10 @@
   const app = getAppContext();
 </script>
 
-{#if app.state.spaceOpen && !app.preference.current.spaceExpanded}
+{#if app.state.postsOpen && !app.preference.current.postsExpanded}
   <div
     class={css({ position: 'fixed', inset: '0', zIndex: '40' })}
-    onclick={() => (app.state.spaceOpen = false)}
+    onclick={() => (app.state.postsOpen = false)}
     role="none"
     use:portal
   ></div>
@@ -74,37 +74,37 @@
       transitionDuration: '150ms',
       transitionTimingFunction: 'ease',
     },
-    app.preference.current.spaceExpanded
+    app.preference.current.postsExpanded
       ? {
           position: 'relative',
           marginY: '8px',
-          marginRight: app.preference.current.spaceExpanded === 'open' ? '4px' : '0',
-          minWidth: app.preference.current.spaceExpanded === 'open' ? 'var(--min-width)' : '0',
-          maxWidth: app.preference.current.spaceExpanded === 'open' ? 'var(--max-width)' : '0',
-          opacity: app.preference.current.spaceExpanded === 'open' ? '100' : '0',
+          marginRight: app.preference.current.postsExpanded === 'open' ? '4px' : '0',
+          minWidth: app.preference.current.postsExpanded === 'open' ? 'var(--min-width)' : '0',
+          maxWidth: app.preference.current.postsExpanded === 'open' ? 'var(--max-width)' : '0',
+          opacity: app.preference.current.postsExpanded === 'open' ? '100' : '0',
           transitionProperty: 'min-width, max-width, opacity, position, margin-block',
         }
       : {
           position: 'fixed',
-          left: app.state.spaceOpen ? '64px' : '59px',
+          left: app.state.postsOpen ? '64px' : '59px',
           insetY: '0',
-          minWidth: app.state.spaceOpen ? 'var(--min-width)' : '0',
-          width: app.state.spaceOpen ? 'var(--fixed-width, 0)' : '0',
-          maxWidth: app.state.spaceOpen ? 'var(--max-width)' : '0',
-          opacity: app.state.spaceOpen ? '100' : '0',
+          minWidth: app.state.postsOpen ? 'var(--min-width)' : '0',
+          width: app.state.postsOpen ? 'var(--fixed-width, 0)' : '0',
+          maxWidth: app.state.postsOpen ? 'var(--max-width)' : '0',
+          opacity: app.state.postsOpen ? '100' : '0',
           zIndex: '50',
           transitionProperty: 'left, opacity, position, margin-block',
           overflow: 'var(--overflow)',
         },
   )}
   ontransitionendcapture={(e) => {
-    if (!app.preference.current.spaceExpanded && !app.state.spaceOpen) {
+    if (!app.preference.current.postsExpanded && !app.state.postsOpen) {
       e.currentTarget.style.setProperty('--fixed-width', '0');
       e.currentTarget.style.setProperty('--overflow', 'hidden');
     }
   }}
   ontransitionstartcapture={(e) => {
-    if (!app.preference.current.spaceExpanded && app.state.spaceOpen) {
+    if (!app.preference.current.postsExpanded && app.state.postsOpen) {
       e.currentTarget.style.setProperty('--fixed-width', 'var(--width)');
       e.currentTarget.style.setProperty('--overflow', 'visible');
     }
@@ -125,7 +125,7 @@
         transitionTimingFunction: 'ease',
         overflow: 'hidden',
       },
-      app.preference.current.spaceExpanded
+      app.preference.current.postsExpanded
         ? {
             borderWidth: '[0.5px]',
             borderRadius: '4px',
@@ -151,7 +151,7 @@
       })}
     >
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>내 스페이스</span>
+        <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>내 포스트</span>
 
         <button
           class={center({
@@ -162,17 +162,17 @@
             _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
           })}
           onclick={() => {
-            if (app.preference.current.spaceExpanded) {
-              app.state.spaceOpen = app.preference.current.spaceExpanded === 'open';
-              app.preference.current.spaceExpanded = false;
+            if (app.preference.current.postsExpanded) {
+              app.state.postsOpen = app.preference.current.postsExpanded === 'open';
+              app.preference.current.postsExpanded = false;
             } else {
-              app.preference.current.spaceExpanded = app.state.spaceOpen ? 'open' : 'closed';
+              app.preference.current.postsExpanded = app.state.postsOpen ? 'open' : 'closed';
             }
           }}
           type="button"
-          use:tooltip={{ message: app.preference.current.spaceExpanded ? '패널 고정 해제' : '패널 고정' }}
+          use:tooltip={{ message: app.preference.current.postsExpanded ? '패널 고정 해제' : '패널 고정' }}
         >
-          <Icon icon={app.preference.current.spaceExpanded ? PanelLeftDashedIcon : PanelLeftIcon} size={14} />
+          <Icon icon={app.preference.current.postsExpanded ? PanelLeftDashedIcon : PanelLeftIcon} size={14} />
         </button>
       </div>
 

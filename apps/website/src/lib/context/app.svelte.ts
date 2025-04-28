@@ -2,7 +2,7 @@ import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
 
 type AppPreference = {
-  spaceExpanded: 'open' | 'closed' | false;
+  postsExpanded: 'open' | 'closed' | false;
   panelExpanded: boolean;
   focusDuration: number;
   restDuration: number;
@@ -12,7 +12,7 @@ type AppState = {
   ancestors: string[];
   current?: string;
 
-  spaceOpen: boolean;
+  postsOpen: boolean;
   commandPaletteOpen: boolean;
   shareOpen: string | false;
   statsOpen: boolean;
@@ -40,7 +40,7 @@ export const getAppContext = () => {
 export const setupAppContext = () => {
   const appState = $state<AppState>({
     ancestors: [],
-    spaceOpen: false,
+    postsOpen: false,
     commandPaletteOpen: false,
     shareOpen: false,
     statsOpen: false,
@@ -48,7 +48,7 @@ export const setupAppContext = () => {
 
   const context: AppContext = {
     preference: new LocalStore<AppPreference>('typie:pref', {
-      spaceExpanded: false,
+      postsExpanded: false,
       panelExpanded: true,
       focusDuration: 30,
       restDuration: 10,

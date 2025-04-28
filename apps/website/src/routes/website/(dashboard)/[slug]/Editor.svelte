@@ -15,7 +15,7 @@
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CopyIcon from '~icons/lucide/copy';
   import ElipsisIcon from '~icons/lucide/ellipsis';
-  import LibraryBigIcon from '~icons/lucide/library-big';
+  import FolderIcon from '~icons/lucide/folder';
   import PanelRightCloseIcon from '~icons/lucide/panel-right-close';
   import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
   import TrashIcon from '~icons/lucide/trash';
@@ -284,9 +284,9 @@
       })}
     >
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <Icon style={css.raw({ color: 'gray.400' })} icon={LibraryBigIcon} size={12} />
+        <Icon style={css.raw({ color: 'gray.400' })} icon={FolderIcon} size={12} />
 
-        <div class={css({ flex: 'none', fontSize: '12px', color: 'gray.400' })}>내 스페이스</div>
+        <div class={css({ flex: 'none', fontSize: '12px', color: 'gray.400' })}>내 포스트</div>
         <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
 
         {#each $query.post.entity.ancestors as ancestor (ancestor.id)}

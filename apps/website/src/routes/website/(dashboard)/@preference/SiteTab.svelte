@@ -8,10 +8,10 @@
   import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import type { DashboardLayout_PreferenceModal_SpaceTab_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_SiteTab_user } from '$graphql';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_SpaceTab_user;
+    $user: DashboardLayout_PreferenceModal_SiteTab_user;
   };
 
   let { $user: _user }: Props = $props();
@@ -19,7 +19,7 @@
   const user = fragment(
     _user,
     graphql(`
-      fragment DashboardLayout_PreferenceModal_SpaceTab_user on User {
+      fragment DashboardLayout_PreferenceModal_SiteTab_user on User {
         id
 
         sites {
@@ -31,7 +31,7 @@
   );
 
   const updateSiteSlug = graphql(`
-    mutation DashboardLayout_PreferenceModal_SpaceTab_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
+    mutation DashboardLayout_PreferenceModal_SiteTab_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
       updateSiteSlug(input: $input) {
         id
         slug
@@ -45,11 +45,11 @@
     }),
     onSubmit: async (data) => {
       await updateSiteSlug({ siteId: $user.sites[0].id, slug: data.slug });
-      Toast.success('스페이스 주소가 변경되었습니다.');
+      Toast.success('사이트 주소가 변경되었습니다.');
     },
     onError: (error) => {
       if (error instanceof TypieError && error.code === 'site_slug_already_exists') {
-        throw new FormError('slug', '이미 존재하는 스페이스 주소입니다.');
+        throw new FormError('slug', '이미 존재하는 사이트 주소입니다.');
       }
     },
     defaultValues: {
@@ -59,7 +59,7 @@
 </script>
 
 <div class={flex({ direction: 'column', gap: '24px' })}>
-  <p class={css({ fontSize: '20px', fontWeight: 'bold' })}>스페이스 설정</p>
+  <p class={css({ fontSize: '20px', fontWeight: 'bold' })}>사이트 설정</p>
 
   <div class={flex({ direction: 'column', gap: '8px' })}>
     <p class={css({ fontWeight: 'medium' })}>주소</p>

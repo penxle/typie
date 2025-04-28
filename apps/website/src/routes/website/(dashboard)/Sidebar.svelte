@@ -2,7 +2,7 @@
   import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
   import CircleHelpIcon from '~icons/lucide/circle-help';
   import CogIcon from '~icons/lucide/cog';
-  import LibraryBigIcon from '~icons/lucide/library-big';
+  import FolderIcon from '~icons/lucide/folder';
   import PlusIcon from '~icons/lucide/plus';
   import SearchIcon from '~icons/lucide/search';
   import { goto, pushState } from '$app/navigation';
@@ -16,8 +16,8 @@
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
   import Notification from './Notification.svelte';
+  import Posts from './Posts.svelte';
   import SidebarButton from './SidebarButton.svelte';
-  import Space from './Space.svelte';
   import UserMenu from './UserMenu.svelte';
   import type { DashboardLayout_Sidebar_user } from '$graphql';
 
@@ -35,7 +35,7 @@
 
         sites {
           id
-          ...DashboardLayout_Space_site
+          ...DashboardLayout_Posts_site
         }
 
         ...DashboardLayout_UserMenu_user
@@ -106,14 +106,14 @@
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
     <SidebarButton
-      active={app.preference.current.spaceExpanded === false ? app.state.spaceOpen : app.preference.current.spaceExpanded === 'open'}
-      icon={LibraryBigIcon}
-      label="내 스페이스"
+      active={app.preference.current.postsExpanded === false ? app.state.postsOpen : app.preference.current.postsExpanded === 'open'}
+      icon={FolderIcon}
+      label="내 포스트"
       onclick={() => {
-        if (app.preference.current.spaceExpanded === false) {
-          app.state.spaceOpen = !app.state.spaceOpen;
+        if (app.preference.current.postsExpanded === false) {
+          app.state.postsOpen = !app.state.postsOpen;
         } else {
-          app.preference.current.spaceExpanded = app.preference.current.spaceExpanded === 'open' ? 'closed' : 'open';
+          app.preference.current.postsExpanded = app.preference.current.postsExpanded === 'open' ? 'closed' : 'open';
         }
       }}
     />
@@ -135,7 +135,7 @@
   <UserMenu {$user} />
 </aside>
 
-<Space $site={$user.sites[0]} />
+<Posts $site={$user.sites[0]} />
 
 <PreferenceModal {$user} />
 <StatsModal />
