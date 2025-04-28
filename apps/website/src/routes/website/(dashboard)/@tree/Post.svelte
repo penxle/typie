@@ -60,9 +60,19 @@
   `);
 
   const app = getAppContext();
+  const active = $derived(app.state.current === $post.entity.id);
+
+  let element = $state<HTMLAnchorElement>();
+
+  $effect(() => {
+    if (active) {
+      element?.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+    }
+  });
 </script>
 
 <a
+  bind:this={element}
   class={cx(
     'group',
     css(
@@ -83,6 +93,9 @@
         marginLeft: '-1px',
         paddingLeft: '14px',
         _hover: { borderLeftColor: 'gray.300' },
+      },
+      active && {
+        backgroundColor: 'gray.100',
       },
     ),
   )}
@@ -105,14 +118,17 @@
   <Icon style={css.raw({ color: 'gray.500' })} icon={FileIcon} size={14} />
 
   <span
-    class={css({
-      flexGrow: '1',
-      fontSize: '14px',
-      fontWeight: 'medium',
-      color: 'gray.600',
-      wordBreak: 'break-all',
-      lineClamp: '1',
-    })}
+    class={css(
+      {
+        flexGrow: '1',
+        fontSize: '14px',
+        fontWeight: 'medium',
+        color: 'gray.600',
+        wordBreak: 'break-all',
+        lineClamp: '1',
+      },
+      active && { fontWeight: 'bold', color: 'gray.950' },
+    )}
   >
     {$post.title}
   </span>
@@ -160,6 +176,8 @@
           actionLabel: '삭제',
           actionHandler: async () => {
             await deletePost({ postId: $post.id });
+            app.state.ancestors = [];
+            app.state.current = undefined;
           },
         });
       }}
