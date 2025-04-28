@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { TypieError } from '@/errors';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import MoveUpRightIcon from '~icons/lucide/move-up-right';
   import PanelLeftIcon from '~icons/lucide/panel-left';
   import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
   import SquarePenIcon from '~icons/lucide/square-pen';
-  import { goto } from '$app/navigation';
+  import { goto, pushState } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { portal, tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
@@ -11,13 +13,35 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import EntityTree from './@tree/EntityTree.svelte';
-  import type { DashboardLayout_Posts_site } from '$graphql';
+  import type { DashboardLayout_Posts_site, DashboardLayout_Posts_user } from '$graphql';
 
   type Props = {
     $site: DashboardLayout_Posts_site;
+    $user: DashboardLayout_Posts_user;
   };
 
-  let { $site: _site }: Props = $props();
+  let { $site: _site, $user: _user }: Props = $props();
+
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment DashboardLayout_Posts_user on User {
+        id
+
+        usage {
+          postCount
+        }
+
+        planRule {
+          maxPostCount
+        }
+
+        plan {
+          id
+        }
+      }
+    `),
+  );
 
   const site = fragment(
     _site,
@@ -206,11 +230,17 @@
             _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
           })}
           onclick={async () => {
-            const resp = await createPost({
-              siteId: $site.id,
-            });
+            try {
+              const resp = await createPost({
+                siteId: $site.id,
+              });
 
-            await goto(`/${resp.entity.slug}`);
+              await goto(`/${resp.entity.slug}`);
+            } catch (err) {
+              if (err instanceof TypieError && err.code === 'max_post_count_reached') {
+                pushState('', { shallowRoute: '/preference/billing' });
+              }
+            }
           }}
           type="button"
           use:tooltip={{ message: '새 포스트 생성' }}
@@ -231,5 +261,72 @@
     >
       <EntityTree {$site} />
     </div>
+
+    {#if !$user.plan}
+      {@const usage = ($user.planRule.maxPostCount - $user.usage.postCount) * 100}
+
+      <div class={css({ paddingX: '16px', paddingY: '20px' })}>
+        <button
+          class={css({
+            borderWidth: '1px',
+            borderColor: 'gray.100',
+            borderRadius: '6px',
+            textAlign: 'left',
+            paddingX: '10px',
+            paddingY: '8px',
+            width: 'full',
+            boxShadow: 'small',
+            _hover: { backgroundColor: 'gray.100' },
+          })}
+          onclick={() => {
+            pushState('', { shallowRoute: '/preference/billing' });
+          }}
+          type="button"
+        >
+          <p class={css({ fontSize: '12px', color: 'gray.600' })}>현재 사용량</p>
+
+          <div class={css({ position: 'relative', marginY: '4px' })}>
+            <div
+              style:width={`calc(100% - ${usage}%)`}
+              class={css({
+                position: 'absolute',
+                top: '0',
+                left: '0',
+                borderRadius: 'full',
+                backgroundColor: 'brand.500',
+                maxWidth: 'full',
+                height: '4px',
+              })}
+            ></div>
+            <div class={css({ borderRadius: 'full', backgroundColor: 'gray.200', height: '4px' })}></div>
+          </div>
+
+          <div class={css({ fontSize: '12px', color: 'gray.600', textAlign: 'right' })}>
+            {$user.usage.postCount} / {$user.planRule.maxPostCount}
+          </div>
+
+          <div
+            class={flex({
+              align: 'center',
+              justify: 'center',
+              gap: '4px',
+              marginTop: '4px',
+              borderWidth: '1px',
+              borderColor: 'gray.200',
+              borderRadius: '4px',
+              paddingX: '12px',
+              paddingY: '6px',
+              fontSize: '13px',
+              fontWeight: 'semibold',
+              textAlign: 'center',
+              color: 'gray.700',
+            })}
+          >
+            플랜 업그레이드
+            <Icon style={css.raw({ color: 'gray.400' })} icon={MoveUpRightIcon} size={12} />
+          </div>
+        </button>
+      </div>
+    {/if}
   </div>
 </div>
