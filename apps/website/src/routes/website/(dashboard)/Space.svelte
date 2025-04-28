@@ -220,7 +220,15 @@
       </div>
     </div>
 
-    <div class={css({ flexGrow: '1', paddingX: '16px', scrollPaddingY: '16px', overflowY: 'auto' })}>
+    <div
+      class={css({
+        flexGrow: '1',
+        paddingX: '16px',
+        paddingBottom: '32px',
+        scrollPaddingY: '16px',
+        overflowY: 'auto',
+      })}
+    >
       <EntityTree {$site} />
     </div>
   </div>

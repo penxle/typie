@@ -7,7 +7,7 @@
   import Post from './Post.svelte';
 
   const query = graphql(`
-    query DashboardLayout_PostShareModal_Query($entityId: ID!) @client {
+    query DashboardLayout_ShareModal_Query($entityId: ID!) @client {
       entity(entityId: $entityId) {
         id
 
