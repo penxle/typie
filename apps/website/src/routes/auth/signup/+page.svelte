@@ -1,21 +1,22 @@
 <script lang="ts">
   import { z } from 'zod';
   import { TypieError } from '@/errors';
-  import { generateRandomName } from '@/utils/name';
+  import ShuffleIcon from '~icons/lucide/dices';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Button, Checkbox, Helmet, TextInput } from '$lib/components';
+  import { tooltip } from '$lib/actions';
+  import { Button, Checkbox, Helmet, Icon, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { Toast } from '$lib/notification';
   import { serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
 
   const query = graphql(`
     query SignUpPage_Query {
-      seed
+      randomName
     }
   `);
 
@@ -25,10 +26,16 @@
     }
   `);
 
+  const generateRandomName = graphql(`
+    mutation SignUpPage_GenerateRandomName_Mutation {
+      generateRandomName
+    }
+  `);
+
   const form = createForm({
     schema: z
       .object({
-        name: z.string({ required_error: '닉네임을 입력해주세요.' }).nonempty('닉네임을 입력해주세요.'),
+        name: z.string().optional(),
         email: z.string({ required_error: '이메일을 입력해주세요.' }).email('올바른 이메일 형식을 입력해주세요.'),
         password: z.string({ required_error: '비밀번호를 입력해주세요.' }).nonempty('비밀번호를 입력해주세요.'),
         confirmPassword: z.string({ required_error: '비밀번호 확인을 입력해주세요.' }).nonempty('비밀번호 확인을 입력해주세요.'),
@@ -44,7 +51,7 @@
     onSubmit: async (data) => {
       await sendSignUpEmail({
         email: data.email,
-        name: data.name,
+        name: data.name ?? name,
         password: data.password,
         state: serializeOAuthState({
           redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
@@ -65,7 +72,7 @@
     },
   });
 
-  const name = $derived(generateRandomName(String($query.seed)));
+  let name = $state($query.randomName);
 </script>
 
 <Helmet
@@ -146,7 +153,25 @@
       <div class={flex({ direction: 'column', gap: '4px' })}>
         <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="name">닉네임</label>
 
-        <TextInput id="name" aria-invalid={!!form.errors.name} placeholder={name} bind:value={form.fields.name} />
+        <TextInput id="name" aria-invalid={!!form.errors.name} placeholder={name} bind:value={form.fields.name}>
+          {#snippet rightItem()}
+            <button
+              class={center({
+                borderRadius: '6px',
+                size: '24px',
+                color: 'gray.500',
+                _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+              })}
+              onclick={async () => {
+                name = await generateRandomName();
+              }}
+              type="button"
+              use:tooltip={{ message: '주사위 굴리기', placement: 'top', offset: 8, keepOnClick: true }}
+            >
+              <Icon icon={ShuffleIcon} size={14} />
+            </button>
+          {/snippet}
+        </TextInput>
 
         {#if form.errors.name}
           <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
