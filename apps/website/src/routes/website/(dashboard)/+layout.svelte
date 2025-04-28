@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
+  import { Button, HorizontalDivider } from '$lib/components';
   import { setupAppContext } from '$lib/context';
   import { isMobileDevice } from '$lib/utils';
   import { css } from '$styled-system/css';
@@ -123,18 +124,29 @@
         </div>
       </div>
 
-      <div class={css({ borderRadius: '6px', paddingY: '8px', textAlign: 'center', backgroundColor: 'gray.50' })}>
+      <div class={css({ borderRadius: '8px', paddingY: '8px', textAlign: 'center', backgroundColor: 'gray.50' })}>
         <p class={css({ fontSize: '13px', color: 'gray.500' })}>현재 로그인 정보</p>
         <p class={css({ marginTop: '2px', fontSize: '14px' })}>{$query.me.email}</p>
       </div>
 
-      <div class={flex({ alignItems: 'center', gap: '16px', userSelect: 'none' })}>
-        <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
-        <span class={css({ fontSize: '14px', color: 'gray.500' })}>또는</span>
-        <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
-      </div>
+      <HorizontalDivider color="secondary" />
 
-      <a class={css({ marginX: 'auto', fontSize: '13px', color: 'brand.500' })} href="https://penxle.channel.io/home">문의하기</a>
+      <div>
+        <Button
+          style={css.raw({ width: 'full' })}
+          external
+          href="https://x.com/intent/follow?screen_name=typieofficial"
+          size="lg"
+          type="link"
+          variant="secondary"
+        >
+          타이피 트위터 팔로우하기
+        </Button>
+
+        <p class={css({ marginTop: '6px', fontSize: '11px', textAlign: 'center', color: 'gray.500' })}>
+          타이피 트위터 팔로우하고 최근 소식을 가장 빠르게 받아보세요
+        </p>
+      </div>
     </div>
   </div>
 {:else}
