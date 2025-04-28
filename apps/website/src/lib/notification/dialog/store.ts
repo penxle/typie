@@ -1,10 +1,13 @@
 import { writable } from 'svelte/store';
+import type { Snippet } from 'svelte';
 
 type Dialog = {
   id: symbol;
 
   title: string;
   message: string;
+
+  children?: Snippet;
 
   action?: 'primary' | 'danger';
   actionLabel?: string;

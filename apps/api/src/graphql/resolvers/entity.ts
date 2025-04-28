@@ -18,6 +18,7 @@ import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site
 IEntity.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
+    type: t.expose('type', { type: EntityType }),
     slug: t.exposeString('slug'),
     permalink: t.exposeString('permalink'),
     order: t.exposeString('order'),
@@ -100,6 +101,30 @@ Entity.implement({
           FROM sq
           WHERE ${ne(sql`id`, self.id)}
           ORDER BY depth DESC
+        `);
+
+        return rows.map(({ id }) => id);
+      },
+    }),
+
+    descendants: t.field({
+      type: [Entity],
+      resolve: async (self) => {
+        const rows = await db.execute<{ id: string }>(sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id}, ${Entities.depth}
+            FROM ${Entities}
+            WHERE ${eq(Entities.id, self.id)}
+            UNION ALL
+            SELECT ${Entities.id}, ${Entities.depth}
+            FROM ${Entities}
+            JOIN sq ON ${Entities.parentId} = sq.id
+            WHERE ${eq(Entities.state, EntityState.ACTIVE)}
+          )
+          SELECT id
+          FROM sq
+          WHERE ${ne(sql`id`, self.id)}
+          ORDER BY depth ASC
         `);
 
         return rows.map(({ id }) => id);

@@ -92,6 +92,7 @@ type Entity implements IEntity {
   ancestors: [Entity!]!
   children: [Entity!]!
   depth: Int!
+  descendants: [Entity!]!
   id: ID!
   node: EntityNode!
   order: String!
@@ -99,6 +100,7 @@ type Entity implements IEntity {
   permalink: String!
   site: Site!
   slug: String!
+  type: EntityType!
   url: String!
   view: EntityView!
   visibility: EntityVisibility!
@@ -126,6 +128,7 @@ type EntityView implements IEntity {
   permalink: String!
   site: SiteView!
   slug: String!
+  type: EntityType!
   url: String!
   visibility: EntityVisibility!
 }
@@ -175,6 +178,7 @@ interface IEntity {
   order: String!
   permalink: String!
   slug: String!
+  type: EntityType!
   url: String!
   visibility: EntityVisibility!
 }
