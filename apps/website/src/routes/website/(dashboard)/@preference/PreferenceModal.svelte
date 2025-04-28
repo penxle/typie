@@ -1,6 +1,6 @@
 <script lang="ts">
   import CreditCardIcon from '~icons/lucide/credit-card';
-  import OrbitIcon from '~icons/lucide/orbit';
+  import PanelTopIcon from '~icons/lucide/panel-top';
   import ShieldCheckIcon from '~icons/lucide/shield-check';
   import UserIcon from '~icons/lucide/user';
   import { replaceState } from '$app/navigation';
@@ -12,7 +12,7 @@
   import AccountTab from './AccountTab.svelte';
   import BillingTab from './BillingTab.svelte';
   import IdentityTab from './IdentityTab.svelte';
-  import SpaceTab from './SpaceTab.svelte';
+  import SiteTab from './SiteTab.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_PreferenceModal_user } from '$graphql';
 
@@ -38,7 +38,7 @@
         ...DashboardLayout_PreferenceModal_AccountTab_user
         ...DashboardLayout_PreferenceModal_BillingTab_user
         ...DashboardLayout_PreferenceModal_IdentityTab_user
-        ...DashboardLayout_PreferenceModal_SpaceTab_user
+        ...DashboardLayout_PreferenceModal_SiteTab_user
       }
     `),
   );
@@ -51,10 +51,10 @@
       component: AccountTab,
     },
     {
-      path: '/preference/space',
-      label: '스페이스',
-      icon: OrbitIcon,
-      component: SpaceTab,
+      path: '/preference/site',
+      label: '사이트',
+      icon: PanelTopIcon,
+      component: SiteTab,
     },
     {
       path: '/preference/identity',
