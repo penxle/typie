@@ -66,6 +66,7 @@
       minWidth: 'var(--min-width)',
       width: 'var(--width)',
       maxWidth: 'var(--max-width)',
+      height: 'full',
     })}
   >
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
