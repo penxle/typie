@@ -581,6 +581,7 @@ type SiteView implements ISite {
 type Subscription {
   postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
+  siteUsageUpdateStream(siteId: ID!): Site!
 }
 
 input SyncPostInput {
