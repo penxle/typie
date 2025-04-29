@@ -2,7 +2,7 @@
   import { setContext, tick } from 'svelte';
   import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
-  import { createFloatingActions, portal } from '$lib/actions';
+  import { createFloatingActions, focusTrap, portal } from '$lib/actions';
   import { css } from '$styled-system/css';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { Snippet } from 'svelte';
@@ -168,6 +168,7 @@
     )}
     role="menu"
     use:floating
+    use:focusTrap={{ fallbackFocus: menuEl, escapeDeactivates: false, allowOutsideClick: true }}
     transition:scale={{ start: 0.95, duration: 150 }}
   >
     {#if action}
