@@ -179,5 +179,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       .then(firstOrThrow);
 
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
+    pubsub.publish('site:usage:update', siteId, null);
   }
 });

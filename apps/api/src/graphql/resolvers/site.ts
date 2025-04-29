@@ -203,4 +203,28 @@ builder.subscriptionFields((t) => ({
         .exhaustive();
     },
   }),
+
+  siteUsageUpdateStream: t.withAuth({ session: true }).field({
+    type: Site,
+    args: { siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }) },
+    subscribe: async (_, args, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: args.siteId,
+      });
+
+      const repeater = pubsub.subscribe('site:usage:update', args.siteId);
+
+      ctx.c.req.raw.signal.addEventListener('abort', () => {
+        repeater.return();
+      });
+
+      return repeater;
+    },
+    resolve: async (_, args, ctx) => {
+      clearLoaders(ctx);
+
+      return await db.select().from(Sites).where(eq(Sites.id, args.siteId)).then(firstOrThrow);
+    },
+  }),
 }));

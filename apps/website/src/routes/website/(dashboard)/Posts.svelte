@@ -313,6 +313,9 @@
                 borderRightRadius: 'full',
                 backgroundColor: 'brand.400',
                 maxWidth: 'full',
+                transitionProperty: 'width',
+                transitionDuration: '150ms',
+                transitionTimingFunction: 'ease',
               })}
             ></div>
 
@@ -339,6 +342,9 @@
                 borderRightRadius: 'full',
                 backgroundColor: 'brand.400',
                 maxWidth: 'full',
+                transitionProperty: 'width',
+                transitionDuration: '150ms',
+                transitionTimingFunction: 'ease',
               })}
             ></div>
 

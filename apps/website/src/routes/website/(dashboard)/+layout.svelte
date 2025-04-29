@@ -67,14 +67,31 @@
     }
   `);
 
+  const siteUsageUpdateStream = graphql(`
+    subscription DashboardLayout_SiteUsageUpdateStream($siteId: ID!) {
+      siteUsageUpdateStream(siteId: $siteId) {
+        ... on Site {
+          id
+
+          usage {
+            totalCharacterCount
+            totalBlobSize
+          }
+        }
+      }
+    }
+  `);
+
   setupAppContext();
 
   $effect(() => {
     return untrack(() => {
       const unsubscribe = siteUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
+      const unsubscribe2 = siteUsageUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
 
       return () => {
         unsubscribe();
+        unsubscribe2();
       };
     });
   });
