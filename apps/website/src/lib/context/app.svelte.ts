@@ -17,6 +17,11 @@ type AppState = {
   commandPaletteOpen: boolean;
   shareOpen: string | false;
   statsOpen: boolean;
+
+  progress: {
+    totalCharacterCount: number;
+    totalBlobSize: number;
+  };
 };
 
 type AppTimerState = {
@@ -45,6 +50,11 @@ export const setupAppContext = () => {
     commandPaletteOpen: false,
     shareOpen: false,
     statsOpen: false,
+
+    progress: {
+      totalCharacterCount: 0,
+      totalBlobSize: 0,
+    },
   });
 
   const context: AppContext = {

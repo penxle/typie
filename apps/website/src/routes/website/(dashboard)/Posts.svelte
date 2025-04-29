@@ -93,6 +93,11 @@
 
     return Math.min(1, $site.usage.totalBlobSize / $user.planRule.maxTotalBlobSize);
   });
+
+  $effect(() => {
+    app.state.progress.totalCharacterCount = totalCharacterCountProgress;
+    app.state.progress.totalBlobSize = totalBlobSizeProgress;
+  });
 </script>
 
 {#if app.state.postsOpen && !app.preference.current.postsExpanded}
