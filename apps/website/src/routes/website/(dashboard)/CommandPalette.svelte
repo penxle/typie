@@ -284,10 +284,6 @@
   $effect(() => {
     if (app.state.commandPaletteOpen) {
       updateGreeting();
-
-      setTimeout(() => {
-        inputEl?.focus();
-      });
     }
   });
 
@@ -329,6 +325,7 @@
         }
       }}
       placeholder={`${$user.name}님, ${greeting}`}
+      tabindex="0"
       type="text"
       bind:value={query}
     />

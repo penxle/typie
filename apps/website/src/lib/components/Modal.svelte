@@ -1,7 +1,7 @@
 <script lang="ts">
   import { sineOut } from 'svelte/easing';
   import { fade, fly } from 'svelte/transition';
-  import { portal } from '$lib/actions';
+  import { focusTrap, portal } from '$lib/actions';
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import RingSpinner from './RingSpinner.svelte';
@@ -24,10 +24,20 @@
   };
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && (open = false)} />
+<svelte:window
+  onkeydown={(e) => {
+    if (open && e.key === 'Escape') {
+      close();
+    }
+  }}
+/>
 
 {#if open}
-  <div class={center({ position: 'fixed', inset: '0', zIndex: '50', padding: '20px', userSelect: 'none' })} use:portal>
+  <div
+    class={center({ position: 'fixed', inset: '0', zIndex: '50', padding: '20px', userSelect: 'none' })}
+    use:focusTrap={{ fallbackFocus: '[role="none"]', escapeDeactivates: false }}
+    use:portal
+  >
     <div
       class={css({
         position: 'fixed',
@@ -62,6 +72,9 @@
           },
           style,
         )}
+        aria-modal="true"
+        role="dialog"
+        tabindex="-1"
         transition:fly|global={{ y: 5, duration: 150, easing: sineOut }}
       >
         {@render children()}

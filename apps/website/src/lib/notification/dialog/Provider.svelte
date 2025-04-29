@@ -4,5 +4,7 @@
 </script>
 
 {#if $store.length > 0}
-  <Component dialog={$store[0]} />
+  {#key $store[0].id}
+    <Component dialog={$store[0]} />
+  {/key}
 {/if}

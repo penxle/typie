@@ -109,6 +109,7 @@
       pushState('', { shallowRoute: '/preference/account' });
       open = false;
     }}
+    tabindex={-1}
     type="button"
   >
     설정
@@ -135,6 +136,7 @@
         },
       });
     }}
+    tabindex={-1}
     type="button"
   >
     로그아웃

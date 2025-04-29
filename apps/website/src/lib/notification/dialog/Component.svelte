@@ -55,6 +55,7 @@
         dismiss();
       }}
       size="md"
+      tabindex={0}
       variant={dialog.action ?? 'primary'}
     >
       {dialog.actionLabel ?? '확인'}
