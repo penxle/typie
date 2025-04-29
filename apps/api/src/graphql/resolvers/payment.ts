@@ -56,7 +56,8 @@ Plan.implement({
 
 PlanRule.implement({
   fields: (t) => ({
-    maxPostCount: t.int({ resolve: (self) => self.maxPostCount ?? defaultPlanRules.maxPostCount }),
+    maxTotalCharacterCount: t.int({ resolve: (self) => self.maxTotalCharacterCount ?? defaultPlanRules.maxTotalCharacterCount }),
+    maxTotalBlobSize: t.int({ resolve: (self) => self.maxTotalBlobSize ?? defaultPlanRules.maxTotalBlobSize }),
   }),
 });
 

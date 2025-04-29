@@ -29,7 +29,6 @@ import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
-import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
 import { CharacterCountChange, Comment, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostView } from '../objects';
 
@@ -324,11 +323,6 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
-      await assertPlanRule({
-        userId: ctx.session.userId,
-        rule: 'maxPostCount',
-      });
-
       const title = null;
       const subtitle = null;
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -425,11 +419,6 @@ builder.mutationFields((t) => ({
       postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
     },
     resolve: async (_, { input }, ctx) => {
-      await assertPlanRule({
-        userId: ctx.session.userId,
-        rule: 'maxPostCount',
-      });
-
       const entity = await db
         .select({
           siteId: Entities.siteId,

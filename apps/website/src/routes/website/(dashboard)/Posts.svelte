@@ -1,7 +1,5 @@
 <script lang="ts">
-  import { TypieError } from '@/errors';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
-  import MoveUpRightIcon from '~icons/lucide/move-up-right';
   import PanelLeftIcon from '~icons/lucide/panel-left';
   import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -10,6 +8,7 @@
   import { portal, tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
+  import { comma, formatBytes } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import EntityTree from './@tree/EntityTree.svelte';
@@ -28,12 +27,9 @@
       fragment DashboardLayout_Posts_user on User {
         id
 
-        usage {
-          postCount
-        }
-
         planRule {
-          maxPostCount
+          maxTotalCharacterCount
+          maxTotalBlobSize
         }
 
         plan {
@@ -48,6 +44,11 @@
     graphql(`
       fragment DashboardLayout_Posts_site on Site {
         id
+
+        usage {
+          totalCharacterCount
+          totalBlobSize
+        }
 
         ...DashboardLayout_EntityTree_site
       }
@@ -76,6 +77,22 @@
   `);
 
   const app = getAppContext();
+
+  const totalCharacterCountProgress = $derived.by(() => {
+    if ($user.planRule.maxTotalCharacterCount === -1) {
+      return -1;
+    }
+
+    return Math.min(1, $site.usage.totalCharacterCount / $user.planRule.maxTotalCharacterCount);
+  });
+
+  const totalBlobSizeProgress = $derived.by(() => {
+    if ($user.planRule.maxTotalBlobSize === -1) {
+      return -1;
+    }
+
+    return Math.min(1, $site.usage.totalBlobSize / $user.planRule.maxTotalBlobSize);
+  });
 </script>
 
 {#if app.state.postsOpen && !app.preference.current.postsExpanded}
@@ -230,17 +247,11 @@
             _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
           })}
           onclick={async () => {
-            try {
-              const resp = await createPost({
-                siteId: $site.id,
-              });
+            const resp = await createPost({
+              siteId: $site.id,
+            });
 
-              await goto(`/${resp.entity.slug}`);
-            } catch (err) {
-              if (err instanceof TypieError && err.code === 'max_post_count_reached') {
-                pushState('', { shallowRoute: '/preference/billing' });
-              }
-            }
+            await goto(`/${resp.entity.slug}`);
           }}
           type="button"
           use:tooltip={{ message: '새 포스트 생성' }}
@@ -254,6 +265,7 @@
       class={css({
         flexGrow: '1',
         paddingX: '16px',
+        paddingTop: '8px',
         paddingBottom: '32px',
         scrollPaddingY: '16px',
         overflowY: 'auto',
@@ -262,71 +274,78 @@
       <EntityTree {$site} />
     </div>
 
-    {#if !$user.plan}
-      {@const usage = ($user.planRule.maxPostCount - $user.usage.postCount) * 100}
+    {#if totalCharacterCountProgress !== -1 || totalBlobSizeProgress !== -1}
+      <button
+        class={flex({
+          flexDirection: 'column',
+          gap: '8px',
+          borderTopWidth: '1px',
+          borderColor: 'gray.100',
+          paddingX: '12px',
+          paddingTop: '12px',
+          paddingBottom: '20px',
+          transitionProperty: 'background-color',
+          transitionDuration: '250ms',
+          transitionTimingFunction: 'ease',
+          _hover: { backgroundColor: 'gray.50' },
+        })}
+        onclick={() => {
+          pushState('', { shallowRoute: '/preference/billing' });
+        }}
+        type="button"
+      >
+        <div class={flex({ flexDirection: 'column', gap: '2px' })}>
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '2px' })}>
+            <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500' })}>글자 수</div>
 
-      <div class={css({ paddingX: '16px', paddingY: '20px' })}>
-        <button
-          class={css({
-            borderWidth: '1px',
-            borderColor: 'gray.100',
-            borderRadius: '6px',
-            textAlign: 'left',
-            paddingX: '10px',
-            paddingY: '8px',
-            width: 'full',
-            boxShadow: 'small',
-            _hover: { backgroundColor: 'gray.100' },
-          })}
-          onclick={() => {
-            pushState('', { shallowRoute: '/preference/billing' });
-          }}
-          type="button"
-        >
-          <p class={css({ fontSize: '12px', color: 'gray.600' })}>현재 사용량</p>
+            <div class={css({ fontSize: '12px', color: 'gray.500' })}>
+              {comma($site.usage.totalCharacterCount)}자 / {comma($user.planRule.maxTotalCharacterCount)}자
+            </div>
+          </div>
 
-          <div class={css({ position: 'relative', marginY: '4px' })}>
+          <div class={css({ position: 'relative', borderRadius: 'full', height: '4px', overflow: 'hidden' })}>
             <div
-              style:width={`calc(100% - ${usage}%)`}
+              style:width={`${totalCharacterCountProgress * 100}%`}
               class={css({
                 position: 'absolute',
-                top: '0',
                 left: '0',
-                borderRadius: 'full',
-                backgroundColor: 'brand.500',
+                insetY: '0',
+                borderRightRadius: 'full',
+                backgroundColor: 'brand.400',
                 maxWidth: 'full',
-                height: '4px',
               })}
             ></div>
-            <div class={css({ borderRadius: 'full', backgroundColor: 'gray.200', height: '4px' })}></div>
+
+            <div class={css({ backgroundColor: 'gray.200', height: 'full' })}></div>
+          </div>
+        </div>
+
+        <div class={flex({ flexDirection: 'column', gap: '2px' })}>
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '4px' })}>
+            <div class={css({ fontSize: '12px', color: 'gray.700' })}>첨부 파일</div>
+
+            <div class={css({ fontSize: '12px', color: 'gray.500' })}>
+              {formatBytes($site.usage.totalBlobSize)} / {formatBytes($user.planRule.maxTotalBlobSize)}
+            </div>
           </div>
 
-          <div class={css({ fontSize: '12px', color: 'gray.600', textAlign: 'right' })}>
-            {$user.usage.postCount} / {$user.planRule.maxPostCount}
-          </div>
+          <div class={css({ position: 'relative', borderRadius: 'full', height: '4px', overflow: 'hidden' })}>
+            <div
+              style:width={`${totalBlobSizeProgress * 100}%`}
+              class={css({
+                position: 'absolute',
+                left: '0',
+                insetY: '0',
+                borderRightRadius: 'full',
+                backgroundColor: 'brand.400',
+                maxWidth: 'full',
+              })}
+            ></div>
 
-          <div
-            class={flex({
-              align: 'center',
-              justify: 'center',
-              gap: '4px',
-              marginTop: '4px',
-              borderWidth: '1px',
-              borderColor: 'gray.200',
-              borderRadius: '4px',
-              paddingX: '12px',
-              paddingY: '6px',
-              fontSize: '13px',
-              fontWeight: 'semibold',
-              textAlign: 'center',
-              color: 'gray.700',
-            })}
-          >
-            플랜 업그레이드
-            <Icon style={css.raw({ color: 'gray.400' })} icon={MoveUpRightIcon} size={12} />
+            <div class={css({ backgroundColor: 'gray.200', height: 'full' })}></div>
           </div>
-        </button>
-      </div>
+        </div>
+      </button>
     {/if}
   </div>
 </div>

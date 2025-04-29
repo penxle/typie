@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { TypieError } from '@/errors';
   import FilePenIcon from '~icons/lucide/file-pen';
-  import { goto, pushState } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { Button, Helmet, Icon } from '$lib/components';
   import { css } from '$styled-system/css';
@@ -50,15 +49,11 @@
 
   <Button
     onclick={async () => {
-      try {
-        const resp = await createPost({ siteId: $query.me.sites[0].id });
+      const resp = await createPost({
+        siteId: $query.me.sites[0].id,
+      });
 
-        await goto(`/${resp.entity.slug}`);
-      } catch (err) {
-        if (err instanceof TypieError && err.code === 'max_post_count_reached') {
-          pushState('', { shallowRoute: '/preference/billing' });
-        }
-      }
+      await goto(`/${resp.entity.slug}`);
     }}
   >
     새 포스트 만들기

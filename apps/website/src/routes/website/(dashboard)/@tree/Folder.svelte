@@ -1,6 +1,5 @@
 <script lang="ts">
   import { EntityType, EntityVisibility } from '@/enums';
-  import { TypieError } from '@/errors';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -11,7 +10,7 @@
   import SquarePenIcon from '~icons/lucide/square-pen';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
-  import { goto, pushState } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { HorizontalDivider, Icon, Menu, MenuItem, RingSpinner } from '$lib/components';
   import { getAppContext } from '$lib/context';
@@ -256,18 +255,12 @@
         <MenuItem
           icon={SquarePenIcon}
           onclick={async () => {
-            try {
-              const resp = await createPost({
-                siteId: $folder.entity.site.id,
-                parentEntityId: $folder.entity.id,
-              });
+            const resp = await createPost({
+              siteId: $folder.entity.site.id,
+              parentEntityId: $folder.entity.id,
+            });
 
-              await goto(`/${resp.entity.slug}`);
-            } catch (err) {
-              if (err instanceof TypieError && err.code === 'max_post_count_reached') {
-                pushState('', { shallowRoute: '/preference/billing' });
-              }
-            }
+            await goto(`/${resp.entity.slug}`);
           }}
         >
           하위 포스트 생성

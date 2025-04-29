@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { TypieError } from '@/errors';
   import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
   import CircleHelpIcon from '~icons/lucide/circle-help';
   import CogIcon from '~icons/lucide/cog';
@@ -94,17 +93,11 @@
       },
     })}
     onclick={async () => {
-      try {
-        const resp = await createPost({
-          siteId: $user.sites[0].id,
-        });
+      const resp = await createPost({
+        siteId: $user.sites[0].id,
+      });
 
-        await goto(`/${resp.entity.slug}`);
-      } catch (err) {
-        if (err instanceof TypieError && err.code === 'max_post_count_reached') {
-          pushState('', { shallowRoute: '/preference/billing' });
-        }
-      }
+      await goto(`/${resp.entity.slug}`);
     }}
     type="button"
     use:tooltip={{ message: '새 포스트 생성', placement: 'right', offset: 12 }}

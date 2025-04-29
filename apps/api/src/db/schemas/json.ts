@@ -1,11 +1,13 @@
 import { NotificationCategory } from '@/enums';
 
 export type PlanRules = {
-  maxPostCount: number;
+  maxTotalCharacterCount: number;
+  maxTotalBlobSize: number;
 };
 
 export const defaultPlanRules: PlanRules = {
-  maxPostCount: -1,
+  maxTotalCharacterCount: -1,
+  maxTotalBlobSize: -1,
 };
 
 export type NotificationAnnouncementData = {

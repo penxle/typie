@@ -86,15 +86,15 @@ Site.implement({
     usage: t.field({
       type: t.builder.simpleObject('SiteUsage', {
         fields: (t) => ({
-          characterCount: t.int(),
-          blobSize: t.int(),
+          totalCharacterCount: t.int(),
+          totalBlobSize: t.int(),
         }),
       }),
       resolve: async (self) => {
         const row = await db
           .select({
-            characterCount: sum(PostContents.characterCount).mapWith(Number),
-            blobSize: sum(PostContents.blobSize).mapWith(Number),
+            totalCharacterCount: sum(PostContents.characterCount).mapWith(Number),
+            totalBlobSize: sum(PostContents.blobSize).mapWith(Number),
           })
           .from(PostContents)
           .innerJoin(Posts, eq(PostContents.postId, Posts.id))
@@ -103,8 +103,8 @@ Site.implement({
           .then(firstOrThrow);
 
         return {
-          characterCount: row.characterCount || 0,
-          blobSize: row.blobSize || 0,
+          totalCharacterCount: row.totalCharacterCount || 0,
+          totalBlobSize: row.totalBlobSize || 0,
         };
       },
     }),

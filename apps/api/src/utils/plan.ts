@@ -1,8 +1,6 @@
-import { and, count, eq } from 'drizzle-orm';
-import { db, Entities, first, Plans, Posts, UserPlans } from '@/db';
+import { eq } from 'drizzle-orm';
+import { db, first, Plans, UserPlans } from '@/db';
 import { defaultPlanRules } from '@/db/schemas/json';
-import { EntityState } from '@/enums';
-import { TypieError } from '@/errors';
 import type { PlanRules } from '@/db/schemas/json';
 
 type GetPlanParams<T extends keyof PlanRules> = {
@@ -26,22 +24,5 @@ export const assertPlanRule = async <T extends keyof PlanRules>({ userId, rule }
 
   if (value === -1) {
     return;
-  }
-
-  switch (rule) {
-    case 'maxPostCount': {
-      const postCount = await db
-        .select({ count: count() })
-        .from(Posts)
-        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .where(and(eq(Entities.userId, userId), eq(Entities.state, EntityState.ACTIVE)))
-        .then((result) => result[0]?.count ?? 0);
-
-      if (postCount >= value) {
-        throw new TypieError({ code: 'max_post_count_reached' });
-      }
-
-      break;
-    }
   }
 };
