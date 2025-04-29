@@ -80,7 +80,8 @@
         "url": { "default": null },
         "ratio": { "default": null },
         "placeholder": { "default": null },
-        "proportion": { "default": 1 }
+        "proportion": { "default": 1 },
+        "size": { "default": null }
       },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=image]" }]
     },

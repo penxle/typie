@@ -28,6 +28,7 @@
         url
         ratio
         placeholder
+        size
       }
     }
   `);

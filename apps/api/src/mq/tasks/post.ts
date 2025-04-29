@@ -1,3 +1,4 @@
+import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
 import { eq, sql } from 'drizzle-orm';
 import * as R from 'remeda';
@@ -11,8 +12,18 @@ import { pubsub } from '@/pubsub';
 import { meili } from '@/search';
 import { makeText } from '@/utils';
 import { defineJob } from '../types';
+import type { Node } from '@tiptap/pm/model';
 
-const getCharacterCount = (text: string) => [...text.replaceAll(/\s+/g, ' ').trim()].length;
+const getCharacterCount = (text: string) => {
+  return [...text.replaceAll(/\s+/g, ' ').trim()].length;
+};
+
+const getBlobSize = (node: Node) => {
+  const sizes = findChildren(node, (node) => node.type.name === 'file' || node.type.name === 'image').map(
+    ({ node }) => Number(node.attrs.size) || 0,
+  );
+  return sizes.reduce((acc, size) => acc + size, 0);
+};
 
 export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: string) => {
   const updates = await redis.smembers(`post:sync:updates:${postId}`);
@@ -117,6 +128,9 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       const body = node.toJSON();
       const text = makeText(body);
 
+      const characterCount = getCharacterCount(text);
+      const blobSize = getBlobSize(node);
+
       const updatedAt = dayjs();
 
       await tx
@@ -135,6 +149,8 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
         .set({
           body,
           text,
+          characterCount,
+          blobSize,
           updatedAt,
         })
         .where(eq(PostContents.postId, postId));

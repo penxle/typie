@@ -11,6 +11,7 @@ scalar Binary
 
 interface Blob {
   id: ID!
+  size: Int!
 }
 
 type CharacterCountChange {
@@ -215,6 +216,7 @@ type Image implements Blob {
   id: ID!
   placeholder: String!
   ratio: Float!
+  size: Int!
   url: String!
 }
 
@@ -541,6 +543,7 @@ type Site implements ISite {
   name: String!
   slug: String!
   url: String!
+  usage: SiteUsage!
   view: SiteView!
 }
 
@@ -550,6 +553,11 @@ enum SiteState {
 }
 
 union SiteUpdateStreamPayload = Entity | Site
+
+type SiteUsage {
+  blobSize: Int!
+  characterCount: Int!
+}
 
 type SiteView implements ISite {
   id: ID!

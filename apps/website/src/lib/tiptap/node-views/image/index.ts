@@ -22,6 +22,7 @@ export const Image = createNodeView(Component, {
       ratio: {},
       placeholder: {},
       proportion: { default: 1 },
+      size: {},
     };
   },
 
