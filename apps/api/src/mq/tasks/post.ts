@@ -12,7 +12,7 @@ import { meili } from '@/search';
 import { makeText } from '@/utils';
 import { defineJob } from '../types';
 
-const getCharacterCount = (text: string) => text.replaceAll(/\s+/g, ' ').trim().length;
+const getCharacterCount = (text: string) => [...text.replaceAll(/\s+/g, ' ').trim()].length;
 
 export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: string) => {
   const updates = await redis.smembers(`post:sync:updates:${postId}`);

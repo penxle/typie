@@ -21,9 +21,9 @@
   let open = $state(false);
   let text = $state('');
 
-  const countWithWhitespace = $derived(text.replaceAll(/\s+/g, ' ').trim().length);
-  const countWithoutWhitespace = $derived(text.replaceAll(/\s/g, '').length);
-  const countWithoutWhitespaceAndPunctuation = $derived(text.replaceAll(/[\s\p{P}]/gu, '').length);
+  const countWithWhitespace = $derived([...text.replaceAll(/\s+/g, ' ').trim()].length);
+  const countWithoutWhitespace = $derived([...text.replaceAll(/\s/g, '').trim()].length);
+  const countWithoutWhitespaceAndPunctuation = $derived([...text.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
 
   const handler = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
     if (transaction.docChanged) {
