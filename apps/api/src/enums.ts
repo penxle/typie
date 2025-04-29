@@ -4,6 +4,12 @@ export const CommentState = {
   DELETED: 'DELETED',
 } as const;
 
+export type CreditCodeState = keyof typeof CreditCodeState;
+export const CreditCodeState = {
+  AVAILABLE: 'AVAILABLE',
+  USED: 'USED',
+} as const;
+
 export type EntityState = keyof typeof EntityState;
 export const EntityState = {
   ACTIVE: 'ACTIVE',
@@ -112,6 +118,14 @@ export type SiteState = keyof typeof SiteState;
 export const SiteState = {
   ACTIVE: 'ACTIVE',
   DELETED: 'DELETED',
+} as const;
+
+export type UserPaymentCreditTransactionCause = keyof typeof UserPaymentCreditTransactionCause;
+export const UserPaymentCreditTransactionCause = {
+  PERIODIC_PAYMENT: 'PERIODIC_PAYMENT',
+  CODE_REDEMPTION: 'CODE_REDEMPTION',
+  MANUAL_ADJUSTMENT: 'MANUAL_ADJUSTMENT',
+  EVENT: 'EVENT',
 } as const;
 
 export type UserPlanBillingCycle = keyof typeof UserPlanBillingCycle;

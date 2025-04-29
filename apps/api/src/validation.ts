@@ -44,3 +44,10 @@ export const cardSchema = {
     .string({ required_error: '카드 비밀번호를 입력해 주세요' })
     .regex(/^\d{2}$/, { message: '올바른 카드 비밀번호를 입력해 주세요' }),
 };
+
+export const redeemCodeSchema = z
+  .string({ required_error: '코드를 입력해 주세요' })
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9-]+$/, { message: '코드 형식이 맞지 않아요' })
+  .transform((str) => str.replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1'));

@@ -1,12 +1,14 @@
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, getTableColumns, gte, inArray, lt, sql, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, getTableColumns, gt, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '@/cache';
 import {
+  CreditCodes,
   db,
   Entities,
   first,
   firstOrThrow,
+  firstOrThrowWith,
   Notifications,
   PaymentBillingKeys,
   Plans,
@@ -15,6 +17,8 @@ import {
   Sites,
   TableCode,
   UserMarketingConsents,
+  UserPaymentCredits,
+  UserPaymentCreditTransactions,
   UserPersonalIdentities,
   UserPlans,
   Users,
@@ -25,10 +29,21 @@ import {
 import { defaultPlanRules } from '@/db/schemas/json';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { EntityState, PaymentBillingKeyState, SingleSignOnProvider, SiteState, UserPlanState, UserState } from '@/enums';
+import {
+  CreditCodeState,
+  EntityState,
+  PaymentBillingKeyState,
+  SingleSignOnProvider,
+  SiteState,
+  UserPaymentCreditTransactionCause,
+  UserPlanState,
+  UserState,
+} from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
+import { getUserCredit } from '@/utils/credit';
+import { delay } from '@/utils/promise';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
 import {
@@ -219,6 +234,10 @@ User.implement({
           .where(eq(UserMarketingConsents.userId, user.id))
           .then(first));
       },
+    }),
+
+    remainingCredit: t.int({
+      resolve: async (user) => await getUserCredit({ userId: user.id }),
     }),
   }),
 });
@@ -483,6 +502,40 @@ builder.mutationFields((t) => ({
         })
         .returning()
         .then(firstOrThrow);
+    },
+  }),
+
+  redeemCreditCode: t.withAuth({ session: true }).fieldWithInput({
+    type: User,
+    input: { code: t.input.string() },
+    resolve: async (_, { input }, ctx) => {
+      await delay(Math.random() * 2000);
+
+      const creditCode = await db
+        .select({ id: CreditCodes.id, state: CreditCodes.state, amount: CreditCodes.amount })
+        .from(CreditCodes)
+        .where(and(eq(CreditCodes.code, input.code), eq(CreditCodes.state, CreditCodeState.AVAILABLE), gt(CreditCodes.expiresAt, dayjs())))
+        .then(firstOrThrowWith(new TypieError({ code: 'invalid_code' })));
+
+      return await db.transaction(async (tx) => {
+        await tx.update(CreditCodes).set({ state: CreditCodeState.USED, redeemedAt: dayjs() }).where(eq(CreditCodes.id, creditCode.id));
+
+        await tx.insert(UserPaymentCredits).values({
+          userId: ctx.session.userId,
+          initialAmount: creditCode.amount,
+          remainingAmount: creditCode.amount,
+          expiresAt: dayjs().add(1, 'year'),
+          codeId: creditCode.id,
+        });
+
+        await tx.insert(UserPaymentCreditTransactions).values({
+          userId: ctx.session.userId,
+          cause: UserPaymentCreditTransactionCause.CODE_REDEMPTION,
+          amount: creditCode.amount,
+        });
+
+        return ctx.session.userId;
+      });
     },
   }),
 

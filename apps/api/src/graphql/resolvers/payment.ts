@@ -9,6 +9,7 @@ import {
   PaymentRecords,
   Plans,
   TableCode,
+  UserPaymentCreditTransactions,
   UserPlans,
   Users,
   validateDbId,
@@ -20,12 +21,14 @@ import {
   PaymentMethodType,
   PaymentRecordState,
   PlanAvailability,
+  UserPaymentCreditTransactionCause,
   UserPlanBillingCycle,
   UserPlanState,
 } from '@/enums';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
+import { deductUserCredit } from '@/utils/credit';
 import { cardSchema } from '@/validation';
 import { builder } from '../builder';
 import { isTypeOf, PaymentBillingKey, Plan, PlanRule, UserPlan } from '../objects';
@@ -170,14 +173,17 @@ builder.mutationFields((t) => ({
 
       const enrolledAt = dayjs.kst().startOf('day');
       const nextPaymentDate = getNextPaymentDate(input.billingCycle, enrolledAt);
+      const paymentAmount = calculatePaymentAmount(input.billingCycle, plan.fee);
 
       return await db.transaction(async (tx) => {
+        const { deductedAmount, remainingAmount } = await deductUserCredit({ tx, userId: ctx.session.userId, amount: paymentAmount });
+
         const userPlan = await tx
           .insert(UserPlans)
           .values({
             userId: ctx.session.userId,
             planId: plan.id,
-            fee: calculatePaymentAmount(input.billingCycle, plan.fee),
+            fee: plan.fee,
             billingCycle: input.billingCycle,
             expiresAt: nextPaymentDate,
           })
@@ -188,7 +194,7 @@ builder.mutationFields((t) => ({
           .insert(PaymentInvoices)
           .values({
             userId: ctx.session.userId,
-            amount: userPlan.fee,
+            amount: paymentAmount,
             billingAt: enrolledAt,
             state: PaymentInvoiceState.PAID,
           })
@@ -197,32 +203,53 @@ builder.mutationFields((t) => ({
 
         await tx.insert(PaymentInvoices).values({
           userId: ctx.session.userId,
-          amount: userPlan.fee,
+          amount: paymentAmount,
           billingAt: nextPaymentDate,
           state: PaymentInvoiceState.UPCOMING,
         });
 
-        const paymentResult = await portone.makePayment({
-          paymentId: invoice.id,
-          billingKey: paymentBillingKey.billingKey,
-          customerName: user.name,
-          customerEmail: user.email,
-          orderName: '타이피 정기결제',
-          amount: userPlan.fee,
-        });
+        if (deductedAmount > 0) {
+          const creditTransaction = await tx
+            .insert(UserPaymentCreditTransactions)
+            .values({
+              userId: ctx.session.userId,
+              cause: UserPaymentCreditTransactionCause.PERIODIC_PAYMENT,
+              amount: -deductedAmount,
+            })
+            .returning({ id: UserPaymentCreditTransactions.id })
+            .then(firstOrThrow);
 
-        if (paymentResult.status === 'failed') {
-          throw new TypieError({ code: 'payment_failed', message: paymentResult.message });
+          await tx.insert(PaymentRecords).values({
+            invoiceId: invoice.id,
+            methodType: PaymentMethodType.CREDIT,
+            methodId: creditTransaction.id,
+            state: PaymentRecordState.SUCCEEDED,
+            amount: deductedAmount,
+          });
         }
+        if (remainingAmount > 0) {
+          const paymentResult = await portone.makePayment({
+            paymentId: invoice.id,
+            billingKey: paymentBillingKey.billingKey,
+            customerName: user.name,
+            customerEmail: user.email,
+            orderName: '타이피 정기결제',
+            amount: remainingAmount,
+          });
 
-        await tx.insert(PaymentRecords).values({
-          invoiceId: invoice.id,
-          methodType: PaymentMethodType.BILLING_KEY,
-          methodId: paymentBillingKey.id,
-          state: PaymentRecordState.SUCCEEDED,
-          amount: userPlan.fee,
-          receiptUrl: paymentResult.receiptUrl,
-        });
+          if (paymentResult.status === 'failed') {
+            throw new TypieError({ code: 'payment_failed', message: paymentResult.message });
+          }
+
+          await tx.insert(PaymentRecords).values({
+            invoiceId: invoice.id,
+            methodType: PaymentMethodType.BILLING_KEY,
+            methodId: paymentBillingKey.id,
+            state: PaymentRecordState.SUCCEEDED,
+            amount: remainingAmount,
+            receiptUrl: paymentResult.receiptUrl,
+          });
+        }
 
         return userPlan;
       });
