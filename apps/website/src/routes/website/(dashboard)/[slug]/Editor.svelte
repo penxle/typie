@@ -29,6 +29,7 @@
   import { TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
   import { YState } from './state.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -499,3 +500,5 @@
 
   <Panel $post={$query.post} {editor} />
 </div>
+
+<Limit {editor} />
