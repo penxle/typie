@@ -31,11 +31,11 @@
     `),
   );
 
-  const updatePaymentMethod = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdatePaymentMethod_Mutation(
-      $input: UpdatePaymentMethodInput!
+  const updatePaymentBillingKey = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdatePaymentBillingKey_Mutation(
+      $input: UpdatePaymentBillingKeyInput!
     ) {
-      updatePaymentMethod(input: $input) {
+      updatePaymentBillingKey(input: $input) {
         id
         name
         createdAt
@@ -70,7 +70,7 @@
     }),
     onSubmit: async (data) => {
       try {
-        await updatePaymentMethod({
+        await updatePaymentBillingKey({
           birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
           cardNumber: data.cardNumber,
           expiryDate: data.expiryDate,

@@ -34,6 +34,12 @@ export const NotificationState = {
   READ: 'READ',
 } as const;
 
+export type PaymentBillingKeyState = keyof typeof PaymentBillingKeyState;
+export const PaymentBillingKeyState = {
+  ACTIVE: 'ACTIVE',
+  DEACTIVATED: 'DEACTIVATED',
+} as const;
+
 export type PaymentInvoiceState = keyof typeof PaymentInvoiceState;
 export const PaymentInvoiceState = {
   UPCOMING: 'UPCOMING',
@@ -42,10 +48,10 @@ export const PaymentInvoiceState = {
   CANCELED: 'CANCELED',
 } as const;
 
-export type PaymentMethodState = keyof typeof PaymentMethodState;
-export const PaymentMethodState = {
-  ACTIVE: 'ACTIVE',
-  DEACTIVATED: 'DEACTIVATED',
+export type PaymentMethodType = keyof typeof PaymentMethodType;
+export const PaymentMethodType = {
+  BILLING_KEY: 'BILLING_KEY',
+  CREDIT: 'CREDIT',
 } as const;
 
 export type PaymentRecordState = keyof typeof PaymentRecordState;

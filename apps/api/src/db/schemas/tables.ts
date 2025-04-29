@@ -134,6 +134,29 @@ export const Notifications = pgTable('notifications', {
     .default(sql`now()`),
 });
 
+export const PaymentBillingKeys = pgTable(
+  'payment_billing_keys',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PAYMENT_BILLING_KEYS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    billingKey: text('billing_key').notNull(),
+    state: E._PaymentBillingKeyState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex()
+      .on(t.userId)
+      .where(eq(t.state, sql`'ACTIVE'`)),
+  ],
+);
+
 export const PaymentInvoices = pgTable('payment_invoices', {
   id: text('id')
     .primaryKey()
@@ -149,29 +172,6 @@ export const PaymentInvoices = pgTable('payment_invoices', {
     .default(sql`now()`),
 });
 
-export const PaymentMethods = pgTable(
-  'payment_methods',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.PAYMENT_METHODS)),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    name: text('name').notNull(),
-    billingKey: text('billing_key').notNull(),
-    state: E._PaymentMethodState('state').notNull().default('ACTIVE'),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [
-    uniqueIndex()
-      .on(t.userId)
-      .where(eq(t.state, sql`'ACTIVE'`)),
-  ],
-);
-
 export const PaymentRecords = pgTable('payment_records', {
   id: text('id')
     .primaryKey()
@@ -179,9 +179,8 @@ export const PaymentRecords = pgTable('payment_records', {
   invoiceId: text('invoice_id')
     .notNull()
     .references(() => PaymentInvoices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  methodId: text('method_id')
-    .notNull()
-    .references(() => PaymentMethods.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  methodType: E._PaymentMethodType('method_type').notNull(),
+  methodId: text('method_id').notNull(),
   state: E._PaymentRecordState('state').notNull(),
   amount: integer('amount').notNull(),
   receiptUrl: text('receipt_url'),
