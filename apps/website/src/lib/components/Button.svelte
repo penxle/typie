@@ -52,7 +52,6 @@
             _enabled: {
               base: 'white',
               _hover: 'white',
-              _focusVisible: 'white',
               _active: 'white',
               _pressed: 'white',
             },
@@ -62,7 +61,6 @@
             _enabled: {
               base: 'brand.500',
               _hover: 'brand.600',
-              _focusVisible: 'brand.600',
               _active: 'brand.700',
               _pressed: 'brand.700',
             },
@@ -75,7 +73,6 @@
             _enabled: {
               base: 'gray.700',
               _hover: 'gray.700',
-              _focusVisible: 'gray.700',
               _active: 'gray.700',
               _pressed: 'gray.700',
             },
@@ -85,7 +82,6 @@
             _enabled: {
               base: 'white',
               _hover: 'gray.100',
-              _focusVisible: 'gray.100',
               _active: 'gray.300',
               _pressed: 'gray.300',
             },
@@ -102,7 +98,6 @@
             _enabled: {
               base: 'white',
               _hover: 'white',
-              _focusVisible: 'white',
               _active: 'white',
               _pressed: 'white',
             },
@@ -112,7 +107,6 @@
             _enabled: {
               base: 'red.600',
               _hover: 'red.500',
-              _focusVisible: 'red.500',
               _active: 'red.700',
               _pressed: 'red.700',
             },
