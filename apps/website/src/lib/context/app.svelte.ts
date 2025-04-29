@@ -1,11 +1,12 @@
 import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
 
-type AppPreference = {
+export type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   panelExpanded: boolean;
   focusDuration: number;
   restDuration: number;
+  currentPage?: string;
 };
 
 type AppState = {

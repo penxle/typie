@@ -1,8 +1,10 @@
 <script lang="ts">
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
+  import { afterNavigate } from '$app/navigation';
   import { graphql } from '$graphql';
   import { Helmet, Icon } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Editor from './Editor.svelte';
@@ -14,6 +16,7 @@
 
         entity {
           id
+          slug
           state
         }
       }
@@ -21,6 +24,12 @@
       ...Editor_query
     }
   `);
+
+  const app = getAppContext();
+
+  afterNavigate(() => {
+    app.preference.current.currentPage = $query.post.entity.slug;
+  });
 </script>
 
 {#if $query.post.entity.state === EntityState.ACTIVE}

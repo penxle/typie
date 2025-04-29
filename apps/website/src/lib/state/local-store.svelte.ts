@@ -19,4 +19,12 @@ export class LocalStore<T> {
       localStorage.setItem(this.#key, JSON.stringify(this.current));
     });
   }
+
+  static get<U>(key: string): U | null {
+    if (!browser) return null;
+
+    const item = localStorage.getItem(key);
+
+    return item ? (JSON.parse(item) as U) : null;
+  }
 }
