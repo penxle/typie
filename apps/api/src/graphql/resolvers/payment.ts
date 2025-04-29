@@ -4,8 +4,8 @@ import {
   db,
   first,
   firstOrThrow,
+  PaymentBillingKeys,
   PaymentInvoices,
-  PaymentMethods,
   PaymentRecords,
   Plans,
   TableCode,
@@ -15,8 +15,9 @@ import {
 } from '@/db';
 import { defaultPlanRules } from '@/db/schemas/json';
 import {
+  PaymentBillingKeyState,
   PaymentInvoiceState,
-  PaymentMethodState,
+  PaymentMethodType,
   PaymentRecordState,
   PlanAvailability,
   UserPlanBillingCycle,
@@ -27,14 +28,14 @@ import * as portone from '@/external/portone';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
 import { cardSchema } from '@/validation';
 import { builder } from '../builder';
-import { isTypeOf, PaymentMethod, Plan, PlanRule, UserPlan } from '../objects';
+import { isTypeOf, PaymentBillingKey, Plan, PlanRule, UserPlan } from '../objects';
 
 /**
  * * Types
  */
 
-PaymentMethod.implement({
-  isTypeOf: isTypeOf(TableCode.PAYMENT_METHODS),
+PaymentBillingKey.implement({
+  isTypeOf: isTypeOf(TableCode.PAYMENT_BILLING_KEYS),
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
@@ -78,8 +79,8 @@ UserPlan.implement({
  */
 
 builder.mutationFields((t) => ({
-  updatePaymentMethod: t.withAuth({ session: true }).fieldWithInput({
-    type: PaymentMethod,
+  updatePaymentBillingKey: t.withAuth({ session: true }).fieldWithInput({
+    type: PaymentBillingKey,
     input: {
       cardNumber: t.input.string({ validate: { schema: cardSchema.cardNumber } }),
       expiryDate: t.input.string({ validate: { schema: cardSchema.expiryDate } }),
@@ -105,18 +106,18 @@ builder.mutationFields((t) => ({
       }
 
       return await db.transaction(async (tx) => {
-        const methods = await tx
-          .update(PaymentMethods)
-          .set({ state: PaymentMethodState.DEACTIVATED })
-          .where(and(eq(PaymentMethods.userId, ctx.session.userId), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
-          .returning({ billingKey: PaymentMethods.billingKey });
+        const billingKeys = await tx
+          .update(PaymentBillingKeys)
+          .set({ state: PaymentBillingKeyState.DEACTIVATED })
+          .where(and(eq(PaymentBillingKeys.userId, ctx.session.userId), eq(PaymentBillingKeys.state, PaymentBillingKeyState.ACTIVE)))
+          .returning({ billingKey: PaymentBillingKeys.billingKey });
 
-        for (const method of methods) {
-          await portone.deleteBillingKey({ billingKey: method.billingKey });
+        for (const billingKey of billingKeys) {
+          await portone.deleteBillingKey({ billingKey: billingKey.billingKey });
         }
 
         return await tx
-          .insert(PaymentMethods)
+          .insert(PaymentBillingKeys)
           .values({
             userId: ctx.session.userId,
             name: `${result.cardName} ${input.cardNumber.slice(-4)}`,
@@ -160,10 +161,10 @@ builder.mutationFields((t) => ({
         .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.PUBLIC)))
         .then(firstOrThrow);
 
-      const paymentMethod = await db
-        .select({ id: PaymentMethods.id, billingKey: PaymentMethods.billingKey })
-        .from(PaymentMethods)
-        .where(and(eq(PaymentMethods.userId, ctx.session.userId), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)))
+      const paymentBillingKey = await db
+        .select({ id: PaymentBillingKeys.id, billingKey: PaymentBillingKeys.billingKey })
+        .from(PaymentBillingKeys)
+        .where(and(eq(PaymentBillingKeys.userId, ctx.session.userId), eq(PaymentBillingKeys.state, PaymentBillingKeyState.ACTIVE)))
         .then(firstOrThrow);
 
       const enrolledAt = dayjs.kst().startOf('day');
@@ -202,7 +203,7 @@ builder.mutationFields((t) => ({
 
         const paymentResult = await portone.makePayment({
           paymentId: invoice.id,
-          billingKey: paymentMethod.billingKey,
+          billingKey: paymentBillingKey.billingKey,
           customerName: user.name,
           customerEmail: user.email,
           orderName: '타이피 정기결제',
@@ -215,7 +216,8 @@ builder.mutationFields((t) => ({
 
         await tx.insert(PaymentRecords).values({
           invoiceId: invoice.id,
-          methodId: paymentMethod.id,
+          methodType: PaymentMethodType.BILLING_KEY,
+          methodId: paymentBillingKey.id,
           state: PaymentRecordState.SUCCEEDED,
           amount: userPlan.fee,
           receiptUrl: paymentResult.receiptUrl,

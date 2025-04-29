@@ -22,7 +22,7 @@
         id
         ...DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user
 
-        paymentMethod {
+        paymentBillingKey {
           id
           name
         }
@@ -59,7 +59,7 @@
 <div class={flex({ direction: 'column', gap: '24px' })}>
   <p class={css({ fontSize: '20px', fontWeight: 'bold' })}>결제 설정</p>
 
-  {#if !$user.plan || !$user.paymentMethod}
+  {#if !$user.plan || !$user.paymentBillingKey}
     <div class={flex({ direction: 'column', gap: '8px' })}>
       <p class={css({ fontWeight: 'medium' })}>현재 플랜</p>
 
@@ -107,7 +107,7 @@
       <p class={css({ fontWeight: 'medium' })}>결제 카드 정보</p>
 
       <div class={flex({ align: 'center', justify: 'space-between', fontSize: '15px', color: 'gray.700' })}>
-        {$user.paymentMethod.name}
+        {$user.paymentBillingKey.name}
 
         <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">결제 카드 변경</Button>
       </div>

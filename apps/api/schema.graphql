@@ -285,7 +285,7 @@ type Mutation {
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
-  updatePaymentMethod(input: UpdatePaymentMethodInput!): PaymentMethod!
+  updatePaymentBillingKey(input: UpdatePaymentBillingKeyInput!): PaymentBillingKey!
   updatePostOption(input: UpdatePostOptionInput!): Post!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
@@ -320,6 +320,17 @@ enum NotificationState {
   UNREAD
 }
 
+type PaymentBillingKey {
+  createdAt: DateTime!
+  id: ID!
+  name: String!
+}
+
+enum PaymentBillingKeyState {
+  ACTIVE
+  DEACTIVATED
+}
+
 enum PaymentInvoiceState {
   CANCELED
   PAID
@@ -327,15 +338,9 @@ enum PaymentInvoiceState {
   UPCOMING
 }
 
-type PaymentMethod {
-  createdAt: DateTime!
-  id: ID!
-  name: String!
-}
-
-enum PaymentMethodState {
-  ACTIVE
-  DEACTIVATED
+enum PaymentMethodType {
+  BILLING_KEY
+  CREDIT
 }
 
 enum PaymentRecordState {
@@ -583,7 +588,7 @@ input UpdateFolderOptionInput {
   visibility: EntityVisibility!
 }
 
-input UpdatePaymentMethodInput {
+input UpdatePaymentBillingKeyInput {
   birthOrBusinessRegistrationNumber: String!
   cardNumber: String!
   expiryDate: String!
@@ -617,7 +622,7 @@ type User {
   id: ID!
   name: String!
   notifications: [Notification!]!
-  paymentMethod: PaymentMethod
+  paymentBillingKey: PaymentBillingKey
   personalIdentity: UserPersonalIdentity
   plan: UserPlan
   planRule: PlanRule!

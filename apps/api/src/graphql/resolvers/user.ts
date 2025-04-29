@@ -8,7 +8,7 @@ import {
   first,
   firstOrThrow,
   Notifications,
-  PaymentMethods,
+  PaymentBillingKeys,
   Plans,
   PostCharacterCountChanges,
   Posts,
@@ -24,7 +24,7 @@ import {
 import { defaultPlanRules } from '@/db/schemas/json';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { EntityState, PaymentMethodState, SingleSignOnProvider, SiteState, UserPlanState, UserState } from '@/enums';
+import { EntityState, PaymentBillingKeyState, SingleSignOnProvider, SiteState, UserPlanState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
@@ -35,7 +35,7 @@ import {
   Image,
   isTypeOf,
   Notification,
-  PaymentMethod,
+  PaymentBillingKey,
   PlanRule,
   Post,
   Site,
@@ -76,18 +76,18 @@ User.implement({
       },
     }),
 
-    paymentMethod: t.field({
-      type: PaymentMethod,
+    paymentBillingKey: t.field({
+      type: PaymentBillingKey,
       nullable: true,
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
-          name: 'User.paymentMethod',
+          name: 'User.paymentBillingKey',
           nullable: true,
           load: async (ids) => {
             return await db
               .select()
-              .from(PaymentMethods)
-              .where(and(inArray(PaymentMethods.userId, ids), eq(PaymentMethods.state, PaymentMethodState.ACTIVE)));
+              .from(PaymentBillingKeys)
+              .where(and(inArray(PaymentBillingKeys.userId, ids), eq(PaymentBillingKeys.state, PaymentBillingKeyState.ACTIVE)));
           },
           key: (row) => row?.userId,
         });
@@ -378,7 +378,10 @@ builder.mutationFields((t) => ({
         await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.userId, ctx.session.userId));
 
         await tx.delete(UserPlans).where(eq(UserPlans.userId, ctx.session.userId));
-        await tx.update(PaymentMethods).set({ state: PaymentMethodState.DEACTIVATED }).where(eq(PaymentMethods.userId, ctx.session.userId));
+        await tx
+          .update(PaymentBillingKeys)
+          .set({ state: PaymentBillingKeyState.DEACTIVATED })
+          .where(eq(PaymentBillingKeys.userId, ctx.session.userId));
 
         await tx.delete(UserPersonalIdentities).where(eq(UserPersonalIdentities.userId, ctx.session.userId));
 
