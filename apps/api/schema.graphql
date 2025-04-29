@@ -285,6 +285,7 @@ type Mutation {
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
+  updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
   updatePaymentBillingKey(input: UpdatePaymentBillingKeyInput!): PaymentBillingKey!
   updatePostOption(input: UpdatePostOptionInput!): Post!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
@@ -588,6 +589,10 @@ input UpdateFolderOptionInput {
   visibility: EntityVisibility!
 }
 
+input UpdateMarketingConsentInput {
+  marketingConsent: Boolean!
+}
+
 input UpdatePaymentBillingKeyInput {
   birthOrBusinessRegistrationNumber: String!
   cardNumber: String!
@@ -620,6 +625,7 @@ type User {
   characterCountChanges: [CharacterCountChange!]!
   email: String!
   id: ID!
+  marketingConsent: Boolean!
   name: String!
   notifications: [Notification!]!
   paymentBillingKey: PaymentBillingKey
