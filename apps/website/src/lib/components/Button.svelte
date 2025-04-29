@@ -47,6 +47,7 @@
     variants: {
       variant: {
         primary: {
+          fontWeight: 'bold',
           color: {
             _enabled: {
               base: 'white',
@@ -69,6 +70,7 @@
           },
         },
         secondary: {
+          fontWeight: 'semibold',
           color: {
             _enabled: {
               base: 'gray.700',
@@ -119,9 +121,9 @@
         },
       },
       size: {
-        sm: { borderRadius: '4px', paddingX: '12px', height: '32px', fontSize: '13px', fontWeight: 'semibold' },
-        md: { borderRadius: '6px', paddingX: '20px', height: '36px', fontSize: '14px', fontWeight: 'semibold' },
-        lg: { borderRadius: '8px', paddingX: '28px', height: '40px', fontSize: '15px', fontWeight: 'bold' },
+        sm: { borderRadius: '4px', paddingX: '12px', height: '32px', fontSize: '13px' },
+        md: { borderRadius: '6px', paddingX: '20px', height: '36px', fontSize: '14px' },
+        lg: { borderRadius: '8px', paddingX: '28px', height: '40px', fontSize: '15px' },
       },
     },
   });

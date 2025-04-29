@@ -21,3 +21,15 @@ export const closest = (value: number, array: number[]) => {
 
   return r;
 };
+
+export const formatBytes = (bytes: number) => {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let index = 0;
+
+  while (bytes >= 1000 && index < units.length - 1) {
+    bytes /= 1000;
+    index++;
+  }
+
+  return `${Math.floor(bytes)} ${units[index]}`;
+};

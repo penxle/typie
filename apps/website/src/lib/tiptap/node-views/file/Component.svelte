@@ -6,7 +6,7 @@
   import { graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { Button, Icon, Menu, MenuItem, RingSpinner, VerticalDivider } from '$lib/components';
-  import { uploadBlob } from '$lib/utils';
+  import { formatBytes, uploadBlob } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { NodeView } from '../../lib';
@@ -73,18 +73,6 @@
 
     picker.click();
   };
-
-  const formatFileSize = (bytes: number) => {
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let index = 0;
-
-    while (bytes >= 1024 && index < units.length - 1) {
-      bytes /= 1024;
-      index++;
-    }
-
-    return `${Math.floor(bytes)}${units[index]}`;
-  };
 </script>
 
 <NodeView data-drag-handle draggable>
@@ -121,7 +109,7 @@
 
         <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
 
-        <span class={css({ color: 'gray.400' })}>{formatFileSize(attrs.size)}</span>
+        <span class={css({ color: 'gray.400' })}>{formatBytes(attrs.size)}</span>
       </div>
     {:else}
       <div
@@ -142,7 +130,7 @@
 
           <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
 
-          <span class={css({ color: 'gray.400' })}>{formatFileSize(file.size)}</span>
+          <span class={css({ color: 'gray.400' })}>{formatBytes(file.size)}</span>
         {:else}
           <Icon icon={PaperclipIcon} size={20} />
           {#if editor?.current.isEditable}
