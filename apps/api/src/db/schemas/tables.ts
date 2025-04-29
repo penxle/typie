@@ -25,6 +25,20 @@ export const Comments = pgTable('comments', {
     .default(sql`now()`),
 });
 
+export const CreditCodes = pgTable('credit_codes', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.CREDIT_CODES)),
+  state: E._CreditCodeState('state').notNull().default('AVAILABLE'),
+  code: text('code').unique().notNull(),
+  amount: integer('amount').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  expiresAt: datetime('expires_at').notNull(),
+  redeemedAt: datetime('redeemed_at'),
+});
+
 export const Files = pgTable('files', {
   id: text('id')
     .primaryKey()
@@ -393,6 +407,36 @@ export const UserMarketingConsents = pgTable('user_marketing_consents', {
     .notNull()
     .unique()
     .references(() => Users.id),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const UserPaymentCredits = pgTable('user_payment_credits', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_PAYMENT_CREDITS)),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  codeId: text('code_id').references(() => CreditCodes.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  initialAmount: integer('initial_amount').notNull(),
+  remainingAmount: integer('remaining_amount').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  expiresAt: datetime('expires_at').notNull(),
+});
+
+export const UserPaymentCreditTransactions = pgTable('user_payment_credit_transactions', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_PAYMENT_CREDIT_TRANSACTIONS)),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  cause: E._UserPaymentCreditTransactionCause('cause').notNull(),
+  amount: integer('amount').notNull(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

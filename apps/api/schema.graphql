@@ -57,6 +57,11 @@ input CreatePreorderPaymentInput {
   email: String!
 }
 
+enum CreditCodeState {
+  AVAILABLE
+  USED
+}
+
 scalar DateTime
 
 input DeleteCommentInput {
@@ -277,6 +282,7 @@ type Mutation {
   moveEntity(input: MoveEntityInput!): Entity!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  redeemCreditCode(input: RedeemCreditCodeInput!): User!
   renameFolder(input: RenameFolderInput!): Folder!
   resetPassword(input: ResetPasswordInput!): Boolean!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
@@ -486,6 +492,10 @@ type Query {
   welcome: Welcome!
 }
 
+input RedeemCreditCodeInput {
+  code: String!
+}
+
 input RenameFolderInput {
   folderId: ID!
   name: String!
@@ -642,9 +652,17 @@ type User {
   plan: UserPlan
   planRule: PlanRule!
   recentPosts: [Post!]!
+  remainingCredit: Int!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
   usage: UserUsage!
+}
+
+enum UserPaymentCreditTransactionCause {
+  CODE_REDEMPTION
+  EVENT
+  MANUAL_ADJUSTMENT
+  PERIODIC_PAYMENT
 }
 
 type UserPersonalIdentity {
