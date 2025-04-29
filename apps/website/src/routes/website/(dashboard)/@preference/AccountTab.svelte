@@ -1,11 +1,12 @@
 <script lang="ts">
+  import dayjs from 'dayjs';
   import { z } from 'zod';
   import UploadIcon from '~icons/lucide/upload';
   import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';
   import { fragment, graphql } from '$graphql';
-  import { Button, HorizontalDivider, Icon, LoadableImg, TextInput } from '$lib/components';
+  import { Button, HorizontalDivider, Icon, LoadableImg, Switch, TextInput } from '$lib/components';
   import { createForm } from '$lib/form';
   import { Dialog } from '$lib/notification';
   import { uploadBlobAsImage } from '$lib/utils';
@@ -27,6 +28,7 @@
         id
         name
         email
+        marketingConsent
 
         singleSignOns {
           id
@@ -51,6 +53,15 @@
         avatar {
           id
         }
+      }
+    }
+  `);
+
+  const updateMarketingConsent = graphql(`
+    mutation DashboardLayout_PreferenceModal_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
+      updateMarketingConsent(input: $input) {
+        id
+        marketingConsent
       }
     }
   `);
@@ -206,6 +217,24 @@
         </div>
       </div>
     {/each}
+  </div>
+
+  <HorizontalDivider color="secondary" />
+
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', maxWidth: '500px' })}>
+    <p class={css({ fontWeight: 'medium' })}>마케팅 수신 동의</p>
+
+    <Switch
+      checked={$user.marketingConsent}
+      onchange={async () => {
+        await updateMarketingConsent({ marketingConsent: !$user.marketingConsent });
+
+        Dialog.alert({
+          title: '타이피 마케팅 수신 동의',
+          message: `${dayjs().formatAsDate()}에 ${$user.marketingConsent ? '거부' : '동의'}처리되었어요`,
+        });
+      }}
+    />
   </div>
 
   <HorizontalDivider color="secondary" />
