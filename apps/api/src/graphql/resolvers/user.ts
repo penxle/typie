@@ -14,6 +14,7 @@ import {
   Posts,
   Sites,
   TableCode,
+  UserMarketingConsents,
   UserPersonalIdentities,
   UserPlans,
   Users,
@@ -208,6 +209,17 @@ User.implement({
         return await db.select().from(UserSingleSignOns).where(eq(UserSingleSignOns.userId, user.id));
       },
     }),
+
+    marketingConsent: t.field({
+      type: 'Boolean',
+      resolve: async (user) => {
+        return !!(await db
+          .select({ id: UserMarketingConsents.id })
+          .from(UserMarketingConsents)
+          .where(eq(UserMarketingConsents.userId, user.id))
+          .then(first));
+      },
+    }),
   }),
 });
 
@@ -354,6 +366,22 @@ builder.mutationFields((t) => ({
         .where(eq(Users.id, ctx.session.userId))
         .returning()
         .then(firstOrThrow);
+    },
+  }),
+
+  updateMarketingConsent: t.withAuth({ session: true }).fieldWithInput({
+    type: User,
+    input: {
+      marketingConsent: t.input.boolean(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      if (input.marketingConsent) {
+        await db.insert(UserMarketingConsents).values({ userId: ctx.session.userId }).onConflictDoNothing();
+      } else {
+        await db.delete(UserMarketingConsents).where(eq(UserMarketingConsents.userId, ctx.session.userId));
+      }
+
+      return ctx.session.userId;
     },
   }),
 
