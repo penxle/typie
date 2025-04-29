@@ -18,6 +18,7 @@ import { Blob, File, Image, isTypeOf } from '../objects';
 Blob.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
+    size: t.exposeInt('size'),
   }),
 });
 
@@ -26,7 +27,6 @@ File.implement({
   interfaces: [Blob],
   fields: (t) => ({
     name: t.exposeString('name'),
-    size: t.exposeInt('size'),
 
     url: t.string({ resolve: (blob) => `https://typie.net/files/${blob.path}` }),
   }),

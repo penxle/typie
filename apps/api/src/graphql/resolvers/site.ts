@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql, sum } from 'drizzle-orm';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
-import { db, Entities, first, firstOrThrow, Sites, TableCode, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
@@ -80,6 +80,32 @@ Site.implement({
           .then(first);
 
         return row?.id;
+      },
+    }),
+
+    usage: t.field({
+      type: t.builder.simpleObject('SiteUsage', {
+        fields: (t) => ({
+          characterCount: t.int(),
+          blobSize: t.int(),
+        }),
+      }),
+      resolve: async (self) => {
+        const row = await db
+          .select({
+            characterCount: sum(PostContents.characterCount).mapWith(Number),
+            blobSize: sum(PostContents.blobSize).mapWith(Number),
+          })
+          .from(PostContents)
+          .innerJoin(Posts, eq(PostContents.postId, Posts.id))
+          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+          .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.ACTIVE)))
+          .then(firstOrThrow);
+
+        return {
+          characterCount: row.characterCount || 0,
+          blobSize: row.blobSize || 0,
+        };
       },
     }),
   }),

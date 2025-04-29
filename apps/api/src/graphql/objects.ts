@@ -72,7 +72,7 @@ export const FolderView = createObjectRef('FolderView', T.Folders);
 export const PostView = createObjectRef('PostView', T.Posts);
 export const SiteView = createObjectRef('SiteView', T.Sites);
 
-type BlobShape = { id: string; path: string };
+type BlobShape = { id: string; size: number; path: string };
 export const Blob = builder.interfaceRef<BlobShape>('Blob');
 
 export const EntityNode = builder.unionType('EntityNode', {
