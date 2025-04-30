@@ -1,39 +1,58 @@
 <script lang="ts">
-  import { page } from '$app/state';
+  import { base64 } from 'rfc4648';
+  import { onMount } from 'svelte';
+  import { sineOut } from 'svelte/easing';
+  import { fly } from 'svelte/transition';
+  import * as YAwareness from 'y-protocols/awareness';
+  import * as Y from 'yjs';
+  import { browser } from '$app/environment';
+  import Logo from '$assets/logos/logo.svg?component';
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Helmet, Modal } from '$lib/components';
+  import { Helmet } from '$lib/components';
+  import { TiptapEditor, TiptapRenderer } from '$lib/tiptap';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
-  import CtaSection from './CtaSection.svelte';
-  import EditorSection from './EditorSection.svelte';
-  import FaqSection from './FaqSection.svelte';
-  import FocusSection from './FocusSection.svelte';
-  import Footer from './Footer.svelte';
-  import HeroSection from './HeroSection.svelte';
-  import ShareSection from './ShareSection.svelte';
+  import { center, flex } from '$styled-system/patterns';
+  import { token } from '$styled-system/tokens';
+  import { YState } from '../(dashboard)/[slug]/state.svelte';
+  import Toolbar from '../(dashboard)/[slug]/Toolbar.svelte';
+  import { Highlight } from './highlight';
+  import type { Editor } from '@tiptap/core';
+  import type { Ref } from '$lib/utils';
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = graphql(`
     query IndexPage_Query {
       me {
         id
       }
+
+      welcome {
+        body
+        bodyMobile
+        update
+        updateMobile
+      }
+
+      randomName
     }
   `);
 
-  let confirmOpen = $state(false);
+  let editor = $state<Ref<Editor>>();
+  let loaded = $state(false);
+  let highlight = $state(false);
 
-  $effect(() => {
-    const message = page.url.searchParams.get('message');
-    if (message) {
-      alert(message);
-    }
-  });
+  const doc = new Y.Doc();
+  const awareness = new YAwareness.Awareness(doc);
 
-  $effect(() => {
-    if (page.url.searchParams.get('success') === '1') {
-      confirmOpen = true;
-    }
+  const maxWidth = new YState<number>(doc, 'maxWidth', 800);
+
+  onMount(() => {
+    Y.applyUpdateV2(doc, base64.parse($query.welcome.update), 'remote');
+    loaded = true;
+
+    setTimeout(() => {
+      highlight = true;
+    }, 500);
   });
 </script>
 
@@ -45,49 +64,136 @@
   trailing={null}
 />
 
+{#if loaded}
+  <div
+    class={center({ flexDirection: 'column', position: 'fixed', top: '0', insetX: '0', zIndex: '40', pointerEvents: 'none' })}
+    in:fly={{ y: -10, easing: sineOut }}
+  >
+    <div
+      class={css({
+        borderWidth: '1px',
+        borderTopWidth: '0',
+        borderBottomRadius: '12px',
+        width: 'full',
+        maxWidth: '1000px',
+        backgroundColor: 'white',
+        boxShadow: 'small',
+        overflow: 'hidden',
+        pointerEvents: 'auto',
+      })}
+    >
+      <div class={flex({ justifyContent: 'space-between', alignItems: 'center', paddingX: '16px', paddingY: '8px' })}>
+        <Logo class={css({ height: '24px' })} />
+
+        <a
+          style:--background-color={token('colors.brand.500')}
+          style:--border-color={token('colors.brand.500')}
+          style:--border-accent-color={token('colors.white')}
+          class={css({
+            borderWidth: '2px',
+            borderColor: 'transparent',
+            borderRadius: '4px',
+            paddingX: '12px',
+            paddingY: '6px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: 'white',
+            background:
+              '[linear-gradient(var(--background-color), var(--background-color)) padding-box, conic-gradient(from var(--angle), var(--border-color), var(--border-accent-color) 10%, var(--border-color) 20%) border-box]',
+            animationName: '[rotate]',
+            animationDuration: '2s',
+            animationTimingFunction: 'linear',
+            animationIterationCount: 'infinite',
+            _hover: { animationPlayState: 'paused' },
+          })}
+          href={env.PUBLIC_AUTH_URL}
+        >
+          시작하기
+        </a>
+      </div>
+
+      <div class={css({ height: '1px', backgroundColor: 'gray.200' })}></div>
+
+      <Toolbar style={css.raw({ hideBelow: 'md' })} {doc} {editor} />
+    </div>
+  </div>
+{/if}
+
 <div
-  class={css({
-    wordBreak: 'keep-all',
-    color: '[#282738]',
-    backgroundColor: '[#FFFDF8]',
-    height: 'full',
-    overflowX: 'hidden',
+  style:--grid-line-color={token('colors.gray.100')}
+  style:--cross-line-color={token('colors.gray.50')}
+  style:--grid-size="30px"
+  style:--line-thickness="1px"
+  class={flex({
+    flexDirection: 'column',
+    alignItems: 'center',
+    width: 'screen',
+    height: 'screen',
+    backgroundColor: 'white',
+    backgroundImage:
+      '[repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size))]',
+    backgroundSize: 'var(--grid-size) var(--grid-size)',
     overflowY: 'auto',
   })}
 >
-  <HeroSection />
+  <div
+    style:--prosemirror-max-width={`${maxWidth.current}px`}
+    class={flex({ paddingTop: '240px', width: 'full', maxWidth: '1000px', hideBelow: 'md' })}
+  >
+    {#if browser}
+      <div
+        style:--highlight-progress={highlight ? '1' : '0'}
+        style:--highlight-name={`"${$query.randomName}"`}
+        class={css({ display: 'contents', '& a': { cursor: 'pointer' } })}
+        onclick={(e) => {
+          const anchor = (e.target as HTMLElement).closest('a');
+          if (anchor) {
+            e.preventDefault();
+            window.open(anchor.href, '_blank');
+          }
+        }}
+        role="none"
+      >
+        <TiptapEditor style={css.raw({ width: 'full' })} {awareness} {doc} extensions={[Highlight]} bind:editor />
+      </div>
+    {:else}
+      <TiptapRenderer style={css.raw({ width: 'full', paddingBottom: '80px' })} content={$query.welcome.body} />
+    {/if}
+  </div>
 
-  <EditorSection />
-
-  <FocusSection />
-
-  <ShareSection />
-
-  <CtaSection />
-
-  <FaqSection />
-
-  <Footer />
+  <div style:--prosemirror-max-width="100%" class={css({ paddingTop: '120px', paddingX: '16px', width: 'full', hideFrom: 'md' })}>
+    <div
+      style:--highlight-progress={highlight ? '1' : '0'}
+      style:--highlight-name={`"${$query.randomName}"`}
+      class={css({ display: 'contents', '& a': { cursor: 'pointer' } })}
+      onclick={(e) => {
+        const anchor = (e.target as HTMLElement).closest('a');
+        if (anchor) {
+          e.preventDefault();
+          window.open(anchor.href, '_blank');
+        }
+      }}
+      role="none"
+    >
+      <TiptapRenderer
+        style={css.raw({ width: 'full', paddingBottom: '80px' })}
+        content={$query.welcome.bodyMobile}
+        extensions={[Highlight]}
+      />
+    </div>
+  </div>
 </div>
 
-<Modal bind:open={confirmOpen}>
-  <div class={flex({ direction: 'column', align: 'center', gap: '20px', width: 'full' })}>
-    타이피 사전 등록이 완료되었어요!
+<style>
+  @keyframes -global-rotate {
+    to {
+      --angle: 360deg;
+    }
+  }
 
-    <button
-      class={css({
-        borderRadius: '8px',
-        paddingX: '20px',
-        paddingY: '12px',
-        fontSize: '12px',
-        color: 'white',
-        backgroundColor: '[#4A2DA0]',
-        width: 'full',
-      })}
-      onclick={() => (confirmOpen = false)}
-      type="button"
-    >
-      감사합니다. 오픈일에 만나요!
-    </button>
-  </div>
-</Modal>
+  @property --angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+</style>

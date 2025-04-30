@@ -39,7 +39,10 @@ export const Highlight = Extension.create({
                         left: '0',
                         top: '0',
                         width: '[calc(var(--highlight-progress) * 100%)]',
-                        borderLeftRadius: '[calc(12px * var(--highlight-progress))]',
+                        borderLeftRadius: {
+                          base: '[calc(6px * var(--highlight-progress))]',
+                          md: '[calc(12px * var(--highlight-progress))]',
+                        },
                         borderRightWidth: { base: '2px', md: '4px' },
                         borderRightColor: 'brand.500',
                         height: 'full',
