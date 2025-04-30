@@ -18,7 +18,6 @@ import {
   TableCode,
   UserMarketingConsents,
   UserPaymentCredits,
-  UserPaymentCreditTransactions,
   UserPersonalIdentities,
   UserPlans,
   Users,
@@ -29,20 +28,10 @@ import {
 import { defaultPlanRules } from '@/db/schemas/json';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import {
-  CreditCodeState,
-  EntityState,
-  PaymentBillingKeyState,
-  SingleSignOnProvider,
-  SiteState,
-  UserPaymentCreditTransactionCause,
-  UserPlanState,
-  UserState,
-} from '@/enums';
+import { CreditCodeState, EntityState, PaymentBillingKeyState, SingleSignOnProvider, SiteState, UserPlanState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
-import { getUserCredit } from '@/utils/credit';
 import { delay } from '@/utils/promise';
 import { userSchema } from '@/validation';
 import { builder } from '../builder';
@@ -236,8 +225,16 @@ User.implement({
       },
     }),
 
-    remainingCredit: t.int({
-      resolve: async (user) => await getUserCredit({ userId: user.id }),
+    credit: t.int({
+      resolve: async (user) => {
+        const credit = await db
+          .select({ amount: UserPaymentCredits.amount })
+          .from(UserPaymentCredits)
+          .where(eq(UserPaymentCredits.userId, user.id))
+          .then(first);
+
+        return credit?.amount ?? 0;
+      },
     }),
   }),
 });
@@ -518,21 +515,27 @@ builder.mutationFields((t) => ({
         .then(firstOrThrowWith(new TypieError({ code: 'invalid_code' })));
 
       return await db.transaction(async (tx) => {
-        await tx.update(CreditCodes).set({ state: CreditCodeState.USED, redeemedAt: dayjs() }).where(eq(CreditCodes.id, creditCode.id));
+        await tx
+          .update(CreditCodes)
+          .set({
+            userId: ctx.session.userId,
+            state: CreditCodeState.USED,
+            usedAt: dayjs(),
+          })
+          .where(eq(CreditCodes.id, creditCode.id));
 
-        await tx.insert(UserPaymentCredits).values({
-          userId: ctx.session.userId,
-          initialAmount: creditCode.amount,
-          remainingAmount: creditCode.amount,
-          expiresAt: dayjs().add(1, 'year'),
-          codeId: creditCode.id,
-        });
-
-        await tx.insert(UserPaymentCreditTransactions).values({
-          userId: ctx.session.userId,
-          cause: UserPaymentCreditTransactionCause.CODE_REDEMPTION,
-          amount: creditCode.amount,
-        });
+        await tx
+          .insert(UserPaymentCredits)
+          .values({
+            userId: ctx.session.userId,
+            amount: creditCode.amount,
+          })
+          .onConflictDoUpdate({
+            target: [UserPaymentCredits.userId],
+            set: {
+              amount: sql`${UserPaymentCredits.amount} + ${creditCode.amount}`,
+            },
+          });
 
         return ctx.session.userId;
       });

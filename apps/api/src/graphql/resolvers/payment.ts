@@ -9,7 +9,7 @@ import {
   PaymentRecords,
   Plans,
   TableCode,
-  UserPaymentCreditTransactions,
+  UserPaymentCredits,
   UserPlans,
   Users,
   validateDbId,
@@ -21,14 +21,12 @@ import {
   PaymentMethodType,
   PaymentRecordState,
   PlanAvailability,
-  UserPaymentCreditTransactionCause,
   UserPlanBillingCycle,
   UserPlanState,
 } from '@/enums';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
-import { deductUserCredit } from '@/utils/credit';
 import { cardSchema } from '@/validation';
 import { builder } from '../builder';
 import { isTypeOf, PaymentBillingKey, Plan, PlanRule, UserPlan } from '../objects';
@@ -176,8 +174,6 @@ builder.mutationFields((t) => ({
       const paymentAmount = calculatePaymentAmount(input.billingCycle, plan.fee);
 
       return await db.transaction(async (tx) => {
-        const { deductedAmount, remainingAmount } = await deductUserCredit({ tx, userId: ctx.session.userId, amount: paymentAmount });
-
         const userPlan = await tx
           .insert(UserPlans)
           .values({
@@ -208,33 +204,35 @@ builder.mutationFields((t) => ({
           state: PaymentInvoiceState.UPCOMING,
         });
 
-        if (deductedAmount > 0) {
-          const creditTransaction = await tx
-            .insert(UserPaymentCreditTransactions)
-            .values({
-              userId: ctx.session.userId,
-              cause: UserPaymentCreditTransactionCause.PERIODIC_PAYMENT,
-              amount: -deductedAmount,
-            })
-            .returning({ id: UserPaymentCreditTransactions.id })
-            .then(firstOrThrow);
+        const paymentCredit = await tx
+          .select({ id: UserPaymentCredits.id, amount: UserPaymentCredits.amount })
+          .from(UserPaymentCredits)
+          .where(eq(UserPaymentCredits.userId, ctx.session.userId))
+          .for('update')
+          .then(first);
 
+        const creditPaymentAmount = Math.min(paymentCredit?.amount ?? 0, paymentAmount);
+
+        if (paymentCredit && creditPaymentAmount > 0) {
           await tx.insert(PaymentRecords).values({
             invoiceId: invoice.id,
             methodType: PaymentMethodType.CREDIT,
-            methodId: creditTransaction.id,
+            methodId: paymentCredit.id,
             state: PaymentRecordState.SUCCEEDED,
-            amount: deductedAmount,
+            amount: creditPaymentAmount,
           });
         }
-        if (remainingAmount > 0) {
+
+        const billingKeyPaymentAmount = paymentAmount - creditPaymentAmount;
+
+        if (billingKeyPaymentAmount > 0) {
           const paymentResult = await portone.makePayment({
             paymentId: invoice.id,
             billingKey: paymentBillingKey.billingKey,
             customerName: user.name,
             customerEmail: user.email,
             orderName: '타이피 정기결제',
-            amount: remainingAmount,
+            amount: billingKeyPaymentAmount,
           });
 
           if (paymentResult.status === 'failed') {
@@ -246,7 +244,7 @@ builder.mutationFields((t) => ({
             methodType: PaymentMethodType.BILLING_KEY,
             methodId: paymentBillingKey.id,
             state: PaymentRecordState.SUCCEEDED,
-            amount: remainingAmount,
+            amount: billingKeyPaymentAmount,
             receiptUrl: paymentResult.receiptUrl,
           });
         }

@@ -120,14 +120,6 @@ export const SiteState = {
   DELETED: 'DELETED',
 } as const;
 
-export type UserPaymentCreditTransactionCause = keyof typeof UserPaymentCreditTransactionCause;
-export const UserPaymentCreditTransactionCause = {
-  PERIODIC_PAYMENT: 'PERIODIC_PAYMENT',
-  CODE_REDEMPTION: 'CODE_REDEMPTION',
-  MANUAL_ADJUSTMENT: 'MANUAL_ADJUSTMENT',
-  EVENT: 'EVENT',
-} as const;
-
 export type UserPlanBillingCycle = keyof typeof UserPlanBillingCycle;
 export const UserPlanBillingCycle = {
   MONTHLY: 'MONTHLY',
