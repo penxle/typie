@@ -33,26 +33,40 @@ export const serve = async ({ Server, manifest, prerendered }) => {
       const filePath = path.join(basePath, 'assets', relativePath);
       const file = Bun.file(filePath);
 
-      return new Response(file, {
-        headers: {
-          'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate',
-          'content-type': file.type,
-          'content-length': file.size,
-        },
-      });
+      if (await file.exists()) {
+        return c.body(file, {
+          headers: {
+            'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate',
+          },
+        });
+      } else {
+        return c.text('Not Found', {
+          status: 404,
+          headers: {
+            'cache-control': 'no-store',
+          },
+        });
+      }
     }
 
     if (c.req.path in prerendered) {
       const filePath = path.join(basePath, 'assets', prerendered[c.req.path]);
       const file = Bun.file(filePath);
 
-      return new Response(file, {
-        headers: {
-          'cache-control': 'public, max-age=0, must-revalidate',
-          'content-type': file.type,
-          'content-length': file.size,
-        },
-      });
+      if (await file.exists()) {
+        return c.body(file, {
+          headers: {
+            'cache-control': 'public, max-age=0, must-revalidate',
+          },
+        });
+      } else {
+        return c.text('Not Found', {
+          status: 404,
+          headers: {
+            'cache-control': 'no-store',
+          },
+        });
+      }
     }
 
     const url = new URL(c.req.url);
@@ -66,14 +80,14 @@ export const serve = async ({ Server, manifest, prerendered }) => {
     });
 
     if (response.headers.get('cache-control') === null) {
-      response.headers.set('cache-control', 'private, no-cache');
+      if (response.ok) {
+        response.headers.set('cache-control', 'private, no-cache');
+      } else {
+        response.headers.set('cache-control', 'no-store');
+      }
     }
 
     return response;
-  });
-
-  app.onError((_, c) => {
-    return c.text('Internal Server Error', { status: 500 });
   });
 
   Bun.serve({
@@ -82,11 +96,17 @@ export const serve = async ({ Server, manifest, prerendered }) => {
       if (err.code === 'ENOENT') {
         return new Response('Not Found', {
           status: 404,
+          headers: {
+            'cache-control': 'no-store',
+          },
         });
       }
 
       return new Response('Internal Server Error', {
         status: 500,
+        headers: {
+          'cache-control': 'no-store',
+        },
       });
     },
     port: 3000,
