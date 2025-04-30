@@ -57,6 +57,12 @@ input CreatePreorderPaymentInput {
   email: String!
 }
 
+type CreditCode {
+  amount: Int!
+  code: String!
+  id: ID!
+}
+
 enum CreditCodeState {
   AVAILABLE
   USED
@@ -479,6 +485,7 @@ type PreorderUser {
 }
 
 type Query {
+  creditCode(code: String!): CreditCode!
   entity(entityId: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   entityViewByPermalink(permalink: String!): EntityView!

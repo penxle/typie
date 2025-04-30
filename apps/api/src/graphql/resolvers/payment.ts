@@ -1,9 +1,11 @@
 import dayjs from 'dayjs';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gt } from 'drizzle-orm';
 import {
+  CreditCodes,
   db,
   first,
   firstOrThrow,
+  firstOrThrowWith,
   PaymentBillingKeys,
   PaymentInvoices,
   PaymentRecords,
@@ -16,6 +18,7 @@ import {
 } from '@/db';
 import { defaultPlanRules } from '@/db/schemas/json';
 import {
+  CreditCodeState,
   PaymentBillingKeyState,
   PaymentInvoiceState,
   PaymentMethodType,
@@ -24,12 +27,13 @@ import {
   UserPlanBillingCycle,
   UserPlanState,
 } from '@/enums';
-import { TypieError } from '@/errors';
+import { NotFoundError, TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
-import { cardSchema } from '@/validation';
+import { delay } from '@/utils/promise';
+import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
-import { isTypeOf, PaymentBillingKey, Plan, PlanRule, UserPlan } from '../objects';
+import { CreditCode, isTypeOf, PaymentBillingKey, Plan, PlanRule, UserPlan } from '../objects';
 
 /**
  * * Types
@@ -75,6 +79,36 @@ UserPlan.implement({
     plan: t.expose('planId', { type: Plan }),
   }),
 });
+
+CreditCode.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    code: t.exposeString('code'),
+    amount: t.exposeInt('amount'),
+  }),
+});
+
+/**
+ * * Queries
+ */
+
+builder.queryFields((t) => ({
+  creditCode: t.withAuth({ session: true }).field({
+    type: CreditCode,
+    args: {
+      code: t.input.string({ validate: { schema: redeemCodeSchema } }),
+    },
+    resolve: async (_, { code }) => {
+      await delay(Math.random() * 1000);
+
+      return await db
+        .select()
+        .from(CreditCodes)
+        .where(and(eq(CreditCodes.code, code), eq(CreditCodes.state, CreditCodeState.AVAILABLE), gt(CreditCodes.expiresAt, dayjs())))
+        .then(firstOrThrowWith(new NotFoundError()));
+    },
+  }),
+}));
 
 /**
  * * Mutations
@@ -221,6 +255,11 @@ builder.mutationFields((t) => ({
             state: PaymentRecordState.SUCCEEDED,
             amount: creditPaymentAmount,
           });
+
+          await tx
+            .update(UserPaymentCredits)
+            .set({ amount: paymentCredit.amount - creditPaymentAmount })
+            .where(eq(UserPaymentCredits.id, paymentCredit.id));
         }
 
         const billingKeyPaymentAmount = paymentAmount - creditPaymentAmount;
