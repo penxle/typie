@@ -302,7 +302,7 @@
         })}
         onclick={() => {
           pushState('', { shallowRoute: '/preference/billing' });
-          mixpanel.track('open_billing', { via: 'usage_widget' });
+          mixpanel.track('open_billing_tab', { via: 'usage_widget' });
         }}
         type="button"
       >

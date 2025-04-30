@@ -271,7 +271,7 @@
               parentEntityId: $folder.entity.id,
             });
 
-            mixpanel.track('create_nested_post', { via: 'folder_context_menu' });
+            mixpanel.track('create_child_post');
 
             await goto(`/${resp.entity.slug}`);
           }}
@@ -289,7 +289,7 @@
                 name: '새 폴더',
               });
 
-              mixpanel.track('create_child_folder', { via: 'folder_context_menu' });
+              mixpanel.track('create_child_folder');
 
               open = true;
             }}

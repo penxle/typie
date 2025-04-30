@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { pushState } from '$app/navigation';
   import { env } from '$env/dynamic/public';
@@ -107,6 +108,7 @@
     })}
     onclick={() => {
       pushState('', { shallowRoute: '/preference/account' });
+      mixpanel.track('open_preference_modal', { via: 'user_menu' });
       open = false;
     }}
     tabindex={-1}
@@ -129,6 +131,8 @@
       _hover: { backgroundColor: 'red.50' },
     })}
     onclick={() => {
+      mixpanel.track('logout', { via: 'user_menu' });
+
       location.href = qs.stringifyUrl({
         url: `${env.PUBLIC_AUTH_URL}/logout`,
         query: {

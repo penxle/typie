@@ -27,7 +27,7 @@
         email: data.email,
       });
 
-      mixpanel.track('send-password-reset-email');
+      mixpanel.track('send_password_reset_email');
       emailSent = true;
     },
     onError: (error) => {

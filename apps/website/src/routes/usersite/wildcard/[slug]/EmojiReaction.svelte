@@ -63,7 +63,10 @@
 {#if $postView.allowReaction}
   <button
     class={css({ marginTop: '2px', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'gray.100' } })}
-    onclick={() => (open = true)}
+    onclick={() => {
+      open = true;
+      mixpanel.track('open_post_reaction_popover');
+    }}
     type="button"
     use:anchor
   >

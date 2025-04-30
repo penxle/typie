@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
@@ -73,6 +74,8 @@
       <MenuItem href={`${env.PUBLIC_WEBSITE_URL}/home`} type="link">내 홈으로</MenuItem>
       <MenuItem
         onclick={() => {
+          mixpanel.track('logout', { via: 'header' });
+
           location.href = qs.stringifyUrl({
             url: `${env.PUBLIC_AUTH_URL}/logout`,
             query: {
