@@ -1,8 +1,8 @@
 import * as Sentry from '@sentry/bun';
-import { env } from '@/env';
+import { dev, env, stack } from '@/env';
 
 Sentry.init({
-  enabled: process.env.NODE_ENV === 'production',
+  enabled: !dev,
   dsn: env.SENTRY_DSN,
-  environment: env.PUBLIC_PULUMI_STACK,
+  environment: stack,
 });
