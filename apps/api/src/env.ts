@@ -25,7 +25,6 @@ const schema = z.object({
 });
 
 export const env = schema.parse(process.env);
+export const stack = process.env.PUBLIC_PULUMI_STACK ?? process.env.DOPPLER_ENVIRONMENT ?? 'dev';
 export const dev = process.env.NODE_ENV !== 'production';
-export const production = process.env.PUBLIC_PULUMI_STACK
-  ? process.env.PUBLIC_PULUMI_STACK === 'prod'
-  : process.env.DOPPLER_ENVIRONMENT === 'prod';
+export const production = stack === 'prod';

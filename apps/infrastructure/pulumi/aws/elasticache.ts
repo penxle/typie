@@ -8,11 +8,14 @@ const subnetGroup = new aws.elasticache.SubnetGroup('private', {
   subnetIds: [subnets.private.az1.id, subnets.private.az2.id],
 });
 
-const parameterGroup = new aws.elasticache.ParameterGroup('typie-valkey8', {
-  name: 'typie-valkey8',
+const parameterGroup = new aws.elasticache.ParameterGroup('typie-valkey8-cluster', {
+  name: 'typie-valkey8-cluster',
   family: 'valkey8',
 
-  parameters: [{ name: 'maxmemory-policy', value: 'noeviction' }],
+  parameters: [
+    { name: 'cluster-enabled', value: 'yes' },
+    { name: 'maxmemory-policy', value: 'noeviction' },
+  ],
 });
 
 const cluster = new aws.elasticache.ReplicationGroup('typie', {
@@ -23,17 +26,17 @@ const cluster = new aws.elasticache.ReplicationGroup('typie', {
   engineVersion: '8.0',
   parameterGroupName: parameterGroup.name,
 
-  nodeType: 'cache.t4g.micro',
+  nodeType: 'cache.r7g.large',
 
-  // clusterMode: 'enabled',
+  clusterMode: 'enabled',
   numNodeGroups: 1,
-  replicasPerNodeGroup: 0,
+  replicasPerNodeGroup: 1,
 
   subnetGroupName: subnetGroup.name,
   securityGroupIds: [securityGroups.internal.id],
 
-  multiAzEnabled: false,
-  automaticFailoverEnabled: false,
+  multiAzEnabled: true,
+  automaticFailoverEnabled: true,
 
   atRestEncryptionEnabled: true,
   transitEncryptionEnabled: false,
@@ -51,6 +54,6 @@ new aws.route53.Record('redis.typie.io', {
   zoneId: zones.typie_io.zoneId,
   type: 'CNAME',
   name: 'redis.typie.io',
-  records: [cluster.primaryEndpointAddress],
+  records: [cluster.configurationEndpointAddress],
   ttl: 300,
 });
