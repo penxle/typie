@@ -31,6 +31,8 @@ builder.queryFields((t) => ({
         body: t.field({ type: 'JSON' }),
         update: t.field({ type: 'Binary' }),
         name: t.string(),
+        bodyMobile: t.field({ type: 'JSON' }),
+        updateMobile: t.field({ type: 'Binary' }),
       }),
     }),
     resolve: async () => {
@@ -48,10 +50,24 @@ builder.queryFields((t) => ({
 
       const name = generateRandomName(nanoid());
 
+      const contentMobile = await db
+        .select({ body: PostContents.body })
+        .from(PostContents)
+        .where(eq(PostContents.postId, 'P0WELCOMEMOBILE'))
+        .then(first);
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const bodyMobile = contentMobile?.body ?? schema.topNodeType.createAndFill()!.toJSON();
+
+      const yDocMobile = makeYDoc({ body: bodyMobile });
+      const updateMobile = Y.encodeStateAsUpdateV2(yDocMobile);
+
       return {
         body,
         update,
         name,
+        bodyMobile,
+        updateMobile,
       };
     },
   }),

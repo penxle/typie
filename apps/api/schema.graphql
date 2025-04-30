@@ -713,6 +713,8 @@ input VerifyPersonalIdentityInput {
 
 type Welcome {
   body: JSON!
+  bodyMobile: JSON!
   name: String!
   update: Binary!
+  updateMobile: Binary!
 }
