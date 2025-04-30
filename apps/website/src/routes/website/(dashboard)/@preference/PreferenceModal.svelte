@@ -35,6 +35,10 @@
       fragment DashboardLayout_PreferenceModal_user on User {
         id
 
+        plan {
+          id
+        }
+
         ...DashboardLayout_PreferenceModal_AccountTab_user
         ...DashboardLayout_PreferenceModal_BillingTab_user
         ...DashboardLayout_PreferenceModal_IdentityTab_user
@@ -50,12 +54,16 @@
       icon: UserIcon,
       component: AccountTab,
     },
-    {
-      path: '/preference/site',
-      label: '사이트',
-      icon: PanelTopIcon,
-      component: SiteTab,
-    },
+    ...($user.plan
+      ? [
+          {
+            path: '/preference/site',
+            label: '사이트',
+            icon: PanelTopIcon,
+            component: SiteTab,
+          },
+        ]
+      : []),
     {
       path: '/preference/identity',
       label: '인증',
