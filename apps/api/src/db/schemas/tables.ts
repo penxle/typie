@@ -347,6 +347,7 @@ export const PreorderUsers = pgTable('preorder_users', {
   email: text('email').unique().notNull(),
   wish: text('wish'),
   preorderPaymentId: text('preorder_payment_id').notNull(),
+  codeId: text('code_id').references(() => CreditCodes.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
