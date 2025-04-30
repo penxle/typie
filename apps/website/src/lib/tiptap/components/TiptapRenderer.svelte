@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Editor } from '@tiptap/core';
+  import { Editor, Extension } from '@tiptap/core';
   import { onMount } from 'svelte';
   import { Ref } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { renderHTML } from '../lib/html';
-  import { extensions } from '../schema';
+  import { extensions as defaultExtensions } from '../schema';
   import type { JSONContent } from '@tiptap/core';
   import type { SystemStyleObject } from '$styled-system/types';
 
@@ -12,18 +12,19 @@
     style?: SystemStyleObject;
     content: JSONContent;
     editor?: Ref<Editor>;
+    extensions?: Extension[];
   };
 
-  let { style, content, editor = $bindable() }: Props = $props();
+  let { style, content, editor = $bindable(), extensions }: Props = $props();
 
   let element = $state<HTMLElement>();
-  const html = $derived(renderHTML(content, extensions));
+  const html = $derived(renderHTML(content, [...defaultExtensions, ...(extensions ?? [])]));
 
   onMount(() => {
     const e = new Editor({
       editable: false,
       content,
-      extensions,
+      extensions: [...defaultExtensions, ...(extensions ?? [])],
       injectCSS: false,
 
       editorProps: {

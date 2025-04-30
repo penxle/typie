@@ -28,7 +28,9 @@
 
       welcome {
         body
+        bodyMobile
         update
+        updateMobile
       }
 
       randomName
@@ -112,7 +114,7 @@
 
       <div class={css({ height: '1px', backgroundColor: 'gray.200' })}></div>
 
-      <Toolbar {doc} {editor} />
+      <Toolbar style={css.raw({ hideBelow: 'md' })} {doc} {editor} />
     </div>
   </div>
 {/if}
@@ -134,7 +136,10 @@
     overflowY: 'auto',
   })}
 >
-  <div style:--prosemirror-max-width={`${maxWidth.current}px`} class={flex({ paddingTop: '240px', width: 'full', maxWidth: '1000px' })}>
+  <div
+    style:--prosemirror-max-width={`${maxWidth.current}px`}
+    class={flex({ paddingTop: '240px', width: 'full', maxWidth: '1000px', hideBelow: 'md' })}
+  >
     {#if browser}
       <div
         style:--highlight-progress={highlight ? '1' : '0'}
@@ -154,6 +159,28 @@
     {:else}
       <TiptapRenderer style={css.raw({ width: 'full', paddingBottom: '80px' })} content={$query.welcome.body} />
     {/if}
+  </div>
+
+  <div style:--prosemirror-max-width="100%" class={css({ paddingTop: '120px', paddingX: '16px', width: 'full', hideFrom: 'md' })}>
+    <div
+      style:--highlight-progress={highlight ? '1' : '0'}
+      style:--highlight-name={`"${$query.randomName}"`}
+      class={css({ display: 'contents', '& a': { cursor: 'pointer' } })}
+      onclick={(e) => {
+        const anchor = (e.target as HTMLElement).closest('a');
+        if (anchor) {
+          e.preventDefault();
+          window.open(anchor.href, '_blank');
+        }
+      }}
+      role="none"
+    >
+      <TiptapRenderer
+        style={css.raw({ width: 'full', paddingBottom: '80px' })}
+        content={$query.welcome.bodyMobile}
+        extensions={[Highlight]}
+      />
+    </div>
   </div>
 </div>
 

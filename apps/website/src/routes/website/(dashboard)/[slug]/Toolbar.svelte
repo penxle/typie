@@ -41,27 +41,32 @@
   import type { Editor } from '@tiptap/core';
   import type * as Y from 'yjs';
   import type { Ref } from '$lib/utils';
+  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     editor?: Ref<Editor>;
     doc: Y.Doc;
+    style?: SystemStyleObject;
   };
 
-  let { editor, doc }: Props = $props();
+  let { editor, doc, style }: Props = $props();
 
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
 </script>
 
 <div
-  class={css({
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    borderBottomWidth: '1px',
-    borderBottomColor: 'gray.100',
-    paddingY: '8px',
-    zIndex: '10',
-  })}
+  class={css(
+    {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+      borderBottomWidth: '1px',
+      borderBottomColor: 'gray.100',
+      paddingY: '8px',
+      zIndex: '10',
+    },
+    style,
+  )}
   role="toolbar"
   tabindex="-1"
 >
