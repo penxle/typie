@@ -126,14 +126,28 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <SidebarButton icon={ChartNoAxesCombinedIcon} label="통계" onclick={() => (app.state.statsOpen = true)} />
+    <SidebarButton
+      icon={ChartNoAxesCombinedIcon}
+      label="통계"
+      onclick={() => {
+        app.state.statsOpen = true;
+        mixpanel.track('open_stats_modal');
+      }}
+    />
   </div>
 
   <div class={css({ flexGrow: '1' })}></div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
     <SidebarButton as="a" href="https://help.typie.co" icon={CircleHelpIcon} label="도움말" rel="noopener noreferrer" target="_blank" />
-    <SidebarButton icon={CogIcon} label="설정" onclick={() => pushState('', { shallowRoute: '/preference/account' })} />
+    <SidebarButton
+      icon={CogIcon}
+      label="설정"
+      onclick={() => {
+        pushState('', { shallowRoute: '/preference/account' });
+        mixpanel.track('open_preference_modal', { via: 'sidebar' });
+      }}
+    />
   </div>
 
   <UserMenu {$user} />

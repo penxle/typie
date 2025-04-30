@@ -148,7 +148,7 @@
         })}
         onclick={async () => {
           await markAllNotificationsAsRead();
-          mixpanel.track('mark_notifications_as_read');
+          mixpanel.track('mark_all_notifications_as_read');
         }}
         type="button"
         use:tooltip={{ message: '모두 읽기' }}

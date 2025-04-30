@@ -159,7 +159,7 @@
       icon={CopyIcon}
       onclick={async () => {
         const resp = await duplicatePost({ postId: $post.id });
-        mixpanel.track('duplicate_post');
+        mixpanel.track('duplicate_post', { via: 'tree' });
         await goto(`/${resp.entity.slug}`);
       }}
     >
