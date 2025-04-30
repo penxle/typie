@@ -188,7 +188,8 @@
         ...[...dragging.element.querySelectorAll<HTMLElement>('[data-id]')].map((element) => Number(element.dataset.depth ?? 0)),
       );
 
-      const depthDelta = draggingMaxDepth - draggingDepth + (dragging.element.dataset.type === 'folder' ? 1 : 0);
+      const depthDelta =
+        draggingMaxDepth - draggingDepth + (dragging.element.dataset.type === 'folder' ? 1 : 0) + (parentDepth === 0 ? 0 : 1);
 
       if (parentDepth + depthDelta > maxDepth) {
         dragging.indicator = {};
