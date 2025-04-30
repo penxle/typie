@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { siteSchema } from '@/validation';
@@ -45,6 +46,8 @@
     }),
     onSubmit: async (data) => {
       await updateSiteSlug({ siteId: $user.sites[0].id, slug: data.slug });
+
+      mixpanel.track('update_site_slug');
       Toast.success('사이트 주소가 변경되었습니다.');
     },
     onError: (error) => {

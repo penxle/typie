@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { cardSchema } from '@/validation';
@@ -77,8 +78,11 @@
           passwordTwoDigits: data.passwordTwoDigits,
         });
 
+        mixpanel.track('update_payment_billing_key');
+
         if (!$user.plan) {
           await enrollPlan({ billingCycle, planId: 'PL0PLUS' });
+          mixpanel.track('enroll_plan', { billingCycle, planId: 'PL0PLUS' });
         }
 
         open = false;

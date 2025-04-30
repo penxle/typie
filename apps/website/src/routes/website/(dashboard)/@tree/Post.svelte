@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
@@ -158,6 +159,7 @@
       icon={CopyIcon}
       onclick={async () => {
         const resp = await duplicatePost({ postId: $post.id });
+        mixpanel.track('duplicate_post');
         await goto(`/${resp.entity.slug}`);
       }}
     >
@@ -176,6 +178,7 @@
           actionLabel: '삭제',
           actionHandler: async () => {
             await deletePost({ postId: $post.id });
+            mixpanel.track('delete_post', { via: 'tree' });
             app.state.ancestors = [];
             app.state.current = undefined;
           },

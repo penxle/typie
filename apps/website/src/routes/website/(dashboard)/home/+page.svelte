@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import FilePenIcon from '~icons/lucide/file-pen';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
@@ -52,6 +53,8 @@
       const resp = await createPost({
         siteId: $query.me.sites[0].id,
       });
+
+      mixpanel.track('createPost', { via: 'home' });
 
       await goto(`/${resp.entity.slug}`);
     }}

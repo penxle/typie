@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import PanelLeftIcon from '~icons/lucide/panel-left';
   import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
@@ -211,8 +212,10 @@
             if (app.preference.current.postsExpanded) {
               app.state.postsOpen = app.preference.current.postsExpanded === 'open';
               app.preference.current.postsExpanded = false;
+              mixpanel.track('toggle_posts_expanded', { expanded: false });
             } else {
               app.preference.current.postsExpanded = app.state.postsOpen ? 'open' : 'closed';
+              mixpanel.track('toggle_posts_expanded', { expanded: true });
             }
           }}
           type="button"
@@ -236,6 +239,7 @@
               siteId: $site.id,
               name: '새 폴더',
             });
+            mixpanel.track('create_folder', { via: 'tree' });
           }}
           type="button"
           use:tooltip={{ message: '새 폴더 생성' }}
@@ -255,6 +259,8 @@
             const resp = await createPost({
               siteId: $site.id,
             });
+
+            mixpanel.track('create_post', { via: 'tree' });
 
             await goto(`/${resp.entity.slug}`);
           }}
@@ -296,6 +302,7 @@
         })}
         onclick={() => {
           pushState('', { shallowRoute: '/preference/billing' });
+          mixpanel.track('open_billing', { via: 'usage_widget' });
         }}
         type="button"
       >

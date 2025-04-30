@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
@@ -61,6 +62,8 @@
         folderId: $folder.id,
         visibility: data.visibility,
       });
+
+      mixpanel.track('update_folder_option', { visibility: data.visibility });
     },
     defaultValues: {
       visibility: $folder.entity.visibility,
@@ -69,6 +72,7 @@
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText($folder.entity.url);
+    mixpanel.track('copy_folder_share_url');
 
     if (timer) {
       clearTimeout(timer);

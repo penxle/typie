@@ -1,5 +1,6 @@
 <script lang="ts">
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import { fragment, graphql } from '$graphql';
   import { Button, HorizontalDivider } from '$lib/components';
   import { Dialog } from '$lib/notification';
@@ -125,6 +126,7 @@
             actionLabel: '해지',
             actionHandler: async () => {
               await cancelPlan();
+              mixpanel.track('cancel_plan');
             },
           });
         }}

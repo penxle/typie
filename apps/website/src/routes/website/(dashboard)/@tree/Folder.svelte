@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { EntityType, EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
@@ -190,6 +191,8 @@
             name: formData.get('name') as string,
           });
 
+          mixpanel.track('rename_folder');
+
           editing = false;
         }}
       >
@@ -248,7 +251,15 @@
         {/snippet}
 
         <MenuItem icon={PencilIcon} onclick={() => (editing = true)}>이름 변경</MenuItem>
-        <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $folder.entity.id)}>공유</MenuItem>
+        <MenuItem
+          icon={BlendIcon}
+          onclick={() => {
+            app.state.shareOpen = $folder.entity.id;
+            mixpanel.track('open_folder_share_modal');
+          }}
+        >
+          공유
+        </MenuItem>
 
         <HorizontalDivider color="secondary" />
 
@@ -259,6 +270,8 @@
               siteId: $folder.entity.site.id,
               parentEntityId: $folder.entity.id,
             });
+
+            mixpanel.track('create_nested_post', { via: 'folder_context_menu' });
 
             await goto(`/${resp.entity.slug}`);
           }}
@@ -275,6 +288,8 @@
                 parentEntityId: $folder.entity.id,
                 name: '새 폴더',
               });
+
+              mixpanel.track('create_child_folder', { via: 'folder_context_menu' });
 
               open = true;
             }}
@@ -301,6 +316,7 @@
               actionLabel: '삭제',
               actionHandler: async () => {
                 await deleteFolder({ folderId: $folder.id });
+                mixpanel.track('delete_folder');
               },
             });
           }}

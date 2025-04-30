@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { fade } from 'svelte/transition';
   import SmilePlusIcon from '~icons/lucide/smile-plus';
   import { fragment, graphql } from '$graphql';
@@ -91,6 +92,7 @@
             class={center({ borderRadius: '4px', padding: '3px', size: 'full', _supportHover: { backgroundColor: 'gray.100' } })}
             onclick={async () => {
               await createPostReaction({ postId: $postView.id, emoji });
+              mixpanel.track('create_post_reaction', { emoji });
             }}
             type="button"
           >

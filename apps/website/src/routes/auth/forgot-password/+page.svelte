@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import NaverIcon from '~icons/simple-icons/naver';
@@ -26,6 +27,7 @@
         email: data.email,
       });
 
+      mixpanel.track('send-password-reset-email');
       emailSent = true;
     },
     onError: (error) => {

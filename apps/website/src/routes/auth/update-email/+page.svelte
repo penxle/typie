@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -20,6 +21,8 @@
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       code: page.url.searchParams.get('code')!,
     });
+
+    mixpanel.track('update_email');
 
     Toast.success('이메일이 변경되었어요');
 

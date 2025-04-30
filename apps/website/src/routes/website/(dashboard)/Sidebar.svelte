@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
   import CircleHelpIcon from '~icons/lucide/circle-help';
   import CogIcon from '~icons/lucide/cog';
@@ -96,6 +97,8 @@
       const resp = await createPost({
         siteId: $user.sites[0].id,
       });
+
+      mixpanel.track('create_post', { via: 'sidebar' });
 
       await goto(`/${resp.entity.slug}`);
     }}

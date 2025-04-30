@@ -1,5 +1,6 @@
 <script lang="ts">
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import BellIcon from '~icons/lucide/bell';
   import CheckCheckIcon from '~icons/lucide/check-check';
   import { fragment, graphql } from '$graphql';
@@ -147,6 +148,7 @@
         })}
         onclick={async () => {
           await markAllNotificationsAsRead();
+          mixpanel.track('mark_notifications_as_read');
         }}
         type="button"
         use:tooltip={{ message: '모두 읽기' }}
@@ -179,6 +181,8 @@
               if (notification.state === 'UNREAD') {
                 await markNotificationAsRead({ notificationId: notification.id });
               }
+
+              mixpanel.track('read_notification');
 
               const url =
                 notification.data.__typename === 'NotificationCommentData'
