@@ -29,14 +29,15 @@ export const CreditCodes = pgTable('credit_codes', {
   id: text('id')
     .primaryKey()
     .$defaultFn(() => createDbId(TableCode.CREDIT_CODES)),
-  state: E._CreditCodeState('state').notNull().default('AVAILABLE'),
+  userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   code: text('code').unique().notNull(),
   amount: integer('amount').notNull(),
+  state: E._CreditCodeState('state').notNull().default('AVAILABLE'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
   expiresAt: datetime('expires_at').notNull(),
-  redeemedAt: datetime('redeemed_at'),
+  usedAt: datetime('used_at'),
 });
 
 export const Files = pgTable('files', {
@@ -418,24 +419,8 @@ export const UserPaymentCredits = pgTable('user_payment_credits', {
     .$defaultFn(() => createDbId(TableCode.USER_PAYMENT_CREDITS)),
   userId: text('user_id')
     .notNull()
+    .unique()
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  codeId: text('code_id').references(() => CreditCodes.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  initialAmount: integer('initial_amount').notNull(),
-  remainingAmount: integer('remaining_amount').notNull(),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-  expiresAt: datetime('expires_at').notNull(),
-});
-
-export const UserPaymentCreditTransactions = pgTable('user_payment_credit_transactions', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.USER_PAYMENT_CREDIT_TRANSACTIONS)),
-  userId: text('user_id')
-    .notNull()
-    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  cause: E._UserPaymentCreditTransactionCause('cause').notNull(),
   amount: integer('amount').notNull(),
   createdAt: datetime('created_at')
     .notNull()

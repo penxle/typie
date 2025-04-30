@@ -643,6 +643,7 @@ input UpdateUserInput {
 type User {
   avatar: Image!
   characterCountChanges: [CharacterCountChange!]!
+  credit: Int!
   email: String!
   id: ID!
   marketingConsent: Boolean!
@@ -653,17 +654,9 @@ type User {
   plan: UserPlan
   planRule: PlanRule!
   recentPosts: [Post!]!
-  remainingCredit: Int!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
   usage: UserUsage!
-}
-
-enum UserPaymentCreditTransactionCause {
-  CODE_REDEMPTION
-  EVENT
-  MANUAL_ADJUSTMENT
-  PERIODIC_PAYMENT
 }
 
 type UserPersonalIdentity {

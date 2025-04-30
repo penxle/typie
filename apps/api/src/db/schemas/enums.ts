@@ -20,10 +20,6 @@ export const _PostContentRating = createPgEnum('_post_content_rating', E.PostCon
 export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.PreorderPaymentState);
 export const _SiteState = createPgEnum('_site_state', E.SiteState);
 export const _SingleSignOnProvider = createPgEnum('_single_sign_on_provider', E.SingleSignOnProvider);
-export const _UserPaymentCreditTransactionCause = createPgEnum(
-  '_user_payment_credit_transaction_cause',
-  E.UserPaymentCreditTransactionCause,
-);
 export const _UserPlanBillingCycle = createPgEnum('_user_plan_billing_cycle', E.UserPlanBillingCycle);
 export const _UserPlanState = createPgEnum('_user_plan_state', E.UserPlanState);
 export const _UserState = createPgEnum('_user_state', E.UserState);
