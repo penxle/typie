@@ -181,23 +181,24 @@
     }
 
     if (parentElement) {
-      const parentDepth = Number(parentElement.dataset.depth ?? 0);
-      const draggingDepth = Number(dragging.element.dataset.depth ?? 0);
-      const draggingMaxDepth = Math.max(
-        draggingDepth,
-        ...[...dragging.element.querySelectorAll<HTMLElement>('[data-id]')].map((element) => Number(element.dataset.depth ?? 0)),
-      );
-
-      const depthDelta =
-        draggingMaxDepth - draggingDepth + (dragging.element.dataset.type === 'folder' ? 1 : 0) + (parentDepth === 0 ? 0 : 1);
-
-      if (parentDepth + depthDelta > maxDepth) {
-        dragging.indicator = {};
-        dragging.drop = undefined;
-        return;
-      }
-
       dragging.drop.parentId = parentElement.dataset.id;
+
+      if (dragging.element.dataset.type === 'folder') {
+        const newPathDepth = Number(parentElement.dataset.pathDepth ?? 0) + 1;
+        const folderDepth = 1;
+        const draggingDepth = Math.max(
+          folderDepth,
+          ...[...dragging.element.querySelectorAll<HTMLElement>('[data-type="folder"]')].map(
+            (element) => Number(element.dataset.pathDepth ?? 0) - Number(dragging?.element.dataset.pathDepth ?? 0) + folderDepth,
+          ),
+        );
+
+        if (newPathDepth + draggingDepth > maxDepth) {
+          dragging.indicator = {};
+          dragging.drop = undefined;
+          return;
+        }
+      }
     }
   };
 
