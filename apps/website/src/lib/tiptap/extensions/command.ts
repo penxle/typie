@@ -49,6 +49,8 @@ export const Command = Extension.create({
       isNodeAllowed:
         (typeOrName: string | NodeType) =>
         ({ state }) => {
+          return true;
+
           const { selection } = state;
           const { $anchor, empty } = selection;
 

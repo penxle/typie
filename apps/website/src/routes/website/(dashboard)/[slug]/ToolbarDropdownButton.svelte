@@ -21,6 +21,7 @@
     floating: Snippet<[{ close: () => void }]>;
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let { style, size, label, active = false, disabled = false, chevron = false, placement = 'bottom', anchor, floating }: Props = $props();
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
@@ -64,7 +65,6 @@
       style,
     )}
     aria-pressed={opened}
-    {disabled}
     onclick={open}
     type="button"
     use:anchorAction
@@ -98,7 +98,6 @@
       )}
       aria-label={label}
       aria-pressed={opened}
-      {disabled}
       onclick={open}
       type="button"
       use:anchorAction
