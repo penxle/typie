@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { EntityVisibility, PostContentRating } from '@/enums';
   import BanIcon from '~icons/lucide/ban';
@@ -94,6 +95,15 @@
         allowReaction: data.allowReaction,
         protectContent: data.protectContent,
       });
+
+      mixpanel.track('update_post_option', {
+        visibility: data.visibility,
+        hasPassword: data.hasPassword,
+        contentRating: data.contentRating,
+        allowComment: data.allowComment,
+        allowReaction: data.allowReaction,
+        protectContent: data.protectContent,
+      });
     },
     defaultValues: {
       visibility: $post.entity.visibility,
@@ -108,6 +118,7 @@
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText($post.entity.url);
+    mixpanel.track('copy_post_share_url');
 
     if (timer) {
       clearTimeout(timer);

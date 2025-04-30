@@ -1,5 +1,6 @@
 <script lang="ts">
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import { EntityVisibility } from '@/enums';
   import { fragment, graphql } from '$graphql';
   import { getAppContext } from '$lib/context';
@@ -75,7 +76,10 @@
 
         <button
           class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.500', transition: 'common', _hover: { color: 'gray.700' } })}
-          onclick={() => (app.state.shareOpen = $post.entity.id)}
+          onclick={() => {
+            app.state.shareOpen = $post.entity.id;
+            mixpanel.track('open_post_share_modal', { via: 'panel' });
+          }}
           type="button"
         >
           설정

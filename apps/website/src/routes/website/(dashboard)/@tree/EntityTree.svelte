@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { on } from 'svelte/events';
   import { fade } from 'svelte/transition';
   import { fragment, graphql } from '$graphql';
@@ -219,6 +220,8 @@
         lowerOrder,
         upperOrder,
       });
+
+      mixpanel.track('move_entity', { parentEntityId: parentId ?? null, lowerOrder, upperOrder });
     }
 
     cancelDragging();

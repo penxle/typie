@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { z } from 'zod';
   import { SingleSignOnProvider } from '@/enums';
@@ -39,6 +40,8 @@
         password: data.password,
       });
 
+      mixpanel.track('login_with_email');
+
       location.href = qs.stringifyUrl({
         url: `${env.PUBLIC_AUTH_URL}/authorize`,
         query: {
@@ -68,6 +71,8 @@
         state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
       }),
     });
+
+    mixpanel.track('login_with_sso', { provider });
 
     location.href = url;
   };

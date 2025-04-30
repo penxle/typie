@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import IconTrash2 from '~icons/lucide/trash-2';
   import { graphql } from '$graphql';
   import { Button, Icon, Img, RingSpinner } from '$lib/components';
@@ -47,6 +48,8 @@
         const attrs = await persistBlobAsImage({ path });
 
         coverImage.current = JSON.stringify(attrs);
+
+        mixpanel.track('set_cover_image');
       } finally {
         inflight = false;
       }
@@ -86,7 +89,14 @@
       <Button onclick={handleUpload} size="sm" variant="secondary">커버 이미지 설정</Button>
 
       {#if coverImage.current}
-        <Button onclick={() => (coverImage.current = null)} size="sm" variant="secondary">
+        <Button
+          onclick={() => {
+            coverImage.current = null;
+            mixpanel.track('remove_cover_image');
+          }}
+          size="sm"
+          variant="secondary"
+        >
           <Icon icon={IconTrash2} />
         </Button>
       {/if}

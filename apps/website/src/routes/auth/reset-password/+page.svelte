@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { goto } from '$app/navigation';
@@ -32,6 +33,8 @@
         code: page.url.searchParams.get('code') ?? '',
         password: data.password,
       });
+
+      mixpanel.track('reset_password');
 
       Toast.success('비밀번호가 재설정되었어요');
 

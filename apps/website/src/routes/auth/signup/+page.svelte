@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import ShuffleIcon from '~icons/lucide/dices';
@@ -60,6 +61,8 @@
         }),
         marketingAgreed: data.marketingAgreed ?? false,
       });
+
+      mixpanel.track('send_sign_up_email');
 
       emailSent = true;
     },

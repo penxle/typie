@@ -2,6 +2,7 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
@@ -346,12 +347,21 @@
             </button>
           {/snippet}
 
-          <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $query.post.entity.id)}>공유</MenuItem>
+          <MenuItem
+            icon={BlendIcon}
+            onclick={() => {
+              app.state.shareOpen = $query.post.entity.id;
+              mixpanel.track('open_post_share_modal', { via: 'editor' });
+            }}
+          >
+            공유
+          </MenuItem>
 
           <MenuItem
             icon={CopyIcon}
             onclick={async () => {
               const resp = await duplicatePost({ postId: $query.post.id });
+              mixpanel.track('duplicate_post', { via: 'editor' });
               await goto(`/${resp.entity.slug}`);
             }}
           >
@@ -370,6 +380,7 @@
                 actionLabel: '삭제',
                 actionHandler: async () => {
                   await deletePost({ postId: $query.post.id });
+                  mixpanel.track('delete_post', { via: 'editor' });
                   app.state.ancestors = [];
                   app.state.current = undefined;
                 },
@@ -389,7 +400,10 @@
             transition: 'common',
             _hover: { backgroundColor: 'gray.100' },
           })}
-          onclick={() => (app.preference.current.panelExpanded = !app.preference.current.panelExpanded)}
+          onclick={() => {
+            app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
+            mixpanel.track('toggle_panel_expanded', { expanded: app.preference.current.panelExpanded });
+          }}
           type="button"
           use:tooltip={{ message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기' }}
         >

@@ -1,5 +1,6 @@
 <script lang="ts">
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import UploadIcon from '~icons/lucide/upload';
   import NaverIcon from '~icons/simple-icons/naver';
@@ -79,6 +80,7 @@
     }),
     onSubmit: async (data) => {
       await updateUser({ name: data.name, avatarId: data.avatarId });
+      mixpanel.track('update_user');
     },
     defaultValues: {
       name: $user.name,
@@ -229,6 +231,8 @@
       onchange={async () => {
         await updateMarketingConsent({ marketingConsent: !$user.marketingConsent });
 
+        mixpanel.track('update_marketing_consent', { marketingConsent: !$user.marketingConsent });
+
         Dialog.alert({
           title: '타이피 마케팅 수신 동의',
           message: `${dayjs().formatAsDate()}에 ${$user.marketingConsent ? '거부' : '동의'}처리되었어요`,
@@ -249,6 +253,7 @@
         actionLabel: '탈퇴',
         actionHandler: async () => {
           await deleteUser();
+          mixpanel.track('delete_user');
           globalThis.location.href = '/';
         },
       });

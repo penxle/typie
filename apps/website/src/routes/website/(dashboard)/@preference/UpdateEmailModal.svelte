@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { graphql } from '$graphql';
@@ -28,6 +29,7 @@
     onSubmit: async (data) => {
       await sendEmailUpdateEmail({ email: data.email });
 
+      mixpanel.track('send_email_update_email');
       open = false;
       Dialog.alert({
         title: '이메일 변경',

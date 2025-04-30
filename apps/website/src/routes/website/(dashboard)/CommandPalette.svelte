@@ -2,6 +2,7 @@
   import dayjs from 'dayjs';
   import { disassemble } from 'es-hangul';
   import { matchSorter } from 'match-sorter';
+  import mixpanel from 'mixpanel-browser';
   import * as R from 'remeda';
   import { tick } from 'svelte';
   import { match } from 'ts-pattern';
@@ -101,6 +102,8 @@
         const resp = await createPost({
           siteId: $user.sites[0].id,
         });
+
+        mixpanel.track('create_post', { via: 'command_palette' });
 
         await goto(`/${resp.entity.slug}`);
       },
@@ -416,6 +419,11 @@
           })}
           aria-selected={selectedResultIndex === hit.idx}
           onclick={() => {
+            mixpanel.track('command_palette_select', {
+              type: hit.__typename,
+              ...(hit.__typename === 'SearchHitCommand' ? { name: hit.name } : {}),
+            });
+
             hit.action();
             close();
           }}
