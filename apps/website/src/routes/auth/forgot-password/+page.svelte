@@ -89,11 +89,11 @@
       <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>비밀번호 재설정하기</h1>
 
       <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500', wordBreak: 'keep-all' })}>
-        {form.fields.email}으로 비밀번호 재설정 링크를 보냈어요.
+        {form.fields.email} 으로 비밀번호 재설정 링크를 보냈어요.
       </div>
     </div>
 
-    <div class={flex({ direction: 'column', gap: '12px' })}>
+    <div class={flex({ direction: 'column', gap: '4px' })}>
       <Button style={center.raw({ gap: '8px', width: 'full' })} external href="https://gmail.com" size="lg" type="link" variant="secondary">
         <Icon icon={GoogleIcon} size={16} />
         구글 이메일 열기
@@ -110,15 +110,15 @@
         <Icon style={css.raw({ color: '[#03C75A]' })} icon={NaverIcon} size={14} />
         네이버 이메일 열기
       </Button>
+    </div>
 
-      <div class={flex({ justifyContent: 'center' })}>
-        <a
-          class={css({ fontSize: '13px', color: 'gray.700', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
-          href={`/login${page.url.search}`}
-        >
-          로그인 페이지로 돌아가기
-        </a>
-      </div>
+    <div class={flex({ justifyContent: 'center' })}>
+      <a
+        class={css({ fontSize: '13px', color: 'gray.700', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
+        href={`/login${page.url.search}`}
+      >
+        로그인 페이지로 돌아가기
+      </a>
     </div>
   {/if}
 </div>
