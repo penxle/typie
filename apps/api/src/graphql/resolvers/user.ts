@@ -33,7 +33,7 @@ import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { delay } from '@/utils/promise';
-import { userSchema } from '@/validation';
+import { redeemCodeSchema, userSchema } from '@/validation';
 import { builder } from '../builder';
 import {
   CharacterCountChange,
@@ -504,7 +504,7 @@ builder.mutationFields((t) => ({
 
   redeemCreditCode: t.withAuth({ session: true }).fieldWithInput({
     type: User,
-    input: { code: t.input.string() },
+    input: { code: t.input.string({ validate: { schema: redeemCodeSchema } }) },
     resolve: async (_, { input }, ctx) => {
       await delay(Math.random() * 2000);
 
