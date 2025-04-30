@@ -176,50 +176,52 @@
     </div>
   </div>
 
-  <HorizontalDivider color="secondary" />
+  {#if $user.singleSignOns.length > 0}
+    <HorizontalDivider color="secondary" />
 
-  <div class={flex({ direction: 'column', gap: '12px' })}>
-    <p class={css({ fontWeight: 'medium' })}>연결된 SNS 계정</p>
+    <div class={flex({ direction: 'column', gap: '12px' })}>
+      <p class={css({ fontWeight: 'medium' })}>연결된 SNS 계정</p>
 
-    {#each $user.singleSignOns as singleSignOn (singleSignOn.id)}
-      <div class={flex({ align: 'center', gap: '12px' })}>
-        {#if singleSignOn.provider === 'GOOGLE'}
-          <Icon icon={GoogleIcon} size={24} />
-        {:else if singleSignOn.provider === 'NAVER'}
-          <div
-            class={center({
-              borderWidth: '1px',
-              borderColor: '[#03C75A]',
-              borderRadius: '6px',
-              color: 'white',
-              backgroundColor: '[#03C75A]',
-              size: '28px',
-            })}
-          >
-            <Icon icon={NaverIcon} size={16} />
+      {#each $user.singleSignOns as singleSignOn (singleSignOn.id)}
+        <div class={flex({ align: 'center', gap: '12px' })}>
+          {#if singleSignOn.provider === 'GOOGLE'}
+            <Icon icon={GoogleIcon} size={24} />
+          {:else if singleSignOn.provider === 'NAVER'}
+            <div
+              class={center({
+                borderWidth: '1px',
+                borderColor: '[#03C75A]',
+                borderRadius: '6px',
+                color: 'white',
+                backgroundColor: '[#03C75A]',
+                size: '28px',
+              })}
+            >
+              <Icon icon={NaverIcon} size={16} />
+            </div>
+          {:else if singleSignOn.provider === 'KAKAO'}
+            <div
+              class={center({
+                borderWidth: '1px',
+                borderColor: '[#FEE500]',
+                borderRadius: '6px',
+                color: 'black',
+                backgroundColor: '[#FEE500]',
+                size: '28px',
+              })}
+            >
+              <Icon icon={KakaoIcon} size={20} />
+            </div>
+          {/if}
+
+          <div>
+            <p class={css({ fontSize: '15px', textTransform: 'capitalize' })}>{singleSignOn.provider.toLowerCase()}</p>
+            <p class={css({ marginTop: '2px', fontSize: '14px', color: 'gray.500' })}>{singleSignOn.email}</p>
           </div>
-        {:else if singleSignOn.provider === 'KAKAO'}
-          <div
-            class={center({
-              borderWidth: '1px',
-              borderColor: '[#FEE500]',
-              borderRadius: '6px',
-              color: 'black',
-              backgroundColor: '[#FEE500]',
-              size: '28px',
-            })}
-          >
-            <Icon icon={KakaoIcon} size={20} />
-          </div>
-        {/if}
-
-        <div>
-          <p class={css({ fontSize: '15px', textTransform: 'capitalize' })}>{singleSignOn.provider.toLowerCase()}</p>
-          <p class={css({ marginTop: '2px', fontSize: '14px', color: 'gray.500' })}>{singleSignOn.email}</p>
         </div>
-      </div>
-    {/each}
-  </div>
+      {/each}
+    </div>
+  {/if}
 
   <HorizontalDivider color="secondary" />
 
