@@ -173,7 +173,7 @@
   };
 </script>
 
-<Modal style={css.raw({ gap: '24px', padding: '20px' })} bind:open>
+<Modal style={css.raw({ gap: '24px', padding: '20px', maxWidth: '500px' })} bind:open>
   <p class={css({ fontWeight: 'semibold' })}>카드 등록 및 결제</p>
 
   {#if !$user.plan}
@@ -378,16 +378,16 @@
       </div>
     {/if}
 
-    <div class={flex({ direction: 'column', gap: '8px', marginY: '12px' })}>
+    <div class={flex({ direction: 'column', gap: '6px', marginY: '12px' })}>
       <Checkbox checked={allChecked} onchange={handleAllCheck} size="sm">
-        <span class={css({ color: 'gray.700' })}>모두 확인하고 동의합니다</span>
+        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.700' })}>모두 확인하고 동의해요</span>
       </Checkbox>
 
       <HorizontalDivider color="secondary" />
 
       {#each agreements as agreement (agreement.name)}
         <Checkbox size="sm" bind:checked={agreementChecks[agreements.indexOf(agreement)]}>
-          <span class={flex({ fontSize: '14px', color: 'gray.700' })}>
+          <span class={flex({ fontSize: '13px', color: 'gray.700' })}>
             <a
               class={css({ textDecoration: 'underline', color: 'gray.900' })}
               href={agreement.url}
