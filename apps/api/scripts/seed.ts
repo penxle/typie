@@ -9,7 +9,10 @@ await db.transaction(async (tx) => {
     id: PlanId.PLUS,
     name: 'Plus',
     fee: 4900,
-    rules: {},
+    rules: {
+      maxTotalCharacterCount: -1,
+      maxTotalBlobSize: -1,
+    },
   });
 
   await tx.insert(Plans).values({

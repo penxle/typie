@@ -17,6 +17,7 @@ type AppState = {
   commandPaletteOpen: boolean;
   shareOpen: string | false;
   statsOpen: boolean;
+  upgradeOpen: boolean;
 
   progress: {
     totalCharacterCount: number;
@@ -50,6 +51,7 @@ export const setupAppContext = () => {
     commandPaletteOpen: false,
     shareOpen: false,
     statsOpen: false,
+    upgradeOpen: false,
 
     progress: {
       totalCharacterCount: 0,

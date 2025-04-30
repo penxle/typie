@@ -6,6 +6,7 @@ import { colors } from './colors';
 import { fontSizes } from './font-sizes';
 import { fontWeights } from './font-weights';
 import { fonts } from './fonts';
+import { gradients } from './gradients';
 import { lineHeights } from './line-heights';
 import { opacity } from './opacity';
 import { radii } from './radii';
@@ -22,6 +23,7 @@ export const tokens = defineTokens({
   fonts,
   fontSizes,
   fontWeights,
+  gradients,
   lineHeights,
   opacity,
   radii,

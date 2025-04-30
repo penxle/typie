@@ -337,7 +337,7 @@
 
         <div class={flex({ flexDirection: 'column', gap: '2px' })}>
           <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '4px' })}>
-            <div class={css({ fontSize: '12px', color: 'gray.700' })}>첨부 파일</div>
+            <div class={css({ fontSize: '12px', color: 'gray.700' })}>파일 업로드</div>
 
             <div class={css({ fontSize: '12px', color: 'gray.500' })}>
               {formatBytes($site.usage.totalBlobSize)} / {formatBytes($user.planRule.maxTotalBlobSize)}
