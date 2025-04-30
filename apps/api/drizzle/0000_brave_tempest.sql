@@ -214,6 +214,7 @@ CREATE TABLE "preorder_users" (
 	"email" text NOT NULL,
 	"wish" text,
 	"preorder_payment_id" text NOT NULL,
+	"code_id" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "preorder_users_email_unique" UNIQUE("email")
 );
@@ -320,6 +321,7 @@ ALTER TABLE "post_snapshots" ADD CONSTRAINT "post_snapshots_post_id_posts_id_fk"
 ALTER TABLE "post_snapshots" ADD CONSTRAINT "post_snapshots_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE cascade;
 ALTER TABLE "posts" ADD CONSTRAINT "posts_entity_id_entities_id_fk" FOREIGN KEY ("entity_id") REFERENCES "public"."entities"("id") ON DELETE restrict ON UPDATE cascade;
 ALTER TABLE "posts" ADD CONSTRAINT "posts_cover_image_id_images_id_fk" FOREIGN KEY ("cover_image_id") REFERENCES "public"."images"("id") ON DELETE restrict ON UPDATE cascade;
+ALTER TABLE "preorder_users" ADD CONSTRAINT "preorder_users_code_id_credit_codes_id_fk" FOREIGN KEY ("code_id") REFERENCES "public"."credit_codes"("id") ON DELETE restrict ON UPDATE cascade;
 ALTER TABLE "sites" ADD CONSTRAINT "sites_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE cascade;
 ALTER TABLE "user_marketing_consents" ADD CONSTRAINT "user_marketing_consents_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE cascade;
 ALTER TABLE "user_payment_credits" ADD CONSTRAINT "user_payment_credits_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE cascade;
