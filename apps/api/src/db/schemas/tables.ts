@@ -407,7 +407,7 @@ export const UserMarketingConsents = pgTable('user_marketing_consents', {
   userId: text('user_id')
     .notNull()
     .unique()
-    .references(() => Users.id),
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -434,7 +434,7 @@ export const UserPersonalIdentities = pgTable('user_personal_identities', {
   userId: text('user_id')
     .notNull()
     .unique()
-    .references(() => Users.id),
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
   birthDate: datetime('birth_date').notNull(),
   gender: text('gender').notNull(),
@@ -452,10 +452,10 @@ export const UserPlans = pgTable('user_plans', {
     .$defaultFn(() => createDbId(TableCode.USER_PLANS)),
   userId: text('user_id')
     .notNull()
-    .references(() => Users.id),
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   planId: text('plan_id')
     .notNull()
-    .references(() => Plans.id),
+    .references(() => Plans.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   fee: integer('fee').notNull(),
   billingCycle: E._UserPlanBillingCycle('billing_cycle').notNull(),
   state: E._UserPlanState('state').notNull().default('ACTIVE'),
@@ -473,7 +473,7 @@ export const UserSessions = pgTable(
       .$defaultFn(() => createDbId(TableCode.USER_SESSIONS)),
     userId: text('user_id')
       .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     token: text('token').notNull().unique(),
     expiresAt: datetime('expires_at').notNull(),
     createdAt: datetime('created_at')
@@ -491,7 +491,7 @@ export const UserSingleSignOns = pgTable(
       .$defaultFn(() => createDbId(TableCode.USER_SINGLE_SIGN_ONS)),
     userId: text('user_id')
       .notNull()
-      .references(() => Users.id),
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     provider: E._SingleSignOnProvider('provider').notNull(),
     principal: text('principal').notNull(),
     email: text('email').notNull(),
