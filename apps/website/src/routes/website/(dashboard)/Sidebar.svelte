@@ -1,7 +1,6 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
   import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
-  import CircleHelpIcon from '~icons/lucide/circle-help';
   import CogIcon from '~icons/lucide/cog';
   import FolderIcon from '~icons/lucide/folder';
   import PlusIcon from '~icons/lucide/plus';
@@ -139,7 +138,7 @@
   <div class={css({ flexGrow: '1' })}></div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <SidebarButton as="a" href="https://help.typie.co" icon={CircleHelpIcon} label="도움말" rel="noopener noreferrer" target="_blank" />
+    <!-- <SidebarButton as="a" href="https://help.typie.co" icon={CircleHelpIcon} label="도움말" rel="noopener noreferrer" target="_blank" /> -->
     <SidebarButton
       icon={CogIcon}
       label="설정"
