@@ -1,4 +1,6 @@
 import { Redis } from 'ioredis';
-import { env } from '@/env';
+import { env, stack } from '@/env';
 
-export const redis = new Redis(env.REDIS_URL);
+export const redis = new Redis.Cluster([env.REDIS_URL], {
+  keyPrefix: `${stack}:`,
+});

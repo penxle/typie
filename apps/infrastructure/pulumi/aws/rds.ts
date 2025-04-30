@@ -66,7 +66,7 @@ new aws.rds.ClusterInstance('typie-1', {
   identifier: 'typie-1',
 
   engine: 'aurora-postgresql',
-  instanceClass: 'db.t4g.medium',
+  instanceClass: 'db.r7g.large',
 
   availabilityZone: subnets.private.az1.availabilityZone,
   caCertIdentifier: 'rds-ca-ecc384-g1',
@@ -78,22 +78,22 @@ new aws.rds.ClusterInstance('typie-1', {
   applyImmediately: true,
 });
 
-// new aws.rds.ClusterInstance('typie-2', {
-//   clusterIdentifier: cluster.id,
-//   identifier: 'typie-2',
+new aws.rds.ClusterInstance('typie-2', {
+  clusterIdentifier: cluster.id,
+  identifier: 'typie-2',
 
-//   engine: 'aurora-postgresql',
-//   instanceClass: 'db.t4g.medium',
+  engine: 'aurora-postgresql',
+  instanceClass: 'db.r7g.large',
 
-//   availabilityZone: subnets.private.az2.availabilityZone,
-//   caCertIdentifier: 'rds-ca-ecc384-g1',
+  availabilityZone: subnets.private.az2.availabilityZone,
+  caCertIdentifier: 'rds-ca-ecc384-g1',
 
-//   preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
+  preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
 
-//   promotionTier: 1,
+  promotionTier: 1,
 
-//   applyImmediately: true,
-// });
+  applyImmediately: true,
+});
 
 new aws.route53.Record('db.typie.io', {
   zoneId: zones.typie_io.zoneId,

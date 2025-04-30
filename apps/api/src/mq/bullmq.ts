@@ -2,7 +2,8 @@ import os from 'node:os';
 import * as Sentry from '@sentry/bun';
 import { logger } from '@typie/lib';
 import { Queue, Worker } from 'bullmq';
-import { dev, env } from '@/env';
+import Redis from 'ioredis';
+import { dev, env, stack } from '@/env';
 import { crons, jobs } from './tasks';
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -10,7 +11,9 @@ const lane = dev ? os.hostname() : env.PUBLIC_PULUMI_STACK!;
 const taskMap = Object.fromEntries([...jobs, ...crons].map((job) => [job.name, job.fn]));
 
 export const queue = new Queue(lane, {
-  connection: { url: env.REDIS_URL },
+  prefix: `${stack}:{mq}`,
+  connection: new Redis.Cluster([env.REDIS_URL]),
+
   defaultJobOptions: {
     removeOnComplete: true,
     removeOnFail: true,
@@ -30,7 +33,8 @@ const worker = new Worker(
     await fn(job.data);
   },
   {
-    connection: { url: env.REDIS_URL },
+    prefix: `${stack}:{mq}`,
+    connection: new Redis.Cluster([env.REDIS_URL]),
     concurrency: 50,
   },
 );
