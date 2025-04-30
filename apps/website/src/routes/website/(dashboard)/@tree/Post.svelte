@@ -101,9 +101,9 @@
     ),
   )}
   aria-selected="false"
-  data-depth={$post.entity.depth}
   data-id={$post.entity.id}
   data-order={$post.entity.order}
+  data-path-depth={$post.entity.depth}
   data-type="post"
   draggable="false"
   href="/{$post.entity.slug}"

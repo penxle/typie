@@ -134,7 +134,7 @@
   });
 </script>
 
-<details data-depth={$folder.entity.depth} data-id={$folder.entity.id} data-order={$folder.entity.order} data-type="folder" bind:open>
+<details data-id={$folder.entity.id} data-order={$folder.entity.order} data-path-depth={$folder.entity.depth} data-type="folder" bind:open>
   <summary
     class={cx(
       'group',
