@@ -6,8 +6,8 @@ export type PlanRules = {
 };
 
 export const defaultPlanRules: PlanRules = {
-  maxTotalCharacterCount: -1,
-  maxTotalBlobSize: -1,
+  maxTotalCharacterCount: 16_000,
+  maxTotalBlobSize: 20 * 1000 * 1000,
 };
 
 export type NotificationAnnouncementData = {
