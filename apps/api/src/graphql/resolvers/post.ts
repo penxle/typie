@@ -1,4 +1,3 @@
-import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
@@ -27,7 +26,7 @@ import { NotFoundError, TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
-import { generateEntityOrder, getKoreanAge, makeText, makeYDoc } from '@/utils';
+import { generateEntityOrder, generatePermalink, generateSlug, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { CharacterCountChange, Comment, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostView } from '../objects';
@@ -463,6 +462,8 @@ builder.mutationFields((t) => ({
           content: {
             body: PostContents.body,
             text: PostContents.text,
+            characterCount: PostContents.characterCount,
+            blobSize: PostContents.blobSize,
           },
         })
         .from(Posts)
@@ -519,6 +520,8 @@ builder.mutationFields((t) => ({
           text: post.content.text,
           update: Y.encodeStateAsUpdateV2(doc),
           vector: Y.encodeStateVector(doc),
+          characterCount: post.content.characterCount,
+          blobSize: post.content.blobSize,
         });
 
         await tx.insert(PostSnapshots).values({
@@ -818,9 +821,6 @@ builder.subscriptionFields((t) => ({
 /**
  * * Utils
  */
-
-const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
-const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
 
 const getPostDocument = async (postId: string) => {
   const { update, vector } = await db

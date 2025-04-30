@@ -7,7 +7,7 @@ import ky from 'ky';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, Images, Sites, UserMarketingConsents, Users, UserSessions, UserSingleSignOns } from '@/db';
+import { db, first, firstOrThrow, Images, UserMarketingConsents, Users, UserSessions, UserSingleSignOns } from '@/db';
 import { sendEmail } from '@/email';
 import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
@@ -16,6 +16,7 @@ import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
 import { google, kakao, naver } from '@/external/sso';
 import { generateRandomAvatar, persistBlobAsImage } from '@/utils';
+import { createSite } from '@/utils/site';
 import { builder } from '../builder';
 import type { UserContext } from '@/context';
 import type { Transaction } from '@/db';
@@ -338,14 +339,15 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId }: Cre
 
   const user = await tx.insert(Users).values({ email, name, avatarId }).returning({ id: Users.id }).then(firstOrThrow);
 
-  await tx.insert(Sites).values({
+  await createSite({
     userId: user.id,
+    name: `${name}의 사이트`,
     slug: [
       faker.word.adjective({ length: { min: 3, max: 5 } }),
       faker.word.noun({ length: { min: 4, max: 6 } }),
       faker.string.numeric({ length: { min: 3, max: 4 } }),
     ].join('-'),
-    name: `${name}의 사이트`,
+    tx,
   });
 
   const avatar = await tx

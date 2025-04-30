@@ -1,9 +1,8 @@
-import { faker } from '@faker-js/faker';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility } from '@/enums';
 import { pubsub } from '@/pubsub';
-import { generateEntityOrder } from '@/utils';
+import { generateEntityOrder, generatePermalink, generateSlug } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
@@ -93,8 +92,8 @@ builder.mutationFields((t) => ({
             userId: ctx.session.userId,
             siteId: input.siteId,
             parentId: input.parentEntityId,
-            slug: faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' }),
-            permalink: faker.string.alphanumeric({ length: 6, casing: 'mixed' }),
+            slug: generateSlug(),
+            permalink: generatePermalink(),
             type: EntityType.FOLDER,
             order: generateEntityOrder({ lower: last?.order, upper: null }),
             depth,
