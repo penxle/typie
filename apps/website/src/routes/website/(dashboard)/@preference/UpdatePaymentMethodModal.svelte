@@ -3,10 +3,13 @@
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { cardSchema } from '@/validation';
+  import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { fragment, graphql } from '$graphql';
-  import { Button, Checkbox, HorizontalDivider, Modal, SegmentButtons, TextInput } from '$lib/components';
+  import { Button, Checkbox, HorizontalDivider, Icon, Modal, SegmentButtons, TextInput } from '$lib/components';
   import { createForm } from '$lib/form';
   import { Toast } from '$lib/notification';
+  import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import type { UserPlanBillingCycle } from '@/enums';
@@ -32,6 +35,16 @@
     `),
   );
 
+  const query = graphql(`
+    query DashboardLayout_PreferenceModal_BillingTab_Query($code: String!) @client {
+      creditCode(code: $code) {
+        id
+        amount
+        code
+      }
+    }
+  `);
+
   const updatePaymentBillingKey = graphql(`
     mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdatePaymentBillingKey_Mutation(
       $input: UpdatePaymentBillingKeyInput!
@@ -40,6 +53,14 @@
         id
         name
         createdAt
+      }
+    }
+  `);
+
+  const redeemCreditCode = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_RedeemCreditCode_Mutation($input: RedeemCreditCodeInput!) {
+      redeemCreditCode(input: $input) {
+        id
       }
     }
   `);
@@ -68,6 +89,7 @@
       expiryDate: cardSchema.expiryDate,
       birthOrBusinessRegistrationNumber: cardSchema.birthOrBusinessRegistrationNumber,
       passwordTwoDigits: cardSchema.passwordTwoDigits,
+      code: z.string().optional(),
     }),
     onSubmit: async (data) => {
       try {
@@ -77,8 +99,12 @@
           expiryDate: data.expiryDate,
           passwordTwoDigits: data.passwordTwoDigits,
         });
-
         mixpanel.track('update_payment_billing_key');
+
+        if (redeemCode) {
+          await redeemCreditCode({ code: redeemCode.code });
+          mixpanel.track('redeem_credit_code');
+        }
 
         if (!$user.plan) {
           await enrollPlan({ billingCycle, planId: 'PL0PLUS' });
@@ -91,6 +117,7 @@
           billing_key_issue_failed: '결제 키 발급에 실패했습니다. 카드 정보를 다시 확인해주세요.',
           plan_already_enrolled: '이미 결제 정보가 등록되어 있습니다.',
           payment_failed: '결제에 실패했습니다. 카드 정보를 다시 확인해주세요.',
+          invalid_code: '유효하지 않은 할인 코드입니다.',
         };
 
         if (err instanceof TypieError) {
@@ -108,6 +135,18 @@
 
   let agreementChecks = $state(agreements.map(() => false));
   const allChecked = $derived(agreementChecks.every(Boolean));
+  let redeemInputOpen = $state(false);
+  let buttonEl = $state<HTMLElement>();
+  let redeemCode = $state<{ id: string; amount: number; code: string } | null>(null);
+  let paymentAmount = $state(4900);
+
+  $effect(() => {
+    paymentAmount = billingCycle === 'MONTHLY' ? 4900 : 49_000;
+
+    if (redeemCode) {
+      paymentAmount -= redeemCode.amount;
+    }
+  });
 
   const handleAllCheck = () => {
     agreementChecks = agreementChecks.map(() => !allChecked);
@@ -178,7 +217,7 @@
         backgroundColor: 'gray.100',
       })}
     >
-      결제 금액: {billingCycle === 'MONTHLY' ? '4,900' : '49,000'}원
+      결제 금액: {comma(paymentAmount)}원
     </div>
   {/if}
 
@@ -267,6 +306,78 @@
       {/if}
     </div>
 
+    {#if !$user.plan}
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <button
+          class={flex({ align: 'center', justify: 'space-between', color: 'gray.400' })}
+          onclick={() => (redeemInputOpen = !redeemInputOpen)}
+          type="button"
+        >
+          <p class={css({ fontSize: '12px' })}>할인 코드를 갖고 계신가요?</p>
+
+          {#if redeemInputOpen}
+            <Icon icon={ChevronUpIcon} size={12} />
+          {:else}
+            <Icon icon={ChevronDownIcon} size={12} />
+          {/if}
+        </button>
+
+        {#if redeemInputOpen}
+          <div class={flex({ align: 'center', gap: '4px' })}>
+            <TextInput
+              id="code"
+              style={css.raw({ width: 'full' })}
+              onblur={() => buttonEl?.click()}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') {
+                  buttonEl?.click();
+                }
+              }}
+              placeholder="할인 코드 입력하기"
+              size="sm"
+              bind:value={form.fields.code}
+            />
+
+            <Button
+              style={css.raw({ flex: 'none' })}
+              onclick={async () => {
+                if (form.fields.code) {
+                  try {
+                    const resp = await query.load({ code: form.fields.code });
+                    redeemCode = resp.creditCode;
+                  } catch {
+                    Toast.error('유효하지 않은 할인 코드입니다.');
+                  }
+                }
+              }}
+              size="sm"
+              variant="secondary"
+              bind:element={buttonEl}
+            >
+              확인
+            </Button>
+          </div>
+        {/if}
+
+        {#if redeemCode}
+          <div
+            class={flex({
+              align: 'center',
+              justify: 'space-between',
+              borderWidth: '1px',
+              borderColor: 'gray.100',
+              borderRadius: '4px',
+              paddingX: '8px',
+              paddingY: '6px',
+            })}
+          >
+            <p class={css({ fontSize: '13px' })}>사전등록 할인</p>
+            <p class={css({ fontSize: '13px', color: 'gray.600' })}>{comma(redeemCode.amount)}원</p>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
     <div class={flex({ direction: 'column', gap: '8px', marginY: '12px' })}>
       <Checkbox checked={allChecked} onchange={handleAllCheck} size="sm">
         <span class={css({ color: 'gray.700' })}>모두 확인하고 동의합니다</span>
@@ -291,6 +402,6 @@
       {/each}
     </div>
 
-    <Button disabled={!allChecked} size="lg" type="submit">결제</Button>
+    <Button disabled={!allChecked} size="lg" type="submit">{redeemCode ? (paymentAmount === 0 ? '등록' : '등록 및 결제') : '결제'}</Button>
   </form>
 </Modal>

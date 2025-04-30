@@ -9,6 +9,7 @@
   type RecipeProps = RecipeVariantProps<typeof recipe>;
   type BaseProps = {
     style?: SystemStyleObject;
+    element?: HTMLElement;
     loading?: boolean;
     disabled?: boolean;
     children: Snippet;
@@ -30,7 +31,17 @@
 
   type Props = ButtonAllProps | LinkAllProps;
 
-  let { type = 'button', style, disabled = false, loading = false, variant = 'primary', size = 'md', children, ...rest }: Props = $props();
+  let {
+    type = 'button',
+    style,
+    disabled = false,
+    loading = false,
+    variant = 'primary',
+    size = 'md',
+    element = $bindable(),
+    children,
+    ...rest
+  }: Props = $props();
 
   const recipe = cva({
     base: {
@@ -138,6 +149,7 @@
 
 <svelte:element
   this={type === 'link' ? 'a' : 'button'}
+  bind:this={element}
   class={css(recipe.raw({ variant, size }), loading && { position: 'relative' }, style)}
   aria-busy={loading}
   role="button"
