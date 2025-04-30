@@ -61,7 +61,7 @@ const cluster = new aws.rds.Cluster('typie', {
   applyImmediately: true,
 });
 
-new aws.rds.ClusterInstance('typie-1', {
+const instance = new aws.rds.ClusterInstance('typie-1', {
   clusterIdentifier: cluster.id,
   identifier: 'typie-1',
 
@@ -157,6 +157,11 @@ new aws.route53.Record('dev.db.typie.io', {
   records: [devCluster.endpoint],
   ttl: 300,
 });
+
+export const db = {
+  cluster,
+  instance,
+};
 
 export const outputs = {
   AWS_RDS_PASSWORD: password.result,
