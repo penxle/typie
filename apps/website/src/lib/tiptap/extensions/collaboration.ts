@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { redo, undo, yCursorPlugin, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from 'y-prosemirror';
 import { css } from '$styled-system/css';
+import type { EditorView } from '@tiptap/pm/view';
 import type * as YAwareness from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 
@@ -63,6 +64,42 @@ export const Collaboration = Extension.create<CollaborationOptions>({
   addProseMirrorPlugins() {
     const fragment = this.options.doc.getXmlFragment('body');
 
+    const yUndoPluginInstance = yUndoPlugin();
+    const originalUndoPluginView = yUndoPluginInstance.spec.view;
+
+    yUndoPluginInstance.spec.view = (view: EditorView) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const undoManager = yUndoPluginKey.getState(view.state)?.undoManager as any;
+
+      if (undoManager.restore) {
+        undoManager.restore();
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        undoManager.restore = () => {};
+      }
+
+      const viewRet = originalUndoPluginView ? originalUndoPluginView(view) : undefined;
+
+      return {
+        destroy: () => {
+          const hasUndoManSelf = undoManager.trackedOrigins.has(undoManager);
+          const observers = undoManager._observers;
+
+          undoManager.restore = () => {
+            if (hasUndoManSelf) {
+              undoManager.trackedOrigins.add(undoManager);
+            }
+
+            undoManager.doc.on('afterTransaction', undoManager.afterTransactionHandler);
+            undoManager._observers = observers;
+          };
+
+          if (viewRet?.destroy) {
+            viewRet.destroy();
+          }
+        },
+      };
+    };
+
     type User = { name: string; color: string };
 
     const cursorBuilder = (user: User) => {
@@ -113,7 +150,7 @@ export const Collaboration = Extension.create<CollaborationOptions>({
       };
     };
 
-    return [ySyncPlugin(fragment), yUndoPlugin(), yCursorPlugin(this.options.awareness, { cursorBuilder, selectionBuilder })];
+    return [ySyncPlugin(fragment), yUndoPluginInstance, yCursorPlugin(this.options.awareness, { cursorBuilder, selectionBuilder })];
   },
 
   addKeyboardShortcuts() {
