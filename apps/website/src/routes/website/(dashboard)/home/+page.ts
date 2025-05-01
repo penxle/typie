@@ -1,13 +1,13 @@
 import { redirect } from '@sveltejs/kit';
 import { LocalStore } from '$lib/state';
-import type { AppPreference } from '$lib/context';
 import type { HomePage_Query_AfterLoad } from './$graphql';
 
 export const _HomePage_Query_AfterLoad: HomePage_Query_AfterLoad = async ({ query }) => {
-  const pref = LocalStore.get<AppPreference>('typie:pref');
+  const lvp = LocalStore.get<Record<string, string>>('typie:lvp');
 
-  if (pref?.currentPage) {
-    redirect(302, `/${pref.currentPage}`);
+  const slug = lvp?.[query.me.sites[0].id];
+  if (slug) {
+    redirect(302, `/${slug}`);
   }
 
   const entity = query.me.sites[0].firstEntity;

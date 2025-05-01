@@ -90,7 +90,7 @@
     }
   `);
 
-  setupAppContext();
+  setupAppContext($query.me.id);
 
   $effect(() => {
     return untrack(() => {
