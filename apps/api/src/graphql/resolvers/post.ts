@@ -407,6 +407,7 @@ builder.mutationFields((t) => ({
       });
 
       pubsub.publish('site:update', input.siteId, { scope: 'site' });
+      pubsub.publish('site:usage:update', input.siteId, null);
 
       return post;
     },
@@ -534,6 +535,7 @@ builder.mutationFields((t) => ({
       });
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      pubsub.publish('site:usage:update', entity.siteId, null);
 
       return newPost;
     },
@@ -564,6 +566,7 @@ builder.mutationFields((t) => ({
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
+      pubsub.publish('site:usage:update', entity.siteId, null);
 
       return input.postId;
     },
