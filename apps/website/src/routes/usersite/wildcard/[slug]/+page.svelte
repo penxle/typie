@@ -29,7 +29,7 @@
   `);
 </script>
 
-<div class={flex({ flexDirection: 'column', width: 'screen', height: 'screen' })}>
+<div class={flex({ flexDirection: 'column', width: '[100dvw]', height: '[100dvh]' })}>
   <Header $user={$query.me} />
 
   <div class={css({ flexGrow: '1', overflowY: 'auto' })}>

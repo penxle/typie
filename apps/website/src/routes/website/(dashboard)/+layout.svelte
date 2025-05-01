@@ -124,8 +124,8 @@
     style:--grid-size="30px"
     style:--line-thickness="1px"
     class={center({
-      width: 'screen',
-      height: 'screen',
+      width: '[100dvw]',
+      height: '[100dvh]',
       overflowY: 'auto',
       backgroundColor: 'white',
       backgroundImage:
@@ -192,7 +192,7 @@
     class={flex({
       position: 'relative',
       alignItems: 'stretch',
-      height: 'screen',
+      height: '[100dvh]',
       backgroundColor: 'gray.100',
     })}
   >

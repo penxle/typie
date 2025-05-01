@@ -18,8 +18,8 @@
   style:--line-thickness="1px"
   class={center({
     padding: '20px',
-    width: 'screen',
-    minHeight: 'screen',
+    width: '[100dvw]',
+    minHeight: '[100dvh]',
     height: 'full',
     overflowY: 'auto',
     backgroundColor: 'white',
