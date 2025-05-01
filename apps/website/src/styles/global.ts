@@ -44,8 +44,8 @@ export const globalCss = defineGlobalStyles({
   },
 
   body: {
-    width: 'screen',
-    height: 'screen',
+    width: '[100dvw]',
+    height: '[100dvh]',
     overflow: 'hidden',
   },
 

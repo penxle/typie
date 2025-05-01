@@ -10,7 +10,7 @@
   const seed = Math.floor(Math.random() * 1000);
 </script>
 
-<div class={center({ width: 'screen', height: 'screen' })}>
+<div class={center({ width: '[100dvw]', height: '[100dvh]' })}>
   <Grain style={css.raw({ position: 'absolute', inset: '0' })} freq={2.2} opacity={0.75} {seed} />
 
   <div
