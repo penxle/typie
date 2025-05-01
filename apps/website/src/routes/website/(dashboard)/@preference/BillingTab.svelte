@@ -14,7 +14,8 @@
   import { Dialog } from '$lib/notification';
   import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { flex, grid } from '$styled-system/patterns';
+  import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
   import type { DashboardLayout_PreferenceModal_BillingTab_user } from '$graphql';
 
@@ -29,6 +30,7 @@
     graphql(`
       fragment DashboardLayout_PreferenceModal_BillingTab_user on User {
         id
+        credit
         ...DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user
 
         paymentBillingKey {
@@ -63,6 +65,7 @@
   `);
 
   let updatePaymentMethodOpen = $state(false);
+  let redeemCreditCodeOpen = $state(false);
 </script>
 
 <div class={flex({ direction: 'column', gap: '24px' })}>
@@ -71,11 +74,10 @@
   <div class={flex({ direction: 'column', gap: '8px' })}>
     <p class={css({ fontWeight: 'medium' })}>플랜 정보</p>
 
-    <div class={flex({ gap: '12px' })}>
+    <div class={grid({ columns: 2, gap: '12px' })}>
       <div
         class={flex({
           flexDirection: 'column',
-          flexGrow: '1',
           borderWidth: '1px',
           borderRadius: '8px',
           paddingX: '16px',
@@ -115,7 +117,6 @@
       <div
         class={flex({
           flexDirection: 'column',
-          flexGrow: '1',
           borderWidth: '1px',
           borderRadius: '8px',
           paddingX: '16px',
@@ -189,8 +190,9 @@
         class={flex({
           align: 'center',
           justify: 'space-between',
-          borderRadius: '4px',
-          padding: '12px',
+          borderRadius: '8px',
+          paddingX: '16px',
+          paddingY: '12px',
           fontSize: '15px',
           fontWeight: 'medium',
           color: 'gray.700',
@@ -204,9 +206,9 @@
     </div>
   {:else}
     <div class={flex({ direction: 'column', gap: '8px' })}>
-      <p class={css({ fontWeight: 'medium' })}>현재 플랜</p>
+      <p class={css({ fontWeight: 'medium' })}>이용중인 플랜</p>
 
-      <div class={css({ borderRadius: '4px', padding: '12px', backgroundColor: 'gray.100' })}>
+      <div class={css({ borderRadius: '8px', paddingX: '16px', paddingY: '12px', backgroundColor: 'gray.100' })}>
         <p class={css({ fontSize: '15px', fontWeight: 'medium', color: 'gray.700' })}>
           {$user.plan.plan.name} 플랜
         </p>
@@ -218,12 +220,39 @@
             {#if $user.plan.state === 'ACTIVE'}
               ({dayjs($user.plan.expiresAt).formatAsDate()}에 {comma($user.plan.fee)}원 결제 예정)
             {:else}
-              ({dayjs($user.plan.expiresAt).formatAsDate()}에 해지 예정)
+              ({dayjs($user.plan.expiresAt).formatAsDate()} 해지 예정)
             {/if}
           </span>
         </p>
       </div>
     </div>
+  {/if}
+
+  <HorizontalDivider color="secondary" />
+
+  <div>
+    <div class={flex({ align: 'center', justify: 'space-between' })}>
+      <div>
+        <p class={css({ fontWeight: 'medium' })}>현재 크레딧</p>
+
+        <p class={css({ marginTop: '4px', fontSize: '12px', color: 'gray.600' })}>플랜 결제 시 잔여 크레딧이 먼저 사용됩니다.</p>
+      </div>
+
+      <p class={css({ fontSize: '14px', color: 'gray.800' })}>{comma($user.credit)}원</p>
+    </div>
+
+    <Button
+      style={css.raw({ marginTop: '8px', marginLeft: 'auto' })}
+      onclick={() => (redeemCreditCodeOpen = true)}
+      size="sm"
+      variant="secondary"
+    >
+      할인 코드 등록
+    </Button>
+  </div>
+
+  {#if $user.paymentBillingKey}
+    <HorizontalDivider color="secondary" />
 
     <div>
       <p class={css({ fontWeight: 'medium' })}>결제 카드 정보</p>
@@ -234,29 +263,30 @@
         <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">결제 카드 변경</Button>
       </div>
     </div>
+  {/if}
 
-    {#if $user.plan.state === 'ACTIVE'}
-      <HorizontalDivider color="secondary" />
-      <button
-        class={css({ padding: '4px', fontSize: '13px', color: 'gray.400', width: 'fit' })}
-        onclick={() => {
-          Dialog.confirm({
-            title: '정말로 해지하시겠습니까?',
-            message: '해지 후에도 남은 기간 동안 서비스를 이용하실 수 있습니다.',
-            action: 'danger',
-            actionLabel: '해지',
-            actionHandler: async () => {
-              await cancelPlan();
-              mixpanel.track('cancel_plan');
-            },
-          });
-        }}
-        type="button"
-      >
-        해지하기
-      </button>
-    {/if}
+  {#if $user.plan?.state === 'ACTIVE'}
+    <HorizontalDivider color="secondary" />
+    <button
+      class={css({ padding: '4px', fontSize: '13px', color: 'gray.400', width: 'fit' })}
+      onclick={() => {
+        Dialog.confirm({
+          title: '정말로 해지하시겠습니까?',
+          message: '해지 후에도 남은 기간 동안 서비스를 이용하실 수 있습니다.',
+          action: 'danger',
+          actionLabel: '해지',
+          actionHandler: async () => {
+            await cancelPlan();
+            mixpanel.track('cancel_plan');
+          },
+        });
+      }}
+      type="button"
+    >
+      해지하기
+    </button>
   {/if}
 </div>
 
 <UpdatePaymentMethodModal {$user} bind:open={updatePaymentMethodOpen} />
+<RedeemCreditCodeModal bind:open={redeemCreditCodeOpen} />

@@ -2,13 +2,13 @@
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
-  import { cardSchema } from '@/validation';
+  import { cardSchema, redeemCodeSchema } from '@/validation';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { fragment, graphql } from '$graphql';
   import { Button, Checkbox, HorizontalDivider, Icon, Modal, SegmentButtons, TextInput } from '$lib/components';
-  import { createForm } from '$lib/form';
-  import { Toast } from '$lib/notification';
+  import { createForm, FormError } from '$lib/form';
+  import { Dialog, Toast } from '$lib/notification';
   import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -27,6 +27,7 @@
     graphql(`
       fragment DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user on User {
         id
+        credit
 
         plan {
           id
@@ -36,7 +37,7 @@
   );
 
   const query = graphql(`
-    query DashboardLayout_PreferenceModal_BillingTab_Query($code: String!) @client {
+    query DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_Query($code: String!) @client {
       creditCode(code: $code) {
         id
         amount
@@ -61,6 +62,7 @@
     mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_RedeemCreditCode_Mutation($input: RedeemCreditCodeInput!) {
       redeemCreditCode(input: $input) {
         id
+        credit
       }
     }
   `);
@@ -83,47 +85,71 @@
 
   let billingCycle = $state<UserPlanBillingCycle>('MONTHLY');
 
+  const redeemCodeForm = createForm({
+    schema: z.object({
+      code: redeemCodeSchema,
+    }),
+    onSubmit: async (data) => {
+      const resp = await query.load({ code: data.code });
+      redeemCode = resp.creditCode;
+    },
+    onError: () => {
+      throw new FormError('code', '유효하지 않은 할인 코드입니다.');
+    },
+  });
+
   const form = createForm({
     schema: z.object({
       cardNumber: cardSchema.cardNumber,
       expiryDate: cardSchema.expiryDate,
       birthOrBusinessRegistrationNumber: cardSchema.birthOrBusinessRegistrationNumber,
       passwordTwoDigits: cardSchema.passwordTwoDigits,
-      code: z.string().optional(),
     }),
     onSubmit: async (data) => {
-      try {
-        await updatePaymentBillingKey({
-          birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
-          cardNumber: data.cardNumber,
-          expiryDate: data.expiryDate,
-          passwordTwoDigits: data.passwordTwoDigits,
-        });
-        mixpanel.track('update_payment_billing_key');
+      await updatePaymentBillingKey({
+        birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
+        cardNumber: data.cardNumber,
+        expiryDate: data.expiryDate,
+        passwordTwoDigits: data.passwordTwoDigits,
+      });
+      mixpanel.track('update_payment_billing_key');
 
+      if ($user.plan) {
+        open = false;
+      } else {
         if (redeemCode) {
           await redeemCreditCode({ code: redeemCode.code });
-          mixpanel.track('redeem_credit_code');
+          mixpanel.track('redeem_credit_code', { via: 'update-payment-method-modal' });
         }
 
-        if (!$user.plan) {
+        if (!redeemCode && (redeemCodeForm.errors.code || (redeemCodeForm.fields.code?.length ?? 0) > 0)) {
+          Dialog.confirm({
+            title: '할인 코드 사용',
+            message: '할인 코드가 적용되지 않았어요. 그래도 결제를 할까요?',
+            actionLabel: '결제',
+            actionHandler: async () => {
+              await enrollPlan({ billingCycle, planId: 'PL0PLUS' });
+              mixpanel.track('enroll_plan', { billingCycle, planId: 'PL0PLUS' });
+              open = false;
+            },
+          });
+        } else {
           await enrollPlan({ billingCycle, planId: 'PL0PLUS' });
           mixpanel.track('enroll_plan', { billingCycle, planId: 'PL0PLUS' });
+          open = false;
         }
+      }
+    },
+    onError: (error) => {
+      const errorMessages: Record<string, string> = {
+        billing_key_issue_failed: '결제 키 발급에 실패했습니다. 카드 정보를 다시 확인해주세요.',
+        plan_already_enrolled: '이미 결제 정보가 등록되어 있습니다.',
+        payment_failed: '결제에 실패했습니다. 카드 정보를 다시 확인해주세요.',
+      };
 
-        open = false;
-      } catch (err) {
-        const errorMessages: Record<string, string> = {
-          billing_key_issue_failed: '결제 키 발급에 실패했습니다. 카드 정보를 다시 확인해주세요.',
-          plan_already_enrolled: '이미 결제 정보가 등록되어 있습니다.',
-          payment_failed: '결제에 실패했습니다. 카드 정보를 다시 확인해주세요.',
-          invalid_code: '유효하지 않은 할인 코드입니다.',
-        };
-
-        if (err instanceof TypieError) {
-          const message = errorMessages[err.code] || err.code;
-          Toast.error(message);
-        }
+      if (error instanceof TypieError) {
+        const message = errorMessages[error.code] || error.code;
+        Toast.error(message);
       }
     },
   });
@@ -136,17 +162,13 @@
   let agreementChecks = $state(agreements.map(() => false));
   const allChecked = $derived(agreementChecks.every(Boolean));
   let redeemInputOpen = $state(false);
-  let buttonEl = $state<HTMLElement>();
   let redeemCode = $state<{ id: string; amount: number; code: string } | null>(null);
-  let paymentAmount = $state(4900);
-
-  $effect(() => {
-    paymentAmount = billingCycle === 'MONTHLY' ? 4900 : 49_000;
-
-    if (redeemCode) {
-      paymentAmount -= redeemCode.amount;
-    }
-  });
+  let planFee = $derived(billingCycle === 'MONTHLY' ? 4900 : 49_000);
+  let paymentAmount = $derived(
+    planFee -
+      ($user.credit >= planFee ? $user.credit - ($user.credit - planFee) : $user.credit) -
+      (redeemCode ? (redeemCode.amount >= planFee ? redeemCode.amount - (redeemCode.amount - planFee) : redeemCode.amount) : 0),
+  );
 
   const handleAllCheck = () => {
     agreementChecks = agreementChecks.map(() => !allChecked);
@@ -208,16 +230,98 @@
       </div>
     </div>
 
-    <div
-      class={css({
-        borderRadius: '4px',
-        padding: '12px',
-        fontSize: '15px',
-        fontWeight: 'medium',
-        backgroundColor: 'gray.100',
-      })}
-    >
-      결제 금액: {comma(paymentAmount)}원
+    <div class={flex({ direction: 'column', gap: '8px' })}>
+      <div
+        class={css({
+          borderRadius: '4px',
+          padding: '12px',
+          fontSize: '15px',
+          fontWeight: 'medium',
+          backgroundColor: 'gray.100',
+        })}
+      >
+        <div class={flex({ align: 'center', justify: 'space-between' })}>
+          <p>결제 금액</p>
+
+          <p>{comma(paymentAmount)}원</p>
+        </div>
+
+        {#if paymentAmount !== planFee || $user.credit > 0 || redeemCode}
+          <HorizontalDivider style={css.raw({ marginY: '4px' })} />
+          <div class={flex({ direction: 'column', gap: '1px', fontSize: '12px', color: 'gray.700' })}>
+            {#if paymentAmount !== planFee}
+              <div>
+                플랜 금액: {comma(planFee)}원
+              </div>
+            {/if}
+            {#if $user.credit > 0}
+              <div>
+                잔여 크레딧: -{comma($user.credit)}원
+              </div>
+            {/if}
+            {#if redeemCode}
+              <div>
+                할인 코드 사용: -{comma(redeemCode.amount)}원
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        <button
+          class={flex({ align: 'center', justify: 'space-between', color: 'gray.400' })}
+          onclick={() => (redeemInputOpen = !redeemInputOpen)}
+          type="button"
+        >
+          <p class={css({ fontSize: '12px' })}>할인 코드를 갖고 계신가요?</p>
+
+          {#if redeemInputOpen}
+            <Icon icon={ChevronUpIcon} size={12} />
+          {:else}
+            <Icon icon={ChevronDownIcon} size={12} />
+          {/if}
+        </button>
+
+        {#if redeemInputOpen}
+          <form class={flex({ align: 'flex-start', gap: '4px' })} onsubmit={redeemCodeForm.handleSubmit}>
+            <div class={css({ width: 'full' })}>
+              <TextInput
+                id="code"
+                style={css.raw({ width: 'full' })}
+                placeholder="할인 코드 입력하기"
+                size="sm"
+                bind:value={redeemCodeForm.fields.code}
+              />
+
+              {#if redeemCodeForm.errors.code}
+                <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>
+                  {redeemCodeForm.errors.code}
+                </div>
+              {/if}
+            </div>
+
+            <Button style={css.raw({ flex: 'none' })} size="sm" type="submit" variant="secondary">확인</Button>
+          </form>
+        {/if}
+
+        {#if redeemCode}
+          <div
+            class={flex({
+              align: 'center',
+              justify: 'space-between',
+              borderWidth: '1px',
+              borderColor: 'gray.100',
+              borderRadius: '4px',
+              paddingX: '8px',
+              paddingY: '6px',
+            })}
+          >
+            <p class={css({ fontSize: '13px' })}>사전등록 할인</p>
+            <p class={css({ fontSize: '13px', color: 'gray.600' })}>{comma(redeemCode.amount)}원</p>
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
 
@@ -305,78 +409,6 @@
         </div>
       {/if}
     </div>
-
-    {#if !$user.plan}
-      <div class={flex({ direction: 'column', gap: '4px' })}>
-        <button
-          class={flex({ align: 'center', justify: 'space-between', color: 'gray.400' })}
-          onclick={() => (redeemInputOpen = !redeemInputOpen)}
-          type="button"
-        >
-          <p class={css({ fontSize: '12px' })}>할인 코드를 갖고 계신가요?</p>
-
-          {#if redeemInputOpen}
-            <Icon icon={ChevronUpIcon} size={12} />
-          {:else}
-            <Icon icon={ChevronDownIcon} size={12} />
-          {/if}
-        </button>
-
-        {#if redeemInputOpen}
-          <div class={flex({ align: 'center', gap: '4px' })}>
-            <TextInput
-              id="code"
-              style={css.raw({ width: 'full' })}
-              onblur={() => buttonEl?.click()}
-              onkeydown={(e) => {
-                if (e.key === 'Enter') {
-                  buttonEl?.click();
-                }
-              }}
-              placeholder="할인 코드 입력하기"
-              size="sm"
-              bind:value={form.fields.code}
-            />
-
-            <Button
-              style={css.raw({ flex: 'none' })}
-              onclick={async () => {
-                if (form.fields.code) {
-                  try {
-                    const resp = await query.load({ code: form.fields.code });
-                    redeemCode = resp.creditCode;
-                  } catch {
-                    Toast.error('유효하지 않은 할인 코드입니다.');
-                  }
-                }
-              }}
-              size="sm"
-              variant="secondary"
-              bind:element={buttonEl}
-            >
-              확인
-            </Button>
-          </div>
-        {/if}
-
-        {#if redeemCode}
-          <div
-            class={flex({
-              align: 'center',
-              justify: 'space-between',
-              borderWidth: '1px',
-              borderColor: 'gray.100',
-              borderRadius: '4px',
-              paddingX: '8px',
-              paddingY: '6px',
-            })}
-          >
-            <p class={css({ fontSize: '13px' })}>사전등록 할인</p>
-            <p class={css({ fontSize: '13px', color: 'gray.600' })}>{comma(redeemCode.amount)}원</p>
-          </div>
-        {/if}
-      </div>
-    {/if}
 
     <div class={flex({ direction: 'column', gap: '6px', marginY: '12px' })}>
       <Checkbox checked={allChecked} onchange={handleAllCheck} size="sm">
