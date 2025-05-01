@@ -1,12 +1,12 @@
 import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
 
-export type AppPreference = {
+type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   panelExpanded: boolean;
+
   focusDuration: number;
   restDuration: number;
-  currentPage?: string;
 };
 
 type AppState = {
@@ -44,7 +44,7 @@ export const getAppContext = () => {
   return getContext<AppContext>(key);
 };
 
-export const setupAppContext = () => {
+export const setupAppContext = (userId: string) => {
   const appState = $state<AppState>({
     ancestors: [],
     postsOpen: false,
@@ -60,14 +60,14 @@ export const setupAppContext = () => {
   });
 
   const context: AppContext = {
-    preference: new LocalStore<AppPreference>('typie:pref', {
+    preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
       postsExpanded: false,
       panelExpanded: true,
       focusDuration: 30,
       restDuration: 10,
     }),
     state: appState,
-    timerState: new SessionStore<AppTimerState>('typie:timer', {
+    timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {
       status: 'init',
       currentTime: 0,
       paused: false,

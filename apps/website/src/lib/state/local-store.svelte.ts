@@ -21,10 +21,23 @@ export class LocalStore<T> {
   }
 
   static get<U>(key: string): U | null {
-    if (!browser) return null;
+    if (!browser) {
+      return null;
+    }
 
     const item = localStorage.getItem(key);
+    if (!item) {
+      return null;
+    }
 
-    return item ? (JSON.parse(item) as U) : null;
+    return JSON.parse(item) as U;
+  }
+
+  static set<U>(key: string, value: U) {
+    if (!browser) {
+      return;
+    }
+
+    localStorage.setItem(key, JSON.stringify(value));
   }
 }

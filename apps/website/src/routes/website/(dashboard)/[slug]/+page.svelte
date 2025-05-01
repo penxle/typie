@@ -4,7 +4,7 @@
   import { afterNavigate } from '$app/navigation';
   import { graphql } from '$graphql';
   import { Helmet, Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
+  import { LocalStore } from '$lib/state';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Editor from './Editor.svelte';
@@ -18,6 +18,10 @@
           id
           slug
           state
+
+          site {
+            id
+          }
         }
       }
 
@@ -25,10 +29,10 @@
     }
   `);
 
-  const app = getAppContext();
-
   afterNavigate(() => {
-    app.preference.current.currentPage = $query.post.entity.slug;
+    const lvp = LocalStore.get<Record<string, string>>('typie:lvp') ?? {};
+    lvp[$query.post.entity.site.id] = $query.post.entity.slug;
+    LocalStore.set('typie:lvp', lvp);
   });
 </script>
 
