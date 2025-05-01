@@ -98,7 +98,9 @@ builder.queryFields((t) => ({
     args: {
       code: t.input.string({ validate: { schema: redeemCodeSchema } }),
     },
-    resolve: async (_, { code }) => {
+    resolve: async (_, args) => {
+      const code = args.code.toUpperCase().replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1');
+
       await delay(Math.random() * 1000);
 
       return await db

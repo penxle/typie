@@ -508,10 +508,12 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       await delay(Math.random() * 2000);
 
+      const code = input.code.toUpperCase().replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1');
+
       const creditCode = await db
         .select({ id: CreditCodes.id, state: CreditCodes.state, amount: CreditCodes.amount })
         .from(CreditCodes)
-        .where(and(eq(CreditCodes.code, input.code), eq(CreditCodes.state, CreditCodeState.AVAILABLE), gt(CreditCodes.expiresAt, dayjs())))
+        .where(and(eq(CreditCodes.code, code), eq(CreditCodes.state, CreditCodeState.AVAILABLE), gt(CreditCodes.expiresAt, dayjs())))
         .then(firstOrThrowWith(new TypieError({ code: 'invalid_code' })));
 
       return await db.transaction(async (tx) => {
