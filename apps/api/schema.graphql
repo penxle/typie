@@ -348,6 +348,13 @@ enum PaymentBillingKeyState {
   DEACTIVATED
 }
 
+type PaymentInvoice {
+  amount: Int!
+  billingAt: DateTime!
+  id: ID!
+  state: PaymentInvoiceState!
+}
+
 enum PaymentInvoiceState {
   CANCELED
   PAID
@@ -683,6 +690,7 @@ type UserPlan {
   expiresAt: DateTime!
   fee: Int!
   id: ID!
+  nextInvoice: PaymentInvoice
   plan: Plan!
   state: UserPlanState!
 }
