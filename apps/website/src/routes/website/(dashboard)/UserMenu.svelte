@@ -119,6 +119,27 @@
 
   <div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
 
+  <a
+    class={css({
+      paddingX: '16px',
+      paddingY: '12px',
+      width: 'full',
+      fontSize: '14px',
+      fontWeight: 'medium',
+      textAlign: 'center',
+      color: 'gray.700',
+      transition: 'common',
+      _hover: { backgroundColor: 'gray.100' },
+    })}
+    href="https://penxle.channel.io/home"
+    rel="noopener noreferrer"
+    target="_blank"
+  >
+    고객센터
+  </a>
+
+  <div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+
   <button
     class={css({
       paddingX: '16px',
