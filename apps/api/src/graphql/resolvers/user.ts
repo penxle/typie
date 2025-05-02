@@ -440,7 +440,7 @@ builder.mutationFields((t) => ({
   }),
 
   verifyPersonalIdentity: t.withAuth({ session: true }).fieldWithInput({
-    type: UserPersonalIdentity,
+    type: User,
     input: { identityVerificationId: t.input.string() },
     resolve: async (_, { input }, ctx) => {
       const resp = await portone.getIdentityVerification({
@@ -472,7 +472,7 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'identity_not_match' });
         }
 
-        return await db
+        await db
           .update(UserPersonalIdentities)
           .set({
             name: resp.name,
@@ -481,14 +481,9 @@ builder.mutationFields((t) => ({
             ci: resp.ci,
             expiresAt: dayjs.kst().add(1, 'year').startOf('day'),
           })
-          .where(eq(UserPersonalIdentities.id, existingIdentityWithSameUser.id))
-          .returning()
-          .then(firstOrThrow);
-      }
-
-      return await db
-        .insert(UserPersonalIdentities)
-        .values({
+          .where(eq(UserPersonalIdentities.id, existingIdentityWithSameUser.id));
+      } else {
+        await db.insert(UserPersonalIdentities).values({
           userId: ctx.session.userId,
           name: resp.name,
           birthDate: dayjs.kst(resp.birthDate).startOf('day'),
@@ -496,9 +491,10 @@ builder.mutationFields((t) => ({
           phoneNumber: resp.phoneNumber,
           ci: resp.ci,
           expiresAt: dayjs.kst().add(1, 'year').startOf('day'),
-        })
-        .returning()
-        .then(firstOrThrow);
+        });
+      }
+
+      return ctx.session.userId;
     },
   }),
 
