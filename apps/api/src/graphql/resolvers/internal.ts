@@ -1,10 +1,12 @@
-import { eq } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
-import { db, first, PostContents } from '@/db';
+import { db, Entities, first, Folders, PostContents, Posts } from '@/db';
+import { EntityState, EntityVisibility } from '@/enums';
 import { schema } from '@/pm';
 import { generateRandomName, makeYDoc } from '@/utils';
 import { builder } from '../builder';
+import { PostView } from '../objects';
 
 /**
  * * Queries
@@ -69,6 +71,29 @@ builder.queryFields((t) => ({
         bodyMobile,
         updateMobile,
       };
+    },
+  }),
+
+  announcements: t.field({
+    type: [PostView],
+    resolve: async () => {
+      const folder = await db.select({ entityId: Folders.entityId }).from(Folders).where(eq(Folders.id, 'F0ANNOUNCEMENTS')).then(first);
+      if (!folder) {
+        return [];
+      }
+
+      return await db
+        .select(getTableColumns(Posts))
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(
+          and(
+            eq(Entities.parentId, folder.entityId),
+            eq(Entities.state, EntityState.ACTIVE),
+            eq(Entities.visibility, EntityVisibility.UNLISTED),
+          ),
+        )
+        .orderBy(asc(Entities.order));
     },
   }),
 }));

@@ -65,6 +65,7 @@
             width: 'full',
             maxWidth: '720px',
             height: 'fit',
+            maxHeight: 'full',
             backgroundColor: 'white',
             boxShadow: 'large',
             overflowY: 'auto',

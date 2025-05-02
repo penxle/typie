@@ -48,6 +48,9 @@ IPost.implement({
     allowReaction: t.exposeBoolean('allowReaction'),
     protectContent: t.exposeBoolean('protectContent'),
 
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+
     excerpt: t.string({
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
@@ -75,9 +78,6 @@ Post.implement({
   interfaces: [IPost],
   fields: (t) => ({
     view: t.expose('id', { type: PostView }),
-
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
-    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
 
     password: t.exposeString('password', { nullable: true }),
 

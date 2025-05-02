@@ -7,6 +7,8 @@ type AppPreference = {
 
   focusDuration: number;
   restDuration: number;
+
+  announcementViewedIds?: string[];
 };
 
 type AppState = {

@@ -36,6 +36,8 @@
         ...DashboardLayout_Sidebar_user
         ...DashboardLayout_CommandPalette_user
       }
+
+      ...DashboardLayout_Sidebar_query
     }
   `);
 
@@ -196,7 +198,7 @@
       backgroundColor: 'gray.100',
     })}
   >
-    <Sidebar $user={$query.me} />
+    <Sidebar {$query} $user={$query.me} />
 
     <div
       class={css({
