@@ -1,4 +1,5 @@
 <script lang="ts">
+  import * as PortOne from '@portone/browser-sdk/v2';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { z } from 'zod';
@@ -13,6 +14,7 @@
   import { fragment, graphql } from '$graphql';
   import { Button, ContentProtect, Helmet, HorizontalDivider, Icon, Img, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
+  import { Toast } from '$lib/notification';
   import { TiptapRenderer } from '$lib/tiptap';
   import { comma, serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
@@ -124,6 +126,19 @@
     }
   `);
 
+  const verifyPersonalIdentity = graphql(`
+    mutation UsersiteWildcardSlugPage_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
+      verifyPersonalIdentity(input: $input) {
+        id
+
+        personalIdentity {
+          id
+          expiresAt
+        }
+      }
+    }
+  `);
+
   const form = createForm({
     schema: z.object({
       password: z.string(),
@@ -160,6 +175,38 @@
       },
     }),
   );
+
+  const handleVerification = async () => {
+    try {
+      mixpanel.track('verify_personal_identity_start');
+
+      const resp = await PortOne.requestIdentityVerification({
+        storeId: 'store-e1e69136-38bb-42dd-b226-3c78e03c1ff1',
+        identityVerificationId: `identity-verification-${crypto.randomUUID()}`,
+        channelKey: 'channel-key-31e03361-26cb-4810-86ed-801cce4f570f',
+      });
+
+      if (resp === undefined) {
+        console.log('error');
+        return;
+      }
+
+      await verifyPersonalIdentity({ identityVerificationId: resp.identityVerificationId });
+      mixpanel.track('verify_personal_identity_success');
+
+      window.location.reload();
+    } catch (err) {
+      const errorMessages: Record<string, string> = {
+        identity_verification_failed: '인증에 실패했습니다.',
+        same_identity_exists: '이미 다른 계정에 인증된 정보입니다.',
+      };
+
+      if (err instanceof TypieError) {
+        const message = errorMessages[err.code] || err.code;
+        Toast.error(message);
+      }
+    }
+  };
 </script>
 
 <svelte:head>
@@ -303,9 +350,7 @@
                 {#if $user}
                   <Button
                     style={css.raw({ width: 'full', maxWidth: '280px', height: '38px', borderRadius: '6px' })}
-                    external
-                    href={`${env.PUBLIC_WEBSITE_URL}/home`}
-                    type="link"
+                    onclick={handleVerification}
                   >
                     본인 인증
                   </Button>
