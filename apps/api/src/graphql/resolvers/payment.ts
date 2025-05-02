@@ -33,7 +33,7 @@ import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
 import { delay } from '@/utils/promise';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
-import { CreditCode, isTypeOf, PaymentBillingKey, Plan, PlanRule, UserPlan } from '../objects';
+import { CreditCode, isTypeOf, PaymentBillingKey, PaymentInvoice, Plan, PlanRule, UserPlan } from '../objects';
 
 /**
  * * Types
@@ -45,6 +45,16 @@ PaymentBillingKey.implement({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+  }),
+});
+
+PaymentInvoice.implement({
+  isTypeOf: isTypeOf(TableCode.PAYMENT_INVOICES),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    state: t.expose('state', { type: PaymentInvoiceState }),
+    amount: t.exposeInt('amount'),
+    billingAt: t.expose('billingAt', { type: 'DateTime' }),
   }),
 });
 
@@ -77,6 +87,18 @@ UserPlan.implement({
     state: t.expose('state', { type: UserPlanState }),
 
     plan: t.expose('planId', { type: Plan }),
+
+    nextInvoice: t.field({
+      type: PaymentInvoice,
+      nullable: true,
+      resolve: async (self) => {
+        return await db
+          .select()
+          .from(PaymentInvoices)
+          .where(and(eq(PaymentInvoices.userId, self.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)))
+          .then(first);
+      },
+    }),
   }),
 });
 

@@ -57,6 +57,7 @@ export const Folder = createObjectRef('Folder', T.Folders);
 export const Image = createObjectRef('Image', T.Images);
 export const Notification = createObjectRef('Notification', T.Notifications);
 export const PaymentBillingKey = createObjectRef('PaymentBillingKey', T.PaymentBillingKeys);
+export const PaymentInvoice = createObjectRef('PaymentInvoice', T.PaymentInvoices);
 export const Plan = createObjectRef('Plan', T.Plans);
 export const Post = createObjectRef('Post', T.Posts);
 export const PostReaction = createObjectRef('PostReaction', T.PostReactions);
