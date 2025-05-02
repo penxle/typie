@@ -208,12 +208,14 @@ interface IPost {
   allowReaction: Boolean!
   contentRating: PostContentRating!
   coverImage: Image
+  createdAt: DateTime!
   excerpt: String!
   id: ID!
   maxWidth: Int!
   protectContent: Boolean!
   subtitle: String
   title: String!
+  updatedAt: DateTime!
 }
 
 interface ISite {
@@ -442,6 +444,7 @@ type PostView implements IPost {
   comments: [Comment!]!
   contentRating: PostContentRating!
   coverImage: Image
+  createdAt: DateTime!
   entity: EntityView!
   excerpt: String!
   hasPassword: Boolean!
@@ -451,6 +454,7 @@ type PostView implements IPost {
   reactions: [PostReaction!]!
   subtitle: String
   title: String!
+  updatedAt: DateTime!
 }
 
 union PostViewBody = PostViewBodyAvailable | PostViewBodyUnavailable
@@ -485,6 +489,7 @@ type PreorderUser {
 }
 
 type Query {
+  announcements: [PostView!]!
   creditCode(code: String!): CreditCode!
   entity(entityId: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!

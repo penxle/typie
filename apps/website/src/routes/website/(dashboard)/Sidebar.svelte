@@ -15,17 +15,32 @@
   import { center, flex } from '$styled-system/patterns';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
+  import Announcements from './Announcements.svelte';
   import Notification from './Notification.svelte';
   import Posts from './Posts.svelte';
   import SidebarButton from './SidebarButton.svelte';
   import UserMenu from './UserMenu.svelte';
-  import type { DashboardLayout_Sidebar_user } from '$graphql';
+  import type { DashboardLayout_Sidebar_query, DashboardLayout_Sidebar_user } from '$graphql';
 
   type Props = {
+    $query: DashboardLayout_Sidebar_query;
     $user: DashboardLayout_Sidebar_user;
   };
 
-  let { $user: _user }: Props = $props();
+  let { $query: _query, $user: _user }: Props = $props();
+
+  const query = fragment(
+    _query,
+    graphql(`
+      fragment DashboardLayout_Sidebar_query on Query {
+        announcements {
+          id
+
+          ...DashboardLayout_Announcements_postView
+        }
+      }
+    `),
+  );
 
   const user = fragment(
     _user,
@@ -138,7 +153,10 @@
   <div class={css({ flexGrow: '1' })}></div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+    <Announcements $posts={$query.announcements} />
+
     <!-- <SidebarButton as="a" href="https://help.typie.co" icon={CircleHelpIcon} label="도움말" rel="noopener noreferrer" target="_blank" /> -->
+
     <SidebarButton
       icon={CogIcon}
       label="설정"
