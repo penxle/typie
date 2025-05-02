@@ -34,7 +34,11 @@
     mutation DashboardLayout_PreferenceModal_IdentityTab_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
       verifyPersonalIdentity(input: $input) {
         id
-        expiresAt
+
+        personalIdentity {
+          id
+          expiresAt
+        }
       }
     }
   `);

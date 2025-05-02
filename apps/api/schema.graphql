@@ -306,7 +306,7 @@ type Mutation {
   updatePostOption(input: UpdatePostOptionInput!): Post!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
-  verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): UserPersonalIdentity!
+  verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
 }
 
 type Notification {
