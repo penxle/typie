@@ -127,14 +127,14 @@ export const globalCss = defineGlobalStyles({
 
 export const globalFontface = defineGlobalFontface({
   SUIT: {
-    src: 'url("https://typie.net/fonts/SUIT-Variable.woff2") format("woff2-variations")',
+    src: 'url("https://cdn.typie.net/fonts/SUIT-Variable.woff2") format("woff2-variations")',
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
   },
 
   IBMPlexSansKR: {
-    src: 'url("https://typie.net/fonts/IBMPlexSansKR-Bold.woff2") format("woff2")',
+    src: 'url("https://cdn.typie.net/fonts/IBMPlexSansKR-Bold.woff2") format("woff2")',
     fontStyle: 'normal',
     fontWeight: '700',
     fontDisplay: 'swap',
@@ -142,13 +142,13 @@ export const globalFontface = defineGlobalFontface({
 
   LINESeedKR: [
     {
-      src: 'url("https://typie.net/fonts/LINESeedKR-Regular.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/LINESeedKR-Regular.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '400',
       fontDisplay: 'swap',
     },
     {
-      src: 'url("https://typie.net/fonts/LINESeedKR-Bold.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/LINESeedKR-Bold.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '700',
       fontDisplay: 'swap',
@@ -156,7 +156,7 @@ export const globalFontface = defineGlobalFontface({
   ],
 
   FiraCode: {
-    src: 'url("https://typie.net/fonts/FiraCode-Variable.woff2") format("woff2-variations")',
+    src: 'url("https://cdn.typie.net/fonts/FiraCode-Variable.woff2") format("woff2-variations")',
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'swap',
@@ -164,13 +164,13 @@ export const globalFontface = defineGlobalFontface({
 
   KoPubWorldBatang: [
     {
-      src: 'url("https://typie.net/fonts/KoPubWorldBatang-Medium.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/KoPubWorldBatang-Medium.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '500',
       fontDisplay: 'block',
     },
     {
-      src: 'url("https://typie.net/fonts/KoPubWorldBatang-Bold.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/KoPubWorldBatang-Bold.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '700',
       fontDisplay: 'block',
@@ -179,13 +179,13 @@ export const globalFontface = defineGlobalFontface({
 
   KoPubWorldDotum: [
     {
-      src: 'url("https://typie.net/fonts/KoPubWorldDotum-Medium.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/KoPubWorldDotum-Medium.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '500',
       fontDisplay: 'block',
     },
     {
-      src: 'url("https://typie.net/fonts/KoPubWorldDotum-Bold.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/KoPubWorldDotum-Bold.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '700',
       fontDisplay: 'block',
@@ -194,13 +194,13 @@ export const globalFontface = defineGlobalFontface({
 
   NanumBarunGothic: [
     {
-      src: 'url("https://typie.net/fonts/NanumBarunGothic-Regular.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/NanumBarunGothic-Regular.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '400',
       fontDisplay: 'block',
     },
     {
-      src: 'url("https://typie.net/fonts/NanumBarunGothic-Bold.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/NanumBarunGothic-Bold.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '700',
       fontDisplay: 'block',
@@ -209,13 +209,13 @@ export const globalFontface = defineGlobalFontface({
 
   NanumMyeongjo: [
     {
-      src: 'url("https://typie.net/fonts/NanumMyeongjo-Regular.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/NanumMyeongjo-Regular.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '400',
       fontDisplay: 'block',
     },
     {
-      src: 'url("https://typie.net/fonts/NanumMyeongjo-Bold.woff2") format("woff2")',
+      src: 'url("https://cdn.typie.net/fonts/NanumMyeongjo-Bold.woff2") format("woff2")',
       fontStyle: 'normal',
       fontWeight: '700',
       fontDisplay: 'block',
@@ -223,14 +223,14 @@ export const globalFontface = defineGlobalFontface({
   ],
 
   Pretendard: {
-    src: `url("https://typie.net/fonts/Pretendard-Variable.woff2") format("woff2-variations")`,
+    src: `url("https://cdn.typie.net/fonts/Pretendard-Variable.woff2") format("woff2-variations")`,
     fontStyle: 'normal',
     fontWeight: '100 900',
     fontDisplay: 'block',
   },
 
   RIDIBatang: {
-    src: 'url("https://typie.net/fonts/RIDIBatang-Regular.woff2") format("woff2")',
+    src: 'url("https://cdn.typie.net/fonts/RIDIBatang-Regular.woff2") format("woff2")',
     fontStyle: 'normal',
     fontWeight: '400',
     fontDisplay: 'block',

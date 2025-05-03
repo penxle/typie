@@ -12,12 +12,12 @@
   const worker = browser ? Comlink.wrap<WorkerApi>(new Worker()) : null;
 
   const fonts = [
-    { name: 'KoPubWorldBatang', url: 'https://typie.net/fonts/ttf/KoPubWorldBatang-Medium.ttf' },
-    { name: 'KoPubWorldDotum', url: 'https://typie.net/fonts/ttf/KoPubWorldDotum-Medium.ttf' },
-    { name: 'NanumBarunGothic', url: 'https://typie.net/fonts/ttf/NanumBarunGothic-Regular.ttf' },
-    { name: 'NanumMyeongjo', url: 'https://typie.net/fonts/ttf/NanumMyeongjo-Regular.ttf' },
-    { name: 'Pretendard', url: 'https://typie.net/fonts/ttf/Pretendard-Regular.ttf' },
-    { name: 'RIDIBatang', url: 'https://typie.net/fonts/ttf/RIDIBatang-Regular.ttf' },
+    { name: 'KoPubWorldBatang', url: 'https://cdn.typie.net/fonts/ttf/KoPubWorldBatang-Medium.ttf' },
+    { name: 'KoPubWorldDotum', url: 'https://cdn.typie.net/fonts/ttf/KoPubWorldDotum-Medium.ttf' },
+    { name: 'NanumBarunGothic', url: 'https://cdn.typie.net/fonts/ttf/NanumBarunGothic-Regular.ttf' },
+    { name: 'NanumMyeongjo', url: 'https://cdn.typie.net/fonts/ttf/NanumMyeongjo-Regular.ttf' },
+    { name: 'Pretendard', url: 'https://cdn.typie.net/fonts/ttf/Pretendard-Regular.ttf' },
+    { name: 'RIDIBatang', url: 'https://cdn.typie.net/fonts/ttf/RIDIBatang-Regular.ttf' },
   ];
 
   const loadFont = async (url?: string) => {

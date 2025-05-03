@@ -30,7 +30,7 @@ File.implement({
   fields: (t) => ({
     name: t.exposeString('name'),
 
-    url: t.string({ resolve: (blob) => `https://typie.net/files/${blob.path}` }),
+    url: t.string({ resolve: (blob) => `https://usercontents.typie.net/files/${blob.path}` }),
   }),
 });
 
@@ -42,7 +42,7 @@ Font.implement({
     fullName: t.exposeString('fullName', { nullable: true }),
     weight: t.exposeInt('weight'),
 
-    url: t.string({ resolve: (font) => `https://typie.net/fonts/${font.path}` }),
+    url: t.string({ resolve: (font) => `https://usercontents.typie.net/fonts/${font.path}` }),
   }),
 });
 
@@ -53,7 +53,7 @@ Image.implement({
     placeholder: t.exposeString('placeholder'),
 
     ratio: t.float({ resolve: (image) => image.width / image.height }),
-    url: t.string({ resolve: (blob) => `https://typie.net/images/${blob.path}` }),
+    url: t.string({ resolve: (blob) => `https://usercontents.typie.net/images/${blob.path}` }),
   }),
 });
 

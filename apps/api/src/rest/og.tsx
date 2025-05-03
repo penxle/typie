@@ -22,7 +22,7 @@ const loadFonts = async <T extends string>(names: T[]) => {
       return await file.arrayBuffer();
     }
 
-    const url = `https://typie.net/fonts/otf/${name}.otf`;
+    const url = `https://cdn.typie.net/fonts/otf/${name}.otf`;
     const resp = await ky.get(url).arrayBuffer();
     await file.write(resp);
 
