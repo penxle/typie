@@ -29,13 +29,13 @@ const TypieEmail = ({ preview, children }: Props) => {
         <Body className="bg-white font-sans">
           <Container className="mx-auto py-[48px] px-[24px] max-w-[520px]">
             <Img
-              src="https://typie.net/email/logo-black.png?v=1"
+              src="https://cdn.typie.net/email/logo-black.png?v=1"
               height="24"
               alt="타이피 로고"
               className="light-mode-logo h-[24px] w-auto object-cover mb-[24px]"
             />
             <Img
-              src="https://typie.net/email/logo-white.png?v=1"
+              src="https://cdn.typie.net/email/logo-white.png?v=1"
               height="24"
               alt="타이피 로고"
               className="dark-mode-logo h-[24px] w-auto object-cover mb-[24px]"

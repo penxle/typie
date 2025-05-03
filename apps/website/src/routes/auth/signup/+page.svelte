@@ -83,7 +83,7 @@
 
 <Helmet
   description="지금 타이피에 가입하고 바로 글쓰기를 시작해보세요."
-  image={{ size: 'large', src: 'https://typie.net/opengraph/default.png' }}
+  image={{ size: 'large', src: 'https://cdn.typie.net/opengraph/default.png' }}
   title="회원가입"
 />
 

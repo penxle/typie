@@ -83,7 +83,7 @@
 {#if $entityView.node.__typename === 'FolderView'}
   <Helmet
     description={`${$entityView.node.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
-    image={{ size: 'large', src: 'https://typie.net/opengraph/default.png' }}
+    image={{ size: 'large', src: 'https://cdn.typie.net/opengraph/default.png' }}
     title={$entityView.node.name}
   />
 
