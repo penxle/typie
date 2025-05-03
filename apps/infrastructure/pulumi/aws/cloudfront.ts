@@ -198,7 +198,7 @@ const cdn = new aws.cloudfront.Distribution('cdn', {
 
 const usercontents = new aws.cloudfront.Distribution('usercontents', {
   enabled: true,
-  aliases: ['usercontents.typie.net'],
+  aliases: ['typie.net'],
   httpVersion: 'http2and3',
 
   origins: [
@@ -268,10 +268,10 @@ new aws.route53.Record('cdn.typie.net', {
   ],
 });
 
-new aws.route53.Record('usercontents.typie.net', {
+new aws.route53.Record('typie.net', {
   zoneId: zones.typie_net.zoneId,
   type: 'A',
-  name: 'usercontents.typie.net',
+  name: 'typie.net',
   aliases: [
     {
       name: usercontents.domainName,
