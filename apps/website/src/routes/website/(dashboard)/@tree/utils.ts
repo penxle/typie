@@ -1,4 +1,4 @@
-export const maxDepth = 2;
+export const maxDepth = 3;
 
 const HIDDEN_TREE = '[role="tree"][aria-hidden="true"]';
 const VISIBLE_TREE = '[role="tree"]:not([aria-hidden="true"])';
