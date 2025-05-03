@@ -1,0 +1,6 @@
+[submodule "crates/fondue/vendor/woff2"]
+	path = crates/fondue/vendor/woff2
+	url = https://github.com/google/woff2.git
+[submodule "crates/fondue/vendor/brotli"]
+	path = crates/fondue/vendor/brotli
+	url = https://github.com/google/brotli.git

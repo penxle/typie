@@ -1,15 +1,17 @@
 import path from 'node:path';
 import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
+import { getFontMetadata, toWoff2 } from '@typie/fondue';
 import qs from 'query-string';
 import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
-import { db, Files, firstOrThrow, Images, TableCode, validateDbId } from '@/db';
+import { db, Files, firstOrThrow, Fonts, Images, TableCode, validateDbId } from '@/db';
 import { env } from '@/env';
+import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
 import { builder } from '../builder';
-import { Blob, File, Image, isTypeOf } from '../objects';
+import { Blob, File, Font, Image, isTypeOf } from '../objects';
 
 /**
  * * Types
@@ -29,6 +31,18 @@ File.implement({
     name: t.exposeString('name'),
 
     url: t.string({ resolve: (blob) => `https://typie.net/files/${blob.path}` }),
+  }),
+});
+
+Font.implement({
+  isTypeOf: isTypeOf(TableCode.FONTS),
+  interfaces: [Blob],
+  fields: (t) => ({
+    name: t.exposeString('name'),
+    fullName: t.exposeString('fullName', { nullable: true }),
+    weight: t.exposeInt('weight'),
+
+    url: t.string({ resolve: (font) => `https://typie.net/fonts/${font.path}` }),
   }),
 });
 
@@ -228,6 +242,62 @@ builder.mutationFields((t) => ({
         .returning()
         .then(firstOrThrow);
       /* eslint-enable @typescript-eslint/no-non-null-assertion */
+    },
+  }),
+
+  persistBlobAsFont: t.fieldWithInput({
+    type: Font,
+    input: { path: t.input.string() },
+    resolve: async (_, { input }, ctx) => {
+      const object = await aws.s3.send(
+        new GetObjectCommand({
+          Bucket: 'typie-uploads',
+          Key: input.path,
+        }),
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const buffer = await object.Body!.transformToByteArray();
+
+      const metadata = getFontMetadata(buffer);
+      if (metadata.weight !== 400) {
+        throw new TypieError({ code: 'invalid_font_weight' });
+      }
+
+      if (metadata.style !== 'normal') {
+        throw new TypieError({ code: 'invalid_font_style' });
+      }
+
+      const filePath = path.join(path.dirname(input.path), `${path.basename(input.path, path.extname(input.path))}.woff2`);
+      const woff2 = toWoff2(buffer);
+
+      await aws.s3.send(
+        new PutObjectCommand({
+          Bucket: 'typie-usercontents',
+          Key: `fonts/${filePath}`,
+          Body: woff2,
+          ContentType: 'font/woff2',
+          Tagging: qs.stringify({
+            UserId: ctx.session?.userId ?? 'anonymous',
+            Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+          }),
+        }),
+      );
+
+      return await db
+        .insert(Fonts)
+        .values({
+          userId: ctx.session?.userId,
+          name: metadata.familyName ?? '(이름 없음)',
+          familyName: metadata.familyName,
+          fullName: metadata.fullName,
+          postScriptName: metadata.postScriptName,
+          weight: metadata.weight,
+          size: woff2.length,
+          path: filePath,
+        })
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 }));

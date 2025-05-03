@@ -54,6 +54,7 @@ export const Embed = createObjectRef('Embed', T.Embeds);
 export const Entity = createObjectRef('Entity', T.Entities);
 export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
+export const Font = createObjectRef('Font', T.Fonts);
 export const Image = createObjectRef('Image', T.Images);
 export const Notification = createObjectRef('Notification', T.Notifications);
 export const PaymentBillingKey = createObjectRef('PaymentBillingKey', T.PaymentBillingKeys);

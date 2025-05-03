@@ -24,7 +24,7 @@ export const FontFamily = Extension.create({
           fontFamily: {
             parseHTML: (element) => {
               const fontFamily = element.style.fontFamily;
-              if (!fontFamily || !(fontFamilies as string[]).includes(fontFamily)) {
+              if (!fontFamily || (!(fontFamilies as string[]).includes(fontFamily) && !fontFamily.startsWith('FONT0'))) {
                 return null;
               }
 
@@ -50,7 +50,7 @@ export const FontFamily = Extension.create({
       setFontFamily:
         (fontFamily) =>
         ({ commands }) => {
-          if (!fontFamilies.includes(fontFamily)) {
+          if (!fontFamilies.includes(fontFamily) && !fontFamily.startsWith('FONT0')) {
             return false;
           }
 

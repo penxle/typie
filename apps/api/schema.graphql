@@ -1,3 +1,8 @@
+input AddSiteFontInput {
+  fontId: ID!
+  siteId: ID!
+}
+
 input AuthorizeSignUpEmailInput {
   code: String!
 }
@@ -180,6 +185,20 @@ type FolderView implements IFolder {
   name: String!
 }
 
+type Font implements Blob {
+  fullName: String
+  id: ID!
+  name: String!
+  size: Int!
+  url: String!
+  weight: Int!
+}
+
+enum FontState {
+  ACTIVE
+  ARCHIVED
+}
+
 input GenerateSingleSignOnAuthorizationUrlInput {
   email: String
   provider: SingleSignOnProvider!
@@ -219,6 +238,7 @@ interface IPost {
 }
 
 interface ISite {
+  fonts: [Font!]!
   id: ID!
   name: String!
   slug: String!
@@ -265,6 +285,7 @@ input MoveEntityInput {
 }
 
 type Mutation {
+  addSiteFont(input: AddSiteFontInput!): Site!
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): String!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlan: UserPlan!
@@ -289,8 +310,10 @@ type Mutation {
   markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
   moveEntity(input: MoveEntityInput!): Entity!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
+  persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
+  removeSiteFont(input: RemoveSiteFontInput!): Site!
   renameFolder(input: RenameFolderInput!): Folder!
   resetPassword(input: ResetPasswordInput!): Boolean!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
@@ -373,6 +396,10 @@ enum PaymentRecordState {
 }
 
 input PersistBlobAsFileInput {
+  path: String!
+}
+
+input PersistBlobAsFontInput {
   path: String!
 }
 
@@ -515,6 +542,11 @@ input RedeemCreditCodeInput {
   code: String!
 }
 
+input RemoveSiteFontInput {
+  fontId: ID!
+  siteId: ID!
+}
+
 input RenameFolderInput {
   folderId: ID!
   name: String!
@@ -569,11 +601,13 @@ enum SingleSignOnProvider {
 type Site implements ISite {
   entities: [Entity!]!
   firstEntity(type: EntityType!): Entity
+  fonts: [Font!]!
   id: ID!
   name: String!
   slug: String!
   url: String!
   usage: SiteUsage!
+  user: User!
   view: SiteView!
 }
 
@@ -590,6 +624,7 @@ type SiteUsage {
 }
 
 type SiteView implements ISite {
+  fonts: [Font!]!
   id: ID!
   myMasqueradeName: String!
   name: String!

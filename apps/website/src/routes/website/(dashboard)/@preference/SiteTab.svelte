@@ -6,7 +6,7 @@
   import { fragment, graphql } from '$graphql';
   import { Button, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
-  import { Toast } from '$lib/notification';
+  import { Dialog, Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_PreferenceModal_SiteTab_user } from '$graphql';
@@ -26,6 +26,12 @@
         sites {
           id
           slug
+
+          fonts {
+            id
+            name
+            fullName
+          }
         }
       }
     `),
@@ -36,6 +42,18 @@
       updateSiteSlug(input: $input) {
         id
         slug
+      }
+    }
+  `);
+
+  const removeSiteFont = graphql(`
+    mutation DashboardLayout_PreferenceModal_SiteTab_RemoveSiteFont_Mutation($input: RemoveSiteFontInput!) {
+      removeSiteFont(input: $input) {
+        id
+
+        fonts {
+          id
+        }
       }
     }
   `);
@@ -78,5 +96,40 @@
 
       <Button style={css.raw({ flex: 'none', height: '38px' })} disabled={!form.state.isDirty} type="submit">주소 변경</Button>
     </form>
+  </div>
+
+  <div class={flex({ direction: 'column', gap: '8px' })}>
+    <p class={css({ fontWeight: 'medium' })}>폰트</p>
+
+    {#each $user.sites[0].fonts as { id, name, fullName } (id)}
+      <div class={flex({ alignItems: 'center', gap: '8px' })}>
+        <p class={css({ fontWeight: 'medium' })}>
+          {name}
+          {#if fullName}
+            <span class={css({ fontSize: '12px', color: 'gray.500' })}>({fullName})</span>
+          {/if}
+        </p>
+
+        <Button
+          onclick={() => {
+            Dialog.confirm({
+              title: '폰트 삭제',
+              message: `"${name}" 폰트를 삭제하시겠어요?`,
+              action: 'danger',
+              actionLabel: '삭제',
+              actionHandler: async () => {
+                await removeSiteFont({ siteId: $user.sites[0].id, fontId: id });
+              },
+            });
+          }}
+          size="sm"
+          variant="secondary"
+        >
+          삭제
+        </Button>
+      </div>
+    {:else}
+      <p class={css({ fontSize: '14px', color: 'gray.500' })}>에디터에서 업로드한 폰트가 여기 나타나요</p>
+    {/each}
   </div>
 </div>

@@ -40,6 +40,7 @@
         "@tiptap/core": "^2.11.7",
         "@tiptap/html": "^2.11.7",
         "@tiptap/pm": "^2.11.7",
+        "@typie/fondue": "workspace:*",
         "@typie/lib": "workspace:*",
         "bullmq": "^5.51.1",
         "dayjs": "^1.11.13",
@@ -179,7 +180,11 @@
         "zod": "^3.24.3",
       },
     },
-    "lib/glyphr": {
+    "crates/fondue": {
+      "name": "@typie/fondue",
+      "version": "0.0.1",
+    },
+    "crates/glyphr": {
       "name": "@typie/glyphr",
       "version": "0.0.1",
     },
@@ -1369,7 +1374,9 @@
 
     "@typie/caddy": ["@typie/caddy@workspace:apps/caddy"],
 
-    "@typie/glyphr": ["@typie/glyphr@workspace:lib/glyphr"],
+    "@typie/fondue": ["@typie/fondue@workspace:crates/fondue"],
+
+    "@typie/glyphr": ["@typie/glyphr@workspace:crates/glyphr"],
 
     "@typie/infrastructure": ["@typie/infrastructure@workspace:apps/infrastructure"],
 

@@ -3,6 +3,7 @@
 node_modules/
 dist/
 target/
+out/
 .turbo/
 
 .env.local

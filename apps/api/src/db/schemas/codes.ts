@@ -8,6 +8,7 @@ export const TableCode = {
   FILES: 'FILE',
   FOLDERS: 'F',
   FOLDER_OPTIONS: 'FO',
+  FONTS: 'FONT',
   IMAGES: 'IMG',
   NOTIFICATIONS: 'NT',
   PAYMENT_BILLING_KEYS: 'PYBK',

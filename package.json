@@ -5,7 +5,7 @@
   "type": "module",
   "workspaces": [
     "apps/*",
-    "lib/*",
+    "crates/*",
     "packages/*"
   ],
   "scripts": {

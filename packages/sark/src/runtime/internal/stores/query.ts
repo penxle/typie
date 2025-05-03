@@ -67,7 +67,7 @@ export function createQueryStore<T extends $ArtifactSchema<'query'>>(schema: Art
             context: {
               transport: 'fetch',
               ...context,
-              requestPolicy: 'cache-only',
+              requestPolicy: 'cache-first',
             },
           });
 

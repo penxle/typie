@@ -77,6 +77,15 @@
             site {
               id
               url
+
+              fonts {
+                id
+                name
+                weight
+                url
+              }
+
+              ...Editor_Toolbar_site
             }
           }
 
@@ -142,6 +151,15 @@
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
+
+  const fontFaces = $derived(
+    $query.post.entity.site.fonts
+      .map(
+        (font) =>
+          `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+      )
+      .join('\n'),
+  );
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote') {
@@ -269,6 +287,11 @@
     };
   });
 </script>
+
+<svelte:head>
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+  {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
+</svelte:head>
 
 <Helmet title={`${effectiveTitle} 작성 중`} />
 
@@ -418,7 +441,7 @@
 
     <HorizontalDivider color="secondary" />
 
-    <Toolbar {doc} {editor} />
+    <Toolbar $site={$query.post.entity.site} {doc} {editor} />
 
     <div class={css({ position: 'relative', flexGrow: '1', overflowY: 'auto', scrollbarGutter: 'stable' })}>
       <div

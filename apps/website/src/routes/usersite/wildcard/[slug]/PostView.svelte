@@ -93,6 +93,16 @@
             ...UsersiteWildcardSlugPage_EmojiReaction_postView
           }
         }
+
+        site {
+          id
+
+          fonts {
+            id
+            weight
+            url
+          }
+        }
       }
     `),
   );
@@ -164,6 +174,15 @@
     },
   });
 
+  const fontFaces = $derived(
+    $entityView.site.fonts
+      .map(
+        (font) =>
+          `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+      )
+      .join('\n'),
+  );
+
   const authorizeUrl = $derived(
     qs.stringifyUrl({
       url: `${env.PUBLIC_AUTH_URL}/authorize`,
@@ -211,6 +230,9 @@
 
 <svelte:head>
   <meta name="robots" content="noindex, nofollow" />
+
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+  {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
 {#if $entityView.node.__typename === 'PostView'}

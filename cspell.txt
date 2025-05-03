@@ -28,6 +28,7 @@ meili
 meilisearch
 myeongjo
 nanum
+napi
 natgw
 noeviction
 noreferrer

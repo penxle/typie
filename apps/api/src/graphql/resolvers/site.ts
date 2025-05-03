@@ -1,8 +1,8 @@
 import { and, asc, eq, inArray, isNull, sql, sum } from 'drizzle-orm';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
-import { db, Entities, first, firstOrThrow, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType } from '@/enums';
+import { db, Entities, first, firstOrThrow, Fonts, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
+import { EntityState, EntityType, FontState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -10,7 +10,7 @@ import { generateRandomName } from '@/utils/name';
 import { assertSitePermission } from '@/utils/permission';
 import { siteSchema } from '@/validation';
 import { builder } from '../builder';
-import { Entity, ISite, isTypeOf, Site, SiteView } from '../objects';
+import { Entity, Font, ISite, isTypeOf, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -23,6 +23,17 @@ ISite.implement({
     name: t.exposeString('name'),
 
     url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', self.slug) }),
+
+    fonts: t.field({
+      type: [Font],
+      resolve: async (self) => {
+        return await db
+          .select()
+          .from(Fonts)
+          .where(and(eq(Fonts.siteId, self.id), eq(Fonts.state, FontState.ACTIVE)))
+          .orderBy(asc(Fonts.createdAt));
+      },
+    }),
   }),
 });
 
@@ -31,6 +42,7 @@ Site.implement({
   interfaces: [ISite],
   fields: (t) => ({
     view: t.expose('id', { type: SiteView }),
+    user: t.expose('userId', { type: User }),
 
     entities: t.field({
       type: [Entity],
@@ -166,6 +178,42 @@ builder.mutationFields((t) => ({
       }
 
       return await db.update(Sites).set({ slug: input.slug }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
+    },
+  }),
+
+  addSiteFont: t.withAuth({ session: true }).fieldWithInput({
+    type: Site,
+    input: {
+      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
+      fontId: t.input.id({ validate: validateDbId(TableCode.FONTS) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: input.siteId,
+      });
+
+      await db.update(Fonts).set({ siteId: input.siteId }).where(eq(Fonts.id, input.fontId));
+
+      return input.siteId;
+    },
+  }),
+
+  removeSiteFont: t.withAuth({ session: true }).fieldWithInput({
+    type: Site,
+    input: {
+      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
+      fontId: t.input.id({ validate: validateDbId(TableCode.FONTS) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: input.siteId,
+      });
+
+      await db.update(Fonts).set({ siteId: null }).where(eq(Fonts.id, input.fontId));
+
+      return input.siteId;
     },
   }),
 }));

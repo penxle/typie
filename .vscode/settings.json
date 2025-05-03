@@ -17,7 +17,6 @@
   "svelte.plugin.svelte.defaultScriptLanguage": "ts",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.tsdk": "node_modules/typescript/lib",
-  "rust-analyzer.linkedProjects": ["lib/glyphr/Cargo.toml"],
   "workbench.activityBar.orientation": "vertical",
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
