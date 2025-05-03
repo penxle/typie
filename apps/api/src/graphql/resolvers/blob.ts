@@ -260,7 +260,7 @@ builder.mutationFields((t) => ({
       const buffer = await object.Body!.transformToByteArray();
 
       const metadata = getFontMetadata(buffer);
-      if (metadata.weight !== 400) {
+      if (metadata.weight < 300 || metadata.weight > 500) {
         throw new TypieError({ code: 'invalid_font_weight' });
       }
 
@@ -270,6 +270,13 @@ builder.mutationFields((t) => ({
 
       const filePath = path.join(path.dirname(input.path), `${path.basename(input.path, path.extname(input.path))}.woff2`);
       const woff2 = toWoff2(buffer);
+
+      const name =
+        metadata.familyName ??
+        metadata.fullName ??
+        metadata.postScriptName ??
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        path.basename(decodeURIComponent(object.Metadata!.name), path.extname(decodeURIComponent(object.Metadata!.name)));
 
       await aws.s3.send(
         new PutObjectCommand({
@@ -288,7 +295,7 @@ builder.mutationFields((t) => ({
         .insert(Fonts)
         .values({
           userId: ctx.session?.userId,
-          name: metadata.familyName ?? '(이름 없음)',
+          name,
           familyName: metadata.familyName,
           fullName: metadata.fullName,
           postScriptName: metadata.postScriptName,

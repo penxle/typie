@@ -43,26 +43,42 @@ pub fn get_font_metadata(data: Uint8Array) -> Result<Font> {
     .names()
     .into_iter()
     .find(|name| name.name_id == name_id::TYPOGRAPHIC_FAMILY)
-    .and_then(|name| name.to_string())
+    .and_then(|name| {
+      name
+        .to_string()
+        .or(String::from_utf8(name.name.to_vec()).ok())
+    })
     .or_else(|| {
       face
         .names()
         .into_iter()
         .find(|name| name.name_id == name_id::FAMILY)
-        .and_then(|name| name.to_string())
+        .and_then(|name| {
+          name
+            .to_string()
+            .or(String::from_utf8(name.name.to_vec()).ok())
+        })
     });
 
   let full_name = face
     .names()
     .into_iter()
     .find(|name| name.name_id == name_id::FULL_NAME)
-    .and_then(|name| name.to_string());
+    .and_then(|name| {
+      name
+        .to_string()
+        .or(String::from_utf8(name.name.to_vec()).ok())
+    });
 
   let post_script_name = face
     .names()
     .into_iter()
     .find(|name| name.name_id == name_id::POST_SCRIPT_NAME)
-    .and_then(|name| name.to_string());
+    .and_then(|name| {
+      name
+        .to_string()
+        .or(String::from_utf8(name.name.to_vec()).ok())
+    });
 
   Ok(Font {
     weight,
