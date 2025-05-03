@@ -57,6 +57,7 @@ unstub
 unsubscriber
 vcpu
 wonka
+xact
 xlarge
 xsmall
 xxlarge

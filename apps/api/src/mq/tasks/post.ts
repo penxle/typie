@@ -26,7 +26,7 @@ const getBlobSize = (node: Node) => {
 };
 
 export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: string) => {
-  const updates = await redis.smembers(`post:sync:updates:${postId}`);
+  let updates = await redis.smembers(`post:sync:updates:${postId}`);
   if (updates.length === 0) {
     return;
   }
@@ -34,6 +34,14 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
   let snapshotUpdated = false;
 
   await db.transaction(async (tx) => {
+    const hashKey = Bun.hash.xxHash32(`post:sync:collect:${postId}`);
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${hashKey})`);
+
+    updates = await redis.smembers(`post:sync:updates:${postId}`);
+    if (updates.length === 0) {
+      return;
+    }
+
     const post = await tx
       .select({
         id: Posts.id,
@@ -45,7 +53,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
       .innerJoin(Entities, eq(Posts.entityId, Entities.id))
       .where(eq(Posts.id, postId))
-      .for('update')
       .then(firstOrThrow);
 
     const pendingUpdates = R.groupBy(
@@ -166,9 +173,9 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
         },
       ]);
     }
-  });
 
-  await redis.srem(`post:sync:updates:${postId}`, ...updates);
+    await redis.srem(`post:sync:updates:${postId}`, ...updates);
+  });
 
   if (snapshotUpdated) {
     const { siteId, entityId } = await db
