@@ -28,6 +28,12 @@ export const EntityVisibility = {
   PRIVATE: 'PRIVATE',
 } as const;
 
+export type FontState = keyof typeof FontState;
+export const FontState = {
+  ACTIVE: 'ACTIVE',
+  ARCHIVED: 'ARCHIVED',
+} as const;
+
 export type NotificationCategory = keyof typeof NotificationCategory;
 export const NotificationCategory = {
   ANNOUNCEMENT: 'ANNOUNCEMENT',

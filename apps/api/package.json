@@ -31,6 +31,7 @@
     "@tiptap/core": "^2.11.7",
     "@tiptap/html": "^2.11.7",
     "@tiptap/pm": "^2.11.7",
+    "@typie/fondue": "workspace:*",
     "@typie/lib": "workspace:*",
     "bullmq": "^5.51.1",
     "dayjs": "^1.11.13",

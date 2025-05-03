@@ -8,6 +8,13 @@
       "when": 1745997813080,
       "tag": "0000_brave_tempest",
       "breakpoints": false
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1746295580428,
+      "tag": "0001_dizzy_mathemanic",
+      "breakpoints": false
     }
   ]
 }

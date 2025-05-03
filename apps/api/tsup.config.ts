@@ -9,6 +9,7 @@ export default defineConfig({
   format: 'esm',
   esbuildOptions: (options) => {
     options.chunkNames = 'chunks/[name]-[hash]';
+    options.assetNames = '[name]';
   },
 
   noExternal: [/^@typie\//],

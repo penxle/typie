@@ -185,10 +185,8 @@ export class Cache {
       this.#trackDependency(queryKey, entityKey, fieldKey);
     });
 
-    if (!result.partial) {
-      const subject = this.#retriveSubject(queryKey);
-      subject.next(result);
-    }
+    const subject = this.#retriveSubject(queryKey);
+    subject.next(result);
   }
 
   #refreshAffectedQueries(fieldUpdates: Map<EntityKey, Set<FieldKey>>, excludeKey?: QueryKey) {

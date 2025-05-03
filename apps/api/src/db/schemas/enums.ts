@@ -10,6 +10,7 @@ export const _CreditCodeState = createPgEnum('_credit_code_state', E.CreditCodeS
 export const _EntityState = createPgEnum('_entity_state', E.EntityState);
 export const _EntityType = createPgEnum('_entity_type', E.EntityType);
 export const _EntityVisibility = createPgEnum('_entity_visibility', E.EntityVisibility);
+export const _FontState = createPgEnum('_font_state', E.FontState);
 export const _NotificationState = createPgEnum('_notification_state', E.NotificationState);
 export const _PaymentBillingKeyState = createPgEnum('_payment_billing_key_state', E.PaymentBillingKeyState);
 export const _PaymentInvoiceState = createPgEnum('_payment_invoice_state', E.PaymentInvoiceState);

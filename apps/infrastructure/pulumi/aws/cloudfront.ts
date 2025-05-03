@@ -195,6 +195,17 @@ const cdn = new aws.cloudfront.Distribution('cdn', {
   orderedCacheBehaviors: [
     {
       targetOriginId: 'usercontents',
+      pathPattern: 'fonts/*',
+      compress: true,
+      viewerProtocolPolicy: 'redirect-to-https',
+      allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+      cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
+      cachePolicyId: staticCachePolicy.id,
+      originRequestPolicyId: staticOriginRequestPolicy.id,
+      responseHeadersPolicyId: staticResponseHeadersPolicy.id,
+    },
+    {
+      targetOriginId: 'usercontents',
       pathPattern: 'files/*',
       compress: true,
       viewerProtocolPolicy: 'redirect-to-https',

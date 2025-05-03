@@ -67,6 +67,25 @@ export const Folders = pgTable('folders', {
     .default(sql`now()`),
 });
 
+export const Fonts = pgTable('fonts', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.FONTS)),
+  userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  siteId: text('site_id').references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  familyName: text('family_name'),
+  fullName: text('full_name'),
+  postScriptName: text('post_script_name'),
+  weight: integer('weight').notNull(),
+  size: integer('size').notNull(),
+  path: text('path').notNull(),
+  state: E._FontState('state').notNull().default('ACTIVE'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Embeds = pgTable('embeds', {
   id: text('id')
     .primaryKey()

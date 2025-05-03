@@ -25,6 +25,7 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
+  import { fragment, graphql } from '$graphql';
   import { HorizontalDivider, Icon, SegmentButtons, VerticalDivider } from '$lib/components';
   import { defaultValues, values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
@@ -37,19 +38,33 @@
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import ToolbarFloatingLink from './ToolbarFloatingLink.svelte';
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
+  import ToolbarFontFamily from './ToolbarFontFamily.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
   import type * as Y from 'yjs';
+  import type { Editor_Toolbar_site, Optional } from '$graphql';
   import type { Ref } from '$lib/utils';
   import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
+    $site?: Optional<Editor_Toolbar_site>;
     editor?: Ref<Editor>;
     doc: Y.Doc;
     style?: SystemStyleObject;
   };
 
-  let { editor, doc, style }: Props = $props();
+  let { $site: _site, editor, doc, style }: Props = $props();
+
+  const site = fragment(
+    _site,
+    graphql(`
+      fragment Editor_Toolbar_site on Site {
+        id
+
+        ...Editor_Toolbar_FontFamily_site
+      }
+    `),
+  );
 
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
 </script>
@@ -317,37 +332,7 @@
         {/snippet}
       </ToolbarDropdownButton>
 
-      <ToolbarDropdownButton
-        style={css.raw({ width: '120px' })}
-        chevron
-        disabled={!editor?.current.can().chain().focus().setFontFamily(defaultValues.fontFamily).run()}
-        label="글씨 서체"
-        size="small"
-      >
-        {#snippet anchor()}
-          <div class={css({ flexGrow: '1', fontSize: '14px', color: 'gray.700' })}>
-            {values.fontFamily.find(
-              ({ value }) => value === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily),
-            )?.label}
-          </div>
-        {/snippet}
-
-        {#snippet floating({ close })}
-          <ToolbarDropdownMenu>
-            {#each values.fontFamily as { label, value } (value)}
-              <ToolbarDropdownMenuItem
-                active={(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily) === value}
-                onclick={() => {
-                  editor?.current.chain().focus().setFontFamily(value).run();
-                  close();
-                }}
-              >
-                <div style:font-family={value}>{label}</div>
-              </ToolbarDropdownMenuItem>
-            {/each}
-          </ToolbarDropdownMenu>
-        {/snippet}
-      </ToolbarDropdownButton>
+      <ToolbarFontFamily {$site} {editor} />
 
       <ToolbarDropdownButton
         style={css.raw({ width: '60px' })}
