@@ -112,8 +112,8 @@
 
 <div
   style:--min-width="240px"
-  style:--width="15vw"
-  style:--max-width="300px"
+  style:--width="20vw"
+  style:--max-width="320px"
   style:--overflow="hidden"
   class={css(
     {

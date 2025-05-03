@@ -34,6 +34,11 @@
             children {
               id
               ...DashboardLayout_EntityTree_Entity_entity
+
+              children {
+                id
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
             }
           }
         }
