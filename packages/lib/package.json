@@ -16,8 +16,8 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.20.7",
-    "@types/bun": "^1.2.10",
+    "@sveltejs/kit": "^2.20.8",
+    "@types/bun": "^1.2.11",
     "@typie/tsconfig": "workspace:*",
     "dayjs": "^1.11.13",
     "hono": "^4.7.8",
@@ -27,7 +27,7 @@
     "svelte": "^5.28.2",
     "svgo": "^3.3.2",
     "typescript": "^5.8.3",
-    "vite": "^6.3.3",
+    "vite": "^6.3.4",
     "xmlbuilder2": "^3.1.1"
   }
 }
