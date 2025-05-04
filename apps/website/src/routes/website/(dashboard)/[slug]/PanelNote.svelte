@@ -1,7 +1,12 @@
 <script lang="ts">
-  import getCaretCoordinates from 'textarea-caret';
+  import ExpandIcon from '~icons/lucide/expand';
+  import Minimize2Icon from '~icons/lucide/minimize-2';
+  import NotebookTabsIcon from '~icons/lucide/notebook-tabs';
+  import { textAreaScrollPadding, tooltip } from '$lib/actions';
+  import { Icon } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
   import { YState } from './state.svelte';
   import type * as Y from 'yjs';
 
@@ -11,77 +16,40 @@
 
   let { doc }: Props = $props();
 
+  const app = getAppContext();
   const note = new YState(doc, 'note', '');
-
-  let element = $state<HTMLTextAreaElement>();
-  const paddingBottom = $derived(element ? Number.parseFloat(getComputedStyle(element).lineHeight) * 2 : 0);
-
-  const scroll = () => {
-    if (!element) {
-      return;
-    }
-
-    const { top, height } = getCaretCoordinates(element, element.selectionEnd);
-    const caretBottom = top + height;
-
-    const visibleTop = element.scrollTop;
-    const visibleBottom = visibleTop + element.clientHeight;
-
-    if (caretBottom + paddingBottom > visibleBottom) {
-      element.scrollTop = Math.min(caretBottom - element.clientHeight + paddingBottom, element.scrollHeight - element.clientHeight);
-      return;
-    }
-
-    if (top - paddingBottom < visibleTop) {
-      element.scrollTop = Math.max(top - paddingBottom, 0);
-    }
-  };
 </script>
 
-<div
-  class={flex({
-    flexDirection: 'column',
-    gap: '16px',
-    flexGrow: '1',
-    borderTopWidth: '1px',
-    borderTopColor: 'gray.100',
-    paddingTop: '16px',
-  })}
->
+<div class={flex({ flexDirection: 'column', gap: '16px', flexGrow: '1' })}>
   <div class={flex({ justifyContent: 'space-between', alignItems: 'center', paddingX: '20px' })}>
-    <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>노트</div>
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      <Icon style={css.raw({ color: 'gray.500' })} icon={NotebookTabsIcon} size={12} />
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>작성 노트</div>
+    </div>
 
-    <!-- <button
-      class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.500', transition: 'common', _hover: { color: 'gray.700' } })}
-      onclick={() => {}}
+    <button
+      class={center({ size: '20px', color: 'gray.500', transition: 'common', _hover: { color: 'gray.700' } })}
+      onclick={() => (app.preference.current.noteExpanded = !app.preference.current.noteExpanded)}
       type="button"
+      use:tooltip={{ message: app.preference.current.noteExpanded ? '작게 보기' : '크게 보기' }}
     >
-      설정
-    </button> -->
+      <Icon icon={app.preference.current.noteExpanded ? Minimize2Icon : ExpandIcon} size={12} />
+    </button>
   </div>
 
   <textarea
-    bind:this={element}
     class={css({
       flexGrow: '1',
       width: 'full',
       paddingX: '20px',
       paddingBottom: '20px',
-      scrollBehavior: 'auto',
-      overflowAnchor: 'auto',
-      scrollPaddingY: '20px',
       fontSize: '13px',
       color: 'gray.700',
       wordBreak: 'break-all',
       resize: 'none',
     })}
-    oninput={scroll}
-    onkeydown={(e) => {
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        requestAnimationFrame(scroll);
-      }
-    }}
-    placeholder="포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용을 적어둘 수 있어요. 모든 노트는 포스트 작성자만 볼 수 있어요."
+    placeholder="포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요."
     bind:value={note.current}
+    use:textAreaScrollPadding
   ></textarea>
 </div>

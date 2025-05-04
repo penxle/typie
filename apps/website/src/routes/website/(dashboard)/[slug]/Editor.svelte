@@ -33,6 +33,7 @@
   import { center, flex } from '$styled-system/patterns';
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
+  import PanelNote from './PanelNote.svelte';
   import { YState } from './state.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
@@ -449,95 +450,113 @@
 
     <Toolbar $site={$query.post.entity.site} {doc} {editor} />
 
-    <div class={css({ position: 'relative', flexGrow: '1', overflowY: 'auto', scrollbarGutter: 'stable' })}>
-      <div
-        style:--prosemirror-max-width={`${maxWidth.current}px`}
-        class={flex({
-          flexDirection: 'column',
-          alignItems: 'center',
-          flexGrow: '1',
-          paddingTop: '60px',
-          paddingX: '80px',
-          width: 'full',
-        })}
-      >
-        <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-          <textarea
-            bind:this={titleEl}
-            class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-            autocapitalize="off"
-            autocomplete="off"
-            maxlength="100"
-            onkeydown={(e) => {
-              if (e.isComposing) {
-                return;
-              }
+    <div class={flex({ flexGrow: '1', overflowY: 'hidden' })}>
+      <div class={css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' })}>
+        <div
+          style:--prosemirror-max-width={`${maxWidth.current}px`}
+          class={flex({
+            flexDirection: 'column',
+            alignItems: 'center',
+            paddingTop: '60px',
+            paddingX: '80px',
+            size: 'full',
+          })}
+        >
+          <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+            <textarea
+              bind:this={titleEl}
+              class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+              autocapitalize="off"
+              autocomplete="off"
+              maxlength="100"
+              onkeydown={(e) => {
+                if (e.isComposing) {
+                  return;
+                }
 
-              if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  subtitleEl?.focus();
+                }
+              }}
+              placeholder="제목을 입력하세요"
+              rows={1}
+              spellcheck="false"
+              bind:value={title.current}
+              use:autosize
+            ></textarea>
+
+            <textarea
+              bind:this={subtitleEl}
+              class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
+              autocapitalize="off"
+              autocomplete="off"
+              maxlength="100"
+              onkeydown={(e) => {
+                if (e.isComposing) {
+                  return;
+                }
+
+                if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
+                  e.preventDefault();
+                  titleEl?.focus();
+                }
+
+                if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+                  e.preventDefault();
+                  editor?.current.chain().focus().setTextSelection(2).run();
+                }
+              }}
+              placeholder="부제목을 입력하세요"
+              rows={1}
+              spellcheck="false"
+              bind:value={subtitle.current}
+              use:autosize
+            ></textarea>
+
+            <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+          </div>
+
+          <TiptapEditor
+            style={css.raw({ flexGrow: '1', width: 'full' })}
+            {awareness}
+            {doc}
+            oncreate={() => {
+              titleEl?.focus();
+            }}
+            onkeydown={(view, e) => {
+              const { doc, selection } = view.state;
+              const { anchor } = selection;
+
+              if (
+                ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+                (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+              ) {
                 e.preventDefault();
                 subtitleEl?.focus();
               }
             }}
-            placeholder="제목을 입력하세요"
-            rows={1}
-            spellcheck="false"
-            bind:value={title.current}
-            use:autosize
-          ></textarea>
-
-          <textarea
-            bind:this={subtitleEl}
-            class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
-            autocapitalize="off"
-            autocomplete="off"
-            maxlength="100"
-            onkeydown={(e) => {
-              if (e.isComposing) {
-                return;
-              }
-
-              if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
-                e.preventDefault();
-                titleEl?.focus();
-              }
-
-              if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
-                e.preventDefault();
-                editor?.current.chain().focus().setTextSelection(2).run();
-              }
-            }}
-            placeholder="부제목을 입력하세요"
-            rows={1}
-            spellcheck="false"
-            bind:value={subtitle.current}
-            use:autosize
-          ></textarea>
-
-          <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+            bind:editor
+          />
         </div>
-
-        <TiptapEditor
-          style={css.raw({ flexGrow: '1', width: 'full' })}
-          {awareness}
-          {doc}
-          oncreate={() => {
-            titleEl?.focus();
-          }}
-          onkeydown={(view, e) => {
-            const { doc, selection } = view.state;
-            const { anchor } = selection;
-
-            if (
-              ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
-              (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
-            ) {
-              e.preventDefault();
-              subtitleEl?.focus();
-            }
-          }}
-          bind:editor
-        />
       </div>
+
+      {#if app.preference.current.noteExpanded}
+        <div
+          class={flex({
+            flexShrink: '0',
+            borderLeftWidth: '1px',
+            borderLeftColor: 'gray.100',
+            paddingTop: '16px',
+            width: '1/4',
+            height: 'full',
+            overflowY: 'auto',
+            scrollbarGutter: 'stable',
+          })}
+        >
+          <PanelNote {doc} />
+        </div>
+      {/if}
     </div>
   </div>
 

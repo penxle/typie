@@ -45,8 +45,6 @@
   );
 
   const app = getAppContext();
-
-  // const BOTTOM_GAP_PX = parseFloat(getComputedStyle(ta).lineHeight) * 3;
 </script>
 
 <aside
@@ -169,6 +167,10 @@
       </div>
     </div>
 
-    <PanelNote {doc} />
+    <HorizontalDivider color="secondary" />
+
+    {#if !app.preference.current.noteExpanded}
+      <PanelNote {doc} />
+    {/if}
   </div>
 </aside>

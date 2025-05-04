@@ -4,6 +4,7 @@ import { LocalStore, SessionStore } from '../state';
 type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   panelExpanded: boolean;
+  noteExpanded: boolean;
 
   focusDuration: number;
   restDuration: number;
@@ -65,6 +66,8 @@ export const setupAppContext = (userId: string) => {
     preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
       postsExpanded: false,
       panelExpanded: true,
+      noteExpanded: false,
+
       focusDuration: 30,
       restDuration: 10,
     }),
