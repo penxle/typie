@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as PortOne from '@portone/browser-sdk/v2';
   import mixpanel from 'mixpanel-browser';
+  import { nanoid } from 'nanoid';
   import qs from 'query-string';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
@@ -198,22 +199,25 @@
   const handleVerification = async () => {
     try {
       mixpanel.track('verify_personal_identity_start');
+      sessionStorage.setItem('redirect_uri', page.url.href);
 
       const resp = await PortOne.requestIdentityVerification({
         storeId: 'store-e1e69136-38bb-42dd-b226-3c78e03c1ff1',
-        identityVerificationId: `identity-verification-${crypto.randomUUID()}`,
+        identityVerificationId: `identity-verification-${nanoid()}`,
         channelKey: 'channel-key-31e03361-26cb-4810-86ed-801cce4f570f',
+        redirectUrl: `${page.url.origin}/identity`,
       });
 
       if (resp === undefined) {
-        console.log('error');
         return;
       }
 
-      await verifyPersonalIdentity({ identityVerificationId: resp.identityVerificationId });
-      mixpanel.track('verify_personal_identity_success');
+      await verifyPersonalIdentity({
+        identityVerificationId: resp.identityVerificationId,
+      });
 
-      window.location.reload();
+      mixpanel.track('verify_personal_identity_success');
+      location.reload();
     } catch (err) {
       const errorMessages: Record<string, string> = {
         identity_verification_failed: '인증에 실패했습니다.',
