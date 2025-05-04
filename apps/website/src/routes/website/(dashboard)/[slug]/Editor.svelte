@@ -16,6 +16,7 @@
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CopyIcon from '~icons/lucide/copy';
   import ElipsisIcon from '~icons/lucide/ellipsis';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderIcon from '~icons/lucide/folder';
   import PanelRightCloseIcon from '~icons/lucide/panel-right-close';
   import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
@@ -60,6 +61,7 @@
           entity {
             id
             slug
+            url
 
             ancestors {
               id
@@ -369,6 +371,10 @@
               <Icon icon={ElipsisIcon} size={16} />
             </button>
           {/snippet}
+
+          <MenuItem external href={$query.post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+
+          <HorizontalDivider color="secondary" />
 
           <MenuItem
             icon={BlendIcon}

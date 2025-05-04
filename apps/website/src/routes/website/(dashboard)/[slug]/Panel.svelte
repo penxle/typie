@@ -2,10 +2,13 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { EntityVisibility } from '@/enums';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import { fragment, graphql } from '$graphql';
+  import { tooltip } from '$lib/actions';
+  import { HorizontalDivider, Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { css, cx } from '$styled-system/css';
+  import { center, flex } from '$styled-system/patterns';
   import PanelCharacterCountChangeWidget from './PanelCharacterCountChangeWidget.svelte';
   import PanelCharacterCountWidget from './PanelCharacterCountWidget.svelte';
   import type { Editor } from '@tiptap/core';
@@ -29,6 +32,7 @@
 
         entity {
           id
+          url
           visibility
         }
 
@@ -70,6 +74,24 @@
       height: 'full',
     })}
   >
+    <div class={flex({ flexDirection: 'column', gap: '6px' })}>
+      <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>포스트</div>
+
+        <a
+          class={cx('group', center({ size: '20px' }))}
+          href={$post.entity.url}
+          rel="noopener noreferrer"
+          target="_blank"
+          use:tooltip={{ message: '사이트에서 열기' }}
+        >
+          <Icon style={css.raw({ color: 'gray.500', _groupHover: { color: 'gray.700' } })} icon={ExternalLinkIcon} size={14} />
+        </a>
+      </div>
+    </div>
+
+    <HorizontalDivider color="secondary" />
+
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
         <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>공유 상태</div>
