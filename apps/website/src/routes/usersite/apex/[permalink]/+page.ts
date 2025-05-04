@@ -16,6 +16,7 @@ export const _UsersiteApexPermalinkPage_Query_AfterLoad: UsersiteApexPermalinkPa
       response_type: 'code',
       redirect_uri: `${query.permalink.siteUrl}/authorize`,
       state: serializeOAuthState({ redirect_uri: `${query.permalink.siteUrl}/${query.permalink.entitySlug}` }),
+      prompt: 'none',
     },
   });
 
