@@ -175,7 +175,11 @@
           }}
         >
           <div class={flex({ alignItems: 'center', gap: '4px' })}>
-            <Icon style={css.raw({ color: 'gray.500', transitionProperty: 'none', _groupHover: { color: 'brand.400' } })} icon={PlusIcon} />
+            <Icon
+              style={css.raw({ color: 'gray.500', transitionProperty: 'none', _groupHover: { color: 'brand.400' } })}
+              icon={PlusIcon}
+              size={14}
+            />
             <span class={css({ color: 'gray.700', _groupHover: { color: 'brand.400' } })}>직접 업로드</span>
           </div>
         </ToolbarDropdownMenuItem>
@@ -226,14 +230,12 @@
       </div>
 
       <ul class={css({ listStyle: 'disc', paddingLeft: '20px', fontSize: '13px', color: 'gray.500' })}>
+        <li>TTF, OTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
+        <li>너무 얇거나 너무 두꺼운 폰트, 기울어진 폰트는 업로드할 수 없어요.</li>
         <li>업로드된 폰트는 내 글이라면 어디서나 이용할 수 있어요.</li>
         <li>기존에 업로드한 폰트 목록은 설정 &gt; 사이트 탭에서 관리할 수 있어요.</li>
-        <li>TTF, OTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
-        <li>너무 두껍거나 너무 얇은 폰트는 업로드할 수 없어요.</li>
-        <li>기울어진 폰트는 업로드할 수 없어요.</li>
-        <li>
-          무료 폰트 혹은 이미 구매해 웹에서 사용할 수 있는 라이선스가 있는 폰트만 이용해 주세요. 저작권에 위배되는 폰트는 삭제될 수 있어요.
-        </li>
+        <li>무료 폰트 혹은 이미 구매해 웹에서 사용할 수 있는 라이선스가 있는 폰트만 이용해 주세요.</li>
+        <li>저작권에 위배되는 폰트는 삭제될 수 있어요.</li>
       </ul>
     </div>
 
