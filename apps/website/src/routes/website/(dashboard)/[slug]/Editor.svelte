@@ -541,7 +541,7 @@
     </div>
   </div>
 
-  <Panel $post={$query.post} {editor} />
+  <Panel $post={$query.post} {doc} {editor} />
 </div>
 
 <Limit {editor} />

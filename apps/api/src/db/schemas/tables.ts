@@ -294,6 +294,7 @@ export const PostContents = pgTable('post_contents', {
   text: text('text').notNull(),
   characterCount: integer('character_count').notNull().default(0),
   blobSize: integer('blob_size').notNull().default(0),
+  note: text('note').notNull().default(''),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
   createdAt: datetime('created_at')
