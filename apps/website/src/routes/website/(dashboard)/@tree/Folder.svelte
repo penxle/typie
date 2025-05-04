@@ -6,6 +6,7 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EllipsisIcon from '~icons/lucide/ellipsis';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import PencilIcon from '~icons/lucide/pencil-line';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -41,6 +42,7 @@
           order
           depth
           visibility
+          url
 
           site {
             id
@@ -251,6 +253,13 @@
         {/snippet}
 
         <MenuItem icon={PencilIcon} onclick={() => (editing = true)}>이름 변경</MenuItem>
+
+        <HorizontalDivider color="secondary" />
+
+        <MenuItem external href={$folder.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+
+        <HorizontalDivider color="secondary" />
+
         <MenuItem
           icon={BlendIcon}
           onclick={() => {

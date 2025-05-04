@@ -4,6 +4,7 @@
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import FileIcon from '~icons/lucide/file';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
@@ -34,6 +35,7 @@
           order
           slug
           visibility
+          url
         }
       }
     `),
@@ -152,6 +154,10 @@
         <Icon icon={EllipsisIcon} size={14} />
       </div>
     {/snippet}
+
+    <MenuItem external href={$post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+
+    <HorizontalDivider color="secondary" />
 
     <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $post.entity.id)}>공유</MenuItem>
 
