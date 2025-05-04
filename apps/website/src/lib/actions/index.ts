@@ -5,4 +5,5 @@ export * from './hover.svelte';
 export * from './outside-click.svelte';
 export * from './portal.svelte';
 export * from './scroll-lock.svelte';
+export * from './textarea-scrollpadding.svelte';
 export * from './tooltip.svelte';
