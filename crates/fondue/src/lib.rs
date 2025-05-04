@@ -1,6 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use ttf_parser::{Face, Style, name_id};
+use ttf_parser::{Face, Language, Style, name_id};
 
 #[cxx::bridge]
 mod ffi {
@@ -12,24 +12,49 @@ mod ffi {
 }
 
 #[napi(object)]
-pub struct Font {
+pub struct FontMetadata {
   pub weight: u16,
-
   #[napi(ts_type = "'normal' | 'italic' | 'oblique'")]
   pub style: &'static str,
-
-  #[napi(js_name = "familyName")]
   pub family_name: Option<String>,
-
-  #[napi(js_name = "fullName")]
   pub full_name: Option<String>,
-
-  #[napi(js_name = "postScriptName")]
   pub post_script_name: Option<String>,
 }
 
-#[napi(js_name = "getFontMetadata")]
-pub fn get_font_metadata(data: Uint8Array) -> Result<Font> {
+fn get_name(face: &Face, name_id: u16) -> Option<String> {
+  let languages = [
+    Some(Language::Korean_Korea),
+    Some(Language::English_UnitedStates),
+    None,
+  ];
+
+  for &language in &languages {
+    let result = face
+      .names()
+      .into_iter()
+      .find(|name| {
+        if let Some(language) = language {
+          name.language() == language && name.name_id == name_id
+        } else {
+          name.name_id == name_id
+        }
+      })
+      .and_then(|name| {
+        name
+          .to_string()
+          .or_else(|| String::from_utf8(name.name.to_vec()).ok())
+      });
+
+    if result.is_some() {
+      return result;
+    }
+  }
+
+  None
+}
+
+#[napi]
+pub fn get_font_metadata(data: Uint8Array) -> Result<FontMetadata> {
   let face = Face::parse(data.as_ref(), 0).map_err(|err| Error::from_reason(err.to_string()))?;
 
   let weight = face.weight().to_number();
@@ -39,48 +64,12 @@ pub fn get_font_metadata(data: Uint8Array) -> Result<Font> {
     Style::Oblique => "oblique",
   };
 
-  let family_name = face
-    .names()
-    .into_iter()
-    .find(|name| name.name_id == name_id::TYPOGRAPHIC_FAMILY)
-    .and_then(|name| {
-      name
-        .to_string()
-        .or(String::from_utf8(name.name.to_vec()).ok())
-    })
-    .or_else(|| {
-      face
-        .names()
-        .into_iter()
-        .find(|name| name.name_id == name_id::FAMILY)
-        .and_then(|name| {
-          name
-            .to_string()
-            .or(String::from_utf8(name.name.to_vec()).ok())
-        })
-    });
+  let family_name =
+    get_name(&face, name_id::TYPOGRAPHIC_FAMILY).or_else(|| get_name(&face, name_id::FAMILY));
+  let full_name = get_name(&face, name_id::FULL_NAME);
+  let post_script_name = get_name(&face, name_id::POST_SCRIPT_NAME);
 
-  let full_name = face
-    .names()
-    .into_iter()
-    .find(|name| name.name_id == name_id::FULL_NAME)
-    .and_then(|name| {
-      name
-        .to_string()
-        .or(String::from_utf8(name.name.to_vec()).ok())
-    });
-
-  let post_script_name = face
-    .names()
-    .into_iter()
-    .find(|name| name.name_id == name_id::POST_SCRIPT_NAME)
-    .and_then(|name| {
-      name
-        .to_string()
-        .or(String::from_utf8(name.name.to_vec()).ok())
-    });
-
-  Ok(Font {
+  Ok(FontMetadata {
     weight,
     style,
     family_name,
@@ -89,7 +78,7 @@ pub fn get_font_metadata(data: Uint8Array) -> Result<Font> {
   })
 }
 
-#[napi(js_name = "toWoff2")]
+#[napi]
 pub fn to_woff2(data: Uint8Array) -> Result<Uint8Array> {
   let input = data.as_ref();
   let output = ffi::compress_woff2(input);
