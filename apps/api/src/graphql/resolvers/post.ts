@@ -465,6 +465,7 @@ builder.mutationFields((t) => ({
             text: PostContents.text,
             characterCount: PostContents.characterCount,
             blobSize: PostContents.blobSize,
+            note: PostContents.note,
           },
         })
         .from(Posts)
@@ -523,6 +524,7 @@ builder.mutationFields((t) => ({
           vector: Y.encodeStateVector(doc),
           characterCount: post.content.characterCount,
           blobSize: post.content.blobSize,
+          note: post.content.note,
         });
 
         await tx.insert(PostSnapshots).values({
