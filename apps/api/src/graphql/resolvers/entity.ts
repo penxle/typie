@@ -257,7 +257,7 @@ builder.queryFields((t) => ({
         .then(firstOrThrowWith(new NotFoundError()));
 
       const entity = await db
-        .select(getTableColumns(Entities))
+        .select()
         .from(Entities)
         .where(and(eq(Entities.siteId, site.id), eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrowWith(new NotFoundError()));
@@ -275,26 +275,26 @@ builder.queryFields((t) => ({
     },
   }),
 
-  entityViewByPermalink: t.field({
-    type: EntityView,
+  permalink: t.field({
+    type: t.builder.simpleObject('Permalink', {
+      fields: (t) => ({
+        siteUrl: t.string(),
+        entitySlug: t.string(),
+      }),
+    }),
     args: { permalink: t.arg.string() },
-    resolve: async (_, args, ctx) => {
+    resolve: async (_, args) => {
       const entity = await db
-        .select(getTableColumns(Entities))
+        .select({ siteSlug: Sites.slug, entitySlug: Entities.slug })
         .from(Entities)
+        .innerJoin(Sites, eq(Entities.siteId, Sites.id))
         .where(and(eq(Entities.permalink, args.permalink), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrowWith(new NotFoundError()));
 
-      if (entity.visibility === EntityVisibility.PRIVATE) {
-        await assertSitePermission({
-          userId: ctx.session?.userId,
-          siteId: entity.siteId,
-        }).catch(() => {
-          throw new NotFoundError();
-        });
-      }
-
-      return entity;
+      return {
+        siteUrl: env.USERSITE_URL.replace('*', entity.siteSlug),
+        entitySlug: entity.entitySlug,
+      };
     },
   }),
 }));

@@ -395,6 +395,11 @@ enum PaymentRecordState {
   SUCCEEDED
 }
 
+type Permalink {
+  entitySlug: String!
+  siteUrl: String!
+}
+
 input PersistBlobAsFileInput {
   path: String!
 }
@@ -527,9 +532,9 @@ type Query {
   creditCode(code: String!): CreditCode!
   entity(entityId: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!
-  entityViewByPermalink(permalink: String!): EntityView!
   image(imageId: ID!): Image!
   me: User
+  permalink(permalink: String!): Permalink!
   post(slug: String!): Post!
   randomName: String!
   search(query: String!, siteId: ID!): SearchResult!
