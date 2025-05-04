@@ -51,6 +51,10 @@
   const placeholderUrl = $derived(progressive ? thumbHashToDataURL(base64.parse($image.placeholder)) : undefined);
 
   const load = () => {
+    if (loaded) {
+      return;
+    }
+
     const imgEl = document.createElement('img');
 
     imgEl.addEventListener('load', async () => {
@@ -74,6 +78,8 @@
 
   $effect(() => {
     if (containerEl) {
+      loaded = false;
+
       const observer = new IntersectionObserver((entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
           load();
@@ -90,26 +96,28 @@
   });
 </script>
 
-{#if placeholderUrl}
-  <div
-    bind:this={containerEl}
-    style:aspect-ratio={ratio ?? $image.ratio}
-    class={css({
-      position: 'relative',
-      width: 'full',
-      overflow: 'hidden',
-    })}
-  >
-    <img class={css(style, { size: 'full', objectFit: 'cover' })} {alt} loading="lazy" src={placeholderUrl} {...rest} />
+{#key $image.url}
+  {#if placeholderUrl}
+    <div
+      bind:this={containerEl}
+      style:aspect-ratio={ratio ?? $image.ratio}
+      class={css({
+        position: 'relative',
+        width: 'full',
+        overflow: 'hidden',
+      })}
+    >
+      <img class={css(style, { size: 'full', objectFit: 'cover' })} {alt} loading="lazy" src={placeholderUrl} {...rest} />
 
-    {#if loaded}
-      <div
-        bind:this={targetEl}
-        class={css({ position: 'absolute', inset: '0', backgroundColor: 'white' })}
-        in:fade={{ duration: 200 }}
-      ></div>
-    {/if}
-  </div>
-{:else}
-  <img class={css(style)} {alt} loading="lazy" {sizes} {src} {srcset} {...rest} />
-{/if}
+      {#if loaded}
+        <div
+          bind:this={targetEl}
+          class={css({ position: 'absolute', inset: '0', backgroundColor: 'white' })}
+          in:fade={{ duration: 200 }}
+        ></div>
+      {/if}
+    </div>
+  {:else}
+    <img class={css(style)} {alt} loading="lazy" {sizes} {src} {srcset} {...rest} />
+  {/if}
+{/key}
