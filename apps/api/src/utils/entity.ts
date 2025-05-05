@@ -12,8 +12,10 @@ type MakeYDocParams = {
   subtitle?: string | null;
   maxWidth?: number;
   body: JSONContent;
+  storedMarks?: unknown[];
+  note?: string;
 };
-export const makeYDoc = ({ title, subtitle, maxWidth, body }: MakeYDocParams) => {
+export const makeYDoc = ({ title, subtitle, maxWidth, body, note, storedMarks }: MakeYDocParams) => {
   const node = Node.fromJSON(schema, body);
   const doc = new Y.Doc();
 
@@ -21,6 +23,8 @@ export const makeYDoc = ({ title, subtitle, maxWidth, body }: MakeYDocParams) =>
   map.set('title', title ?? '');
   map.set('subtitle', subtitle ?? '');
   map.set('maxWidth', maxWidth ?? 800);
+  map.set('storedMarks', storedMarks ?? []);
+  map.set('note', note ?? '');
 
   const fragment = doc.getXmlFragment('body');
   prosemirrorToYXmlFragment(node, fragment);

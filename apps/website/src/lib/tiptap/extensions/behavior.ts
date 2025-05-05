@@ -1,35 +1,43 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 
+const arrayOrNull = <T>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
+
 export const Behavior = Extension.create({
   name: 'behavior',
 
   addKeyboardShortcuts() {
     return {
       Backspace: ({ editor }) => {
-        const { doc, selection } = editor.state;
+        const { selection, storedMarks } = editor.state;
         const { $anchor, empty } = selection;
 
         const pos = $anchor.before(2);
         const block = $anchor.node(2);
 
-        if (empty && $anchor.parent.isTextblock && $anchor.parent.childCount === 0 && $anchor.parentOffset === 0) {
-          if (!['paragraph', 'bullet_list', 'ordered_list'].includes(block.type.name) && block.childCount === 0) {
-            return editor.chain().setNodeSelection(pos).deleteSelection().insertContentAt(pos, { type: 'paragraph' }).run();
-          }
-
-          const blockBefore = doc.childBefore(pos).node;
-          if (block.childCount === 0 && blockBefore?.isTextblock && blockBefore.childCount === 0) {
-            return editor
-              .chain()
-              .setNodeSelection(pos)
-              .deleteSelection()
-              .setTextSelection(pos - 1)
-              .run();
-          }
+        if (
+          empty &&
+          $anchor.parent.isTextblock &&
+          $anchor.parent.childCount === 0 &&
+          $anchor.parentOffset === 0 &&
+          !['paragraph', 'bullet_list', 'ordered_list'].includes(block.type.name) &&
+          block.childCount === 0
+        ) {
+          return editor.chain().setNodeSelection(pos).deleteSelection().insertContentAt(pos, { type: 'paragraph' }).run();
         }
 
-        return false;
+        const marks =
+          arrayOrNull(storedMarks) || arrayOrNull($anchor.marks()) || arrayOrNull($anchor.parent.firstChild?.firstChild?.marks) || null;
+
+        return editor
+          .chain()
+          .first(({ commands }) => [commands.deleteSelection, commands.joinBackward, commands.selectNodeBackward])
+          .command(({ tr, dispatch }) => {
+            tr.setStoredMarks(marks);
+            dispatch?.(tr);
+            return true;
+          })
+          .run();
       },
 
       // Enter: ({ editor }) => {

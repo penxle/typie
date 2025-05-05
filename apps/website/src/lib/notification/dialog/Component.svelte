@@ -30,7 +30,7 @@
       {dialog.title}
     </div>
 
-    <div class={css({ fontSize: '15px', color: 'gray.700' })}>
+    <div class={css({ fontSize: '15px', color: 'gray.700', whiteSpace: 'pre-wrap' })}>
       {dialog.message}
     </div>
 

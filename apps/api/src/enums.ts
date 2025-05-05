@@ -85,6 +85,12 @@ export const PostContentRating = {
   R19: 'R19',
 } as const;
 
+export type PostType = keyof typeof PostType;
+export const PostType = {
+  NORMAL: 'NORMAL',
+  TEMPLATE: 'TEMPLATE',
+} as const;
+
 export type PostSyncType = keyof typeof PostSyncType;
 export const PostSyncType = {
   HEARTBEAT: 'HEARTBEAT',

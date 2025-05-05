@@ -1,7 +1,7 @@
 <script lang="ts">
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { EntityVisibility } from '@/enums';
+  import { EntityVisibility, PostType } from '@/enums';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import { fragment, graphql } from '$graphql';
   import { tooltip } from '$lib/actions';
@@ -30,6 +30,7 @@
     graphql(`
       fragment Editor_Panel_post on Post {
         id
+        type
         createdAt
         updatedAt
 
@@ -79,7 +80,13 @@
   >
     <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>포스트</div>
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>
+          {#if $post.type === PostType.NORMAL}
+            포스트
+          {:else if $post.type === PostType.TEMPLATE}
+            템플릿
+          {/if}
+        </div>
 
         <a
           class={cx('group', center({ size: '20px' }))}
