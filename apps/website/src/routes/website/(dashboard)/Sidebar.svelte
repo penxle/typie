@@ -1,16 +1,20 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
+  import { fly } from 'svelte/transition';
   import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
+  import CircleFadingArrowUpIcon from '~icons/lucide/circle-fading-arrow-up';
   import CogIcon from '~icons/lucide/cog';
   import FolderIcon from '~icons/lucide/folder';
   import PlusIcon from '~icons/lucide/plus';
   import SearchIcon from '~icons/lucide/search';
   import { goto, pushState } from '$app/navigation';
+  import { updated } from '$app/state';
   import Favicon from '$assets/logos/favicon.svg?component';
   import { fragment, graphql } from '$graphql';
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
+  import { Dialog } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
@@ -151,6 +155,38 @@
   </div>
 
   <div class={css({ flexGrow: '1' })}></div>
+
+  {#if updated.current}
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <div in:fly={{ y: '4px', duration: 500 }}>
+        <SidebarButton
+          icon={CircleFadingArrowUpIcon}
+          iconStyle={css.raw({
+            color: 'brand.500',
+            animationName: 'alarm',
+            animationDuration: '2s',
+            animationDelay: '500ms',
+            animationIterationCount: 'infinite',
+            animationTimingFunction: 'cubic-bezier(0.36, 0.07, 0.19, 0.97)',
+          })}
+          label="새로운 업데이트가 있어요"
+          onclick={() => {
+            Dialog.confirm({
+              title: '새로운 업데이트가 있어요',
+              message: `이용 가능한 업데이트가 있어요. 새로고침 후 이용해주세요.`,
+              actionLabel: '새로고침',
+              actionHandler: () => {
+                location.reload();
+              },
+              cancelLabel: '나중에',
+            });
+
+            mixpanel.track('open_preference_modal', { via: 'sidebar' });
+          }}
+        />
+      </div>
+    </div>
+  {/if}
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
     <Announcements $posts={$query.announcements} />
