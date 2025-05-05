@@ -4,15 +4,17 @@
   import { center } from '$styled-system/patterns';
   import type { Component } from 'svelte';
   import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
+  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     as?: 'button' | 'a';
     icon: Component;
     label: string;
     active?: boolean;
+    iconStyle?: SystemStyleObject;
   } & (HTMLButtonAttributes | HTMLAnchorAttributes);
 
-  let { as = 'button', icon, label, active = false, ...rest }: Props = $props();
+  let { as = 'button', icon, label, active = false, iconStyle, ...rest }: Props = $props();
 </script>
 
 <svelte:element
@@ -36,5 +38,5 @@
   use:tooltip={{ message: label, placement: 'right', offset: 12 }}
   {...rest}
 >
-  <Icon {icon} size={20} />
+  <Icon style={iconStyle} {icon} size={20} />
 </svelte:element>
