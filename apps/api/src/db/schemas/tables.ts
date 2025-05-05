@@ -252,6 +252,7 @@ export const Posts = pgTable('posts', {
   allowComment: boolean('allow_comment').notNull().default(true),
   allowReaction: boolean('allow_reaction').notNull().default(true),
   protectContent: boolean('protect_content').notNull().default(true),
+  type: E._PostType('type').notNull().default('NORMAL'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -294,6 +295,7 @@ export const PostContents = pgTable('post_contents', {
   text: text('text').notNull(),
   characterCount: integer('character_count').notNull().default(0),
   blobSize: integer('blob_size').notNull().default(0),
+  storedMarks: jsonb('stored_marks').notNull().$type<unknown[]>().default([]),
   note: text('note').notNull().default(''),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),

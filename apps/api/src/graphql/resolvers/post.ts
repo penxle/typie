@@ -21,7 +21,15 @@ import {
   UserPersonalIdentities,
   validateDbId,
 } from '@/db';
-import { EntityState, EntityType, EntityVisibility, PostContentRating, PostSyncType, PostViewBodyUnavailableReason } from '@/enums';
+import {
+  EntityState,
+  EntityType,
+  EntityVisibility,
+  PostContentRating,
+  PostSyncType,
+  PostType,
+  PostViewBodyUnavailableReason,
+} from '@/enums';
 import { NotFoundError, TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
@@ -47,6 +55,8 @@ IPost.implement({
     allowComment: t.exposeBoolean('allowComment'),
     allowReaction: t.exposeBoolean('allowReaction'),
     protectContent: t.exposeBoolean('protectContent'),
+
+    type: t.expose('type', { type: PostType }),
 
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
@@ -101,6 +111,45 @@ Post.implement({
       },
     }),
 
+    body: t.field({
+      type: 'JSON',
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Post.body',
+          load: async (ids) => {
+            return await db
+              .select({ postId: PostContents.postId, body: PostContents.body })
+              .from(PostContents)
+              .where(inArray(PostContents.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        const content = await loader.load(self.id);
+
+        return content.body;
+      },
+    }),
+
+    storedMarks: t.field({
+      type: 'JSON',
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Post.storedMarks',
+          load: async (ids) => {
+            return await db
+              .select({ postId: PostContents.postId, storedMarks: PostContents.storedMarks })
+              .from(PostContents)
+              .where(inArray(PostContents.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        const content = await loader.load(self.id);
+
+        return content.storedMarks;
+      },
+    }),
     entity: t.expose('entityId', { type: Entity }),
 
     characterCountChange: t.withAuth({ session: true }).field({
@@ -465,6 +514,7 @@ builder.mutationFields((t) => ({
             text: PostContents.text,
             characterCount: PostContents.characterCount,
             blobSize: PostContents.blobSize,
+            storedMarks: PostContents.storedMarks,
             note: PostContents.note,
           },
         })
@@ -480,6 +530,8 @@ builder.mutationFields((t) => ({
         subtitle: post.subtitle,
         body: post.content.body,
         maxWidth: post.maxWidth,
+        storedMarks: post.content.storedMarks,
+        note: post.content.note,
       });
 
       const snapshot = Y.snapshot(doc);
@@ -619,6 +671,41 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
       });
+    },
+  }),
+
+  updatePostType: t.withAuth({ session: true }).fieldWithInput({
+    type: Post,
+    input: {
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+      type: t.input.field({ type: PostType }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const post = await db
+        .select({ siteId: Entities.siteId, entityId: Entities.id })
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(eq(Posts.id, input.postId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: post.siteId,
+      });
+
+      const updatedPost = await db
+        .update(Posts)
+        .set({
+          type: input.type,
+        })
+        .where(eq(Posts.id, input.postId))
+        .returning()
+        .then(firstOrThrow);
+
+      pubsub.publish('site:update', post.siteId, { scope: 'site' });
+      pubsub.publish('site:update', post.siteId, { scope: 'entity', entityId: post.entityId });
+
+      return updatedPost;
     },
   }),
 

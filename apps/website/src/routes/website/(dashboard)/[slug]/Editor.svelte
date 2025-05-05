@@ -1,7 +1,9 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
+  import { Mark } from '@tiptap/pm/model';
   import dayjs from 'dayjs';
+  import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -11,7 +13,7 @@
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostSyncType } from '@/enums';
+  import { PostSyncType, PostType } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CopyIcon from '~icons/lucide/copy';
@@ -20,6 +22,7 @@
   import FolderIcon from '~icons/lucide/folder';
   import PanelRightCloseIcon from '~icons/lucide/panel-right-close';
   import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
+  import ShapesIcon from '~icons/lucide/shapes';
   import TrashIcon from '~icons/lucide/trash';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
@@ -34,6 +37,7 @@
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
   import PanelNote from './PanelNote.svelte';
+  import Placeholder from './Placeholder.svelte';
   import { YState } from './state.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
@@ -57,6 +61,7 @@
 
         post(slug: $slug) {
           id
+          type
           update
 
           entity {
@@ -88,6 +93,7 @@
                 url
               }
 
+              ...Editor_Placeholder_site
               ...Editor_Toolbar_site
             }
           }
@@ -112,6 +118,27 @@
         entity {
           id
           slug
+        }
+      }
+    }
+  `);
+
+  const updatePostType = graphql(`
+    mutation Editor_UpdatePostType_Mutation($input: UpdatePostTypeInput!) {
+      updatePostType(input: $input) {
+        id
+        type
+
+        entity {
+          id
+
+          site {
+            id
+
+            templates {
+              id
+            }
+          }
         }
       }
     }
@@ -152,6 +179,7 @@
   const title = new YState<string>(doc, 'title', '');
   const subtitle = new YState<string>(doc, 'subtitle', '');
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
+  const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
@@ -253,7 +281,11 @@
       color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
     });
 
-    editor?.current.commands.setTextSelection(0);
+    if (editor) {
+      const { tr, schema } = editor.current.state;
+      tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
+      editor.current.view.dispatch(tr);
+    }
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
     const heartbeatInterval = setInterval(() => {
@@ -275,6 +307,24 @@
     app.state.ancestors = $query.post.entity.ancestors.map((ancestor) => ancestor.id);
     app.state.current = $query.post.entity.id;
 
+    const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
+
+    const handler = ({ editor }: { editor: Editor }) => {
+      const marks =
+        arrayOrNull(editor.state.storedMarks) ||
+        arrayOrNull(editor.state.selection.$anchor.marks()) ||
+        arrayOrNull(editor.state.selection.$anchor.parent.firstChild?.firstChild?.marks) ||
+        [];
+
+      const jsonMarks = marks.map((mark) => mark.toJSON());
+
+      if (stringify(storedMarks.current) !== stringify(jsonMarks)) {
+        storedMarks.current = jsonMarks;
+      }
+    };
+
+    editor?.current.on('transaction', handler);
+
     return () => {
       off();
 
@@ -283,6 +333,8 @@
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
+
+      editor?.current.off('transaction', handler);
 
       persistence.destroy();
       awareness.destroy();
@@ -398,6 +450,40 @@
             복제
           </MenuItem>
 
+          {#if $query.post.type === PostType.NORMAL}
+            <MenuItem
+              icon={ShapesIcon}
+              onclick={() => {
+                Dialog.confirm({
+                  title: '템플릿으로 전환',
+                  message: '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
+                  actionLabel: '전환',
+                  actionHandler: async () => {
+                    await updatePostType({ postId: $query.post.id, type: PostType.TEMPLATE });
+                  },
+                });
+              }}
+            >
+              템플릿으로 전환
+            </MenuItem>
+          {:else if $query.post.type === PostType.TEMPLATE}
+            <MenuItem
+              icon={ShapesIcon}
+              onclick={() => {
+                Dialog.confirm({
+                  title: '포스트로 전환',
+                  message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
+                  actionLabel: '전환',
+                  actionHandler: async () => {
+                    await updatePostType({ postId: $query.post.id, type: PostType.NORMAL });
+                  },
+                });
+              }}
+            >
+              포스트로 전환
+            </MenuItem>
+          {/if}
+
           <HorizontalDivider color="secondary" />
 
           <MenuItem
@@ -504,7 +590,17 @@
 
                 if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
                   e.preventDefault();
-                  editor?.current.chain().focus().setTextSelection(2).run();
+                  const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+                  editor?.current
+                    .chain()
+                    .focus()
+                    .setTextSelection(2)
+                    .command(({ tr, dispatch }) => {
+                      tr.setStoredMarks(marks);
+                      dispatch?.(tr);
+                      return true;
+                    })
+                    .run();
                 }
               }}
               placeholder="부제목을 입력하세요"
@@ -517,27 +613,33 @@
             <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
           </div>
 
-          <TiptapEditor
-            style={css.raw({ flexGrow: '1', width: 'full' })}
-            {awareness}
-            {doc}
-            oncreate={() => {
-              titleEl?.focus();
-            }}
-            onkeydown={(view, e) => {
-              const { doc, selection } = view.state;
-              const { anchor } = selection;
+          <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+            <TiptapEditor
+              style={css.raw({ size: 'full' })}
+              {awareness}
+              {doc}
+              oncreate={() => {
+                titleEl?.focus();
+              }}
+              onkeydown={(view, e) => {
+                const { doc, selection } = view.state;
+                const { anchor } = selection;
 
-              if (
-                ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
-                (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
-              ) {
-                e.preventDefault();
-                subtitleEl?.focus();
-              }
-            }}
-            bind:editor
-          />
+                if (
+                  ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+                  (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+                ) {
+                  e.preventDefault();
+                  subtitleEl?.focus();
+                }
+              }}
+              bind:editor
+            />
+
+            {#if editor}
+              <Placeholder $site={$query.post.entity.site} {doc} {editor} />
+            {/if}
+          </div>
         </div>
       </div>
 

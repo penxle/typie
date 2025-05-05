@@ -234,6 +234,7 @@ interface IPost {
   protectContent: Boolean!
   subtitle: String
   title: String!
+  type: PostType!
   updatedAt: DateTime!
 }
 
@@ -327,6 +328,7 @@ type Mutation {
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
   updatePaymentBillingKey(input: UpdatePaymentBillingKeyInput!): PaymentBillingKey!
   updatePostOption(input: UpdatePostOptionInput!): Post!
+  updatePostType(input: UpdatePostTypeInput!): Post!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
@@ -433,6 +435,7 @@ type PlanRule {
 type Post implements IPost {
   allowComment: Boolean!
   allowReaction: Boolean!
+  body: JSON!
   characterCountChange: CharacterCountChange!
   contentRating: PostContentRating!
   coverImage: Image
@@ -443,8 +446,10 @@ type Post implements IPost {
   maxWidth: Int!
   password: String
   protectContent: Boolean!
+  storedMarks: JSON!
   subtitle: String
   title: String!
+  type: PostType!
   update: Binary!
   updatedAt: DateTime!
   view: PostView!
@@ -476,6 +481,11 @@ enum PostSyncType {
   VECTOR
 }
 
+enum PostType {
+  NORMAL
+  TEMPLATE
+}
+
 type PostView implements IPost {
   allowComment: Boolean!
   allowReaction: Boolean!
@@ -493,6 +503,7 @@ type PostView implements IPost {
   reactions: [PostReaction!]!
   subtitle: String
   title: String!
+  type: PostType!
   updatedAt: DateTime!
 }
 
@@ -610,6 +621,7 @@ type Site implements ISite {
   id: ID!
   name: String!
   slug: String!
+  templates: [Post!]!
   url: String!
   usage: SiteUsage!
   user: User!
@@ -687,6 +699,11 @@ input UpdatePostOptionInput {
   postId: ID!
   protectContent: Boolean!
   visibility: EntityVisibility!
+}
+
+input UpdatePostTypeInput {
+  postId: ID!
+  type: PostType!
 }
 
 input UpdateSiteSlugInput {

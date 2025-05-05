@@ -1,11 +1,12 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
-  import { EntityVisibility } from '@/enums';
+  import { EntityVisibility, PostType } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import FileIcon from '~icons/lucide/file';
+  import ShapesIcon from '~icons/lucide/shapes';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
@@ -27,6 +28,7 @@
     graphql(`
       fragment DashboardLayout_EntityTree_Post_post on Post {
         id
+        type
         title
 
         entity {
@@ -118,7 +120,11 @@
     )}
   ></div>
 
-  <Icon style={css.raw({ color: 'gray.500' })} icon={FileIcon} size={14} />
+  {#if $post.type === PostType.NORMAL}
+    <Icon style={css.raw({ color: 'gray.500' })} icon={FileIcon} size={14} />
+  {:else if $post.type === PostType.TEMPLATE}
+    <Icon style={css.raw({ color: 'gray.500' })} icon={ShapesIcon} size={14} />
+  {/if}
 
   <span
     class={css(

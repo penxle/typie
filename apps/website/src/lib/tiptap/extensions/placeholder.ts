@@ -37,7 +37,7 @@ export const Placeholder = Extension.create({
               ($anchor.parent.attrs.textAlign === 'left' || $anchor.parent.attrs.textAlign === 'justify') &&
               $anchor.parent.childCount === 0;
 
-            if (currentBodyEmpty || currentParagraphEmpty) {
+            if (!currentBodyEmpty && currentParagraphEmpty) {
               decorations.push(
                 createDecoration(
                   $anchor.pos <= 2 ? 1 : $anchor.before(),

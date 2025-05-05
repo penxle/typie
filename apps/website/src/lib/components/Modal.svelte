@@ -35,7 +35,7 @@
 {#if open}
   <div
     class={center({ position: 'fixed', inset: '0', zIndex: '50', padding: '20px', userSelect: 'none' })}
-    use:focusTrap={{ fallbackFocus: '[role="none"]', escapeDeactivates: false }}
+    use:focusTrap={{ fallbackFocus: '[role="none"]', escapeDeactivates: false, returnFocusOnDeactivate: false }}
     use:portal
   >
     <div

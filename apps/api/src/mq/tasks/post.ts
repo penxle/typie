@@ -130,6 +130,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       const maxWidth = (map.get('maxWidth') as number) ?? 800;
       const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
       const note = (map.get('note') as string) || '';
+      const storedMarks = (map.get('storedMarks') as unknown[]) ?? [];
 
       const fragment = doc.getXmlFragment('body');
       const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
@@ -159,6 +160,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
           text,
           characterCount,
           blobSize,
+          storedMarks,
           note,
           updatedAt,
         })
