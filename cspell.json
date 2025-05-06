@@ -8,7 +8,7 @@
   },
   "enableGlobDot": true,
   "useGitignore": true,
-  "ignorePaths": [".git", ".gitignore", ".vscode", ".cursor", "*.svg", "CODEOWNERS", "drizzle", "naver*.html"],
+  "ignorePaths": [".git", ".gitignore", ".vscode", ".cursor", "pnpm-lock.yaml", "*.svg", "CODEOWNERS", "drizzle", "naver*.html"],
   "dictionaries": ["cspell.txt"],
   "dictionaryDefinitions": [
     {

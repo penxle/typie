@@ -1,4 +1,4 @@
-import { createBunWebSocket } from 'hono/bun';
-import type { ServerWebSocket } from 'bun';
+import { createNodeWebSocket } from '@hono/node-ws';
+import { app } from './app';
 
-export const { websocket, upgradeWebSocket } = createBunWebSocket<ServerWebSocket>();
+export const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });

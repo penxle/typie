@@ -3,11 +3,6 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "crates/*",
-    "packages/*"
-  ],
   "scripts": {
     "bootstrap": "husky && doppler setup --no-interactive",
     "build": "turbo run build",
@@ -31,8 +26,5 @@
     "turbo": "^2.5.2",
     "typescript": "^5.8.3"
   },
-  "packageManager": "bun@1.0.0",
-  "trustedDependencies": [
-    "@mongodb-js/zstd"
-  ]
+  "packageManager": "pnpm@10.10.0"
 }

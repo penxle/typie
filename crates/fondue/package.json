@@ -6,7 +6,7 @@
   "main": "out/index.js",
   "types": "out/index.d.ts",
   "scripts": {
-    "build:napi": "bun run build:napi:linux-arm64 && bun run build:napi:macos-arm64",
+    "build:napi": "pnpm build:napi:linux-arm64 && pnpm build:napi:macos-arm64",
     "build:napi:linux-arm64": "napi build --release --platform --js=false --zig --target=aarch64-unknown-linux-gnu out",
     "build:napi:macos-arm64": "napi build --release --platform --js=false --target=aarch64-apple-darwin out"
   },

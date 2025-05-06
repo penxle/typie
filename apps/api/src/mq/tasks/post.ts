@@ -1,3 +1,4 @@
+import stringHash from '@sindresorhus/string-hash';
 import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
 import { eq, sql } from 'drizzle-orm';
@@ -34,7 +35,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
   let snapshotUpdated = false;
 
   await db.transaction(async (tx) => {
-    const hashKey = Bun.hash.xxHash32(`post:sync:collect:${postId}`);
+    const hashKey = stringHash(`post:sync:collect:${postId}`);
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${hashKey})`);
 
     updates = await redis.smembers(`post:sync:updates:${postId}`);

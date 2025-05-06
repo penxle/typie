@@ -16,8 +16,8 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
+    "@hono/node-server": "^1.14.1",
     "@sveltejs/kit": "^2.20.8",
-    "@types/bun": "^1.2.11",
     "@typie/tsconfig": "workspace:*",
     "dayjs": "^1.11.13",
     "hono": "^4.7.8",

@@ -1,4 +1,4 @@
-import { bun } from '@typie/adapter-bun';
+import { node } from '@typie/adapter-node';
 import { sveltePreprocess } from 'svelte-preprocess';
 
 /** @type {import('@sveltejs/kit').Config} */
@@ -6,7 +6,7 @@ export default {
   preprocess: sveltePreprocess(),
 
   kit: {
-    adapter: bun(),
+    adapter: node(),
     alias: {
       '@/*': '../api/src/*',
       '$assets/*': './src/assets/*',

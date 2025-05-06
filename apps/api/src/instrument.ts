@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import { dev, env, stack } from '@/env';
 
 Sentry.init({
