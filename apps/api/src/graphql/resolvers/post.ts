@@ -805,7 +805,11 @@ builder.mutationFields((t) => ({
           }),
         );
 
-        await enqueueJob('post:sync:collect', input.postId);
+        await enqueueJob('post:sync:collect', input.postId, {
+          deduplication: {
+            id: `post:sync:collect:${input.postId}`,
+          },
+        });
       } else if (input.type === PostSyncType.VECTOR) {
         const state = await getPostDocument(input.postId);
         const update = Y.diffUpdateV2(state.update, base64.parse(input.data));
