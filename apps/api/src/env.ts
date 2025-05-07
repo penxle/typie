@@ -20,6 +20,7 @@ const schema = z.object({
   PUBLIC_PULUMI_STACK: z.string().optional(),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
+  SLACK_REPORT_WEBHOOK_URL: z.string(),
   USERSITE_URL: z.string(),
   WEBSITE_URL: z.string(),
 });
