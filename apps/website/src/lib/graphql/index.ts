@@ -2,6 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { cacheExchange, createClient, errorExchange, fetchExchange, GraphQLError, NetworkError, wsExchange } from '@typie/sark';
 import ky from 'ky';
 import { TypieError } from '@/errors';
+import { browser } from '$app/environment';
 import { env } from '$env/dynamic/public';
 
 // eslint-disable-next-line import/no-default-export
@@ -24,26 +25,30 @@ export default createClient({
     }),
     cacheExchange(),
     fetchExchange(),
-    wsExchange(`${env.PUBLIC_API_URL}/graphql`, {
-      connectionParams: async () => {
-        const resp = await ky
-          .post(`/graphql`, {
-            json: {
-              operationName: 'WsExchange_CreateWsSession_Mutation',
-              query: /* GraphQL */ `
-                mutation WsExchange_CreateWsSession_Mutation {
-                  createWsSession
-                }
-              `,
-            },
-          })
-          .json<{ data: { createWsSession: string } }>();
+    ...(browser
+      ? [
+          wsExchange(`${env.PUBLIC_API_URL}/graphql`, {
+            connectionParams: async () => {
+              const resp = await ky
+                .post(`/graphql`, {
+                  json: {
+                    operationName: 'WsExchange_CreateWsSession_Mutation',
+                    query: /* GraphQL */ `
+                      mutation WsExchange_CreateWsSession_Mutation {
+                        createWsSession
+                      }
+                    `,
+                  },
+                })
+                .json<{ data: { createWsSession: string } }>();
 
-        return {
-          session: resp.data.createWsSession,
-        };
-      },
-    }),
+              return {
+                session: resp.data.createWsSession,
+              };
+            },
+          }),
+        ]
+      : []),
   ],
   onError: (err, event) => {
     if (err instanceof TypieError) {

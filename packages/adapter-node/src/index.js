@@ -8,11 +8,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /**
  * @returns {import("@sveltejs/kit").Adapter}
  */
-export const bun = () => {
+export const node = () => {
   return {
-    name: '@typie/adapter-bun',
+    name: '@typie/adapter-node',
     adapt: async (builder) => {
-      const tmp = builder.getBuildDirectory('adapter-bun');
+      const tmp = builder.getBuildDirectory('adapter-node');
       const out = 'dist';
 
       builder.rimraf(tmp);

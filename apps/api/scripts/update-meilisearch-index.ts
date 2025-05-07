@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import { eq } from 'drizzle-orm';
 import { db, Entities, PostContents, Posts } from '@/db';

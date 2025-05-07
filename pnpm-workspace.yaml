@@ -1,0 +1,5 @@
+includeWorkspaceRoot: true
+packages:
+  - 'apps/*'
+  - 'crates/*'
+  - 'packages/*'

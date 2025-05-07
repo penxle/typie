@@ -13,4 +13,15 @@ export default defineConfig([
       options.packages = 'external';
     },
   },
+  {
+    entry: {
+      cli: 'src/codegen/cli.ts',
+    },
+    format: ['esm'],
+    external: [/^\$/],
+
+    esbuildOptions: (options) => {
+      options.packages = 'external';
+    },
+  },
 ]);

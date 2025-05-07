@@ -1,5 +1,6 @@
 import { GetObjectTaggingCommand, PutObjectTaggingCommand } from '@aws-sdk/client-s3';
 import { faker } from '@faker-js/faker';
+import * as argon2 from 'argon2';
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import { setCookie } from 'hono/cookie';
@@ -49,7 +50,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'password_not_set' });
       }
 
-      if (!(await Bun.password.verify(input.password, user.password))) {
+      if (!(await argon2.verify(user.password, input.password))) {
         throw new TypieError({ code: 'invalid_credentials' });
       }
 
@@ -88,7 +89,7 @@ builder.mutationFields((t) => ({
         24 * 60 * 60,
         JSON.stringify({
           email,
-          password: await Bun.password.hash(input.password),
+          password: await argon2.hash(input.password),
           name: input.name,
           state: input.state,
           marketingAgreed: input.marketingAgreed,
@@ -300,7 +301,7 @@ builder.mutationFields((t) => ({
 
       await db
         .update(Users)
-        .set({ password: await Bun.password.hash(input.password) })
+        .set({ password: await argon2.hash(input.password) })
         .where(eq(Users.email, email));
 
       await redis.del(`auth:reset-password:${input.code}`);

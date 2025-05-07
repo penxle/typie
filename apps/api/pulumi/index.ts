@@ -13,7 +13,7 @@ const app = new typie.App('api', {
   image: {
     name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/typie',
     digest: config.require('digest'),
-    command: ['bun', 'run', 'apps/api/index.js'],
+    command: ['node', 'apps/api/index.js'],
   },
 
   resources: {

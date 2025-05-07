@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import { eq } from 'drizzle-orm';
 import { CreditCodes, db, firstOrThrow, PreorderUsers } from '@/db';
@@ -6,7 +6,7 @@ import { sendEmail } from '@/email';
 import { PreorderCodeEmail } from '@/email/templates';
 
 if (!process.argv[2]) {
-  console.error('Usage: bun scripts/resend-preorder-mail.ts <email>');
+  console.error('Usage: node scripts/resend-preorder-mail.ts <email>');
   process.exit(1);
 }
 

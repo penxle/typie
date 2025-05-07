@@ -1,5 +1,5 @@
 {
-  "name": "@typie/adapter-bun",
+  "name": "@typie/adapter-node",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -16,8 +16,8 @@
     "hono-compress": "^0.7.0"
   },
   "devDependencies": {
+    "@hono/node-server": "^1.14.1",
     "@sveltejs/kit": "^2.20.8",
-    "@types/bun": "^1.2.11",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "hono": "^4.7.8",
