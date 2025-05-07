@@ -27,6 +27,7 @@
     "@react-email/components": "^0.0.38",
     "@resvg/resvg-js": "^2.6.2",
     "@sentry/bun": "^9.15.0",
+    "@sesamecare-oss/redlock": "^1.4.0",
     "@sindresorhus/string-hash": "^2.0.0",
     "@tiptap/core": "^2.11.9",
     "@tiptap/html": "^2.11.9",
