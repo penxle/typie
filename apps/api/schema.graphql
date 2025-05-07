@@ -316,6 +316,7 @@ type Mutation {
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
   removeSiteFont(input: RemoveSiteFontInput!): Site!
   renameFolder(input: RenameFolderInput!): Folder!
+  reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
@@ -566,6 +567,11 @@ input RemoveSiteFontInput {
 input RenameFolderInput {
   folderId: ID!
   name: String!
+}
+
+input ReportPostInput {
+  postId: ID!
+  reason: String
 }
 
 input ResetPasswordInput {

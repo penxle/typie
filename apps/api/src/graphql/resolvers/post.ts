@@ -19,6 +19,7 @@ import {
   PostSnapshots,
   TableCode,
   UserPersonalIdentities,
+  Users,
   validateDbId,
 } from '@/db';
 import {
@@ -30,12 +31,14 @@ import {
   PostType,
   PostViewBodyUnavailableReason,
 } from '@/enums';
+import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
+import { logToSlack } from '@/utils/slack';
 import { builder } from '../builder';
 import { CharacterCountChange, Comment, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostView } from '../objects';
 
@@ -825,6 +828,42 @@ builder.mutationFields((t) => ({
           data: input.data,
         });
       }
+
+      return true;
+    },
+  }),
+
+  reportPost: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: {
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+      reason: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const post = await db
+        .select({
+          id: Posts.id,
+          title: Posts.title,
+          permalink: Entities.permalink,
+        })
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(eq(Posts.id, input.postId))
+        .then(firstOrThrow);
+
+      const user = await db
+        .select({ id: Users.id, name: Users.name, email: Users.email })
+        .from(Users)
+        .where(eq(Users.id, ctx.session.userId))
+        .then(firstOrThrow);
+
+      logToSlack('report', {
+        content: `${post.title}(${post.id}) 포스트 신고
+        신고자: ${user.name}(${user.id}, ${user.email})
+        이유: ${input.reason}
+        ${env.USERSITE_URL.replace('*.', '')}/${post.permalink}
+        `,
+      });
 
       return true;
     },
