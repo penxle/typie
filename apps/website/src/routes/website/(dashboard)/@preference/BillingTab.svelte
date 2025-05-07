@@ -51,6 +51,12 @@
             name
             fee
           }
+
+          nextInvoice {
+            id
+            amount
+            billingAt
+          }
         }
       }
     `),
@@ -217,8 +223,8 @@
           {dayjs($user.plan.createdAt).formatAsDate()} - {dayjs($user.plan.expiresAt).formatAsDate()}
 
           <span class={css({ fontSize: '12px', color: 'gray.400' })}>
-            {#if $user.plan.state === 'ACTIVE'}
-              ({dayjs($user.plan.expiresAt).formatAsDate()}에 {comma($user.plan.fee)}원 결제 예정)
+            {#if $user.plan.nextInvoice}
+              ({dayjs($user.plan.nextInvoice.billingAt).formatAsDate()}에 {comma($user.plan.nextInvoice.amount)}원 결제 예정)
             {:else}
               ({dayjs($user.plan.expiresAt).formatAsDate()} 해지 예정)
             {/if}
