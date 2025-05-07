@@ -35,8 +35,12 @@
       open = false;
     },
     onError: (error) => {
-      if (error instanceof TypieError && error.code === 'invalid_code') {
-        throw new FormError('code', '유효하지 않은 할인 코드입니다.');
+      if (error instanceof TypieError) {
+        if (error.code === 'invalid_code') {
+          throw new FormError('code', '유효하지 않은 할인 코드입니다.');
+        } else if (error.code === 'already_redeemed') {
+          throw new FormError('code', '이미 등록된 할인 코드입니다.');
+        }
       }
     },
   });
