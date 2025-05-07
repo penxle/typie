@@ -506,13 +506,18 @@ builder.mutationFields((t) => ({
 
       const code = input.code.toUpperCase().replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1');
 
-      const creditCode = await db
-        .select({ id: CreditCodes.id, state: CreditCodes.state, amount: CreditCodes.amount })
-        .from(CreditCodes)
-        .where(and(eq(CreditCodes.code, code), eq(CreditCodes.state, CreditCodeState.AVAILABLE), gt(CreditCodes.expiresAt, dayjs())))
-        .then(firstOrThrowWith(new TypieError({ code: 'invalid_code' })));
-
       return await db.transaction(async (tx) => {
+        const creditCode = await tx
+          .select({ id: CreditCodes.id, state: CreditCodes.state, amount: CreditCodes.amount })
+          .from(CreditCodes)
+          .where(and(eq(CreditCodes.code, code), gt(CreditCodes.expiresAt, dayjs())))
+          .for('update')
+          .then(firstOrThrowWith(new TypieError({ code: 'invalid_code' })));
+
+        if (creditCode.state === CreditCodeState.USED) {
+          throw new TypieError({ code: 'already_redeemed' });
+        }
+
         await tx
           .update(CreditCodes)
           .set({
