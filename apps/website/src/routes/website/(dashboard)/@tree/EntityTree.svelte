@@ -79,6 +79,8 @@
 
   let tree = $state<HTMLElement>();
   let dragging = $state<Dragging | null>(null);
+  let pointerType = $state<PointerEvent['pointerType']>('mouse');
+  let dragTimeout = $state<NodeJS.Timeout | null>(null);
 
   const handlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
     const element = (e.target as HTMLElement).closest<HTMLElement>('[data-id]');
@@ -87,16 +89,34 @@
       return;
     }
 
-    dragging = {
-      eligible: false,
-      event: e,
-      element,
-      indicator: {},
-    };
+    pointerType = e.pointerType;
+
+    if (pointerType === 'mouse') {
+      dragging = {
+        eligible: false,
+        event: e,
+        element,
+        indicator: {},
+      };
+    } else {
+      dragTimeout = setTimeout(() => {
+        dragging = {
+          eligible: false,
+          event: e,
+          element,
+          indicator: {},
+        };
+      }, 50);
+    }
   };
 
   const handlePointerMove: PointerEventHandler<HTMLDivElement> = (e) => {
     if (!dragging || !tree) {
+      if (dragTimeout) {
+        clearTimeout(dragTimeout);
+        dragTimeout = null;
+      }
+
       return;
     }
 
@@ -209,6 +229,11 @@
 
   const handlePointerUp: PointerEventHandler<HTMLDivElement> = async () => {
     if (!dragging) {
+      if (dragTimeout) {
+        clearTimeout(dragTimeout);
+        dragTimeout = null;
+      }
+
       return;
     }
 
@@ -239,7 +264,12 @@
       return;
     }
 
-    if (dragging.eligible) {
+    if (dragTimeout) {
+      clearTimeout(dragTimeout);
+      dragTimeout = null;
+    }
+
+    if (dragging.eligible && dragging.element.hasPointerCapture(dragging.event.pointerId)) {
       dragging.element.releasePointerCapture(dragging.event.pointerId);
     }
 
@@ -248,7 +278,11 @@
 </script>
 
 <svelte:window
-  oncontextmenu={() => cancelDragging()}
+  oncontextmenu={() => {
+    if (pointerType === 'mouse') {
+      cancelDragging();
+    }
+  }}
   onkeydown={(e) => {
     if (e.key === 'Escape') {
       cancelDragging();
@@ -292,7 +326,7 @@
         borderRadius: '2px',
         backgroundColor: 'brand.200',
         pointerEvents: 'none',
-        zIndex: '[1000]',
+        zIndex: '1',
       })}
       use:portal
       transition:fade|global={{ duration: 100 }}
