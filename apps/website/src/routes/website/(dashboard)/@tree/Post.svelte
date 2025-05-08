@@ -89,7 +89,7 @@
         paddingY: '6px',
         borderRadius: '6px',
         transition: 'common',
-        _hover: { backgroundColor: 'gray.100' },
+        _supportHover: { backgroundColor: 'gray.100' },
         '&:has([aria-pressed="true"])': { backgroundColor: 'gray.100' },
       },
       $post.entity.depth > 0 && {
@@ -97,7 +97,7 @@
         borderLeftRadius: '0',
         marginLeft: '-1px',
         paddingLeft: '14px',
-        _hover: { borderLeftColor: 'gray.300' },
+        _supportHover: { borderLeftColor: 'gray.300' },
       },
       active && {
         backgroundColor: 'gray.100',
