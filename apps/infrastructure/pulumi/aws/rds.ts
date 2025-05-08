@@ -38,6 +38,9 @@ const cluster = new aws.rds.Cluster('typie', {
   engineMode: 'provisioned',
   engineVersion: '17.4',
 
+  // spell-checker:disable-next-line
+  storageType: 'aurora-iopt1',
+
   dbClusterParameterGroupName: parameterGroup.name,
 
   dbSubnetGroupName: subnetGroup.name,
