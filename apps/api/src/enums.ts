@@ -78,6 +78,10 @@ export const PlanAvailability = {
   PRIVATE: 'PRIVATE',
 } as const;
 
+export const PostAvailableAction = {
+  EDIT: 'EDIT',
+} as const;
+
 export type PostContentRating = keyof typeof PostContentRating;
 export const PostContentRating = {
   ALL: 'ALL',

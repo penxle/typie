@@ -225,6 +225,7 @@ interface IFolder {
 interface IPost {
   allowComment: Boolean!
   allowReaction: Boolean!
+  availableActions: [PostAvailableAction!]!
   contentRating: PostContentRating!
   coverImage: Image
   createdAt: DateTime!
@@ -436,6 +437,7 @@ type PlanRule {
 type Post implements IPost {
   allowComment: Boolean!
   allowReaction: Boolean!
+  availableActions: [PostAvailableAction!]!
   body: JSON!
   characterCountChange: CharacterCountChange!
   contentRating: PostContentRating!
@@ -454,6 +456,10 @@ type Post implements IPost {
   update: Binary!
   updatedAt: DateTime!
   view: PostView!
+}
+
+enum PostAvailableAction {
+  EDIT
 }
 
 enum PostContentRating {
@@ -490,6 +496,7 @@ enum PostType {
 type PostView implements IPost {
   allowComment: Boolean!
   allowReaction: Boolean!
+  availableActions: [PostAvailableAction!]!
   body: PostViewBody!
   comments: [Comment!]!
   contentRating: PostContentRating!
