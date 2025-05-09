@@ -5,7 +5,6 @@
   import qs from 'query-string';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
-  import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
   import LockIcon from '~icons/lucide/lock';
   import MessageCircleIcon from '~icons/lucide/message-circle';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';
@@ -21,6 +20,7 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import EmojiReaction from './EmojiReaction.svelte';
+  import PostActionMenu from './PostActionMenu.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { Optional, UsersiteWildcardSlugPage_PostView_entityView, UsersiteWildcardSlugPage_PostView_user } from '$graphql';
 
@@ -104,6 +104,8 @@
             url
           }
         }
+
+        ...UsersiteWildcardSlugPage_PostActionMenu_entityView
       }
     `),
   );
@@ -324,9 +326,7 @@
             <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'gray.600' })}>
               <ShareLinkPopover href={$entityView.url} />
 
-              <button class={css({ borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'gray.100' } })} type="button">
-                <Icon icon={EllipsisVerticalIcon} size={18} />
-              </button>
+              <PostActionMenu {$entityView} />
             </div>
           </div>
 
@@ -358,9 +358,7 @@
             <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'gray.600' })}>
               <ShareLinkPopover href={$entityView.url} />
 
-              <button class={css({ borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'gray.100' } })} type="button">
-                <Icon icon={EllipsisVerticalIcon} size={18} />
-              </button>
+              <PostActionMenu {$entityView} />
             </div>
           </div>
         {:else if $entityView.node.body.__typename === 'PostViewBodyUnavailable'}
