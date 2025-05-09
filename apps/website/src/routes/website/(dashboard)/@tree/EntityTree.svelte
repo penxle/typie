@@ -326,7 +326,7 @@
         borderRadius: '2px',
         backgroundColor: 'brand.200',
         pointerEvents: 'none',
-        zIndex: '1',
+        zIndex: '50',
       })}
       use:portal
       transition:fade|global={{ duration: 100 }}
