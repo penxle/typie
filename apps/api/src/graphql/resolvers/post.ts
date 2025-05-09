@@ -26,6 +26,7 @@ import {
   EntityState,
   EntityType,
   EntityVisibility,
+  PostAvailableAction,
   PostContentRating,
   PostSyncType,
   PostType,
@@ -81,6 +82,32 @@ IPost.implement({
         const text = content.text.replaceAll(/\s+/g, ' ').trim();
 
         return text.length <= 200 ? text : text.slice(0, 200) + '...';
+      },
+    }),
+
+    availableActions: t.field({
+      type: [PostAvailableAction],
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Post.availableActions',
+          load: async (ids) => {
+            return await db
+              .select({ postId: Posts.id, entityId: Entities.id, siteId: Entities.siteId })
+              .from(Posts)
+              .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+              .where(inArray(Posts.id, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        const post = await loader.load(self.id);
+
+        return await Promise.allSettled([
+          assertSitePermission({
+            userId: ctx.session?.userId,
+            siteId: post.siteId,
+          }).then(() => PostAvailableAction.EDIT),
+        ]).then((results) => results.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value));
       },
     }),
   }),
