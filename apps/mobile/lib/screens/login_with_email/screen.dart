@@ -3,6 +3,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:luthor/luthor.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/error.dart';
 import 'package:typie/hooks/service.dart';
@@ -43,7 +44,9 @@ class LoginWithEmailScreen extends HookWidget {
             );
           } on TypieError catch (e) {
             if (e.code == 'invalid_credentials') {
-              form.setError('password', '이메일 주소 또는 비밀번호가 올바르지 않습니다.');
+              if (context.mounted) {
+                context.toast.show(ToastType.error, '이메일 주소 또는 비밀번호가 올바르지 않습니다.');
+              }
             }
           }
         },
@@ -52,8 +55,19 @@ class LoginWithEmailScreen extends HookWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             spacing: 16,
             children: [
-              const FormTextField(name: 'email', labelText: 'Email'),
-              const FormTextField(name: 'password', labelText: 'Password', obscureText: true),
+              const FormTextField(
+                name: 'email',
+                labelText: 'Email',
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+              ),
+              const FormTextField(
+                name: 'password',
+                labelText: 'Password',
+                obscureText: true,
+                keyboardType: TextInputType.visiblePassword,
+                textInputAction: TextInputAction.done,
+              ),
               Tappable(
                 child: const Text('Login'),
                 onTap: () {
