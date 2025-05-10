@@ -12,6 +12,7 @@ class Screen extends StatelessWidget {
     this.appBar,
     this.bottomBorder = true,
     this.resizeToAvoidBottomInset = true,
+    this.padding,
     this.backgroundColor = AppColors.white,
   });
 
@@ -22,6 +23,7 @@ class Screen extends StatelessWidget {
   final bool useSafeArea;
   final bool bottomBorder;
   final bool resizeToAvoidBottomInset;
+  final EdgeInsets? padding;
   final Color backgroundColor;
 
   @override
@@ -38,7 +40,13 @@ class Screen extends StatelessWidget {
             bottomBorder: bottomBorder,
           ),
       body: SizedBox.expand(
-        child: useSafeArea ? SafeArea(maintainBottomViewPadding: resizeToAvoidBottomInset, child: child) : child,
+        child:
+            useSafeArea
+                ? SafeArea(
+                  maintainBottomViewPadding: resizeToAvoidBottomInset,
+                  child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+                )
+                : Padding(padding: padding ?? EdgeInsets.zero, child: child),
       ),
     );
   }

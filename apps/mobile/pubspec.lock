@@ -225,6 +225,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.5"
+  custom_lint_builder:
+    dependency: transitive
+    description:
+      name: custom_lint_builder
+      sha256: "107e0a43606138015777590ee8ce32f26ba7415c25b722ff0908a6f5d7a4c228"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.5"
   custom_lint_core:
     dependency: transitive
     description:
@@ -406,14 +414,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_form_builder:
-    dependency: "direct main"
-    description:
-      name: flutter_form_builder
-      sha256: aa3901466c70b69ae6c7f3d03fcbccaec5fde179d3fded0b10203144b546ad28
-      url: "https://pub.dev"
-    source: hosted
-    version: "10.0.1"
   flutter_hooks:
     dependency: "direct main"
     description:
@@ -504,6 +504,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
+  freezed_lint:
+    dependency: "direct dev"
+    description:
+      name: freezed_lint
+      sha256: "579196c8fd554d55f82d1fdc2369b89f5458d75f79799d0ea7eee0bc31caa0d3"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.9"
   frontend_server_client:
     dependency: transitive
     description:
@@ -632,6 +640,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.1"
+  hotreloader:
+    dependency: transitive
+    description:
+      name: hotreloader
+      sha256: bc167a1163807b03bada490bfe2df25b0d744df359227880220a5cbd04e5734b
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.3.0"
   http:
     dependency: transitive
     description:
@@ -680,14 +696,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.7.0"
-  intl:
-    dependency: transitive
-    description:
-      name: intl
-      sha256: "3df61194eb431efc39c4ceba583b95633a403f46c9fd341e550ce0bfa50e9aa5"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.20.2"
   io:
     dependency: transitive
     description:
@@ -776,6 +784,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.3.0"
+  luthor:
+    dependency: "direct main"
+    description:
+      name: luthor
+      sha256: "8c28b6159d81801678a223357f7d102c64ceb232f7bde4881ddcefd065889c77"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.6.1"
   matcher:
     dependency: transitive
     description:
@@ -1183,4 +1199,4 @@ packages:
     version: "2.1.0"
 sdks:
   dart: ">=3.8.0-0 <4.0.0"
-  flutter: ">=3.29.0"
+  flutter: ">=3.27.0"
