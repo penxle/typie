@@ -1,0 +1,131 @@
+import 'dart:isolate';
+
+import 'package:dio/dio.dart';
+import 'package:dio_http2_adapter/dio_http2_adapter.dart';
+import 'package:ferry/ferry.dart';
+import 'package:ferry/ferry_isolate.dart';
+import 'package:gql_dio_link/gql_dio_link.dart';
+import 'package:injectable/injectable.dart';
+import 'package:typie/env.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart' show possibleTypesMap;
+import 'package:typie/graphql/auth_link.dart';
+import 'package:typie/graphql/cookie_link.dart';
+import 'package:typie/graphql/error.dart';
+import 'package:typie/graphql/message.dart';
+import 'package:typie/services/auth.dart';
+
+@singleton
+class GraphQLClient {
+  GraphQLClient._(this._client);
+
+  final IsolateClient _client;
+
+  IsolateClient get raw => _client;
+
+  @FactoryMethod(preResolve: true)
+  static Future<GraphQLClient> create(Auth auth) async {
+    SendPort? sendPort;
+
+    auth.addListener(() {
+      final accessToken = switch (auth.value) {
+        Authenticated(:final accessToken) => accessToken,
+        _ => null,
+      };
+
+      sendPort?.send(GraphQLAccessTokenMessage(accessToken));
+    });
+
+    final accessToken = switch (auth.value) {
+      Authenticated(:final accessToken) => accessToken,
+      _ => null,
+    };
+
+    final client = await IsolateClient.create(
+      _createClient,
+      params: _CreateClientParams(accessToken: accessToken),
+      messageHandler: (message) async {
+        switch (message) {
+          case GraphQLPortMessage(:final port):
+            sendPort = port;
+          case GraphQLCookieMessage(:final cookie):
+            if (cookie.name == 'typie-st') {
+              await auth.login(cookie.value);
+            }
+        }
+      },
+    );
+
+    return GraphQLClient._(client);
+  }
+
+  Future<TData> request<TData, TVars>(OperationRequest<TData, TVars> request) async {
+    OperationResponse<TData, TVars> resp;
+
+    try {
+      resp = await _client.request(request).first;
+    } on Exception catch (e) {
+      throw OperationError.exception(e);
+    }
+
+    if (resp.linkException != null) {
+      throw OperationError.exception(resp.linkException!);
+    }
+
+    if (resp.graphqlErrors?.isNotEmpty ?? false) {
+      final error = resp.graphqlErrors![0];
+      throw OperationError.graphql(error);
+    }
+
+    return resp.data as TData;
+  }
+
+  Future<void> refetch<TData, TVars>(OperationRequest<TData, TVars> request) async {
+    return _client.addRequestToRequestController(request);
+  }
+
+  Future<void> dispose() async {
+    await _client.dispose();
+  }
+}
+
+class _CreateClientParams {
+  _CreateClientParams({this.accessToken});
+
+  final String? accessToken;
+}
+
+Future<Client> _createClient(_CreateClientParams params, SendPort? sendPort) async {
+  final receivePort = ReceivePort();
+  sendPort?.send(GraphQLMessage.port(receivePort.sendPort));
+
+  var accessToken = params.accessToken;
+
+  receivePort.listen((message) {
+    switch (message) {
+      case GraphQLAccessTokenMessage(:final token):
+        accessToken = token;
+    }
+  });
+
+  final link = Link.from([
+    authLink(getAccessToken: () => accessToken),
+    cookieLink(
+      setter: (cookie) {
+        sendPort?.send(GraphQLMessage.cookie(cookie));
+      },
+    ),
+    DioLink('${Env.apiUrl}/graphql', client: Dio()..httpClientAdapter = Http2Adapter(ConnectionManager())),
+  ]);
+
+  final cache = Cache(possibleTypes: possibleTypesMap);
+
+  return Client(
+    link: link,
+    cache: cache,
+    defaultFetchPolicies: {
+      OperationType.query: FetchPolicy.CacheAndNetwork,
+      OperationType.mutation: FetchPolicy.NetworkOnly,
+      OperationType.subscription: FetchPolicy.NetworkOnly,
+    },
+  );
+}

@@ -1,0 +1,6 @@
+query HomeScreen_Query {
+  me {
+    id
+    email
+  }
+}

@@ -24,6 +24,7 @@ ipaddr
 kakao
 karpenter
 kubeconfig
+lucide
 meili
 meilisearch
 myeongjo
@@ -35,6 +36,7 @@ noreferrer
 oidcs
 oklch
 on+
+oslllo
 penxle
 plpgsql
 pulumi
@@ -54,12 +56,14 @@ stakater
 stibee
 tsup
 typie
+udids
 unplugin
 unstub
 unsubscriber
 vcpu
 wonka
 xact
+xcarchive
 xlarge
 xsmall
 xxlarge

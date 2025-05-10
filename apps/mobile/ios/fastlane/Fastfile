@@ -1,0 +1,41 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Sync certificates"
+  lane :certificates do
+    app_store_connect_api_key
+
+    firebase_app_distribution_get_udids(
+      project_number: "378927208010",
+      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+      output_file: "build/udids.txt",
+    )
+
+    register_devices(devices_file: "./build/udids.txt")
+    
+    match(type: "development")
+    match(type: "adhoc", force_for_new_devices: true)
+    match(type: "appstore")
+  end
+
+  desc "Build and distribute the app for beta"
+  lane :beta do
+    latest_release = firebase_app_distribution_get_latest_release(
+      app: "1:378927208010:ios:470c2238efaee1db34b8b3",
+      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+    )
+
+    target_build_number = (latest_release&.dig(:buildVersion)).to_i + 1
+
+    Dir.chdir("../..") do
+      sh "flutter build ipa --build-number=#{target_build_number} --dart-define=ENV=release --export-options-plist=./ios/ExportOptions.plist"
+    end
+
+    dist = firebase_app_distribution(
+      app: "1:378927208010:ios:470c2238efaee1db34b8b3",
+      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+      ipa_path: "../build/ios/ipa/Typie.ipa",
+      groups: "ios",
+    )
+  end
+end

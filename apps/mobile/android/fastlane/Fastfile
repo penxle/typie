@@ -1,0 +1,28 @@
+default_platform(:android)
+
+platform :android do
+  desc "Sync certificates"
+  lane :certificates do
+    sh "echo $KEYSTORE | base64 -d > ../keystore.jks"
+  end
+
+  lane :beta do
+    latest_release = firebase_app_distribution_get_latest_release(
+      app: "1:378927208010:android:43c0f4af9b2ffcf234b8b3",
+      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+    )
+
+    target_build_number = (latest_release&.dig(:buildVersion)).to_i + 1
+
+    Dir.chdir("../..") do
+      sh "flutter build apk --build-number=#{target_build_number} --dart-define=ENV=release"
+    end
+
+    firebase_app_distribution(
+      app: "1:378927208010:android:43c0f4af9b2ffcf234b8b3",
+      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+      android_artifact_path: "../build/app/outputs/apk/release/app-release.apk",
+      groups: "android",
+    )
+  end
+end

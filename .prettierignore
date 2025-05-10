@@ -6,3 +6,6 @@ docs/*
 *.rs
 
 apps/api/drizzle/*
+apps/mobile/*
+!apps/mobile/package.json
+!apps/mobile/**/*.js

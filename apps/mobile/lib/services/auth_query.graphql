@@ -1,0 +1,6 @@
+query Auth_Query {
+  me {
+    id
+    email
+  }
+}
