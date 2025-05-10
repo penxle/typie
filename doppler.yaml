@@ -3,6 +3,10 @@ setup:
     project: typie-api
     config: dev_local
 
+  - path: apps/mobile
+    project: typie-mobile
+    config: dev_local
+
   - path: apps/website
     project: typie-website
     config: dev_local

@@ -68,6 +68,7 @@ export default defineConfig([
       'unicorn/no-array-reduce': 'off',
       'unicorn/no-empty-file': 'off',
       'unicorn/no-null': 'off',
+      'unicorn/number-literal-case': 'off',
       'unicorn/prefer-global-this': 'off',
       'unicorn/prefer-switch': 'off',
       'unicorn/prefer-ternary': 'off',

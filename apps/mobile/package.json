@@ -1,0 +1,17 @@
+{
+  "name": "@typie/mobile",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "buildrunner": "doppler run -- dart run build_runner watch --delete-conflicting-outputs",
+    "clean": "flutter clean && dart run build_runner clean"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.39",
+    "@iconify/tools": "^4.0.4",
+    "change-case-all": "^2.1.0",
+    "fantasticon": "^3.0.0",
+    "oslllo-svg-fixer": "^5.0.0"
+  }
+}

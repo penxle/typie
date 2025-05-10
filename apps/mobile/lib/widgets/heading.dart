@@ -1,0 +1,129 @@
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
+import 'package:auto_route/auto_route.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:typie/icons/lucide.dart';
+import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/tappable.dart';
+
+class Heading extends StatelessWidget implements PreferredSizeWidget {
+  const Heading({
+    super.key,
+    this.leading,
+    this.title,
+    this.actions,
+    this.backgroundColor = AppColors.white,
+    this.fallbackSystemUiOverlayStyle,
+    this.titleOnLeft = false,
+    this.bottomBorder = true,
+  });
+
+  final Widget? leading;
+  final Widget? title;
+  final List<Widget>? actions;
+  final Color? backgroundColor;
+  final SystemUiOverlayStyle? fallbackSystemUiOverlayStyle;
+  final bool titleOnLeft;
+  final bool bottomBorder;
+
+  static const _preferredSize = Size.fromHeight(54);
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColorLuminance = backgroundColor?.computeLuminance();
+    final baseSystemUiOverlayStyle =
+        backgroundColorLuminance != null
+            ? backgroundColorLuminance > 0.179
+                ? SystemUiOverlayStyle.dark
+                : SystemUiOverlayStyle.light
+            : fallbackSystemUiOverlayStyle ?? SystemUiOverlayStyle.dark;
+
+    return AnnotatedRegion(
+      value: baseSystemUiOverlayStyle.copyWith(statusBarColor: AppColors.transparent),
+      child: Box(
+        decoration: BoxDecoration(color: backgroundColor),
+        child: SafeArea(
+          bottom: false,
+          child: Box(
+            height: _preferredSize.height,
+            padding: const Pad(horizontal: 20),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: bottomBorder ? AppColors.gray_100 : Colors.transparent)),
+            ),
+            child: NavigationToolbar(
+              leading: leading ?? const HeadingAutoLeading(),
+              middle: title,
+              centerMiddle: !titleOnLeft,
+              trailing: actions == null ? null : Row(mainAxisSize: MainAxisSize.min, children: actions!),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Size get preferredSize => _preferredSize;
+
+  static PreferredSizeWidget animated({
+    required AnimationController animation,
+    required Heading Function(BuildContext context) builder,
+  }) {
+    return PreferredSize(
+      preferredSize: _preferredSize,
+      child: AnimatedBuilder(animation: animation, builder: (context, child) => builder(context)),
+    );
+  }
+}
+
+class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
+  const EmptyHeading({super.key, this.backgroundColor, this.fallbackSystemUiOverlayStyle});
+
+  final Color? backgroundColor;
+  final SystemUiOverlayStyle? fallbackSystemUiOverlayStyle;
+
+  @override
+  Size get preferredSize => Size.zero;
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColorLuminance = backgroundColor?.computeLuminance();
+    final baseSystemUiOverlayStyle =
+        backgroundColorLuminance != null
+            ? backgroundColorLuminance > 0.179
+                ? SystemUiOverlayStyle.dark
+                : SystemUiOverlayStyle.light
+            : fallbackSystemUiOverlayStyle ?? SystemUiOverlayStyle.dark;
+
+    return AnnotatedRegion(
+      value: baseSystemUiOverlayStyle.copyWith(statusBarColor: Colors.transparent),
+      child: Box(color: backgroundColor, child: const SafeArea(child: SizedBox.shrink())),
+    );
+  }
+}
+
+class HeadingAutoLeading extends StatelessWidget {
+  const HeadingAutoLeading({super.key, this.color = AppColors.gray_950});
+
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AutoLeadingButton(
+      builder: (context, leadingType, action) {
+        if (leadingType.isNoLeading) {
+          return const SizedBox.shrink();
+        }
+
+        return Tappable(
+          child: Icon(switch (leadingType) {
+            LeadingType.back => LucideIcons.arrow_left,
+            LeadingType.close => LucideIcons.x,
+            _ => throw UnimplementedError(),
+          }, color: color),
+          onTap: () => action?.call(),
+        );
+      },
+    );
+  }
+}

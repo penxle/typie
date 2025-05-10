@@ -8,6 +8,12 @@
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "dev"],
       "outputCapture": "std"
+    },
+    {
+      "name": "Flutter",
+      "type": "dart",
+      "request": "launch",
+      "program": "apps/mobile/lib/main.dart"
     }
   ]
 }

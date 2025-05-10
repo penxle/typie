@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+  <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+    <item name="android:windowSplashScreenBackground">@color/brand_500</item>
+    <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_foreground</item>
+  </style>
+
+  <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+    <item name="android:windowBackground">?android:colorBackground</item>
+  </style>
+</resources>
