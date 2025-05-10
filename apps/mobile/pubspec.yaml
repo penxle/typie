@@ -20,6 +20,7 @@ dependencies:
     sdk: flutter
   flutter_hooks: ^0.21.2
   flutter_secure_storage: ^9.2.4
+  fluttertoast: ^8.2.12
   freezed_annotation: ^3.0.0
   get_it: ^8.0.3
   gql_code_builder_serializers: ^0.1.0
