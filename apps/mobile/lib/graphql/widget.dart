@@ -17,17 +17,17 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
     final snapshot = useStream(stream);
     final loaded = useRef(false);
 
-    final controller = useAnimationController(duration: const Duration(milliseconds: 200));
-    final animation = useMemoized(() {
-      final curve = CurvedAnimation(parent: controller, curve: Curves.ease);
+    final animationController = useAnimationController(duration: const Duration(milliseconds: 200));
+    final tweenedAnimation = useMemoized(() {
+      final curve = CurvedAnimation(parent: animationController, curve: Curves.ease);
       return Tween<double>(begin: 0, end: 1).animate(curve);
-    }, [controller]);
+    }, [animationController]);
 
     useEffect(() {
       final data = snapshot.data?.data;
       if (data != null && !loaded.value) {
         loaded.value = true;
-        controller.forward();
+        animationController.forward();
       }
 
       return null;
@@ -38,6 +38,6 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
       return const SizedBox.shrink();
     }
 
-    return FadeTransition(opacity: animation, child: builder(context, client, data));
+    return FadeTransition(opacity: tweenedAnimation, child: builder(context, client, data));
   }
 }

@@ -25,6 +25,7 @@ kakao
 karpenter
 kubeconfig
 lucide
+luthor
 meili
 meilisearch
 myeongjo
