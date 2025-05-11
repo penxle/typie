@@ -622,6 +622,7 @@ input SendSignUpEmailInput {
 }
 
 enum SingleSignOnProvider {
+  APPLE
   GOOGLE
   KAKAO
   NAVER

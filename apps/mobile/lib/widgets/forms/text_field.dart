@@ -20,8 +20,6 @@ class FormTextField extends HookWidget {
     this.textInputAction,
     this.initialValue,
     this.validators,
-    this.onSubmitted,
-    this.autovalidateMode = AutovalidateMode.onUserInteraction,
   });
 
   final String name;
@@ -35,8 +33,6 @@ class FormTextField extends HookWidget {
   final TextInputAction? textInputAction;
   final String? initialValue;
   final List<FormFieldValidator<String>>? validators;
-  final void Function(String)? onSubmitted;
-  final AutovalidateMode autovalidateMode;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +88,7 @@ class FormTextField extends HookWidget {
 
     return HookFormField(
       name: name,
+      initialValue: initialValue,
       builder: (context, field) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +127,11 @@ class FormTextField extends HookWidget {
               onChanged: (value) {
                 field.value = value;
               },
-              // onSubmitted: onSubmitted,
+              onSubmitted: (value) {
+                if (textInputAction == TextInputAction.done) {
+                  field.form.submit();
+                }
+              },
             ),
             const Box.gap(4),
             AnimatedBuilder(

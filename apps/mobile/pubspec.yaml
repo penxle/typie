@@ -20,8 +20,11 @@ dependencies:
     sdk: flutter
   flutter_hooks: ^0.21.2
   flutter_secure_storage: ^9.2.4
+  flutter_svg: ^2.1.0
+  fluttertoast: ^8.2.12
   freezed_annotation: ^3.0.0
   get_it: ^8.0.3
+  google_sign_in: ^6.3.0
   gql_code_builder_serializers: ^0.1.0
   gql_dio_link: ^1.0.1+1
   gql_exec: ^1.0.0+1
@@ -30,8 +33,11 @@ dependencies:
   hive_ce_flutter: ^2.3.0
   injectable: ^2.5.0
   json_annotation: ^4.9.0
+  kakao_flutter_sdk_user: ^1.9.7+3
   logger: ^2.5.0
   luthor: ^0.6.1
+  naver_login_sdk: ^3.0.0
+  sign_in_with_apple: ^7.0.1
 
 dev_dependencies:
   auto_route_generator: ^10.0.1
@@ -50,7 +56,12 @@ dev_dependencies:
   very_good_analysis: ^7.0.0
 
 flutter:
-  uses-material-design: false
+  uses-material-design: true
+
+  assets:
+  - assets/brands/
+  - assets/images/
+  - assets/logos/
 
   fonts:
     - family: LucideIcons
@@ -79,3 +90,9 @@ flutter:
           weight: 800
         - asset: assets/fonts/SUIT-Heavy.ttf
           weight: 900
+    - family: Eulyoo1945
+      fonts:
+        - asset: assets/fonts/Eulyoo1945-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Eulyoo1945-SemiBold.ttf
+          weight: 600

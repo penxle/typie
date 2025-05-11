@@ -1,5 +1,4 @@
 import { and, asc, eq, getTableColumns } from 'drizzle-orm';
-import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
 import { db, Entities, first, Folders, PostContents, Posts } from '@/db';
 import { EntityState, EntityVisibility } from '@/enums';
@@ -23,7 +22,7 @@ builder.queryFields((t) => ({
   randomName: t.field({
     type: 'String',
     resolve: () => {
-      return generateRandomName(nanoid());
+      return generateRandomName();
     },
   }),
 
@@ -50,7 +49,7 @@ builder.queryFields((t) => ({
       const yDoc = makeYDoc({ body });
       const update = Y.encodeStateAsUpdateV2(yDoc);
 
-      const name = generateRandomName(nanoid());
+      const name = generateRandomName();
 
       const contentMobile = await db
         .select({ body: PostContents.body })
@@ -106,7 +105,7 @@ builder.mutationFields((t) => ({
   generateRandomName: t.field({
     type: 'String',
     resolve: () => {
-      return generateRandomName(nanoid());
+      return generateRandomName();
     },
   }),
 }));

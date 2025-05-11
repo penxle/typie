@@ -125,6 +125,7 @@ export const SearchHitType = {
 
 export type SingleSignOnProvider = keyof typeof SingleSignOnProvider;
 export const SingleSignOnProvider = {
+  APPLE: 'APPLE',
   GOOGLE: 'GOOGLE',
   KAKAO: 'KAKAO',
   NAVER: 'NAVER',

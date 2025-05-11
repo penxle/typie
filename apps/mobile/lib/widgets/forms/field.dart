@@ -3,15 +3,15 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/widgets/forms/form.dart';
 
 class HookFormFieldController<T> {
-  HookFormFieldController({required this.controller, required this.name});
+  HookFormFieldController({required this.form, required this.name});
 
-  final HookFormController controller;
+  final HookFormController form;
   final String name;
 
-  T? get value => controller.data[name] as T?;
-  set value(T? value) => controller.setValue(name, value);
+  T? get value => form.data[name] as T?;
+  set value(T? value) => form.setValue(name, value);
 
-  String? get error => controller.errors[name];
+  String? get error => form.errors[name];
 }
 
 class HookFormField<T> extends HookWidget {
@@ -26,8 +26,8 @@ class HookFormField<T> extends HookWidget {
     final form = HookFormScope.of(context);
 
     useListenableSelector(form, () => form.errors[name]);
-    final value = useState(initialValue as T);
-    final field = useMemoized(() => HookFormFieldController<T>(controller: form, name: name));
+    final value = useState(initialValue);
+    final field = useMemoized(() => HookFormFieldController<T>(form: form, name: name));
 
     useEffect(() {
       form.setValue(name, value.value);

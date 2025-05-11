@@ -1,4 +1,5 @@
 import stringHash from '@sindresorhus/string-hash';
+import { nanoid } from 'nanoid';
 
 const randomNamePrefixes = [
   '간식먹는',
@@ -208,8 +209,8 @@ const randomNameSuffixes = [
 
 const randomNameAmount = randomNamePrefixes.length * randomNameSuffixes.length;
 
-export const generateRandomName = (seed: string) => {
-  const random = stringHash(seed) % randomNameAmount;
+export const generateRandomName = (seed?: string) => {
+  const random = stringHash(seed ?? nanoid()) % randomNameAmount;
   const prefix = randomNamePrefixes[random % randomNamePrefixes.length];
   const suffix = randomNameSuffixes[Math.floor(random / randomNamePrefixes.length)];
 

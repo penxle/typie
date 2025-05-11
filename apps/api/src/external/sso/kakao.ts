@@ -16,24 +16,34 @@ export const generateAuthorizationUrl = (state: string) => {
   });
 };
 
-export const authorizeUser = async (code: string): Promise<ExternalUser> => {
-  const tokens = await ky
-    .post('https://kauth.kakao.com/oauth/token', {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
-      },
-      body: qs.stringify({
-        grant_type: 'authorization_code',
-        client_id: env.KAKAO_CLIENT_ID,
-        client_secret: env.KAKAO_CLIENT_SECRET,
-        redirect_uri: `${env.AUTH_URL}/sso/kakao`,
-        code,
-      }),
-    })
-    .json<{ access_token: string }>();
+export const authorizeUser = async (params: Record<string, string>): Promise<ExternalUser> => {
+  let accessToken = params.access_token;
 
-  if (!tokens.access_token) {
-    throw new Error('Token validation failed');
+  if (!accessToken) {
+    if (!params.code) {
+      throw new Error('Invalid parameters');
+    }
+
+    const tokens = await ky
+      .post('https://kauth.kakao.com/oauth/token', {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+        },
+        body: qs.stringify({
+          grant_type: 'authorization_code',
+          client_id: env.KAKAO_CLIENT_ID,
+          client_secret: env.KAKAO_CLIENT_SECRET,
+          redirect_uri: `${env.AUTH_URL}/sso/kakao`,
+          code: params.code,
+        }),
+      })
+      .json<{ access_token: string }>();
+
+    if (!tokens.access_token) {
+      throw new Error('Token validation failed');
+    }
+
+    accessToken = tokens.access_token;
   }
 
   type KakaoUserResponse = {
@@ -52,7 +62,7 @@ export const authorizeUser = async (code: string): Promise<ExternalUser> => {
 
   const me = await ky('https://kapi.kakao.com/v2/user/me', {
     headers: {
-      Authorization: `Bearer ${tokens.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
     },
   }).json<KakaoUserResponse>();
