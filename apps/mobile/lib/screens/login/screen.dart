@@ -10,11 +10,11 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:naver_login_sdk/naver_login_sdk.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:typie/context/loader.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/logger.dart';
 import 'package:typie/screens/login/__generated__/authorize_single_sign_on_mutation.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
@@ -31,12 +31,14 @@ class LoginScreen extends HookWidget {
     final googleSignIn = useService<GoogleSignIn>();
 
     final login = useCallback((GSingleSignOnProvider provider, Map<String, dynamic> params) async {
-      await client.request(
-        GLoginScreen_AuthorizeSingleSignOn_MutationReq((b) {
-          b.vars.input.provider = provider;
-          b.vars.input.params = JsonObject(params);
-        }),
-      );
+      await context.runWithLoader(() async {
+        await client.request(
+          GLoginScreen_AuthorizeSingleSignOn_MutationReq((b) {
+            b.vars.input.provider = provider;
+            b.vars.input.params = JsonObject(params);
+          }),
+        );
+      });
     });
 
     return Scaffold(
@@ -78,6 +80,7 @@ class LoginScreen extends HookWidget {
                     onTap: () async {
                       await googleSignIn.signOut();
                       final result = await googleSignIn.signIn();
+
                       if (result != null) {
                         await login(GSingleSignOnProvider.GOOGLE, {'code': result.serverAuthCode});
                       }
@@ -91,7 +94,7 @@ class LoginScreen extends HookWidget {
                     onTap: () async {
                       if (!await isKakaoTalkInstalled()) {
                         if (context.mounted) {
-                          context.toast(ToastType.error, '카카오톡을 먼저 설치해주세요');
+                          context.toast(ToastType.error, '카카오톡을 먼저 설치해주세요.');
                         }
 
                         return;
@@ -113,16 +116,20 @@ class LoginScreen extends HookWidget {
                     foregroundColor: AppColors.white,
                     backgroundColor: const Color(0xFF03C75A),
                     onTap: () async {
-                      final completer = Completer<void>();
+                      final completer = Completer<bool>();
 
                       await NaverLoginSDK.logout();
                       await NaverLoginSDK.authenticate(
                         callback: OAuthLoginCallback(
                           onSuccess: () {
-                            completer.complete();
+                            completer.complete(true);
                           },
                           onError: (code, message) {
-                            completer.completeError(Exception('[$code] $message'));
+                            if (code == 2) {
+                              completer.complete(false);
+                            } else {
+                              completer.completeError(Exception('[$code] $message'));
+                            }
                           },
                           onFailure: (code, message) {
                             completer.completeError(Exception('[$code] $message'));
@@ -130,10 +137,10 @@ class LoginScreen extends HookWidget {
                         ),
                       );
 
-                      await completer.future;
-
-                      final accessToken = await NaverLoginSDK.getAccessToken();
-                      await login(GSingleSignOnProvider.NAVER, {'access_token': accessToken});
+                      if (await completer.future) {
+                        final accessToken = await NaverLoginSDK.getAccessToken();
+                        await login(GSingleSignOnProvider.NAVER, {'access_token': accessToken});
+                      }
                     },
                   ),
                   if (Platform.isIOS)
@@ -190,8 +197,10 @@ class _Button extends StatelessWidget {
       onTap: () async {
         try {
           await onTap();
-        } on Exception catch (e) {
-          log.e('login failed', error: e);
+        } on Exception {
+          if (context.mounted) {
+            context.toast(ToastType.error, '로그인에 실패했어요. 다시 시도해주세요.');
+          }
         }
       },
       child: Box(
