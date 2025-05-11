@@ -21,7 +21,6 @@ dependencies:
   flutter_hooks: ^0.21.2
   flutter_secure_storage: ^9.2.4
   flutter_svg: ^2.1.0
-  fluttertoast: ^8.2.12
   freezed_annotation: ^3.0.0
   get_it: ^8.0.3
   google_sign_in: ^6.3.0
@@ -66,6 +65,9 @@ flutter:
     - family: LucideIcons
       fonts:
         - asset: assets/fonts/LucideIcons.ttf
+    - family: LucideLightIcons
+      fonts:
+        - asset: assets/fonts/LucideLightIcons.ttf
     - family: TypieIcons
       fonts:
         - asset: assets/fonts/TypieIcons.ttf

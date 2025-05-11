@@ -1,7 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:typie/context/toast.dart';
 import 'package:typie/routers/app.dart';
 import 'package:typie/styles/colors.dart';
 
@@ -39,7 +38,7 @@ class App extends HookWidget {
         ),
         iconTheme: const IconThemeData(color: AppColors.gray_950, size: 24),
       ),
-      builder: (context, child) => ToastProvider(child: KeyboardDismiss(child: child!)),
+      builder: (context, child) => KeyboardDismiss(child: child!),
     );
   }
 }

@@ -117,7 +117,7 @@ const createIconFont = async (name, dir) => {
     });
 
   await fs.writeFile(
-    `lib/icons/${name}.dart`,
+    `lib/icons/${Case.snake(name)}.dart`,
     `// automatically generated
 // ignore_for_file: constant_identifier_names
 // spell-checker:disable
@@ -134,6 +134,13 @@ ${entries.join('\n')}
 };
 
 const iconSet = new IconSet(icons);
+const lucideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-lucide-'));
+await exportToDirectory(iconSet, {
+  target: lucideDir,
+  cleanup: true,
+  includeAliases: false,
+});
+
 iconSet.forEachSync(
   (name) => {
     const svg = iconSet.toSVG(name);
@@ -143,9 +150,9 @@ iconSet.forEachSync(
   ['icon'],
 );
 
-const lucideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-lucide-'));
+const lucideLightDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-lucide-light-'));
 await exportToDirectory(iconSet, {
-  target: lucideDir,
+  target: lucideLightDir,
   cleanup: true,
   includeAliases: false,
 });
@@ -154,4 +161,5 @@ const typieDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-typie-'));
 await fs.cp('../website/src/icons', typieDir, { recursive: true });
 
 await createIconFont('lucide', lucideDir);
+await createIconFont('lucide-light', lucideLightDir);
 await createIconFont('typie', typieDir);
