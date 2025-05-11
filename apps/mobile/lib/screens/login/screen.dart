@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
@@ -9,6 +10,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:naver_login_sdk/naver_login_sdk.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
@@ -87,6 +89,20 @@ class LoginScreen extends HookWidget {
                     foregroundColor: AppColors.gray_950,
                     backgroundColor: const Color(0xFFFEE500),
                     onTap: () async {
+                      if (!await isKakaoTalkInstalled()) {
+                        if (context.mounted) {
+                          context.toast(ToastType.error, '카카오톡을 먼저 설치해주세요');
+                        }
+
+                        return;
+                      }
+
+                      try {
+                        await UserApi.instance.logout();
+                      } on Exception {
+                        // pass
+                      }
+
                       final result = await UserApi.instance.loginWithKakaoTalk();
                       await login(GSingleSignOnProvider.KAKAO, {'access_token': result.accessToken});
                     },
@@ -99,6 +115,7 @@ class LoginScreen extends HookWidget {
                     onTap: () async {
                       final completer = Completer<void>();
 
+                      await NaverLoginSDK.logout();
                       await NaverLoginSDK.authenticate(
                         callback: OAuthLoginCallback(
                           onSuccess: () {
@@ -119,19 +136,20 @@ class LoginScreen extends HookWidget {
                       await login(GSingleSignOnProvider.NAVER, {'access_token': accessToken});
                     },
                   ),
-                  _Button(
-                    text: '애플로 시작하기',
-                    icon: const SvgImage('brands/apple', width: 20, color: AppColors.white),
-                    foregroundColor: AppColors.white,
-                    backgroundColor: AppColors.gray_950,
-                    onTap: () async {
-                      final result = await SignInWithApple.getAppleIDCredential(
-                        scopes: [AppleIDAuthorizationScopes.email],
-                      );
+                  if (Platform.isIOS)
+                    _Button(
+                      text: '애플로 시작하기',
+                      icon: const SvgImage('brands/apple', width: 20, color: AppColors.white),
+                      foregroundColor: AppColors.white,
+                      backgroundColor: AppColors.gray_950,
+                      onTap: () async {
+                        final result = await SignInWithApple.getAppleIDCredential(
+                          scopes: [AppleIDAuthorizationScopes.email],
+                        );
 
-                      await login(GSingleSignOnProvider.APPLE, {'code': result.authorizationCode});
-                    },
-                  ),
+                        await login(GSingleSignOnProvider.APPLE, {'code': result.authorizationCode});
+                      },
+                    ),
                 ],
               ),
             ),

@@ -88,20 +88,17 @@ class ToastScope extends InheritedWidget {
 
 enum ToastType { success, error }
 
-class ToastExtension {
-  const ToastExtension(this.context);
+extension ToastExtension on BuildContext {
+  FToast get _toast => ToastScope.of(this);
 
-  final BuildContext context;
-  FToast get toast => ToastScope.of(context);
-
-  void show(ToastType type, String message, {String? actionText, void Function()? onAction}) {
-    toast.showToast(
+  void toast(ToastType type, String message, {String? actionText, void Function()? onAction}) {
+    _toast.showToast(
       child: _TextToastWidget(
         type: type,
         message: message,
         actionText: actionText,
         onAction: () {
-          toast.removeCustomToast();
+          _toast.removeCustomToast();
           onAction?.call();
         },
       ),
@@ -112,8 +109,4 @@ class ToastExtension {
       },
     );
   }
-}
-
-extension ToastX on BuildContext {
-  ToastExtension get toast => ToastExtension(this);
 }

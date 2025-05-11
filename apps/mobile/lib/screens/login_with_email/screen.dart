@@ -45,7 +45,7 @@ class LoginWithEmailScreen extends HookWidget {
           } on TypieError catch (e) {
             if (e.code == 'invalid_credentials') {
               if (context.mounted) {
-                context.toast.show(ToastType.error, '이메일 주소 또는 비밀번호가 올바르지 않습니다.');
+                context.toast(ToastType.error, '이메일 주소 또는 비밀번호가 올바르지 않습니다.');
               }
             }
           }

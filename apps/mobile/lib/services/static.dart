@@ -9,5 +9,10 @@ Future<void> configureStaticServices() async {
 
   KakaoSdk.init(nativeAppKey: Env.kakaoNativeAppKey);
 
-  await NaverLoginSDK.initialize(clientId: Env.naverClientId, clientSecret: Env.naverClientSecret, urlScheme: 'typie');
+  await NaverLoginSDK.initialize(
+    urlScheme: 'typie',
+    clientName: '타이피',
+    clientId: Env.naverClientId,
+    clientSecret: Env.naverClientSecret,
+  );
 }
