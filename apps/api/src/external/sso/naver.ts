@@ -16,26 +16,36 @@ export const generateAuthorizationUrl = (state: string) => {
   });
 };
 
-export const authorizeUser = async (code: string): Promise<ExternalUser> => {
-  const tokens = await ky(
-    qs.stringifyUrl({
-      url: 'https://nid.naver.com/oauth2.0/token',
-      query: {
-        grant_type: 'authorization_code',
-        client_id: env.NAVER_CLIENT_ID,
-        client_secret: env.NAVER_CLIENT_SECRET,
-        code,
-      },
-    }),
-  ).json<{ access_token: string }>();
+export const authorizeUser = async (params: Record<string, string>): Promise<ExternalUser> => {
+  let accessToken = params.access_token;
 
-  if (!tokens.access_token) {
-    throw new Error('Token validation failed');
+  if (!accessToken) {
+    if (!params.code) {
+      throw new Error('Invalid parameters');
+    }
+
+    const tokens = await ky(
+      qs.stringifyUrl({
+        url: 'https://nid.naver.com/oauth2.0/token',
+        query: {
+          grant_type: 'authorization_code',
+          client_id: env.NAVER_CLIENT_ID,
+          client_secret: env.NAVER_CLIENT_SECRET,
+          code: params.code,
+        },
+      }),
+    ).json<{ access_token: string }>();
+
+    if (!tokens.access_token) {
+      throw new Error('Token validation failed');
+    }
+
+    accessToken = tokens.access_token;
   }
 
   type R = { response: { id: string; email: string; nickname: string; profile_image: string } };
   const me = await ky('https://openapi.naver.com/v1/nid/me', {
-    headers: { Authorization: `Bearer ${tokens.access_token}` },
+    headers: { Authorization: `Bearer ${accessToken}` },
   }).json<R>();
 
   return {

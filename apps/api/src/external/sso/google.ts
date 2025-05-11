@@ -20,10 +20,14 @@ export const generateAuthorizationUrl = (state: string, email?: string | null) =
   });
 };
 
-export const authorizeUser = async (code: string): Promise<ExternalUser> => {
+export const authorizeUser = async (params: Record<string, string>): Promise<ExternalUser> => {
+  if (!params.code) {
+    throw new Error('Invalid parameters');
+  }
+
   const client = createOAuthClient();
 
-  const { tokens } = await client.getToken({ code });
+  const { tokens } = await client.getToken(params.code);
   if (!tokens.access_token) {
     throw new Error('Token validation failed');
   }

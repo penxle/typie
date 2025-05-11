@@ -21,6 +21,22 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
+
+    <activity
+      android:name="com.kakao.sdk.flutter.AuthCodeCustomTabsActivity"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+
+        <data
+          android:host="oauth"
+          android:scheme="kakao8f6521e9ca87bcbedc21657883445b25" />
+      </intent-filter>
+    </activity>
+
     <meta-data
       android:name="flutterEmbedding"
       android:value="2" />

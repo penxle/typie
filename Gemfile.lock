@@ -35,6 +35,7 @@ GEM
     colored2 (3.1.2)
     commander (4.6.0)
       highline (~> 2.0.0)
+    csv (3.3.4)
     declarative (0.0.20)
     digest-crc (0.7.0)
       rake (>= 12.0.0, < 14.0.0)
@@ -231,6 +232,7 @@ PLATFORMS
 
 DEPENDENCIES
   abbrev
+  csv
   fastlane
   fastlane-plugin-firebase_app_distribution
   ostruct

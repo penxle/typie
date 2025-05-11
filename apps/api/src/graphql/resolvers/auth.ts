@@ -14,8 +14,8 @@ import { SingleSignOnProvider, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
-import { google, kakao, naver } from '@/external/sso';
-import { generateRandomAvatar, persistBlobAsImage } from '@/utils';
+import { apple, google, kakao, naver } from '@/external/sso';
+import { generateRandomAvatar, generateRandomName, persistBlobAsImage } from '@/utils';
 import { createSite } from '@/utils/site';
 import { builder } from '../builder';
 import type { UserContext } from '@/context';
@@ -169,6 +169,7 @@ builder.mutationFields((t) => ({
         .with(SingleSignOnProvider.GOOGLE, () => google.generateAuthorizationUrl(input.state, input.email))
         .with(SingleSignOnProvider.NAVER, () => naver.generateAuthorizationUrl(input.state))
         .with(SingleSignOnProvider.KAKAO, () => kakao.generateAuthorizationUrl(input.state))
+        .with(SingleSignOnProvider.APPLE, () => apple.generateAuthorizationUrl())
         .exhaustive();
     },
   }),
@@ -181,9 +182,10 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const externalUser = await match(input.provider)
-        .with(SingleSignOnProvider.GOOGLE, () => google.authorizeUser(input.params.code))
-        .with(SingleSignOnProvider.NAVER, () => naver.authorizeUser(input.params.code))
-        .with(SingleSignOnProvider.KAKAO, () => kakao.authorizeUser(input.params.code))
+        .with(SingleSignOnProvider.GOOGLE, () => google.authorizeUser(input.params))
+        .with(SingleSignOnProvider.NAVER, () => naver.authorizeUser(input.params))
+        .with(SingleSignOnProvider.KAKAO, () => kakao.authorizeUser(input.params))
+        .with(SingleSignOnProvider.APPLE, () => apple.authorizeUser(input.params))
         .exhaustive();
 
       const sso = await db
@@ -195,7 +197,7 @@ builder.mutationFields((t) => ({
       if (sso) {
         await createSession(ctx, sso.userId);
 
-        return input.params.state;
+        return input.params.state ?? '';
       }
 
       const existingUser = await db
@@ -214,7 +216,7 @@ builder.mutationFields((t) => ({
 
         await createSession(ctx, existingUser.id);
 
-        return input.params.state;
+        return input.params.state ?? '';
       }
 
       const user = await db.transaction(async (tx) => {
@@ -229,7 +231,7 @@ builder.mutationFields((t) => ({
 
         const user = await createUser(tx, {
           email: externalUser.email,
-          name: externalUser.name,
+          name: externalUser.name ?? generateRandomName(),
           avatarId: avatar.id,
         });
 
@@ -245,7 +247,7 @@ builder.mutationFields((t) => ({
 
       await createSession(ctx, user.id);
 
-      return input.params.state;
+      return input.params.state ?? '';
     },
   }),
 

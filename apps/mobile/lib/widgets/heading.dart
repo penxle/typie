@@ -30,16 +30,16 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColorLuminance = backgroundColor?.computeLuminance();
-    final baseSystemUiOverlayStyle =
-        backgroundColorLuminance != null
-            ? backgroundColorLuminance > 0.179
-                ? SystemUiOverlayStyle.dark
-                : SystemUiOverlayStyle.light
-            : fallbackSystemUiOverlayStyle ?? SystemUiOverlayStyle.dark;
-
     return AnnotatedRegion(
-      value: baseSystemUiOverlayStyle.copyWith(statusBarColor: AppColors.transparent),
+      value: const SystemUiOverlayStyle(
+        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: AppColors.transparent,
+        systemNavigationBarColor: AppColors.transparent,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+        systemStatusBarContrastEnforced: false,
+      ),
       child: Box(
         decoration: BoxDecoration(color: backgroundColor),
         child: SafeArea(
@@ -87,16 +87,16 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColorLuminance = backgroundColor?.computeLuminance();
-    final baseSystemUiOverlayStyle =
-        backgroundColorLuminance != null
-            ? backgroundColorLuminance > 0.179
-                ? SystemUiOverlayStyle.dark
-                : SystemUiOverlayStyle.light
-            : fallbackSystemUiOverlayStyle ?? SystemUiOverlayStyle.dark;
-
     return AnnotatedRegion(
-      value: baseSystemUiOverlayStyle.copyWith(statusBarColor: Colors.transparent),
+      value: const SystemUiOverlayStyle(
+        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: AppColors.transparent,
+        systemNavigationBarColor: AppColors.transparent,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+        systemStatusBarContrastEnforced: false,
+      ),
       child: Box(color: backgroundColor, child: const SafeArea(child: SizedBox.shrink())),
     );
   }

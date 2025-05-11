@@ -35,7 +35,7 @@ platform :ios do
     dist = firebase_app_distribution(
       app: "1:378927208010:ios:470c2238efaee1db34b8b3",
       service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-      ipa_path: "../build/ios/ipa/Typie.ipa",
+      ipa_path: "../build/ios/ipa/타이피.ipa",
       groups: "ios",
     )
   end

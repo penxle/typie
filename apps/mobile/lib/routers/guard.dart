@@ -15,14 +15,15 @@ class GuardRouter extends HookWidget {
     final state = useValueListenable(auth);
 
     return AutoRouter.declarative(
-      routes:
-          (handler) => [
-            switch (state) {
-              AuthInitializing() => authShell(),
-              Authenticated() => dashboardShell(),
-              Unauthenticated() => authShell(),
-            },
-          ],
+      routes: (handler) {
+        return [
+          switch (state) {
+            AuthInitializing() => AuthShell(),
+            Authenticated() => DashboardShell(),
+            Unauthenticated() => AuthShell(),
+          },
+        ];
+      },
     );
   }
 }
