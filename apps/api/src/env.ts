@@ -1,9 +1,12 @@
 import { z } from 'zod';
 
 const schema = z.object({
-  APPLE_CLIENT_ID: z.string(),
-  APPLE_KEY_ID: z.string(),
-  APPLE_PRIVATE_KEY: z.string(),
+  APPLE_APP_APPLE_ID: z.string(),
+  APPLE_APP_BUNDLE_ID: z.string(),
+  APPLE_IAP_KEY_ID: z.string(),
+  APPLE_IAP_PRIVATE_KEY: z.string(),
+  APPLE_SIGN_IN_KEY_ID: z.string(),
+  APPLE_SIGN_IN_PRIVATE_KEY: z.string(),
   APPLE_TEAM_ID: z.string(),
   AUTH_URL: z.string(),
   DATABASE_URL: z.string(),

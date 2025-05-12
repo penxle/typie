@@ -13,14 +13,14 @@ export const authorizeUser = async (params: Record<string, string>): Promise<Ext
   }
 
   const clientSecret = appleSignIn.getClientSecret({
-    clientID: env.APPLE_CLIENT_ID,
+    clientID: env.APPLE_APP_BUNDLE_ID,
     teamID: env.APPLE_TEAM_ID,
-    keyIdentifier: env.APPLE_KEY_ID,
-    privateKey: env.APPLE_PRIVATE_KEY,
+    keyIdentifier: env.APPLE_SIGN_IN_KEY_ID,
+    privateKey: env.APPLE_SIGN_IN_PRIVATE_KEY,
   });
 
   const tokens = await appleSignIn.getAuthorizationToken(params.code, {
-    clientID: env.APPLE_CLIENT_ID,
+    clientID: env.APPLE_APP_BUNDLE_ID,
     clientSecret,
     redirectUri: `${env.AUTH_URL}/sso/apple`,
   });
@@ -30,7 +30,7 @@ export const authorizeUser = async (params: Record<string, string>): Promise<Ext
   }
 
   const idToken = await appleSignIn.verifyIdToken(tokens.id_token, {
-    audience: env.APPLE_CLIENT_ID,
+    audience: env.APPLE_APP_BUNDLE_ID,
   });
 
   return {
