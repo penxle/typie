@@ -12,27 +12,25 @@ class FormTextField extends HookWidget {
     super.key,
     this.controller,
     this.focusNode,
-    this.labelText,
-    this.hintText,
+    this.label,
+    this.placeholder,
     this.autofocus = false,
     this.obscureText = false,
     this.keyboardType,
     this.textInputAction,
     this.initialValue,
-    this.validators,
   });
 
   final String name;
   final TextEditingController? controller;
   final FocusNode? focusNode;
-  final String? labelText;
-  final String? hintText;
+  final String? label;
+  final String? placeholder;
   final bool autofocus;
   final bool obscureText;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final String? initialValue;
-  final List<FormFieldValidator<String>>? validators;
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +81,7 @@ class FormTextField extends HookWidget {
           );
         });
       }
+
       return null;
     }, []);
 
@@ -93,12 +92,12 @@ class FormTextField extends HookWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (labelText != null) ...[
+            if (label != null) ...[
               AnimatedBuilder(
                 animation: tweenedLabelColor,
                 builder: (context, child) {
                   return Text(
-                    labelText!,
+                    label!,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -119,7 +118,7 @@ class FormTextField extends HookWidget {
               decoration: InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
-                hintText: hintText,
+                hintText: placeholder,
                 hintStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray_400),
               ),
               cursorColor: AppColors.gray_900,

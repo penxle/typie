@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 class Tappable extends StatelessWidget {
-  const Tappable({required this.child, this.onTap, super.key});
+  const Tappable({required this.child, required this.onTap, super.key});
 
   final Widget child;
-  final void Function()? onTap;
+  final void Function() onTap;
 
   @override
   Widget build(BuildContext context) {

@@ -1,52 +1,37 @@
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/styles/colors.dart';
-import 'package:typie/widgets/heading.dart';
 
 class Screen extends StatelessWidget {
   const Screen({
     required this.child,
     super.key,
-    this.title,
     this.actions,
-    this.useSafeArea = false,
-    this.appBar,
-    this.bottomBorder = true,
+    this.safeArea = true,
+    this.heading,
     this.resizeToAvoidBottomInset = true,
     this.padding,
     this.backgroundColor = AppColors.white,
   });
 
-  final PreferredSizeWidget? appBar;
-  final String? title;
+  final PreferredSizeWidget? heading;
   final Widget child;
   final List<Widget>? actions;
-  final bool useSafeArea;
-  final bool bottomBorder;
+  final bool safeArea;
   final bool resizeToAvoidBottomInset;
   final EdgeInsets? padding;
   final Color backgroundColor;
 
   @override
   Widget build(BuildContext context) {
+    final inner = Box(padding: padding, child: child);
+
     return Scaffold(
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       backgroundColor: backgroundColor,
-      appBar:
-          appBar ??
-          Heading(
-            title:
-                title == null ? null : Text(title!, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-            actions: actions,
-            bottomBorder: bottomBorder,
-          ),
+      appBar: heading,
       body: SizedBox.expand(
-        child:
-            useSafeArea
-                ? SafeArea(
-                  maintainBottomViewPadding: resizeToAvoidBottomInset,
-                  child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
-                )
-                : Padding(padding: padding ?? EdgeInsets.zero, child: child),
+        child: safeArea ? SafeArea(maintainBottomViewPadding: !resizeToAvoidBottomInset, child: inner) : inner,
       ),
     );
   }
