@@ -8,7 +8,7 @@ platform :ios do
     firebase_app_distribution_get_udids(
       project_number: "378927208010",
       service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-      output_file: "build/udids.txt",
+      output_file: "udids.txt",
     )
 
     register_devices(devices_file: "./build/udids.txt")
