@@ -11,6 +11,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
     super.key,
     this.leading,
     this.title,
+    this.titleWidget,
     this.actions,
     this.backgroundColor = AppColors.white,
     this.fallbackSystemUiOverlayStyle,
@@ -19,7 +20,8 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
   });
 
   final Widget? leading;
-  final Widget? title;
+  final String? title;
+  final Widget? titleWidget;
   final List<Widget>? actions;
   final Color? backgroundColor;
   final SystemUiOverlayStyle? fallbackSystemUiOverlayStyle;
@@ -52,7 +54,11 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
             ),
             child: NavigationToolbar(
               leading: leading ?? const HeadingAutoLeading(),
-              middle: title,
+              middle:
+                  titleWidget ??
+                  (title == null
+                      ? null
+                      : Text(title!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
               centerMiddle: !titleOnLeft,
               trailing: actions == null ? null : Row(mainAxisSize: MainAxisSize.min, children: actions!),
             ),
@@ -117,7 +123,7 @@ class HeadingAutoLeading extends StatelessWidget {
 
         return Tappable(
           child: Icon(switch (leadingType) {
-            LeadingType.back => LucideIcons.arrow_left,
+            LeadingType.back => LucideIcons.chevron_left,
             LeadingType.close => LucideIcons.x,
             _ => throw UnimplementedError(),
           }, color: color),

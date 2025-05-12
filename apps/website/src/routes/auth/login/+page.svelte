@@ -55,9 +55,9 @@
     onError: (error) => {
       if (error instanceof TypieError) {
         if (error.code === 'invalid_credentials') {
-          throw new FormError('password', '이메일 혹은 비밀번호가 일치하지 않습니다.');
+          throw new FormError('password', '이메일 또는 비밀번호가 올바르지 않아요.');
         } else if (error.code === 'password_not_set') {
-          throw new FormError('password', '비밀번호가 설정되지 않았습니다.');
+          throw new FormError('password', '비밀번호가 설정되지 않았어요.');
         }
       }
     },

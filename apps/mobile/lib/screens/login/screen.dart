@@ -15,9 +15,11 @@ import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/login/__generated__/authorize_single_sign_on_mutation.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/svg_image.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -41,134 +43,137 @@ class LoginScreen extends HookWidget {
       });
     });
 
-    return Scaffold(
-      appBar: const EmptyHeading(),
-      extendBodyBehindAppBar: true,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                spacing: 24,
-                children: [
-                  SvgImage('logos/full', height: 40, color: AppColors.gray_950),
-                  Text(
-                    '쓰고, 공유하고, 정리하는\n글쓰기 공간',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: 'Eulyoo1945',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.gray_500,
-                    ),
+    return Screen(
+      resizeToAvoidBottomInset: false,
+      heading: const EmptyHeading(),
+      child: Column(
+        children: [
+          const Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              spacing: 24,
+              children: [
+                SvgImage('logos/full', height: 40, color: AppColors.gray_950),
+                Text(
+                  '쓰고, 공유하고, 정리하는\n글쓰기 공간',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Eulyoo1945',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.gray_500,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Box(
-              padding: const Pad(horizontal: 24),
-              child: Column(
-                spacing: 8,
-                children: [
-                  _Button(
-                    text: '구글로 시작하기',
-                    icon: const SvgImage('brands/google', width: 20),
-                    foregroundColor: AppColors.gray_950,
-                    backgroundColor: AppColors.white,
-                    borderColor: AppColors.gray_200,
-                    onTap: () async {
-                      await googleSignIn.signOut();
-                      final result = await googleSignIn.signIn();
+          ),
+          Box(
+            padding: const Pad(horizontal: 24),
+            child: Column(
+              spacing: 8,
+              children: [
+                _Button(
+                  text: '구글로 시작하기',
+                  icon: const SvgImage('brands/google', width: 20),
+                  foregroundColor: AppColors.gray_950,
+                  backgroundColor: AppColors.white,
+                  borderColor: AppColors.gray_200,
+                  onTap: () async {
+                    await googleSignIn.signOut();
+                    final result = await googleSignIn.signIn();
 
-                      if (result != null) {
-                        await login(GSingleSignOnProvider.GOOGLE, {'code': result.serverAuthCode});
-                      }
-                    },
-                  ),
-                  _Button(
-                    text: '카카오로 시작하기',
-                    icon: const SvgImage('brands/kakao', width: 20, color: AppColors.black),
-                    foregroundColor: AppColors.gray_950,
-                    backgroundColor: const Color(0xFFFEE500),
-                    onTap: () async {
-                      if (!await isKakaoTalkInstalled()) {
-                        if (context.mounted) {
-                          context.toast(ToastType.error, '카카오톡을 먼저 설치해주세요.');
-                        }
-
-                        return;
+                    if (result != null) {
+                      await login(GSingleSignOnProvider.GOOGLE, {'code': result.serverAuthCode});
+                    }
+                  },
+                ),
+                _Button(
+                  text: '카카오로 시작하기',
+                  icon: const SvgImage('brands/kakao', width: 20, color: AppColors.black),
+                  foregroundColor: AppColors.gray_950,
+                  backgroundColor: const Color(0xFFFEE500),
+                  onTap: () async {
+                    if (!await isKakaoTalkInstalled()) {
+                      if (context.mounted) {
+                        context.toast(ToastType.error, '카카오톡을 먼저 설치해주세요.');
                       }
 
-                      try {
-                        await UserApi.instance.logout();
-                      } on Exception {
-                        // pass
-                      }
+                      return;
+                    }
 
-                      final result = await UserApi.instance.loginWithKakaoTalk();
-                      await login(GSingleSignOnProvider.KAKAO, {'access_token': result.accessToken});
-                    },
-                  ),
-                  _Button(
-                    text: '네이버로 시작하기',
-                    icon: const SvgImage('brands/naver', width: 20, color: AppColors.white),
-                    foregroundColor: AppColors.white,
-                    backgroundColor: const Color(0xFF03C75A),
-                    onTap: () async {
-                      final completer = Completer<bool>();
+                    try {
+                      await UserApi.instance.logout();
+                    } on Exception {
+                      // pass
+                    }
 
-                      await NaverLoginSDK.logout();
-                      await NaverLoginSDK.authenticate(
-                        callback: OAuthLoginCallback(
-                          onSuccess: () {
-                            completer.complete(true);
-                          },
-                          onError: (code, message) {
-                            if (code == 2) {
-                              completer.complete(false);
-                            } else {
-                              completer.completeError(Exception('[$code] $message'));
-                            }
-                          },
-                          onFailure: (code, message) {
+                    final result = await UserApi.instance.loginWithKakaoTalk();
+                    await login(GSingleSignOnProvider.KAKAO, {'access_token': result.accessToken});
+                  },
+                ),
+                _Button(
+                  text: '네이버로 시작하기',
+                  icon: const SvgImage('brands/naver', width: 20, color: AppColors.white),
+                  foregroundColor: AppColors.white,
+                  backgroundColor: const Color(0xFF03C75A),
+                  onTap: () async {
+                    final completer = Completer<bool>();
+
+                    await NaverLoginSDK.logout();
+                    await NaverLoginSDK.authenticate(
+                      callback: OAuthLoginCallback(
+                        onSuccess: () {
+                          completer.complete(true);
+                        },
+                        onError: (code, message) {
+                          if (code == 2) {
+                            completer.complete(false);
+                          } else {
                             completer.completeError(Exception('[$code] $message'));
-                          },
-                        ),
+                          }
+                        },
+                        onFailure: (code, message) {
+                          completer.completeError(Exception('[$code] $message'));
+                        },
+                      ),
+                    );
+
+                    if (await completer.future) {
+                      final accessToken = await NaverLoginSDK.getAccessToken();
+                      await login(GSingleSignOnProvider.NAVER, {'access_token': accessToken});
+                    }
+                  },
+                ),
+                if (Platform.isIOS)
+                  _Button(
+                    text: '애플로 시작하기',
+                    icon: const SvgImage('brands/apple', width: 20, color: AppColors.white),
+                    foregroundColor: AppColors.white,
+                    backgroundColor: AppColors.gray_950,
+                    onTap: () async {
+                      final result = await SignInWithApple.getAppleIDCredential(
+                        scopes: [AppleIDAuthorizationScopes.email],
                       );
 
-                      if (await completer.future) {
-                        final accessToken = await NaverLoginSDK.getAccessToken();
-                        await login(GSingleSignOnProvider.NAVER, {'access_token': accessToken});
-                      }
+                      await login(GSingleSignOnProvider.APPLE, {'code': result.authorizationCode});
                     },
                   ),
-                  if (Platform.isIOS)
-                    _Button(
-                      text: '애플로 시작하기',
-                      icon: const SvgImage('brands/apple', width: 20, color: AppColors.white),
-                      foregroundColor: AppColors.white,
-                      backgroundColor: AppColors.gray_950,
-                      onTap: () async {
-                        final result = await SignInWithApple.getAppleIDCredential(
-                          scopes: [AppleIDAuthorizationScopes.email],
-                        );
-
-                        await login(GSingleSignOnProvider.APPLE, {'code': result.authorizationCode});
-                      },
-                    ),
-                ],
-              ),
+              ],
             ),
-            const Box(
-              padding: Pad(all: 24),
-              child: Text(
+          ),
+          Box(
+            padding: const Pad(all: 24),
+            child: Tappable(
+              onTap: () async {
+                await context.router.push(const LoginWithEmailRoute());
+              },
+              child: const Text(
                 '이메일로 가입하셨나요?',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
