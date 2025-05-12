@@ -5,7 +5,7 @@ import { db, UserPushNotificationTokens } from '@/db';
 import { env } from '@/env';
 
 export const app = initializeApp({
-  credential: cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)),
+  credential: cert(JSON.parse(env.GOOGLE_SERVICE_ACCOUNT)),
 });
 
 export const messaging = getMessaging(app);
