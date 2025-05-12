@@ -3,7 +3,7 @@ default_platform(:android)
 platform :android do
   desc "Sync certificates"
   lane :certificates do
-    sh "echo $KEYSTORE | base64 -d > ../keystore.jks"
+    sh "echo $KEYSTORE | base64 -d > ../keystore-release.jks"
   end
 
   lane :beta do

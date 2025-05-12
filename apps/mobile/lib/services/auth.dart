@@ -28,8 +28,6 @@ sealed class AuthState with _$AuthState {
   }) = Authenticated;
 
   const factory AuthState.unauthenticated() = Unauthenticated;
-
-  bool get isAuthenticated => this is Authenticated;
 }
 
 @singleton

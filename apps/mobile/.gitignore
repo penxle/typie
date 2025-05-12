@@ -53,3 +53,5 @@ app.*.map.json
 **/*.gr.dart
 **/*.config.dart
 **/__generated__/**
+
+**/udids.txt

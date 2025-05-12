@@ -39,6 +39,7 @@
     "dayjs": "^1.11.13",
     "drizzle-orm": "^0.43.1",
     "escape-string-regexp": "^5.0.0",
+    "firebase-admin": "^13.3.0",
     "fractional-indexing-jittered": "^1.0.0",
     "google-auth-library": "^9.15.1",
     "graphql": "^16.11.0",

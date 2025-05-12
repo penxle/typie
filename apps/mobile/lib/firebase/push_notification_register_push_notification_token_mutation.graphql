@@ -1,0 +1,3 @@
+mutation PushNotification_RegisterPushNotificationToken_Mutation($input: RegisterPushNotificationTokenInput!) {
+  registerPushNotificationToken(input: $input)
+}

@@ -13,6 +13,8 @@ android {
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+
+    isCoreLibraryDesugaringEnabled = true
   }
 
   kotlinOptions {
@@ -25,11 +27,20 @@ android {
     targetSdk = 36
     versionCode = flutter.versionCode
     versionName = flutter.versionName
+
+    multiDexEnabled = true
   }
 
   signingConfigs {
+    getByName("debug") {
+      storeFile = file("../keystore-debug.jks")
+      storePassword = "password"
+      keyAlias = "co.typie"
+      keyPassword = "password"
+    }
+
     create("release") {
-      storeFile = file("../keystore.jks")
+      storeFile = file("../keystore-release.jks")
       storePassword = System.getenv("KEYSTORE_PASSWORD")
       keyAlias = "co.typie"
       keyPassword = System.getenv("KEYSTORE_PASSWORD")
@@ -37,6 +48,10 @@ android {
   }
 
   buildTypes {
+    getByName("debug") {
+      signingConfig = signingConfigs.getByName("debug")
+    }
+
     getByName("release") {
       signingConfig = signingConfigs.getByName("release")
 
@@ -53,4 +68,10 @@ android {
 
 flutter {
   source = "../.."
+}
+
+dependencies {
+  implementation("androidx.window:window:1.3.0")
+  implementation("androidx.window:window-java:1.3.0")
+  coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
