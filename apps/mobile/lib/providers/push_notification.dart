@@ -6,15 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:typie/context/toast.dart';
-import 'package:typie/firebase/__generated__/push_notification_register_push_notification_token_mutation.req.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/providers/__generated__/push_notification_register_push_notification_token_mutation.req.gql.dart';
 import 'package:typie/services/auth.dart';
 
-class PushNotification extends HookWidget {
-  const PushNotification({required this.child, super.key});
-
-  final Widget child;
+class PushNotificationProvider extends HookWidget {
+  const PushNotificationProvider({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +41,7 @@ class PushNotification extends HookWidget {
       return subscription.cancel;
     });
 
-    return child;
+    return const SizedBox.shrink();
   }
 }
 
@@ -67,7 +65,7 @@ Future<void> _registerToken(GraphQLClient client) async {
     }
 
     await client.request(
-      GPushNotification_RegisterPushNotificationToken_MutationReq((b) {
+      GPushNotificationProvider_RegisterPushNotificationToken_MutationReq((b) {
         b.vars.input.token = token;
       }),
     );
