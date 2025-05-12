@@ -488,6 +488,19 @@ export const UserPlans = pgTable('user_plans', {
     .default(sql`now()`),
 });
 
+export const UserPushNotificationTokens = pgTable('user_push_notification_tokens', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_PUSH_NOTIFICATION_TOKENS)),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  token: text('token').notNull().unique(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const UserSessions = pgTable(
   'user_sessions',
   {

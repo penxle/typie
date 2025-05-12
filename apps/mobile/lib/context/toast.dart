@@ -7,15 +7,16 @@ import 'package:typie/icons/lucide.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/styles/colors.dart';
 
-enum ToastType { success, error }
+enum ToastType { success, error, notification }
 
 class _Widget extends HookWidget {
-  const _Widget({required this.type, required this.message, required this.completer});
+  const _Widget({required this.type, required this.message, required this.duration, required this.completer});
 
   final Completer<void> completer;
 
   final ToastType type;
   final String message;
+  final Duration duration;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +33,7 @@ class _Widget extends HookWidget {
     useEffect(() {
       animationController.forward();
 
-      final timer = Timer(const Duration(seconds: 2), () {
+      final timer = Timer(duration, () {
         animationController.reverse().then((_) {
           completer.complete();
         });
@@ -66,6 +67,7 @@ class _Widget extends HookWidget {
                       color: switch (type) {
                         ToastType.success => AppColors.green_600,
                         ToastType.error => AppColors.red_600,
+                        ToastType.notification => AppColors.blue_600,
                       },
                     ),
                     width: 20,
@@ -74,6 +76,7 @@ class _Widget extends HookWidget {
                       child: switch (type) {
                         ToastType.success => const Icon(LucideIcons.check, color: AppColors.white, size: 14),
                         ToastType.error => const Icon(TypieIcons.exclamation, color: AppColors.white, size: 14),
+                        ToastType.notification => const Icon(LucideIcons.bell, color: AppColors.white, size: 14),
                       },
                     ),
                   ),
@@ -99,7 +102,7 @@ class _Widget extends HookWidget {
 extension ToastExtension on BuildContext {
   static OverlayEntry? _entry;
 
-  void toast(ToastType type, String message) {
+  void toast(ToastType type, String message, {Duration? duration}) {
     if (_entry != null) {
       _entry?.remove();
     }
@@ -108,7 +111,12 @@ extension ToastExtension on BuildContext {
 
     _entry = OverlayEntry(
       builder: (context) {
-        return _Widget(type: type, message: message, completer: completer);
+        return _Widget(
+          type: type,
+          message: message,
+          duration: duration ?? const Duration(seconds: 2),
+          completer: completer,
+        );
       },
     );
 

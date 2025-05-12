@@ -7,6 +7,7 @@ const schema = z.object({
   APPLE_TEAM_ID: z.string(),
   AUTH_URL: z.string(),
   DATABASE_URL: z.string(),
+  FIREBASE_SERVICE_ACCOUNT: z.string(),
   GOOGLE_OAUTH_CLIENT_ID: z.string(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string(),
   IFRAMELY_API_KEY: z.string(),

@@ -16,9 +16,11 @@ dependencies:
   ferry: ^0.16.1+2
   ferry_flutter: ^0.9.1-dev.4
   firebase_core: ^3.13.0
+  firebase_messaging: ^15.2.5
   flutter:
     sdk: flutter
   flutter_hooks: ^0.21.2
+  flutter_local_notifications: ^19.2.0
   flutter_secure_storage: ^9.2.4
   flutter_svg: ^2.1.0
   freezed_annotation: ^3.0.0
@@ -36,6 +38,7 @@ dependencies:
   logger: ^2.5.0
   luthor: ^0.6.1
   naver_login_sdk: ^3.0.0
+  permission_handler: ^12.0.0+1
   sign_in_with_apple: ^7.0.1
 
 dev_dependencies:

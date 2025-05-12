@@ -20,6 +20,7 @@ import {
   UserPaymentCredits,
   UserPersonalIdentities,
   UserPlans,
+  UserPushNotificationTokens,
   Users,
   UserSessions,
   UserSingleSignOns,
@@ -542,6 +543,25 @@ builder.mutationFields((t) => ({
 
         return ctx.session.userId;
       });
+    },
+  }),
+
+  registerPushNotificationToken: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: { token: t.input.string() },
+    resolve: async (_, { input }, ctx) => {
+      await db
+        .insert(UserPushNotificationTokens)
+        .values({
+          userId: ctx.session.userId,
+          token: input.token,
+        })
+        .onConflictDoUpdate({
+          target: [UserPushNotificationTokens.token],
+          set: { userId: ctx.session.userId },
+        });
+
+      return true;
     },
   }),
 

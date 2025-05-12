@@ -315,6 +315,7 @@ type Mutation {
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
+  registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
   removeSiteFont(input: RemoveSiteFontInput!): Site!
   renameFolder(input: RenameFolderInput!): Folder!
   reportPost(input: ReportPostInput!): Boolean!
@@ -564,6 +565,10 @@ type Query {
 
 input RedeemCreditCodeInput {
   code: String!
+}
+
+input RegisterPushNotificationTokenInput {
+  token: String!
 }
 
 input RemoveSiteFontInput {

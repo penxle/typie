@@ -6,8 +6,8 @@ import 'package:typie/services/static.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await configureServices();
   await configureStaticServices();
+  await configureServices();
 
   runApp(const App());
 }
