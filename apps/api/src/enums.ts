@@ -34,6 +34,12 @@ export const FontState = {
   ARCHIVED: 'ARCHIVED',
 } as const;
 
+export type InAppPurchaseStore = keyof typeof InAppPurchaseStore;
+export const InAppPurchaseStore = {
+  APP_STORE: 'APP_STORE',
+  GOOGLE_PLAY: 'GOOGLE_PLAY',
+} as const;
+
 export type NotificationCategory = keyof typeof NotificationCategory;
 export const NotificationCategory = {
   ANNOUNCEMENT: 'ANNOUNCEMENT',

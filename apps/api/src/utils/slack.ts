@@ -1,19 +1,21 @@
-import got from 'got';
+import ky from 'ky';
 import { match } from 'ts-pattern';
 import { env } from '@/env';
 
-type SlackChannel = 'report';
+type SlackChannel = 'iap' | 'report';
 
 export const logToSlack = (channel: SlackChannel, message: Record<string, unknown>) => {
   try {
-    got({
-      url: match(channel)
+    ky.post(
+      match(channel)
+        .with('iap', () => env.SLACK_IAP_WEBHOOK_URL)
         .with('report', () => env.SLACK_REPORT_WEBHOOK_URL)
         .exhaustive(),
-      method: 'POST',
-      json: message,
-    });
+      {
+        json: message,
+      },
+    );
   } catch {
-    /* empty */
+    // pass
   }
 };

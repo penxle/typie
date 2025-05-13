@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 const schema = z.object({
-  APPLE_APP_APPLE_ID: z.string(),
+  APPLE_APP_APPLE_ID: z.coerce.number(),
   APPLE_APP_BUNDLE_ID: z.string(),
+  APPLE_IAP_ISSUER_ID: z.string(),
   APPLE_IAP_KEY_ID: z.string(),
   APPLE_IAP_PRIVATE_KEY: z.string(),
   APPLE_SIGN_IN_KEY_ID: z.string(),
@@ -10,6 +11,7 @@ const schema = z.object({
   APPLE_TEAM_ID: z.string(),
   AUTH_URL: z.string(),
   DATABASE_URL: z.string(),
+  GOOGLE_PLAY_PACKAGE_NAME: z.string(),
   GOOGLE_OAUTH_CLIENT_ID: z.string(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string(),
   GOOGLE_SERVICE_ACCOUNT: z.string(),
@@ -28,6 +30,7 @@ const schema = z.object({
   PUBLIC_PULUMI_STACK: z.string().optional(),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
+  SLACK_IAP_WEBHOOK_URL: z.string(),
   SLACK_REPORT_WEBHOOK_URL: z.string(),
   USERSITE_URL: z.string(),
   WEBSITE_URL: z.string(),

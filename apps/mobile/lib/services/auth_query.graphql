@@ -1,6 +1,7 @@
 query Auth_Query {
   me {
     id
+    uuid
     email
   }
 }
