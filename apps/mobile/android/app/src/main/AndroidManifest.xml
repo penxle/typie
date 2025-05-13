@@ -1,11 +1,14 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
 
   <uses-permission android:name="android.permission.INTERNET" />
 
   <application
     android:name="${applicationName}"
+    android:enableOnBackInvokedCallback="false"
     android:icon="@mipmap/ic_launcher"
-    android:label="@string/app_label">
+    android:label="@string/app_label"
+    tools:targetApi="36">
     <activity
       android:name=".MainActivity"
       android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
