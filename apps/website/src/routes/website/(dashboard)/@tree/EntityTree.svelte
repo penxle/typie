@@ -278,9 +278,12 @@
 </script>
 
 <svelte:window
-  oncontextmenu={() => {
+  oncontextmenu={(e) => {
     if (pointerType === 'mouse') {
       cancelDragging();
+    } else {
+      e.preventDefault();
+      e.stopPropagation();
     }
   }}
   onkeydown={(e) => {
