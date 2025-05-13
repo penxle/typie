@@ -35,6 +35,7 @@ import * as googleplay from '@/external/googleplay';
 import * as portone from '@/external/portone';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
 import { delay } from '@/utils/promise';
+import { logToSlack } from '@/utils/slack';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
 import { CreditCode, isTypeOf, PaymentBillingKey, PaymentInvoice, Plan, PlanRule, UserPlan } from '../objects';
@@ -359,13 +360,13 @@ builder.mutationFields((t) => ({
           transactionId: input.data,
         });
 
-        console.log(transaction);
+        logToSlack('iap', { source: 'enrollPlanWithInAppPurchase', transaction: JSON.stringify(transaction, null, 2) });
       } else if (input.store === InAppPurchaseStore.GOOGLE_PLAY) {
         const subscription = await googleplay.getSubscription({
           purchaseToken: input.data,
         });
 
-        console.log(subscription);
+        logToSlack('iap', { source: 'enrollPlanWithInAppPurchase', subscription: JSON.stringify(subscription, null, 2) });
       }
 
       return true;

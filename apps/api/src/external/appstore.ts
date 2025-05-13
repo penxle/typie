@@ -43,3 +43,12 @@ export const getTransaction = async ({ environment, transactionId }: GetTransact
 
   return transaction;
 };
+
+type DecodeNotificationParams = { environment: 'production' | 'sandbox'; signedPayload: string };
+export const decodeNotification = async ({ environment, signedPayload }: DecodeNotificationParams) => {
+  const verifier = verifiers[environment];
+
+  const notification = await verifier.verifyAndDecodeNotification(signedPayload);
+
+  return notification;
+};
