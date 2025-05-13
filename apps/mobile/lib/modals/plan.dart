@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:typie/context/loader.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/services/auth.dart';
@@ -30,13 +31,17 @@ class PlanModal extends HookWidget {
         Btn(
           '월 결제 (${productDetailsMap.data?[BillingCycle.monthly]!.price})',
           onTap: () async {
-            await _purchaseProduct(authState, productDetailsMap.data![BillingCycle.monthly]!);
+            await context.runWithLoader(() async {
+              await _purchaseProduct(authState, productDetailsMap.data![BillingCycle.monthly]!);
+            });
           },
         ),
         Btn(
           '연 결제 (${productDetailsMap.data?[BillingCycle.yearly]!.price})',
           onTap: () async {
-            await _purchaseProduct(authState, productDetailsMap.data![BillingCycle.yearly]!);
+            await context.runWithLoader(() async {
+              await _purchaseProduct(authState, productDetailsMap.data![BillingCycle.yearly]!);
+            });
           },
         ),
         Btn(
@@ -95,16 +100,23 @@ Future<Map<BillingCycle, _Product>> _fetchProductMap() async {
   }
 }
 
+Future<void>? _purchaseProductFuture;
 Future<void> _purchaseProduct(AuthState authState, _Product product) async {
+  if (_purchaseProductFuture != null) {
+    return;
+  }
+
   if (authState case Authenticated(:final me)) {
-    if (Platform.isIOS) {
-      await InAppPurchase.instance.buyNonConsumable(
+    try {
+      _purchaseProductFuture = InAppPurchase.instance.buyNonConsumable(
         purchaseParam: PurchaseParam(productDetails: product.details, applicationUserName: me.uuid),
       );
-    } else {
-      await InAppPurchase.instance.buyNonConsumable(
-        purchaseParam: GooglePlayPurchaseParam(productDetails: product.details, applicationUserName: me.uuid),
-      );
+
+      await _purchaseProductFuture;
+    } on Exception {
+      // pass
+    } finally {
+      _purchaseProductFuture = null;
     }
   }
 }

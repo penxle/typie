@@ -41,18 +41,10 @@ class App extends HookWidget {
         iconTheme: const IconThemeData(color: AppColors.gray_950, size: 24),
       ),
       builder: (context, child) {
-        return Overlay(
-          initialEntries: [
-            OverlayEntry(
-              builder: (context) {
-                return Stack(
-                  children: [
-                    KeyboardDismiss(child: child!),
-                    const Offstage(child: Stack(children: [InAppPurchaseProvider(), PushNotificationProvider()])),
-                  ],
-                );
-              },
-            ),
+        return Stack(
+          children: [
+            KeyboardDismiss(child: child!),
+            const Offstage(child: Stack(children: [InAppPurchaseProvider(), PushNotificationProvider()])),
           ],
         );
       },

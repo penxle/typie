@@ -6,6 +6,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/logger.dart';
 import 'package:typie/providers/__generated__/in_app_purchase_enroll_plan_with_in_app_purchase_mutation.req.gql.dart';
 
 class InAppPurchaseProvider extends HookWidget {
@@ -30,8 +31,8 @@ class InAppPurchaseProvider extends HookWidget {
                 }),
               );
             }
-          } on Exception {
-            // pass
+          } on Exception catch (e) {
+            log.e('InAppPurchaseProvider', error: e);
           } finally {
             if (purchaseDetails.pendingCompletePurchase) {
               await InAppPurchase.instance.completePurchase(purchaseDetails);

@@ -7,7 +7,7 @@ import 'package:typie/styles/colors.dart';
 extension BottomSheetExtension on BuildContext {
   Future<T?> showBottomSheet<T extends Object?>(Widget child) async {
     return router.pushWidget(
-      _DraggableBottomSheet(child: child),
+      _Widget(child: child),
       opaque: false,
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final tweenedBackdropOpacity = Tween<double>(
@@ -48,8 +48,8 @@ extension BottomSheetExtension on BuildContext {
   }
 }
 
-class _DraggableBottomSheet extends HookWidget {
-  const _DraggableBottomSheet({required this.child});
+class _Widget extends HookWidget {
+  const _Widget({required this.child});
 
   final Widget child;
 
