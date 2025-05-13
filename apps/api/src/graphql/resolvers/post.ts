@@ -34,12 +34,12 @@ import {
 } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
+import * as slack from '@/external/slack';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
-import { logToSlack } from '@/utils/slack';
 import { builder } from '../builder';
 import { CharacterCountChange, Comment, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostView } from '../objects';
 
@@ -888,12 +888,14 @@ builder.mutationFields((t) => ({
         .where(eq(Users.id, ctx.session.userId))
         .then(firstOrThrow);
 
-      logToSlack('report', {
-        content: `${post.title}(${post.id}) 포스트 신고
+      await slack.sendMessage({
+        channel: '#cs',
+        username: '타이피 신고 알림',
+        iconEmoji: ':rotating_light:',
+        message: `${post.title} (${post.id}) 포스트 신고
         신고자: ${user.name}(${user.id}, ${user.email})
         이유: ${input.reason}
-        ${env.USERSITE_URL.replace('*.', '')}/${post.permalink}
-        `,
+        ${env.USERSITE_URL.replace('*.', '')}/${post.permalink}`,
       });
 
       return true;

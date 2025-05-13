@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { production } from '@/env';
 import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
-import { logToSlack } from '@/utils/slack';
+import * as slack from '@/external/slack';
 import type { ResponseBodyV2 } from '@apple/app-store-server-library';
 import type { Env } from '@/context';
 import type { DeveloperNotification } from '@/external/googleplay';
@@ -20,21 +20,27 @@ iap.post('/appstore', async (c) => {
     signedPayload: body.signedPayload,
   });
 
-  logToSlack('iap', { source: '/iap/appstore', notification: JSON.stringify(notification, null, 2) });
+  await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'rest/appstore', notification }, null, 2) });
 
   return c.json({}, 200);
 });
 
 iap.post('/googleplay', async (c) => {
-  const body = await c.req.json<DeveloperNotification>();
-  logToSlack('iap', { source: '/iap/googleplay', notification: JSON.stringify(body, null, 2) });
+  const notification = await c.req.json<DeveloperNotification>();
+  await slack.sendMessage({
+    channel: 'iap',
+    message: JSON.stringify({ source: 'rest/googleplay', notification }, null, 2),
+  });
 
-  if (body.subscriptionNotification) {
+  if (notification.subscriptionNotification) {
     const subscription = await googleplay.getSubscription({
-      purchaseToken: body.subscriptionNotification.purchaseToken,
+      purchaseToken: notification.subscriptionNotification.purchaseToken,
     });
 
-    logToSlack('iap', { source: '/iap/googleplay', subscription: JSON.stringify(subscription, null, 2) });
+    await slack.sendMessage({
+      channel: 'iap',
+      message: JSON.stringify({ source: 'rest/googleplay', subscription }, null, 2),
+    });
   }
 
   return c.json({}, 200);
