@@ -76,7 +76,7 @@
   };
 
   let resizer = $state<Resizer | null>(null);
-  let newWidth = $derived(Math.min(Math.max(app.preference.current.postsWidth + (resizer?.deltaX ?? 0), 240), 480));
+  let newWidth = $derived(Math.min(Math.max((app.preference.current.postsWidth ?? 240) + (resizer?.deltaX ?? 0), 240), 480));
 </script>
 
 {#if app.state.postsOpen && !app.preference.current.postsExpanded}
