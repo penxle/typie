@@ -1,0 +1,158 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "AB9CEDBB",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6745595771",
+    "_developerTeamID" : "4V96GK9874",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 768814398.83161199,
+    "_locale" : "ko",
+    "_storefront" : "KOR",
+    "_storeKitErrors" : [
+      {
+        "current" : {
+          "index" : 2,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : {
+          "index" : 1,
+          "type" : "purchase"
+        },
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : {
+          "index" : 2,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : {
+          "index" : 3,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21684897",
+      "localizations" : [
+
+      ],
+      "name" : "Plan",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "6900",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6745806674",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "타이피 FULL ACCESS (월간)",
+              "displayName" : "타이피 FULL ACCESS (월간)",
+              "locale" : "ko"
+            }
+          ],
+          "productID" : "plan.full.1month",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "plan.full.1month",
+          "subscriptionGroupID" : "21684897",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "69000",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6745806649",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "타이피 FULL ACCESS (연간)",
+              "displayName" : "타이피 FULL ACCESS (연간)",
+              "locale" : "ko"
+            }
+          ],
+          "productID" : "plan.full.1year",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "plan.full.1year",
+          "subscriptionGroupID" : "21684897",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

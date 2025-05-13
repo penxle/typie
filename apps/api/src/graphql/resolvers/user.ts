@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { and, asc, count, desc, eq, getTableColumns, gt, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import * as uuid from 'uuid';
 import { redis } from '@/cache';
 import {
   CreditCodes,
@@ -62,6 +63,11 @@ User.implement({
     name: t.exposeString('name'),
     email: t.exposeString('email'),
     avatar: t.expose('avatarId', { type: Image }),
+
+    uuid: t.string({
+      // just a randomly-picked uuid for namespace
+      resolve: (self) => uuid.v5(self.id, '1d394eb5-c61c-4c49-944e-05c9f9435adf'),
+    }),
 
     sites: t.field({
       type: [Site],

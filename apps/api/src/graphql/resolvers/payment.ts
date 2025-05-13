@@ -19,6 +19,7 @@ import {
 import { defaultPlanRules } from '@/db/schemas/json';
 import {
   CreditCodeState,
+  InAppPurchaseStore,
   PaymentBillingKeyState,
   PaymentInvoiceState,
   PaymentMethodType,
@@ -27,7 +28,10 @@ import {
   UserPlanBillingCycle,
   UserPlanState,
 } from '@/enums';
+import { production } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
+import * as appstore from '@/external/appstore';
+import * as googleplay from '@/external/googleplay';
 import * as portone from '@/external/portone';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
 import { delay } from '@/utils/promise';
@@ -339,6 +343,32 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
       });
+    },
+  }),
+
+  enrollPlanWithInAppPurchase: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: {
+      store: t.input.field({ type: InAppPurchaseStore }),
+      data: t.input.string(),
+    },
+    resolve: async (_, { input }) => {
+      if (input.store === InAppPurchaseStore.APP_STORE) {
+        const transaction = await appstore.getTransaction({
+          environment: production ? 'production' : 'sandbox',
+          transactionId: input.data,
+        });
+
+        console.log(transaction);
+      } else if (input.store === InAppPurchaseStore.GOOGLE_PLAY) {
+        const subscription = await googleplay.getSubscription({
+          purchaseToken: input.data,
+        });
+
+        console.log(subscription);
+      }
+
+      return true;
     },
   }),
 }));

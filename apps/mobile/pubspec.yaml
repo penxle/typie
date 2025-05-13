@@ -32,7 +32,11 @@ dependencies:
   gql_transform_link: ^1.0.0
   hive_ce: ^2.11.1
   hive_ce_flutter: ^2.3.0
+  in_app_purchase: ^3.2.1
+  in_app_purchase_android: ^0.4.0+1
+  in_app_purchase_storekit: ^0.3.22+1
   injectable: ^2.5.0
+  intl: ^0.20.2
   json_annotation: ^4.9.0
   kakao_flutter_sdk_user: ^1.9.7+3
   logger: ^2.5.0

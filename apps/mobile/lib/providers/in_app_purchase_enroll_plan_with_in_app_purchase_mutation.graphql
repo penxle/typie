@@ -1,0 +1,3 @@
+mutation InAppPurchase_EnrollPlanWithInAppPurchase_Mutation($input: EnrollPlanWithInAppPurchaseInput!) {
+  enrollPlanWithInAppPurchase(input: $input)
+}

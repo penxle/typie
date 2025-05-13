@@ -105,6 +105,11 @@ input EnrollPlanInput {
   planId: ID!
 }
 
+input EnrollPlanWithInAppPurchaseInput {
+  data: String!
+  store: InAppPurchaseStore!
+}
+
 type Entity implements IEntity {
   ancestors: [Entity!]!
   children: [Entity!]!
@@ -255,6 +260,11 @@ type Image implements Blob {
   url: String!
 }
 
+enum InAppPurchaseStore {
+  APP_STORE
+  GOOGLE_PLAY
+}
+
 input IssueBlobUploadUrlInput {
   filename: String!
 }
@@ -303,6 +313,7 @@ type Mutation {
   deleteUser: Boolean!
   duplicatePost(input: DuplicatePostInput!): Post!
   enrollPlan(input: EnrollPlanInput!): UserPlan!
+  enrollPlanWithInAppPurchase(input: EnrollPlanWithInAppPurchaseInput!): Boolean!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
@@ -752,6 +763,7 @@ type User {
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
   usage: UserUsage!
+  uuid: String!
 }
 
 type UserPersonalIdentity {
