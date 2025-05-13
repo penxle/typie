@@ -33,9 +33,9 @@ import { NotFoundError, TypieError } from '@/errors';
 import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
 import * as portone from '@/external/portone';
+import * as slack from '@/external/slack';
 import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
 import { delay } from '@/utils/promise';
-import { logToSlack } from '@/utils/slack';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
 import { CreditCode, isTypeOf, PaymentBillingKey, PaymentInvoice, Plan, PlanRule, UserPlan } from '../objects';
@@ -360,13 +360,13 @@ builder.mutationFields((t) => ({
           transactionId: input.data,
         });
 
-        logToSlack('iap', { source: 'enrollPlanWithInAppPurchase', transaction: JSON.stringify(transaction, null, 2) });
+        await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'mutation/appstore', transaction }, null, 2) });
       } else if (input.store === InAppPurchaseStore.GOOGLE_PLAY) {
         const subscription = await googleplay.getSubscription({
           purchaseToken: input.data,
         });
 
-        logToSlack('iap', { source: 'enrollPlanWithInAppPurchase', subscription: JSON.stringify(subscription, null, 2) });
+        await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'mutation/googleplay', subscription }, null, 2) });
       }
 
       return true;
