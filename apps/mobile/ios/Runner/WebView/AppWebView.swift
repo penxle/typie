@@ -3,7 +3,7 @@ import UIKit
 import WebKit
 
 class AppWebView: NSObject, FlutterPlatformView {
-  private let webView: WKWebView
+  private let webView: AppWKWebView
   private let channel: FlutterMethodChannel
 
   init(
@@ -35,7 +35,7 @@ class AppWebView: NSObject, FlutterPlatformView {
       }
     }
 
-    webView = WKWebView(frame: frame, configuration: configuration)
+    webView = AppWKWebView(frame: frame, configuration: configuration)
 
     super.init()
 
@@ -46,6 +46,7 @@ class AppWebView: NSObject, FlutterPlatformView {
       webView.isInspectable = true
     }
 
+    webView.scrollView.contentInsetAdjustmentBehavior = .never
     webView.configuration.userContentController.add(self, name: "handler")
 
     setupConsole()
@@ -127,6 +128,8 @@ class AppWebView: NSObject, FlutterPlatformView {
 
     webView.configuration.userContentController.removeScriptMessageHandler(forName: "handler")
     webView.configuration.userContentController.removeAllUserScripts()
+
+    webView.loadHTMLString("", baseURL: nil)
   }
 
   private func setupConsole() {
@@ -173,7 +176,7 @@ class AppWebView: NSObject, FlutterPlatformView {
             attrs: { name, data: JSON.stringify(data ?? null)},
           }),
           addEventListener: (name, fn) => {
-            const handler = (event) => { if (event.detail.name === name) fn(event.data) };
+            const handler = (event) => { if (event.detail.name === name) fn(event.detail.data) };
             handlers.set(fn, handler);
             window.addEventListener('__webview__', handler);
           },

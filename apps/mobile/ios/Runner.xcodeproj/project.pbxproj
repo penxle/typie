@@ -16,6 +16,8 @@
 		8C3DDA1B0F839431C970D517 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 52DF332886BBF5D0CBD37A5A /* Pods_RunnerTests.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
+		B60149372DD4C8F00055A06B /* KeyboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60149362DD4C8E80055A06B /* KeyboardPlugin.swift */; };
+		B60149392DD4D5460055A06B /* AppWKWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60149382DD4D53F0055A06B /* AppWKWebView.swift */; };
 		B67D40782DD26A43002679B6 /* Configuration.storekit in Resources */ = {isa = PBXBuildFile; fileRef = B67D40772DD26A43002679B6 /* Configuration.storekit */; };
 		B6C8B4172DCCE23C0089DBE2 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B6C8B4152DCCE23C0089DBE2 /* LaunchScreen.storyboard */; };
 		B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC503E2DD388C900F2B218 /* AppWebView.swift */; };
@@ -66,6 +68,8 @@
 		97C146FB1CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B60149362DD4C8E80055A06B /* KeyboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardPlugin.swift; sourceTree = "<group>"; };
+		B60149382DD4D53F0055A06B /* AppWKWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWKWebView.swift; sourceTree = "<group>"; };
 		B625650C2DD0A1F500958764 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		B67D40772DD26A43002679B6 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration.storekit; sourceTree = "<group>"; };
 		B6C8B4162DCCE23C0089DBE2 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -148,6 +152,7 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				B60149352DD4C8E00055A06B /* Keyboard */,
 				B6FC503C2DD3882000F2B218 /* WebView */,
 				B625650C2DD0A1F500958764 /* Runner.entitlements */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
@@ -177,9 +182,18 @@
 			path = Pods;
 			sourceTree = "<group>";
 		};
+		B60149352DD4C8E00055A06B /* Keyboard */ = {
+			isa = PBXGroup;
+			children = (
+				B60149362DD4C8E80055A06B /* KeyboardPlugin.swift */,
+			);
+			path = Keyboard;
+			sourceTree = "<group>";
+		};
 		B6FC503C2DD3882000F2B218 /* WebView */ = {
 			isa = PBXGroup;
 			children = (
+				B60149382DD4D53F0055A06B /* AppWKWebView.swift */,
 				B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */,
 				B6FC503E2DD388C900F2B218 /* AppWebView.swift */,
 			);
@@ -412,6 +426,8 @@
 			files = (
 				B6FC50412DD3890600F2B218 /* AppWebViewFactory.swift in Sources */,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				B60149372DD4C8F00055A06B /* KeyboardPlugin.swift in Sources */,
+				B60149392DD4D5460055A06B /* AppWKWebView.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */,
 			);

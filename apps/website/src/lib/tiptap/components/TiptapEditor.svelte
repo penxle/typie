@@ -37,8 +37,9 @@
           autocapitalize: 'off',
           spellcheck: 'false',
         },
-        scrollMargin: { top: 250, bottom: 150, left: 0, right: 0 },
-        scrollThreshold: { top: 250, bottom: 150, left: 0, right: 0 },
+
+        scrollMargin: window.__webview__ ? 24 : 48,
+        scrollThreshold: window.__webview__ ? 24 : 48,
 
         handleKeyDown: onkeydown,
       },
@@ -49,6 +50,12 @@
 
       onCreate: () => {
         oncreate?.();
+      },
+
+      onFocus: ({ editor }) => {
+        setTimeout(() => {
+          editor.commands.scrollIntoView();
+        }, 500);
       },
     });
 

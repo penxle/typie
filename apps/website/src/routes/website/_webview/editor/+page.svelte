@@ -202,7 +202,15 @@
 
     editor?.current.on('transaction', handler);
 
-    window.__webview__?.emitEvent('editor.ready');
+    window.__webview__?.addEventListener('blur', () => {
+      titleEl?.blur();
+      subtitleEl?.blur();
+      editor?.current.commands.blur();
+
+      window.__webview__?.emitEvent('blur');
+    });
+
+    window.__webview__?.emitEvent('ready');
 
     return () => {
       clearInterval(forceSyncInterval);
@@ -224,16 +232,10 @@
   {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
-<div class={css({ height: '[100dvh]', overflowY: 'auto', scrollbarGutter: 'stable' })}>
+<div class={css({ height: '[100dvh]', overflowY: 'auto', scrollbarGutter: 'stable', userSelect: 'text' })}>
   <div
     style:--prosemirror-max-width={`${maxWidth.current}px`}
-    class={flex({
-      flexDirection: 'column',
-      alignItems: 'center',
-      paddingTop: '24px',
-      paddingX: '24px',
-      size: 'full',
-    })}
+    class={flex({ flexDirection: 'column', alignItems: 'center', paddingTop: '24px', paddingX: '24px', size: 'full' })}
   >
     <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
       <textarea
