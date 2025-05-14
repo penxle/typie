@@ -128,6 +128,8 @@ class _WebViewState extends State<WebView> {
   void _onFocusChanged() {
     if (widget.focusNode!.hasFocus) {
       _controller.requestFocus();
+    } else {
+      _controller.clearFocus();
     }
   }
 }
@@ -148,8 +150,12 @@ class WebViewController {
     await _channel.invokeMethod('requestFocus', <dynamic, dynamic>{});
   }
 
-  void emitEvent(String name, [dynamic data]) {
-    _channel.invokeMethod('emitEvent', {'name': name, 'data': jsonEncode(data)});
+  Future<void> clearFocus() async {
+    await _channel.invokeMethod('clearFocus', <dynamic, dynamic>{});
+  }
+
+  Future<void> emitEvent(String name, [dynamic data]) async {
+    await _channel.invokeMethod('emitEvent', {'name': name, 'data': jsonEncode(data)});
   }
 }
 

@@ -28,6 +28,7 @@ platform :ios do
     target_build_number = (latest_release&.dig(:buildVersion)).to_i + 1
 
     Dir.chdir("../..") do
+      sh "dart run build_runner clean"
       sh "dart run build_runner build --delete-conflicting-outputs"
       sh "flutter build ipa --build-number=#{target_build_number} --export-options-plist=./ios/ExportOptions.plist"
     end
