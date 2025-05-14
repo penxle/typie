@@ -1,5 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import dayjs from 'dayjs';
+import { dev } from '$app/environment';
 import { env as privateEnv } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { deserializeOAuthState } from '$lib/utils';
@@ -24,7 +25,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     cookies.set('typie-af', 'true', {
       path: '/',
       httpOnly: false,
-      secure: true,
+      secure: !dev,
       sameSite: 'lax',
       expires: dayjs().add(1, 'day').toDate(),
     });
@@ -59,7 +60,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
   cookies.set('typie-at', data.access_token, {
     path: '/',
     httpOnly: true,
-    secure: true,
+    secure: !dev,
     sameSite: 'lax',
     expires: dayjs().add(1, 'year').toDate(),
   });

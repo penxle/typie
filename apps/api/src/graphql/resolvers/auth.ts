@@ -11,7 +11,7 @@ import { db, first, firstOrThrow, Images, UserMarketingConsents, Users, UserSess
 import { sendEmail } from '@/email';
 import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
-import { env } from '@/env';
+import { dev, env } from '@/env';
 import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
 import { apple, google, kakao, naver } from '@/external/sso';
@@ -329,7 +329,7 @@ const createSession = async (ctx: UserContext, userId: string) => {
   setCookie(ctx.c, 'typie-st', token, {
     path: '/',
     httpOnly: true,
-    secure: true,
+    secure: !dev,
     sameSite: 'lax',
     expires: expiresAt.toDate(),
   });
