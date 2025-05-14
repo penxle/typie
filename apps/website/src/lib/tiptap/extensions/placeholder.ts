@@ -42,7 +42,7 @@ export const Placeholder = Extension.create({
                 createDecoration(
                   $anchor.pos <= 2 ? 1 : $anchor.before(),
                   $anchor.pos <= 2 ? 3 : $anchor.after(),
-                  '내용을 입력하거나 /를 입력해 블록 삽입하기...',
+                  window.__webview__ ? '내용을 입력해보세요...' : '내용을 입력하거나 /를 입력해 블록 삽입하기...',
                 ),
               );
             }

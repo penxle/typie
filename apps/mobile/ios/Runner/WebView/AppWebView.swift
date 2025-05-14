@@ -28,7 +28,6 @@ class AppWebView: NSObject, FlutterPlatformView {
             .domain: cookie["domain"]!,
             .path: "/",
             .sameSitePolicy: HTTPCookieStringPolicy.sameSiteLax,
-            .secure: true,
           ])!
 
           configuration.websiteDataStore.httpCookieStore.setCookie(httpCookie)
@@ -88,6 +87,12 @@ class AppWebView: NSObject, FlutterPlatformView {
 
             webView.load(request)
           }
+
+        case "requestFocus":
+          webView.becomeFirstResponder()
+
+        case "clearFocus":
+          webView.resignFirstResponder()
 
         case "dispose":
           dispose()

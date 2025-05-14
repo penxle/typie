@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_http2_adapter/dio_http2_adapter.dart';
 import 'package:ferry/ferry.dart';
 import 'package:ferry/ferry_isolate.dart';
+import 'package:flutter/foundation.dart';
 import 'package:gql_dio_link/gql_dio_link.dart';
 import 'package:injectable/injectable.dart';
 import 'package:typie/env.dart';
@@ -107,6 +108,11 @@ Future<Client> _createClient(_CreateClientParams params, SendPort? sendPort) asy
     }
   });
 
+  final dio =
+      kDebugMode
+          ? (Dio()..httpClientAdapter = HttpClientAdapter())
+          : (Dio()..httpClientAdapter = Http2Adapter(ConnectionManager()));
+
   final link = Link.from([
     authLink(getAccessToken: () => accessToken),
     cookieLink(
@@ -114,7 +120,7 @@ Future<Client> _createClient(_CreateClientParams params, SendPort? sendPort) asy
         sendPort?.send(GraphQLMessage.cookie(cookie));
       },
     ),
-    DioLink('${Env.apiUrl}/graphql', client: Dio()..httpClientAdapter = Http2Adapter(ConnectionManager())),
+    DioLink('${Env.apiUrl}/graphql', client: dio),
   ]);
 
   final cache = Cache(possibleTypes: possibleTypesMap);

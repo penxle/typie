@@ -41,6 +41,8 @@ export const globalCss = defineGlobalStyles({
 
     scrollbarWidth: 'thin',
     scrollbarColor: '{colors.gray.200} {colors.transparent}',
+
+    WebkitTapHighlightColor: 'transparent',
   },
 
   body: {
@@ -87,7 +89,7 @@ export const globalCss = defineGlobalStyles({
   },
 
   '::placeholder': {
-    color: 'gray.400',
+    color: 'gray.300',
   },
 
   '::-webkit-search-cancel-button': {

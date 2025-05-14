@@ -35,7 +35,7 @@ class HomeScreen extends HookWidget {
                 Btn(
                   'editor',
                   onTap: () async {
-                    await context.router.push(const EditorRoute());
+                    await context.router.push(EditorRoute(slug: data.me!.sites[0].firstEntity!.slug));
                   },
                 ),
                 Tappable(
