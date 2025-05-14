@@ -46,8 +46,11 @@ class AppWebView: NSObject, FlutterPlatformView {
       webView.isInspectable = true
     }
 
+    webView.configuration.userContentController.add(self, name: "handler")
+
     setupConsole()
     disableZoom()
+    setupEventChannel()
 
     if let params = args as? [String: Any] {
       if let userAgent = params["userAgent"] as? String {
@@ -68,37 +71,42 @@ class AppWebView: NSObject, FlutterPlatformView {
     }
 
     channel.setMethodCallHandler { [weak self] call, result in
-      guard let self = self else {
-        return
-      }
-
-      guard let args = call.arguments as? [String: Any] else {
+      guard let self = self,
+            let args = call.arguments as? [String: Any]
+      else {
         return
       }
 
       switch call.method {
-        case "loadUrl":
-          if let url = args["url"] as? String, let nsUrl = URL(string: url) {
-            let request = URLRequest(
-              url: nsUrl,
-              cachePolicy: .reloadIgnoringLocalCacheData,
-              timeoutInterval: 60.0
-            )
+      case "loadUrl":
+        if let url = args["url"] as? String, let nsUrl = URL(string: url) {
+          let request = URLRequest(
+            url: nsUrl,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 60.0
+          )
 
-            webView.load(request)
-          }
+          webView.load(request)
+        }
 
-        case "requestFocus":
-          webView.becomeFirstResponder()
+      case "requestFocus":
+        webView.becomeFirstResponder()
 
-        case "clearFocus":
-          webView.resignFirstResponder()
+      case "clearFocus":
+        webView.resignFirstResponder()
 
-        case "dispose":
-          dispose()
+      case "emitEvent":
+        if let name = args["name"] as? String, let data = args["data"] as? String {
+          webView.evaluateJavaScript("""
+            window.dispatchEvent(new CustomEvent('__webview__', { detail: { name: '\(name)', data: JSON.parse('\(data)') } }))
+          """)
+        }
 
-        default:
-          result(FlutterMethodNotImplemented)
+      case "dispose":
+        dispose()
+
+      default:
+        result(FlutterMethodNotImplemented)
       }
     }
   }
@@ -117,14 +125,14 @@ class AppWebView: NSObject, FlutterPlatformView {
     webView.navigationDelegate = nil
     webView.uiDelegate = nil
 
-    webView.configuration.userContentController.removeScriptMessageHandler(forName: "onConsole")
+    webView.configuration.userContentController.removeScriptMessageHandler(forName: "handler")
     webView.configuration.userContentController.removeAllUserScripts()
   }
 
   private func setupConsole() {
     let script = """
       (() => {
-        const log = (level) => (message) => window.webkit.messageHandlers.onConsole.postMessage({ level, message: String(message) });
+        const log = (level) => (message) => window.webkit.messageHandlers.handler.postMessage({ name: 'console', attrs: { level, message: String(message) }});
         console.log = log('LOG'); console.debug = log('DEBUG'); console.info = log('INFO'); console.warn = log('WARN'); console.error = log('ERROR');
       })();
     """
@@ -135,7 +143,6 @@ class AppWebView: NSObject, FlutterPlatformView {
       forMainFrameOnly: false
     )
 
-    webView.configuration.userContentController.add(self, name: "onConsole")
     webView.configuration.userContentController.addUserScript(userScript)
   }
 
@@ -155,6 +162,39 @@ class AppWebView: NSObject, FlutterPlatformView {
 
     webView.configuration.userContentController.addUserScript(userScript)
   }
+
+  private func setupEventChannel() {
+    let script = """
+      (() => {
+        const handlers = new WeakMap();
+        window.__webview__ = {
+          emitEvent: (name, data) => window.webkit.messageHandlers.handler.postMessage({
+            name: 'emitEvent',
+            attrs: { name, data: JSON.stringify(data ?? null)},
+          }),
+          addEventListener: (name, fn) => {
+            const handler = (event) => { if (event.detail.name === name) fn(event.data) };
+            handlers.set(fn, handler);
+            window.addEventListener('__webview__', handler);
+          },
+          removeEventListener: (name, fn) => {
+            const handler = handlers.get(fn);
+            if (handler) {
+              window.removeEventListener('__webview__', handler);
+            }
+          },
+        };
+      })();
+    """
+
+    let userScript = WKUserScript(
+      source: script,
+      injectionTime: .atDocumentStart,
+      forMainFrameOnly: true
+    )
+
+    webView.configuration.userContentController.addUserScript(userScript)
+  }
 }
 
 extension AppWebView: WKNavigationDelegate {
@@ -167,14 +207,34 @@ extension AppWebView: WKUIDelegate {}
 
 extension AppWebView: WKScriptMessageHandler {
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-    if message.name == "onConsole", let body = message.body as? [String: Any] {
-      guard let level = body["level"] as? String,
-            let _message = body["message"] as? String else { return }
+    guard let body = message.body as? [String: Any],
+          let name = body["name"] as? String,
+          let attrs = body["attrs"] as? [String: Any]
+    else {
+      return
+    }
 
-      channel.invokeMethod("onConsole", arguments: [
-        "level": level,
-        "message": _message,
-      ])
+    switch name {
+    case "console":
+      if let level = attrs["level"] as? String,
+         let message = attrs["message"] as? String
+      {
+        channel.invokeMethod("console", arguments: [
+          "level": level,
+          "message": message,
+        ])
+      }
+    case "emitEvent":
+      if let name = attrs["name"] as? String,
+         let data = attrs["data"] as? String
+      {
+        channel.invokeMethod("emitEvent", arguments: [
+          "name": name,
+          "data": data,
+        ])
+      }
+    default:
+      break
     }
   }
 }

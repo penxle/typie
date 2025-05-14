@@ -19,9 +19,25 @@ class EditorScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final auth = useService<Auth>();
-    final webViewController = useRef<WebViewController?>(null);
+    final webViewController = useState<WebViewController?>(null);
 
     final focusNode = useFocusNode();
+
+    useEffect(() {
+      if (webViewController.value == null) {
+        return null;
+      }
+
+      final controller = webViewController.value!;
+
+      final subscription = controller.onEvent.listen((event) {
+        if (event.name == 'editor.ready') {
+          focusNode.requestFocus();
+        }
+      });
+
+      return subscription.cancel;
+    }, [webViewController.value]);
 
     if (auth.value case Authenticated(:final accessToken)) {
       return Screen(
@@ -33,7 +49,6 @@ class EditorScreen extends HookWidget {
           initialCookies: [Cookie('typie-at', accessToken)],
           onWebViewCreated: (controller) {
             webViewController.value = controller;
-            focusNode.requestFocus();
           },
         ),
       );

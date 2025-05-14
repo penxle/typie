@@ -202,6 +202,8 @@
 
     editor?.current.on('transaction', handler);
 
+    window.__webview__?.emitEvent('editor.ready');
+
     return () => {
       clearInterval(forceSyncInterval);
 

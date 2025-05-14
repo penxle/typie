@@ -58,7 +58,7 @@ class AppWebView(
         }
 
         channel.invokeMethod(
-          "onConsole", mapOf("level" to level, "message" to message)
+          "console", mapOf("level" to level, "message" to message)
         )
 
         return true
