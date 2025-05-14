@@ -29,9 +29,14 @@
       element,
       extensions: [...defaultExtensions, ...(extensions ?? []), ...(doc && awareness ? [Collaboration.configure({ doc, awareness })] : [])],
       injectCSS: false,
+      autofocus: false,
 
       editorProps: {
-        attributes: { class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style) },
+        attributes: {
+          class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style),
+          autocapitalize: 'off',
+          spellcheck: 'false',
+        },
         scrollMargin: { top: 250, bottom: 150, left: 0, right: 0 },
         scrollThreshold: { top: 250, bottom: 150, left: 0, right: 0 },
 

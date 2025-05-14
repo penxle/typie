@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:dio_http2_adapter/dio_http2_adapter.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -14,7 +15,10 @@ abstract class RegisterModule {
       const FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true, resetOnError: true));
 
   @singleton
-  Dio get dio => Dio()..httpClientAdapter = Http2Adapter(ConnectionManager());
+  Dio get dio =>
+      kDebugMode
+          ? (Dio()..httpClientAdapter = HttpClientAdapter())
+          : (Dio()..httpClientAdapter = Http2Adapter(ConnectionManager()));
 
   @singleton
   GoogleSignIn get googleSignIn => GoogleSignIn(

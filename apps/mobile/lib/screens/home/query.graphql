@@ -2,5 +2,14 @@ query HomeScreen_Query {
   me {
     id
     email
+
+    sites {
+      id
+      
+      firstEntity(type: POST) {
+        id
+        slug
+      }
+    }
   }
 }

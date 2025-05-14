@@ -30,4 +30,7 @@ abstract class Env {
 
   @EnviedField()
   static String oidcClientSecret = _Env.oidcClientSecret;
+
+  @EnviedField()
+  static String websiteUrl = _Env.websiteUrl;
 }

@@ -80,8 +80,7 @@ class AppWebView(
 
             if (name != null && value != null && domain != null) {
               cookieManager.setCookie(
-                "https://$domain",
-                "$name=$value; Domain=$domain; Path=/; Secure; SameSite=Lax"
+                "https://$domain", "$name=$value; Domain=$domain; Path=/; Secure; SameSite=Lax"
               )
             }
           }
@@ -97,6 +96,8 @@ class AppWebView(
 
   override fun onMethodCall(call: MethodCall, result: Result) {
     when (call.method) {
+      "requestFocus" -> webView.requestFocus()
+      "clearFocus" -> webView.clearFocus()
       "dispose" -> {}
       else -> result.notImplemented()
     }
