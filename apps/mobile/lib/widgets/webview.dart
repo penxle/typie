@@ -5,9 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:typie/logger.dart';
 
 class WebView extends StatefulWidget {
-  const WebView({required this.initialUrl, this.userAgent, this.onWebViewCreated, super.key});
+  const WebView({required this.initialUrl, this.initialCookies, this.userAgent, this.onWebViewCreated, super.key});
 
   final String initialUrl;
+  final List<Cookie>? initialCookies;
   final String? userAgent;
   final void Function(WebViewController controller)? onWebViewCreated;
 
@@ -18,23 +19,32 @@ class WebView extends StatefulWidget {
 }
 
 class _WebViewState extends State<WebView> {
+  final viewType = 'co.typie.webview';
   late final WebViewController _controller;
 
   @override
   Widget build(BuildContext context) {
-    final params = <String, dynamic>{'initialUrl': widget.initialUrl, 'userAgent': widget.userAgent ?? 'Typie/1.0.0'};
+    final initialHost = Uri.parse(widget.initialUrl).host;
+    final creationParams = <String, dynamic>{
+      'userAgent': widget.userAgent ?? 'Typie/1.0.0',
+      'initialUrl': widget.initialUrl,
+      'initialCookies':
+          widget.initialCookies
+              ?.map((cookie) => {'name': cookie.name, 'value': cookie.value, 'domain': initialHost})
+              .toList(),
+    };
 
     if (Platform.isAndroid) {
       return AndroidView(
-        viewType: 'co.typie.webview',
-        creationParams: params,
+        viewType: viewType,
+        creationParams: creationParams,
         creationParamsCodec: const StandardMessageCodec(),
         onPlatformViewCreated: _onPlatformViewCreated,
       );
     } else if (Platform.isIOS) {
       return UiKitView(
-        viewType: 'co.typie.webview',
-        creationParams: params,
+        viewType: viewType,
+        creationParams: creationParams,
         creationParamsCodec: const StandardMessageCodec(),
         onPlatformViewCreated: _onPlatformViewCreated,
       );

@@ -19,6 +19,23 @@ class AppWebView: NSObject, FlutterPlatformView {
     configuration.suppressesIncrementalRendering = true
     configuration.websiteDataStore = WKWebsiteDataStore.nonPersistent()
 
+    if let params = args as? [String: Any] {
+      if let cookies = params["initialCookies"] as? [[String: Any]] {
+        for cookie in cookies {
+          let httpCookie = HTTPCookie(properties: [
+            .name: cookie["name"]!,
+            .value: cookie["value"]!,
+            .domain: cookie["domain"]!,
+            .path: "/",
+            .sameSitePolicy: HTTPCookieStringPolicy.sameSiteLax,
+            .secure: true,
+          ])!
+
+          configuration.websiteDataStore.httpCookieStore.setCookie(httpCookie)
+        }
+      }
+    }
+
     webView = WKWebView(frame: frame, configuration: configuration)
 
     super.init()
@@ -31,6 +48,7 @@ class AppWebView: NSObject, FlutterPlatformView {
     }
 
     setupConsole()
+    disableZoom()
 
     if let params = args as? [String: Any] {
       if let userAgent = params["userAgent"] as? String {
@@ -115,15 +133,26 @@ class AppWebView: NSObject, FlutterPlatformView {
     webView.configuration.userContentController.add(self, name: "onConsole")
     webView.configuration.userContentController.addUserScript(userScript)
   }
+
+  private func disableZoom() {
+    let script = """
+      (() => {
+        const meta = document.createElement('meta'); meta.name = 'viewport'; meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        const head = document.querySelector('head'); head.appendChild(meta);
+      })();
+    """
+
+    let userScript = WKUserScript(
+      source: script,
+      injectionTime: .atDocumentEnd,
+      forMainFrameOnly: true
+    )
+
+    webView.configuration.userContentController.addUserScript(userScript)
+  }
 }
 
 extension AppWebView: WKNavigationDelegate {
-  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    channel.invokeMethod("onPageFinished", arguments: [
-      "url": webView.url?.absoluteString,
-    ])
-  }
-
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
     webView.reload()
   }
