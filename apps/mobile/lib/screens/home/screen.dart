@@ -9,6 +9,7 @@ import 'package:typie/modals/plan.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/query.req.gql.dart';
 import 'package:typie/services/auth.dart';
+import 'package:typie/widgets/btn.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -31,6 +32,12 @@ class HomeScreen extends HookWidget {
               children: [
                 const Icon(LucideIcons.user, size: 100),
                 Text(data.me!.email),
+                Btn(
+                  'editor',
+                  onTap: () async {
+                    await context.router.push(const EditorRoute());
+                  },
+                ),
                 Tappable(
                   child: const Text('plan'),
                   onTap: () async {

@@ -23,6 +23,7 @@ class AppRouter extends RootStackRouter {
           transitionsBuilder: TransitionsBuilders.fadeIn,
           children: [
             AutoRoute(page: HomeRoute.page, initial: true),
+            AutoRoute(page: EditorRoute.page),
             AutoRoute(page: EntityTreeRoute.page, path: 'entity/:entityId'),
           ],
         ),
