@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -85,6 +87,8 @@ class _WebViewState extends State<WebView> {
     }
 
     _controller._channel.invokeMethod('dispose', <dynamic, dynamic>{});
+    _controller._channel.setMethodCallHandler(null);
+    _controller._streamController.close();
 
     super.dispose();
   }
@@ -94,8 +98,10 @@ class _WebViewState extends State<WebView> {
       try {
         final args = call.arguments as Map<dynamic, dynamic>;
         switch (call.method) {
-          case 'onConsole':
+          case 'console':
             _onConsole(args['level'] as String, args['message'] as String);
+          case 'emitEvent':
+            _onEmitEvent(args['name'] as String, jsonDecode(args['data'] as String));
           default:
             throw MissingPluginException('Method ${call.method} not implemented');
         }
@@ -115,6 +121,10 @@ class _WebViewState extends State<WebView> {
     log.d('WebView: [$level] $message');
   }
 
+  void _onEmitEvent(String name, dynamic data) {
+    _controller._streamController.add(WebViewEvent(name, data));
+  }
+
   void _onFocusChanged() {
     if (widget.focusNode!.hasFocus) {
       _controller.requestFocus();
@@ -126,6 +136,9 @@ class WebViewController {
   WebViewController(this._channel);
 
   final MethodChannel _channel;
+  final _streamController = StreamController<WebViewEvent>.broadcast();
+
+  Stream<WebViewEvent> get onEvent => _streamController.stream;
 
   Future<void> loadUrl(String url) async {
     await _channel.invokeMethod('loadUrl', {'url': url});
@@ -134,4 +147,15 @@ class WebViewController {
   Future<void> requestFocus() async {
     await _channel.invokeMethod('requestFocus', <dynamic, dynamic>{});
   }
+
+  void emitEvent(String name, [dynamic data]) {
+    _channel.invokeMethod('emitEvent', {'name': name, 'data': jsonEncode(data)});
+  }
+}
+
+class WebViewEvent {
+  const WebViewEvent(this.name, [this.data]);
+
+  final String name;
+  final dynamic data;
 }
