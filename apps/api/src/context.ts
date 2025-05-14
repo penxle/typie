@@ -10,6 +10,7 @@ import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import * as R from 'remeda';
 import { db, firstOrThrow, UserSessions } from '@/db';
+import { dev } from '@/env';
 import { publicKey } from '@/utils';
 import type { Context as HonoContext } from 'hono';
 
@@ -65,7 +66,7 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
     setCookie(c, 'typie-did', deviceId, {
       path: '/',
       httpOnly: true,
-      secure: true,
+      secure: !dev,
       sameSite: 'lax',
       maxAge: dayjs.duration(1, 'year').asSeconds(),
     });
