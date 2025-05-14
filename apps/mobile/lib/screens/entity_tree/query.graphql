@@ -1,0 +1,13 @@
+# import './entity_tree_entity_entity.graphql'
+
+query EntityTreeScreen_Query($entityId: ID!) {
+  entity(entityId: $entityId) {
+    id
+    ...EntityTree_Entity_entity
+
+    children {
+      id
+      ...EntityTree_Entity_entity
+    }
+  }
+}

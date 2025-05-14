@@ -1,0 +1,16 @@
+# import './entity_tree_entity_entity.graphql'
+
+query EntityTreeScreen_Root_Query {
+  me {
+    id
+
+    sites {
+      id
+
+      entities {
+        id
+        ...EntityTree_Entity_entity
+      }
+    }
+  }
+}
