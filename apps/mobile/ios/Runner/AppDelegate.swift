@@ -9,9 +9,11 @@ import UIKit
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
 
-    if #available(iOS 10.0, *) {
-      UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
-    }
+    UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
+
+    let registrar = self.registrar(forPlugin: "co.typie.webview")
+    let factory = AppWebViewFactory(messenger: registrar!.messenger())
+    registrar?.register(factory, withId: "co.typie.webview")
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
