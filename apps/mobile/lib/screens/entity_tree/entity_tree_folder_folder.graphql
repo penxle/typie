@@ -1,0 +1,12 @@
+fragment EntityTree_Folder_folder on Folder {
+  id
+  name
+
+  entity {
+    id
+    order
+    depth
+    visibility
+    url
+  }
+}

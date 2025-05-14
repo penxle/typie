@@ -21,7 +21,10 @@ class AppRouter extends RootStackRouter {
         CustomRoute<dynamic>(
           page: DashboardShell,
           transitionsBuilder: TransitionsBuilders.fadeIn,
-          children: [AutoRoute(page: HomeRoute.page, initial: true)],
+          children: [
+            AutoRoute(page: HomeRoute.page, initial: true),
+            AutoRoute(page: EntityTreeRoute.page, path: 'entity/:entityId'),
+          ],
         ),
       ],
     ),

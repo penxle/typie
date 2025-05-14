@@ -1,0 +1,14 @@
+fragment EntityTree_Post_post on Post {
+  id
+  type
+  title
+
+  entity {
+    id
+    depth
+    order
+    slug
+    visibility
+    url
+  }
+}
