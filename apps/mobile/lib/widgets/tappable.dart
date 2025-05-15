@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
-class Tappable extends StatelessWidget {
-  const Tappable({required this.child, required this.onTap, super.key});
+class Tappable extends HookWidget {
+  const Tappable({required this.onTap, this.child, this.builder, super.key})
+    : assert(child != null || builder != null, 'Either child or builder must be provided');
 
-  final Widget child;
+  final Widget? child;
+  final Widget Function(BuildContext context, {bool isPressed})? builder;
   final void Function() onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: child);
+    final isPressed = useState(false);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      onTapDown: (_) => isPressed.value = true,
+      onTapUp: (_) => isPressed.value = false,
+      onTapCancel: () => isPressed.value = false,
+      child: builder != null ? builder!(context, isPressed: isPressed.value) : child,
+    );
   }
 }
 

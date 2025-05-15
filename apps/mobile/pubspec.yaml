@@ -11,6 +11,7 @@ dependencies:
   auto_route: ^10.0.1
   back_button_interceptor: ^8.0.4
   built_value: ^8.9.5
+  collection: ^1.19.1
   dio: ^5.8.0+1
   dio_http2_adapter: ^2.6.0
   envied: ^1.1.1

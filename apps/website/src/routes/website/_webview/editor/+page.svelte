@@ -187,10 +187,18 @@
     const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
 
     const handler = ({ editor }: { editor: Editor }) => {
+      const anchor = editor.state.selection.$anchor;
+
+      window.__webview__?.emitEvent('state', {
+        nodes: Array.from({ length: anchor.depth + 1 }, (_, i) => ({ type: anchor.node(i).type.name, attrs: anchor.node(i).attrs })),
+        marks: anchor.marks().map((mark) => mark.toJSON()),
+        storedMarks: editor.state.storedMarks?.map((mark) => mark.toJSON()),
+      });
+
       const marks =
         arrayOrNull(editor.state.storedMarks) ||
-        arrayOrNull(editor.state.selection.$anchor.marks()) ||
-        arrayOrNull(editor.state.selection.$anchor.parent.firstChild?.firstChild?.marks) ||
+        arrayOrNull(anchor.marks()) ||
+        arrayOrNull(anchor.parent.firstChild?.firstChild?.marks) ||
         [];
 
       const jsonMarks = marks.map((mark) => mark.toJSON());
@@ -202,15 +210,77 @@
 
     editor?.current.on('transaction', handler);
 
+    window.__webview__?.addEventListener('focus', () => {
+      editor?.current.commands.focus();
+      window.__webview__?.emitEvent('focus');
+    });
+
     window.__webview__?.addEventListener('blur', () => {
       titleEl?.blur();
       subtitleEl?.blur();
       editor?.current.commands.blur();
-
       window.__webview__?.emitEvent('blur');
     });
 
-    window.__webview__?.emitEvent('ready');
+    window.__webview__?.addEventListener('command', (data) => {
+      const name = data.name as string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const attrs = data.attrs as Record<string, any>;
+
+      if (name === 'bold') {
+        editor?.current.chain().focus().toggleBold().run();
+      } else if (name === 'italic') {
+        editor?.current.chain().focus().toggleItalic().run();
+      } else if (name === 'underline') {
+        editor?.current.chain().focus().toggleUnderline().run();
+      } else if (name === 'strike') {
+        editor?.current.chain().focus().toggleStrike().run();
+      } else if (name === 'text_style') {
+        if (attrs.fontFamily) {
+          editor?.current.chain().focus().setFontFamily(attrs.fontFamily).run();
+        }
+        if (attrs.fontSize) {
+          editor?.current.chain().focus().setFontSize(attrs.fontSize).run();
+        }
+        if (attrs.textColor) {
+          editor?.current.chain().focus().setTextColor(attrs.textColor).run();
+        }
+      } else if (name === 'paragraph') {
+        if (attrs.textAlign) {
+          editor?.current.chain().focus().setParagraphTextAlign(attrs.textAlign).run();
+        }
+        if (attrs.lineHeight) {
+          editor?.current.chain().focus().setParagraphLineHeight(attrs.lineHeight).run();
+        }
+        if (attrs.letterSpacing) {
+          editor?.current.chain().focus().setParagraphLetterSpacing(attrs.letterSpacing).run();
+        }
+      } else if (name === 'image') {
+        editor?.current.chain().focus().setImage().run();
+      } else if (name === 'file') {
+        editor?.current.chain().focus().setFile().run();
+      } else if (name === 'embed') {
+        editor?.current.chain().focus().setEmbed().run();
+      } else if (name === 'horizontal_rule') {
+        editor?.current.chain().focus().setHorizontalRule().run();
+      } else if (name === 'blockquote') {
+        editor?.current.chain().focus().toggleBlockquote().run();
+      } else if (name === 'callout') {
+        editor?.current.chain().focus().toggleCallout().run();
+      } else if (name === 'fold') {
+        editor?.current.chain().focus().toggleFold().run();
+      } else if (name === 'table') {
+        editor?.current.chain().focus().insertTable().run();
+      } else if (name === 'bullet_list') {
+        editor?.current.chain().focus().toggleBulletList().run();
+      } else if (name === 'ordered_list') {
+        editor?.current.chain().focus().toggleOrderedList().run();
+      } else if (name === 'code_block') {
+        editor?.current.chain().focus().setCodeBlock().run();
+      } else if (name === 'html_block') {
+        editor?.current.chain().focus().setHtmlBlock().run();
+      }
+    });
 
     return () => {
       clearInterval(forceSyncInterval);
@@ -304,6 +374,7 @@
         {doc}
         oncreate={() => {
           titleEl?.focus();
+          window.__webview__?.emitEvent('ready');
         }}
         bind:editor
       />
