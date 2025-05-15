@@ -4,6 +4,7 @@
 fragment EntityTree_Entity_entity on Entity {
   id
   depth
+  order
 
   node {
     __typename
