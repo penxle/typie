@@ -10,6 +10,7 @@ class Screen extends StatelessWidget {
     this.safeArea = true,
     this.heading,
     this.resizeToAvoidBottomInset = true,
+    this.keyboardDismiss = true,
     this.padding,
     this.backgroundColor = AppColors.white,
   });
@@ -19,20 +20,27 @@ class Screen extends StatelessWidget {
   final List<Widget>? actions;
   final bool safeArea;
   final bool resizeToAvoidBottomInset;
+  final bool keyboardDismiss;
   final EdgeInsets? padding;
   final Color backgroundColor;
 
   @override
   Widget build(BuildContext context) {
-    final inner = Box(padding: padding, child: child);
+    Widget body = Box(padding: padding, child: child);
+
+    if (keyboardDismiss) {
+      body = KeyboardDismiss(child: body);
+    }
+
+    if (safeArea) {
+      body = SafeArea(maintainBottomViewPadding: !resizeToAvoidBottomInset, child: body);
+    }
 
     return Scaffold(
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       backgroundColor: backgroundColor,
       appBar: heading,
-      body: SizedBox.expand(
-        child: safeArea ? SafeArea(maintainBottomViewPadding: !resizeToAvoidBottomInset, child: inner) : inner,
-      ),
+      body: body,
     );
   }
 }

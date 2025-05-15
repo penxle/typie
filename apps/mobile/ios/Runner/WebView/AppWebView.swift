@@ -17,6 +17,7 @@ class AppWebView: NSObject, FlutterPlatformView {
     let configuration = WKWebViewConfiguration()
 
     configuration.suppressesIncrementalRendering = true
+    configuration.selectionGranularity = .character
     configuration.websiteDataStore = WKWebsiteDataStore.nonPersistent()
 
     if let params = args as? [String: Any] {
@@ -75,6 +76,7 @@ class AppWebView: NSObject, FlutterPlatformView {
       guard let self = self,
             let args = call.arguments as? [String: Any]
       else {
+        result(nil)
         return
       }
 
@@ -89,12 +91,15 @@ class AppWebView: NSObject, FlutterPlatformView {
 
           webView.load(request)
         }
+        result(nil)
 
       case "requestFocus":
         webView.becomeFirstResponder()
+        result(nil)
 
       case "clearFocus":
         webView.resignFirstResponder()
+        result(nil)
 
       case "emitEvent":
         if let name = args["name"] as? String, let data = args["data"] as? String {
@@ -102,9 +107,11 @@ class AppWebView: NSObject, FlutterPlatformView {
             window.dispatchEvent(new CustomEvent('__webview__', { detail: { name: '\(name)', data: JSON.parse('\(data)') } }))
           """)
         }
+        result(nil)
 
       case "dispose":
         dispose()
+        result(nil)
 
       default:
         result(FlutterMethodNotImplemented)
