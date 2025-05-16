@@ -47,6 +47,7 @@ class AppWebView: NSObject, FlutterPlatformView {
       webView.isInspectable = true
     }
 
+    webView.setKeyboardRequiresUserInteraction(false)
     webView.scrollView.contentInsetAdjustmentBehavior = .never
     webView.configuration.userContentController.add(self, name: "handler")
 
