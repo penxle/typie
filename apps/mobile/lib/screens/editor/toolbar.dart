@@ -56,7 +56,6 @@ class EditorToolbar extends HookWidget {
                         onTap: () async {
                           if (selectedToolboxIdx == 1) {
                             await webViewController?.requestFocus();
-                            scope.selectedToolboxIdx.value = -1;
                           } else {
                             scope.selectedToolboxIdx.value = 1;
                             await webViewController?.clearFocus();
@@ -74,7 +73,6 @@ class EditorToolbar extends HookWidget {
                         icon: LucideLightIcons.image,
                         onTap: () async {
                           await webViewController?.requestFocus();
-                          scope.selectedToolboxIdx.value = -1;
                         },
                       ),
                       _IconToolbarButton(
@@ -93,7 +91,6 @@ class EditorToolbar extends HookWidget {
                         icon: LucideLightIcons.settings,
                         onTap: () async {
                           await webViewController?.requestFocus();
-                          scope.selectedToolboxIdx.value = -1;
                         },
                       ),
                     ],
@@ -115,7 +112,6 @@ class EditorToolbar extends HookWidget {
                     onTap: () async {
                       await webViewController?.requestFocus();
                       scope.selectedTextbarIdx.value = -1;
-                      scope.selectedToolboxIdx.value = -1;
                     },
                   ),
                 ],
