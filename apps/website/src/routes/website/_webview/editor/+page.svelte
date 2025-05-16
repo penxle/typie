@@ -228,23 +228,23 @@
       } else if (name === 'strike') {
         editor?.current.chain().focus().toggleStrike().run();
       } else if (name === 'text_style') {
-        if (attrs.fontFamily) {
+        if (attrs.fontFamily !== undefined) {
           editor?.current.chain().focus().setFontFamily(attrs.fontFamily).run();
         }
-        if (attrs.fontSize) {
+        if (attrs.fontSize !== undefined) {
           editor?.current.chain().focus().setFontSize(attrs.fontSize).run();
         }
-        if (attrs.textColor) {
+        if (attrs.textColor !== undefined) {
           editor?.current.chain().focus().setTextColor(attrs.textColor).run();
         }
       } else if (name === 'paragraph') {
-        if (attrs.textAlign) {
+        if (attrs.textAlign !== undefined) {
           editor?.current.chain().focus().setParagraphTextAlign(attrs.textAlign).run();
         }
-        if (attrs.lineHeight) {
+        if (attrs.lineHeight !== undefined) {
           editor?.current.chain().focus().setParagraphLineHeight(attrs.lineHeight).run();
         }
-        if (attrs.letterSpacing) {
+        if (attrs.letterSpacing !== undefined) {
           editor?.current.chain().focus().setParagraphLetterSpacing(attrs.letterSpacing).run();
         }
       } else if (name === 'image') {
