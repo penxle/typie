@@ -11,7 +11,7 @@ platform :ios do
       output_file: "udids.txt",
     )
 
-    register_devices(devices_file: "./build/udids.txt")
+    register_devices(devices_file: "./udids.txt")
     
     match(type: "development")
     match(type: "adhoc", force_for_new_devices: true)

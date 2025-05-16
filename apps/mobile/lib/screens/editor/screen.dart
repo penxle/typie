@@ -26,7 +26,6 @@ class EditorScreen extends HookWidget implements AutoRouteWrapper {
     final keyboard = useService<Keyboard>();
 
     final isReady = useState(false);
-    final focusNode = useFocusNode();
 
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
@@ -49,16 +48,13 @@ class EditorScreen extends HookWidget implements AutoRouteWrapper {
         return null;
       }
 
-      final subscription = webViewController.onEvent.listen((event) {
+      final subscription = webViewController.onEvent.listen((event) async {
         switch (event.name) {
-          case 'ready':
+          case 'webviewReady':
             isReady.value = true;
-            focusNode.requestFocus();
-          case 'focus':
-            focusNode.requestFocus();
-          case 'blur':
-            focusNode.unfocus();
-          case 'state':
+            await webViewController.requestFocus();
+            await webViewController.emitEvent('appReady');
+          case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
         }
       });
@@ -82,7 +78,6 @@ class EditorScreen extends HookWidget implements AutoRouteWrapper {
                 children: [
                   Expanded(
                     child: WebView(
-                      focusNode: focusNode,
                       initialUrl: '${Env.websiteUrl}/_webview/editor?slug=$slug',
                       initialCookies: [Cookie('typie-at', accessToken)],
                       onWebViewCreated: (controller) {
