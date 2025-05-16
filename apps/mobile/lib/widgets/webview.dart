@@ -7,21 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:typie/logger.dart';
 
 class WebView extends StatefulWidget {
-  const WebView({
-    required this.initialUrl,
-    this.initialCookies,
-    this.userAgent,
-    this.onWebViewCreated,
-    this.focusNode,
-    super.key,
-  });
+  const WebView({required this.initialUrl, this.initialCookies, this.userAgent, this.onWebViewCreated, super.key});
 
   final String initialUrl;
   final List<Cookie>? initialCookies;
   final String? userAgent;
   final void Function(WebViewController controller)? onWebViewCreated;
-
-  final FocusNode? focusNode;
 
   @override
   State<WebView> createState() {
@@ -32,15 +23,6 @@ class WebView extends StatefulWidget {
 class _WebViewState extends State<WebView> {
   final viewType = 'co.typie.webview';
   late final WebViewController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-
-    if (widget.focusNode != null) {
-      widget.focusNode!.addListener(_onFocusChanged);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,24 +38,18 @@ class _WebViewState extends State<WebView> {
     };
 
     if (Platform.isAndroid) {
-      return Focus(
-        focusNode: widget.focusNode,
-        child: AndroidView(
-          viewType: viewType,
-          creationParams: creationParams,
-          creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: _onPlatformViewCreated,
-        ),
+      return AndroidView(
+        viewType: viewType,
+        creationParams: creationParams,
+        creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: _onPlatformViewCreated,
       );
     } else if (Platform.isIOS) {
-      return Focus(
-        focusNode: widget.focusNode,
-        child: UiKitView(
-          viewType: viewType,
-          creationParams: creationParams,
-          creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: _onPlatformViewCreated,
-        ),
+      return UiKitView(
+        viewType: viewType,
+        creationParams: creationParams,
+        creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: _onPlatformViewCreated,
       );
     }
 
@@ -82,10 +58,6 @@ class _WebViewState extends State<WebView> {
 
   @override
   void dispose() {
-    if (widget.focusNode != null) {
-      widget.focusNode!.removeListener(_onFocusChanged);
-    }
-
     _controller._channel.invokeMethod('dispose', <dynamic, dynamic>{});
     _controller._channel.setMethodCallHandler(null);
     _controller._streamController.close();
@@ -123,14 +95,6 @@ class _WebViewState extends State<WebView> {
 
   void _onEmitEvent(String name, dynamic data) {
     _controller._streamController.add(WebViewEvent(name, data));
-  }
-
-  void _onFocusChanged() {
-    if (widget.focusNode!.hasFocus) {
-      _controller.requestFocus();
-    } else {
-      _controller.clearFocus();
-    }
   }
 }
 

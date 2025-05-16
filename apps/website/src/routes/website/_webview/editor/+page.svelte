@@ -189,7 +189,7 @@
     const handler = ({ editor }: { editor: Editor }) => {
       const anchor = editor.state.selection.$anchor;
 
-      window.__webview__?.emitEvent('state', {
+      window.__webview__?.emitEvent('setProseMirrorState', {
         nodes: Array.from({ length: anchor.depth + 1 }, (_, i) => ({ type: anchor.node(i).type.name, attrs: anchor.node(i).attrs })),
         marks: anchor.marks().map((mark) => mark.toJSON()),
         storedMarks: editor.state.storedMarks?.map((mark) => mark.toJSON()),
@@ -210,16 +210,8 @@
 
     editor?.current.on('transaction', handler);
 
-    window.__webview__?.addEventListener('focus', () => {
-      editor?.current.commands.focus();
-      window.__webview__?.emitEvent('focus');
-    });
-
-    window.__webview__?.addEventListener('blur', () => {
-      titleEl?.blur();
-      subtitleEl?.blur();
-      editor?.current.commands.blur();
-      window.__webview__?.emitEvent('blur');
+    window.__webview__?.addEventListener('appReady', () => {
+      titleEl?.focus();
     });
 
     window.__webview__?.addEventListener('command', (data) => {
@@ -279,6 +271,10 @@
         editor?.current.chain().focus().setCodeBlock().run();
       } else if (name === 'html_block') {
         editor?.current.chain().focus().setHtmlBlock().run();
+      } else if (name === 'undo') {
+        editor?.current.chain().focus().undo().run();
+      } else if (name === 'redo') {
+        editor?.current.chain().focus().redo().run();
       }
     });
 
@@ -373,8 +369,7 @@
         {awareness}
         {doc}
         oncreate={() => {
-          titleEl?.focus();
-          window.__webview__?.emitEvent('ready');
+          window.__webview__?.emitEvent('webviewReady');
         }}
         bind:editor
       />
