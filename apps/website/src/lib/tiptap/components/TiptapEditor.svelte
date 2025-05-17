@@ -18,9 +18,10 @@
     extensions?: Extension[];
     onkeydown?: (view: EditorView, event: KeyboardEvent) => void;
     oncreate?: () => void;
+    onfile?: (event: { pos: number; files: File[] }) => void;
   };
 
-  let { style, editor = $bindable(), doc, awareness, extensions, onkeydown, oncreate }: Props = $props();
+  let { style, editor = $bindable(), doc, awareness, extensions, onkeydown, oncreate, onfile }: Props = $props();
 
   let element = $state<HTMLDivElement>();
 
@@ -42,6 +43,24 @@
         scrollThreshold: window.__webview__ ? 24 : 48,
 
         handleKeyDown: onkeydown,
+
+        handleDrop: (view, event) => {
+          if (event.dataTransfer?.files?.length) {
+            const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.anchor;
+            onfile?.({ pos, files: [...event.dataTransfer.files] });
+          }
+
+          return true;
+        },
+
+        handlePaste: (view, event) => {
+          if (event.clipboardData?.files?.length) {
+            const pos = view.state.selection.anchor;
+            onfile?.({ pos, files: [...event.clipboardData.files] });
+          }
+
+          return true;
+        },
       },
 
       onTransaction: ({ editor: e }) => {
