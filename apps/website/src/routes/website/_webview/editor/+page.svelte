@@ -248,11 +248,11 @@
           editor?.current.chain().focus().setParagraphLetterSpacing(attrs.letterSpacing).run();
         }
       } else if (name === 'image') {
-        editor?.current.chain().focus().setImage().run();
+        editor?.current.chain().focus().setImage(attrs).run();
       } else if (name === 'file') {
-        editor?.current.chain().focus().setFile().run();
+        editor?.current.chain().focus().setFile(attrs).run();
       } else if (name === 'embed') {
-        editor?.current.chain().focus().setEmbed().run();
+        editor?.current.chain().focus().setEmbed(attrs).run();
       } else if (name === 'horizontal_rule') {
         editor?.current.chain().focus().setHorizontalRule().run();
       } else if (name === 'blockquote') {
