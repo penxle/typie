@@ -187,19 +187,20 @@
     const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
 
     const handler = ({ editor }: { editor: Editor }) => {
-      const anchor = editor.state.selection.$anchor;
+      const { doc, selection, storedMarks: storedMarks_ } = editor.state;
+      const { $anchor: anchor } = selection;
 
       window.__webview__?.emitEvent('setProseMirrorState', {
-        nodes: Array.from({ length: anchor.depth + 1 }, (_, i) => ({ type: anchor.node(i).type.name, attrs: anchor.node(i).attrs })),
+        nodes: [...Array.from({ length: anchor.depth + 1 }, (_, i) => anchor.node(i)), doc.nodeAt(anchor.pos)]
+          .filter((node) => !!node)
+          .map((node) => ({ type: node.type.name, attrs: node.attrs })),
         marks: anchor.marks().map((mark) => mark.toJSON()),
         storedMarks: editor.state.storedMarks?.map((mark) => mark.toJSON()),
+        selection: editor.state.selection.toJSON(),
       });
 
       const marks =
-        arrayOrNull(editor.state.storedMarks) ||
-        arrayOrNull(anchor.marks()) ||
-        arrayOrNull(anchor.parent.firstChild?.firstChild?.marks) ||
-        [];
+        arrayOrNull(storedMarks_) || arrayOrNull(anchor.marks()) || arrayOrNull(anchor.parent.firstChild?.firstChild?.marks) || [];
 
       const jsonMarks = marks.map((mark) => mark.toJSON());
 

@@ -9,6 +9,7 @@ abstract class ProseMirrorState with _$ProseMirrorState {
   const factory ProseMirrorState({
     required List<ProseMirrorNode> nodes,
     required List<ProseMirrorMark> marks,
+    required ProseMirrorSelection selection,
     List<ProseMirrorMark>? storedMarks,
   }) = _ProseMirrorState;
 
@@ -118,4 +119,13 @@ abstract class ProseMirrorMark with _$ProseMirrorMark {
 abstract class ProseMirrorNode with _$ProseMirrorNode {
   const factory ProseMirrorNode({required String type, required Map<String, dynamic>? attrs}) = _ProseMirrorNode;
   factory ProseMirrorNode.fromJson(Map<String, dynamic> json) => _$ProseMirrorNodeFromJson(json);
+}
+
+@Freezed(unionKey: 'type')
+sealed class ProseMirrorSelection with _$ProseMirrorSelection {
+  const factory ProseMirrorSelection.all() = ProseMirrorAllSelection;
+  const factory ProseMirrorSelection.text({required int anchor, required int head}) = ProseMirrorTextSelection;
+  const factory ProseMirrorSelection.node({required int anchor}) = ProseMirrorNodeSelection;
+
+  factory ProseMirrorSelection.fromJson(Map<String, dynamic> json) => _$ProseMirrorSelectionFromJson(json);
 }
