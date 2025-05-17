@@ -12,7 +12,7 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, updateAttributes }: Props = $props();
+  let { node, editor, updateAttributes, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
@@ -33,7 +33,7 @@
   const color = $derived(calloutMap[attrs.type as Callout].color);
 </script>
 
-<NodeView>
+<NodeView {...HTMLAttributes}>
   <div
     style:border-color={color}
     style:background-color={`color-mix(in srgb, ${color} 2%, transparent)`}

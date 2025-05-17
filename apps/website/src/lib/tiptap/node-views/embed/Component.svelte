@@ -13,7 +13,7 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, selected, updateAttributes, deleteNode }: Props = $props();
+  let { node, editor, selected, updateAttributes, deleteNode, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
@@ -94,7 +94,7 @@
   });
 </script>
 
-<NodeView data-drag-handle draggable>
+<NodeView data-drag-handle draggable {...HTMLAttributes}>
   <div class={cx('group', css({ position: 'relative' }))}>
     {#if attrs.id}
       {#if attrs.html}

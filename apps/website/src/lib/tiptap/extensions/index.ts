@@ -4,6 +4,7 @@ export * from './collaboration';
 export * from './command';
 export * from './drop-cursor';
 export * from './limit';
+export * from './node-id';
 export * from './placeholder';
 export * from './syntax-highlight';
 export * from './typography';

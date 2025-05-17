@@ -6,7 +6,7 @@
 
   type Props = NodeViewProps;
 
-  let { node }: Props = $props();
+  let { node, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
@@ -20,6 +20,6 @@
   );
 </script>
 
-<NodeView style={center.raw({ height: '16px' })}>
+<NodeView style={center.raw({ height: '16px' })} {...HTMLAttributes}>
   <Component />
 </NodeView>

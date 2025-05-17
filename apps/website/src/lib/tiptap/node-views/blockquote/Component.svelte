@@ -7,7 +7,7 @@
 
   type Props = NodeViewProps;
 
-  let { node }: Props = $props();
+  let { node, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
@@ -21,7 +21,7 @@
   );
 </script>
 
-<NodeView style={flex.raw({ gap: '16px' })}>
+<NodeView style={flex.raw({ gap: '16px' })} {...HTMLAttributes}>
   <Component />
 
   <NodeViewContentEditable style={css.raw({ flexGrow: '1', '& > *': { textAlign: '[left!]', textIndent: '0!' } })} />

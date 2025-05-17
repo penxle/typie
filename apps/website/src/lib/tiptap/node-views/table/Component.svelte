@@ -104,7 +104,7 @@
   }
 </script>
 
-<NodeView style={css.raw({ position: 'relative' })}>
+<NodeView style={css.raw({ position: 'relative' })} {...HTMLAttributes}>
   <table
     style:--table-border-style={attrs.borderStyle}
     onpointerleave={() => {
