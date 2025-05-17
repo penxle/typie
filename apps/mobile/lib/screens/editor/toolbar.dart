@@ -4,11 +4,16 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/async_effect.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
+import 'package:typie/screens/editor/__generated__/persist_blob_as_image_mutation.req.gql.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/values.dart';
+import 'package:typie/services/blob.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
 import 'package:typie/widgets/vertical_divider.dart';
@@ -18,6 +23,9 @@ class EditorToolbar extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    final blob = useService<Blob>();
+    final client = useService<GraphQLClient>();
+
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
     final keyboardHeight = useValueListenable(scope.keyboardHeight);
@@ -141,7 +149,28 @@ class EditorToolbar extends HookWidget {
                     label: '이미지',
                     isActive: proseMirrorState?.isNodeActive('image') ?? false,
                     onTap: () async {
-                      await scope.command('image');
+                      final file = await ImagePicker().pickImage(source: ImageSource.gallery);
+                      if (file == null) {
+                        return;
+                      }
+
+                      final path = await blob.upload(file);
+                      final result = await client.request(
+                        GEditorScreen_PersistBlobAsImage_MutationReq((b) {
+                          b.vars.input.path = path;
+                        }),
+                      );
+
+                      await scope.command(
+                        'image',
+                        attrs: {
+                          'id': result.persistBlobAsImage.id,
+                          'url': result.persistBlobAsImage.url,
+                          'ratio': result.persistBlobAsImage.ratio,
+                          'placeholder': result.persistBlobAsImage.placeholder,
+                          'size': result.persistBlobAsImage.size,
+                        },
+                      );
                     },
                   ),
                   _BoxButton(
@@ -213,7 +242,7 @@ class EditorToolbar extends HookWidget {
                     label: '코드',
                     isActive: proseMirrorState?.isNodeActive('code_block') ?? false,
                     onTap: () async {
-                      await scope.command('code');
+                      await scope.command('code_block');
                     },
                   ),
                   _BoxButton(
@@ -221,7 +250,7 @@ class EditorToolbar extends HookWidget {
                     label: 'HTML',
                     isActive: proseMirrorState?.isNodeActive('html_block') ?? false,
                     onTap: () async {
-                      await scope.command('html');
+                      await scope.command('html_block');
                     },
                   ),
                 ],
