@@ -48,18 +48,22 @@
           if (event.dataTransfer?.files?.length) {
             const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.anchor;
             onfile?.({ pos, files: [...event.dataTransfer.files] });
+
+            return true;
           }
 
-          return true;
+          return false;
         },
 
         handlePaste: (view, event) => {
           if (event.clipboardData?.files?.length) {
             const pos = view.state.selection.anchor;
             onfile?.({ pos, files: [...event.clipboardData.files] });
+
+            return true;
           }
 
-          return true;
+          return false;
         },
       },
 
