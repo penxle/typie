@@ -32,6 +32,7 @@
   import { getAppContext } from '$lib/context';
   import { Dialog, Tip } from '$lib/notification';
   import { TiptapEditor } from '$lib/tiptap';
+  import { uploadBlob } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Limit from './Limit.svelte';
@@ -148,6 +149,29 @@
     mutation Editor_DeletePost_Mutation($input: DeletePostInput!) {
       deletePost(input: $input) {
         id
+      }
+    }
+  `);
+
+  const persistBlobAsImage = graphql(`
+    mutation Editor_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+      persistBlobAsImage(input: $input) {
+        id
+        url
+        ratio
+        placeholder
+        size
+      }
+    }
+  `);
+
+  const persistBlobAsFile = graphql(`
+    mutation Editor_PersistBlobAsFile_Mutation($input: PersistBlobAsFileInput!) {
+      persistBlobAsFile(input: $input) {
+        id
+        name
+        size
+        url
       }
     }
   `);
@@ -620,6 +644,19 @@
               {doc}
               oncreate={() => {
                 titleEl?.focus();
+              }}
+              onfile={async ({ pos, files }) => {
+                for (const file of files) {
+                  const path = await uploadBlob(file);
+
+                  if (file.type.startsWith('image/')) {
+                    const resp = await persistBlobAsImage({ path });
+                    editor?.current.commands.insertContentAt(pos, { type: 'image', attrs: resp });
+                  } else {
+                    const resp = await persistBlobAsFile({ path });
+                    editor?.current.commands.insertContentAt(pos, { type: 'file', attrs: resp });
+                  }
+                }
               }}
               onkeydown={(view, e) => {
                 const { doc, selection } = view.state;
