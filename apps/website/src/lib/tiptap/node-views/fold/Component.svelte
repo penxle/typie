@@ -9,12 +9,12 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, updateAttributes }: Props = $props();
+  let { node, editor, updateAttributes, HTMLAttributes }: Props = $props();
 
   let open = $state(editor?.current.isEditable ? node.attrs.open : false);
 </script>
 
-<NodeView>
+<NodeView {...HTMLAttributes}>
   <details
     class={flex({ flexDirection: 'column', borderWidth: '1px', borderRadius: '8px' })}
     ontoggle={(e) => {

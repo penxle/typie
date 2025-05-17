@@ -13,7 +13,7 @@
 
   type Props = NodeViewProps;
 
-  let { editor, node }: Props = $props();
+  let { editor, node, HTMLAttributes }: Props = $props();
 
   let iframeEl = $state<HTMLIFrameElement>();
   let height = $state(0);
@@ -52,6 +52,7 @@
     backgroundColor: 'gray.50',
     overflow: 'hidden',
   })}
+  {...HTMLAttributes}
 >
   <div
     class={flex({

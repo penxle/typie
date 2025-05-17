@@ -14,7 +14,7 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, selected, updateAttributes, deleteNode }: Props = $props();
+  let { node, editor, selected, updateAttributes, getPos, deleteNode, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
@@ -38,6 +38,17 @@
 
   $effect(() => {
     pickerOpened = selected;
+  });
+
+  $effect(() => {
+    const handler = (data: { pos: number; inflight: boolean }) => {
+      if (data.pos === getPos()) {
+        inflight = data.inflight;
+      }
+    };
+
+    window.__webview__?.addEventListener('inflight', handler);
+    return () => window.__webview__?.removeEventListener('inflight', handler);
   });
 
   let enlarged = $state(false);
@@ -122,7 +133,7 @@
   };
 </script>
 
-<NodeView style={css.raw({ display: 'flex', justifyContent: 'center' })}>
+<NodeView style={css.raw({ display: 'flex', justifyContent: 'center', userSelect: 'none' })} {...HTMLAttributes}>
   <div
     bind:this={containerEl}
     style:width={`${proportion * 100}%`}
@@ -141,7 +152,7 @@
         size="full"
       />
 
-      {#if editor?.current.isEditable}
+      {#if editor?.current.isEditable && !window.__webview__}
         <button
           class={css({
             position: 'absolute',
@@ -241,14 +252,14 @@
           {:else}
             <Icon icon={ImageIcon} size={20} />
             {#if editor?.current.isEditable}
-              이미지 업로드
+              {attrs.nodeId}
             {:else}
               이미지 없음
             {/if}
           {/if}
         </div>
 
-        {#if editor?.current.isEditable}
+        {#if editor?.current.isEditable && !window.__webview__}
           <Menu>
             {#snippet button({ open })}
               <div
@@ -281,7 +292,7 @@
   </div>
 </NodeView>
 
-{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable}
+{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable && !window.__webview__}
   <div
     class={center({
       flexDirection: 'column',

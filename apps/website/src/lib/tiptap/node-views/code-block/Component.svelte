@@ -11,7 +11,7 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, updateAttributes }: Props = $props();
+  let { node, editor, updateAttributes, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
@@ -45,6 +45,7 @@
     backgroundColor: 'gray.50',
     overflow: 'hidden',
   })}
+  {...HTMLAttributes}
 >
   <div
     class={flex({
