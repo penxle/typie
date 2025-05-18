@@ -69,29 +69,27 @@ Site.implement({
       nullable: true,
       args: { type: t.arg({ type: EntityType }) },
       resolve: async (self, args) => {
-        const row = await db
-          .execute<{ id: string }>(
-            sql`
-              WITH RECURSIVE sq AS (
-                SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.type}, ${Entities.order}, ${Entities.state}, ARRAY[${Entities.order}] as path_array, 1 as depth
-                FROM ${Entities}
-                WHERE ${and(eq(Entities.siteId, self.id), isNull(Entities.parentId), eq(Entities.state, EntityState.ACTIVE))}
-                UNION ALL
-                SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.type}, ${Entities.order}, ${Entities.state}, sq.path_array || ${Entities.order}, sq.depth + 1
-                FROM ${Entities}
-                JOIN sq ON ${Entities.parentId} = sq.id
-                WHERE ${eq(Entities.state, EntityState.ACTIVE)}
-              )
-              SELECT sq.id
-              FROM sq
-              WHERE sq.type = ${args.type}
-              ORDER BY sq.path_array
-              LIMIT 1;
-            `,
-          )
-          .then(first);
+        const { rows } = await db.execute<{ id: string }>(
+          sql`
+            WITH RECURSIVE sq AS (
+              SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.type}, ${Entities.order}, ${Entities.state}, ARRAY[${Entities.order}] as path_array, 1 as depth
+              FROM ${Entities}
+              WHERE ${and(eq(Entities.siteId, self.id), isNull(Entities.parentId), eq(Entities.state, EntityState.ACTIVE))}
+              UNION ALL
+              SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.type}, ${Entities.order}, ${Entities.state}, sq.path_array || ${Entities.order}, sq.depth + 1
+              FROM ${Entities}
+              JOIN sq ON ${Entities.parentId} = sq.id
+              WHERE ${eq(Entities.state, EntityState.ACTIVE)}
+            )
+            SELECT sq.id
+            FROM sq
+            WHERE sq.type = ${args.type}
+            ORDER BY sq.path_array
+            LIMIT 1;
+          `,
+        );
 
-        return row?.id;
+        return rows[0]?.id;
       },
     }),
 
