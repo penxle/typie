@@ -17,8 +17,8 @@ const app = new typie.App('api', {
   },
 
   resources: {
-    cpu: '4',
-    memory: '8Gi',
+    cpu: '1000m',
+    memory: '2Gi',
   },
 
   autoscale: {

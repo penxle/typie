@@ -1,7 +1,6 @@
 import '@/instrument';
 import '@typie/lib/dayjs';
 import '@/mq';
-import '@/heap-snapshot';
 
 import { logger } from '@typie/lib';
 import { Hono } from 'hono';

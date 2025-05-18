@@ -18,8 +18,8 @@ const app = new typie.App('website', {
   },
 
   resources: {
-    cpu: '1',
-    memory: '2Gi',
+    cpu: '250m',
+    memory: '512Mi',
   },
 
   autoscale: {
