@@ -6,18 +6,14 @@ import 'package:injectable/injectable.dart';
 @singleton
 class Keyboard {
   Keyboard() {
-    _channel
-      ..setMethodCallHandler((call) async {
-        final args = call.arguments as Map<dynamic, dynamic>;
-        if (call.method == 'heightChanged') {
-          _height = args['height'] as double;
-          _streamController.add(_height);
-        }
-      })
-      ..invokeMethod('listen');
+    _channel.receiveBroadcastStream().listen((event) {
+      final data = event as Map<dynamic, dynamic>;
+      _height = data['height'] as double;
+      _streamController.add(_height);
+    });
   }
 
-  static const _channel = MethodChannel('co.typie.keyboard');
+  static const _channel = EventChannel('co.typie.keyboard');
   final _streamController = StreamController<double>.broadcast();
   double _height = 0;
 
@@ -28,6 +24,5 @@ class Keyboard {
   @disposeMethod
   void dispose() {
     _streamController.close();
-    _channel.invokeMethod('dispose');
   }
 }
