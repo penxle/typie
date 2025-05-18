@@ -123,19 +123,12 @@ Post.implement({
 
     update: t.field({
       type: 'Binary',
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'Post.update',
-          load: async (ids) => {
-            return await db
-              .select({ postId: PostContents.postId, update: PostContents.update })
-              .from(PostContents)
-              .where(inArray(PostContents.postId, ids));
-          },
-          key: ({ postId }) => postId,
-        });
-
-        const content = await loader.load(self.id);
+      resolve: async (self) => {
+        const content = await db
+          .select({ update: PostContents.update })
+          .from(PostContents)
+          .where(eq(PostContents.postId, self.id))
+          .then(firstOrThrow);
 
         return content.update;
       },
