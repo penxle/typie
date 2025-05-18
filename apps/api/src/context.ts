@@ -1,16 +1,13 @@
 import { clearAllDataLoaders } from '@pothos/plugin-dataloader';
 import { getClientAddress } from '@typie/lib';
 import DataLoader from 'dataloader';
-import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import stringify from 'fast-json-stable-stringify';
-import { setCookie } from 'hono/cookie';
 import { HTTPException } from 'hono/http-exception';
 import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import * as R from 'remeda';
 import { db, firstOrThrow, UserSessions } from '@/db';
-import { dev } from '@/env';
 import { publicKey } from '@/utils';
 import type { Context as HonoContext } from 'hono';
 
@@ -63,13 +60,6 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
   let deviceId = c.req.header('X-Device-Id');
   if (!deviceId) {
     deviceId = nanoid(32);
-    setCookie(c, 'typie-did', deviceId, {
-      path: '/',
-      httpOnly: true,
-      secure: !dev,
-      sameSite: 'lax',
-      maxAge: dayjs.duration(1, 'year').asSeconds(),
-    });
   }
 
   const ctx: Context = {

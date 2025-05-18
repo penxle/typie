@@ -5,6 +5,7 @@ import '@/mq';
 import { logger } from '@typie/lib';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import { compress } from 'hono-compress';
 import { deriveContext } from '@/context';
 import { env } from '@/env';
 import { graphql } from '@/graphql';
@@ -13,6 +14,8 @@ import { websocket } from '@/ws';
 import type { Env } from '@/context';
 
 const app = new Hono<Env>();
+
+app.use('*', compress());
 
 app.use('*', async (c, next) => {
   const context = await deriveContext(c);
