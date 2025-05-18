@@ -21,7 +21,7 @@ export const extendNodeToNodeView = <Options = any, Storage = any>(
   component: NodeViewComponent,
   options?: Partial<CreateNodeViewOptions<Options, Storage>>,
 ) => {
-  return node.extend<Options, Storage, CreateNodeViewOptions<Options, Storage>>({
+  return node.extend({
     ...options,
 
     parseHTML() {

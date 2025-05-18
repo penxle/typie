@@ -92,12 +92,10 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
         const { from, to } = this.editor.state.selection;
         const pos = this.getPos();
 
-        if (pos) {
-          if (from <= pos && to >= pos + this.node.nodeSize) {
-            this.selectNode();
-          } else {
-            this.deselectNode();
-          }
+        if (from <= pos && to >= pos + this.node.nodeSize) {
+          this.selectNode();
+        } else {
+          this.deselectNode();
         }
       }
     };

@@ -11,12 +11,12 @@
   type Props = {
     editor?: Ref<Editor>;
     tableNode: Node;
-    getPos: () => number | undefined;
+    tablePos: number;
     isLastRowHovered: boolean;
     isLastColumnHovered: boolean;
   };
 
-  let { editor, tableNode, getPos, isLastRowHovered, isLastColumnHovered }: Props = $props();
+  let { editor, tableNode, tablePos, isLastRowHovered, isLastColumnHovered }: Props = $props();
 
   function addRowAtEnd(tableNode: Node) {
     if (!editor) {
@@ -28,10 +28,6 @@
 
     const map = TableMap.get(tableNode);
     const lastRowIndex = map.height - 1;
-    const tablePos = getPos();
-    if (tablePos === undefined) {
-      return;
-    }
 
     const tableStart = tablePos + 1;
 
@@ -55,10 +51,6 @@
 
     const map = TableMap.get(tableNode);
     const lastColumnIndex = map.width - 1;
-    const tablePos = getPos();
-    if (tablePos === undefined) {
-      return;
-    }
 
     const tableStart = tablePos + 1;
 

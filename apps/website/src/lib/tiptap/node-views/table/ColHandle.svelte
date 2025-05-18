@@ -15,13 +15,13 @@
   type Props = {
     editor?: Ref<Editor>;
     tableNode: Node;
-    getPos: () => number | undefined;
+    tablePos: number;
     i: number;
     hoveredColumnIndex?: number | null;
     hasSpan?: boolean;
   };
 
-  let { editor, tableNode, getPos, i, hoveredColumnIndex, hasSpan = false }: Props = $props();
+  let { editor, tableNode, tablePos, i, hoveredColumnIndex, hasSpan = false }: Props = $props();
 
   const map = $derived(TableMap.get(tableNode));
 
@@ -31,11 +31,6 @@
     }
 
     const { tr } = editor.current.state;
-    const tablePos = getPos();
-    if (tablePos === undefined) {
-      return;
-    }
-
     const tableStart = tablePos + 1;
 
     if (colIndex < 0 || colIndex >= map.width) {
@@ -102,10 +97,6 @@
 
     let tableType = tableNode.type;
     let newTable = tableType.createChecked(tableNode.attrs, rows, tableNode.marks);
-    const tablePos = getPos();
-    if (tablePos === undefined) {
-      return;
-    }
 
     tr.replaceWith(tablePos, tablePos + tableNode.nodeSize, newTable);
 
