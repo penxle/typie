@@ -9,8 +9,7 @@ export default defineConfig({
 
   dialect: 'postgresql',
   dbCredentials: {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    url: process.env.DATABASE_URL!,
+    url: `${process.env.DATABASE_URL}?sslmode=no-verify`,
   },
 
   tablesFilter: ['!pg_stat_statements', '!pg_stat_statements_info'],

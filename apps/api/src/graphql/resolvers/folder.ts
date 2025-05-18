@@ -171,7 +171,7 @@ builder.mutationFields((t) => ({
         siteId: folder.siteId,
       });
 
-      const descendants = await db.execute<{ id: string }>(
+      const { rows: descendants } = await db.execute<{ id: string }>(
         sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}

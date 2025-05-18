@@ -1,19 +1,18 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import ky from 'ky';
+import { Pool } from 'pg';
 import { env } from '@/env';
 import { DrizzleLogger } from './logger';
 import * as enums from './schemas/enums';
 import * as tables from './schemas/tables';
 import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
-export const pg = postgres(env.DATABASE_URL, {
+const certificate = await ky.get('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem').text();
+
+export const pg = new Pool({
+  connectionString: env.DATABASE_URL,
+  ssl: { ca: certificate },
   max: 20,
-  max_lifetime: 3600,
-  connection: {
-    idle_in_transaction_session_timeout: 30 * 1000,
-    lock_timeout: 10 * 1000,
-    statement_timeout: 30 * 1000,
-  },
 });
 
 export const db = drizzle(pg, {
