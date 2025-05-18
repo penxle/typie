@@ -83,9 +83,14 @@ new aws.s3.BucketCorsConfigurationV2('uploads', {
   ],
 });
 
-export const buckets = { cdn, usercontents, uploads };
+const misc = new aws.s3.BucketV2('misc', {
+  bucket: 'typie-misc',
+});
+
+export const buckets = { cdn, usercontents, uploads, misc };
 
 export const outputs = {
   AWS_S3_BUCKET_USERCONTENTS_ARN: usercontents.arn,
   AWS_S3_BUCKET_UPLOADS_ARN: uploads.arn,
+  AWS_S3_BUCKET_MISC_ARN: misc.arn,
 };

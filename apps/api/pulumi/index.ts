@@ -43,6 +43,11 @@ const app = new typie.App('api', {
         },
         {
           Effect: 'Allow',
+          Action: ['s3:PutObject'],
+          Resource: [pulumi.concat(ref.requireOutput('AWS_S3_BUCKET_MISC_ARN'), '/*')],
+        },
+        {
+          Effect: 'Allow',
           Action: ['ses:SendEmail'],
           Resource: [ref.getOutput('AWS_SES_EMAIL_IDENTITY'), ref.getOutput('AWS_SES_CONFIGURATION_SET')],
           Condition: {

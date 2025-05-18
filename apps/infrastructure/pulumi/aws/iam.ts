@@ -45,6 +45,11 @@ new aws.iam.UserPolicy('developer@team', {
       },
       {
         Effect: 'Allow',
+        Action: ['s3:PutObject'],
+        Resource: [pulumi.concat(buckets.misc.arn, '/*')],
+      },
+      {
+        Effect: 'Allow',
         Action: ['ses:SendEmail'],
         Resource: [emailIdentity.arn, configurationSet.arn],
         Condition: {

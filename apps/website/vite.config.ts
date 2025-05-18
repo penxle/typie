@@ -6,6 +6,7 @@ import icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  clearScreen: false,
   plugins: [
     svg(),
     icons({
