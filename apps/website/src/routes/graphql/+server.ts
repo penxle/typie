@@ -33,8 +33,16 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     cookies.delete('typie-at', { path: '/' });
   }
 
+  const headers = new Headers();
+
+  const setCookies = response.headers.getSetCookie();
+  for (const setCookie of setCookies) {
+    headers.append('Set-Cookie', setCookie);
+  }
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
+    headers,
   });
 };
