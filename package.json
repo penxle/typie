@@ -32,6 +32,9 @@
     "typescript": "^5.8.3"
   },
   "packageManager": "bun@1.0.0",
+  "patchedDependencies": {
+    "happy-dom-without-node@14.12.3": "patches/happy-dom-without-node@14.12.3.patch"
+  },
   "trustedDependencies": [
     "@mongodb-js/zstd"
   ]
