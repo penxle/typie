@@ -11,7 +11,7 @@ type Storage = {
 
 const key = new PluginKey('syntax_highlight');
 
-export const SyntaxHighlight = Extension.create<never, Storage>({
+export const SyntaxHighlight = Extension.create<unknown, Storage>({
   name: 'syntax_highlight',
 
   addStorage() {
