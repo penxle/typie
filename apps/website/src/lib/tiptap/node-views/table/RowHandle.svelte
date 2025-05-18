@@ -15,13 +15,13 @@
   type Props = {
     editor?: Ref<Editor>;
     tableNode: Node;
-    tablePos: number;
+    getPos: () => number | undefined;
     i: number;
     hoveredRowIndex?: number | null;
     hasSpan?: boolean;
   };
 
-  let { editor, tableNode, tablePos, i, hoveredRowIndex, hasSpan = false }: Props = $props();
+  let { editor, tableNode, getPos, i, hoveredRowIndex, hasSpan = false }: Props = $props();
 
   function selectRow(rowIndex: number) {
     if (!editor) {
@@ -31,6 +31,11 @@
     const { tr } = editor.current.state;
 
     const map = TableMap.get(tableNode);
+    const tablePos = getPos();
+    if (tablePos === undefined) {
+      return;
+    }
+
     const tableStart = tablePos + 1;
 
     if (rowIndex < 0 || rowIndex >= map.height) {
@@ -87,6 +92,10 @@
 
     const tableType = tableNode.type;
     const newTable = tableType.createChecked(tableNode.attrs, rowNodes, tableNode.marks);
+    const tablePos = getPos();
+    if (tablePos === undefined) {
+      return;
+    }
 
     tr.replaceWith(tablePos, tablePos + tableNode.nodeSize, newTable);
 
