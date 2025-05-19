@@ -8,4 +8,18 @@ export const utilities = {
       height: value,
     }),
   }),
+  maxSize: defineUtility({
+    values: 'sizes',
+    transform: (value) => ({
+      maxWidth: value,
+      maxHeight: value,
+    }),
+  }),
+  minSize: defineUtility({
+    values: 'sizes',
+    transform: (value) => ({
+      minWidth: value,
+      minHeight: value,
+    }),
+  }),
 };

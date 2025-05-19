@@ -10,11 +10,14 @@ import type {
   NodeViewRendererProps,
 } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import type { Transaction } from '@tiptap/pm/state';
 import type { Decoration, DecorationSource, NodeView as ProseMirrorNodeView } from '@tiptap/pm/view';
 import type { Component } from 'svelte';
 
 export type NodeViewProps = Omit<TiptapNodeViewProps, 'editor'> & {
   editor?: Ref<Editor>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extras: Record<string, any>;
 };
 
 export type NodeViewComponent = Component<NodeViewProps>;
@@ -26,7 +29,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
   #props = $state<NodeViewProps>();
 
   #handleSelectionUpdate: () => void;
-  #handleTransaction: () => void;
+  #handleTransaction: (props: { editor: Editor; transaction: Transaction }) => void;
   #onDragStart: (event: DragEvent) => void;
 
   constructor(component: NodeViewComponent, props: NodeViewRendererProps, options?: Partial<NodeViewRendererOptions>) {
@@ -58,6 +61,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
       HTMLAttributes: this.HTMLAttributes,
       extension: this.extension,
       selected: false,
+      extras: {},
 
       getPos: () => this.getPos(),
       updateAttributes: (attrs) => this.updateAttributes(attrs),
@@ -102,9 +106,14 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
       }
     };
 
-    this.#handleTransaction = () => {
+    this.#handleTransaction = ({ editor, transaction }) => {
       if (this.#props) {
         this.#props.editor = new Ref(this.editor);
+
+        const meta = transaction.getMeta('updateNodeViewExtras$');
+        if (meta && editor.state.selection.anchor === this.getPos()) {
+          this.#props.extras = meta.extras;
+        }
       }
     };
 

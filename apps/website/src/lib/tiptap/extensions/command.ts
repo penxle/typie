@@ -1,4 +1,4 @@
-import { Extension, getMarkType, getNodeType } from '@tiptap/core';
+import { Extension, getMarkType } from '@tiptap/core';
 import type { MarkType, NodeType } from '@tiptap/pm/model';
 
 declare module '@tiptap/core' {
@@ -7,6 +7,7 @@ declare module '@tiptap/core' {
     commands: {
       isMarkAllowed: (typeOrName: string | MarkType) => ReturnType;
       isNodeAllowed: (typeOrName: string | NodeType) => ReturnType;
+      updateNodeViewExtras: (extras: Record<string, unknown>) => ReturnType;
     };
   }
 }
@@ -46,28 +47,18 @@ export const Command = Extension.create({
           return false;
         },
 
-      isNodeAllowed:
-        (typeOrName: string | NodeType) =>
-        ({ state }) => {
+      isNodeAllowed: () => () => {
+        return true;
+      },
+
+      updateNodeViewExtras:
+        (extras) =>
+        ({ tr, dispatch }) => {
+          tr.setMeta('updateNodeViewExtras$', { extras });
+
+          dispatch?.(tr);
+
           return true;
-
-          const { selection } = state;
-          const { $anchor, empty } = selection;
-
-          if (!empty) {
-            return false;
-          }
-
-          if ($anchor.parent.type.name !== 'paragraph' || $anchor.parent.childCount !== 0) {
-            return false;
-          }
-
-          const type = getNodeType(typeOrName, state.schema);
-          if ($anchor.node($anchor.depth - 1).type.contentMatch.matchType(type)) {
-            return true;
-          }
-
-          return false;
         },
     };
   },

@@ -191,9 +191,10 @@
       const { $anchor: anchor } = selection;
 
       window.__webview__?.emitEvent('setProseMirrorState', {
-        nodes: [...Array.from({ length: anchor.depth + 1 }, (_, i) => anchor.node(i)), doc.nodeAt(anchor.pos)]
-          .filter((node) => !!node)
-          .map((node) => ({ type: node.type.name, attrs: node.attrs })),
+        nodes: Array.from({ length: anchor.depth + 1 }, (_, i) => anchor.before(i + 1))
+          .map((pos) => [pos, doc.nodeAt(pos)] as const)
+          .filter(([, node]) => !!node && !node.isText)
+          .map(([pos, node]) => ({ pos, type: node?.type.name, attrs: node?.attrs })),
         marks: anchor.marks().map((mark) => mark.toJSON()),
         storedMarks: editor.state.storedMarks?.map((mark) => mark.toJSON()),
         selection: editor.state.selection.toJSON(),
@@ -249,11 +250,15 @@
           editor?.current.chain().focus().setParagraphLetterSpacing(attrs.letterSpacing).run();
         }
       } else if (name === 'image') {
-        editor?.current.chain().focus().setImage(attrs).run();
+        editor?.current.chain().focus().setImage(attrs.url).run();
       } else if (name === 'file') {
-        editor?.current.chain().focus().setFile(attrs).run();
+        editor?.current
+          .chain()
+          .focus()
+          .setFile(attrs as { name: string; size: number })
+          .run();
       } else if (name === 'embed') {
-        editor?.current.chain().focus().setEmbed(attrs).run();
+        editor?.current.chain().focus().setEmbed().run();
       } else if (name === 'horizontal_rule') {
         editor?.current.chain().focus().setHorizontalRule().run();
       } else if (name === 'blockquote') {
@@ -276,6 +281,10 @@
         editor?.current.chain().focus().undo().run();
       } else if (name === 'redo') {
         editor?.current.chain().focus().redo().run();
+      } else if (name === 'delete') {
+        editor?.current.chain().focus().deleteSelection().run();
+      } else if (name === 'attr') {
+        editor?.current.chain().focus().updateAttributes(attrs.type, attrs.attributes).run();
       }
     });
 

@@ -3,10 +3,9 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import PaperclipIcon from '~icons/lucide/paperclip';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import { graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { Button, Icon, Menu, MenuItem, RingSpinner, VerticalDivider } from '$lib/components';
-  import { formatBytes, uploadBlob } from '$lib/utils';
+  import { formatBytes, uploadBlobAsFile } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { NodeView } from '../../lib';
@@ -14,27 +13,15 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, selected, updateAttributes, deleteNode, HTMLAttributes }: Props = $props();
+  let { node, editor, selected, updateAttributes, deleteNode, extras, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
     attrs = node.attrs;
   });
 
-  const persistBlobAsFile = graphql(`
-    mutation FileNodeView_PersistBlobAsFile_Mutation($input: PersistBlobAsFileInput!) {
-      persistBlobAsFile(input: $input) {
-        id
-        name
-        size
-        url
-      }
-    }
-  `);
-
-  let inflight = $state(false);
+  let file = $state<{ name: string; size: number }>();
   let pickerOpened = $state(false);
-  let file = $state<File>();
 
   $effect(() => {
     pickerOpened = selected;
@@ -55,23 +42,36 @@
     picker.addEventListener('change', async () => {
       pickerOpened = false;
 
-      file = picker.files?.[0];
+      const file = picker.files?.[0];
       if (!file) {
         return;
       }
 
-      inflight = true;
-      try {
-        const path = await uploadBlob(file);
-        const attrs = await persistBlobAsFile({ path });
-
-        updateAttributes(attrs);
-      } finally {
-        inflight = false;
-      }
+      upload(file);
     });
 
     picker.click();
+  };
+
+  $effect(() => {
+    if (extras.file && !attrs.id && !file) {
+      if (extras.file instanceof File) {
+        upload(extras.file);
+      } else {
+        file = extras.file;
+      }
+    }
+  });
+
+  const upload = async (f: File) => {
+    file = f;
+
+    try {
+      const attrs = await uploadBlobAsFile(f);
+      updateAttributes(attrs);
+    } finally {
+      file = undefined;
+    }
   };
 </script>
 
@@ -123,7 +123,7 @@
           truncate: true,
         })}
       >
-        {#if inflight && file}
+        {#if file}
           <RingSpinner style={css.raw({ size: '20px' })} />
 
           <span class={css({ truncate: true })}>{file.name}</span>
@@ -134,7 +134,7 @@
         {:else}
           <Icon icon={PaperclipIcon} size={20} />
           {#if editor?.current.isEditable}
-            파일 업로드
+            눌러서 파일 업로드
           {:else}
             파일 없음
           {/if}
@@ -184,7 +184,7 @@
   </svelte:element>
 </NodeView>
 
-{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable}
+{#if pickerOpened && !attrs.id && !file && editor?.current.isEditable}
   <div
     class={center({
       flexDirection: 'column',
