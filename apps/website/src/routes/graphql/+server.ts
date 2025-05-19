@@ -34,6 +34,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
   }
 
   const responseHeaders = new Headers(response.headers);
+  responseHeaders.delete('Content-Length');
   responseHeaders.delete('Content-Encoding');
   responseHeaders.delete('Transfer-Encoding');
 
