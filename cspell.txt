@@ -58,6 +58,7 @@ srem
 sslmode
 stakater
 stibee
+tini
 tsup
 typie
 udids

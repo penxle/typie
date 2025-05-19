@@ -1,4 +1,8 @@
-FROM oven/bun:1 AS base
+FROM amazonlinux:2023 AS base
+
+RUN dnf install -y unzip
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:$PATH"
 
 FROM base AS builder
 WORKDIR /build
@@ -23,9 +27,18 @@ RUN bun install --production
 FROM base AS runner
 WORKDIR /app
 
+ADD https://github.com/krallin/tini/releases/download/v0.19.0/tini-arm64 /tini
+RUN chmod +x /tini
+
 ENV NODE_ENV=production
+
+ENV LD_LIBRARY_PATH="/app/lib"
+ADD vendor/sharp.tar.xz .
 
 COPY --from=builder /build/apps/api/dist ./apps/api
 COPY --from=builder /build/apps/website/dist ./apps/website
 
 COPY --from=deps /deps/node_modules ./node_modules
+
+EXPOSE 3000
+ENTRYPOINT ["/tini", "--"]

@@ -1,0 +1,148 @@
+name: Build sharp
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build
+    runs-on: linux-arm64-4vcpu
+
+    container:
+      image: amazonlinux:2023
+
+    env:
+      SHARP_VERSION: 0.34.1
+      VIPS_VERSION: 8.16.1
+
+      MOZJPEG_VERSION: 4.0.0
+      SPNG_VERSION: 0.7.4
+      CGIF_VERSION: 0.5.0
+      DE265_VERSION: 1.0.16
+      X265_VERSION: 4.1
+      AOM_VERSION: 3.12.1
+      HEIF_VERSION: 1.19.8
+      FFTW_VERSION: 3.3.10
+
+      CC: clang
+      CXX: clang++
+      LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
+      PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
+
+    steps:
+      - name: Install dependencies
+        run: |
+          curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+          dnf group install -y "Development Tools"
+          dnf install -y \
+            clang \
+            cmake \
+            expat-devel \
+            glib2-devel \
+            highway-devel \
+            libexif-devel \
+            libimagequant-devel \
+            librsvg2-devel \
+            libtiff-devel \
+            libwebp-devel \
+            meson \
+            nasm \
+            nodejs
+
+      - name: Download tarballs
+        run: |
+          curl -fsSL https://github.com/mozilla/mozjpeg/archive/refs/tags/v${MOZJPEG_VERSION}.tar.gz | tar xzf -
+          curl -fsSL https://github.com/randy408/libspng/archive/v${SPNG_VERSION}.tar.gz | tar xzf -
+          curl -fsSL https://github.com/dloebl/cgif/archive/refs/tags/v${CGIF_VERSION}.tar.gz | tar xzf -
+          curl -fsSL https://github.com/strukturag/libde265/releases/download/v${DE265_VERSION}/libde265-${DE265_VERSION}.tar.gz | tar xzf -
+          curl -fsSL https://bitbucket.org/multicoreware/x265_git/downloads/x265_${X265_VERSION}.tar.gz | tar xzf -
+          curl -fsSL https://storage.googleapis.com/aom-releases/libaom-${AOM_VERSION}.tar.gz | tar xzf -
+          curl -fsSL https://github.com/strukturag/libheif/releases/download/v${HEIF_VERSION}/libheif-${HEIF_VERSION}.tar.gz | tar xzf -
+          curl -fsSL https://fftw.org/fftw-${FFTW_VERSION}.tar.gz | tar xzf -
+          curl -fsSL https://github.com/libvips/libvips/releases/download/v${VIPS_VERSION}/vips-${VIPS_VERSION}.tar.xz | tar xJf -
+
+      - name: Build mozjpeg
+        working-directory: mozjpeg-${{ env.MOZJPEG_VERSION }}
+        run: |
+          cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DPNG_SUPPORTED=OFF .
+          make -j$(nproc)
+          make install
+
+      - name: Build libspng
+        working-directory: libspng-${{ env.SPNG_VERSION }}
+        run: |
+          meson setup build --buildtype=release
+          meson compile -C build
+          meson install -C build
+
+      - name: Build cgif
+        working-directory: cgif-${{ env.CGIF_VERSION }}
+        run: |
+          meson setup build --buildtype=release
+          meson compile -C build
+          meson install -C build
+
+      - name: Build libde265
+        working-directory: libde265-${{ env.DE265_VERSION }}
+        run: |
+          cmake .
+          make -j$(nproc)
+          make install
+
+      - name: Build x265
+        working-directory: x265_${{ env.X265_VERSION }}
+        run: |
+          cmake source
+          make -j$(nproc)
+          make install
+
+      - name: Build libaom
+        working-directory: libaom-${{ env.AOM_VERSION }}
+        run: |
+          mkdir libaom-build && cd libaom-build
+          cmake -DBUILD_SHARED_LIBS=ON ..
+          make -j$(nproc)
+          make install
+
+      - name: Build libheif
+        working-directory: libheif-${{ env.HEIF_VERSION }}
+        run: |
+          cmake --preset=release-noplugins .
+          make -j$(nproc)
+          make install
+
+      - name: Build fftw
+        working-directory: fftw-${{ env.FFTW_VERSION }}
+        run: |
+          cmake -DENABLE_THREADS=ON .
+          make -j$(nproc)
+          make install
+
+      - name: Build libvips
+        working-directory: vips-${{ env.VIPS_VERSION }}
+        run: |
+          meson setup build --prefix=/opt/libvips --libdir=lib -Dmodules=disabled
+          meson compile -C build
+          meson install -C build
+
+      - name: Build sharp
+        env:
+          LD_LIBRARY_PATH: /opt/libvips/lib
+          PKG_CONFIG_PATH: /opt/libvips/lib/pkgconfig
+        run: |
+          npm install node-addon-api node-gyp
+          npm install --build-from-source --foreground-scripts sharp@${{ env.SHARP_VERSION }}
+
+      - name: Copy artifacts
+        run: |
+          mkdir artifacts
+          cp -r node_modules artifacts/
+          cp -r /opt/libvips/lib artifacts/
+          ldd artifacts/lib/libvips.so | grep '=>' | awk '{print $3}' | xargs -I {} cp {} artifacts/lib/
+          tar cJvf sharp.tar.xz -C artifacts/ .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharp
+          path: sharp.tar.xz
