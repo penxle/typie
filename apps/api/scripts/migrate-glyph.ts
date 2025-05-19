@@ -196,7 +196,11 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
             return embed;
           }
 
-          const meta = await iframely.unfurl(url);
+          const meta = await iframely.unfurl(url).catch(() => null);
+
+          if (!meta) {
+            return [];
+          }
 
           return await tx
             .insert(Embeds)
@@ -217,11 +221,20 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
               thumbnailUrl: Embeds.thumbnailUrl,
               html: Embeds.html,
             })
+            .onConflictDoUpdate({
+              target: [Embeds.url],
+              set: {
+                userId,
+                type: meta.type,
+                title: meta.title,
+                description: meta.description,
+                thumbnailUrl: meta.thumbnailUrl,
+                html: meta.html,
+              },
+            })
             .then(firstOrThrow);
         })
-        .then((result) => ({ attrs: result }))
-        // 링크가 유효하지 않아서 iframely가 실패하면 일단 없앰
-        .catch(() => []);
+        .then((result) => ({ attrs: result }));
     })
     .with('file', async () => {
       const originalFile = await sqlGlyph<
