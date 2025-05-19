@@ -16,6 +16,9 @@
     mutation BlobUtils_PersistBlobAsFile($input: PersistBlobAsFileInput!) {
       persistBlobAsFile(input: $input) {
         id
+        name
+        size
+        url
       }
     }
   `);
@@ -25,6 +28,7 @@
       persistBlobAsImage(input: $input) {
         id
         url
+        size
         ...Img_image
       }
     }

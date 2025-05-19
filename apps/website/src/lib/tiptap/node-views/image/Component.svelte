@@ -2,10 +2,9 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ImageIcon from '~icons/lucide/image';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import { graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { Button, Icon, Img, Menu, MenuItem, RingSpinner } from '$lib/components';
-  import { uploadBlob } from '$lib/utils';
+  import { uploadBlobAsImage } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { NodeView } from '../../lib';
@@ -14,41 +13,18 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, selected, updateAttributes, getPos, deleteNode, HTMLAttributes }: Props = $props();
+  let { node, editor, selected, updateAttributes, deleteNode, extras, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
     attrs = node.attrs;
   });
 
-  const persistBlobAsImage = graphql(`
-    mutation ImageNodeView_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
-      persistBlobAsImage(input: $input) {
-        id
-        url
-        ratio
-        placeholder
-        size
-      }
-    }
-  `);
-
-  let inflight = $state(false);
+  let inflightUrl = $state<string>();
   let pickerOpened = $state(false);
 
   $effect(() => {
     pickerOpened = selected;
-  });
-
-  $effect(() => {
-    const handler = (data: { pos: number; inflight: boolean }) => {
-      if (data.pos === getPos()) {
-        inflight = data.inflight;
-      }
-    };
-
-    window.__webview__?.addEventListener('inflight', handler);
-    return () => window.__webview__?.removeEventListener('inflight', handler);
   });
 
   let enlarged = $state(false);
@@ -74,18 +50,32 @@
         return;
       }
 
-      inflight = true;
-      try {
-        const path = await uploadBlob(file);
-        const attrs = await persistBlobAsImage({ path });
-
-        updateAttributes(attrs);
-      } finally {
-        inflight = false;
-      }
+      await upload(file);
     });
 
     picker.click();
+  };
+
+  $effect(() => {
+    if (extras.file && !attrs.id && !inflightUrl) {
+      if (typeof extras.file === 'string') {
+        inflightUrl = extras.file;
+      } else {
+        upload(extras.file);
+      }
+    }
+  });
+
+  const upload = async (file: File) => {
+    inflightUrl = URL.createObjectURL(file);
+
+    try {
+      const attrs = await uploadBlobAsImage(file);
+      updateAttributes(attrs);
+    } finally {
+      URL.revokeObjectURL(inflightUrl);
+      inflightUrl = undefined;
+    }
   };
 
   let containerEl = $state<HTMLDivElement>();
@@ -141,16 +131,23 @@
     data-drag-handle
     draggable
   >
-    {#if attrs.id}
-      <Img
-        style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
-        $image={attrs}
-        alt="본문 이미지"
-        onclick={() => !editor?.current.isEditable && (enlarged = true)}
-        progressive
-        role="button"
-        size="full"
-      />
+    {#if attrs.id || inflightUrl}
+      {#if attrs.id}
+        <Img
+          style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
+          $image={attrs}
+          alt="본문 이미지"
+          onclick={() => !editor?.current.isEditable && (enlarged = true)}
+          progressive
+          role="button"
+          size="full"
+        />
+      {:else if inflightUrl}
+        <img class={css({ width: 'full', borderRadius: '4px' })} alt="본문 이미지" src={inflightUrl} />
+        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50', zIndex: '1' })}>
+          <RingSpinner style={css.raw({ size: '24px', color: 'gray.400' })} />
+        </div>
+      {/if}
 
       {#if editor?.current.isEditable && !window.__webview__}
         <button
@@ -167,6 +164,7 @@
             backgroundColor: '[#363839/70]',
             opacity: '0',
             transition: 'opacity',
+            zIndex: '2',
             _hover: { backgroundColor: '[#363839/40]' },
             _groupHover: { opacity: '100' },
           })}
@@ -176,7 +174,17 @@
           <Icon icon={Trash2Icon} size={16} />
         </button>
 
-        <div class={flex({ position: 'absolute', top: '0', bottom: '0', left: '10px', alignItems: 'center' })}>
+        <div
+          class={flex({
+            position: 'absolute',
+            top: '0',
+            bottom: '0',
+            left: '10px',
+            alignItems: 'center',
+            zIndex: '2',
+            pointerEvents: 'none',
+          })}
+        >
           <button
             class={css({
               borderRadius: '4px',
@@ -187,6 +195,7 @@
               cursor: 'col-resize',
               opacity: '0',
               transition: 'opacity',
+              pointerEvents: 'auto',
               _hover: { backgroundColor: '[#363839/40]' },
               _groupHover: { opacity: '100' },
             })}
@@ -201,7 +210,17 @@
           ></button>
         </div>
 
-        <div class={flex({ position: 'absolute', top: '0', bottom: '0', right: '10px', alignItems: 'center' })}>
+        <div
+          class={flex({
+            position: 'absolute',
+            top: '0',
+            bottom: '0',
+            right: '10px',
+            alignItems: 'center',
+            zIndex: '2',
+            pointerEvents: 'none',
+          })}
+        >
           <button
             class={css({
               borderRadius: '4px',
@@ -212,6 +231,7 @@
               cursor: 'col-resize',
               opacity: '0',
               transition: 'opacity',
+              pointerEvents: 'auto',
               _hover: { backgroundColor: '[#363839/40]' },
               _groupHover: { opacity: '100' },
             })}
@@ -246,16 +266,11 @@
             color: 'gray.400',
           })}
         >
-          {#if inflight}
-            <RingSpinner style={css.raw({ size: '20px' })} />
-            이미지 업로드 중...
+          <Icon icon={ImageIcon} size={20} />
+          {#if editor?.current.isEditable}
+            눌러서 이미지 업로드
           {:else}
-            <Icon icon={ImageIcon} size={20} />
-            {#if editor?.current.isEditable}
-              {attrs.nodeId}
-            {:else}
-              이미지 없음
-            {/if}
+            이미지 없음
           {/if}
         </div>
 
@@ -292,7 +307,7 @@
   </div>
 </NodeView>
 
-{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable && !window.__webview__}
+{#if pickerOpened && !attrs.id && !inflightUrl && editor?.current.isEditable && !window.__webview__}
   <div
     class={center({
       flexDirection: 'column',

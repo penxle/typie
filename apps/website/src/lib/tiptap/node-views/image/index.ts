@@ -5,7 +5,7 @@ declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     image: {
-      setImage: (attrs?: Record<string, unknown>) => ReturnType;
+      setImage: (file?: File | string) => ReturnType;
     };
   }
 }
@@ -29,13 +29,19 @@ export const Image = createNodeView(Component, {
   addCommands() {
     return {
       setImage:
-        (attrs) =>
-        ({ can, commands }) => {
+        (file) =>
+        ({ can, chain }) => {
           if (!can().isNodeAllowed(this.name)) {
             return false;
           }
 
-          return commands.insertContent({ type: this.name, attrs });
+          let cmd = chain().insertContent({ type: this.name });
+
+          if (file) {
+            cmd = cmd.updateNodeViewExtras({ file });
+          }
+
+          return cmd.run();
         },
     };
   },
