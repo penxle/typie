@@ -13,6 +13,7 @@ const handler: RequestHandler = async ({ url, request, params }) => {
   });
 
   const responseHeaders = new Headers(response.headers);
+  responseHeaders.delete('Content-Length');
   responseHeaders.delete('Content-Encoding');
   responseHeaders.delete('Transfer-Encoding');
 
