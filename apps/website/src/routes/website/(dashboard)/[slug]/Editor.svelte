@@ -31,7 +31,8 @@
   import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { Dialog, Tip } from '$lib/notification';
-  import { TiptapEditor } from '$lib/tiptap';
+  import { getNodeView, TiptapEditor } from '$lib/tiptap';
+  import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Limit from './Limit.svelte';
@@ -621,12 +622,37 @@
               oncreate={() => {
                 titleEl?.focus();
               }}
-              onfile={async ({ pos, files }) => {
-                for (const file of files) {
-                  if (file.type.startsWith('image/')) {
-                    editor?.current.chain().focus(pos).setImage(file).run();
-                  } else {
-                    editor?.current.chain().focus(pos).setFile(file).run();
+              onfile={async ({ pos, file }) => {
+                if (!editor) {
+                  return;
+                }
+
+                if (file.type.startsWith('image/')) {
+                  editor.current.chain().setImage().run();
+                  const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                  const url = URL.createObjectURL(file);
+                  nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
+
+                  try {
+                    const attrs = await uploadBlobAsImage(file);
+                    nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                  } catch {
+                    nodeView?.handle?.(new CustomEvent('error'));
+                  } finally {
+                    URL.revokeObjectURL(url);
+                  }
+                } else {
+                  editor?.current.chain().focus(pos).setFile().run();
+                  const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                  nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
+
+                  try {
+                    const attrs = await uploadBlobAsFile(file);
+                    nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                  } catch {
+                    nodeView?.handle?.(new CustomEvent('error'));
                   }
                 }
               }}

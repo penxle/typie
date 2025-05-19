@@ -7,7 +7,6 @@ declare module '@tiptap/core' {
     commands: {
       isMarkAllowed: (typeOrName: string | MarkType) => ReturnType;
       isNodeAllowed: (typeOrName: string | NodeType) => ReturnType;
-      updateNodeViewExtras: (extras: Record<string, unknown>) => ReturnType;
     };
   }
 }
@@ -50,16 +49,6 @@ export const Command = Extension.create({
       isNodeAllowed: () => () => {
         return true;
       },
-
-      updateNodeViewExtras:
-        (extras) =>
-        ({ tr, dispatch }) => {
-          tr.setMeta('updateNodeViewExtras$', { extras });
-
-          dispatch?.(tr);
-
-          return true;
-        },
     };
   },
 });

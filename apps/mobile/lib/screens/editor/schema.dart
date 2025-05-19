@@ -16,6 +16,8 @@ abstract class ProseMirrorState with _$ProseMirrorState {
   const ProseMirrorState._();
   factory ProseMirrorState.fromJson(Map<String, dynamic> json) => _$ProseMirrorStateFromJson(json);
 
+  ProseMirrorNode? get currentNode => selection is ProseMirrorNodeSelection ? nodes.last : null;
+
   bool isMarkActive(String type, {Map<String, dynamic>? attrs}) {
     if (storedMarks != null) {
       final storedMark = storedMarks?.firstWhereOrNull((mark) => mark.type == type);
@@ -117,7 +119,8 @@ abstract class ProseMirrorMark with _$ProseMirrorMark {
 
 @freezed
 abstract class ProseMirrorNode with _$ProseMirrorNode {
-  const factory ProseMirrorNode({required String type, required Map<String, dynamic>? attrs}) = _ProseMirrorNode;
+  const factory ProseMirrorNode({required int pos, required String type, required Map<String, dynamic>? attrs}) =
+      _ProseMirrorNode;
   factory ProseMirrorNode.fromJson(Map<String, dynamic> json) => _$ProseMirrorNodeFromJson(json);
 }
 
@@ -126,6 +129,8 @@ sealed class ProseMirrorSelection with _$ProseMirrorSelection {
   const factory ProseMirrorSelection.all() = ProseMirrorAllSelection;
   const factory ProseMirrorSelection.text({required int anchor, required int head}) = ProseMirrorTextSelection;
   const factory ProseMirrorSelection.node({required int anchor}) = ProseMirrorNodeSelection;
+  const factory ProseMirrorSelection.multinode({required int anchor, required int head}) =
+      ProseMirrorMultiNodeSelection;
 
   factory ProseMirrorSelection.fromJson(Map<String, dynamic> json) => _$ProseMirrorSelectionFromJson(json);
 }

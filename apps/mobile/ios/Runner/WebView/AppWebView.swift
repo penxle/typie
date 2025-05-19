@@ -20,6 +20,8 @@ class AppWebView: NSObject, FlutterPlatformView {
     configuration.selectionGranularity = .character
     configuration.websiteDataStore = WKWebsiteDataStore.nonPersistent()
 
+    configuration.setURLSchemeHandler(AppWebViewSchemeHandler(), forURLScheme: "picker")
+
     if let params = args as? [String: Any] {
       if let cookies = params["initialCookies"] as? [[String: Any]] {
         for cookie in cookies {
@@ -248,4 +250,48 @@ extension AppWebView: WKScriptMessageHandler {
       break
     }
   }
+}
+
+class AppWebViewSchemeHandler: NSObject, WKURLSchemeHandler {
+  func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
+    guard let url = urlSchemeTask.request.url else {
+      urlSchemeTask.didFailWithError(NSError(domain: "co.typie.webview", code: -1))
+      return
+    }
+
+    switch url.scheme {
+    case "picker":
+      do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: url.path))
+
+        let mimetype = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+          .queryItems?
+          .first(where: { $0.name == "type" })?
+          .value ?? "application/octet-stream"
+
+        let response = HTTPURLResponse(
+          url: url,
+          mimeType: mimetype,
+          expectedContentLength: data.count,
+          textEncodingName: nil
+        )
+
+        urlSchemeTask.didReceive(response)
+        urlSchemeTask.didReceive(data)
+        urlSchemeTask.didFinish()
+      } catch {
+        urlSchemeTask.didFailWithError(error)
+      }
+    default:
+      urlSchemeTask.didFailWithError(
+        NSError(
+          domain: "co.typie.webview",
+          code: 0,
+          userInfo: [NSLocalizedDescriptionKey: "Invalid URL scheme"]
+        )
+      )
+    }
+  }
+
+  func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
 }

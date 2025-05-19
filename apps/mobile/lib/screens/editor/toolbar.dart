@@ -1,15 +1,17 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:collection/collection.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
+import 'package:typie/screens/editor/__generated__/persist_blob_as_file_mutation.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/persist_blob_as_image_mutation.req.gql.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/values.dart';
@@ -23,9 +25,6 @@ class EditorToolbar extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blob = useService<Blob>();
-    final client = useService<GraphQLClient>();
-
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
     final keyboardHeight = useValueListenable(scope.keyboardHeight);
@@ -38,6 +37,13 @@ class EditorToolbar extends HookWidget {
       return const SizedBox.shrink();
     }
 
+    useAsyncEffect(() async {
+      if (proseMirrorState?.currentNode != null) {
+        scope.selectedTextbarIdx.value = -1;
+      }
+      return null;
+    }, [proseMirrorState?.currentNode]);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -49,63 +55,27 @@ class EditorToolbar extends HookWidget {
             border: Border(top: BorderSide(color: AppColors.gray_200)),
           ),
           child: Row(
+            spacing: 16,
             children: [
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const Pad(horizontal: 16),
-                  child: Row(
-                    spacing: 16,
-                    children: [
-                      _IconToolbarButton(
-                        icon: LucideLightIcons.plus,
-                        isActive: selectedToolboxIdx == 1,
-                        onTap: () async {
-                          if (selectedToolboxIdx == 1) {
-                            await webViewController?.requestFocus();
-                          } else {
-                            scope.selectedToolboxIdx.value = 1;
-                            await webViewController?.clearFocus();
-                          }
-                        },
-                      ),
-                      _IconToolbarButton(
-                        icon: LucideLightIcons.type_,
-                        isActive: selectedTextbarIdx != -1,
-                        onTap: () async {
-                          scope.selectedTextbarIdx.value = selectedTextbarIdx == -1 ? 0 : -1;
-                        },
-                      ),
-                      _IconToolbarButton(
-                        icon: LucideLightIcons.image,
-                        onTap: () async {
-                          await webViewController?.requestFocus();
-                        },
-                      ),
-                      _IconToolbarButton(
-                        icon: LucideLightIcons.undo,
-                        onTap: () async {
-                          await scope.command('undo');
-                        },
-                      ),
-                      _IconToolbarButton(
-                        icon: LucideLightIcons.redo,
-                        onTap: () async {
-                          await scope.command('redo');
-                        },
-                      ),
-                      _IconToolbarButton(
-                        icon: LucideLightIcons.settings,
-                        onTap: () async {
-                          await webViewController?.requestFocus();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
+                child: switch (proseMirrorState?.currentNode?.type) {
+                  'file' => const _FileToolbar(),
+                  'image' => const _ImageToolbar(),
+                  _ => const _DefaultToolbar(),
+                },
               ),
-              const Box.gap(16),
+              _IconToolbarButton(
+                icon: LucideLightIcons.undo,
+                onTap: () async {
+                  await scope.command('undo');
+                },
+              ),
+              _IconToolbarButton(
+                icon: LucideLightIcons.redo,
+                onTap: () async {
+                  await scope.command('redo');
+                },
+              ),
               AnimatedIndexedSwitcher(
                 index: selectedTextbarIdx == -1 && selectedToolboxIdx == -1 ? 0 : 1,
                 children: [
@@ -124,7 +94,7 @@ class EditorToolbar extends HookWidget {
                   ),
                 ],
               ),
-              const Box.gap(16),
+              const SizedBox.shrink(),
             ],
           ),
         ),
@@ -149,28 +119,8 @@ class EditorToolbar extends HookWidget {
                     label: '이미지',
                     isActive: proseMirrorState?.isNodeActive('image') ?? false,
                     onTap: () async {
-                      final file = await ImagePicker().pickImage(source: ImageSource.gallery);
-                      if (file == null) {
-                        return;
-                      }
-
-                      final path = await blob.upload(file);
-                      final result = await client.request(
-                        GEditorScreen_PersistBlobAsImage_MutationReq((b) {
-                          b.vars.input.path = path;
-                        }),
-                      );
-
-                      await scope.command(
-                        'image',
-                        attrs: {
-                          'id': result.persistBlobAsImage.id,
-                          'url': result.persistBlobAsImage.url,
-                          'ratio': result.persistBlobAsImage.ratio,
-                          'placeholder': result.persistBlobAsImage.placeholder,
-                          'size': result.persistBlobAsImage.size,
-                        },
-                      );
+                      await scope.command('image');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -179,6 +129,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('file') ?? false,
                     onTap: () async {
                       await scope.command('file');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -187,6 +138,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('embed') ?? false,
                     onTap: () async {
                       await scope.command('embed');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -195,6 +147,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('horizontal_rule') ?? false,
                     onTap: () async {
                       await scope.command('horizontal_rule');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -203,6 +156,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('blockquote') ?? false,
                     onTap: () async {
                       await scope.command('blockquote');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -211,6 +165,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('callout') ?? false,
                     onTap: () async {
                       await scope.command('callout');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -219,6 +174,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('fold') ?? false,
                     onTap: () async {
                       await scope.command('fold');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -227,6 +183,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('table') ?? false,
                     onTap: () async {
                       await scope.command('table');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -235,7 +192,9 @@ class EditorToolbar extends HookWidget {
                     isActive:
                         (proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
                         (proseMirrorState?.isNodeActive('ordered_list') ?? false),
-                    onTap: () async {},
+                    onTap: () async {
+                      await webViewController?.requestFocus();
+                    },
                   ),
                   _BoxButton(
                     icon: LucideLightIcons.code,
@@ -243,6 +202,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('code_block') ?? false,
                     onTap: () async {
                       await scope.command('code_block');
+                      await webViewController?.requestFocus();
                     },
                   ),
                   _BoxButton(
@@ -251,6 +211,7 @@ class EditorToolbar extends HookWidget {
                     isActive: proseMirrorState?.isNodeActive('html_block') ?? false,
                     onTap: () async {
                       await scope.command('html_block');
+                      await webViewController?.requestFocus();
                     },
                   ),
                 ],
@@ -258,6 +219,239 @@ class EditorToolbar extends HookWidget {
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _DefaultToolbar extends HookWidget {
+  const _DefaultToolbar();
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = EditorStateScope.of(context);
+    final webViewController = useValueListenable(scope.webViewController);
+    final selectedToolboxIdx = useValueListenable(scope.selectedToolboxIdx);
+    final selectedTextbarIdx = useValueListenable(scope.selectedTextbarIdx);
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const Pad(left: 16),
+      child: Row(
+        spacing: 16,
+        children: [
+          _IconToolbarButton(
+            icon: LucideLightIcons.plus,
+            isActive: selectedToolboxIdx == 1,
+            onTap: () async {
+              if (selectedToolboxIdx == 1) {
+                await webViewController?.requestFocus();
+              } else {
+                scope.selectedToolboxIdx.value = 1;
+                await webViewController?.clearFocus();
+              }
+            },
+          ),
+          _IconToolbarButton(
+            icon: LucideLightIcons.type_,
+            isActive: selectedTextbarIdx != -1,
+            onTap: () async {
+              scope.selectedTextbarIdx.value = selectedTextbarIdx == -1 ? 0 : -1;
+            },
+          ),
+          _IconToolbarButton(
+            icon: LucideLightIcons.image,
+            onTap: () async {
+              await scope.command('image');
+              await webViewController?.requestFocus();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NodeToolbar extends HookWidget {
+  const _NodeToolbar({required this.label, required this.children});
+
+  final String label;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = EditorStateScope.of(context);
+    final webViewController = useValueListenable(scope.webViewController);
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const Pad(left: 16),
+      child: Row(
+        spacing: 16,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_500)),
+          const AppVerticalDivider(height: 20, color: AppColors.gray_200),
+          ...children,
+          _TextToolbarButton(
+            text: '삭제',
+            color: AppColors.red_500,
+            onTap: () async {
+              await scope.command('delete');
+              await webViewController?.requestFocus();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImageToolbar extends HookWidget {
+  const _ImageToolbar();
+
+  @override
+  Widget build(BuildContext context) {
+    final blob = useService<Blob>();
+    final client = useService<GraphQLClient>();
+
+    final scope = EditorStateScope.of(context);
+    final proseMirrorState = useValueListenable(scope.proseMirrorState);
+
+    return _NodeToolbar(
+      label: '이미지',
+      children: [
+        if (proseMirrorState!.currentNode!.attrs?['id'] == null)
+          _TextToolbarButton(
+            text: '업로드',
+            onTap: () async {
+              final nodeId = proseMirrorState.currentNode!.attrs?['nodeId'] as String?;
+              if (nodeId == null) {
+                return;
+              }
+
+              final result = await FilePicker.platform.pickFiles(type: FileType.image);
+              if (result == null) {
+                return;
+              }
+
+              final pickedFile = result.files.firstOrNull;
+              if (pickedFile == null) {
+                return;
+              }
+
+              final file = File(pickedFile.path!);
+              final mimetype = await blob.mime(file);
+
+              final url =
+                  Uri.parse(
+                    pickedFile.identifier!,
+                  ).replace(scheme: 'picker', queryParameters: {'type': mimetype}).toString();
+
+              await scope.webViewController.value?.emitEvent('nodeview', {
+                'nodeId': nodeId,
+                'name': 'inflight',
+                'detail': {'url': url},
+              });
+
+              try {
+                final path = await blob.upload(file);
+                final result = await client.request(
+                  GEditorScreen_PersistBlobAsImage_MutationReq((b) {
+                    b.vars.input.path = path;
+                  }),
+                );
+
+                await scope.webViewController.value?.emitEvent('nodeview', {
+                  'nodeId': nodeId,
+                  'name': 'success',
+                  'detail': {
+                    'attrs': {
+                      'id': result.persistBlobAsImage.id,
+                      'url': result.persistBlobAsImage.url,
+                      'ratio': result.persistBlobAsImage.ratio,
+                      'placeholder': result.persistBlobAsImage.placeholder,
+                      'size': result.persistBlobAsImage.size,
+                    },
+                  },
+                });
+              } on Exception {
+                await scope.webViewController.value?.emitEvent('nodeview', {'nodeId': nodeId, 'name': 'error'});
+              }
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _FileToolbar extends HookWidget {
+  const _FileToolbar();
+
+  @override
+  Widget build(BuildContext context) {
+    final blob = useService<Blob>();
+    final client = useService<GraphQLClient>();
+
+    final scope = EditorStateScope.of(context);
+    final proseMirrorState = useValueListenable(scope.proseMirrorState);
+
+    return _NodeToolbar(
+      label: '파일',
+      children: [
+        if (proseMirrorState!.currentNode!.attrs?['id'] == null)
+          _TextToolbarButton(
+            text: '업로드',
+            onTap: () async {
+              final nodeId = proseMirrorState.currentNode!.attrs?['nodeId'] as String?;
+              if (nodeId == null) {
+                return;
+              }
+
+              final result = await FilePicker.platform.pickFiles();
+              if (result == null) {
+                return;
+              }
+
+              final pickedFile = result.files.firstOrNull;
+              if (pickedFile == null) {
+                return;
+              }
+
+              final file = File(pickedFile.path!);
+
+              await scope.webViewController.value?.emitEvent('nodeview', {
+                'nodeId': nodeId,
+                'name': 'inflight',
+                'detail': {'name': pickedFile.name, 'size': pickedFile.size},
+              });
+
+              try {
+                final path = await blob.upload(file);
+                final result = await client.request(
+                  GEditorScreen_PersistBlobAsFile_MutationReq((b) {
+                    b.vars.input.path = path;
+                  }),
+                );
+
+                await scope.webViewController.value?.emitEvent('nodeview', {
+                  'nodeId': nodeId,
+                  'name': 'success',
+                  'detail': {
+                    'attrs': {
+                      'id': result.persistBlobAsFile.id,
+                      'url': result.persistBlobAsFile.url,
+                      'name': result.persistBlobAsFile.name,
+                      'size': result.persistBlobAsFile.size,
+                    },
+                  },
+                });
+              } on Exception {
+                await scope.webViewController.value?.emitEvent('nodeview', {'nodeId': nodeId, 'name': 'error'});
+              }
+            },
+          ),
       ],
     );
   }
@@ -645,10 +839,16 @@ class _SelectTextbar extends HookWidget {
 enum _ButtonState { idle, pressed, active }
 
 class _BaseButton extends HookWidget {
-  const _BaseButton({required this.onTap, required this.builder, this.isActive = false});
+  const _BaseButton({
+    required this.onTap,
+    required this.builder,
+    this.isActive = false,
+    this.color = AppColors.gray_700,
+  });
 
   final Widget Function(BuildContext context, Color color) builder;
 
+  final Color color;
   final bool isActive;
   final void Function() onTap;
 
@@ -667,10 +867,10 @@ class _BaseButton extends HookWidget {
     final colorTween = useRef<ColorTween?>(null);
 
     useEffect(() {
-      final begin = colorTween.value?.evaluate(curve) ?? (isActive ? AppColors.brand_500 : AppColors.gray_700);
+      final begin = colorTween.value?.evaluate(curve) ?? (isActive ? AppColors.brand_500 : color);
 
       final end = switch (effectiveState) {
-        _ButtonState.idle => AppColors.gray_700,
+        _ButtonState.idle => color,
         _ButtonState.pressed => AppColors.gray_300,
         _ButtonState.active => AppColors.brand_500,
       };
@@ -690,9 +890,9 @@ class _BaseButton extends HookWidget {
       child: AnimatedBuilder(
         animation: controller,
         builder: (context, child) {
-          final color = colorTween.value?.evaluate(curve) ?? AppColors.gray_700;
+          final currentColor = colorTween.value?.evaluate(curve) ?? color;
 
-          return builder(context, color);
+          return builder(context, currentColor);
         },
       ),
     );
@@ -759,9 +959,15 @@ class _ColorToolbarButton extends HookWidget {
 }
 
 class _TextToolbarButton extends HookWidget {
-  const _TextToolbarButton({required this.onTap, required this.text, this.isActive = false});
+  const _TextToolbarButton({
+    required this.onTap,
+    required this.text,
+    this.isActive = false,
+    this.color = AppColors.gray_700,
+  });
 
   final String text;
+  final Color color;
   final bool isActive;
   final void Function() onTap;
 
@@ -770,6 +976,7 @@ class _TextToolbarButton extends HookWidget {
     return _BaseButton(
       isActive: isActive,
       onTap: onTap,
+      color: color,
       builder: (context, color) {
         return Box(
           padding: const Pad(all: 4),

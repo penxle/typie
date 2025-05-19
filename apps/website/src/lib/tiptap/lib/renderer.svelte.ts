@@ -10,26 +10,27 @@ import type {
   NodeViewRendererProps,
 } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import type { Transaction } from '@tiptap/pm/state';
 import type { Decoration, DecorationSource, NodeView as ProseMirrorNodeView } from '@tiptap/pm/view';
 import type { Component } from 'svelte';
 
 export type NodeViewProps = Omit<TiptapNodeViewProps, 'editor'> & {
   editor?: Ref<Editor>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  extras: Record<string, any>;
 };
 
-export type NodeViewComponent = Component<NodeViewProps>;
+export type NodeViewExports = {
+  handle?: (event: CustomEvent) => void;
+};
+
+export type NodeViewComponent = Component<NodeViewProps, NodeViewExports>;
 
 class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorNodeView {
   #element: HTMLElement;
   #contentElement: HTMLElement | null = null;
-  #component: Record<string, never>;
+  #component: NodeViewExports;
   #props = $state<NodeViewProps>();
 
   #handleSelectionUpdate: () => void;
-  #handleTransaction: (props: { editor: Editor; transaction: Transaction }) => void;
+  #handleTransaction: () => void;
   #onDragStart: (event: DragEvent) => void;
 
   constructor(component: NodeViewComponent, props: NodeViewRendererProps, options?: Partial<NodeViewRendererOptions>) {
@@ -61,7 +62,6 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
       HTMLAttributes: this.HTMLAttributes,
       extension: this.extension,
       selected: false,
-      extras: {},
 
       getPos: () => this.getPos(),
       updateAttributes: (attrs) => this.updateAttributes(attrs),
@@ -81,6 +81,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
     }
 
     this.#element = element;
+    this.#element.__nodeview__ = this.#component;
 
     if (!this.node.isLeaf) {
       const contentElement = element.querySelector<HTMLElement>('[data-node-view-content-editable]');
@@ -106,14 +107,9 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
       }
     };
 
-    this.#handleTransaction = ({ editor, transaction }) => {
+    this.#handleTransaction = () => {
       if (this.#props) {
         this.#props.editor = new Ref(this.editor);
-
-        const meta = transaction.getMeta('updateNodeViewExtras$');
-        if (meta && editor.state.selection.anchor === this.getPos()) {
-          this.#props.extras = meta.extras;
-        }
       }
     };
 
@@ -170,6 +166,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
   destroy() {
     this.editor?.off('selectionUpdate', this.#handleSelectionUpdate);
     this.editor?.off('transaction', this.#handleTransaction);
+    this.#element.__nodeview__ = undefined;
     unmount(this.#component);
     this.#contentElement = null;
   }

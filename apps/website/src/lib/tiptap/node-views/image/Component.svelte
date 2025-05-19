@@ -13,20 +13,19 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, selected, updateAttributes, deleteNode, extras, HTMLAttributes }: Props = $props();
+  let { node, editor, selected, updateAttributes, deleteNode, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
     attrs = node.attrs;
   });
 
-  let inflightUrl = $state<string>();
   let pickerOpened = $state(false);
-
   $effect(() => {
     pickerOpened = selected;
   });
 
+  let inflightUrl = $state<string>();
   let enlarged = $state(false);
 
   const { anchor, floating } = createFloatingActions({
@@ -50,30 +49,26 @@
         return;
       }
 
-      await upload(file);
+      inflightUrl = URL.createObjectURL(file);
+      try {
+        const attrs = await uploadBlobAsImage(file);
+        updateAttributes(attrs);
+      } finally {
+        URL.revokeObjectURL(inflightUrl);
+        inflightUrl = undefined;
+      }
     });
 
     picker.click();
   };
 
-  $effect(() => {
-    if (extras.file && !attrs.id && !inflightUrl) {
-      if (typeof extras.file === 'string') {
-        inflightUrl = extras.file;
-      } else {
-        upload(extras.file);
-      }
-    }
-  });
-
-  const upload = async (file: File) => {
-    inflightUrl = URL.createObjectURL(file);
-
-    try {
-      const attrs = await uploadBlobAsImage(file);
-      updateAttributes(attrs);
-    } finally {
-      URL.revokeObjectURL(inflightUrl);
+  export const handle = (event: CustomEvent) => {
+    if (event.type === 'inflight') {
+      inflightUrl = event.detail.url;
+    } else if (event.type === 'success') {
+      inflightUrl = undefined;
+      updateAttributes(event.detail.attrs);
+    } else if (event.type === 'error') {
       inflightUrl = undefined;
     }
   };
@@ -123,7 +118,7 @@
   };
 </script>
 
-<NodeView style={css.raw({ display: 'flex', justifyContent: 'center', userSelect: 'none' })} {...HTMLAttributes}>
+<NodeView style={css.raw({ display: 'flex', justifyContent: 'center' })} {...HTMLAttributes}>
   <div
     bind:this={containerEl}
     style:width={`${proportion * 100}%`}
@@ -267,11 +262,7 @@
           })}
         >
           <Icon icon={ImageIcon} size={20} />
-          {#if editor?.current.isEditable}
-            눌러서 이미지 업로드
-          {:else}
-            이미지 없음
-          {/if}
+          이미지
         </div>
 
         {#if editor?.current.isEditable && !window.__webview__}

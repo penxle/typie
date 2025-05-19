@@ -14,7 +14,7 @@
   import { graphql } from '$graphql';
   import { autosize } from '$lib/actions';
   import { HorizontalDivider } from '$lib/components';
-  import { TiptapEditor } from '$lib/tiptap';
+  import { getNodeViewByNodeId, TiptapEditor } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import Placeholder from './Placeholder.svelte';
@@ -250,13 +250,9 @@
           editor?.current.chain().focus().setParagraphLetterSpacing(attrs.letterSpacing).run();
         }
       } else if (name === 'image') {
-        editor?.current.chain().focus().setImage(attrs.url).run();
+        editor?.current.chain().focus().setImage().run();
       } else if (name === 'file') {
-        editor?.current
-          .chain()
-          .focus()
-          .setFile(attrs as { name: string; size: number })
-          .run();
+        editor?.current.chain().focus().setFile().run();
       } else if (name === 'embed') {
         editor?.current.chain().focus().setEmbed().run();
       } else if (name === 'horizontal_rule') {
@@ -283,9 +279,21 @@
         editor?.current.chain().focus().redo().run();
       } else if (name === 'delete') {
         editor?.current.chain().focus().deleteSelection().run();
-      } else if (name === 'attr') {
-        editor?.current.chain().focus().updateAttributes(attrs.type, attrs.attributes).run();
       }
+    });
+
+    window.__webview__?.addEventListener('nodeview', (data) => {
+      if (!editor) {
+        return;
+      }
+
+      const nodeId = data.nodeId as string;
+      const name = data.name as string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const detail = data.detail as Record<string, any>;
+
+      const nodeView = getNodeViewByNodeId(editor.current.view, nodeId);
+      nodeView?.handle?.(new CustomEvent(name, { detail }));
     });
 
     return () => {

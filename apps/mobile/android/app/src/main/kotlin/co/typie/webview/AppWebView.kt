@@ -96,9 +96,17 @@ class AppWebView(
 
   override fun onMethodCall(call: MethodCall, result: Result) {
     when (call.method) {
-      "requestFocus" -> webView.requestFocus()
-      "clearFocus" -> webView.clearFocus()
-      "dispose" -> {}
+      "requestFocus" -> {
+        webView.requestFocus()
+        result.success(null)
+      }
+
+      "clearFocus" -> {
+        webView.clearFocus()
+        result.success(null)
+      }
+
+      "dispose" -> result.success(null)
       else -> result.notImplemented()
     }
   }
