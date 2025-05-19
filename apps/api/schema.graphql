@@ -116,7 +116,6 @@ type Entity implements IEntity {
   depth: Int!
   descendants: [Entity!]!
   id: ID!
-  maxDescendantsDepth: Int!
   node: EntityNode!
   order: String!
   parent: Entity
@@ -181,6 +180,7 @@ input FinalizePreorderPaymentInput {
 type Folder implements IFolder {
   entity: Entity!
   id: ID!
+  maxDescendantFoldersDepth: Int!
   name: String!
   view: FolderView!
 }
