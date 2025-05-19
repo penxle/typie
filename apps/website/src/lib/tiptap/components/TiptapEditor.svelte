@@ -18,7 +18,7 @@
     extensions?: Extension[];
     onkeydown?: (view: EditorView, event: KeyboardEvent) => void;
     oncreate?: () => void;
-    onfile?: (event: { pos: number; files: File[] }) => void;
+    onfile?: (event: { pos: number; file: File }) => void;
   };
 
   let { style, editor = $bindable(), doc, awareness, extensions, onkeydown, oncreate, onfile }: Props = $props();
@@ -47,7 +47,9 @@
         handleDrop: (view, event) => {
           if (event.dataTransfer?.files?.length) {
             const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.anchor;
-            onfile?.({ pos, files: [...event.dataTransfer.files] });
+            for (const file of event.dataTransfer.files) {
+              onfile?.({ pos, file });
+            }
 
             return true;
           }
@@ -58,7 +60,9 @@
         handlePaste: (view, event) => {
           if (event.clipboardData?.files?.length) {
             const pos = view.state.selection.anchor;
-            onfile?.({ pos, files: [...event.clipboardData.files] });
+            for (const file of event.clipboardData.files) {
+              onfile?.({ pos, file });
+            }
 
             return true;
           }
@@ -76,9 +80,11 @@
       },
 
       onFocus: ({ editor }) => {
-        setTimeout(() => {
-          editor.commands.scrollIntoView();
-        }, 500);
+        if (window.__webview__) {
+          setTimeout(() => {
+            editor.commands.scrollIntoView();
+          }, 500);
+        }
       },
     });
 

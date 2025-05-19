@@ -1,3 +1,5 @@
+import { findChildrenInRange } from '@tiptap/core';
+import { NodeSelection } from '@tiptap/pm/state';
 import { createNodeView } from '../../lib';
 import Component from './Component.svelte';
 
@@ -5,7 +7,7 @@ declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     image: {
-      setImage: (file?: File | string) => ReturnType;
+      setImage: () => ReturnType;
     };
   }
 }
@@ -29,19 +31,25 @@ export const Image = createNodeView(Component, {
   addCommands() {
     return {
       setImage:
-        (file) =>
-        ({ can, chain }) => {
+        () =>
+        ({ can, tr, dispatch }) => {
           if (!can().isNodeAllowed(this.name)) {
             return false;
           }
 
-          let cmd = chain().insertContent({ type: this.name });
+          const node = this.type.create();
+          tr.replaceSelectionWith(node);
 
-          if (file) {
-            cmd = cmd.updateNodeViewExtras({ file });
+          const children = findChildrenInRange(tr.doc, { from: 0, to: tr.selection.anchor }, (node) => node.type === this.type);
+          const pos = children.at(-1)?.pos;
+
+          if (pos) {
+            tr.setSelection(NodeSelection.create(tr.doc, pos));
           }
 
-          return cmd.run();
+          dispatch?.(tr);
+
+          return true;
         },
     };
   },

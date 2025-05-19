@@ -13,14 +13,14 @@
 
   type Props = NodeViewProps;
 
-  let { node, editor, selected, updateAttributes, deleteNode, extras, HTMLAttributes }: Props = $props();
+  let { node, editor, selected, updateAttributes, deleteNode, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
     attrs = node.attrs;
   });
 
-  let file = $state<{ name: string; size: number }>();
+  let inflightFile = $state<{ name: string; size: number }>();
   let pickerOpened = $state(false);
 
   $effect(() => {
@@ -47,30 +47,26 @@
         return;
       }
 
-      upload(file);
+      inflightFile = { name: file.name, size: file.size };
+      try {
+        const attrs = await uploadBlobAsFile(file);
+        updateAttributes(attrs);
+      } finally {
+        inflightFile = undefined;
+      }
     });
 
     picker.click();
   };
 
-  $effect(() => {
-    if (extras.file && !attrs.id && !file) {
-      if (extras.file instanceof File) {
-        upload(extras.file);
-      } else {
-        file = extras.file;
-      }
-    }
-  });
-
-  const upload = async (f: File) => {
-    file = f;
-
-    try {
-      const attrs = await uploadBlobAsFile(f);
-      updateAttributes(attrs);
-    } finally {
-      file = undefined;
+  export const handle = (event: CustomEvent) => {
+    if (event.type === 'inflight') {
+      inflightFile = event.detail.file;
+    } else if (event.type === 'success') {
+      inflightFile = undefined;
+      updateAttributes(event.detail.attrs);
+    } else if (event.type === 'error') {
+      inflightFile = undefined;
     }
   };
 </script>
@@ -123,26 +119,22 @@
           truncate: true,
         })}
       >
-        {#if file}
+        {#if inflightFile}
           <RingSpinner style={css.raw({ size: '20px' })} />
 
-          <span class={css({ truncate: true })}>{file.name}</span>
+          <span class={css({ truncate: true })}>{inflightFile.name}</span>
 
           <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
 
-          <span class={css({ color: 'gray.400' })}>{formatBytes(file.size)}</span>
+          <span class={css({ color: 'gray.400' })}>{formatBytes(inflightFile.size)}</span>
         {:else}
           <Icon icon={PaperclipIcon} size={20} />
-          {#if editor?.current.isEditable}
-            눌러서 파일 업로드
-          {:else}
-            파일 없음
-          {/if}
+          파일
         {/if}
       </div>
     {/if}
 
-    {#if editor?.current.isEditable}
+    {#if editor?.current.isEditable && !window.__webview__}
       <Menu>
         {#snippet button({ open })}
           <div
@@ -184,7 +176,7 @@
   </svelte:element>
 </NodeView>
 
-{#if pickerOpened && !attrs.id && !file && editor?.current.isEditable}
+{#if pickerOpened && !attrs.id && !inflightFile && editor?.current.isEditable && !window.__webview__}
   <div
     class={center({
       flexDirection: 'column',

@@ -1,4 +1,4 @@
-import { Behavior, BlockSelectionExt, Command, DropCursor, NodeId, Placeholder, SyntaxHighlight, Typography } from './extensions';
+import { Behavior, Command, DropCursor, NodeId, Placeholder, Selection, SyntaxHighlight, Typography } from './extensions';
 import { Bold, Italic, Link, Ruby, Strike, TextStyle, Underline } from './marks';
 import { FloatingMenu, SlashMenu } from './menus';
 import {
@@ -62,10 +62,10 @@ export const extensions = [
   // extensions
   Behavior,
   Command,
-  BlockSelectionExt,
   DropCursor,
   NodeId,
   Placeholder,
+  Selection,
   SyntaxHighlight,
   Typography,
 
