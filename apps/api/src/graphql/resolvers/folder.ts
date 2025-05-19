@@ -25,6 +25,27 @@ Folder.implement({
     view: t.expose('id', { type: FolderView }),
 
     entity: t.expose('entityId', { type: Entity }),
+
+    maxDescendantFoldersDepth: t.int({
+      resolve: async (self) => {
+        const { rows } = await db.execute<{ depth: number }>(
+          sql`
+            WITH RECURSIVE sq AS (
+              SELECT ${Entities.id}, ${Entities.depth}
+              FROM ${Entities}
+              WHERE ${eq(Entities.id, self.entityId)}
+              UNION ALL
+              SELECT ${Entities.id}, ${Entities.depth}
+              FROM ${Entities}
+              JOIN sq ON ${Entities.parentId} = sq.id
+              WHERE ${and(eq(Entities.state, EntityState.ACTIVE), eq(Entities.type, EntityType.FOLDER))}
+            )
+            SELECT MAX(depth) AS depth FROM sq
+          `,
+        );
+        return rows[0].depth;
+      },
+    }),
   }),
 });
 

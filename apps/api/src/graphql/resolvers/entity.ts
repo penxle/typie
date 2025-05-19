@@ -131,27 +131,6 @@ Entity.implement({
         return rows.map(({ id }) => id);
       },
     }),
-
-    maxDescendantsDepth: t.int({
-      resolve: async (self) => {
-        const { rows } = await db.execute<{ depth: number }>(
-          sql`
-            WITH RECURSIVE sq AS (
-              SELECT ${Entities.id}, ${Entities.depth}
-              FROM ${Entities}
-              WHERE ${eq(Entities.id, self.id)}
-              UNION ALL
-              SELECT ${Entities.id}, ${Entities.depth}
-              FROM ${Entities}
-              JOIN sq ON ${Entities.parentId} = sq.id
-              WHERE ${eq(Entities.state, EntityState.ACTIVE)}
-            )
-            SELECT MAX(depth) AS depth FROM sq
-          `,
-        );
-        return rows[0].depth;
-      },
-    }),
   }),
 });
 
