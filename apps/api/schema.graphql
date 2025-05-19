@@ -116,6 +116,7 @@ type Entity implements IEntity {
   depth: Int!
   descendants: [Entity!]!
   id: ID!
+  maxDescendantsDepth: Int!
   node: EntityNode!
   order: String!
   parent: Entity
