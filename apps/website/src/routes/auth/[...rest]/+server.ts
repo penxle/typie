@@ -2,19 +2,24 @@ import { env } from '$env/dynamic/public';
 import type { RequestHandler } from './$types';
 
 const handler: RequestHandler = async ({ url, request, params }) => {
-  const headers = new Headers(request.headers);
-  headers.delete('host');
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete('host');
 
   const response = await fetch(`${env.PUBLIC_API_URL}/auth/${params.rest}${url.search}`, {
     method: request.method,
-    headers,
+    headers: requestHeaders,
     body: request.method === 'POST' ? await request.blob() : undefined,
     redirect: 'manual',
   });
 
+  const responseHeaders = new Headers(response.headers);
+  responseHeaders.delete('Content-Encoding');
+  responseHeaders.delete('Transfer-Encoding');
+
   return new Response(response.body, {
     status: response.status,
-    headers: response.headers,
+    statusText: response.statusText,
+    headers: responseHeaders,
   });
 };
 
