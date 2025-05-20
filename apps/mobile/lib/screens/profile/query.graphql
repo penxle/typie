@@ -1,4 +1,4 @@
-query HomeScreen_Query {
+query ProfileScreen_Query {
   me {
     id
     email

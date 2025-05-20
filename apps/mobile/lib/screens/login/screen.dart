@@ -44,7 +44,6 @@ class LoginScreen extends HookWidget {
     });
 
     return Screen(
-      resizeToAvoidBottomInset: false,
       heading: const EmptyHeading(),
       child: Column(
         children: [
@@ -219,7 +218,10 @@ class _Button extends StatelessWidget {
           children: [
             if (icon != null) Positioned(top: 0, bottom: 0, left: 24, child: icon!),
             Center(
-              child: Text(text, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: foregroundColor)),
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: foregroundColor),
+              ),
             ),
           ],
         ),

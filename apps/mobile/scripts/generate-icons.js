@@ -133,33 +133,35 @@ ${entries.join('\n')}
   );
 };
 
-const iconSet = new IconSet(icons);
-const lucideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-lucide-'));
-await exportToDirectory(iconSet, {
-  target: lucideDir,
-  cleanup: true,
-  includeAliases: false,
-});
+const makeLucideDir = async (name, width) => {
+  const iconSet = new IconSet(icons);
+  iconSet.forEachSync(
+    (name) => {
+      const svg = iconSet.toSVG(name);
+      svg.$svg('[stroke-width="2"]').attr('stroke-width', width);
+      iconSet.fromSVG(name, svg);
+    },
+    ['icon'],
+  );
 
-iconSet.forEachSync(
-  (name) => {
-    const svg = iconSet.toSVG(name);
-    svg.$svg('[stroke-width="2"]').attr('stroke-width', '1.5');
-    iconSet.fromSVG(name, svg);
-  },
-  ['icon'],
-);
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `icons-lucide-${name}-${width}`));
+  await exportToDirectory(iconSet, {
+    target: dir,
+    cleanup: true,
+    includeAliases: false,
+  });
 
-const lucideLightDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-lucide-light-'));
-await exportToDirectory(iconSet, {
-  target: lucideLightDir,
-  cleanup: true,
-  includeAliases: false,
-});
+  return dir;
+};
+
+const lucideLightDir = await makeLucideDir('lucide-light', '1.5');
+const lucideDir = await makeLucideDir('lucide', '2');
+const lucideBoldDir = await makeLucideDir('lucide-bold', '2.5');
 
 const typieDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-typie-'));
 await fs.cp('../website/src/icons', typieDir, { recursive: true });
 
-await createIconFont('lucide', lucideDir);
 await createIconFont('lucide-light', lucideLightDir);
+await createIconFont('lucide', lucideDir);
+await createIconFont('lucide-bold', lucideBoldDir);
 await createIconFont('typie', typieDir);

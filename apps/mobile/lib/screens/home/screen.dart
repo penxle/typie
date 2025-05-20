@@ -1,15 +1,14 @@
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:typie/context/bottom_sheet.dart';
-import 'package:typie/graphql/widget.dart';
+import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide.dart';
-import 'package:typie/modals/plan.dart';
+import 'package:typie/icons/lucide_bold.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/home/__generated__/query.req.gql.dart';
-import 'package:typie/services/auth.dart';
-import 'package:typie/widgets/btn.dart';
+import 'package:typie/screens/home/__generated__/create_post_mutation.req.gql.dart';
+import 'package:typie/services/preference.dart';
+import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -19,47 +18,100 @@ class HomeScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth = useService<Auth>();
+    final client = useService<GraphQLClient>();
+    final pref = useService<Pref>();
 
-    return Screen(
-      child: GraphQLOperation(
-        operation: GHomeScreen_QueryReq(),
-        builder: (context, client, data) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              spacing: 16,
-              children: [
-                const Icon(LucideIcons.user, size: 100),
-                Text(data.me!.email),
-                Btn(
-                  'editor',
-                  onTap: () async {
-                    await context.router.push(EditorRoute(slug: data.me!.sites[0].firstEntity!.slug));
-                  },
+    return AutoTabsRouter(
+      routes: const [PostsRoute(), SearchRoute(), InboxRoute(), ProfileRoute()],
+      duration: Duration.zero,
+      transitionBuilder: (context, child, animation) => child,
+      builder: (context, child) {
+        final padding = MediaQuery.viewPaddingOf(context);
+
+        return Screen(
+          safeArea: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: MediaQuery.removeViewPadding(context: context, removeBottom: true, child: child),
+              ),
+              Box(
+                height: padding.bottom + 54,
+                padding: Pad(horizontal: 24, bottom: padding.bottom),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: AppColors.gray_100)),
                 ),
-                Tappable(
-                  child: const Text('plan'),
-                  onTap: () async {
-                    await context.showBottomSheet(const PlanModal());
-                  },
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const _Button(
+                      index: 0,
+                      icon: Icon(LucideBoldIcons.folder, color: AppColors.gray_300),
+                      activeIcon: Icon(LucideBoldIcons.folder, color: AppColors.gray_700),
+                    ),
+                    const _Button(
+                      index: 1,
+                      icon: Icon(LucideBoldIcons.search, color: AppColors.gray_300),
+                      activeIcon: Icon(LucideBoldIcons.search, color: AppColors.gray_700),
+                    ),
+                    Tappable(
+                      onTap: () async {
+                        final result = await client.request(
+                          GHomeScreen_CreatePost_MutationReq((b) {
+                            b.vars.input.siteId = pref.siteId;
+                          }),
+                        );
+
+                        if (context.mounted) {
+                          await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
+                        }
+                      },
+                      child: const Box(
+                        padding: Pad(horizontal: 12),
+                        child: Icon(LucideBoldIcons.square_plus, color: AppColors.gray_300),
+                      ),
+                    ),
+                    const _Button(
+                      index: 2,
+                      icon: Icon(LucideBoldIcons.bell, color: AppColors.gray_300),
+                      activeIcon: Icon(LucideBoldIcons.bell, color: AppColors.gray_700),
+                    ),
+                    const _Button(
+                      index: 3,
+                      icon: Icon(LucideBoldIcons.circle_user_round, color: AppColors.gray_300),
+                      activeIcon: Icon(LucideBoldIcons.circle_user_round, color: AppColors.gray_700),
+                    ),
+                  ],
                 ),
-                Tappable(
-                  child: const Text('Entity Tree'),
-                  onTap: () async {
-                    await context.router.push(EntityTreeRoute(entityId: null));
-                  },
-                ),
-                Tappable(
-                  child: const Text('logout'),
-                  onTap: () async {
-                    await auth.logout();
-                  },
-                ),
-              ],
-            ),
-          );
-        },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _Button extends StatelessWidget {
+  const _Button({required this.index, required this.icon, this.activeIcon});
+
+  final int index;
+  final Widget icon;
+  final Widget? activeIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    final tabsRouter = AutoTabsRouter.of(context, watch: true);
+
+    return Tappable(
+      onTap: () {
+        tabsRouter.setActiveIndex(index);
+      },
+      child: Box(
+        padding: const Pad(horizontal: 12),
+        child: tabsRouter.activeIndex == index ? activeIcon ?? icon : icon,
       ),
     );
   }
