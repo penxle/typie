@@ -138,7 +138,14 @@
           size="full"
         />
       {:else if inflightUrl}
-        <img class={css({ width: 'full', borderRadius: '4px' })} alt="본문 이미지" src={inflightUrl} />
+        <img
+          class={css({ width: 'full', borderRadius: '4px' })}
+          alt="본문 이미지"
+          onerror={(e) => {
+            (e.currentTarget as HTMLImageElement).src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+          }}
+          src={inflightUrl}
+        />
         <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50', zIndex: '1' })}>
           <RingSpinner style={css.raw({ size: '24px', color: 'gray.400' })} />
         </div>
