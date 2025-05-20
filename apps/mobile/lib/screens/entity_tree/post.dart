@@ -24,7 +24,7 @@ class Post extends HookWidget {
           Tappable(
             child: const Icon(LucideIcons.ellipsis_vertical, size: 18),
             onTap: () async {
-              await context.showBottomSheet(PostModal(post: post));
+              await context.showBottomSheet(PostModal(post));
             },
           ),
         ],

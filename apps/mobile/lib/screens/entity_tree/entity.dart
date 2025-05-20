@@ -14,7 +14,7 @@ class Entity extends HookWidget {
   @override
   Widget build(BuildContext context) {
     return entity.node.G__typename == 'Folder'
-        ? Folder(entity.node as GEntityTree_Folder_folder, entityId: entity.id)
+        ? Folder(entity.node as GEntityTree_Folder_folder, entityId: entity.id, siteId: entity.site.id)
         : Post(entity.node as GEntityTree_Post_post);
   }
 }

@@ -19,4 +19,8 @@ fragment EntityTree_Entity_entity on Entity {
       ...EntityTree_Post_post
     }
   }
+
+  site {
+    id
+  }
 }

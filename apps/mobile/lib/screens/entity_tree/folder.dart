@@ -9,10 +9,11 @@ import 'package:typie/screens/entity_tree/__generated__/entity_tree_folder_folde
 import 'package:typie/widgets/tappable.dart';
 
 class Folder extends HookWidget {
-  const Folder(this.folder, {required this.entityId, super.key});
+  const Folder(this.folder, {required this.entityId, required this.siteId, super.key});
 
   final GEntityTree_Folder_folder folder;
   final String entityId;
+  final String siteId;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +26,7 @@ class Folder extends HookWidget {
           Tappable(
             child: const Icon(LucideIcons.ellipsis_vertical, size: 18),
             onTap: () async {
-              await context.showBottomSheet(FolderModal(folder: folder));
+              await context.showBottomSheet(FolderModal(folder, siteId: siteId));
             },
           ),
         ],
