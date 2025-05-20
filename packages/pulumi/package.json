@@ -10,11 +10,11 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@pulumi/aws": "^6.79.1",
+    "@pulumi/aws": "^6.80.0",
     "@pulumi/kubernetes": "^4.23.0",
-    "@pulumi/pulumi": "^3.167.0",
+    "@pulumi/pulumi": "^3.170.0",
     "@typie/tsconfig": "workspace:*",
-    "ts-pattern": "^5.7.0",
+    "ts-pattern": "^5.7.1",
     "typescript": "^5.8.3"
   }
 }

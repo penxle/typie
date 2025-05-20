@@ -10,7 +10,7 @@ import { ignore } from './eslint-ignore.js';
 
 // eslint-disable-next-line import/no-default-export
 export default defineConfig([
-  { ignores: [ignore] },
+  { ignores: [ignore, '**/vendor/**'] },
   js.configs.recommended,
   unicorn.configs.recommended,
   typescript.configs.strict,
@@ -58,6 +58,7 @@ export default defineConfig([
       'svelte/no-target-blank': 'error',
       'svelte/block-lang': ['error', { script: ['ts'] }],
       'svelte/button-has-type': 'error',
+      'svelte/prefer-writable-derived': 'off',
       'svelte/require-store-reactive-access': 'off',
       'svelte/sort-attributes': 'error',
       'unicorn/catch-error-name': ['error', { name: 'err' }],

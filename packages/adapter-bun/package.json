@@ -16,12 +16,12 @@
     "hono-compress": "^0.7.0"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.20.8",
-    "@types/bun": "^1.2.11",
+    "@sveltejs/kit": "^2.21.1",
+    "@types/bun": "^1.2.13",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
-    "hono": "^4.7.8",
-    "tsup": "^8.4.0",
+    "hono": "^4.7.10",
+    "tsup": "^8.5.0",
     "typescript": "^5.8.3"
   }
 }

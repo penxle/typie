@@ -15,6 +15,7 @@
     ".vscode",
     ".cursor",
     "*.svg",
+    "**/vendor/**",
     "CODEOWNERS",
     "drizzle",
     "naver*.html",
