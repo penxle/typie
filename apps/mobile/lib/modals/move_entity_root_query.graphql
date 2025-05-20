@@ -1,0 +1,23 @@
+query MoveEntityModal_Root_Query {
+  me {
+    id
+
+    sites {
+      id
+
+      entities {
+        id
+        order
+
+        node {
+          __typename
+
+          ... on Folder {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+}

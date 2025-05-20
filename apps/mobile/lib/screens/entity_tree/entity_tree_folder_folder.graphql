@@ -1,6 +1,7 @@
 fragment EntityTree_Folder_folder on Folder {
   id
   name
+  maxDescendantFoldersDepth
 
   entity {
     id
