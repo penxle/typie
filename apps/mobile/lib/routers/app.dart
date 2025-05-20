@@ -16,13 +16,25 @@ class AppRouter extends RootStackRouter {
         CustomRoute<dynamic>(
           page: AuthShell,
           transitionsBuilder: TransitionsBuilders.fadeIn,
-          children: [AutoRoute(page: LoginRoute.page, initial: true), AutoRoute(page: LoginWithEmailRoute.page)],
+          children: [
+            AutoRoute(page: LoginRoute.page, initial: true),
+            AutoRoute(page: LoginWithEmailRoute.page),
+          ],
         ),
         CustomRoute<dynamic>(
           page: DashboardShell,
           transitionsBuilder: TransitionsBuilders.fadeIn,
           children: [
-            AutoRoute(page: HomeRoute.page, initial: true),
+            AutoRoute(
+              page: HomeRoute.page,
+              initial: true,
+              children: [
+                AutoRoute(page: PostsRoute.page),
+                AutoRoute(page: SearchRoute.page),
+                AutoRoute(page: InboxRoute.page),
+                AutoRoute(page: ProfileRoute.page),
+              ],
+            ),
             AutoRoute(page: EditorRoute.page, fullscreenDialog: true),
             AutoRoute(page: EntityTreeRoute.page, path: 'entity/:entityId'),
           ],

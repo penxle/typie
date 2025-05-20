@@ -25,6 +25,7 @@ class LoginWithEmailScreen extends HookWidget {
     return Screen(
       heading: const Heading(title: '이메일로 로그인'),
       padding: const Pad(all: 24),
+      resizeToAvoidBottomInset: true,
       child: HookForm(
         schema: l.schema({
           'email': l

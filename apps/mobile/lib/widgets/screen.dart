@@ -6,10 +6,9 @@ class Screen extends StatelessWidget {
   const Screen({
     required this.child,
     super.key,
-    this.actions,
-    this.safeArea = true,
     this.heading,
-    this.resizeToAvoidBottomInset = true,
+    this.safeArea = true,
+    this.resizeToAvoidBottomInset = false,
     this.keyboardDismiss = true,
     this.padding,
     this.backgroundColor = AppColors.white,
@@ -17,7 +16,6 @@ class Screen extends StatelessWidget {
 
   final PreferredSizeWidget? heading;
   final Widget child;
-  final List<Widget>? actions;
   final bool safeArea;
   final bool resizeToAvoidBottomInset;
   final bool keyboardDismiss;
@@ -26,7 +24,11 @@ class Screen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget body = Box(padding: padding, child: child);
+    var body = child;
+
+    if (padding != null) {
+      body = Padding(padding: padding!, child: body);
+    }
 
     if (keyboardDismiss) {
       body = KeyboardDismiss(child: body);

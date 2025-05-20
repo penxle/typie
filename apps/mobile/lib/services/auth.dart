@@ -12,6 +12,7 @@ import 'package:typie/graphql/auth_link.dart';
 import 'package:typie/services/__generated__/auth_query.data.gql.dart';
 import 'package:typie/services/__generated__/auth_query.req.gql.dart';
 import 'package:typie/services/kv.dart';
+import 'package:typie/services/preference.dart';
 
 part 'auth.freezed.dart';
 
@@ -32,27 +33,28 @@ sealed class AuthState with _$AuthState {
 
 @singleton
 class Auth extends ValueNotifier<AuthState> {
-  Auth._(this._box, this._dio) : super(const AuthState.initializing());
+  Auth._(this._box, this._dio, this._pref) : super(const AuthState.initializing());
 
-  final Box<String> _box;
+  final Box<dynamic> _box;
   final Dio _dio;
+  final Pref _pref;
 
   final String _sessionTokenKey = 'session_token';
   final String _accessTokenKey = 'access_token';
 
   @FactoryMethod(preResolve: true)
-  static Future<Auth> create(KV hive, Dio dio) async {
+  static Future<Auth> create(KV hive, Dio dio, Pref pref) async {
     final box = await hive.openBox('auth_box', encrypted: true);
 
-    final auth = Auth._(box, dio);
+    final auth = Auth._(box, dio, pref);
     await auth._refreshTokens();
     return auth;
   }
 
   Future<void> _refreshTokens() async {
     try {
-      final sessionToken = _box.get(_sessionTokenKey);
-      var accessToken = _box.get(_accessTokenKey);
+      final sessionToken = _box.get(_sessionTokenKey) as String?;
+      var accessToken = _box.get(_accessTokenKey) as String?;
 
       if (sessionToken == null) {
         throw Exception('No session token');
@@ -65,6 +67,7 @@ class Auth extends ValueNotifier<AuthState> {
 
       final me = await _validateAccessToken(accessToken);
 
+      _pref.siteId = me.sites.first.id;
       value = AuthState.authenticated(sessionToken: sessionToken, accessToken: accessToken, me: me);
     } on Exception {
       await _clearTokens();

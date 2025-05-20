@@ -3,5 +3,9 @@ query Auth_Query {
     id
     uuid
     email
+
+    sites {
+      id
+    }
   }
 }

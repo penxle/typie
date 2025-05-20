@@ -84,6 +84,9 @@ flutter:
     - family: LucideLightIcons
       fonts:
         - asset: assets/fonts/LucideLightIcons.ttf
+    - family: LucideBoldIcons
+      fonts:
+        - asset: assets/fonts/LucideBoldIcons.ttf
     - family: TypieIcons
       fonts:
         - asset: assets/fonts/TypieIcons.ttf

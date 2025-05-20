@@ -64,7 +64,6 @@ class Editor extends HookWidget {
       return Screen(
         heading: const Heading(title: 'Editor'),
         safeArea: false,
-        resizeToAvoidBottomInset: false,
         keyboardDismiss: false,
         child: Stack(
           fit: StackFit.expand,
