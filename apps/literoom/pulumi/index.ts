@@ -11,7 +11,7 @@ const role = new aws.iam.Role('literoom@lambda', {
 
 const sharpLayer = new aws.lambda.LayerVersion('sharp', {
   layerName: 'sharp',
-  compatibleRuntimes: ['nodejs20.x'],
+  compatibleRuntimes: ['nodejs22.x'],
   compatibleArchitectures: ['arm64'],
   code: new pulumi.asset.FileArchive('../dist/layers/sharp.zip'),
 });
@@ -25,7 +25,7 @@ const lambda = new aws.lambda.Function('literoom', {
   memorySize: 10_240,
   timeout: 900,
 
-  runtime: 'nodejs20.x',
+  runtime: 'nodejs22.x',
   handler: 'handler.handler',
   layers: [sharpLayer.arn],
 
