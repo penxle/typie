@@ -33,6 +33,7 @@ dependencies:
   gql_code_builder_serializers: ^0.1.0
   gql_dio_link: ^1.0.1+1
   gql_exec: ^1.0.0+1
+  gql_link: ^1.0.0+1
   gql_transform_link: ^1.0.0
   hive_ce: ^2.11.1
   hive_ce_flutter: ^2.3.0
@@ -50,6 +51,8 @@ dependencies:
   permission_handler: ^12.0.0+1
   sign_in_with_apple: ^7.0.1
   url_launcher: ^6.3.1
+  uuid: ^4.5.1
+  web_socket: ^1.0.1
 
 dev_dependencies:
   auto_route_generator: ^10.0.1

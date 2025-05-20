@@ -1,0 +1,3 @@
+mutation CreateWsSession_Mutation {
+  createWsSession
+}
