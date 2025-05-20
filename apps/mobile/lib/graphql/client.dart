@@ -6,13 +6,16 @@ import 'package:ferry/ferry.dart';
 import 'package:ferry/ferry_isolate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gql_dio_link/gql_dio_link.dart';
+import 'package:gql_exec/gql_exec.dart';
 import 'package:injectable/injectable.dart';
 import 'package:typie/env.dart';
+import 'package:typie/graphql/__generated__/create_ws_session_mutation.req.gql.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart' show possibleTypesMap;
 import 'package:typie/graphql/auth_link.dart';
 import 'package:typie/graphql/cookie_link.dart';
 import 'package:typie/graphql/error.dart';
 import 'package:typie/graphql/message.dart';
+import 'package:typie/graphql/ws_link.dart';
 import 'package:typie/services/auth.dart';
 
 @singleton
@@ -80,6 +83,10 @@ class GraphQLClient {
     return resp.data as TData;
   }
 
+  Stream<TData> subscribe<TData, TVars>(OperationRequest<TData, TVars> request) {
+    return _client.request(request).map((resp) => resp.data as TData);
+  }
+
   Future<void> refetch<TData, TVars>(OperationRequest<TData, TVars> request) async {
     return _client.addRequestToRequestController(request);
   }
@@ -108,10 +115,9 @@ Future<Client> _createClient(_CreateClientParams params, SendPort? sendPort) asy
     }
   });
 
-  final dio =
-      kDebugMode
-          ? (Dio()..httpClientAdapter = HttpClientAdapter())
-          : (Dio()..httpClientAdapter = Http2Adapter(ConnectionManager()));
+  final dio = kDebugMode
+      ? (Dio()..httpClientAdapter = HttpClientAdapter())
+      : (Dio()..httpClientAdapter = Http2Adapter(ConnectionManager()));
 
   final link = Link.from([
     authLink(getAccessToken: () => accessToken),
@@ -120,7 +126,24 @@ Future<Client> _createClient(_CreateClientParams params, SendPort? sendPort) asy
         sendPort?.send(GraphQLMessage.cookie(cookie));
       },
     ),
-    DioLink('${Env.apiUrl}/graphql', client: dio),
+    Link.split(
+      (request) => request.operation.getOperationType() == OperationType.subscription,
+      WsLink(
+        url: '${Env.wsUrl}/graphql',
+        connectionParams: () async {
+          final client = Client(
+            link: Link.from([
+              authLink(getAccessToken: () => accessToken),
+              DioLink('${Env.apiUrl}/graphql', client: dio),
+            ]),
+          );
+
+          final result = await client.request(GCreateWsSession_MutationReq()).first;
+          return {'session': result.data!.createWsSession};
+        },
+      ),
+      DioLink('${Env.apiUrl}/graphql', client: dio),
+    ),
   ]);
 
   final cache = Cache(possibleTypes: possibleTypesMap);

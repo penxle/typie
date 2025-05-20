@@ -33,4 +33,7 @@ abstract class Env {
 
   @EnviedField()
   static String websiteUrl = _Env.websiteUrl;
+
+  @EnviedField()
+  static String wsUrl = _Env.wsUrl;
 }
