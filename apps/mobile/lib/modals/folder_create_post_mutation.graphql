@@ -1,0 +1,10 @@
+mutation Folder_CreatePost_Mutation($input: CreatePostInput!) {
+  createPost(input: $input) {
+    id
+
+    entity {
+      id
+      slug
+    }
+  }
+}

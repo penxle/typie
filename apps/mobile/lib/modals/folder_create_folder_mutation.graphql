@@ -1,0 +1,5 @@
+mutation Folder_CreateFolder_Mutation($input: CreateFolderInput!) {
+  createFolder(input: $input) {
+    id
+  }
+}

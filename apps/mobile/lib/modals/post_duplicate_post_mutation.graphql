@@ -1,0 +1,10 @@
+mutation Post_DuplicatePost_Mutation($input: DuplicatePostInput!) {
+  duplicatePost(input: $input) {
+    id
+
+    entity {
+      id
+      slug
+    }
+  }
+}
