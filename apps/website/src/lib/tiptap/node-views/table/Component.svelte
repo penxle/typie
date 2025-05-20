@@ -62,10 +62,6 @@
     const map = TableMap.get(tableNode);
     const rowsLength = map.height;
     const tablePos = getPos();
-    if (tablePos === undefined) {
-      return;
-    }
-
     const tableStart = tablePos + 1;
 
     // table row가 렌더링되길 기다림
@@ -162,7 +158,7 @@
             })}
             role="row"
           >
-            <RowHandle {editor} {getPos} {hasSpan} {hoveredRowIndex} {i} tableNode={node} />
+            <RowHandle {editor} {hasSpan} {hoveredRowIndex} {i} tableNode={node} tablePos={getPos()} />
           </div>
         {/each}
       </div>
@@ -188,7 +184,7 @@
               },
             })}
           >
-            <ColHandle {editor} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
+            <ColHandle {editor} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} tablePos={getPos()} />
           </div>
         {/each}
       {/if}
@@ -200,7 +196,7 @@
     />
 
     {#if editor?.current.isEditable}
-      <AddRowColButton {editor} {getPos} {isLastColumnHovered} {isLastRowHovered} tableNode={node} />
+      <AddRowColButton {editor} {isLastColumnHovered} {isLastRowHovered} tableNode={node} tablePos={getPos()} />
     {/if}
   </table>
 </NodeView>
