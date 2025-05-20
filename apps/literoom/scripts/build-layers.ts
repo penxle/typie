@@ -2,13 +2,13 @@ import fs from 'node:fs/promises';
 import { $ } from 'bun';
 
 await fs.rm('dist/layers', { recursive: true, force: true });
-await fs.mkdir('dist/layers/sharp', { recursive: true });
+await fs.mkdir('dist/layers/sharp/nodejs', { recursive: true });
 
 const $$ = $.cwd('dist/layers/sharp');
 
-// spell-checker:disable-next-line
-await $$`npm install --prefix=nodejs --no-save --cpu=arm64 --os=linux --libc=glibc sharp`;
-await $$`zip -r ../sharp.zip nodejs`;
+await $$`tar xJf ../../../../../vendor/sharp.tar.xz`;
+await $$`mv node_modules nodejs`;
+await $$`zip -r ../sharp.zip .`;
 
 await fs.rm('dist/layers/sharp', { recursive: true });
 
