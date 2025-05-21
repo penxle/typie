@@ -63,6 +63,53 @@ fragment EntityScreen_Entity_entity on Entity {
   }
 }
 
+subscription EntityScreen_SiteUpdateStream_Subscription($siteId: ID!) {
+  siteUpdateStream(siteId: $siteId) {
+    ... on Site {
+      id
+
+      entities {
+        id
+        ...EntityScreen_Entity_entity
+
+        children {
+          id
+          ...EntityScreen_Entity_entity
+
+          children {
+            id
+            ...EntityScreen_Entity_entity
+
+            children {
+              id
+              ...EntityScreen_Entity_entity
+            }
+          }
+        }
+      }
+    }
+
+    ... on Entity {
+      id
+      state
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          name
+        }
+
+        ... on Post {
+          id
+          title
+        }
+      }
+    }
+  }
+}
+
 mutation EntityScreen_MoveEntity_Mutation($input: MoveEntityInput!) {
   moveEntity(input: $input) {
     id

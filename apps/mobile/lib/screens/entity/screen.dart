@@ -28,6 +28,20 @@ class EntityScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    final client = useService<GraphQLClient>();
+
+    useEffect(() {
+      final subscription = client
+          .subscribe(
+            GEntityScreen_SiteUpdateStream_SubscriptionReq((b) {
+              b.vars.siteId = useService<Pref>().siteId;
+            }),
+          )
+          .listen((event) {});
+
+      return subscription.cancel;
+    });
+
     return Screen(child: entityId == null ? const _WithSiteId() : _WithEntityId(entityId!));
   }
 }
@@ -159,9 +173,12 @@ class _EntityList extends HookWidget {
                   .intersperseWith(chevron),
               if (entity?.ancestors.isNotEmpty ?? false) chevron,
               if (entity != null)
-                Text(
-                  entity!.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                Flexible(
+                  child: Text(
+                    entity!.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
           ),
@@ -205,22 +222,39 @@ class _EntityList extends HookWidget {
                     );
                   },
                   onReorder: (oldIndex, newIndex) async {
+                    final dragging = entities[oldIndex];
                     String? lowerOrder;
                     String? upperOrder;
 
                     if (newIndex >= entities.length) {
                       lowerOrder = entities[entities.length - 1].order;
+                      entities
+                        ..remove(dragging)
+                        ..add(dragging);
                     } else if (newIndex == 0) {
                       upperOrder = entities[0].order;
+                      entities
+                        ..remove(dragging)
+                        ..insert(newIndex, dragging);
                     } else {
                       lowerOrder = entities[newIndex - 1].order;
                       upperOrder = entities[newIndex].order;
+
+                      if (oldIndex > newIndex) {
+                        entities
+                          ..removeAt(oldIndex)
+                          ..insert(newIndex, dragging);
+                      } else {
+                        entities
+                          ..remove(dragging)
+                          ..insert(newIndex - 1, dragging);
+                      }
                     }
 
                     await client.request(
                       GEntityScreen_MoveEntity_MutationReq(
                         (b) => b
-                          ..vars.input.entityId = entities[oldIndex].id
+                          ..vars.input.entityId = dragging.id
                           ..vars.input.lowerOrder = lowerOrder
                           ..vars.input.upperOrder = upperOrder,
                       ),
