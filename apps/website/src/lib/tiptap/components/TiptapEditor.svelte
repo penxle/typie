@@ -86,6 +86,12 @@
           }, 500);
         }
       },
+
+      onSelectionUpdate: ({ editor }) => {
+        if (window.__webview__) {
+          editor.commands.scrollIntoView();
+        }
+      },
     });
 
     editor = new Ref(e);
