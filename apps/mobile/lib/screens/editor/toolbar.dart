@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -64,15 +65,17 @@ class EditorToolbar extends HookWidget {
                 },
               ),
               _IconToolbarButton(
-                icon: LucideLightIcons.undo,
+                icon: LucideLightIcons.chevron_left,
+                isRepeatable: true,
                 onTap: () async {
-                  await scope.command('undo');
+                  await scope.webViewController.value?.emitEvent('caret', {'direction': -1});
                 },
               ),
               _IconToolbarButton(
-                icon: LucideLightIcons.redo,
+                icon: LucideLightIcons.chevron_right,
+                isRepeatable: true,
                 onTap: () async {
-                  await scope.command('redo');
+                  await scope.webViewController.value?.emitEvent('caret', {'direction': 1});
                 },
               ),
               AnimatedIndexedSwitcher(
@@ -264,6 +267,18 @@ class _DefaultToolbar extends HookWidget {
             onTap: () async {
               await scope.command('image');
               await webViewController?.requestFocus();
+            },
+          ),
+          _IconToolbarButton(
+            icon: LucideLightIcons.undo,
+            onTap: () async {
+              await scope.command('undo');
+            },
+          ),
+          _IconToolbarButton(
+            icon: LucideLightIcons.redo,
+            onTap: () async {
+              await scope.command('redo');
             },
           ),
         ],
@@ -840,6 +855,7 @@ class _BaseButton extends HookWidget {
     required this.onTap,
     required this.builder,
     this.isActive = false,
+    this.isRepeatable = false,
     this.color = AppColors.gray_700,
   });
 
@@ -847,6 +863,7 @@ class _BaseButton extends HookWidget {
 
   final Color color;
   final bool isActive;
+  final bool isRepeatable;
   final void Function() onTap;
 
   @override
@@ -861,6 +878,8 @@ class _BaseButton extends HookWidget {
     final controller = useAnimationController(duration: const Duration(milliseconds: 150));
     final curve = useMemoized(() => CurvedAnimation(parent: controller, curve: Curves.ease), [controller]);
     final colorTween = useRef<ColorTween?>(null);
+
+    final repeatTimer = useRef<Timer?>(null);
 
     useEffect(() {
       final begin = colorTween.value?.evaluate(curve) ?? (isActive ? AppColors.brand_500 : color);
@@ -880,6 +899,18 @@ class _BaseButton extends HookWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onLongPressStart: (_) {
+        state.value = _ButtonState.pressed;
+        if (isRepeatable) {
+          repeatTimer.value = Timer.periodic(const Duration(milliseconds: 100), (_) {
+            onTap();
+          });
+        }
+      },
+      onLongPressEnd: (_) {
+        repeatTimer.value?.cancel();
+        state.value = _ButtonState.idle;
+      },
       onTapDown: (_) => state.value = _ButtonState.pressed,
       onTapUp: (_) => state.value = _ButtonState.idle,
       onTapCancel: () => state.value = _ButtonState.idle,
@@ -896,17 +927,19 @@ class _BaseButton extends HookWidget {
 }
 
 class _IconToolbarButton extends HookWidget {
-  const _IconToolbarButton({required this.onTap, required this.icon, this.isActive = false});
+  const _IconToolbarButton({required this.onTap, required this.icon, this.isActive = false, this.isRepeatable = false});
 
   final IconData icon;
 
   final bool isActive;
+  final bool isRepeatable;
   final void Function() onTap;
 
   @override
   Widget build(BuildContext context) {
     return _BaseButton(
       isActive: isActive,
+      isRepeatable: isRepeatable,
       onTap: onTap,
       builder: (context, color) {
         return Box(

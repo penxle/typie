@@ -2,6 +2,7 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import { Mark } from '@tiptap/pm/model';
+  import { Selection } from '@tiptap/pm/state';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -15,6 +16,7 @@
   import { autosize } from '$lib/actions';
   import { HorizontalDivider } from '$lib/components';
   import { getNodeViewByNodeId, TiptapEditor } from '$lib/tiptap';
+  import { clamp } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import Placeholder from './Placeholder.svelte';
@@ -294,6 +296,28 @@
 
       const nodeView = getNodeViewByNodeId(editor.current.view, nodeId);
       nodeView?.handle?.(new CustomEvent(name, { detail }));
+    });
+
+    window.__webview__?.addEventListener('caret', (data) => {
+      const direction = data.direction as number;
+
+      if (document.activeElement === titleEl) {
+        const position = clamp(titleEl.selectionStart + direction, 0, titleEl.value.length);
+        titleEl.setSelectionRange(position, position);
+      } else if (document.activeElement === subtitleEl) {
+        const position = clamp(subtitleEl.selectionStart + direction, 0, subtitleEl.value.length);
+        subtitleEl.setSelectionRange(position, position);
+      } else if (editor?.current.isFocused) {
+        editor.current.commands.command(({ state, tr, dispatch }) => {
+          const pos = state.doc.resolve(state.selection.anchor + direction);
+          const selection = Selection.near(pos, direction);
+
+          tr.setSelection(selection);
+          dispatch?.(tr);
+
+          return true;
+        });
+      }
     });
 
     return () => {
