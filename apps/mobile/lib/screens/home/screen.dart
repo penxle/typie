@@ -6,7 +6,7 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_bold.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/home/__generated__/create_post_mutation.req.gql.dart';
+import 'package:typie/screens/home/__generated__/screen.req.gql.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/screen.dart';
@@ -20,6 +20,14 @@ class HomeScreen extends HookWidget {
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final pref = useService<Pref>();
+
+    useEffect(() {
+      final subscription = client
+          .subscribe(GHomeScreen_SiteUpdateStream_SubscriptionReq((b) => b..vars.siteId = pref.siteId))
+          .listen((_) {});
+
+      return subscription.cancel;
+    });
 
     return AutoTabsRouter(
       routes: const [EntityRouter(), SearchRoute(), InboxRoute(), ProfileRoute()],

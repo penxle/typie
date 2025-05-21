@@ -1,0 +1,59 @@
+# import '../entity/screen.graphql'
+
+mutation HomeScreen_CreatePost_Mutation($input: CreatePostInput!) {
+  createPost(input: $input) {
+    id
+
+    entity {
+      id
+      slug
+    }
+  }
+}
+
+subscription HomeScreen_SiteUpdateStream_Subscription($siteId: ID!) {
+  siteUpdateStream(siteId: $siteId) {
+    ... on Site {
+      id
+
+      entities {
+        id
+        ...EntityScreen_Entity_entity
+
+        children {
+          id
+          ...EntityScreen_Entity_entity
+
+          children {
+            id
+            ...EntityScreen_Entity_entity
+
+            children {
+              id
+              ...EntityScreen_Entity_entity
+            }
+          }
+        }
+      }
+    }
+
+    ... on Entity {
+      id
+      state
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          name
+        }
+
+        ... on Post {
+          id
+          title
+        }
+      }
+    }
+  }
+}

@@ -28,20 +28,6 @@ class EntityScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final client = useService<GraphQLClient>();
-
-    useEffect(() {
-      final subscription = client
-          .subscribe(
-            GEntityScreen_SiteUpdateStream_SubscriptionReq((b) {
-              b.vars.siteId = useService<Pref>().siteId;
-            }),
-          )
-          .listen((event) {});
-
-      return subscription.cancel;
-    });
-
     return Screen(child: entityId == null ? const _WithSiteId() : _WithEntityId(entityId!));
   }
 }
