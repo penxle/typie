@@ -17,9 +17,10 @@
     "noEmit": true,
     "skipLibCheck": true,
 
+    "allowUnreachableCode": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
 
     "isolatedModules": true,
     "verbatimModuleSyntax": true
