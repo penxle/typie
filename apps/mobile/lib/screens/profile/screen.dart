@@ -45,12 +45,6 @@ class ProfileScreen extends HookWidget {
                   },
                 ),
                 Tappable(
-                  child: const Text('Entity Tree'),
-                  onTap: () async {
-                    await context.router.push(EntityTreeRoute(entityId: null));
-                  },
-                ),
-                Tappable(
                   child: const Text('logout'),
                   onTap: () async {
                     await auth.logout();

@@ -22,7 +22,7 @@ class HomeScreen extends HookWidget {
     final pref = useService<Pref>();
 
     return AutoTabsRouter(
-      routes: const [PostsRoute(), SearchRoute(), InboxRoute(), ProfileRoute()],
+      routes: const [EntityRouter(), SearchRoute(), InboxRoute(), ProfileRoute()],
       duration: Duration.zero,
       transitionBuilder: (context, child, animation) => child,
       builder: (context, child) {
@@ -37,7 +37,7 @@ class HomeScreen extends HookWidget {
                 child: MediaQuery.removeViewPadding(context: context, removeBottom: true, child: child),
               ),
               Box(
-                height: padding.bottom + 54,
+                height: padding.bottom + 56,
                 padding: Pad(horizontal: 24, bottom: padding.bottom),
                 decoration: const BoxDecoration(
                   border: Border(top: BorderSide(color: AppColors.gray_100)),

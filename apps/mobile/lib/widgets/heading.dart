@@ -28,7 +28,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
   final bool titleOnLeft;
   final bool bottomBorder;
 
-  static const _preferredSize = Size.fromHeight(54);
+  static const _preferredSize = Size.fromHeight(56);
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +103,10 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
-      child: Box(color: backgroundColor, child: const SafeArea(child: SizedBox.shrink())),
+      child: Box(
+        color: backgroundColor,
+        child: const SafeArea(child: SizedBox.shrink()),
+      ),
     );
   }
 }

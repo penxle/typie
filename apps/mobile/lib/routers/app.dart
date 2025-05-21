@@ -1,6 +1,5 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/routers/shells.dart';
 
 @AutoRouterConfig()
 class AppRouter extends RootStackRouter {
@@ -14,7 +13,7 @@ class AppRouter extends RootStackRouter {
       initial: true,
       children: [
         CustomRoute<dynamic>(
-          page: AuthShell,
+          page: AuthRouter.page,
           transitionsBuilder: TransitionsBuilders.fadeIn,
           children: [
             AutoRoute(page: LoginRoute.page, initial: true),
@@ -22,21 +21,23 @@ class AppRouter extends RootStackRouter {
           ],
         ),
         CustomRoute<dynamic>(
-          page: DashboardShell,
+          page: DashboardRouter.page,
           transitionsBuilder: TransitionsBuilders.fadeIn,
           children: [
             AutoRoute(
               page: HomeRoute.page,
               initial: true,
               children: [
-                AutoRoute(page: PostsRoute.page),
+                AutoRoute(
+                  page: EntityRouter.page,
+                  children: [AutoRoute(page: EntityRoute.page, initial: true)],
+                ),
                 AutoRoute(page: SearchRoute.page),
                 AutoRoute(page: InboxRoute.page),
                 AutoRoute(page: ProfileRoute.page),
               ],
             ),
             AutoRoute(page: EditorRoute.page, fullscreenDialog: true),
-            AutoRoute(page: EntityTreeRoute.page, path: 'entity/:entityId'),
           ],
         ),
       ],
