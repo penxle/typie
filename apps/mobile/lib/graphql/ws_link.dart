@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:gql_exec/gql_exec.dart';
 import 'package:gql_link/gql_link.dart';
@@ -11,90 +12,178 @@ part 'ws_link.freezed.dart';
 part 'ws_link.g.dart';
 
 class WsLink extends Link {
-  WsLink({required this.url, this.connectionParams});
+  WsLink({required this.url, this.connectionParams}) {
+    _streamController
+      ..onListen = () {
+        _connectIfNeeded().ignore();
+        _stateNotifier.addListener(_reconnectIfNeeded);
+      }
+      ..onCancel = () async {
+        _stateNotifier.removeListener(_reconnectIfNeeded);
+        _reconnectTimer?.cancel();
+        _reconnectTimer = null;
+
+        final state = _stateNotifier.value;
+        _stateNotifier.value = const WsState.disconnected();
+
+        if (state case _WsConnectedState(:final ws)) {
+          ws.close().ignore();
+        }
+      };
+  }
 
   final String url;
   final FutureOr<Map<String, dynamic>> Function()? connectionParams;
-  WebSocket? _ws;
+
+  Timer? _reconnectTimer;
+  final ValueNotifier<WsState> _stateNotifier = ValueNotifier(const WsState.disconnected());
+  final StreamController<WsMessage> _streamController = StreamController<WsMessage>.broadcast();
 
   final RequestSerializer serializer = const RequestSerializer();
   final ResponseParser parser = const ResponseParser();
   final Uuid uuid = const Uuid();
 
-  final Map<Request, StreamController<Response>> _subscriptions = {};
-  final Map<String, Request> _subscriptionIds = {};
-
   @override
   Stream<Response> request(Request request, [NextLink? forward]) {
-    _connect();
+    final subscriptionId = uuid.v4();
+    StreamSubscription<WsMessage>? subscription;
 
-    final streamController = StreamController<Response>.broadcast();
+    void stateNotifierListener() {
+      final state = _stateNotifier.value;
+      if (state case _WsConnectedState(:final ws)) {
+        ws.sendMessage(WsMessage.subscribe(id: subscriptionId, payload: serializer.serializeRequest(request)));
+      }
+    }
 
-    _subscriptions[request] = streamController;
+    final controller = StreamController<Response>.broadcast();
+    controller
+      ..onListen = () async {
+        subscription = _streamController.stream.listen((message) async {
+          switch (message) {
+            case _WsNextMessage(:final id, :final payload) when id == subscriptionId:
+              controller.add(parser.parseResponse(payload));
+            case _WsErrorMessage(:final id, :final payload) when id == subscriptionId:
+              payload.map(parser.parseError).forEach(controller.addError);
+              await subscription?.cancel();
+              subscription = null;
+            case _WsCompleteMessage(:final id) when id == subscriptionId:
+              await subscription?.cancel();
+              subscription = null;
+            default:
+              break;
+          }
+        });
 
-    return streamController.stream;
+        stateNotifierListener();
+        _stateNotifier.addListener(stateNotifierListener);
+      }
+      ..onCancel = () async {
+        _stateNotifier.removeListener(stateNotifierListener);
+
+        final state = _stateNotifier.value;
+        if (state case _WsConnectedState(:final ws)) {
+          ws.sendMessage(WsMessage.complete(id: subscriptionId));
+        }
+
+        await subscription?.cancel();
+        subscription = null;
+      };
+
+    return controller.stream;
   }
 
-  Future<void> _connect() async {
-    if (_ws != null) {
+  Future<void> _connectIfNeeded() async {
+    final state = _stateNotifier.value;
+    if (state is! _WsDisconnectedState || !_streamController.hasListener) {
       return;
     }
 
-    _ws = await WebSocket.connect(Uri.parse(url), protocols: ['graphql-transport-ws']);
-    _ws!.events.listen((event) {
-      switch (event) {
-        case TextDataReceived(:final text):
-          final message = WsMessage.fromJson(jsonDecode(text) as Map<String, dynamic>);
-          _handleMessage(message);
-        default:
-          break;
-      }
-    });
+    _stateNotifier.value = const WsState.connecting();
+    final completer = Completer<void>();
 
-    final connectionParams = await this.connectionParams?.call();
-    _send(WsMessage.connectionInit(payload: connectionParams));
-  }
+    try {
+      final ws = await WebSocket.connect(Uri.parse(url), protocols: ['graphql-transport-ws']);
 
-  void _send(WsMessage message) {
-    _ws?.sendText(jsonEncode(message));
-  }
-
-  void _handleMessage(WsMessage message) {
-    switch (message) {
-      case _WsConnectionAckMessage():
-        for (final request in _subscriptions.keys) {
-          final id = uuid.v4();
-          _subscriptionIds[id] = request;
-
-          final payload = serializer.serializeRequest(request);
-
-          _send(WsMessage.subscribe(id: id, payload: payload));
+      void handleMessage(WsMessage message) {
+        switch (message) {
+          case _WsPingMessage(:final payload):
+            ws.sendMessage(WsMessage.pong(payload: payload));
+          case _WsPongMessage():
+            break;
+          case _WsConnectionAckMessage() when !completer.isCompleted:
+            completer.complete();
+          case _ when !completer.isCompleted:
+            completer.completeError(Exception('First message cannot be $message'));
+          case _WsNextMessage():
+          case _WsErrorMessage():
+          case _WsCompleteMessage():
+            _streamController.add(message);
+          default:
+            break;
         }
+      }
 
-      case _WsNextMessage(:final id, :final payload):
-        final request = _subscriptionIds[id]!;
-        final response = parser.parseResponse(payload);
-        _subscriptions[request]!.add(response);
+      ws.events.listen((event) {
+        switch (event) {
+          case TextDataReceived(:final text):
+            final message = WsMessage.fromJson(json.decode(text) as Map<String, dynamic>);
+            handleMessage(message);
+          case CloseReceived():
+            if (completer.isCompleted) {
+              _stateNotifier.value = const WsState.disconnected();
+            } else {
+              completer.completeError(Exception('WebSocket closed'));
+            }
+          default:
+            break;
+        }
+      });
 
-      case _WsErrorMessage(:final id, :final payload):
-        final request = _subscriptionIds[id]!;
-        final errors = payload.map(parser.parseError);
-        _subscriptions[request]!.addError(errors);
+      final payload = await connectionParams?.call();
+      ws.sendMessage(WsMessage.connectionInit(payload: payload));
 
-      case _WsCompleteMessage(:final id):
-        final request = _subscriptionIds[id]!;
-        _subscriptions[request]!.close();
+      await completer.future;
 
-      default:
-        break;
+      _stateNotifier.value = WsState.connected(ws: ws);
+    } on Exception {
+      _stateNotifier.value = const WsState.disconnected();
+    }
+  }
+
+  void _reconnectIfNeeded() {
+    if (_reconnectTimer != null) {
+      return;
+    }
+
+    final state = _stateNotifier.value;
+    if (state is _WsDisconnectedState && _streamController.hasListener) {
+      _reconnectTimer = Timer(const Duration(seconds: 1), () {
+        _reconnectTimer = null;
+        _connectIfNeeded().ignore();
+      });
     }
   }
 
   @override
   Future<void> dispose() async {
-    await _ws?.close();
-    await super.dispose();
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+
+    final state = _stateNotifier.value;
+    if (state case _WsConnectedState(:final ws)) {
+      await ws.close(1000, 'Normal Closure');
+    }
+
+    _stateNotifier.dispose();
+    await _streamController.close();
   }
+}
+
+@freezed
+sealed class WsState with _$WsState {
+  const factory WsState.connected({required WebSocket ws}) = _WsConnectedState;
+  const factory WsState.connecting() = _WsConnectingState;
+  const factory WsState.disconnected() = _WsDisconnectedState;
 }
 
 @Freezed(unionKey: 'type', unionValueCase: FreezedUnionCase.snake)
@@ -105,6 +194,14 @@ sealed class WsMessage with _$WsMessage {
   const factory WsMessage.next({required String id, required Map<String, dynamic> payload}) = _WsNextMessage;
   const factory WsMessage.error({required String id, required List<Map<String, dynamic>> payload}) = _WsErrorMessage;
   const factory WsMessage.complete({required String id}) = _WsCompleteMessage;
+  const factory WsMessage.ping({Map<String, dynamic>? payload}) = _WsPingMessage;
+  const factory WsMessage.pong({Map<String, dynamic>? payload}) = _WsPongMessage;
 
   factory WsMessage.fromJson(Map<String, dynamic> json) => _$WsMessageFromJson(json);
+}
+
+extension on WebSocket {
+  void sendMessage(WsMessage message) {
+    sendText(json.encode(message));
+  }
 }

@@ -84,7 +84,10 @@ class GraphQLClient {
   }
 
   Stream<TData> subscribe<TData, TVars>(OperationRequest<TData, TVars> request) {
-    return _client.request(request).map((resp) => resp.data as TData);
+    return _client
+        .request(request)
+        .where((response) => response.data != null)
+        .map((response) => response.data as TData);
   }
 
   Future<void> refetch<TData, TVars>(OperationRequest<TData, TVars> request) async {

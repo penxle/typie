@@ -1,4 +1,5 @@
-import { makeServer } from 'graphql-ws';
+import { GraphQLError } from 'graphql';
+import { CloseCode, makeServer } from 'graphql-ws';
 import { createYoga, useExecutionCancellation } from 'graphql-yoga';
 import { Hono } from 'hono';
 import { redis } from '@/cache';
@@ -47,28 +48,36 @@ const server = makeServer<{ session: string }, { c: ServerContext }>({
     };
   },
   onSubscribe: async (ctx, _, payload) => {
-    const { schema, parse, validate, execute, subscribe, contextFactory } = app.getEnveloped({
-      ...ctx.extra,
-    });
+    try {
+      const { schema, parse, validate, execute, subscribe, contextFactory } = app.getEnveloped({
+        ...ctx.extra,
+      });
 
-    const document = parse(payload.query);
-    const errors = validate(schema, document);
+      const document = parse(payload.query);
+      const errors = validate(schema, document);
 
-    if (errors.length > 0) {
-      return errors;
+      if (errors.length > 0) {
+        return errors;
+      }
+
+      return {
+        schema,
+        operationName: payload.operationName,
+        document,
+        variableValues: payload.variables,
+        contextValue: await contextFactory(),
+        rootValue: {
+          execute,
+          subscribe,
+        },
+      };
+    } catch (err) {
+      if (err instanceof GraphQLError) {
+        return [err];
+      }
+
+      return [new GraphQLError(String(err))];
     }
-
-    return {
-      schema,
-      operationName: payload.operationName,
-      document,
-      variableValues: payload.variables,
-      contextValue: await contextFactory(),
-      rootValue: {
-        execute,
-        subscribe,
-      },
-    };
   },
 });
 
@@ -97,9 +106,13 @@ graphql.get(
       onClose: async (event) => {
         await handleClose?.(event.code, event.reason);
       },
-      onMessage: async (event) => {
+      onMessage: async (event, ws) => {
         if (typeof event.data === 'string') {
-          await handleMessage?.(event.data);
+          try {
+            await handleMessage?.(event.data);
+          } catch {
+            ws.close(CloseCode.InternalServerError, 'Internal server error');
+          }
         }
       },
     };
