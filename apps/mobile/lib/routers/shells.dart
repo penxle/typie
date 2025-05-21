@@ -1,7 +1,11 @@
-// shells
-// ignore_for_file: constant_identifier_names
-
 import 'package:auto_route/auto_route.dart';
 
-const AuthShell = EmptyShellRoute('AuthShell');
-const DashboardShell = EmptyShellRoute('DashboardShell');
+@RoutePage()
+class AuthRouter extends AutoRouter {
+  const AuthRouter({super.key});
+}
+
+@RoutePage()
+class DashboardRouter extends AutoRouter {
+  const DashboardRouter({super.key});
+}

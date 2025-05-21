@@ -5,10 +5,11 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 
 class GraphQLOperation<TData, TVars> extends HookWidget {
-  const GraphQLOperation({required this.operation, required this.builder, super.key});
+  const GraphQLOperation({required this.operation, required this.builder, this.onLoaded, super.key});
 
   final OperationRequest<TData, TVars> operation;
   final Widget Function(BuildContext context, GraphQLClient client, TData data) builder;
+  final void Function(TData data)? onLoaded;
 
   @override
   Widget build(BuildContext context) {
@@ -17,17 +18,18 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
     final snapshot = useStream(stream);
     final loaded = useRef(false);
 
-    final animationController = useAnimationController(duration: const Duration(milliseconds: 200));
-    final tweenedAnimation = useMemoized(() {
-      final curve = CurvedAnimation(parent: animationController, curve: Curves.ease);
+    final controller = useAnimationController(duration: const Duration(milliseconds: 200));
+    final tweenedOpacity = useMemoized(() {
+      final curve = CurvedAnimation(parent: controller, curve: Curves.ease);
       return Tween<double>(begin: 0, end: 1).animate(curve);
-    }, [animationController]);
+    }, [controller]);
 
     useEffect(() {
       final data = snapshot.data?.data;
       if (data != null && !loaded.value) {
         loaded.value = true;
-        animationController.forward();
+        controller.forward();
+        onLoaded?.call(data);
       }
 
       return null;
@@ -38,6 +40,6 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
       return const SizedBox.shrink();
     }
 
-    return FadeTransition(opacity: tweenedAnimation, child: builder(context, client, data));
+    return FadeTransition(opacity: tweenedOpacity, child: builder(context, client, data));
   }
 }

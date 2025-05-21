@@ -1,0 +1,70 @@
+query EntityScreen_WithSiteId_Query($siteId: ID!) {
+  site(siteId: $siteId) {
+    id
+
+    entities {
+      id
+      ...EntityScreen_Entity_entity
+    }
+  }
+}
+
+query EntityScreen_WithEntityId_Query($entityId: ID!) {
+  entity(entityId: $entityId) {
+    id
+
+    ancestors {
+      id
+
+      node {
+        ... on Folder {
+          id
+          name
+        }
+      }
+    }
+
+    node {
+      ... on Folder {
+        id
+        name
+      }
+    }
+
+    children {
+      id
+      ...EntityScreen_Entity_entity
+    }
+  }
+}
+
+fragment EntityScreen_Entity_entity on Entity {
+  id
+  depth
+  order
+  visibility
+  slug
+  url
+
+  node {
+    __typename
+
+    ... on Folder {
+      id
+      name
+      maxDescendantFoldersDepth
+    }
+
+    ... on Post {
+      id
+      type
+      title
+    }
+  }
+}
+
+mutation EntityScreen_MoveEntity_Mutation($input: MoveEntityInput!) {
+  moveEntity(input: $input) {
+    id
+  }
+}
