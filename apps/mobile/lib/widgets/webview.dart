@@ -31,10 +31,9 @@ class _WebViewState extends State<WebView> {
     final creationParams = <String, dynamic>{
       'userAgent': widget.userAgent ?? 'Typie/1.0.0',
       'initialUrl': widget.initialUrl,
-      'initialCookies':
-          widget.initialCookies
-              ?.map((cookie) => {'name': cookie.name, 'value': cookie.value, 'domain': initialUri.host})
-              .toList(),
+      'initialCookies': widget.initialCookies
+          ?.map((cookie) => {'name': cookie.name, 'value': cookie.value, 'domain': initialUri.host})
+          .toList(),
     };
 
     if (Platform.isAndroid) {
@@ -66,24 +65,25 @@ class _WebViewState extends State<WebView> {
   }
 
   void _onPlatformViewCreated(int id) {
-    final channel = MethodChannel('co.typie.webview.$id')..setMethodCallHandler((call) async {
-      try {
-        final args = call.arguments as Map<dynamic, dynamic>;
-        switch (call.method) {
-          case 'console':
-            _onConsole(args['level'] as String, args['message'] as String);
-          case 'emitEvent':
-            _onEmitEvent(args['name'] as String, jsonDecode(args['data'] as String));
-          default:
-            throw MissingPluginException('Method ${call.method} not implemented');
+    final channel = MethodChannel('co.typie.webview.$id')
+      ..setMethodCallHandler((call) async {
+        try {
+          final args = call.arguments as Map<dynamic, dynamic>;
+          switch (call.method) {
+            case 'console':
+              _onConsole(args['level'] as String, args['message'] as String);
+            case 'emitEvent':
+              _onEmitEvent(args['name'] as String, jsonDecode(args['data'] as String));
+            default:
+              throw MissingPluginException('Method ${call.method} not implemented');
+          }
+        } on MissingPluginException {
+          rethrow;
+          // ignore: avoid_catches_without_on_clauses catch all
+        } catch (e) {
+          log.e('WebView', error: e);
         }
-      } on MissingPluginException {
-        rethrow;
-        // ignore: avoid_catches_without_on_clauses catch all
-      } catch (e) {
-        log.e('WebView', error: e);
-      }
-    });
+      });
 
     _controller = WebViewController(channel);
     widget.onWebViewCreated?.call(_controller);

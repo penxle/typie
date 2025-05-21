@@ -31,7 +31,12 @@ class _FullScreenModal extends HookWidget {
 
     return Material(
       color: Colors.white,
-      child: SafeArea(child: Padding(padding: EdgeInsets.only(bottom: bottomPadding), child: child)),
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(bottom: bottomPadding),
+          child: child,
+        ),
+      ),
     );
   }
 }

@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 import 'package:mime/mime.dart';
 import 'package:typie/graphql/client.dart';
-import 'package:typie/services/__generated__/blob_issue_blob_upload_url_mutaton.req.gql.dart';
+import 'package:typie/services/__generated__/blob.req.gql.dart';
 
 @singleton
 class Blob {
@@ -21,9 +21,7 @@ class Blob {
 
   Future<String> upload(File file) async {
     final result = await _client.request(
-      GBlob_IssueBlobUploadUrl_MutationReq((b) {
-        b.vars.input.filename = file.uri.pathSegments.last;
-      }),
+      GBlob_IssueBlobUploadUrl_MutationReq((b) => b..vars.input.filename = file.uri.pathSegments.last),
     );
 
     final url = result.issueBlobUploadUrl.url;
@@ -33,11 +31,10 @@ class Blob {
     final stream = file.openRead();
     final length = await file.length();
 
-    final formData =
-        FormData()
-          ..fields.addAll(fields.asMap.entries.map((e) => MapEntry(e.key as String, e.value as String)))
-          ..fields.add(MapEntry('Content-Type', mimeType))
-          ..files.add(MapEntry('file', MultipartFile.fromStream(() => stream, length)));
+    final formData = FormData()
+      ..fields.addAll(fields.asMap.entries.map((e) => MapEntry(e.key as String, e.value as String)))
+      ..fields.add(MapEntry('Content-Type', mimeType))
+      ..files.add(MapEntry('file', MultipartFile.fromStream(() => stream, length)));
 
     await _dio.post<void>(url, data: formData);
 

@@ -6,10 +6,8 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide.dart';
 import 'package:typie/modals/plan.dart';
-import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/profile/__generated__/query.req.gql.dart';
+import 'package:typie/screens/profile/__generated__/screen.req.gql.dart';
 import 'package:typie/services/auth.dart';
-import 'package:typie/widgets/btn.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -32,12 +30,6 @@ class ProfileScreen extends HookWidget {
               children: [
                 const Icon(LucideIcons.user, size: 100),
                 Text(data.me!.email),
-                Btn(
-                  'editor',
-                  onTap: () async {
-                    await context.router.push(EditorRoute(slug: data.me!.sites[0].firstEntity!.slug));
-                  },
-                ),
                 Tappable(
                   child: const Text('plan'),
                   onTap: () async {

@@ -67,9 +67,7 @@ class HomeScreen extends HookWidget {
                     Tappable(
                       onTap: () async {
                         final result = await client.request(
-                          GHomeScreen_CreatePost_MutationReq((b) {
-                            b.vars.input.siteId = pref.siteId;
-                          }),
+                          GHomeScreen_CreatePost_MutationReq((b) => b..vars.input.siteId = pref.siteId),
                         );
 
                         if (context.mounted) {

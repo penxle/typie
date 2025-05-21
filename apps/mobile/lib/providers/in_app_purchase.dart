@@ -7,7 +7,7 @@ import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/logger.dart';
-import 'package:typie/providers/__generated__/in_app_purchase_enroll_plan_with_in_app_purchase_mutation.req.gql.dart';
+import 'package:typie/providers/__generated__/in_app_purchase.req.gql.dart';
 
 class InAppPurchaseProvider extends HookWidget {
   const InAppPurchaseProvider({super.key});
@@ -22,13 +22,15 @@ class InAppPurchaseProvider extends HookWidget {
           try {
             if (purchaseDetails.status == PurchaseStatus.purchased) {
               await client.request(
-                GInAppPurchase_EnrollPlanWithInAppPurchase_MutationReq((b) {
-                  b.vars.input.store = Platform.isIOS ? GInAppPurchaseStore.APP_STORE : GInAppPurchaseStore.GOOGLE_PLAY;
-                  b.vars.input.data =
-                      Platform.isIOS
-                          ? purchaseDetails.purchaseID
-                          : purchaseDetails.verificationData.serverVerificationData;
-                }),
+                GInAppPurchase_EnrollPlanWithInAppPurchase_MutationReq(
+                  (b) => b
+                    ..vars.input.store = Platform.isIOS
+                        ? GInAppPurchaseStore.APP_STORE
+                        : GInAppPurchaseStore.GOOGLE_PLAY
+                    ..vars.input.data = Platform.isIOS
+                        ? purchaseDetails.purchaseID
+                        : purchaseDetails.verificationData.serverVerificationData,
+                ),
               );
             }
           } on Exception catch (e) {

@@ -15,10 +15,9 @@ abstract class RegisterModule {
       const FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true, resetOnError: true));
 
   @singleton
-  Dio get dio =>
-      kDebugMode
-          ? (Dio()..httpClientAdapter = HttpClientAdapter())
-          : (Dio()..httpClientAdapter = Http2Adapter(ConnectionManager()));
+  Dio get dio => kDebugMode
+      ? (Dio()..httpClientAdapter = HttpClientAdapter())
+      : (Dio()..httpClientAdapter = Http2Adapter(ConnectionManager()));
 
   @singleton
   GoogleSignIn get googleSignIn => GoogleSignIn(
@@ -28,28 +27,28 @@ abstract class RegisterModule {
   );
 
   @singleton
-  FlutterLocalNotificationsPlugin get flutterLocalNotificationsPlugin =>
-      FlutterLocalNotificationsPlugin()
-        ..initialize(
-          const InitializationSettings(
-            android: AndroidInitializationSettings('@drawable/ic_notification_foreground'),
-            iOS: DarwinInitializationSettings(
-              requestAlertPermission: false,
-              requestBadgePermission: false,
-              requestSoundPermission: false,
-            ),
-          ),
-        )
-        ..resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-            ?.createNotificationChannelGroup(const AndroidNotificationChannelGroup('default', '기본'))
-        ..resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(
-          const AndroidNotificationChannel(
-            'default',
-            '기본 알림',
-            groupId: 'default',
-            importance: Importance.max,
-            enableLights: true,
-            ledColor: AppColors.brand_500,
-          ),
-        );
+  FlutterLocalNotificationsPlugin get flutterLocalNotificationsPlugin => FlutterLocalNotificationsPlugin()
+    ..initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@drawable/ic_notification_foreground'),
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        ),
+      ),
+    )
+    ..resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannelGroup(
+      const AndroidNotificationChannelGroup('default', '기본'),
+    )
+    ..resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'default',
+        '기본 알림',
+        groupId: 'default',
+        importance: Importance.max,
+        enableLights: true,
+        ledColor: AppColors.brand_500,
+      ),
+    );
 }

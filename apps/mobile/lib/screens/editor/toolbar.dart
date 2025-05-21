@@ -11,8 +11,7 @@ import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
-import 'package:typie/screens/editor/__generated__/persist_blob_as_file_mutation.req.gql.dart';
-import 'package:typie/screens/editor/__generated__/persist_blob_as_image_mutation.req.gql.dart';
+import 'package:typie/screens/editor/__generated__/toolbar.req.gql.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/values.dart';
 import 'package:typie/services/blob.dart';
@@ -291,7 +290,10 @@ class _NodeToolbar extends HookWidget {
       child: Row(
         spacing: 16,
         children: [
-          Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_500)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_500),
+          ),
           const AppVerticalDivider(height: 20, color: AppColors.gray_200),
           ...children,
           _TextToolbarButton(
@@ -344,10 +346,9 @@ class _ImageToolbar extends HookWidget {
               final file = File(pickedFile.path!);
               final mimetype = await blob.mime(file);
 
-              final url =
-                  Uri.parse(
-                    pickedFile.identifier!,
-                  ).replace(scheme: 'picker', queryParameters: {'type': mimetype}).toString();
+              final url = Uri.parse(
+                pickedFile.identifier!,
+              ).replace(scheme: 'picker', queryParameters: {'type': mimetype}).toString();
 
               await scope.webViewController.value?.emitEvent('nodeview', {
                 'nodeId': nodeId,
@@ -358,9 +359,7 @@ class _ImageToolbar extends HookWidget {
               try {
                 final path = await blob.upload(file);
                 final result = await client.request(
-                  GEditorScreen_PersistBlobAsImage_MutationReq((b) {
-                    b.vars.input.path = path;
-                  }),
+                  GEditorScreen_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path),
                 );
 
                 await scope.webViewController.value?.emitEvent('nodeview', {
@@ -430,9 +429,7 @@ class _FileToolbar extends HookWidget {
               try {
                 final path = await blob.upload(file);
                 final result = await client.request(
-                  GEditorScreen_PersistBlobAsFile_MutationReq((b) {
-                    b.vars.input.path = path;
-                  }),
+                  GEditorScreen_PersistBlobAsFile_MutationReq((b) => b..vars.input.path = path),
                 );
 
                 await scope.webViewController.value?.emitEvent('nodeview', {
@@ -855,12 +852,11 @@ class _BaseButton extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final state = useState(_ButtonState.idle);
-    final effectiveState =
-        state.value == _ButtonState.pressed
-            ? _ButtonState.pressed
-            : isActive
-            ? _ButtonState.active
-            : _ButtonState.idle;
+    final effectiveState = state.value == _ButtonState.pressed
+        ? _ButtonState.pressed
+        : isActive
+        ? _ButtonState.active
+        : _ButtonState.idle;
 
     final controller = useAnimationController(duration: const Duration(milliseconds: 150));
     final curve = useMemoized(() => CurvedAnimation(parent: controller, curve: Curves.ease), [controller]);
@@ -913,7 +909,10 @@ class _IconToolbarButton extends HookWidget {
       isActive: isActive,
       onTap: onTap,
       builder: (context, color) {
-        return Box(padding: const Pad(all: 4), child: Icon(icon, size: 22, color: color));
+        return Box(
+          padding: const Pad(all: 4),
+          child: Icon(icon, size: 22, color: color),
+        );
       },
     );
   }
@@ -981,7 +980,10 @@ class _TextToolbarButton extends HookWidget {
         return Box(
           padding: const Pad(all: 4),
           alignment: Alignment.center,
-          child: Text(text, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: color)),
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: color),
+          ),
         );
       },
     );
@@ -1009,7 +1011,10 @@ class _BoxButton extends StatelessWidget {
             spacing: 8,
             children: [
               Icon(icon, size: 24, color: color),
-              Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color)),
+              Text(
+                label,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color),
+              ),
             ],
           ),
         );
