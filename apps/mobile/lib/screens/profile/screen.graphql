@@ -1,0 +1,6 @@
+query ProfileScreen_Query {
+  me {
+    id
+    email
+  }
+}

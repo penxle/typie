@@ -7,7 +7,7 @@ import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/error.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/screens/login_with_email/__generated__/login_with_email_mutation.req.gql.dart';
+import 'package:typie/screens/login_with_email/__generated__/screen.req.gql.dart';
 import 'package:typie/widgets/btn.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
@@ -38,10 +38,11 @@ class LoginWithEmailScreen extends HookWidget {
         onSubmit: (form) async {
           try {
             await client.request(
-              GLoginWithEmailScreen_LoginWithEmail_MutationReq((b) {
-                b.vars.input.email = form.data['email'] as String;
-                b.vars.input.password = form.data['password'] as String;
-              }),
+              GLoginWithEmailScreen_LoginWithEmail_MutationReq(
+                (b) => b
+                  ..vars.input.email = form.data['email'] as String
+                  ..vars.input.password = form.data['password'] as String,
+              ),
             );
           } on TypieError catch (e) {
             if (context.mounted) {

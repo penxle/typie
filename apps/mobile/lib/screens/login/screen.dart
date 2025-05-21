@@ -16,7 +16,7 @@ import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/login/__generated__/authorize_single_sign_on_mutation.req.gql.dart';
+import 'package:typie/screens/login/__generated__/screen.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
@@ -35,10 +35,11 @@ class LoginScreen extends HookWidget {
     final login = useCallback((GSingleSignOnProvider provider, Map<String, dynamic> params) async {
       await context.runWithLoader(() async {
         await client.request(
-          GLoginScreen_AuthorizeSingleSignOn_MutationReq((b) {
-            b.vars.input.provider = provider;
-            b.vars.input.params = JsonObject(params);
-          }),
+          GLoginScreen_AuthorizeSingleSignOn_MutationReq(
+            (b) => b
+              ..vars.input.provider = provider
+              ..vars.input.params = JsonObject(params),
+          ),
         );
       });
     });
