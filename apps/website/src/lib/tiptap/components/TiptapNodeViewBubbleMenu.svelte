@@ -59,8 +59,10 @@
   <div
     class={css({
       borderWidth: '1px',
+      borderRadius: '4px',
       borderColor: 'gray.300',
       backgroundColor: 'white',
+      cursor: 'pointer',
       boxShadow: 'small',
     })}
     use:floating
@@ -69,6 +71,7 @@
       class={center({
         position: 'relative',
         gap: '8px',
+        borderRadius: '4px',
         paddingX: '14px',
         paddingY: '8px',
         backgroundColor: 'white',

@@ -128,11 +128,11 @@
     css({
       position: 'absolute',
       zIndex: '10',
-      top: '0',
+      top: '20px',
       right: '0',
       bottom: '0',
       width: '23px',
-      height: 'full',
+      height: '[calc(100% - 20px)]',
       translate: 'auto',
       translateX: 'full',
       paddingLeft: '5px',
