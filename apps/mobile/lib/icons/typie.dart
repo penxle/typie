@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 @staticIconProvider
 abstract final class TypieIcons {
   static const String _fontFamily = 'TypieIcons';
-  static const IconData exclamation = IconData(61703, fontFamily: _fontFamily);
+  static const IconData exclamation = IconData(61704, fontFamily: _fontFamily);
+  static const IconData folder_filled = IconData(61703, fontFamily: _fontFamily);
   static const IconData google = IconData(61702, fontFamily: _fontFamily);
   static const IconData horizontal_rule = IconData(61701, fontFamily: _fontFamily);
   static const IconData kakao = IconData(61700, fontFamily: _fontFamily);

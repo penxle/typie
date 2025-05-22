@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:jiffy/jiffy.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:naver_login_sdk/naver_login_sdk.dart';
 import 'package:typie/env.dart';
@@ -15,4 +16,6 @@ Future<void> configureStaticServices() async {
     clientId: Env.naverClientId,
     clientSecret: Env.naverClientSecret,
   );
+
+  await Jiffy.setLocale('ko');
 }

@@ -136,19 +136,12 @@ Post.implement({
 
     body: t.field({
       type: 'JSON',
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'Post.body',
-          load: async (ids) => {
-            return await db
-              .select({ postId: PostContents.postId, body: PostContents.body })
-              .from(PostContents)
-              .where(inArray(PostContents.postId, ids));
-          },
-          key: ({ postId }) => postId,
-        });
-
-        const content = await loader.load(self.id);
+      resolve: async (self) => {
+        const content = await db
+          .select({ body: PostContents.body })
+          .from(PostContents)
+          .where(eq(PostContents.postId, self.id))
+          .then(firstOrThrow);
 
         return content.body;
       },
@@ -156,12 +149,26 @@ Post.implement({
 
     storedMarks: t.field({
       type: 'JSON',
+      resolve: async (self) => {
+        const content = await db
+          .select({ storedMarks: PostContents.storedMarks })
+          .from(PostContents)
+          .where(eq(PostContents.postId, self.id))
+          .then(firstOrThrow);
+
+        return content.storedMarks;
+      },
+    }),
+
+    entity: t.expose('entityId', { type: Entity }),
+
+    characterCount: t.int({
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
-          name: 'Post.storedMarks',
+          name: 'Post.characterCount',
           load: async (ids) => {
             return await db
-              .select({ postId: PostContents.postId, storedMarks: PostContents.storedMarks })
+              .select({ postId: PostContents.postId, characterCount: PostContents.characterCount })
               .from(PostContents)
               .where(inArray(PostContents.postId, ids));
           },
@@ -169,11 +176,9 @@ Post.implement({
         });
 
         const content = await loader.load(self.id);
-
-        return content.storedMarks;
+        return content.characterCount;
       },
     }),
-    entity: t.expose('entityId', { type: Entity }),
 
     characterCountChange: t.withAuth({ session: true }).field({
       type: CharacterCountChange,

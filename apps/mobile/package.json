@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "buildrunner": "doppler run -- dart run build_runner watch --delete-conflicting-outputs",
+    "buildrunner": "dart run build_runner clean && doppler run -- dart run build_runner watch --delete-conflicting-outputs",
     "clean": "flutter clean && dart run build_runner clean"
   },
   "devDependencies": {

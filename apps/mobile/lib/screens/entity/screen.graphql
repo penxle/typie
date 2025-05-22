@@ -40,25 +40,20 @@ query EntityScreen_WithEntityId_Query($entityId: ID!) {
 
 fragment EntityScreen_Entity_entity on Entity {
   id
-  depth
-  order
-  visibility
   slug
-  url
+  order
 
   node {
-    __typename
-
     ... on Folder {
       id
       name
-      maxDescendantFoldersDepth
     }
 
     ... on Post {
       id
-      type
       title
+      excerpt
+      updatedAt
     }
   }
 }

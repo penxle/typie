@@ -9,6 +9,9 @@ targets:
             when: true
             maybeWhen: true
           type_overrides:
+            DateTime:
+              name: Jiffy
+              import: 'package:jiffy/jiffy.dart'
             JSON:
               name: JsonObject
               import: 'package:built_value/json_object.dart'
@@ -17,9 +20,12 @@ targets:
         options:
           schema: typie|lib/graphql/schema.graphql
           type_overrides:
+            DateTime:
+              name: Jiffy
+              import: 'package:jiffy/jiffy.dart'
             JSON:
               name: JsonObject
               import: 'package:built_value/json_object.dart'
           custom_serializers:
-            - import: 'package:built_value/src/json_object_serializer.dart'
-              name: JsonObjectSerializer
+            - import: 'package:typie/graphql/serializer.dart'
+              name: DateTimeSerializer

@@ -452,6 +452,7 @@ type Post implements IPost {
   allowReaction: Boolean!
   availableActions: [PostAvailableAction!]!
   body: JSON!
+  characterCount: Int!
   characterCountChange: CharacterCountChange!
   contentRating: PostContentRating!
   coverImage: Image
