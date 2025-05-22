@@ -3,7 +3,7 @@
   import { TableMap } from '@tiptap/pm/tables';
   import { tick } from 'svelte';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center } from '$styled-system/patterns';
   import { TiptapNodeViewBubbleMenu } from '../../components';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import AddRowColButton from './AddRowColButton.svelte';
@@ -109,104 +109,114 @@
 </script>
 
 <NodeView style={css.raw({ position: 'relative' })} {...HTMLAttributes}>
-  <table
-    style:--table-border-style={attrs.borderStyle}
-    onpointerleave={() => {
-      hoveredRowIndex = null;
-      hoveredColumnIndex = null;
-    }}
-    onpointerover={handlePointerover}
-    {...mergeAttributes(HTMLAttributes, {
-      class: css({
-        position: 'relative',
-        borderRadius: '4px',
-        borderStyle: 'hidden',
-        outlineWidth: '1px',
-        outlineStyle: 'var(--table-border-style)',
-        outlineOffset: '-1px',
-        outlineColor: 'gray.300',
-      }),
-      style: tableWidth ? `width: ${tableWidth}` : `min-width: ${tableMinWidth}`,
-    })}
+  <div
+    class={css(
+      {
+        overflowX: 'auto',
+        overflowY: 'hidden',
+      },
+      editor?.current.isEditable && {
+        marginTop: '-20px',
+        paddingTop: '20px',
+        marginLeft: '-20px',
+        paddingLeft: '20px',
+      },
+    )}
   >
-    <colgroup>
-      {#each cols as col, i (col)}
-        <col bind:this={_colElems[i]} {...col[1]} />
-      {/each}
-    </colgroup>
-    {#if editor?.current.isEditable}
-      <!-- svelte-ignore node_invalid_placement_ssr -->
-      <div
-        class={css({
-          position: 'absolute',
-          inset: '0',
-        })}
-        contenteditable={false}
-        role="rowgroup"
-      >
-        {#each rowElems as row, i (row)}
-          <div
-            style:height={`${row.clientHeight}px`}
-            style:top={`${row.offsetTop}px`}
-            class={flex({
-              position: 'absolute',
-              left: '0',
-              width: '18px',
-              height: '24px',
-              translateX: '-1/2',
-              translate: 'auto',
-              zIndex: '10',
-              justifyContent: 'center',
-              alignItems: 'center',
-              pointerEvents: hoveredRowIndex === i ? 'auto' : 'none',
-            })}
-            role="row"
-          >
-            <RowHandle {editor} {getPos} {hasSpan} {hoveredRowIndex} {i} tableNode={node} />
-          </div>
+    <table
+      style:--table-border-style={attrs.borderStyle}
+      onpointerleave={() => {
+        hoveredRowIndex = null;
+        hoveredColumnIndex = null;
+      }}
+      onpointerover={handlePointerover}
+      {...mergeAttributes(HTMLAttributes, {
+        class: css({
+          position: 'relative',
+          borderRadius: '4px',
+          borderStyle: 'hidden',
+          outlineWidth: '1px',
+          outlineStyle: 'var(--table-border-style)',
+          outlineOffset: '-1px',
+          outlineColor: 'gray.300',
+        }),
+        style: tableWidth ? `width: ${tableWidth}` : `min-width: ${tableMinWidth}`,
+      })}
+    >
+      <colgroup>
+        {#each cols as col, i (col)}
+          <col bind:this={_colElems[i]} {...col[1]} />
         {/each}
-      </div>
-      {#if colgroupRendered}
-        {#each colElems as col, i (i)}
+      </colgroup>
+      {#if editor?.current.isEditable}
+        <!-- svelte-ignore node_invalid_placement_ssr -->
+        <div
+          class={css({
+            position: 'absolute',
+            inset: '0',
+          })}
+          contenteditable={false}
+          role="rowgroup"
+        >
+          {#each rowElems as row, i (row)}
+            <div
+              style:height={`${row.clientHeight}px`}
+              style:top={`${row.offsetTop}px`}
+              class={center({
+                position: 'absolute',
+                left: '0',
+                translate: 'auto',
+                translateX: '-1/2',
+                zIndex: '10',
+                width: '18px',
+                height: '24px',
+                pointerEvents: hoveredRowIndex === i ? 'auto' : 'none',
+              })}
+              role="row"
+            >
+              <RowHandle {editor} {getPos} {hasSpan} {hoveredRowIndex} {i} tableNode={node} />
+            </div>
+          {/each}
+        </div>
+        {#if colgroupRendered}
           <!-- svelte-ignore node_invalid_placement_ssr -->
-          <div
-            style:left={`${col.offsetLeft}px`}
-            style:width={`${col.clientWidth}px`}
-            class={flex({
-              position: 'absolute',
-              top: '0',
-              width: '24px',
-              height: '18px',
-              translateY: '-1/2',
-              translate: 'auto',
-              zIndex: '10',
-              justifyContent: 'center',
-              alignItems: 'center',
-              pointerEvents: hoveredColumnIndex === i ? 'auto' : 'none',
-              '.block-selection-decoration &': {
-                display: 'none',
-              },
-            })}
-          >
-            <ColHandle {editor} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
-          </div>
-        {/each}
+          {#each colElems as col, i (i)}
+            <div
+              style:left={`${col.offsetLeft}px`}
+              style:width={`${col.clientWidth}px`}
+              class={center({
+                position: 'absolute',
+                top: '0',
+                translate: 'auto',
+                translateY: '-1/2',
+                zIndex: '10',
+                width: '24px',
+                height: '18px',
+                pointerEvents: hoveredColumnIndex === i ? 'auto' : 'none',
+                '.block-selection-decoration &': {
+                  display: 'none',
+                },
+              })}
+            >
+              <ColHandle {editor} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
+            </div>
+          {/each}
+        {/if}
       {/if}
-    {/if}
 
-    <NodeViewContentEditable
-      style={css.raw({ '& p': { textIndent: '0!' }, '& td': { borderStyle: 'var(--table-border-style)' } })}
-      as="tbody"
-    />
-
+      <NodeViewContentEditable
+        style={css.raw({ '& p': { textIndent: '0!' }, '& td': { borderStyle: 'var(--table-border-style)' } })}
+        as="tbody"
+      />
+    </table>
     {#if editor?.current.isEditable}
       <AddRowColButton {editor} {getPos} {isLastColumnHovered} {isLastRowHovered} tableNode={node} />
     {/if}
-  </table>
+  </div>
 </NodeView>
 
 <TiptapNodeViewBubbleMenu {editor} {getPos} {node}>
-  <select onchange={(e) => updateAttributes({ borderStyle: e.currentTarget.value })}>
+  <select class={css({ cursor: 'pointer' })} onchange={(e) => updateAttributes({ borderStyle: e.currentTarget.value })}>
     <option selected={attrs.borderStyle === 'solid'} value="solid">solid</option>
     <option selected={attrs.borderStyle === 'dashed'} value="dashed">dashed</option>
     <option selected={attrs.borderStyle === 'dotted'} value="dotted">dotted</option>

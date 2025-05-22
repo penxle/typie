@@ -255,6 +255,7 @@
         flexDirection: 'column',
         alignItems: 'center',
         flexGrow: '1',
+        paddingX: '20px',
         paddingBottom: '80px',
         width: 'full',
         maxWidth: '1200px',
@@ -276,7 +277,6 @@
 
       <div
         class={css({
-          paddingX: '20px',
           paddingTop: $entityView.node.coverImage ? '0' : '50px',
           width: 'full',
           maxWidth: 'var(--prosemirror-max-width)',
