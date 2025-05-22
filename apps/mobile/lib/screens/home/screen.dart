@@ -9,7 +9,6 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/screen.req.gql.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/styles/colors.dart';
-import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
@@ -36,64 +35,62 @@ class HomeScreen extends HookWidget {
       builder: (context, child) {
         final padding = MediaQuery.viewPaddingOf(context);
 
-        return Screen(
-          safeArea: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: MediaQuery.removeViewPadding(context: context, removeBottom: true, child: child),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: MediaQuery.removeViewPadding(context: context, removeBottom: true, child: child),
+            ),
+            Box(
+              height: padding.bottom + 56,
+              padding: Pad(horizontal: 24, bottom: padding.bottom),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.gray_100)),
+                color: AppColors.white,
               ),
-              Box(
-                height: padding.bottom + 56,
-                padding: Pad(horizontal: 24, bottom: padding.bottom),
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: AppColors.gray_100)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const _Button(
-                      index: 0,
-                      icon: Icon(LucideBoldIcons.folder, color: AppColors.gray_300),
-                      activeIcon: Icon(LucideBoldIcons.folder, color: AppColors.gray_700),
-                    ),
-                    const _Button(
-                      index: 1,
-                      icon: Icon(LucideBoldIcons.search, color: AppColors.gray_300),
-                      activeIcon: Icon(LucideBoldIcons.search, color: AppColors.gray_700),
-                    ),
-                    Tappable(
-                      onTap: () async {
-                        final result = await client.request(
-                          GHomeScreen_CreatePost_MutationReq((b) => b..vars.input.siteId = pref.siteId),
-                        );
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _Button(
+                    index: 0,
+                    icon: Icon(LucideBoldIcons.folder, color: AppColors.gray_300),
+                    activeIcon: Icon(LucideBoldIcons.folder, color: AppColors.gray_700),
+                  ),
+                  const _Button(
+                    index: 1,
+                    icon: Icon(LucideBoldIcons.search, color: AppColors.gray_300),
+                    activeIcon: Icon(LucideBoldIcons.search, color: AppColors.gray_700),
+                  ),
+                  Tappable(
+                    onTap: () async {
+                      final result = await client.request(
+                        GHomeScreen_CreatePost_MutationReq((b) => b..vars.input.siteId = pref.siteId),
+                      );
 
-                        if (context.mounted) {
-                          await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
-                        }
-                      },
-                      child: const Box(
-                        padding: Pad(horizontal: 12),
-                        child: Icon(LucideBoldIcons.square_plus, color: AppColors.gray_300),
-                      ),
+                      if (context.mounted) {
+                        await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
+                      }
+                    },
+                    child: const Box(
+                      padding: Pad(horizontal: 12),
+                      child: Icon(LucideBoldIcons.square_plus, color: AppColors.gray_300),
                     ),
-                    const _Button(
-                      index: 2,
-                      icon: Icon(LucideBoldIcons.bell, color: AppColors.gray_300),
-                      activeIcon: Icon(LucideBoldIcons.bell, color: AppColors.gray_700),
-                    ),
-                    const _Button(
-                      index: 3,
-                      icon: Icon(LucideBoldIcons.circle_user_round, color: AppColors.gray_300),
-                      activeIcon: Icon(LucideBoldIcons.circle_user_round, color: AppColors.gray_700),
-                    ),
-                  ],
-                ),
+                  ),
+                  const _Button(
+                    index: 2,
+                    icon: Icon(LucideBoldIcons.bell, color: AppColors.gray_300),
+                    activeIcon: Icon(LucideBoldIcons.bell, color: AppColors.gray_700),
+                  ),
+                  const _Button(
+                    index: 3,
+                    icon: Icon(LucideBoldIcons.circle_user_round, color: AppColors.gray_300),
+                    activeIcon: Icon(LucideBoldIcons.circle_user_round, color: AppColors.gray_700),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );
@@ -111,14 +108,25 @@ class _Button extends StatelessWidget {
   Widget build(BuildContext context) {
     final tabsRouter = AutoTabsRouter.of(context, watch: true);
 
-    return Tappable(
-      onTap: () {
-        tabsRouter.setActiveIndex(index);
-      },
-      child: Box(
-        padding: const Pad(horizontal: 12),
-        child: tabsRouter.activeIndex == index ? activeIcon ?? icon : icon,
-      ),
-    );
+    if (tabsRouter.activeIndex == index) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onDoubleTapDown: (_) {
+          final router = context.router.topMostRouter();
+          if (router is StackRouter) {
+            router.popUntilRoot();
+          }
+        },
+        child: Box(padding: const Pad(horizontal: 12), child: activeIcon ?? icon),
+      );
+    } else {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) {
+          tabsRouter.setActiveIndex(index);
+        },
+        child: Box(padding: const Pad(horizontal: 12), child: icon),
+      );
+    }
   }
 }

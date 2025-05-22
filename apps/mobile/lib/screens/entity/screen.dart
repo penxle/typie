@@ -73,8 +73,8 @@ class _EntityList extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
-    final scrollController = useScrollController();
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
+    final scrollController = PrimaryScrollController.of(context);
 
     useEffect(() {
       void listener() {
