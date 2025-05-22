@@ -18,7 +18,6 @@ import 'package:typie/hooks/service.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/login/__generated__/screen.req.gql.dart';
 import 'package:typie/styles/colors.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/svg_image.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -45,7 +44,6 @@ class LoginScreen extends HookWidget {
     });
 
     return Screen(
-      heading: const EmptyHeading(),
       child: Column(
         children: [
           const Expanded(

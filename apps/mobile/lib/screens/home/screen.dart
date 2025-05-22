@@ -42,10 +42,10 @@ class HomeScreen extends HookWidget {
               child: MediaQuery.removeViewPadding(context: context, removeBottom: true, child: child),
             ),
             Box(
-              height: padding.bottom + 56,
+              height: padding.bottom + 52,
               padding: Pad(horizontal: 24, bottom: padding.bottom),
               decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.gray_100)),
+                border: Border(top: BorderSide(color: AppColors.gray_200)),
                 color: AppColors.white,
               ),
               child: Row(

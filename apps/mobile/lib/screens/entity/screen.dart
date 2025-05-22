@@ -5,8 +5,10 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/extensions/iterable.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide.dart';
+import 'package:typie/icons/typie.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/screen.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen.req.gql.dart';
@@ -28,7 +30,10 @@ class EntityScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Screen(child: entityId == null ? const _WithSiteId() : _WithEntityId(entityId!));
+    return Screen(
+      backgroundColor: AppColors.gray_100,
+      child: entityId == null ? const _WithSiteId() : _WithEntityId(entityId!),
+    );
   }
 }
 
@@ -74,11 +79,12 @@ class _EntityList extends HookWidget {
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
-    final scrollController = PrimaryScrollController.of(context);
+    final scrollController = useScrollController();
+    final primaryScrollController = PrimaryScrollController.of(context);
 
     useEffect(() {
       void listener() {
-        if (scrollController.position.pixels > 0) {
+        if (primaryScrollController.position.pixels > 0) {
           if (animationController.status != AnimationStatus.forward) {
             animationController.forward();
           }
@@ -89,13 +95,19 @@ class _EntityList extends HookWidget {
         }
       }
 
-      scrollController.addListener(listener);
-      return () => scrollController.removeListener(listener);
-    }, []);
+      primaryScrollController.addListener(listener);
+      return () => primaryScrollController.removeListener(listener);
+    });
+
+    useAsyncEffect(() async {
+      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+      return null;
+    });
 
     const chevron = Icon(LucideIcons.chevron_right, size: 24, color: AppColors.gray_500);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AnimatedBuilder(
           animation: animationController,
@@ -103,17 +115,20 @@ class _EntityList extends HookWidget {
             return Box(
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: AppColors.gray_100.withValues(alpha: animationController.value)),
+                  bottom: BorderSide(color: AppColors.gray_200.withValues(alpha: animationController.value)),
                 ),
               ),
-              padding: const Pad(horizontal: 24, vertical: 12),
+              padding: const Pad(vertical: 12),
               child: child,
             );
           },
-          child: Row(
-            children: [
-              Flexible(
-                child: Tappable(
+          child: SingleChildScrollView(
+            controller: scrollController,
+            scrollDirection: Axis.horizontal,
+            padding: const Pad(horizontal: 24),
+            child: Row(
+              children: [
+                Tappable(
                   onTap: () {
                     context.router.popUntil((route) {
                       if (route.data?.name == EntityRoute.name && route.data!.args == null) {
@@ -133,12 +148,10 @@ class _EntityList extends HookWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-              if (entity != null) chevron,
-              ...?entity?.ancestors
-                  .map(
-                    (e) => Flexible(
-                      child: Tappable(
+                if (entity != null) chevron,
+                ...?entity?.ancestors
+                    .map(
+                      (e) => Tappable(
                         onTap: () {
                           context.router.popUntil((route) {
                             if (route.data?.args case EntityRouteArgs(:final entityId)) {
@@ -154,19 +167,17 @@ class _EntityList extends HookWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                  )
-                  .intersperseWith(chevron),
-              if (entity?.ancestors.isNotEmpty ?? false) chevron,
-              if (entity != null)
-                Flexible(
-                  child: Text(
+                    )
+                    .intersperseWith(chevron),
+                if (entity?.ancestors.isNotEmpty ?? false) chevron,
+                if (entity != null)
+                  Text(
                     entity!.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
                     style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
         Expanded(
@@ -175,33 +186,85 @@ class _EntityList extends HookWidget {
                   child: Text('폴더가 비어있어요', style: TextStyle(fontSize: 16, color: AppColors.gray_500)),
                 )
               : ReorderableList(
-                  controller: scrollController,
+                  controller: primaryScrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const Pad(horizontal: 20, vertical: 12),
                   itemCount: entities.length,
                   itemBuilder: (context, index) {
-                    return ReorderableDelayedDragStartListener(
-                      key: ValueKey(entities[index].id),
-                      index: index,
-                      child: entities[index].node.when(
-                        folder: (_) => _Folder(entities[index]),
-                        post: (_) => _Post(entities[index]),
-                        orElse: () => throw UnimplementedError(),
+                    return Box(
+                      key: Key(entities[index].id),
+                      padding: const Pad(vertical: 6),
+                      child: ReorderableDelayedDragStartListener(
+                        index: index,
+                        child: Tappable(
+                          onTap: () async {
+                            await entities[index].node.when(
+                              folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
+                              post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
+                              orElse: () => throw UnimplementedError(),
+                            );
+                          },
+                          child: Box(
+                            padding: const Pad(horizontal: 24, vertical: 12),
+                            decoration: const BoxDecoration(
+                              borderRadius: BorderRadius.all(Radius.circular(8)),
+                              color: AppColors.white,
+                            ),
+                            child: entities[index].node.when(
+                              folder: (_) => _Folder(entities[index]),
+                              post: (_) => _Post(entities[index]),
+                              orElse: () => throw UnimplementedError(),
+                            ),
+                          ),
+                        ),
                       ),
                     );
                   },
-                  proxyDecorator: (child, index, animation) {
-                    final curve = CurvedAnimation(parent: animation, curve: Curves.easeInOut);
-                    final alpha = Tween<double>(begin: 0, end: 1).animate(curve);
+                  proxyDecorator: (_, index, animation) {
+                    final curve = CurvedAnimation(parent: animation, curve: Curves.ease);
+                    final alpha = Tween<double>(begin: 0, end: 0.07).animate(curve);
+
+                    final child = entities[index].node.when(
+                      folder: (_) => _Folder(entities[index]),
+                      post: (_) => _Post(entities[index]),
+                      orElse: () => throw UnimplementedError(),
+                    );
 
                     return AnimatedBuilder(
                       animation: animation,
                       builder: (context, child) {
                         return Box(
-                          decoration: BoxDecoration(
-                            color: AppColors.gray_200.withValues(alpha: alpha.value),
-                            borderRadius: BorderRadius.circular(4),
+                          padding: const Pad(vertical: 6),
+                          child: Box(
+                            padding: const Pad(horizontal: 24, vertical: 12),
+                            decoration: BoxDecoration(
+                              borderRadius: const BorderRadius.all(Radius.circular(8)),
+                              color: AppColors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.gray_950.withValues(alpha: alpha.value),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                                BoxShadow(
+                                  color: AppColors.gray_950.withValues(alpha: alpha.value),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                                BoxShadow(
+                                  color: AppColors.gray_950.withValues(alpha: alpha.value),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                                BoxShadow(
+                                  color: AppColors.gray_950.withValues(alpha: alpha.value),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: child,
                           ),
-                          child: child,
                         );
                       },
                       child: child,
@@ -261,31 +324,20 @@ class _Folder extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tappable(
-      child: Box(
-        padding: const Pad(horizontal: 24, vertical: 12),
-        child: Row(
-          spacing: 8,
-          children: [
-            const Icon(LucideIcons.folder, size: 16, color: AppColors.gray_500),
-            Expanded(
-              child: Text(
-                folder.name,
-                style: const TextStyle(fontSize: 16, color: AppColors.gray_700),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-            Tappable(
-              child: const Icon(LucideIcons.ellipsis, size: 16, color: AppColors.gray_500),
-              onTap: () async {},
-            ),
-          ],
+    return Row(
+      spacing: 8,
+      children: [
+        const Icon(TypieIcons.folder_filled, size: 20, color: AppColors.gray_200),
+        Expanded(
+          child: Text(
+            folder.name,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray_700),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
         ),
-      ),
-      onTap: () async {
-        await context.router.push(EntityRoute(entityId: entity.id));
-      },
+        const Icon(LucideIcons.chevron_right, size: 16, color: AppColors.gray_500),
+      ],
     );
   }
 }
@@ -298,31 +350,31 @@ class _Post extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tappable(
-      child: Box(
-        padding: const Pad(horizontal: 24, vertical: 12),
-        child: Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
+      children: [
+        Row(
           spacing: 8,
           children: [
-            const Icon(LucideIcons.file, size: 16, color: AppColors.gray_500),
             Expanded(
               child: Text(
                 post.title,
-                style: const TextStyle(fontSize: 16, color: AppColors.gray_700),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray_700),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
             ),
-            Tappable(
-              child: const Icon(LucideIcons.ellipsis, size: 16, color: AppColors.gray_500),
-              onTap: () async {},
-            ),
+            Text(post.updatedAt.fromNow(), style: const TextStyle(fontSize: 14, color: AppColors.gray_500)),
           ],
         ),
-      ),
-      onTap: () async {
-        await context.router.push(EditorRoute(slug: entity.slug));
-      },
+        Text(
+          post.excerpt.isEmpty ? '(내용 없음)' : post.excerpt,
+          style: const TextStyle(fontSize: 14, color: AppColors.gray_500),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+        ),
+      ],
     );
   }
 }
