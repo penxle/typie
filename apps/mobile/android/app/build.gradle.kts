@@ -55,8 +55,8 @@ android {
     getByName("release") {
       signingConfig = signingConfigs.getByName("release")
 
-      isMinifyEnabled = true;
-      isShrinkResources = true;
+      isMinifyEnabled = true
+      isShrinkResources = true
 
       proguardFiles(
         getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -71,7 +71,8 @@ flutter {
 }
 
 dependencies {
-  implementation("androidx.window:window:1.3.0")
-  implementation("androidx.window:window-java:1.3.0")
+  implementation("androidx.window:window:1.4.0")
+  implementation("androidx.window:window-java:1.4.0")
+  implementation("com.squareup.moshi:moshi:1.15.2")
   coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
