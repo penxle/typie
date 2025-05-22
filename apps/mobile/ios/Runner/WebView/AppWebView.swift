@@ -84,18 +84,6 @@ class AppWebView: NSObject, FlutterPlatformView {
       }
 
       switch call.method {
-      case "loadUrl":
-        if let url = args["url"] as? String, let nsUrl = URL(string: url) {
-          let request = URLRequest(
-            url: nsUrl,
-            cachePolicy: .reloadIgnoringLocalCacheData,
-            timeoutInterval: 60.0
-          )
-
-          webView.load(request)
-        }
-        result(nil)
-
       case "requestFocus":
         webView.becomeFirstResponder()
         result(nil)
@@ -107,7 +95,7 @@ class AppWebView: NSObject, FlutterPlatformView {
       case "emitEvent":
         if let name = args["name"] as? String, let data = args["data"] as? String {
           webView.evaluateJavaScript("""
-            window.dispatchEvent(new CustomEvent('__webview__', { detail: { name: '\(name)', data: JSON.parse('\(data)') } }))
+            window.dispatchEvent(new CustomEvent('__webview__', { detail: { name: '\(name)', data: JSON.parse('\(data)') } }));
           """)
         }
         result(nil)
@@ -183,7 +171,7 @@ class AppWebView: NSObject, FlutterPlatformView {
         window.__webview__ = {
           emitEvent: (name, data) => window.webkit.messageHandlers.handler.postMessage({
             name: 'emitEvent',
-            attrs: { name, data: JSON.stringify(data ?? null)},
+            attrs: { name, data: JSON.stringify(data ?? null) },
           }),
           addEventListener: (name, fn) => {
             const handler = (event) => { if (event.detail.name === name) fn(event.detail.data) };

@@ -361,9 +361,7 @@ class _ImageToolbar extends HookWidget {
               final file = File(pickedFile.path!);
               final mimetype = await blob.mime(file);
 
-              final url = Uri.parse(
-                pickedFile.identifier!,
-              ).replace(scheme: 'picker', queryParameters: {'type': mimetype}).toString();
+              final url = file.uri.replace(scheme: 'picker', queryParameters: {'type': mimetype}).toString();
 
               await scope.webViewController.value?.emitEvent('nodeview', {
                 'nodeId': nodeId,
