@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:built_value/serializer.dart';
 import 'package:jiffy/jiffy.dart';
 
 class DateTimeSerializer implements PrimitiveSerializer<Jiffy> {
   DateTimeSerializer() {
-    Jiffy.setLocale('ko_KR');
+    unawaited(Jiffy.setLocale('ko_KR'));
   }
 
   @override

@@ -25,7 +25,7 @@ class EntityRouter extends AutoRouter {
 }
 
 @RoutePage()
-class EntityScreen extends HookWidget {
+class EntityScreen extends StatelessWidget {
   const EntityScreen({super.key, @PathParam() this.entityId});
 
   final String? entityId;
@@ -55,7 +55,7 @@ class _WithSiteId extends HookWidget {
   }
 }
 
-class _WithEntityId extends HookWidget {
+class _WithEntityId extends StatelessWidget {
   const _WithEntityId(this.entityId);
 
   final String entityId;
@@ -211,8 +211,8 @@ class _EntityList extends HookWidget {
                 )
               else ...[
                 Tappable(
-                  onTap: () {
-                    context.showBottomMenu(
+                  onTap: () async {
+                    await context.showBottomMenu(
                       items: [
                         BottomMenuItem(
                           icon: LucideIcons.chevrons_up_down,
@@ -342,7 +342,7 @@ class _EntityList extends HookWidget {
   }
 }
 
-class _Folder extends HookWidget {
+class _Folder extends StatelessWidget {
   const _Folder(this.entity);
 
   final GEntityScreen_Entity_entity entity;
@@ -368,7 +368,7 @@ class _Folder extends HookWidget {
   }
 }
 
-class _Post extends HookWidget {
+class _Post extends StatelessWidget {
   const _Post(this.entity);
 
   final GEntityScreen_Entity_entity entity;

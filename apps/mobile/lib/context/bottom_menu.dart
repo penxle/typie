@@ -4,7 +4,7 @@ import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/widgets/tappable.dart';
 
 extension BottomMenuExtension on BuildContext {
-  Future<T?> showBottomMenu<T extends Object?>({required List<BottomMenuItem> items}) async {
+  Future<T?> showBottomMenu<T extends Object?>({required List<BottomMenuItem> items}) {
     return this.showBottomSheet(_Widget(items: items));
   }
 }

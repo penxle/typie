@@ -56,10 +56,10 @@ class _WebViewState extends State<WebView> {
   }
 
   @override
-  void dispose() {
-    _controller._channel.invokeMethod('dispose', <dynamic, dynamic>{});
+  Future<void> dispose() async {
     _controller._channel.setMethodCallHandler(null);
-    _controller._streamController.close();
+    await _controller._channel.invokeMethod('dispose', <dynamic, dynamic>{});
+    await _controller._streamController.close();
 
     super.dispose();
   }
@@ -79,9 +79,8 @@ class _WebViewState extends State<WebView> {
           }
         } on MissingPluginException {
           rethrow;
-          // ignore: avoid_catches_without_on_clauses catch all
-        } catch (e) {
-          log.e('WebView', error: e);
+        } catch (err) {
+          log.e('WebView', error: err);
         }
       });
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -45,7 +47,7 @@ class MoveEntityModal extends HookWidget {
     }
 
     useEffect(() {
-      fetchData(null);
+      unawaited(fetchData(null));
 
       return null;
     }, []);
@@ -91,68 +93,63 @@ class MoveEntityModal extends HookWidget {
           Expanded(
             child: (entities.value == null && rootEntities.value == null) || loading.value
                 ? const Center(child: CircularProgressIndicator())
-                : Column(
-                    children: [
-                      Expanded(
-                        child: (folderCount == 0)
-                            ? const Center(
-                                child: Text('폴더가 비어있어요', style: TextStyle(fontSize: 16, color: Colors.grey)),
-                              )
-                            : ListView.builder(
-                                itemCount: (currentParentId.value != null ? children : rootChildren).length,
-                                itemBuilder: (context, index) {
-                                  final id = currentParentId.value != null
-                                      ? children[index].id
-                                      : rootChildren[index].id;
-                                  final typename = currentParentId.value != null
-                                      ? children[index].node.G__typename
-                                      : rootChildren[index].node.G__typename;
+                : Expanded(
+                    child: (folderCount == 0)
+                        ? const Center(
+                            child: Text('폴더가 비어있어요', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                          )
+                        : ListView.builder(
+                            itemCount: (currentParentId.value != null ? children : rootChildren).length,
+                            itemBuilder: (context, index) {
+                              final id = currentParentId.value != null ? children[index].id : rootChildren[index].id;
+                              final typename = currentParentId.value != null
+                                  ? children[index].node.G__typename
+                                  : rootChildren[index].node.G__typename;
 
-                                  if (typename != 'Folder') {
-                                    return const SizedBox.shrink();
+                              if (typename != 'Folder') {
+                                return const SizedBox.shrink();
+                              }
+
+                              final name = currentParentId.value != null
+                                  ? (children[index].node as GMoveEntityModal_QueryData_entity_children_node__asFolder)
+                                        .name
+                                  : (rootChildren[index].node
+                                            as GMoveEntityModal_Root_QueryData_me_sites_entities_node__asFolder)
+                                        .name;
+
+                              return ListTile(
+                                title: Row(
+                                  spacing: 8,
+                                  children: [
+                                    Icon(
+                                      LucideIcons.folder,
+                                      size: 18,
+                                      color: exceedMaxDepth || id == entityId ? AppColors.gray_400 : null,
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        name,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                        style: exceedMaxDepth || id == entityId
+                                            ? const TextStyle(color: AppColors.gray_400)
+                                            : null,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                                onTap: () async {
+                                  if (exceedMaxDepth || id == entityId) {
+                                    return;
                                   }
 
-                                  final name = currentParentId.value != null
-                                      ? (children[index].node
-                                                as GMoveEntityModal_QueryData_entity_children_node__asFolder)
-                                            .name
-                                      : (rootChildren[index].node
-                                                as GMoveEntityModal_Root_QueryData_me_sites_entities_node__asFolder)
-                                            .name;
-
-                                  return ListTile(
-                                    title: Row(
-                                      spacing: 8,
-                                      children: [
-                                        Icon(
-                                          LucideIcons.folder,
-                                          size: 18,
-                                          color: exceedMaxDepth || id == entityId ? AppColors.gray_400 : null,
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            name,
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
-                                            style: exceedMaxDepth || id == entityId
-                                                ? const TextStyle(color: AppColors.gray_400)
-                                                : null,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                                    onTap: () async {
-                                      if (exceedMaxDepth || id == entityId) return;
-
-                                      currentParentId.value = id;
-                                      await fetchData(id);
-                                    },
-                                  );
+                                  currentParentId.value = id;
+                                  await fetchData(id);
                                 },
-                              ),
-                      ),
-                    ],
+                              );
+                            },
+                          ),
                   ),
           ),
           Container(

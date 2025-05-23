@@ -33,8 +33,8 @@ class _Widget extends HookWidget {
     useEffect(() {
       animationController.forward();
 
-      final timer = Timer(duration, () {
-        animationController.reverse().then((_) {
+      final timer = Timer(duration, () async {
+        await animationController.reverse().then((_) {
           completer.complete();
         });
       });
@@ -122,9 +122,11 @@ extension ToastExtension on BuildContext {
 
     Overlay.of(this, rootOverlay: true).insert(_entry!);
 
-    completer.future.then((_) {
-      _entry?.remove();
-      _entry = null;
-    });
+    unawaited(
+      completer.future.then((_) {
+        _entry?.remove();
+        _entry = null;
+      }),
+    );
   }
 }

@@ -10,6 +10,7 @@ sealed class OperationError with _$OperationError implements Exception {
 }
 
 @freezed
+// ignore: avoid_implementing_value_types freezed
 sealed class GraphQLError with _$GraphQLError implements OperationError {
   factory GraphQLError(gql.GraphQLError error) {
     return switch (error.extensions?['type']) {

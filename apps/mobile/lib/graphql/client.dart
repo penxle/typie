@@ -90,7 +90,7 @@ class GraphQLClient {
         .map((response) => response.data as TData);
   }
 
-  Future<void> refetch<TData, TVars>(OperationRequest<TData, TVars> request) async {
+  Future<void> refetch<TData, TVars>(OperationRequest<TData, TVars> request) {
     return _client.addRequestToRequestController(request);
   }
 

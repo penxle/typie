@@ -1,4 +1,4 @@
-include: package:very_good_analysis/analysis_options.yaml
+include: package:leancode_lint/analysis_options.yaml
 analyzer:
   plugins:
     - custom_lint
@@ -8,8 +8,8 @@ analyzer:
     - '**/__generated__/**'
 linter:
   rules:
-    library_private_types_in_public_api: false
-    lines_longer_than_80_chars: false
-    public_member_api_docs: false
+    avoid_types_on_closure_parameters: false
+    discarded_futures: true
+    unsafe_variance: false
 formatter:
   page_width: 120

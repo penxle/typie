@@ -126,9 +126,9 @@ class FormTextField extends HookWidget {
               onChanged: (value) {
                 field.value = value;
               },
-              onSubmitted: (value) {
+              onSubmitted: (value) async {
                 if (textInputAction == TextInputAction.done) {
-                  field.form.submit();
+                  await field.form.submit();
                 }
               },
             ),

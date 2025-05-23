@@ -7,7 +7,7 @@ class AppRouter extends RootStackRouter {
   final defaultRouteType = const RouteType.cupertino();
 
   @override
-  late final List<AutoRoute> routes = [
+  late final routes = <AutoRoute>[
     AutoRoute(
       page: GuardRouter.page,
       initial: true,

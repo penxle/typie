@@ -22,7 +22,7 @@ class Keyboard {
   bool get isVisible => _height > 0;
 
   @disposeMethod
-  void dispose() {
-    _streamController.close();
+  Future<void> dispose() async {
+    await _streamController.close();
   }
 }

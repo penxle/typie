@@ -33,16 +33,16 @@ class EditorToolbar extends HookWidget {
     final selectedToolboxIdx = useValueListenable(scope.selectedToolboxIdx);
     final proseMirrorState = useValueListenable(scope.proseMirrorState);
 
-    if (!isKeyboardVisible && selectedToolboxIdx == -1) {
-      return const SizedBox.shrink();
-    }
-
     useAsyncEffect(() async {
       if (proseMirrorState?.currentNode != null) {
         scope.selectedTextbarIdx.value = -1;
       }
       return null;
     }, [proseMirrorState?.currentNode]);
+
+    if (!isKeyboardVisible && selectedToolboxIdx == -1) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -258,7 +258,7 @@ class _DefaultToolbar extends HookWidget {
           _IconToolbarButton(
             icon: LucideLightIcons.type_,
             isActive: selectedTextbarIdx != -1,
-            onTap: () async {
+            onTap: () {
               scope.selectedTextbarIdx.value = selectedTextbarIdx == -1 ? 0 : -1;
             },
           ),
@@ -567,8 +567,8 @@ class _Textbar extends HookWidget {
                                     return _ColorToolbarButton(
                                       hex: e['hex'] as String,
                                       isActive: isActive,
-                                      onTap: () {
-                                        scope.command('text_style', attrs: {'textColor': e['value']});
+                                      onTap: () async {
+                                        await scope.command('text_style', attrs: {'textColor': e['value']});
                                       },
                                     );
                                   },
@@ -582,8 +582,8 @@ class _Textbar extends HookWidget {
                                     return _TextToolbarButton(
                                       text: e['label'] as String,
                                       isActive: isActive,
-                                      onTap: () {
-                                        scope.command('text_style', attrs: {'fontFamily': e['value']});
+                                      onTap: () async {
+                                        await scope.command('text_style', attrs: {'fontFamily': e['value']});
                                       },
                                     );
                                   },
@@ -597,8 +597,8 @@ class _Textbar extends HookWidget {
                                     return _TextToolbarButton(
                                       text: e['label'] as String,
                                       isActive: isActive,
-                                      onTap: () {
-                                        scope.command('text_style', attrs: {'fontSize': e['value']});
+                                      onTap: () async {
+                                        await scope.command('text_style', attrs: {'fontSize': e['value']});
                                       },
                                     );
                                   },
@@ -924,7 +924,7 @@ class _BaseButton extends HookWidget {
   }
 }
 
-class _IconToolbarButton extends HookWidget {
+class _IconToolbarButton extends StatelessWidget {
   const _IconToolbarButton({required this.onTap, required this.icon, this.isActive = false, this.isRepeatable = false});
 
   final IconData icon;
@@ -949,7 +949,7 @@ class _IconToolbarButton extends HookWidget {
   }
 }
 
-class _ColorToolbarButton extends HookWidget {
+class _ColorToolbarButton extends StatelessWidget {
   const _ColorToolbarButton({required this.onTap, required this.hex, this.isActive = false});
 
   final String hex;
@@ -988,7 +988,7 @@ class _ColorToolbarButton extends HookWidget {
   }
 }
 
-class _TextToolbarButton extends HookWidget {
+class _TextToolbarButton extends StatelessWidget {
   const _TextToolbarButton({
     required this.onTap,
     required this.text,
