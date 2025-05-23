@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gql_dio_link/gql_dio_link.dart';
 import 'package:gql_exec/gql_exec.dart';
 import 'package:injectable/injectable.dart';
+import 'package:sentry/sentry_io.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/__generated__/client.req.gql.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart' show possibleTypesMap;
@@ -106,6 +107,8 @@ class _CreateClientParams {
 }
 
 Future<Client> _createClient(_CreateClientParams params, SendPort? sendPort) async {
+  Isolate.current.addSentryErrorListener();
+
   final receivePort = ReceivePort();
   sendPort?.send(GraphQLMessage.port(receivePort.sendPort));
 
