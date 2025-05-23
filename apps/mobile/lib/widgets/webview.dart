@@ -56,10 +56,11 @@ class _WebViewState extends State<WebView> {
   }
 
   @override
-  Future<void> dispose() async {
+  void dispose() {
     _controller._channel.setMethodCallHandler(null);
-    await _controller._channel.invokeMethod('dispose', <dynamic, dynamic>{});
-    await _controller._streamController.close();
+
+    unawaited(_controller._channel.invokeMethod('dispose', <dynamic, dynamic>{}));
+    unawaited(_controller._streamController.close());
 
     super.dispose();
   }
