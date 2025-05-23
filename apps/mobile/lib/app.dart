@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/providers/in_app_purchase.dart';
 import 'package:typie/providers/push_notification.dart';
 import 'package:typie/routers/app.dart';
@@ -20,39 +21,41 @@ class App extends HookWidget {
       letterSpacing: -0.015,
     );
 
-    return MaterialApp.router(
-      routerConfig: router.config(),
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        fontFamily: 'SUIT',
-        scaffoldBackgroundColor: AppColors.white,
-        textTheme: const TextTheme(
-          displaySmall: defaultTextStyle,
-          displayMedium: defaultTextStyle,
-          displayLarge: defaultTextStyle,
-          headlineSmall: defaultTextStyle,
-          headlineMedium: defaultTextStyle,
-          headlineLarge: defaultTextStyle,
-          titleSmall: defaultTextStyle,
-          titleMedium: defaultTextStyle,
-          titleLarge: defaultTextStyle,
-          bodySmall: defaultTextStyle,
-          bodyMedium: defaultTextStyle,
-          bodyLarge: defaultTextStyle,
-          labelSmall: defaultTextStyle,
-          labelMedium: defaultTextStyle,
-          labelLarge: defaultTextStyle,
+    return SentryWidget(
+      child: MaterialApp.router(
+        routerConfig: router.config(navigatorObservers: () => [SentryNavigatorObserver()]),
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          fontFamily: 'SUIT',
+          scaffoldBackgroundColor: AppColors.white,
+          textTheme: const TextTheme(
+            displaySmall: defaultTextStyle,
+            displayMedium: defaultTextStyle,
+            displayLarge: defaultTextStyle,
+            headlineSmall: defaultTextStyle,
+            headlineMedium: defaultTextStyle,
+            headlineLarge: defaultTextStyle,
+            titleSmall: defaultTextStyle,
+            titleMedium: defaultTextStyle,
+            titleLarge: defaultTextStyle,
+            bodySmall: defaultTextStyle,
+            bodyMedium: defaultTextStyle,
+            bodyLarge: defaultTextStyle,
+            labelSmall: defaultTextStyle,
+            labelMedium: defaultTextStyle,
+            labelLarge: defaultTextStyle,
+          ),
+          iconTheme: const IconThemeData(size: 24, color: AppColors.gray_950),
         ),
-        iconTheme: const IconThemeData(size: 24, color: AppColors.gray_950),
+        builder: (context, child) {
+          return Stack(
+            children: [
+              child!,
+              const Offstage(child: Stack(children: [InAppPurchaseProvider(), PushNotificationProvider()])),
+            ],
+          );
+        },
       ),
-      builder: (context, child) {
-        return Stack(
-          children: [
-            child!,
-            const Offstage(child: Stack(children: [InAppPurchaseProvider(), PushNotificationProvider()])),
-          ],
-        );
-      },
     );
   }
 }
