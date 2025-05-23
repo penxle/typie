@@ -27,7 +27,7 @@ class KV {
     return KV._(key);
   }
 
-  Future<Box<dynamic>> openBox(String name, {bool encrypted = false}) async {
+  Future<Box<dynamic>> openBox(String name, {bool encrypted = false}) {
     if (encrypted) {
       return Hive.openBox(name, encryptionCipher: HiveAesCipher(_key));
     } else {

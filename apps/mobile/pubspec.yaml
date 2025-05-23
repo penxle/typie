@@ -69,7 +69,7 @@ dev_dependencies:
   hive_ce_generator: ^1.9.1
   injectable_generator: ^2.7.0
   json_serializable: ^6.9.5
-  very_good_analysis: ^7.0.0
+  leancode_lint: ^16.0.0
 
 flutter:
   uses-material-design: true

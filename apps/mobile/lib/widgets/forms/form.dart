@@ -8,12 +8,12 @@ class HookFormController extends ChangeNotifier {
   HookFormController({this.schema, this.onSubmit});
 
   final Validator? schema;
-  final FutureOr<void> Function(HookFormController form)? onSubmit;
+  final Future<void>? Function(HookFormController form)? onSubmit;
 
   final Map<String, dynamic> _data = {};
   final Map<String, String> _errors = {};
 
-  bool _validated = false;
+  var _validated = false;
 
   Map<String, dynamic> get data => _data;
   Map<String, String> get errors => _errors;
@@ -71,7 +71,7 @@ class HookForm extends HookWidget {
 
   final Widget Function(BuildContext context, HookFormController form) builder;
   final Validator? schema;
-  final FutureOr<void> Function(HookFormController form)? onSubmit;
+  final Future<void>? Function(HookFormController form)? onSubmit;
 
   @override
   Widget build(BuildContext context) {

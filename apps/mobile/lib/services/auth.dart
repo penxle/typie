@@ -39,8 +39,8 @@ class Auth extends ValueNotifier<AuthState> {
   final Dio _dio;
   final Pref _pref;
 
-  final String _sessionTokenKey = 'session_token';
-  final String _accessTokenKey = 'access_token';
+  final _sessionTokenKey = 'session_token';
+  final _accessTokenKey = 'access_token';
 
   @FactoryMethod(preResolve: true)
   static Future<Auth> create(KV hive, Dio dio, Pref pref) async {
@@ -85,7 +85,7 @@ class Auth extends ValueNotifier<AuthState> {
 
     if (sessionToken != null) {
       try {
-        await _dio.get<Null>(
+        await _dio.get<void>(
           '${Env.authUrl}/logout',
           queryParameters: {'redirect_uri': 'typie:///'},
           options: Options(
@@ -109,7 +109,7 @@ class Auth extends ValueNotifier<AuthState> {
   }
 
   Future<String> _getAccessToken(String sessionToken) async {
-    final authorizeResponse = await _dio.get<Null>(
+    final authorizeResponse = await _dio.get<void>(
       '${Env.authUrl}/authorize',
       queryParameters: {
         'response_type': 'code',

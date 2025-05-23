@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/styles/colors.dart';
@@ -12,7 +10,7 @@ class Btn extends StatelessWidget {
 
   final String text;
   final BtnVariant variant;
-  final FutureOr<void> Function() onTap;
+  final void Function() onTap;
 
   @override
   Widget build(BuildContext context) {

@@ -77,8 +77,8 @@ class LoginWithEmailScreen extends HookWidget {
               const Spacer(),
               Btn(
                 '로그인',
-                onTap: () {
-                  form.submit();
+                onTap: () async {
+                  await form.submit();
                 },
               ),
             ],

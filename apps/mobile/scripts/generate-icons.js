@@ -113,7 +113,7 @@ const createIconFont = async (name, dir) => {
         n = `${n}_`;
       }
 
-      return `  static const IconData ${n} = IconData(${codepoint & 0xff_ff}, fontFamily: _fontFamily);`;
+      return `  static const ${n} = IconData(${codepoint & 0xff_ff}, fontFamily: _fontFamily);`;
     });
 
   await fs.writeFile(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 
-class Tappable extends HookWidget {
+class Tappable extends StatelessWidget {
   const Tappable({required this.onTap, required this.child, super.key});
 
   final Widget child;

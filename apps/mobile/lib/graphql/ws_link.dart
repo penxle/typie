@@ -18,7 +18,7 @@ class WsLink extends Link {
         _connectIfNeeded().ignore();
         _stateNotifier.addListener(_reconnectIfNeeded);
       }
-      ..onCancel = () async {
+      ..onCancel = () {
         _stateNotifier.removeListener(_reconnectIfNeeded);
         _reconnectTimer?.cancel();
         _reconnectTimer = null;
@@ -37,11 +37,11 @@ class WsLink extends Link {
 
   Timer? _reconnectTimer;
   final ValueNotifier<WsState> _stateNotifier = ValueNotifier(const WsState.disconnected());
-  final StreamController<WsMessage> _streamController = StreamController<WsMessage>.broadcast();
+  final _streamController = StreamController<WsMessage>.broadcast();
 
-  final RequestSerializer serializer = const RequestSerializer();
-  final ResponseParser parser = const ResponseParser();
-  final Uuid uuid = const Uuid();
+  final serializer = const RequestSerializer();
+  final parser = const ResponseParser();
+  final uuid = const Uuid();
 
   @override
   Stream<Response> request(Request request, [NextLink? forward]) {
@@ -57,7 +57,7 @@ class WsLink extends Link {
 
     final controller = StreamController<Response>.broadcast();
     controller
-      ..onListen = () async {
+      ..onListen = () {
         subscription = _streamController.stream.listen((message) async {
           switch (message) {
             case _WsNextMessage(:final id, :final payload) when id == subscriptionId:

@@ -5,7 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/styles/colors.dart';
 
 extension BottomSheetExtension on BuildContext {
-  Future<T?> showBottomSheet<T extends Object?>(Widget child) async {
+  Future<T?> showBottomSheet<T extends Object?>(Widget child) {
     return router.root.pushWidget(
       _Widget(child: child),
       opaque: false,
@@ -28,8 +28,8 @@ extension BottomSheetExtension on BuildContext {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   child: Box(color: AppColors.black.withValues(alpha: 0.5)),
-                  onTap: () {
-                    router.root.pop();
+                  onTap: () async {
+                    await router.root.maybePop();
                   },
                 ),
               ),
@@ -71,7 +71,9 @@ class _Widget extends HookWidget {
       },
       onVerticalDragEnd: (details) {
         final size = sheetKey.currentContext?.size;
-        if (size == null) return;
+        if (size == null) {
+          return;
+        }
 
         final sheetHeight = size.height;
         final currentOffset = controller.value;
