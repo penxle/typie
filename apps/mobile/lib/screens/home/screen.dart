@@ -45,7 +45,7 @@ class HomeScreen extends HookWidget {
               height: padding.bottom + 52,
               padding: Pad(horizontal: 24, bottom: padding.bottom),
               decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.gray_200)),
+                border: Border(top: BorderSide(color: AppColors.gray_950)),
                 color: AppColors.white,
               ),
               child: Row(
@@ -54,13 +54,13 @@ class HomeScreen extends HookWidget {
                 children: [
                   const _Button(
                     index: 0,
-                    icon: Icon(LucideBoldIcons.folder, color: AppColors.gray_300),
-                    activeIcon: Icon(LucideBoldIcons.folder, color: AppColors.gray_700),
+                    icon: Icon(LucideBoldIcons.folder, size: 24, color: AppColors.gray_300),
+                    activeIcon: Icon(LucideBoldIcons.folder, size: 24, color: AppColors.gray_700),
                   ),
                   const _Button(
                     index: 1,
-                    icon: Icon(LucideBoldIcons.search, color: AppColors.gray_300),
-                    activeIcon: Icon(LucideBoldIcons.search, color: AppColors.gray_700),
+                    icon: Icon(LucideBoldIcons.search, size: 24, color: AppColors.gray_300),
+                    activeIcon: Icon(LucideBoldIcons.search, size: 24, color: AppColors.gray_700),
                   ),
                   Tappable(
                     onTap: () async {
@@ -74,18 +74,18 @@ class HomeScreen extends HookWidget {
                     },
                     child: const Box(
                       padding: Pad(horizontal: 12),
-                      child: Icon(LucideBoldIcons.square_plus, color: AppColors.gray_300),
+                      child: Icon(LucideBoldIcons.square_plus, size: 24, color: AppColors.gray_300),
                     ),
                   ),
                   const _Button(
                     index: 2,
-                    icon: Icon(LucideBoldIcons.bell, color: AppColors.gray_300),
-                    activeIcon: Icon(LucideBoldIcons.bell, color: AppColors.gray_700),
+                    icon: Icon(LucideBoldIcons.bell, size: 24, color: AppColors.gray_300),
+                    activeIcon: Icon(LucideBoldIcons.bell, size: 24, color: AppColors.gray_700),
                   ),
                   const _Button(
                     index: 3,
-                    icon: Icon(LucideBoldIcons.circle_user_round, color: AppColors.gray_300),
-                    activeIcon: Icon(LucideBoldIcons.circle_user_round, color: AppColors.gray_700),
+                    icon: Icon(LucideBoldIcons.circle_user_round, size: 24, color: AppColors.gray_300),
+                    activeIcon: Icon(LucideBoldIcons.circle_user_round, size: 24, color: AppColors.gray_700),
                   ),
                 ],
               ),

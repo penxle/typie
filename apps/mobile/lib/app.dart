@@ -12,7 +12,13 @@ class App extends HookWidget {
   Widget build(BuildContext context) {
     final router = useMemoized(AppRouter.new);
 
-    const defaultTextStyle = TextStyle(color: AppColors.gray_950, height: 1.4, letterSpacing: -0.015);
+    const defaultTextStyle = TextStyle(
+      fontFamily: 'SUIT',
+      fontSize: 16,
+      color: AppColors.gray_950,
+      height: 1.4,
+      letterSpacing: -0.015,
+    );
 
     return MaterialApp.router(
       routerConfig: router.config(),
@@ -37,7 +43,7 @@ class App extends HookWidget {
           labelMedium: defaultTextStyle,
           labelLarge: defaultTextStyle,
         ),
-        iconTheme: const IconThemeData(color: AppColors.gray_950, size: 24),
+        iconTheme: const IconThemeData(size: 24, color: AppColors.gray_950),
       ),
       builder: (context, child) {
         return Stack(
