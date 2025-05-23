@@ -3,11 +3,9 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_menu.dart';
-import 'package:typie/extensions/iterable.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
-import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide.dart';
 import 'package:typie/icons/typie.dart';
@@ -81,7 +79,6 @@ class _EntityList extends HookWidget {
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
-    final scrollController = useScrollController();
     final primaryScrollController = PrimaryScrollController.of(context);
 
     final isReordering = useState(false);
@@ -103,13 +100,6 @@ class _EntityList extends HookWidget {
       return () => primaryScrollController.removeListener(listener);
     });
 
-    useAsyncEffect(() async {
-      scrollController.jumpTo(scrollController.position.maxScrollExtent);
-      return null;
-    });
-
-    const chevron = Icon(LucideIcons.chevron_right, size: 24, color: AppColors.gray_500);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -122,76 +112,29 @@ class _EntityList extends HookWidget {
                   bottom: BorderSide(color: AppColors.gray_950.withValues(alpha: animationController.value)),
                 ),
               ),
-              padding: const Pad(vertical: 12),
+              padding: const Pad(horizontal: 20, vertical: 12),
               child: child,
             );
           },
           child: Row(
             children: [
+              if (entity != null)
+                Tappable(
+                  padding: const Pad(right: 4, vertical: 4),
+                  onTap: () async {
+                    await context.router.maybePop();
+                  },
+                  child: const Icon(LucideIcons.chevron_left, size: 24, color: AppColors.gray_700),
+                ),
               Expanded(
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  scrollDirection: Axis.horizontal,
-                  padding: const Pad(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Tappable(
-                        onTap: () {
-                          context.router.popUntil((route) {
-                            if (route.data?.name == EntityRoute.name && route.data!.args == null) {
-                              return true;
-                            }
-
-                            return false;
-                          });
-                        },
-                        child: Text(
-                          '내 포스트',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: entity == null ? null : AppColors.gray_500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (entity != null) chevron,
-                      ...?entity?.ancestors
-                          .map(
-                            (e) => Tappable(
-                              onTap: () {
-                                context.router.popUntil((route) {
-                                  if (route.data?.args case EntityRouteArgs(:final entityId)) {
-                                    return entityId == e.id;
-                                  }
-
-                                  return false;
-                                });
-                              },
-                              child: Text(
-                                e.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.gray_500,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .intersperseWith(chevron),
-                      if (entity?.ancestors.isNotEmpty ?? false) chevron,
-                      if (entity != null)
-                        Text(
-                          entity!.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
+                child: Text(
+                  entity == null
+                      ? '내 포스트'
+                      : entity!.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Box.gap(12),
               if (isReordering.value)
                 Tappable(
                   onTap: () {
@@ -230,7 +173,6 @@ class _EntityList extends HookWidget {
                 const Box.gap(20),
                 Tappable(padding: const Pad(all: 4), onTap: () {}, child: const Icon(LucideIcons.square_pen, size: 24)),
               ],
-              const Box.gap(20),
             ],
           ),
         ),
