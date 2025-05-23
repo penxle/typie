@@ -1,3 +1,4 @@
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/context/bottom_sheet.dart';
@@ -30,6 +31,7 @@ class BottomMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tappable(
+      padding: const Pad(horizontal: 16, vertical: 8),
       onTap: () {
         context.router.pop();
         onTap();

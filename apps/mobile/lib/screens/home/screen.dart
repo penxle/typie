@@ -63,6 +63,7 @@ class HomeScreen extends HookWidget {
                     activeIcon: Icon(LucideBoldIcons.search, size: 24, color: AppColors.gray_700),
                   ),
                   Tappable(
+                    padding: const Pad(horizontal: 16),
                     onTap: () async {
                       final result = await client.request(
                         GHomeScreen_CreatePost_MutationReq((b) => b..vars.input.siteId = pref.siteId),
@@ -72,10 +73,7 @@ class HomeScreen extends HookWidget {
                         await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
                       }
                     },
-                    child: const Box(
-                      padding: Pad(horizontal: 12),
-                      child: Icon(LucideBoldIcons.square_plus, size: 24, color: AppColors.gray_300),
-                    ),
+                    child: const Icon(LucideBoldIcons.square_plus, size: 24, color: AppColors.gray_300),
                   ),
                   const _Button(
                     index: 2,
@@ -117,7 +115,7 @@ class _Button extends StatelessWidget {
             router.popUntilRoot();
           }
         },
-        child: Box(padding: const Pad(horizontal: 12), child: activeIcon ?? icon),
+        child: Box(padding: const Pad(horizontal: 16), child: activeIcon ?? icon),
       );
     } else {
       return GestureDetector(
@@ -125,7 +123,7 @@ class _Button extends StatelessWidget {
         onTapDown: (_) {
           tabsRouter.setActiveIndex(index);
         },
-        child: Box(padding: const Pad(horizontal: 12), child: icon),
+        child: Box(padding: const Pad(horizontal: 16), child: icon),
       );
     }
   }

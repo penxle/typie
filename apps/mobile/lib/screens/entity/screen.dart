@@ -211,6 +211,7 @@ class _EntityList extends HookWidget {
                 )
               else ...[
                 Tappable(
+                  padding: const Pad(all: 4),
                   onTap: () async {
                     await context.showBottomMenu(
                       items: [
@@ -226,8 +227,8 @@ class _EntityList extends HookWidget {
                   },
                   child: const Icon(LucideIcons.ellipsis, size: 24),
                 ),
-                const Box.gap(24),
-                Tappable(onTap: () {}, child: const Icon(LucideIcons.square_pen, size: 24)),
+                const Box.gap(20),
+                Tappable(padding: const Pad(all: 4), onTap: () {}, child: const Icon(LucideIcons.square_pen, size: 24)),
               ],
               const Box.gap(20),
             ],
@@ -262,34 +263,42 @@ class _EntityList extends HookWidget {
                             orElse: () => throw UnimplementedError(),
                           );
                         },
-                        child: Box(
-                          padding: const Pad(vertical: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.gray_950),
-                            borderRadius: const BorderRadius.all(Radius.circular(8)),
-                            color: AppColors.white,
-                          ),
-                          child: Row(
-                            children: [
-                              if (isReordering.value) ...[
-                                const Box.gap(12),
-                                ReorderableDragStartListener(
-                                  index: index,
-                                  child: const Icon(LucideIcons.grip_vertical, size: 24, color: AppColors.gray_500),
+                        child: IntrinsicHeight(
+                          child: Box(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: AppColors.gray_950),
+                              borderRadius: const BorderRadius.all(Radius.circular(8)),
+                              color: AppColors.white,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (isReordering.value)
+                                  ReorderableDragStartListener(
+                                    index: index,
+                                    child: const Listener(
+                                      behavior: HitTestBehavior.opaque,
+                                      child: Box(
+                                        padding: Pad(left: 16, right: 12, vertical: 12),
+                                        child: Icon(LucideIcons.grip_vertical, size: 24, color: AppColors.gray_500),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  const Box.gap(16),
+                                Expanded(
+                                  child: Box(
+                                    padding: const Pad(vertical: 12),
+                                    child: entities[index].node.when(
+                                      folder: (_) => _Folder(entities[index]),
+                                      post: (_) => _Post(entities[index]),
+                                      orElse: () => throw UnimplementedError(),
+                                    ),
+                                  ),
                                 ),
-                                const Box.gap(8),
-                              ] else ...[
                                 const Box.gap(16),
                               ],
-                              Expanded(
-                                child: entities[index].node.when(
-                                  folder: (_) => _Folder(entities[index]),
-                                  post: (_) => _Post(entities[index]),
-                                  orElse: () => throw UnimplementedError(),
-                                ),
-                              ),
-                              const Box.gap(16),
-                            ],
+                            ),
                           ),
                         ),
                       ),
