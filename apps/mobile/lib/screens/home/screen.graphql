@@ -39,21 +39,7 @@ subscription HomeScreen_SiteUpdateStream_Subscription($siteId: ID!) {
 
     ... on Entity {
       id
-      state
-
-      node {
-        __typename
-
-        ... on Folder {
-          id
-          name
-        }
-
-        ... on Post {
-          id
-          title
-        }
-      }
+      ...EntityScreen_Entity_entity
     }
   }
 }

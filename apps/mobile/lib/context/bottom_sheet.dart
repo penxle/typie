@@ -6,7 +6,7 @@ import 'package:typie/styles/colors.dart';
 
 extension BottomSheetExtension on BuildContext {
   Future<T?> showBottomSheet<T extends Object?>(Widget child) async {
-    return router.pushWidget(
+    return router.root.pushWidget(
       _Widget(child: child),
       opaque: false,
       transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -29,14 +29,14 @@ extension BottomSheetExtension on BuildContext {
                   behavior: HitTestBehavior.opaque,
                   child: Box(color: AppColors.black.withValues(alpha: 0.5)),
                   onTap: () {
-                    router.pop();
+                    router.root.pop();
                   },
                 ),
               ),
             ),
             SafeArea(
               bottom: false,
-              child: Align(
+              child: Box(
                 alignment: Alignment.bottomCenter,
                 child: SlideTransition(position: tweenedSlide, child: child),
               ),
@@ -113,7 +113,7 @@ class _Widget extends HookWidget {
                       width: 60,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: AppColors.gray_300,
+                        color: AppColors.gray_200,
                         borderRadius: BorderRadius.all(Radius.circular(999)),
                       ),
                     ),

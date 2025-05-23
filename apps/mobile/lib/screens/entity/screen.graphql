@@ -53,7 +53,7 @@ fragment EntityScreen_Entity_entity on Entity {
       id
       title
       excerpt
-      updatedAt
+      characterCount
     }
   }
 }
