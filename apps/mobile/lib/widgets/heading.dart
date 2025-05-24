@@ -2,6 +2,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gap/gap.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -38,7 +39,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
-      child: Box(
+      child: DecoratedBox(
         decoration: BoxDecoration(color: backgroundColor),
         child: SafeArea(
           bottom: false,
@@ -53,10 +54,13 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                 if (ModalRoute.canPopOf(context) ?? false) ...[
                   Tappable(
                     onTap: () => context.router.maybePop(),
-                    child: const Box(width: 52, child: Icon(LucideLightIcons.chevron_left, color: AppColors.gray_950)),
+                    child: const SizedBox(
+                      width: 52,
+                      child: Icon(LucideLightIcons.chevron_left, color: AppColors.gray_950),
+                    ),
                   ),
                   const AppVerticalDivider(color: AppColors.gray_950),
-                  const Box.gap(20),
+                  const Gap(20),
                 ],
                 Expanded(
                   child:
@@ -68,11 +72,9 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                       ),
                 ),
                 if (actions != null) ...[
-                  const Box.gap(20),
+                  const Gap(20),
                   const AppVerticalDivider(color: AppColors.gray_950),
-                  // const Box.gap(20),
                   ...actions!,
-                  // const Box.gap(12),
                 ],
               ],
             ),
@@ -97,6 +99,8 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    const child = SafeArea(child: SizedBox.shrink());
+
     return AnnotatedRegion(
       value: const SystemUiOverlayStyle(
         statusBarBrightness: Brightness.light,
@@ -107,10 +111,7 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
-      child: Box(
-        color: backgroundColor,
-        child: const SafeArea(child: SizedBox.shrink()),
-      ),
+      child: backgroundColor == null ? child : ColoredBox(color: backgroundColor!, child: child),
     );
   }
 }

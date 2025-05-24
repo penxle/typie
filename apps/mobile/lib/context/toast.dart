@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:typie/icons/lucide.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/styles/colors.dart';
@@ -56,12 +57,14 @@ class _Widget extends HookWidget {
           position: tweenedOffset,
           child: FadeTransition(
             opacity: tweenedOpacity,
-            child: Box(
+            child: Container(
               decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(999)),
               padding: const Pad(all: 12),
               child: Row(
                 children: [
-                  Box(
+                  Container(
+                    width: 20,
+                    height: 20,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(999),
                       color: switch (type) {
@@ -70,8 +73,6 @@ class _Widget extends HookWidget {
                         ToastType.notification => AppColors.blue_600,
                       },
                     ),
-                    width: 20,
-                    height: 20,
                     child: Center(
                       child: switch (type) {
                         ToastType.success => const Icon(LucideIcons.check, color: AppColors.white, size: 14),
@@ -80,7 +81,7 @@ class _Widget extends HookWidget {
                       },
                     ),
                   ),
-                  const Box.gap(8),
+                  const Gap(8),
                   Expanded(
                     child: Text(
                       message,

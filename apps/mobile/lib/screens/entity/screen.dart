@@ -3,6 +3,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
@@ -275,7 +276,7 @@ class _EntityList extends HookWidget {
                   padding: const Pad(horizontal: 20, vertical: 12),
                   itemCount: entities.length,
                   itemBuilder: (context, index) {
-                    return Box(
+                    return Padding(
                       key: Key(entities[index].id),
                       padding: const Pad(vertical: 6),
                       child: Tappable(
@@ -317,9 +318,9 @@ class _EntityList extends HookWidget {
                                   ),
                                   const AppVerticalDivider(color: AppColors.gray_950),
                                 ],
-                                const Box.gap(16),
+                                const Gap(16),
                                 Expanded(
-                                  child: Box(
+                                  child: Padding(
                                     padding: const Pad(vertical: 12),
                                     child: entities[index].node.when(
                                       folder: (_) => _Folder(entities[index]),
@@ -328,7 +329,7 @@ class _EntityList extends HookWidget {
                                     ),
                                   ),
                                 ),
-                                const Box.gap(16),
+                                const Gap(16),
                               ],
                             ),
                           ),

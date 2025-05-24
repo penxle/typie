@@ -65,7 +65,7 @@ class LoginScreen extends HookWidget {
               ],
             ),
           ),
-          Box(
+          Padding(
             padding: const Pad(horizontal: 24),
             child: Column(
               spacing: 8,
@@ -159,7 +159,7 @@ class LoginScreen extends HookWidget {
               ],
             ),
           ),
-          Box(
+          Padding(
             padding: const Pad(all: 24),
             child: Tappable(
               onTap: () async {
@@ -206,7 +206,7 @@ class _Button extends StatelessWidget {
           }
         }
       },
-      child: Box(
+      child: Container(
         height: 48,
         decoration: BoxDecoration(
           border: Border.all(color: borderColor ?? backgroundColor),

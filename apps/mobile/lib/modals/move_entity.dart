@@ -11,9 +11,7 @@ import 'package:typie/modals/__generated__/move_entity.data.gql.dart';
 import 'package:typie/modals/__generated__/move_entity.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/btn.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
-import 'package:typie/widgets/tappable.dart';
 
 class MoveEntityModal extends HookWidget {
   const MoveEntityModal(this.entityId, {this.depth = -1, super.key});
@@ -64,30 +62,6 @@ class MoveEntityModal extends HookWidget {
         : rootChildren.where((child) => child.node.G__typename == 'Folder').length;
 
     return Screen(
-      heading: Heading(
-        titleWidget: Text(
-          (entities.value?.entity.node.G__typename == 'Folder' && currentParentId.value != null)
-              ? (entities.value!.entity.node as GMoveEntityModal_QueryData_entity_node__asFolder).name
-              : '다른 폴더로 이동',
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
-        leading: (entities.value?.entity.parent == null && currentParentId.value == null)
-            ? const Text('')
-            : Tappable(
-                child: const Icon(LucideIcons.chevron_left),
-                onTap: () async {
-                  if (entities.value?.entity.parent != null) {
-                    await fetchData(entities.value!.entity.parent!.id);
-                  } else if (currentParentId.value != null) {
-                    currentParentId.value = null;
-                    entities.value = null;
-                    await fetchData(null);
-                  }
-                },
-              ),
-      ),
       child: Column(
         children: [
           Expanded(
