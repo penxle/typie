@@ -4,6 +4,7 @@
   import { Mark } from '@tiptap/pm/model';
   import { Selection } from '@tiptap/pm/state';
   import stringify from 'fast-json-stable-stringify';
+  import Lenis from 'lenis';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
@@ -20,7 +21,6 @@
   import { flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
   import Placeholder from './Placeholder.svelte';
-  import { scroll } from './scroll.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
@@ -71,11 +71,12 @@
 
   const clientId = nanoid();
 
-  let containerEl = $state<HTMLDivElement>();
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
 
   let editor = $state<Ref<Editor>>();
+
+  let lenis: Lenis;
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -96,6 +97,8 @@
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote') {
+      lenis.resize();
+
       await syncPost(
         {
           clientId,
@@ -140,6 +143,8 @@
 
   onMount(() => {
     const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
+      lenis.resize();
+
       if (payload.type === PostSyncType.UPDATE) {
         Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
       } else if (payload.type === PostSyncType.VECTOR) {
@@ -324,7 +329,20 @@
       }
     });
 
+    lenis = new Lenis({
+      syncTouch: true,
+    });
+
+    const raf = (timestamp: number) => {
+      lenis.raf(timestamp);
+      requestAnimationFrame(raf);
+    };
+
+    requestAnimationFrame(raf);
+
     return () => {
+      lenis.destroy();
+
       clearInterval(forceSyncInterval);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
@@ -345,104 +363,100 @@
 </svelte:head>
 
 <div
-  bind:this={containerEl}
-  class={css({
-    height: '[100dvh]',
-    overflowY: 'auto',
-    scrollbarGutter: 'stable',
+  style:--prosemirror-max-width={`${maxWidth.current}px`}
+  style:--prosemirror-color-selection={token.var('colors.gray.950')}
+  class={flex({
+    flexDirection: 'column',
+    alignItems: 'center',
+    paddingTop: '24px',
+    paddingX: '20px',
+    width: 'full',
     userSelect: 'text',
     touchAction: 'none',
     WebkitTouchCallout: 'none',
   })}
-  use:scroll
 >
-  <div
-    style:--prosemirror-max-width={`${maxWidth.current}px`}
-    style:--prosemirror-color-selection={token.var('colors.gray.950')}
-    class={flex({ flexDirection: 'column', alignItems: 'center', paddingTop: '24px', paddingX: '20px', size: 'full' })}
-  >
-    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-      <textarea
-        bind:this={titleEl}
-        class={css({ width: 'full', fontSize: '24px', fontWeight: 'bold', resize: 'none', touchAction: 'none' })}
-        autocapitalize="off"
-        autocomplete="off"
-        maxlength="100"
-        onkeydown={(e) => {
-          if (e.isComposing) {
-            return;
-          }
+  <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+    <textarea
+      bind:this={titleEl}
+      class={css({ width: 'full', fontSize: '24px', fontWeight: 'bold', resize: 'none', touchAction: 'none' })}
+      autocapitalize="off"
+      autocomplete="off"
+      maxlength="100"
+      onkeydown={(e) => {
+        if (e.isComposing) {
+          return;
+        }
 
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            subtitleEl?.focus();
-          }
-        }}
-        placeholder="제목을 입력하세요"
-        rows={1}
-        spellcheck="false"
-        bind:value={title.current}
-        use:autosize
-      ></textarea>
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          subtitleEl?.focus();
+        }
+      }}
+      placeholder="제목을 입력하세요"
+      rows={1}
+      spellcheck="false"
+      bind:value={title.current}
+      use:autosize
+    ></textarea>
 
-      <textarea
-        bind:this={subtitleEl}
-        class={css({
-          marginTop: '4px',
-          width: 'full',
-          fontSize: '16px',
-          fontWeight: 'medium',
-          overflow: 'hidden',
-          resize: 'none',
-          touchAction: 'none',
-        })}
-        autocapitalize="off"
-        autocomplete="off"
-        maxlength="100"
-        onkeydown={(e) => {
-          if (e.isComposing) {
-            return;
-          }
+    <textarea
+      bind:this={subtitleEl}
+      class={css({
+        marginTop: '4px',
+        width: 'full',
+        fontSize: '16px',
+        fontWeight: 'medium',
+        overflow: 'hidden',
+        resize: 'none',
+        touchAction: 'none',
+      })}
+      autocapitalize="off"
+      autocomplete="off"
+      maxlength="100"
+      onkeydown={(e) => {
+        if (e.isComposing) {
+          return;
+        }
 
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
-            editor?.current
-              .chain()
-              .focus()
-              .setTextSelection(2)
-              .command(({ tr, dispatch }) => {
-                tr.setStoredMarks(marks);
-                dispatch?.(tr);
-                return true;
-              })
-              .run();
-          }
-        }}
-        placeholder="부제목을 입력하세요"
-        rows={1}
-        spellcheck="false"
-        bind:value={subtitle.current}
-        use:autosize
-      ></textarea>
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+          editor?.current
+            .chain()
+            .focus()
+            .setTextSelection(2)
+            .command(({ tr, dispatch }) => {
+              tr.setStoredMarks(marks);
+              dispatch?.(tr);
+              return true;
+            })
+            .run();
+        }
+      }}
+      placeholder="부제목을 입력하세요"
+      rows={1}
+      spellcheck="false"
+      bind:value={subtitle.current}
+      use:autosize
+    ></textarea>
 
-      <div class={css({ marginTop: '10px', marginBottom: '20px', height: '1px', backgroundColor: 'gray.950' })}></div>
-    </div>
+    <div class={css({ marginTop: '10px', marginBottom: '20px', height: '1px', backgroundColor: 'gray.950' })}></div>
+  </div>
 
-    <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
-      <TiptapEditor
-        style={css.raw({ size: 'full' })}
-        {awareness}
-        {doc}
-        oncreate={() => {
-          window.__webview__?.emitEvent('webviewReady');
-        }}
-        bind:editor
-      />
+  <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+    <TiptapEditor
+      style={css.raw({ size: 'full' })}
+      {awareness}
+      {doc}
+      oncreate={() => {
+        window.__webview__?.emitEvent('webviewReady');
+      }}
+      bind:editor
+    />
 
-      {#if editor}
-        <Placeholder {editor} />
-      {/if}
-    </div>
+    {#if editor}
+      <Placeholder {editor} />
+    {/if}
   </div>
 </div>
