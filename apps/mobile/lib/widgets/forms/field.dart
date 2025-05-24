@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/widgets/forms/form.dart';
 
 class HookFormFieldController<T> {
@@ -29,7 +30,7 @@ class HookFormField<T> extends HookWidget {
     final value = useState(initialValue);
     final field = useMemoized(() => HookFormFieldController<T>(form: form, name: name));
 
-    useEffect(() {
+    useAsyncEffect(() async {
       form.setValue(name, value.value);
 
       return null;

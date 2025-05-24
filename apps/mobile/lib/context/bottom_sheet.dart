@@ -103,7 +103,12 @@ class BottomSheet extends HookWidget {
             key: sheetKey,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: AppColors.white,
+              color: AppColors.gray_50,
+              border: const Border(
+                top: BorderSide(color: AppColors.gray_950),
+                left: BorderSide(color: AppColors.gray_950),
+                right: BorderSide(color: AppColors.gray_950),
+              ),
               borderRadius: BorderRadius.vertical(
                 top: const Radius.circular(16),
                 bottom: Radius.circular(floating ? 16 : 0),
@@ -156,7 +161,7 @@ class BottomMenuItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.iconColor = AppColors.gray_700,
+    this.iconColor = AppColors.gray_950,
     this.labelColor = AppColors.gray_950,
     super.key,
   });
@@ -178,9 +183,9 @@ class BottomMenuItem extends StatelessWidget {
         onTap();
       },
       child: Row(
-        spacing: 12,
+        spacing: 16,
         children: [
-          Icon(icon, size: 24, color: iconColor),
+          Icon(icon, size: 22, color: iconColor),
           Text(
             label,
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: labelColor),

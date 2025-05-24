@@ -4,7 +4,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide.dart';
+import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/modals/plan.dart';
 import 'package:typie/screens/profile/__generated__/screen.req.gql.dart';
 import 'package:typie/services/auth.dart';
@@ -28,7 +28,7 @@ class ProfileScreen extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               spacing: 16,
               children: [
-                const Icon(LucideIcons.user, size: 100),
+                const Icon(LucideLightIcons.circle_user_round, size: 100),
                 Text(data.me!.email),
                 Tappable(
                   child: const Text('plan'),
