@@ -18,6 +18,7 @@
   import { clamp } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import { token } from '$styled-system/tokens';
   import Placeholder from './Placeholder.svelte';
   import { scroll } from './scroll.svelte';
   import { YState } from './state.svelte';
@@ -351,11 +352,13 @@
     scrollbarGutter: 'stable',
     userSelect: 'text',
     touchAction: 'none',
+    WebkitTouchCallout: 'none',
   })}
   use:scroll
 >
   <div
     style:--prosemirror-max-width={`${maxWidth.current}px`}
+    style:--prosemirror-color-selection={token.var('colors.gray.950')}
     class={flex({ flexDirection: 'column', alignItems: 'center', paddingTop: '24px', paddingX: '20px', size: 'full' })}
   >
     <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>

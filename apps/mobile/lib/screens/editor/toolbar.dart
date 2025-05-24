@@ -103,10 +103,10 @@ class EditorToolbar extends HookWidget {
         ),
         Container(
           height: keyboardHeight,
-          decoration: const BoxDecoration(
-            color: AppColors.white,
-            border: Border(top: BorderSide(color: AppColors.gray_200)),
-          ),
+              decoration: const BoxDecoration(
+                color: AppColors.white,
+                border: Border(top: BorderSide(color: AppColors.gray_200)),
+              ),
           child: AnimatedIndexedSwitcher(
             index: max(selectedToolboxIdx, 0),
             children: [
@@ -512,7 +512,7 @@ class _Textbar extends HookWidget {
           width: double.infinity,
           height: 48,
           decoration: const BoxDecoration(
-            color: AppColors.gray_50,
+            color: AppColors.white,
             border: Border(top: BorderSide(color: AppColors.gray_200)),
           ),
           child: HookBuilder(
