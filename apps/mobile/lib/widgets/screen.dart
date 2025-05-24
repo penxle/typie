@@ -12,7 +12,7 @@ class Screen extends StatelessWidget {
     this.resizeToAvoidBottomInset = false,
     this.keyboardDismiss = true,
     this.padding,
-    this.backgroundColor = AppColors.white,
+    this.backgroundColor = AppColors.gray_50,
   });
 
   final PreferredSizeWidget? heading;

@@ -11,6 +11,7 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide.dart';
+import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/screen.data.gql.dart';
@@ -19,8 +20,10 @@ import 'package:typie/services/preference.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
+import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
+import 'package:typie/widgets/vertical_divider.dart';
 
 @RoutePage()
 class EntityRouter extends AutoRouter {
@@ -35,10 +38,7 @@ class EntityScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Screen(
-      backgroundColor: AppColors.gray_50,
-      child: entityId == null ? const _WithSiteId() : _WithEntityId(entityId!),
-    );
+    return entityId == null ? const _WithSiteId() : _WithEntityId(entityId!);
   }
 }
 
@@ -120,203 +120,148 @@ class _EntityList extends HookWidget {
       return null;
     }, [isRenaming.value]);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AnimatedBuilder(
-          animation: animationController,
-          builder: (context, child) {
-            return Box(
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: AppColors.gray_950.withValues(alpha: animationController.value)),
-                ),
-              ),
-              padding: const Pad(horizontal: 20, vertical: 12),
-              child: child,
-            );
-          },
-          child: HookForm(
-            schema: l.schema({'name': l.string().min(1).required()}),
-            onSubmit: (form) async {
-              await client.request(
-                GEntityScreen_RenameFolder_MutationReq(
-                  (b) => b
-                    ..vars.input.folderId = folder!.id
-                    ..vars.input.name = form.data['name'] as String,
-                ),
-              );
-
-              isRenaming.value = false;
-            },
-            builder: (context, form) {
-              return Row(
-                children: [
-                  if (entity != null)
-                    Tappable(
-                      padding: const Pad(right: 4, vertical: 4),
-                      onTap: () async {
-                        await context.router.maybePop();
-                      },
-                      child: const Icon(LucideIcons.chevron_left, size: 24, color: AppColors.gray_700),
-                    ),
-                  Expanded(
-                    child: isRenaming.value
-                        ? HookFormTextField.collapsed(
-                            name: 'name',
-                            controller: textEditingController,
-                            initialValue: folder!.name,
-                            autofocus: true,
-                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-                          )
-                        : Text(
-                            entity == null
-                                ? '내 포스트'
-                                : textEditingController.text.isEmpty
-                                ? folder!.name
-                                : textEditingController.text,
-                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                  ),
-                  const Box.gap(16),
-                  if (isRenaming.value) ...[
-                    Tappable(
-                      onTap: () {
-                        isRenaming.value = false;
-                        textEditingController.text = '';
-                      },
-                      child: const Text(
-                        '취소',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_700),
-                      ),
-                    ),
-                    const Box.gap(16),
-                  ],
-                  if (isReordering.value || isRenaming.value)
-                    Tappable(
-                      onTap: () async {
-                        if (isRenaming.value) {
-                          await form.submit();
-                        } else if (isReordering.value) {
-                          isReordering.value = false;
-                        }
-                      },
-                      child: const Box(
-                        padding: Pad(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.all(Radius.circular(999)),
-                          color: AppColors.gray_700,
-                        ),
-                        child: Text(
-                          '완료',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
-                        ),
-                      ),
-                    )
-                  else ...[
-                    Tappable(
-                      padding: const Pad(all: 4),
-                      onTap: () async {
-                        await context.showBottomSheet(
-                          child: BottomMenu(
-                            items: [
-                              if (entity != null)
-                                BottomMenuItem(
-                                  icon: LucideIcons.pen_line,
-                                  label: '이름 바꾸기',
-                                  onTap: () {
-                                    isRenaming.value = true;
-                                  },
-                                ),
-                              if (entities.length > 1)
-                                BottomMenuItem(
-                                  icon: LucideIcons.chevrons_up_down,
-                                  label: '순서 변경하기',
-                                  onTap: () {
-                                    isReordering.value = true;
-                                  },
-                                ),
-                              BottomMenuItem(
-                                icon: LucideIcons.folder_plus,
-                                label: '하위 폴더 만들기',
-                                onTap: () async {
-                                  final resp = await client.request(
-                                    GEntityScreen_CreateFolder_MutationReq(
-                                      (b) => b
-                                        ..vars.input.siteId = pref.siteId
-                                        ..vars.input.parentEntityId = entity?.id
-                                        ..vars.input.name = '새 폴더',
-                                    ),
-                                  );
-
-                                  if (context.mounted) {
-                                    await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
-                                  }
-                                },
-                              ),
-                              BottomMenuItem(
-                                icon: LucideIcons.square_pen,
-                                label: '하위 포스트 만들기',
-                                onTap: () async {
-                                  final resp = await client.request(
-                                    GEntityScreen_CreatePost_MutationReq(
-                                      (b) => b
-                                        ..vars.input.siteId = pref.siteId
-                                        ..vars.input.parentEntityId = entity?.id,
-                                    ),
-                                  );
-
-                                  if (context.mounted) {
-                                    await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
-                                  }
-                                },
-                              ),
-                              if (entity != null)
-                                BottomMenuItem(
-                                  icon: LucideIcons.trash,
-                                  label: '삭제하기',
-                                  onTap: () async {
-                                    await context.showModal(
-                                      child: ConfirmModal(
-                                        title: '폴더 삭제',
-                                        message: '"${folder!.name}" 폴더를 삭제하시겠어요?',
-                                        confirmText: '삭제하기',
-                                        confirmColor: AppColors.red_500,
-                                        onConfirm: () async {
-                                          await client.request(
-                                            GEntityScreen_DeleteFolder_MutationReq(
-                                              (b) => b..vars.input.folderId = folder!.id,
-                                            ),
-                                          );
-
-                                          if (context.mounted) {
-                                            await context.router.maybePop();
-                                          }
-                                        },
-                                      ),
-                                    );
-                                  },
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                      child: const Icon(LucideIcons.ellipsis, size: 24),
-                    ),
-                    const Box.gap(20),
-                    Tappable(
-                      padding: const Pad(all: 4),
-                      onTap: () {},
-                      child: const Icon(LucideIcons.square_pen, size: 24),
-                    ),
-                  ],
-                ],
-              );
-            },
+    return HookForm(
+      schema: l.schema({'name': l.string().min(1).required()}),
+      onSubmit: (form) async {
+        await client.request(
+          GEntityScreen_RenameFolder_MutationReq(
+            (b) => b
+              ..vars.input.folderId = folder!.id
+              ..vars.input.name = form.data['name'] as String,
           ),
-        ),
-        Expanded(
+        );
+
+        isRenaming.value = false;
+      },
+      builder: (context, form) {
+        return Screen(
+          heading: Heading(
+            title: entity == null
+                ? '내 포스트'
+                : textEditingController.text.isEmpty
+                ? folder!.name
+                : textEditingController.text,
+            titleWidget: isRenaming.value
+                ? HookFormTextField.collapsed(
+                    name: 'name',
+                    controller: textEditingController,
+                    initialValue: folder!.name,
+                    autofocus: true,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                  )
+                : null,
+            actions: [
+              if (!isRenaming.value && !isReordering.value)
+                HeadingAction(
+                  icon: LucideIcons.ellipsis,
+                  onTap: () async {
+                    await context.showBottomSheet(
+                      child: BottomMenu(
+                        items: [
+                          if (entity != null)
+                            BottomMenuItem(
+                              icon: LucideIcons.pen_line,
+                              label: '이름 바꾸기',
+                              onTap: () {
+                                isRenaming.value = true;
+                              },
+                            ),
+                          if (entities.length > 1)
+                            BottomMenuItem(
+                              icon: LucideIcons.chevrons_up_down,
+                              label: '순서 변경하기',
+                              onTap: () {
+                                isReordering.value = true;
+                              },
+                            ),
+                          BottomMenuItem(
+                            icon: LucideIcons.folder_plus,
+                            label: '하위 폴더 만들기',
+                            onTap: () async {
+                              final resp = await client.request(
+                                GEntityScreen_CreateFolder_MutationReq(
+                                  (b) => b
+                                    ..vars.input.siteId = pref.siteId
+                                    ..vars.input.parentEntityId = entity?.id
+                                    ..vars.input.name = '새 폴더',
+                                ),
+                              );
+
+                              if (context.mounted) {
+                                await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
+                              }
+                            },
+                          ),
+                          BottomMenuItem(
+                            icon: LucideIcons.square_pen,
+                            label: '하위 포스트 만들기',
+                            onTap: () async {
+                              final resp = await client.request(
+                                GEntityScreen_CreatePost_MutationReq(
+                                  (b) => b
+                                    ..vars.input.siteId = pref.siteId
+                                    ..vars.input.parentEntityId = entity?.id,
+                                ),
+                              );
+
+                              if (context.mounted) {
+                                await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
+                              }
+                            },
+                          ),
+                          if (entity != null)
+                            BottomMenuItem(
+                              icon: LucideIcons.trash,
+                              label: '삭제하기',
+                              onTap: () async {
+                                await context.showModal(
+                                  child: ConfirmModal(
+                                    title: '폴더 삭제',
+                                    message: '"${folder!.name}" 폴더를 삭제하시겠어요?',
+                                    confirmText: '삭제하기',
+                                    confirmColor: AppColors.red_500,
+                                    onConfirm: () async {
+                                      await client.request(
+                                        GEntityScreen_DeleteFolder_MutationReq(
+                                          (b) => b..vars.input.folderId = folder!.id,
+                                        ),
+                                      );
+
+                                      if (context.mounted) {
+                                        await context.router.maybePop();
+                                      }
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                )
+              else ...[
+                if (isRenaming.value)
+                  HeadingAction(
+                    icon: LucideIcons.x,
+                    onTap: () {
+                      isRenaming.value = false;
+                      textEditingController.text = '';
+                    },
+                  ),
+                HeadingAction(
+                  icon: LucideIcons.check,
+                  onTap: () async {
+                    if (isRenaming.value) {
+                      await form.submit();
+                    } else if (isReordering.value) {
+                      isReordering.value = false;
+                    }
+                  },
+                ),
+              ],
+            ],
+          ),
           child: entities.isEmpty
               ? const Center(
                   child: Text(
@@ -346,7 +291,7 @@ class _EntityList extends HookWidget {
                           );
                         },
                         child: IntrinsicHeight(
-                          child: Box(
+                          child: DecoratedBox(
                             decoration: BoxDecoration(
                               border: Border.all(color: AppColors.gray_950),
                               borderRadius: const BorderRadius.all(Radius.circular(8)),
@@ -355,19 +300,24 @@ class _EntityList extends HookWidget {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                if (isReordering.value)
+                                if (isReordering.value) ...[
                                   ReorderableDragStartListener(
                                     index: index,
                                     child: const Listener(
                                       behavior: HitTestBehavior.opaque,
-                                      child: Box(
-                                        padding: Pad(left: 16, right: 12, vertical: 12),
-                                        child: Icon(LucideIcons.grip_vertical, size: 24, color: AppColors.gray_500),
+                                      child: Padding(
+                                        padding: Pad(horizontal: 12, vertical: 12),
+                                        child: Icon(
+                                          LucideLightIcons.grip_vertical,
+                                          size: 24,
+                                          color: AppColors.gray_950,
+                                        ),
                                       ),
                                     ),
-                                  )
-                                else
-                                  const Box.gap(16),
+                                  ),
+                                  const AppVerticalDivider(color: AppColors.gray_950),
+                                ],
+                                const Box.gap(16),
                                 Expanded(
                                   child: Box(
                                     padding: const Pad(vertical: 12),
@@ -433,8 +383,8 @@ class _EntityList extends HookWidget {
                     await HapticFeedback.lightImpact();
                   },
                 ),
-        ),
-      ],
+        );
+      },
     );
   }
 }

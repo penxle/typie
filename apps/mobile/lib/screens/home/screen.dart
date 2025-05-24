@@ -41,7 +41,7 @@ class HomeScreen extends HookWidget {
             Expanded(
               child: MediaQuery.removeViewPadding(context: context, removeBottom: true, child: child),
             ),
-            Box(
+            Container(
               height: padding.bottom + 52,
               padding: Pad(horizontal: 24, bottom: padding.bottom),
               decoration: const BoxDecoration(
@@ -115,7 +115,7 @@ class _Button extends StatelessWidget {
             router.popUntilRoot();
           }
         },
-        child: Box(padding: const Pad(horizontal: 16), child: activeIcon ?? icon),
+        child: Padding(padding: const Pad(horizontal: 16), child: activeIcon ?? icon),
       );
     } else {
       return GestureDetector(
@@ -123,7 +123,7 @@ class _Button extends StatelessWidget {
         onTapDown: (_) {
           tabsRouter.setActiveIndex(index);
         },
-        child: Box(padding: const Pad(horizontal: 16), child: icon),
+        child: Padding(padding: const Pad(horizontal: 16), child: icon),
       );
     }
   }
