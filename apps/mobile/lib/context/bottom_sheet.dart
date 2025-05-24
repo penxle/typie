@@ -3,11 +3,12 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/tappable.dart';
 
 extension BottomSheetExtension on BuildContext {
-  Future<T?> showBottomSheet<T extends Object?>(Widget child) {
+  Future<T?> showBottomSheet<T extends Object?>({required Widget child}) {
     return router.root.pushWidget(
-      _Widget(child: child),
+      child,
       opaque: false,
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final tweenedBackdropOpacity = Tween<double>(
@@ -48,10 +49,12 @@ extension BottomSheetExtension on BuildContext {
   }
 }
 
-class _Widget extends HookWidget {
-  const _Widget({required this.child});
+class BottomSheet extends HookWidget {
+  const BottomSheet({required this.child, this.floating = false, this.padding, super.key});
 
   final Widget child;
+  final bool floating;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
@@ -96,17 +99,21 @@ class _Widget extends HookWidget {
         },
         child: Material(
           color: AppColors.transparent,
-          child: Box(
+          child: Container(
             key: sheetKey,
             width: double.infinity,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: BorderRadius.vertical(
+                top: const Radius.circular(16),
+                bottom: Radius.circular(floating ? 16 : 0),
+              ),
             ),
+            margin: floating ? Pad(horizontal: 16, bottom: bottomPadding + 16) : null,
             child: ConstrainedBox(
               constraints: BoxConstraints(maxHeight: maxHeight),
               child: Box(
-                padding: Pad(top: 8, bottom: bottomPadding + 16),
+                padding: Pad(top: 8, bottom: floating ? 16 : bottomPadding + 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
@@ -119,13 +126,64 @@ class _Widget extends HookWidget {
                         borderRadius: BorderRadius.all(Radius.circular(999)),
                       ),
                     ),
-                    child,
+                    Box(padding: padding, child: child),
                   ],
                 ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class BottomMenu extends StatelessWidget {
+  const BottomMenu({required this.items, super.key});
+
+  final List<BottomMenuItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return BottomSheet(child: Column(children: items));
+  }
+}
+
+class BottomMenuItem extends StatelessWidget {
+  const BottomMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconColor = AppColors.gray_700,
+    this.labelColor = AppColors.gray_950,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+
+  final Color iconColor;
+  final Color labelColor;
+
+  final void Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tappable(
+      padding: const Pad(horizontal: 20, vertical: 12),
+      onTap: () {
+        context.router.pop();
+        onTap();
+      },
+      child: Row(
+        spacing: 12,
+        children: [
+          Icon(icon, size: 24, color: iconColor),
+          Text(
+            label,
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: labelColor),
+          ),
+        ],
       ),
     );
   }

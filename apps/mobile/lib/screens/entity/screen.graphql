@@ -53,14 +53,18 @@ fragment EntityScreen_Entity_entity on Entity {
       id
       title
       excerpt
-      characterCount
+      updatedAt
     }
   }
 }
 
-mutation EntityScreen_MoveEntity_Mutation($input: MoveEntityInput!) {
-  moveEntity(input: $input) {
+mutation EntityScreen_CreateFolder_Mutation($input: CreateFolderInput!) {
+  createFolder(input: $input) {
     id
+
+    entity {
+      id
+    }
   }
 }
 
@@ -68,5 +72,28 @@ mutation EntityScreen_RenameFolder_Mutation($input: RenameFolderInput!) {
   renameFolder(input: $input) {
     id
     name
+  }
+}
+
+mutation EntityScreen_DeleteFolder_Mutation($input: DeleteFolderInput!) {
+  deleteFolder(input: $input) {
+    id
+  }
+}
+
+mutation EntityScreen_CreatePost_Mutation($input: CreatePostInput!) {
+  createPost(input: $input) {
+    id
+
+    entity {
+      id
+      slug
+    }
+  }
+}
+
+mutation EntityScreen_MoveEntity_Mutation($input: MoveEntityInput!) {
+  moveEntity(input: $input) {
+    id
   }
 }

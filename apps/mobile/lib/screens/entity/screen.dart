@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:luthor/luthor.dart';
-import 'package:typie/context/bottom_menu.dart';
-import 'package:typie/extensions/num.dart';
+import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/async_effect.dart';
@@ -86,6 +86,8 @@ class _EntityList extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
+    final pref = useService<Pref>();
+
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
     final textEditingController = useTextEditingController();
     final primaryScrollController = PrimaryScrollController.of(context);
@@ -216,24 +218,88 @@ class _EntityList extends HookWidget {
                     Tappable(
                       padding: const Pad(all: 4),
                       onTap: () async {
-                        await context.showBottomMenu(
-                          items: [
-                            if (entity != null)
+                        await context.showBottomSheet(
+                          child: BottomMenu(
+                            items: [
+                              if (entity != null)
+                                BottomMenuItem(
+                                  icon: LucideIcons.pen_line,
+                                  label: '이름 바꾸기',
+                                  onTap: () {
+                                    isRenaming.value = true;
+                                  },
+                                ),
+                              if (entities.length > 1)
+                                BottomMenuItem(
+                                  icon: LucideIcons.chevrons_up_down,
+                                  label: '순서 변경하기',
+                                  onTap: () {
+                                    isReordering.value = true;
+                                  },
+                                ),
                               BottomMenuItem(
-                                icon: LucideIcons.pen_line,
-                                label: '이름 바꾸기',
-                                onTap: () {
-                                  isRenaming.value = true;
+                                icon: LucideIcons.folder_plus,
+                                label: '하위 폴더 만들기',
+                                onTap: () async {
+                                  final resp = await client.request(
+                                    GEntityScreen_CreateFolder_MutationReq(
+                                      (b) => b
+                                        ..vars.input.siteId = pref.siteId
+                                        ..vars.input.parentEntityId = entity?.id
+                                        ..vars.input.name = '새 폴더',
+                                    ),
+                                  );
+
+                                  if (context.mounted) {
+                                    await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
+                                  }
                                 },
                               ),
-                            BottomMenuItem(
-                              icon: LucideIcons.chevrons_up_down,
-                              label: '순서 변경하기',
-                              onTap: () {
-                                isReordering.value = true;
-                              },
-                            ),
-                          ],
+                              BottomMenuItem(
+                                icon: LucideIcons.square_pen,
+                                label: '하위 포스트 만들기',
+                                onTap: () async {
+                                  final resp = await client.request(
+                                    GEntityScreen_CreatePost_MutationReq(
+                                      (b) => b
+                                        ..vars.input.siteId = pref.siteId
+                                        ..vars.input.parentEntityId = entity?.id,
+                                    ),
+                                  );
+
+                                  if (context.mounted) {
+                                    await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
+                                  }
+                                },
+                              ),
+                              if (entity != null)
+                                BottomMenuItem(
+                                  icon: LucideIcons.trash,
+                                  label: '삭제하기',
+                                  onTap: () async {
+                                    await context.showModal(
+                                      child: ConfirmModal(
+                                        title: '폴더 삭제',
+                                        message: '"${folder!.name}" 폴더를 삭제하시겠어요?',
+                                        confirmText: '삭제하기',
+                                        confirmColor: AppColors.red_500,
+                                        onConfirm: () async {
+                                          await client.request(
+                                            GEntityScreen_DeleteFolder_MutationReq(
+                                              (b) => b..vars.input.folderId = folder!.id,
+                                            ),
+                                          );
+
+                                          if (context.mounted) {
+                                            await context.router.maybePop();
+                                          }
+                                        },
+                                      ),
+                                    );
+                                  },
+                                ),
+                            ],
+                          ),
                         );
                       },
                       child: const Icon(LucideIcons.ellipsis, size: 24),
@@ -384,7 +450,7 @@ class _Folder extends StatelessWidget {
     return Row(
       spacing: 8,
       children: [
-        const Icon(TypieIcons.folder_filled, size: 16),
+        const Icon(TypieIcons.folder_filled, size: 18),
         Expanded(
           child: Text(
             folder.name,
@@ -422,7 +488,7 @@ class _Post extends StatelessWidget {
                 maxLines: 1,
               ),
             ),
-            Text('${post.characterCount.humanize}자', style: const TextStyle(fontSize: 14)),
+            Text(post.updatedAt.fromNow(), style: const TextStyle(fontSize: 14, color: AppColors.gray_700)),
           ],
         ),
         Text(

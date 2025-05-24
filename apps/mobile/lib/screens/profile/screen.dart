@@ -33,7 +33,7 @@ class ProfileScreen extends HookWidget {
                 Tappable(
                   child: const Text('plan'),
                   onTap: () async {
-                    await context.showBottomSheet(const PlanModal());
+                    await context.showBottomSheet(child: const PlanModal());
                   },
                 ),
                 Tappable(
