@@ -46,7 +46,7 @@ class HomeScreen extends HookWidget {
               padding: Pad(horizontal: 24, bottom: padding.bottom),
               decoration: const BoxDecoration(
                 border: Border(top: BorderSide(color: AppColors.gray_950)),
-                color: AppColors.white,
+                color: AppColors.gray_50,
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

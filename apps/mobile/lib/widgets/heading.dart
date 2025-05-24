@@ -10,6 +10,7 @@ import 'package:typie/widgets/vertical_divider.dart';
 
 class Heading extends StatelessWidget implements PreferredSizeWidget {
   const Heading({
+    this.leadingIcon,
     this.title,
     this.titleWidget,
     this.actions,
@@ -18,6 +19,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
     super.key,
   }) : assert(title != null || titleWidget != null, 'title or titleWidget must be provided');
 
+  final IconData? leadingIcon;
   final String? title;
   final Widget? titleWidget;
   final List<Widget>? actions;
@@ -28,6 +30,8 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final route = ModalRoute.of(context);
+
     return AnnotatedRegion(
       key: context.router.current.key,
       value: const SystemUiOverlayStyle(
@@ -51,12 +55,17 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
             ),
             child: Row(
               children: [
-                if (ModalRoute.canPopOf(context) ?? false) ...[
+                if (route?.canPop ?? false) ...[
                   Tappable(
                     onTap: () => context.router.maybePop(),
-                    child: const SizedBox(
+                    child: SizedBox(
                       width: 52,
-                      child: Icon(LucideLightIcons.chevron_left, color: AppColors.gray_950),
+                      child: Icon(
+                        route?.settings is AutoRoutePage && (route!.settings as AutoRoutePage).fullscreenDialog
+                            ? LucideLightIcons.x
+                            : LucideLightIcons.chevron_left,
+                        color: AppColors.gray_950,
+                      ),
                     ),
                   ),
                   const AppVerticalDivider(color: AppColors.gray_950),

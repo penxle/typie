@@ -45,7 +45,7 @@
         lineHeight: '[1.6]',
       })}
     >
-      <div class={css({ fontFamily: 'ui' })}>내용을 입력해보세요...</div>
+      <div class={css({ fontFamily: 'ui' })}>내용을 입력하세요</div>
     </div>
   </div>
 {/if}

@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/__generated__/editor.req.gql.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
@@ -67,7 +68,12 @@ class Editor extends HookWidget {
       operation: GEditorScreen_QueryReq((b) => b..vars.slug = slug),
       builder: (context, client, data) {
         return Screen(
-          heading: Heading(title: data.post.title),
+          heading: Heading(
+            title: data.post.title,
+            actions: [HeadingAction(icon: LucideLightIcons.ellipsis, onTap: () {})],
+            backgroundColor: AppColors.white,
+          ),
+          backgroundColor: AppColors.white,
           safeArea: false,
           keyboardDismiss: false,
           child: Stack(

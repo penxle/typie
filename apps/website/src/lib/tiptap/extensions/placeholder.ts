@@ -13,7 +13,7 @@ export const Placeholder = Extension.create({
       new Plugin({
         props: {
           decorations: (state) => {
-            if (!this.editor.isEditable) {
+            if (!this.editor.isEditable || window.__webview__) {
               return null;
             }
 
