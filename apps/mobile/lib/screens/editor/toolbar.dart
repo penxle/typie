@@ -7,6 +7,7 @@ import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
@@ -48,7 +49,7 @@ class EditorToolbar extends HookWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _Textbar(),
-        Box(
+        Container(
           height: 48,
           decoration: const BoxDecoration(
             color: AppColors.white,
@@ -100,7 +101,7 @@ class EditorToolbar extends HookWidget {
             ],
           ),
         ),
-        Box(
+        Container(
           height: keyboardHeight,
           decoration: const BoxDecoration(
             color: AppColors.white,
@@ -507,7 +508,7 @@ class _Textbar extends HookWidget {
       axisAlignment: -1,
       child: FadeTransition(
         opacity: tweenedOpacity,
-        child: Box(
+        child: Container(
           width: double.infinity,
           height: 48,
           decoration: const BoxDecoration(
@@ -788,14 +789,14 @@ class _AlternateTextbar extends HookWidget {
 
     return Row(
       children: [
-        const Box.gap(4),
+        const Gap(4),
         _IconToolbarButton(
           icon: LucideLightIcons.chevron_left,
           onTap: () {
             scope.selectedTextbarIdx.value = 0;
           },
         ),
-        const Box.gap(12),
+        const Gap(12),
         Expanded(
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -940,7 +941,7 @@ class _IconToolbarButton extends StatelessWidget {
       isRepeatable: isRepeatable,
       onTap: onTap,
       builder: (context, color) {
-        return Box(
+        return Padding(
           padding: const Pad(all: 4),
           child: Icon(icon, size: 22, color: color),
         );
@@ -973,14 +974,12 @@ class _ColorToolbarButton extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Box(
+        child: Container(
           padding: const Pad(all: 1),
-          child: Box(
-            decoration: BoxDecoration(
-              color: color,
-              border: Border.all(color: AppColors.gray_200),
-              borderRadius: BorderRadius.circular(999),
-            ),
+          decoration: BoxDecoration(
+            color: color,
+            border: Border.all(color: AppColors.gray_200),
+            borderRadius: BorderRadius.circular(999),
           ),
         ),
       ),
@@ -1008,9 +1007,9 @@ class _TextToolbarButton extends StatelessWidget {
       onTap: onTap,
       color: color,
       builder: (context, color) {
-        return Box(
-          padding: const Pad(all: 4),
+        return Container(
           alignment: Alignment.center,
+          padding: const Pad(all: 4),
           child: Text(
             text,
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: color),
@@ -1035,8 +1034,7 @@ class _BoxButton extends StatelessWidget {
       isActive: isActive,
       onTap: onTap,
       builder: (context, color) {
-        return Box(
-          alignment: Alignment.center,
+        return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             spacing: 8,

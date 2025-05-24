@@ -1,4 +1,3 @@
-import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/styles/colors.dart';
 
@@ -16,6 +15,10 @@ class AppVerticalDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Box(width: width, height: height, color: color);
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ColoredBox(color: color),
+    );
   }
 }

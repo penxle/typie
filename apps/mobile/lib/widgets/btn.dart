@@ -1,4 +1,3 @@
-import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -16,7 +15,7 @@ class Btn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tappable(
       onTap: onTap,
-      child: Box(
+      child: Container(
         height: 48,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),

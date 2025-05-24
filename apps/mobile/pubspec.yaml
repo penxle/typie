@@ -28,6 +28,7 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   flutter_svg: ^2.1.0
   freezed_annotation: ^3.0.0
+  gap: ^3.0.1
   get_it: ^8.0.3
   google_sign_in: ^6.3.0
   gql_code_builder_serializers: ^0.1.0

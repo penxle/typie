@@ -1,6 +1,7 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -28,7 +29,7 @@ extension ModalExtension on BuildContext {
                 opacity: tweenedBackdropOpacity,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  child: Box(color: AppColors.black.withValues(alpha: 0.5)),
+                  child: ColoredBox(color: AppColors.black.withValues(alpha: 0.5)),
                   onTap: () async {
                     await router.root.maybePop();
                   },
@@ -71,7 +72,7 @@ class Modal extends StatelessWidget {
             BoxShadow(offset: const Offset(0, 8), blurRadius: 16, color: AppColors.gray_950.withValues(alpha: 0.07)),
           ],
         ),
-        child: Box(padding: const Pad(all: 20), child: child),
+        child: Padding(padding: const Pad(all: 20), child: child),
       ),
     );
   }
@@ -110,9 +111,9 @@ class ConfirmModal extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const Box.gap(8),
+          const Gap(8),
           Text(message, style: const TextStyle(fontSize: 16)),
-          const Box.gap(24),
+          const Gap(24),
           Row(
             spacing: 8,
             children: [
@@ -122,10 +123,10 @@ class ConfirmModal extends StatelessWidget {
                     await context.router.maybePop();
                     onCancel?.call();
                   },
-                  child: Box(
-                    padding: const Pad(vertical: 12),
+                  child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(color: cancelColor, borderRadius: BorderRadius.circular(999)),
+                    padding: const Pad(vertical: 12),
                     child: Text(cancelText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                   ),
                 ),
@@ -136,10 +137,10 @@ class ConfirmModal extends StatelessWidget {
                     await context.router.maybePop();
                     onConfirm();
                   },
-                  child: Box(
-                    padding: const Pad(vertical: 12),
+                  child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(color: confirmColor, borderRadius: BorderRadius.circular(999)),
+                    padding: const Pad(vertical: 12),
                     child: Text(
                       confirmText,
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),

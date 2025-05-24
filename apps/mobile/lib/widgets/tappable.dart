@@ -1,5 +1,5 @@
-import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:typie/styles/colors.dart';
 
 class Tappable extends StatelessWidget {
   const Tappable({required this.onTap, required this.child, this.padding, this.debugTapArea = false, super.key});
@@ -15,8 +15,11 @@ class Tappable extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      // ignore: deprecated_member_use for debugging
-      child: debugTapArea ? Box.rand(padding: padding, child: child) : Box(padding: padding, child: child),
+      child: debugTapArea
+          ? Container(color: AppColors.red_500, padding: padding, child: child)
+          : padding == null
+          ? child
+          : Padding(padding: padding!, child: child),
     );
   }
 }

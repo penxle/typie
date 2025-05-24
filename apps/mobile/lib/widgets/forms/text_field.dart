@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/field.dart';
@@ -118,7 +118,7 @@ class HookFormTextField extends HookWidget {
                   );
                 },
               ),
-              const Box.gap(13),
+              const Gap(13),
             ],
             TextField(
               controller: controller ?? builtinController,
@@ -144,11 +144,11 @@ class HookFormTextField extends HookWidget {
                 }
               },
             ),
-            const Box.gap(4),
+            const Gap(4),
             AnimatedBuilder(
               animation: tweenedBorderColor,
               builder: (context, child) {
-                return Box(
+                return Container(
                   width: double.infinity,
                   height: 1.5,
                   color: field.error != null ? AppColors.red_600 : tweenedBorderColor.value,
@@ -156,7 +156,7 @@ class HookFormTextField extends HookWidget {
               },
             ),
             if (field.error != null) ...[
-              const Box.gap(6.5),
+              const Gap(6.5),
               Text(field.error!, style: const TextStyle(fontSize: 11, color: AppColors.red_600)),
             ],
           ],

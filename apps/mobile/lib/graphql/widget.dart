@@ -1,4 +1,3 @@
-import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:ferry/ferry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -43,8 +42,8 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
       return const Screen(child: SizedBox.expand());
     }
 
-    return Box(
-      color: AppColors.white,
+    return ColoredBox(
+      color: AppColors.gray_50,
       child: FadeTransition(opacity: tweenedOpacity, child: builder(context, client, data)),
     );
   }

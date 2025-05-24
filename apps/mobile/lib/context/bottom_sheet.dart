@@ -28,7 +28,7 @@ extension BottomSheetExtension on BuildContext {
                 opacity: tweenedBackdropOpacity,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  child: Box(color: AppColors.black.withValues(alpha: 0.5)),
+                  child: ColoredBox(color: AppColors.black.withValues(alpha: 0.5)),
                   onTap: () async {
                     await router.root.maybePop();
                   },
@@ -37,7 +37,7 @@ extension BottomSheetExtension on BuildContext {
             ),
             SafeArea(
               bottom: false,
-              child: Box(
+              child: Align(
                 alignment: Alignment.bottomCenter,
                 child: SlideTransition(position: tweenedSlide, child: child),
               ),
@@ -112,21 +112,23 @@ class BottomSheet extends HookWidget {
             margin: floating ? Pad(horizontal: 16, bottom: bottomPadding + 16) : null,
             child: ConstrainedBox(
               constraints: BoxConstraints(maxHeight: maxHeight),
-              child: Box(
+              child: Padding(
                 padding: Pad(top: 8, bottom: floating ? 16 : bottomPadding + 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    const Box(
+                    const SizedBox(
                       width: 60,
                       height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.gray_200,
-                        borderRadius: BorderRadius.all(Radius.circular(999)),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.gray_200,
+                          borderRadius: BorderRadius.all(Radius.circular(999)),
+                        ),
                       ),
                     ),
-                    Box(padding: padding, child: child),
+                    if (padding == null) child else Padding(padding: padding!, child: child),
                   ],
                 ),
               ),
