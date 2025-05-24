@@ -106,7 +106,7 @@ class _Widget extends HookWidget {
             child: ConstrainedBox(
               constraints: BoxConstraints(maxHeight: maxHeight),
               child: Box(
-                padding: Pad(horizontal: 12, top: 8, bottom: bottomPadding + 12),
+                padding: Pad(top: 8, bottom: bottomPadding + 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,

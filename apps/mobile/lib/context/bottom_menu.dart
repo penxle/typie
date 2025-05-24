@@ -32,7 +32,7 @@ class BottomMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tappable(
-      padding: const Pad(horizontal: 16, vertical: 8),
+      padding: const Pad(horizontal: 20, vertical: 12),
       onTap: () {
         context.router.pop();
         onTap();
@@ -40,8 +40,8 @@ class BottomMenuItem extends StatelessWidget {
       child: Row(
         spacing: 12,
         children: [
-          Icon(icon, size: 20, color: AppColors.gray_700),
-          Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          Icon(icon, size: 24, color: AppColors.gray_700),
+          Text(label, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500)),
         ],
       ),
     );
