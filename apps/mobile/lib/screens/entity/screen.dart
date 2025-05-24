@@ -2,10 +2,12 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:luthor/luthor.dart';
 import 'package:typie/context/bottom_menu.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide.dart';
 import 'package:typie/icons/typie.dart';
@@ -14,6 +16,8 @@ import 'package:typie/screens/entity/__generated__/screen.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen.req.gql.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/forms/form.dart';
+import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -75,13 +79,18 @@ class _EntityList extends HookWidget {
   final GEntityScreen_WithEntityId_QueryData_entity? entity;
   final List<GEntityScreen_Entity_entity> entities;
 
+  GEntityScreen_WithEntityId_QueryData_entity_node__asFolder? get folder =>
+      entity?.node as GEntityScreen_WithEntityId_QueryData_entity_node__asFolder?;
+
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
+    final textEditingController = useTextEditingController();
     final primaryScrollController = PrimaryScrollController.of(context);
 
     final isReordering = useState(false);
+    final isRenaming = useState(false);
 
     useEffect(() {
       void listener() {
@@ -100,6 +109,14 @@ class _EntityList extends HookWidget {
       return () => primaryScrollController.removeListener(listener);
     });
 
+    useAsyncEffect(() async {
+      if (isRenaming.value) {
+        textEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textEditingController.text.length);
+      }
+
+      return null;
+    }, [isRenaming.value]);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -116,64 +133,107 @@ class _EntityList extends HookWidget {
               child: child,
             );
           },
-          child: Row(
-            children: [
-              if (entity != null)
-                Tappable(
-                  padding: const Pad(right: 4, vertical: 4),
-                  onTap: () async {
-                    await context.router.maybePop();
-                  },
-                  child: const Icon(LucideIcons.chevron_left, size: 24, color: AppColors.gray_700),
+          child: HookForm(
+            schema: l.schema({'name': l.string().min(1).required()}),
+            onSubmit: (form) async {
+              await client.request(
+                GEntityScreen_RenameFolder_MutationReq(
+                  (b) => b
+                    ..vars.input.folderId = folder!.id
+                    ..vars.input.name = form.data['name'] as String,
                 ),
-              Expanded(
-                child: Text(
-                  entity == null
-                      ? '내 포스트'
-                      : entity!.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (isReordering.value)
-                Tappable(
-                  onTap: () {
-                    isReordering.value = false;
-                  },
-                  child: const Box(
-                    padding: Pad(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.all(Radius.circular(999)),
-                      color: AppColors.gray_700,
+              );
+
+              isRenaming.value = false;
+            },
+            builder: (context, form) {
+              return Row(
+                children: [
+                  if (entity != null)
+                    Tappable(
+                      padding: const Pad(right: 4, vertical: 4),
+                      onTap: () async {
+                        await context.router.maybePop();
+                      },
+                      child: const Icon(LucideIcons.chevron_left, size: 24, color: AppColors.gray_700),
                     ),
-                    child: Text(
-                      '완료',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
-                    ),
+                  Expanded(
+                    child: isRenaming.value
+                        ? HookFormTextField.collapsed(
+                            name: 'name',
+                            controller: textEditingController,
+                            initialValue: folder!.name,
+                            autofocus: true,
+                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                          )
+                        : Text(
+                            entity == null
+                                ? '내 포스트'
+                                : textEditingController.text.isEmpty
+                                ? folder!.name
+                                : textEditingController.text,
+                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                   ),
-                )
-              else ...[
-                Tappable(
-                  padding: const Pad(all: 4),
-                  onTap: () async {
-                    await context.showBottomMenu(
-                      items: [
-                        BottomMenuItem(
-                          icon: LucideIcons.chevrons_up_down,
-                          label: '순서 변경하기',
-                          onTap: () {
-                            isReordering.value = true;
-                          },
+                  const Box.gap(16),
+                  if (isReordering.value || isRenaming.value)
+                    Tappable(
+                      onTap: () async {
+                        if (isRenaming.value) {
+                          await form.submit();
+                        } else if (isReordering.value) {
+                          isReordering.value = false;
+                        }
+                      },
+                      child: const Box(
+                        padding: Pad(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.all(Radius.circular(999)),
+                          color: AppColors.gray_700,
                         ),
-                      ],
-                    );
-                  },
-                  child: const Icon(LucideIcons.ellipsis, size: 24),
-                ),
-                const Box.gap(20),
-                Tappable(padding: const Pad(all: 4), onTap: () {}, child: const Icon(LucideIcons.square_pen, size: 24)),
-              ],
-            ],
+                        child: Text(
+                          '완료',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                        ),
+                      ),
+                    )
+                  else ...[
+                    Tappable(
+                      padding: const Pad(all: 4),
+                      onTap: () async {
+                        await context.showBottomMenu(
+                          items: [
+                            if (entity != null)
+                              BottomMenuItem(
+                                icon: LucideIcons.pen_line,
+                                label: '이름 바꾸기',
+                                onTap: () {
+                                  isRenaming.value = true;
+                                },
+                              ),
+                            BottomMenuItem(
+                              icon: LucideIcons.chevrons_up_down,
+                              label: '순서 변경하기',
+                              onTap: () {
+                                isReordering.value = true;
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                      child: const Icon(LucideIcons.ellipsis, size: 24),
+                    ),
+                    const Box.gap(20),
+                    Tappable(
+                      padding: const Pad(all: 4),
+                      onTap: () {},
+                      child: const Icon(LucideIcons.square_pen, size: 24),
+                    ),
+                  ],
+                ],
+              );
+            },
           ),
         ),
         Expanded(

@@ -63,3 +63,10 @@ mutation EntityScreen_MoveEntity_Mutation($input: MoveEntityInput!) {
     id
   }
 }
+
+mutation EntityScreen_RenameFolder_Mutation($input: RenameFolderInput!) {
+  renameFolder(input: $input) {
+    id
+    name
+  }
+}

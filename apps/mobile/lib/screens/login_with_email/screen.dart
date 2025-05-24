@@ -58,7 +58,7 @@ class LoginWithEmailScreen extends HookWidget {
           return Column(
             spacing: 16,
             children: [
-              const FormTextField(
+              const HookFormTextField(
                 name: 'email',
                 label: '이메일',
                 placeholder: 'me@example.com',
@@ -66,13 +66,12 @@ class LoginWithEmailScreen extends HookWidget {
                 textInputAction: TextInputAction.next,
                 autofocus: true,
               ),
-              const FormTextField(
+              const HookFormTextField(
                 name: 'password',
                 label: '비밀번호',
                 placeholder: '********',
                 obscureText: true,
                 keyboardType: TextInputType.visiblePassword,
-                textInputAction: TextInputAction.done,
               ),
               const Spacer(),
               Btn(
