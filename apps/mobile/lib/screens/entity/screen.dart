@@ -11,7 +11,6 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/routers/app.gr.dart';
@@ -137,46 +136,58 @@ class _EntityList extends HookWidget {
       builder: (context, form) {
         return Screen(
           heading: Heading(
-            title: entity == null
-                ? '내 포스트'
-                : textEditingController.text.isEmpty
-                ? folder!.name
-                : textEditingController.text,
             titleWidget: isRenaming.value
                 ? HookFormTextField.collapsed(
                     name: 'name',
                     controller: textEditingController,
-                    initialValue: folder!.name,
                     autofocus: true,
+                    initialValue: folder!.name,
+                    placeholder: '폴더 이름',
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                   )
-                : null,
+                : GestureDetector(
+                    onDoubleTap: () {
+                      if (entity != null) {
+                        isRenaming.value = true;
+                      }
+                    },
+                    child: Text(
+                      entity == null
+                          ? '내 포스트'
+                          : textEditingController.text.isEmpty
+                          ? folder!.name
+                          : textEditingController.text,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
             actions: [
               if (!isRenaming.value && !isReordering.value)
                 HeadingAction(
-                  icon: LucideIcons.ellipsis,
+                  icon: LucideLightIcons.ellipsis,
                   onTap: () async {
                     await context.showBottomSheet(
                       child: BottomMenu(
                         items: [
-                          if (entity != null)
-                            BottomMenuItem(
-                              icon: LucideIcons.pen_line,
-                              label: '이름 바꾸기',
-                              onTap: () {
-                                isRenaming.value = true;
-                              },
-                            ),
-                          if (entities.length > 1)
-                            BottomMenuItem(
-                              icon: LucideIcons.chevrons_up_down,
-                              label: '순서 변경하기',
-                              onTap: () {
-                                isReordering.value = true;
-                              },
-                            ),
                           BottomMenuItem(
-                            icon: LucideIcons.folder_plus,
+                            icon: LucideLightIcons.square_pen,
+                            label: '하위 포스트 만들기',
+                            onTap: () async {
+                              final resp = await client.request(
+                                GEntityScreen_CreatePost_MutationReq(
+                                  (b) => b
+                                    ..vars.input.siteId = pref.siteId
+                                    ..vars.input.parentEntityId = entity?.id,
+                                ),
+                              );
+
+                              if (context.mounted) {
+                                await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
+                              }
+                            },
+                          ),
+                          BottomMenuItem(
+                            icon: LucideLightIcons.folder_plus,
                             label: '하위 폴더 만들기',
                             onTap: () async {
                               final resp = await client.request(
@@ -193,26 +204,24 @@ class _EntityList extends HookWidget {
                               }
                             },
                           ),
-                          BottomMenuItem(
-                            icon: LucideIcons.square_pen,
-                            label: '하위 포스트 만들기',
-                            onTap: () async {
-                              final resp = await client.request(
-                                GEntityScreen_CreatePost_MutationReq(
-                                  (b) => b
-                                    ..vars.input.siteId = pref.siteId
-                                    ..vars.input.parentEntityId = entity?.id,
-                                ),
-                              );
-
-                              if (context.mounted) {
-                                await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
-                              }
-                            },
-                          ),
-                          if (entity != null)
+                          if (entities.length > 1)
                             BottomMenuItem(
-                              icon: LucideIcons.trash,
+                              icon: LucideLightIcons.chevrons_up_down,
+                              label: '순서 변경하기',
+                              onTap: () {
+                                isReordering.value = true;
+                              },
+                            ),
+                          if (entity != null) ...[
+                            BottomMenuItem(
+                              icon: LucideLightIcons.pen_line,
+                              label: '이름 바꾸기',
+                              onTap: () {
+                                isRenaming.value = true;
+                              },
+                            ),
+                            BottomMenuItem(
+                              icon: LucideLightIcons.trash,
                               label: '삭제하기',
                               onTap: () async {
                                 await context.showModal(
@@ -236,6 +245,7 @@ class _EntityList extends HookWidget {
                                 );
                               },
                             ),
+                          ],
                         ],
                       ),
                     );
@@ -244,14 +254,14 @@ class _EntityList extends HookWidget {
               else ...[
                 if (isRenaming.value)
                   HeadingAction(
-                    icon: LucideIcons.x,
+                    icon: LucideLightIcons.x,
                     onTap: () {
                       isRenaming.value = false;
                       textEditingController.text = '';
                     },
                   ),
                 HeadingAction(
-                  icon: LucideIcons.check,
+                  icon: LucideLightIcons.check,
                   onTap: () async {
                     if (isRenaming.value) {
                       await form.submit();
@@ -310,7 +320,7 @@ class _EntityList extends HookWidget {
                                         padding: Pad(horizontal: 12, vertical: 12),
                                         child: Icon(
                                           LucideLightIcons.grip_vertical,
-                                          size: 24,
+                                          size: 20,
                                           color: AppColors.gray_950,
                                         ),
                                       ),
@@ -410,7 +420,7 @@ class _Folder extends StatelessWidget {
             maxLines: 1,
           ),
         ),
-        const Icon(LucideIcons.chevron_right, size: 16),
+        const Icon(LucideLightIcons.chevron_right, size: 16),
       ],
     );
   }

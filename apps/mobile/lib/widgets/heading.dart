@@ -10,15 +10,15 @@ import 'package:typie/widgets/vertical_divider.dart';
 
 class Heading extends StatelessWidget implements PreferredSizeWidget {
   const Heading({
-    required this.title,
+    this.title,
     this.titleWidget,
     this.actions,
     this.backgroundColor = AppColors.gray_50,
     this.fallbackSystemUiOverlayStyle,
     super.key,
-  });
+  }) : assert(title != null || titleWidget != null, 'title or titleWidget must be provided');
 
-  final String title;
+  final String? title;
   final Widget? titleWidget;
   final List<Widget>? actions;
   final Color? backgroundColor;
@@ -66,7 +66,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                   child:
                       titleWidget ??
                       Text(
-                        title,
+                        title!,
                         style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                         overflow: TextOverflow.ellipsis,
                       ),
