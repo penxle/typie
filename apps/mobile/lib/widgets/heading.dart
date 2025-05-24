@@ -2,37 +2,33 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:typie/icons/lucide.dart';
+import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
+import 'package:typie/widgets/vertical_divider.dart';
 
 class Heading extends StatelessWidget implements PreferredSizeWidget {
   const Heading({
-    super.key,
-    this.leading,
-    this.title,
+    required this.title,
     this.titleWidget,
     this.actions,
-    this.backgroundColor = AppColors.white,
+    this.backgroundColor = AppColors.gray_50,
     this.fallbackSystemUiOverlayStyle,
-    this.titleOnLeft = false,
-    this.bottomBorder = true,
+    super.key,
   });
 
-  final Widget? leading;
-  final String? title;
+  final String title;
   final Widget? titleWidget;
   final List<Widget>? actions;
   final Color? backgroundColor;
   final SystemUiOverlayStyle? fallbackSystemUiOverlayStyle;
-  final bool titleOnLeft;
-  final bool bottomBorder;
 
-  static const _preferredSize = Size.fromHeight(56);
+  static const _preferredSize = Size.fromHeight(52);
 
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion(
+      key: context.router.current.key,
       value: const SystemUiOverlayStyle(
         statusBarBrightness: Brightness.light,
         statusBarIconBrightness: Brightness.dark,
@@ -46,21 +42,39 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
         decoration: BoxDecoration(color: backgroundColor),
         child: SafeArea(
           bottom: false,
-          child: Box(
+          child: Container(
             height: _preferredSize.height,
-            padding: const Pad(horizontal: 20),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: bottomBorder ? AppColors.gray_100 : Colors.transparent)),
+            margin: const Pad(horizontal: 20),
+            decoration: const BoxDecoration(
+              border: Border.symmetric(horizontal: BorderSide(color: AppColors.gray_950)),
             ),
-            child: NavigationToolbar(
-              leading: leading ?? const HeadingAutoLeading(),
-              middle:
-                  titleWidget ??
-                  (title == null
-                      ? null
-                      : Text(title!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
-              centerMiddle: !titleOnLeft,
-              trailing: actions == null ? null : Row(mainAxisSize: MainAxisSize.min, children: actions!),
+            child: Row(
+              children: [
+                if (ModalRoute.canPopOf(context) ?? false) ...[
+                  Tappable(
+                    onTap: () => context.router.maybePop(),
+                    child: const Box(width: 52, child: Icon(LucideLightIcons.chevron_left, color: AppColors.gray_950)),
+                  ),
+                  const AppVerticalDivider(color: AppColors.gray_950),
+                  const Box.gap(20),
+                ],
+                Expanded(
+                  child:
+                      titleWidget ??
+                      Text(
+                        title,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                ),
+                if (actions != null) ...[
+                  const Box.gap(20),
+                  const AppVerticalDivider(color: AppColors.gray_950),
+                  // const Box.gap(20),
+                  ...actions!,
+                  // const Box.gap(12),
+                ],
+              ],
             ),
           ),
         ),
@@ -70,16 +84,6 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => _preferredSize;
-
-  static PreferredSizeWidget animated({
-    required AnimationController animation,
-    required Heading Function(BuildContext context) builder,
-  }) {
-    return PreferredSize(
-      preferredSize: _preferredSize,
-      child: AnimatedBuilder(animation: animation, builder: (context, child) => builder(context)),
-    );
-  }
 }
 
 class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
@@ -111,28 +115,18 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-class HeadingAutoLeading extends StatelessWidget {
-  const HeadingAutoLeading({super.key, this.color = AppColors.gray_950});
+class HeadingAction extends StatelessWidget {
+  const HeadingAction({required this.icon, required this.onTap, super.key});
 
-  final Color? color;
+  final IconData icon;
+  final void Function() onTap;
 
   @override
   Widget build(BuildContext context) {
-    return AutoLeadingButton(
-      builder: (context, leadingType, action) {
-        if (leadingType.isNoLeading) {
-          return const SizedBox.shrink();
-        }
-
-        return Tappable(
-          child: Icon(switch (leadingType) {
-            LeadingType.back => LucideIcons.chevron_left,
-            LeadingType.close => LucideIcons.x,
-            _ => throw UnimplementedError(),
-          }, color: color),
-          onTap: () => action?.call(),
-        );
-      },
+    return Tappable(
+      onTap: onTap,
+      padding: const Pad(vertical: 4),
+      child: ConstrainedBox(constraints: const BoxConstraints(minWidth: 52), child: Icon(icon, size: 24)),
     );
   }
 }
