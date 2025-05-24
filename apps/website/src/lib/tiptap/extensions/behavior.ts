@@ -123,7 +123,7 @@ export const Behavior = Extension.create({
             const endOfDocument = pos === doc.content.size - 1;
             const lastChildEmptyParagraph = body.lastChild?.type.name === 'paragraph' && body.lastChild?.childCount === 0;
 
-            if (endOfDocument && !lastChildEmptyParagraph) {
+            if (endOfDocument && !lastChildEmptyParagraph && !window.__webview__) {
               this.editor
                 .chain()
                 .insertContentAt(pos, { type: 'paragraph' })

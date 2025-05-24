@@ -1,0 +1,6 @@
+query EditorScreen_Query($slug: String!) {
+  post(slug: $slug) {
+    id
+    title
+  }
+}
