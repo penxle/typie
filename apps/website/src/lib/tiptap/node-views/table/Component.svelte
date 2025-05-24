@@ -114,6 +114,7 @@
       {
         overflowX: 'auto',
         overflowY: 'hidden',
+        touchAction: 'none',
       },
       editor?.current.isEditable && {
         marginTop: '-20px',

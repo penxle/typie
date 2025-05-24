@@ -14,12 +14,12 @@
   import { browser } from '$app/environment';
   import { graphql } from '$graphql';
   import { autosize } from '$lib/actions';
-  import { HorizontalDivider } from '$lib/components';
   import { getNodeViewByNodeId, TiptapEditor } from '$lib/tiptap';
   import { clamp } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import Placeholder from './Placeholder.svelte';
+  import { scroll } from './scroll.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
@@ -70,6 +70,7 @@
 
   const clientId = nanoid();
 
+  let containerEl = $state<HTMLDivElement>();
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
 
@@ -313,6 +314,8 @@
           const selection = Selection.near(pos, direction);
 
           tr.setSelection(selection);
+          tr.scrollIntoView();
+
           dispatch?.(tr);
 
           return true;
@@ -340,15 +343,25 @@
   {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
-<div class={css({ height: '[100dvh]', overflowY: 'auto', scrollbarGutter: 'stable', userSelect: 'text' })}>
+<div
+  bind:this={containerEl}
+  class={css({
+    height: '[100dvh]',
+    overflowY: 'auto',
+    scrollbarGutter: 'stable',
+    userSelect: 'text',
+    touchAction: 'none',
+  })}
+  use:scroll
+>
   <div
     style:--prosemirror-max-width={`${maxWidth.current}px`}
-    class={flex({ flexDirection: 'column', alignItems: 'center', paddingTop: '24px', paddingX: '24px', size: 'full' })}
+    class={flex({ flexDirection: 'column', alignItems: 'center', paddingTop: '24px', paddingX: '20px', size: 'full' })}
   >
     <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
       <textarea
         bind:this={titleEl}
-        class={css({ width: 'full', fontSize: '24px', fontWeight: 'bold', resize: 'none' })}
+        class={css({ width: 'full', fontSize: '24px', fontWeight: 'bold', resize: 'none', touchAction: 'none' })}
         autocapitalize="off"
         autocomplete="off"
         maxlength="100"
@@ -371,7 +384,15 @@
 
       <textarea
         bind:this={subtitleEl}
-        class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
+        class={css({
+          marginTop: '4px',
+          width: 'full',
+          fontSize: '16px',
+          fontWeight: 'medium',
+          overflow: 'hidden',
+          resize: 'none',
+          touchAction: 'none',
+        })}
         autocapitalize="off"
         autocomplete="off"
         maxlength="100"
@@ -402,7 +423,7 @@
         use:autosize
       ></textarea>
 
-      <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} color="secondary" />
+      <div class={css({ marginTop: '10px', marginBottom: '20px', height: '1px', backgroundColor: 'gray.950' })}></div>
     </div>
 
     <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
