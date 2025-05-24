@@ -2,6 +2,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 
 extension BottomMenuExtension on BuildContext {
@@ -37,9 +38,9 @@ class BottomMenuItem extends StatelessWidget {
         onTap();
       },
       child: Row(
-        spacing: 16,
+        spacing: 12,
         children: [
-          Icon(icon, size: 24),
+          Icon(icon, size: 20, color: AppColors.gray_700),
           Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         ],
       ),

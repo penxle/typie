@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -26,8 +27,9 @@ class App extends HookWidget {
         routerConfig: router.config(navigatorObservers: () => [SentryNavigatorObserver()]),
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          fontFamily: 'SUIT',
+          primaryColor: AppColors.gray_950,
           scaffoldBackgroundColor: AppColors.white,
+          fontFamily: 'SUIT',
           textTheme: const TextTheme(
             displaySmall: defaultTextStyle,
             displayMedium: defaultTextStyle,
@@ -45,7 +47,13 @@ class App extends HookWidget {
             labelMedium: defaultTextStyle,
             labelLarge: defaultTextStyle,
           ),
+          textSelectionTheme: TextSelectionThemeData(
+            cursorColor: AppColors.gray_950,
+            selectionColor: AppColors.gray_950.withValues(alpha: 0.15),
+            selectionHandleColor: AppColors.gray_950,
+          ),
           iconTheme: const IconThemeData(size: 24, color: AppColors.gray_950),
+          cupertinoOverrideTheme: const CupertinoThemeData(primaryColor: AppColors.gray_950),
         ),
         builder: (context, child) {
           return Stack(

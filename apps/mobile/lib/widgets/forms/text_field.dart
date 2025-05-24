@@ -3,11 +3,12 @@ import 'dart:async';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/field.dart';
 
-class FormTextField extends HookWidget {
-  const FormTextField({
+class HookFormTextField extends HookWidget {
+  const HookFormTextField({
     required this.name,
     super.key,
     this.controller,
@@ -17,9 +18,20 @@ class FormTextField extends HookWidget {
     this.autofocus = false,
     this.obscureText = false,
     this.keyboardType,
-    this.textInputAction,
+    this.textInputAction = TextInputAction.done,
     this.initialValue,
   });
+
+  const factory HookFormTextField.collapsed({
+    required String name,
+    required TextStyle style,
+    TextEditingController? controller,
+    FocusNode? focusNode,
+    bool autofocus,
+    String? placeholder,
+    String? initialValue,
+    Key? key,
+  }) = _HookFormCollapsedTextField;
 
   final String name;
   final TextEditingController? controller;
@@ -29,17 +41,17 @@ class FormTextField extends HookWidget {
   final bool autofocus;
   final bool obscureText;
   final TextInputType? keyboardType;
-  final TextInputAction? textInputAction;
+  final TextInputAction textInputAction;
   final String? initialValue;
 
   @override
   Widget build(BuildContext context) {
-    final textController = useTextEditingController(text: initialValue);
-    final textFocusNode = useFocusNode();
+    final builtinController = useTextEditingController(text: initialValue);
+    final builtinFocusNode = useFocusNode();
 
     useEffect(() {
       if (controller != null) {
-        textController.text = controller!.text;
+        builtinController.text = controller!.text;
       }
       return null;
     }, [controller]);
@@ -57,7 +69,7 @@ class FormTextField extends HookWidget {
     }, [animationController]);
 
     useEffect(() {
-      final currentFocusNode = focusNode ?? textFocusNode;
+      final currentFocusNode = focusNode ?? builtinFocusNode;
 
       void listener() {
         if (currentFocusNode.hasFocus) {
@@ -69,14 +81,14 @@ class FormTextField extends HookWidget {
 
       currentFocusNode.addListener(listener);
       return () => currentFocusNode.removeListener(listener);
-    }, [focusNode, textFocusNode]);
+    }, [focusNode, builtinFocusNode]);
 
     useEffect(() {
       if (autofocus) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           unawaited(
             ModalRoute.of(context)!.didPush().then((value) {
-              (focusNode ?? textFocusNode).requestFocus();
+              (focusNode ?? builtinFocusNode).requestFocus();
             }),
           );
         });
@@ -109,8 +121,8 @@ class FormTextField extends HookWidget {
               const Box.gap(13),
             ],
             TextField(
-              controller: controller ?? textController,
-              focusNode: focusNode ?? textFocusNode,
+              controller: controller ?? builtinController,
+              focusNode: focusNode ?? builtinFocusNode,
               autocorrect: false,
               obscureText: obscureText,
               keyboardType: keyboardType,
@@ -148,6 +160,76 @@ class FormTextField extends HookWidget {
               Text(field.error!, style: const TextStyle(fontSize: 11, color: AppColors.red_600)),
             ],
           ],
+        );
+      },
+    );
+  }
+}
+
+class _HookFormCollapsedTextField extends HookFormTextField {
+  const _HookFormCollapsedTextField({
+    required super.name,
+    required this.style,
+    super.controller,
+    super.focusNode,
+    super.autofocus,
+    super.placeholder,
+    super.initialValue,
+    super.key,
+  });
+
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final builtinController = useTextEditingController();
+    final builtinFocusNode = useFocusNode();
+
+    final effectiveController = controller ?? builtinController;
+    final effectiveFocusNode = focusNode ?? builtinFocusNode;
+
+    useAsyncEffect(() async {
+      if (autofocus) {
+        await ModalRoute.of(context)!.didPush();
+        effectiveFocusNode.requestFocus();
+      }
+
+      return null;
+    }, [autofocus]);
+
+    useEffect(() {
+      if (initialValue != null) {
+        effectiveController.text = initialValue!;
+      }
+
+      return null;
+    }, [initialValue]);
+
+    return HookFormField(
+      name: name,
+      initialValue: initialValue,
+      builder: (context, field) {
+        return TextField(
+          controller: effectiveController,
+          focusNode: effectiveFocusNode,
+          autocorrect: false,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          textInputAction: textInputAction,
+          decoration: InputDecoration.collapsed(
+            hintText: placeholder,
+            hintStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray_400),
+          ),
+          cursorColor: AppColors.gray_900,
+          style: style,
+          onChanged: (value) {
+            field.value = value;
+          },
+          onSubmitted: (value) async {
+            if (textInputAction == TextInputAction.done) {
+              await field.form.submit();
+            }
+          },
         );
       },
     );
