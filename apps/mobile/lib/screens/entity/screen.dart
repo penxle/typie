@@ -1,6 +1,7 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:luthor/luthor.dart';
 import 'package:typie/context/bottom_menu.dart';
@@ -177,6 +178,19 @@ class _EntityList extends HookWidget {
                           ),
                   ),
                   const Box.gap(16),
+                  if (isRenaming.value) ...[
+                    Tappable(
+                      onTap: () {
+                        isRenaming.value = false;
+                        textEditingController.text = '';
+                      },
+                      child: const Text(
+                        '취소',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                      ),
+                    ),
+                    const Box.gap(16),
+                  ],
                   if (isReordering.value || isRenaming.value)
                     Tappable(
                       onTap: () async {
@@ -345,6 +359,12 @@ class _EntityList extends HookWidget {
                           ..vars.input.upperOrder = upperOrder,
                       ),
                     );
+                  },
+                  onReorderStart: (index) async {
+                    await HapticFeedback.lightImpact();
+                  },
+                  onReorderEnd: (index) async {
+                    await HapticFeedback.lightImpact();
                   },
                 ),
         ),
