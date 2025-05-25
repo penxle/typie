@@ -80,6 +80,7 @@ class Editor extends HookWidget {
                 onTap: () async {
                   unawaited(scope.webViewController.value?.clearFocus());
                   await context.showBottomSheet(
+                    intercept: true,
                     child: BottomMenu(
                       items: [
                         BottomMenuItem(
@@ -87,6 +88,7 @@ class Editor extends HookWidget {
                           label: '삭제하기',
                           onTap: () async {
                             await context.showModal(
+                              intercept: true,
                               child: ConfirmModal(
                                 title: '포스트 삭제',
                                 message: '"${data.post.title}" 포스트를 삭제하시겠어요?',
