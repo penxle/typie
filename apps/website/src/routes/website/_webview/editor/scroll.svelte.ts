@@ -15,13 +15,17 @@ export const scroll: Action<HTMLElement, undefined, Attributes> = (container) =>
   let scrolling = false;
   let panning = false;
   let native = false;
+
   let initialY = 0;
   let initialTranslateY = 0;
   let currentTranslateY = 0;
   let maxTranslateY = 0;
+
   let velocity = 0;
+
   let lastEventAt = 0;
   let lastY = 0;
+
   let raf = 0;
 
   const VELOCITY_HISTORY_SIZE = 5;
@@ -88,11 +92,11 @@ export const scroll: Action<HTMLElement, undefined, Attributes> = (container) =>
     if (raf) {
       cancelAnimationFrame(raf);
       raf = 0;
+    }
 
-      if (scrolling) {
-        scrolling = false;
-        container.dispatchEvent(new CustomEvent('momentumscrollend'));
-      }
+    if (scrolling) {
+      scrolling = false;
+      container.dispatchEvent(new CustomEvent('momentumscrollend'));
     }
   };
 
@@ -105,7 +109,6 @@ export const scroll: Action<HTMLElement, undefined, Attributes> = (container) =>
     stopMomentumScroll();
 
     panning = true;
-    scrolling = true;
     initialY = touch.clientY;
     initialTranslateY = currentTranslateY;
     lastEventAt = Date.now();
@@ -115,12 +118,11 @@ export const scroll: Action<HTMLElement, undefined, Attributes> = (container) =>
     timeHistory = [];
 
     velocity = currentMomentumVelocity * 0.2;
-
-    container.dispatchEvent(new CustomEvent('momentumscrollstart'));
   };
 
   const handleTouchMove = (e: TouchEvent) => {
     if (!panning || e.touches.length !== 1) return;
+
     e.preventDefault();
     e.stopPropagation();
 
@@ -144,7 +146,16 @@ export const scroll: Action<HTMLElement, undefined, Attributes> = (container) =>
     }
 
     const deltaY = currentY - initialY;
-    setTranslateY(initialTranslateY + deltaY);
+
+    if (!scrolling && Math.abs(deltaY) > 3) {
+      scrolling = true;
+      container.dispatchEvent(new CustomEvent('momentumscrollstart'));
+    }
+
+    if (scrolling) {
+      setTranslateY(initialTranslateY + deltaY);
+    }
+
     lastEventAt = currentTime;
     lastY = currentY;
   };
