@@ -53,6 +53,7 @@ class App extends HookWidget {
             selectionHandleColor: AppColors.gray_950,
           ),
           iconTheme: const IconThemeData(size: 24, color: AppColors.gray_950),
+          progressIndicatorTheme: const ProgressIndicatorThemeData(strokeWidth: 1, color: AppColors.gray_950),
           cupertinoOverrideTheme: const CupertinoThemeData(primaryColor: AppColors.gray_950),
         ),
         builder: (context, child) {
