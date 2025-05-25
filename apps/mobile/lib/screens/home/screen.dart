@@ -65,8 +65,20 @@ class HomeScreen extends HookWidget {
                   Tappable(
                     padding: const Pad(horizontal: 16),
                     onTap: () async {
+                      String? parentEntityId;
+
+                      final topRoute = context.topRoute;
+                      if (topRoute.name == EntityRoute.name) {
+                        final args = topRoute.argsAs<EntityRouteArgs>(orElse: EntityRouteArgs.new);
+                        parentEntityId = args.entityId;
+                      }
+
                       final result = await client.request(
-                        GHomeScreen_CreatePost_MutationReq((b) => b..vars.input.siteId = pref.siteId),
+                        GHomeScreen_CreatePost_MutationReq(
+                          (b) => b
+                            ..vars.input.siteId = pref.siteId
+                            ..vars.input.parentEntityId = parentEntityId,
+                        ),
                       );
 
                       if (context.mounted) {
