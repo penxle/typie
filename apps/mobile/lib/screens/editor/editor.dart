@@ -1,7 +1,10 @@
 import 'dart:io';
 
+import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
@@ -70,7 +73,42 @@ class Editor extends HookWidget {
         return Screen(
           heading: Heading(
             title: data.post.title,
-            actions: [HeadingAction(icon: LucideLightIcons.ellipsis, onTap: () {})],
+            actions: [
+              HeadingAction(
+                icon: LucideLightIcons.ellipsis,
+                onTap: () async {
+                  await context.showBottomSheet(
+                    child: BottomMenu(
+                      items: [
+                        BottomMenuItem(
+                          icon: LucideLightIcons.trash,
+                          label: '삭제하기',
+                          onTap: () async {
+                            await context.showModal(
+                              child: ConfirmModal(
+                                title: '포스트 삭제',
+                                message: '"${data.post.title}" 포스트를 삭제하시겠어요?',
+                                confirmText: '삭제하기',
+                                confirmColor: AppColors.red_500,
+                                onConfirm: () async {
+                                  await client.request(
+                                    GEditorScreen_DeletePost_MutationReq((b) => b..vars.input.postId = data.post.id),
+                                  );
+
+                                  if (context.mounted) {
+                                    await context.router.maybePop();
+                                  }
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
             backgroundColor: AppColors.white,
           ),
           backgroundColor: AppColors.white,
