@@ -369,7 +369,14 @@
     <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
       <textarea
         bind:this={titleEl}
-        class={css({ width: 'full', fontSize: '24px', fontWeight: 'bold', resize: 'none', touchAction: 'none' })}
+        class={css({
+          width: 'full',
+          fontSize: '24px',
+          fontWeight: 'bold',
+          overflow: 'hidden',
+          resize: 'none',
+          touchAction: 'none',
+        })}
         autocapitalize="off"
         autocomplete="off"
         maxlength="100"
