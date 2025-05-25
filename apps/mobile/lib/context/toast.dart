@@ -4,7 +4,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
-import 'package:typie/icons/lucide.dart';
+import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/styles/colors.dart';
 
@@ -75,9 +75,9 @@ class _Widget extends HookWidget {
                     ),
                     child: Center(
                       child: switch (type) {
-                        ToastType.success => const Icon(LucideIcons.check, color: AppColors.white, size: 14),
+                        ToastType.success => const Icon(LucideLightIcons.check, color: AppColors.white, size: 14),
                         ToastType.error => const Icon(TypieIcons.exclamation, color: AppColors.white, size: 14),
-                        ToastType.notification => const Icon(LucideIcons.bell, color: AppColors.white, size: 14),
+                        ToastType.notification => const Icon(LucideLightIcons.bell, color: AppColors.white, size: 14),
                       },
                     ),
                   ),

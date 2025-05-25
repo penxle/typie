@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide_bold.dart';
+import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/icons/typie.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/screen.req.gql.dart';
 import 'package:typie/services/preference.dart';
@@ -45,8 +46,8 @@ class HomeScreen extends HookWidget {
               height: padding.bottom + 52,
               padding: Pad(horizontal: 24, bottom: padding.bottom),
               decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.gray_950)),
-                color: AppColors.gray_50,
+                border: Border(top: BorderSide(color: AppColors.gray_200)),
+                color: AppColors.white,
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -54,13 +55,13 @@ class HomeScreen extends HookWidget {
                 children: [
                   const _Button(
                     index: 0,
-                    icon: Icon(LucideBoldIcons.folder, size: 24, color: AppColors.gray_300),
-                    activeIcon: Icon(LucideBoldIcons.folder, size: 24, color: AppColors.gray_700),
+                    icon: Icon(LucideLightIcons.folder_open, size: 24, color: AppColors.gray_700),
+                    activeIcon: Icon(TypieIcons.folder_open_filled, size: 24, color: AppColors.gray_950),
                   ),
                   const _Button(
                     index: 1,
-                    icon: Icon(LucideBoldIcons.search, size: 24, color: AppColors.gray_300),
-                    activeIcon: Icon(LucideBoldIcons.search, size: 24, color: AppColors.gray_700),
+                    icon: Icon(LucideLightIcons.search, size: 24, color: AppColors.gray_700),
+                    activeIcon: Icon(TypieIcons.search_filled, size: 24, color: AppColors.gray_950),
                   ),
                   Tappable(
                     padding: const Pad(horizontal: 16),
@@ -85,17 +86,17 @@ class HomeScreen extends HookWidget {
                         await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
                       }
                     },
-                    child: const Icon(LucideBoldIcons.square_plus, size: 24, color: AppColors.gray_300),
+                    child: const Icon(LucideLightIcons.square_plus, size: 24, color: AppColors.gray_700),
                   ),
                   const _Button(
                     index: 2,
-                    icon: Icon(LucideBoldIcons.bell, size: 24, color: AppColors.gray_300),
-                    activeIcon: Icon(LucideBoldIcons.bell, size: 24, color: AppColors.gray_700),
+                    icon: Icon(LucideLightIcons.inbox, size: 24, color: AppColors.gray_700),
+                    activeIcon: Icon(TypieIcons.inbox_filled, size: 24, color: AppColors.gray_950),
                   ),
                   const _Button(
                     index: 3,
-                    icon: Icon(LucideBoldIcons.circle_user_round, size: 24, color: AppColors.gray_300),
-                    activeIcon: Icon(LucideBoldIcons.circle_user_round, size: 24, color: AppColors.gray_700),
+                    icon: Icon(LucideLightIcons.circle_user_round, size: 24, color: AppColors.gray_700),
+                    activeIcon: Icon(TypieIcons.circle_user_round_filled, size: 24, color: AppColors.gray_950),
                   ),
                 ],
               ),
