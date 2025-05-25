@@ -40,6 +40,10 @@ class AppWebView: NSObject, FlutterPlatformView {
 
     webView = AppWKWebView(frame: frame, configuration: configuration)
 
+    NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardWillShowNotification, object: nil)
+    NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardWillHideNotification, object: nil)
+    NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+
     super.init()
 
     webView.navigationDelegate = self
@@ -150,7 +154,7 @@ class AppWebView: NSObject, FlutterPlatformView {
   private func disableZoom() {
     let script = """
       (() => {
-        const meta = document.createElement('meta'); meta.name = 'viewport'; meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        const meta = document.createElement('meta'); meta.name = 'viewport'; meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
         const head = document.querySelector('head'); head.appendChild(meta);
       })();
     """
