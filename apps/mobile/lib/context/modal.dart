@@ -2,11 +2,12 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 
 extension ModalExtension on BuildContext {
-  Future<T?> showModal<T extends Object?>({required Widget child}) {
+  Future<T?> showModal<T extends Object?>({required Widget child, bool intercept = false}) {
     return router.root.pushWidget(
       child,
       opaque: false,
@@ -25,11 +26,14 @@ extension ModalExtension on BuildContext {
         return Stack(
           children: [
             Positioned.fill(
-              child: FadeTransition(
-                opacity: tweenedBackdropOpacity,
+              child: PointerInterceptor(
+                intercepting: intercept,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  child: ColoredBox(color: AppColors.black.withValues(alpha: 0.5)),
+                  child: FadeTransition(
+                    opacity: tweenedBackdropOpacity,
+                    child: SizedBox.expand(child: ColoredBox(color: AppColors.black.withValues(alpha: 0.5))),
+                  ),
                   onTap: () async {
                     await router.root.maybePop();
                   },
