@@ -4,7 +4,6 @@
   import { Mark } from '@tiptap/pm/model';
   import { Selection } from '@tiptap/pm/state';
   import stringify from 'fast-json-stable-stringify';
-  import Lenis from 'lenis';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
@@ -21,6 +20,7 @@
   import { flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
   import Placeholder from './Placeholder.svelte';
+  import { scroll } from './scroll.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
@@ -76,9 +76,6 @@
 
   let editor = $state<Ref<Editor>>();
 
-  let lenis: Lenis;
-  let containerEl = $state<HTMLDivElement>();
-
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
 
@@ -98,8 +95,6 @@
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote') {
-      lenis.resize();
-
       await syncPost(
         {
           clientId,
@@ -144,8 +139,6 @@
 
   onMount(() => {
     const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
-      lenis.resize();
-
       if (payload.type === PostSyncType.UPDATE) {
         Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
       } else if (payload.type === PostSyncType.VECTOR) {
@@ -223,7 +216,7 @@
     editor?.current.on('transaction', handler);
 
     window.__webview__?.addEventListener('appReady', () => {
-      titleEl?.focus();
+      // titleEl?.focus();
     });
 
     window.__webview__?.addEventListener('command', (data) => {
@@ -330,22 +323,7 @@
       }
     });
 
-    lenis = new Lenis({
-      wrapper: containerEl,
-      content: containerEl?.firstElementChild as HTMLElement,
-      syncTouch: true,
-    });
-
-    const raf = (timestamp: number) => {
-      lenis.raf(timestamp);
-      requestAnimationFrame(raf);
-    };
-
-    requestAnimationFrame(raf);
-
     return () => {
-      lenis.destroy();
-
       clearInterval(forceSyncInterval);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
@@ -365,7 +343,16 @@
   {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
-<div bind:this={containerEl} class={css({ width: '[100dvw]', height: '[100dvh]', overflow: 'hidden' })}>
+<div
+  class={css({ width: '[100dvw]', height: '[100dvh]', overflow: 'hidden', touchAction: 'none' })}
+  onmomentumscrollend={() => {
+    document.body.style.caretColor = token('colors.gray.950');
+  }}
+  onmomentumscrollstart={() => {
+    document.body.style.caretColor = 'transparent';
+  }}
+  use:scroll
+>
   <div
     style:--prosemirror-max-width={`${maxWidth.current}px`}
     style:--prosemirror-color-selection={token.var('colors.gray.950')}
@@ -374,9 +361,8 @@
       alignItems: 'center',
       paddingTop: '24px',
       paddingX: '20px',
-      size: 'full',
+      width: 'full',
       userSelect: 'text',
-      touchAction: 'none',
       WebkitTouchCallout: 'none',
     })}
   >

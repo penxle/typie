@@ -1,9 +1,12 @@
 *create
+*end
 *execute
 *file
 *init
-*introend
-*outroend
+*intro+
+*momentumscroll*
+*outro+
+*start
 amazonses
 batang
 buildx

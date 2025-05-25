@@ -83,7 +83,15 @@
         if (window.__webview__) {
           setTimeout(() => {
             editor.commands.scrollIntoView();
-          }, 500);
+          }, 200);
+        }
+      },
+
+      onSelectionUpdate: ({ editor }) => {
+        if (window.__webview__) {
+          setTimeout(() => {
+            editor.commands.scrollIntoView();
+          }, 200);
         }
       },
     });

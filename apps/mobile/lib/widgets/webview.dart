@@ -106,10 +106,6 @@ class WebViewController {
 
   Stream<WebViewEvent> get onEvent => _streamController.stream;
 
-  Future<void> loadUrl(String url) async {
-    await _channel.invokeMethod('loadUrl', {'url': url});
-  }
-
   Future<void> requestFocus() async {
     await _channel.invokeMethod('requestFocus', <dynamic, dynamic>{});
   }
