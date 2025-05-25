@@ -67,7 +67,7 @@ export const Paragraph = Node.create({
           return closest(letterSpacing, letterSpacings) ?? defaultValues.letterSpacing;
         },
         renderHTML: ({ letterSpacing }) => ({
-          style: `letter-spacing: ${letterSpacing - 0.015}em`,
+          style: `letter-spacing: ${letterSpacing}em`,
         }),
       },
     };
