@@ -127,7 +127,7 @@ class ConfirmModal extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(color: cancelColor, borderRadius: BorderRadius.circular(999)),
                     padding: const Pad(vertical: 12),
-                    child: Text(cancelText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    child: Text(cancelText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),
@@ -143,7 +143,7 @@ class ConfirmModal extends StatelessWidget {
                     padding: const Pad(vertical: 12),
                     child: Text(
                       confirmText,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.white),
                     ),
                   ),
                 ),

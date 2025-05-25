@@ -6,6 +6,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:built_value/json_object.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:naver_login_sdk/naver_login_sdk.dart';
@@ -49,19 +50,12 @@ class LoginScreen extends HookWidget {
           const Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              spacing: 24,
               children: [
-                SvgImage('logos/full', height: 40, color: AppColors.gray_950),
-                Text(
-                  '쓰고, 공유하고, 정리하는\n글쓰기 공간',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Eulyoo1945',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.gray_500,
-                  ),
-                ),
+                SvgImage('logos/full', height: 52, color: AppColors.gray_950),
+                Gap(24),
+                Text('쓰고, 공유하고, 정리하는', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
+                Gap(4),
+                Text('글쓰기 공간', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               ],
             ),
           ),
@@ -160,15 +154,13 @@ class LoginScreen extends HookWidget {
             ),
           ),
           Padding(
-            padding: const Pad(all: 24),
+            padding: const Pad(all: 12),
             child: Tappable(
+              padding: const Pad(horizontal: 24, vertical: 12),
               onTap: () async {
                 await context.router.push(const LoginWithEmailRoute());
               },
-              child: const Text(
-                '이메일로 가입하셨나요?',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
-              ),
+              child: const Text('이메일로 가입하셨나요?', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
             ),
           ),
         ],
@@ -219,7 +211,7 @@ class _Button extends StatelessWidget {
             Center(
               child: Text(
                 text,
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: foregroundColor),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: foregroundColor),
               ),
             ),
           ],

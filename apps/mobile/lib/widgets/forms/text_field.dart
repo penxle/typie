@@ -131,10 +131,10 @@ class HookFormTextField extends HookWidget {
                 isCollapsed: true,
                 border: InputBorder.none,
                 hintText: placeholder,
-                hintStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray_400),
+                hintStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
               ),
               cursorColor: AppColors.gray_900,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               onChanged: (value) {
                 field.value = value;
               },
@@ -218,7 +218,7 @@ class _HookFormCollapsedTextField extends HookFormTextField {
           textInputAction: textInputAction,
           decoration: InputDecoration.collapsed(
             hintText: placeholder,
-            hintStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray_400),
+            hintStyle: style.copyWith(color: AppColors.gray_300),
           ),
           cursorColor: AppColors.gray_900,
           style: style,

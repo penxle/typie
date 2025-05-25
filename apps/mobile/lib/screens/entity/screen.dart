@@ -415,7 +415,7 @@ class _Folder extends StatelessWidget {
         Expanded(
           child: Text(
             folder.name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
           ),
@@ -444,7 +444,7 @@ class _Post extends StatelessWidget {
             Expanded(
               child: Text(
                 post.title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
