@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:auto_route/auto_route.dart';
@@ -77,6 +78,7 @@ class Editor extends HookWidget {
               HeadingAction(
                 icon: LucideLightIcons.ellipsis,
                 onTap: () async {
+                  unawaited(scope.webViewController.value?.clearFocus());
                   await context.showBottomSheet(
                     child: BottomMenu(
                       items: [

@@ -17,7 +17,7 @@
   import { getNodeViewByNodeId, TiptapEditor } from '$lib/tiptap';
   import { clamp } from '$lib/utils';
   import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
   import Placeholder from './Placeholder.svelte';
   import { scroll } from './scroll.svelte';
@@ -340,7 +340,7 @@
 
 <svelte:head>
   <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-  {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
+  {@html '<st' + `yle type="text/css">${fontFaces}</st` + 'yle>'}
 </svelte:head>
 
 <div
@@ -359,7 +359,7 @@
     class={flex({
       flexDirection: 'column',
       alignItems: 'center',
-      paddingTop: '24px',
+      paddingTop: '40px',
       paddingX: '20px',
       width: 'full',
       userSelect: 'text',
@@ -371,8 +371,9 @@
         bind:this={titleEl}
         class={css({
           width: 'full',
-          fontSize: '24px',
+          fontSize: '20px',
           fontWeight: 'bold',
+          textAlign: 'center',
           overflow: 'hidden',
           resize: 'none',
           touchAction: 'none',
@@ -390,7 +391,7 @@
             subtitleEl?.focus();
           }
         }}
-        placeholder="제목을 입력하세요"
+        placeholder="제목"
         rows={1}
         spellcheck="false"
         bind:value={title.current}
@@ -404,6 +405,7 @@
           width: 'full',
           fontSize: '16px',
           fontWeight: 'medium',
+          textAlign: 'center',
           overflow: 'hidden',
           resize: 'none',
           touchAction: 'none',
@@ -431,14 +433,16 @@
               .run();
           }
         }}
-        placeholder="부제목을 입력하세요"
+        placeholder="부제목"
         rows={1}
         spellcheck="false"
         bind:value={subtitle.current}
         use:autosize
       ></textarea>
 
-      <div class={css({ marginTop: '10px', marginBottom: '20px', height: '1px', backgroundColor: 'gray.950' })}></div>
+      <div class={center()}>
+        <div class={css({ marginY: '40px', width: '120px', height: '1px', backgroundColor: 'gray.200' })}></div>
+      </div>
     </div>
 
     <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
