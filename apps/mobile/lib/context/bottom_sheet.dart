@@ -186,10 +186,7 @@ class BottomMenuItem extends StatelessWidget {
         spacing: 16,
         children: [
           Icon(icon, size: 22, color: iconColor),
-          Text(
-            label,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: labelColor),
-          ),
+          Text(label, style: TextStyle(fontSize: 17, color: labelColor)),
         ],
       ),
     );

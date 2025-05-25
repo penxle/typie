@@ -88,29 +88,13 @@ flutter:
     - family: TypieIcons
       fonts:
         - asset: assets/fonts/TypieIcons.ttf
-    - family: SUIT
+    - family: Interop
       fonts:
-        - asset: assets/fonts/SUIT-Thin.ttf
-          weight: 100
-        - asset: assets/fonts/SUIT-ExtraLight.ttf
-          weight: 200
-        - asset: assets/fonts/SUIT-Light.ttf
-          weight: 300
-        - asset: assets/fonts/SUIT-Regular.ttf
+        - asset: assets/fonts/Interop-Regular.otf
           weight: 400
-        - asset: assets/fonts/SUIT-Medium.ttf
+        - asset: assets/fonts/Interop-Medium.otf
           weight: 500
-        - asset: assets/fonts/SUIT-SemiBold.ttf
+        - asset: assets/fonts/Interop-SemiBold.otf
           weight: 600
-        - asset: assets/fonts/SUIT-Bold.ttf
+        - asset: assets/fonts/Interop-Bold.otf
           weight: 700
-        - asset: assets/fonts/SUIT-ExtraBold.ttf
-          weight: 800
-        - asset: assets/fonts/SUIT-Heavy.ttf
-          weight: 900
-    - family: Eulyoo1945
-      fonts:
-        - asset: assets/fonts/Eulyoo1945-Regular.ttf
-          weight: 400
-        - asset: assets/fonts/Eulyoo1945-SemiBold.ttf
-          weight: 600

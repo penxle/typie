@@ -103,10 +103,10 @@ class EditorToolbar extends HookWidget {
         ),
         Container(
           height: keyboardHeight,
-              decoration: const BoxDecoration(
-                color: AppColors.white,
-                border: Border(top: BorderSide(color: AppColors.gray_200)),
-              ),
+          decoration: const BoxDecoration(
+            color: AppColors.white,
+            border: Border(top: BorderSide(color: AppColors.gray_200)),
+          ),
           child: AnimatedIndexedSwitcher(
             index: max(selectedToolboxIdx, 0),
             children: [
@@ -306,10 +306,7 @@ class _NodeToolbar extends HookWidget {
       child: Row(
         spacing: 16,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_500),
-          ),
+          Text(label, style: const TextStyle(fontSize: 16, color: AppColors.gray_700)),
           const AppVerticalDivider(height: 20, color: AppColors.gray_200),
           ...children,
           _TextToolbarButton(
@@ -1010,10 +1007,7 @@ class _TextToolbarButton extends StatelessWidget {
         return Container(
           alignment: Alignment.center,
           padding: const Pad(all: 4),
-          child: Text(
-            text,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: color),
-          ),
+          child: Text(text, style: TextStyle(fontSize: 16, color: color)),
         );
       },
     );
