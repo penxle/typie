@@ -77,6 +77,7 @@
   let editor = $state<Ref<Editor>>();
 
   let lenis: Lenis;
+  let containerEl = $state<HTMLDivElement>();
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -330,6 +331,8 @@
     });
 
     lenis = new Lenis({
+      wrapper: containerEl,
+      content: containerEl?.firstElementChild as HTMLElement,
       syncTouch: true,
     });
 
@@ -362,101 +365,103 @@
   {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
-<div
-  style:--prosemirror-max-width={`${maxWidth.current}px`}
-  style:--prosemirror-color-selection={token.var('colors.gray.950')}
-  class={flex({
-    flexDirection: 'column',
-    alignItems: 'center',
-    paddingTop: '24px',
-    paddingX: '20px',
-    width: 'full',
-    userSelect: 'text',
-    touchAction: 'none',
-    WebkitTouchCallout: 'none',
-  })}
->
-  <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-    <textarea
-      bind:this={titleEl}
-      class={css({ width: 'full', fontSize: '24px', fontWeight: 'bold', resize: 'none', touchAction: 'none' })}
-      autocapitalize="off"
-      autocomplete="off"
-      maxlength="100"
-      onkeydown={(e) => {
-        if (e.isComposing) {
-          return;
-        }
+<div bind:this={containerEl} class={css({ width: '[100dvw]', height: '[100dvh]', overflow: 'hidden' })}>
+  <div
+    style:--prosemirror-max-width={`${maxWidth.current}px`}
+    style:--prosemirror-color-selection={token.var('colors.gray.950')}
+    class={flex({
+      flexDirection: 'column',
+      alignItems: 'center',
+      paddingTop: '24px',
+      paddingX: '20px',
+      size: 'full',
+      userSelect: 'text',
+      touchAction: 'none',
+      WebkitTouchCallout: 'none',
+    })}
+  >
+    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+      <textarea
+        bind:this={titleEl}
+        class={css({ width: 'full', fontSize: '24px', fontWeight: 'bold', resize: 'none', touchAction: 'none' })}
+        autocapitalize="off"
+        autocomplete="off"
+        maxlength="100"
+        onkeydown={(e) => {
+          if (e.isComposing) {
+            return;
+          }
 
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          subtitleEl?.focus();
-        }
-      }}
-      placeholder="제목을 입력하세요"
-      rows={1}
-      spellcheck="false"
-      bind:value={title.current}
-      use:autosize
-    ></textarea>
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            subtitleEl?.focus();
+          }
+        }}
+        placeholder="제목을 입력하세요"
+        rows={1}
+        spellcheck="false"
+        bind:value={title.current}
+        use:autosize
+      ></textarea>
 
-    <textarea
-      bind:this={subtitleEl}
-      class={css({
-        marginTop: '4px',
-        width: 'full',
-        fontSize: '16px',
-        fontWeight: 'medium',
-        overflow: 'hidden',
-        resize: 'none',
-        touchAction: 'none',
-      })}
-      autocapitalize="off"
-      autocomplete="off"
-      maxlength="100"
-      onkeydown={(e) => {
-        if (e.isComposing) {
-          return;
-        }
+      <textarea
+        bind:this={subtitleEl}
+        class={css({
+          marginTop: '4px',
+          width: 'full',
+          fontSize: '16px',
+          fontWeight: 'medium',
+          overflow: 'hidden',
+          resize: 'none',
+          touchAction: 'none',
+        })}
+        autocapitalize="off"
+        autocomplete="off"
+        maxlength="100"
+        onkeydown={(e) => {
+          if (e.isComposing) {
+            return;
+          }
 
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
-          editor?.current
-            .chain()
-            .focus()
-            .setTextSelection(2)
-            .command(({ tr, dispatch }) => {
-              tr.setStoredMarks(marks);
-              dispatch?.(tr);
-              return true;
-            })
-            .run();
-        }
-      }}
-      placeholder="부제목을 입력하세요"
-      rows={1}
-      spellcheck="false"
-      bind:value={subtitle.current}
-      use:autosize
-    ></textarea>
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+            editor?.current
+              .chain()
+              .focus()
+              .setTextSelection(2)
+              .command(({ tr, dispatch }) => {
+                tr.setStoredMarks(marks);
+                dispatch?.(tr);
+                return true;
+              })
+              .run();
+          }
+        }}
+        placeholder="부제목을 입력하세요"
+        rows={1}
+        spellcheck="false"
+        bind:value={subtitle.current}
+        use:autosize
+      ></textarea>
 
-    <div class={css({ marginTop: '10px', marginBottom: '20px', height: '1px', backgroundColor: 'gray.950' })}></div>
-  </div>
+      <div class={css({ marginTop: '10px', marginBottom: '20px', height: '1px', backgroundColor: 'gray.950' })}></div>
+    </div>
 
-  <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
-    <TiptapEditor
-      style={css.raw({ size: 'full' })}
-      {awareness}
-      {doc}
-      oncreate={() => {
-        window.__webview__?.emitEvent('webviewReady');
-      }}
-      bind:editor
-    />
+    <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+      <TiptapEditor
+        style={css.raw({ size: 'full' })}
+        {awareness}
+        {doc}
+        oncreate={() => {
+          window.__webview__?.emitEvent('webviewReady');
+        }}
+        bind:editor
+      />
 
-    {#if editor}
-      <Placeholder {editor} />
-    {/if}
+      {#if editor}
+        <Placeholder {editor} />
+      {/if}
+    </div>
   </div>
 </div>
