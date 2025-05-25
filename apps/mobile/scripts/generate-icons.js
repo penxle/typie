@@ -126,7 +126,7 @@ import 'package:flutter/material.dart';
 
 @staticIconProvider
 abstract final class ${familyName} {
-  static const String _fontFamily = '${familyName}';
+  static const _fontFamily = '${familyName}';
 ${entries.join('\n')}
 }
 `,
@@ -155,13 +155,9 @@ const makeLucideDir = async (name, width) => {
 };
 
 const lucideLightDir = await makeLucideDir('lucide-light', '1.5');
-const lucideDir = await makeLucideDir('lucide', '2');
-const lucideBoldDir = await makeLucideDir('lucide-bold', '2.5');
 
 const typieDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-typie-'));
 await fs.cp('../website/src/icons', typieDir, { recursive: true });
 
 await createIconFont('lucide-light', lucideLightDir);
-await createIconFont('lucide', lucideDir);
-await createIconFont('lucide-bold', lucideBoldDir);
 await createIconFont('typie', typieDir);

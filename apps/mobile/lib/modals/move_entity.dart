@@ -6,7 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide.dart';
+import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/modals/__generated__/move_entity.data.gql.dart';
 import 'package:typie/modals/__generated__/move_entity.req.gql.dart';
 import 'package:typie/styles/colors.dart';
@@ -96,7 +96,7 @@ class MoveEntityModal extends HookWidget {
                                   spacing: 8,
                                   children: [
                                     Icon(
-                                      LucideIcons.folder,
+                                      LucideLightIcons.folder,
                                       size: 18,
                                       color: exceedMaxDepth || id == entityId ? AppColors.gray_400 : null,
                                     ),
