@@ -137,10 +137,7 @@ class Editor extends HookWidget {
                   ],
                 ),
               ),
-              if (!isReady.value)
-                const Positioned.fill(
-                  child: Center(child: CircularProgressIndicator(color: AppColors.gray_950)),
-                ),
+              if (!isReady.value) const Positioned.fill(child: Center(child: CircularProgressIndicator())),
             ],
           ),
         );
