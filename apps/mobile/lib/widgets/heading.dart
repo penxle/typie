@@ -10,7 +10,7 @@ import 'package:typie/widgets/vertical_divider.dart';
 
 class Heading extends StatelessWidget implements PreferredSizeWidget {
   const Heading({
-    this.leadingIcon,
+    this.leadingWidget,
     this.titleIcon,
     this.title,
     this.titleWidget,
@@ -20,7 +20,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
     super.key,
   }) : assert(title != null || titleWidget != null, 'title or titleWidget must be provided');
 
-  final IconData? leadingIcon;
+  final Widget? leadingWidget;
   final IconData? titleIcon;
   final String? title;
   final Widget? titleWidget;
@@ -57,9 +57,14 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
             ),
             child: Row(
               children: [
-                if (route?.canPop ?? false) ...[
+                if (leadingWidget != null) ...[
+                  leadingWidget!,
+                  const AppVerticalDivider(color: AppColors.gray_950),
+                  const Gap(20),
+                ] else if (route?.canPop ?? false) ...[
                   Tappable(
                     onTap: () => context.router.maybePop(),
+                    padding: const Pad(vertical: 4),
                     child: SizedBox(
                       width: 52,
                       child: Icon(
@@ -124,6 +129,22 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
         systemStatusBarContrastEnforced: false,
       ),
       child: backgroundColor == null ? child : ColoredBox(color: backgroundColor!, child: child),
+    );
+  }
+}
+
+class HeadingLeading extends StatelessWidget {
+  const HeadingLeading({required this.icon, required this.onTap, super.key});
+
+  final IconData icon;
+  final void Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tappable(
+      onTap: onTap,
+      padding: const Pad(vertical: 4),
+      child: SizedBox(width: 52, child: Icon(icon, size: 24)),
     );
   }
 }
