@@ -17,13 +17,13 @@ platform :android do
     Dir.chdir("../..") do
       sh "dart run build_runner clean"
       sh "dart run build_runner build --delete-conflicting-outputs"
-      sh "flutter build appbundle --build-number=#{target_build_number}"
+      sh "flutter build apk --build-number=#{target_build_number}"
     end
 
     firebase_app_distribution(
       app: "1:378927208010:android:43c0f4af9b2ffcf234b8b3",
       service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-      android_artifact_path: "../build/app/outputs/bundle/release/app-release.aab",
+      android_artifact_path: "../build/app/outputs/apk/release/app-release.apk",
       groups: "android",
     )
   end
