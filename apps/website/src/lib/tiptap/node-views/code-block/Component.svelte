@@ -101,7 +101,6 @@
       overflowX: 'auto',
       whiteSpace: 'pre',
       tabSize: '4',
-      touchAction: 'none',
       '&:not(:has(.ProseMirror-trailingBreak))': {
         _after: {
           content: '""',
