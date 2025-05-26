@@ -11,7 +11,7 @@ extension ModalExtension on BuildContext {
     return router.root.pushWidget(
       child,
       opaque: false,
-      transitionDuration: const Duration(milliseconds: 150),
+      transitionDuration: const Duration(milliseconds: 200),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final tweenedBackdropOpacity = Tween<double>(
           begin: 0,

@@ -54,10 +54,9 @@ extension BottomSheetExtension on BuildContext {
 }
 
 class BottomSheet extends HookWidget {
-  const BottomSheet({required this.child, this.floating = false, this.padding, super.key});
+  const BottomSheet({required this.child, this.padding, super.key});
 
   final Widget child;
-  final bool floating;
   final EdgeInsetsGeometry? padding;
 
   @override
@@ -106,23 +105,19 @@ class BottomSheet extends HookWidget {
           child: Container(
             key: sheetKey,
             width: double.infinity,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.gray_50,
-              border: const Border(
+              border: Border(
                 top: BorderSide(color: AppColors.gray_950),
                 left: BorderSide(color: AppColors.gray_950),
                 right: BorderSide(color: AppColors.gray_950),
               ),
-              borderRadius: BorderRadius.vertical(
-                top: const Radius.circular(16),
-                bottom: Radius.circular(floating ? 16 : 0),
-              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
-            margin: floating ? Pad(horizontal: 16, bottom: bottomPadding + 16) : null,
             child: ConstrainedBox(
               constraints: BoxConstraints(maxHeight: maxHeight),
               child: Padding(
-                padding: Pad(top: 8, bottom: floating ? 16 : bottomPadding + 16),
+                padding: Pad(top: 8, bottom: bottomPadding + 12),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
@@ -181,7 +176,7 @@ class BottomMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tappable(
-      padding: const Pad(horizontal: 20, vertical: 12),
+      padding: const Pad(horizontal: 24, vertical: 10),
       onTap: () {
         context.router.pop();
         onTap();
@@ -189,7 +184,7 @@ class BottomMenuItem extends StatelessWidget {
       child: Row(
         spacing: 16,
         children: [
-          Icon(icon, size: 22, color: iconColor),
+          Icon(icon, size: 20, color: iconColor),
           Text(label, style: TextStyle(fontSize: 17, color: labelColor)),
         ],
       ),
