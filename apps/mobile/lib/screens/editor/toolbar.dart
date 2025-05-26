@@ -835,6 +835,7 @@ class _SelectTextbar extends HookWidget {
 
     return Row(
       spacing: 12,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ...editorValues[name]!.mapIndexed(
           (index, e) => KeyedSubtree(key: keys[index], child: builder(context, e, e['value'] == activeValue)),
@@ -961,22 +962,24 @@ class _ColorToolbarButton extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Container(
-        width: 24,
-        height: 24,
-        decoration: BoxDecoration(
-          border: Border.all(
-            width: 2,
-            color: isActive ? (hex == '#ffffff' ? AppColors.gray_200 : color) : AppColors.transparent,
-          ),
-          borderRadius: BorderRadius.circular(999),
-        ),
+      child: Center(
         child: Container(
-          padding: const Pad(all: 1),
+          width: 24,
+          height: 24,
           decoration: BoxDecoration(
-            color: color,
-            border: Border.all(color: AppColors.gray_200),
+            border: Border.all(
+              width: 2,
+              color: isActive ? (hex == '#ffffff' ? AppColors.gray_200 : color) : AppColors.transparent,
+            ),
             borderRadius: BorderRadius.circular(999),
+          ),
+          child: Container(
+            padding: const Pad(all: 1),
+            decoration: BoxDecoration(
+              color: color,
+              border: Border.all(color: AppColors.gray_200),
+              borderRadius: BorderRadius.circular(999),
+            ),
           ),
         ),
       ),

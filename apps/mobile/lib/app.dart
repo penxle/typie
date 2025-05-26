@@ -14,7 +14,13 @@ class App extends HookWidget {
   Widget build(BuildContext context) {
     final router = useMemoized(AppRouter.new);
 
-    const defaultTextStyle = TextStyle(fontFamily: 'Interop', fontSize: 16, color: AppColors.gray_950, height: 1.4);
+    const defaultTextStyle = TextStyle(
+      fontFamily: 'Interop',
+      fontSize: 16,
+      color: AppColors.gray_950,
+      height: 1.4,
+      letterSpacing: 0,
+    );
 
     return SentryWidget(
       child: MaterialApp.router(
