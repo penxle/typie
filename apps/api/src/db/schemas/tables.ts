@@ -474,6 +474,7 @@ export const UserPlans = pgTable('user_plans', {
     .primaryKey()
     .$defaultFn(() => createDbId(TableCode.USER_PLANS)),
   userId: text('user_id')
+    .unique()
     .notNull()
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   planId: text('plan_id')
