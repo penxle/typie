@@ -3,6 +3,7 @@
   import stringHash from '@sindresorhus/string-hash';
   import { Mark } from '@tiptap/pm/model';
   import { Selection } from '@tiptap/pm/state';
+  import { disableBodyScroll, enableBodyScroll } from 'body-scroll-lock-upgrade';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -20,7 +21,6 @@
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
   import Placeholder from './Placeholder.svelte';
-  import { scroll } from './scroll.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
@@ -71,6 +71,7 @@
 
   const clientId = nanoid();
 
+  let containerEl = $state<HTMLDivElement>();
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
 
@@ -138,6 +139,10 @@
   };
 
   onMount(() => {
+    if (containerEl) {
+      disableBodyScroll(containerEl);
+    }
+
     const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
       if (payload.type === PostSyncType.UPDATE) {
         Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
@@ -334,6 +339,10 @@
       persistence.destroy();
       awareness.destroy();
       doc.destroy();
+
+      if (containerEl) {
+        enableBodyScroll(containerEl);
+      }
     };
   });
 </script>
@@ -344,121 +353,114 @@
 </svelte:head>
 
 <div
-  class={css({ width: '[100dvw]', height: '[100dvh]', overflow: 'hidden', touchAction: 'none' })}
-  onmomentumscrollend={() => {
-    document.body.style.caretColor = token('colors.gray.950');
-  }}
-  onmomentumscrollstart={() => {
-    document.body.style.caretColor = 'transparent';
-  }}
-  use:scroll
+  bind:this={containerEl}
+  style:--prosemirror-max-width={`${maxWidth.current}px`}
+  style:--prosemirror-color-selection={token.var('colors.gray.950')}
+  class={flex({
+    flexDirection: 'column',
+    alignItems: 'center',
+    paddingTop: '40px',
+    paddingX: '20px',
+    width: '[100dvw]',
+    height: '[100dvh]',
+    overflow: 'scroll',
+    scrollbarWidth: 'none',
+    userSelect: 'text',
+    touchAction: 'manipulation',
+    WebkitTouchCallout: 'none',
+    WebkitOverflowScrolling: 'touch',
+  })}
 >
-  <div
-    style:--prosemirror-max-width={`${maxWidth.current}px`}
-    style:--prosemirror-color-selection={token.var('colors.gray.950')}
-    class={flex({
-      flexDirection: 'column',
-      alignItems: 'center',
-      paddingTop: '40px',
-      paddingX: '20px',
-      width: 'full',
-      userSelect: 'text',
-      WebkitTouchCallout: 'none',
-    })}
-  >
-    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-      <textarea
-        bind:this={titleEl}
-        class={css({
-          width: 'full',
-          fontSize: '20px',
-          fontWeight: 'bold',
-          textAlign: 'center',
-          overflow: 'hidden',
-          resize: 'none',
-          touchAction: 'none',
-        })}
-        autocapitalize="off"
-        autocomplete="off"
-        maxlength="100"
-        onkeydown={(e) => {
-          if (e.isComposing) {
-            return;
-          }
+  <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+    <textarea
+      bind:this={titleEl}
+      class={css({
+        width: 'full',
+        fontSize: '20px',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        overflow: 'hidden',
+        resize: 'none',
+      })}
+      autocapitalize="off"
+      autocomplete="off"
+      maxlength="100"
+      onkeydown={(e) => {
+        if (e.isComposing) {
+          return;
+        }
 
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            subtitleEl?.focus();
-          }
-        }}
-        placeholder="제목"
-        rows={1}
-        spellcheck="false"
-        bind:value={title.current}
-        use:autosize
-      ></textarea>
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          subtitleEl?.focus();
+        }
+      }}
+      placeholder="제목"
+      rows={1}
+      spellcheck="false"
+      bind:value={title.current}
+      use:autosize
+    ></textarea>
 
-      <textarea
-        bind:this={subtitleEl}
-        class={css({
-          marginTop: '4px',
-          width: 'full',
-          fontSize: '16px',
-          fontWeight: 'medium',
-          textAlign: 'center',
-          overflow: 'hidden',
-          resize: 'none',
-          touchAction: 'none',
-        })}
-        autocapitalize="off"
-        autocomplete="off"
-        maxlength="100"
-        onkeydown={(e) => {
-          if (e.isComposing) {
-            return;
-          }
+    <textarea
+      bind:this={subtitleEl}
+      class={css({
+        marginTop: '4px',
+        width: 'full',
+        fontSize: '16px',
+        fontWeight: 'medium',
+        textAlign: 'center',
+        overflow: 'hidden',
+        resize: 'none',
+      })}
+      autocapitalize="off"
+      autocomplete="off"
+      maxlength="100"
+      onkeydown={(e) => {
+        if (e.isComposing) {
+          return;
+        }
 
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
-            editor?.current
-              .chain()
-              .focus()
-              .setTextSelection(2)
-              .command(({ tr, dispatch }) => {
-                tr.setStoredMarks(marks);
-                dispatch?.(tr);
-                return true;
-              })
-              .run();
-          }
-        }}
-        placeholder="부제목"
-        rows={1}
-        spellcheck="false"
-        bind:value={subtitle.current}
-        use:autosize
-      ></textarea>
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+          editor?.current
+            .chain()
+            .focus()
+            .setTextSelection(2)
+            .command(({ tr, dispatch }) => {
+              tr.setStoredMarks(marks);
+              dispatch?.(tr);
+              return true;
+            })
+            .run();
+        }
+      }}
+      placeholder="부제목"
+      rows={1}
+      spellcheck="false"
+      bind:value={subtitle.current}
+      use:autosize
+    ></textarea>
 
-      <div class={center()}>
-        <div class={css({ marginY: '40px', width: '120px', height: '1px', backgroundColor: 'gray.200' })}></div>
-      </div>
+    <div class={center()}>
+      <div class={css({ marginY: '40px', width: '120px', height: '1px', backgroundColor: 'gray.200' })}></div>
     </div>
+  </div>
 
-    <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
-      <TiptapEditor
-        style={css.raw({ size: 'full' })}
-        {awareness}
-        {doc}
-        oncreate={() => {
-          window.__webview__?.emitEvent('webviewReady');
-        }}
-        bind:editor
-      />
+  <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+    <TiptapEditor
+      style={css.raw({ size: 'full' })}
+      {awareness}
+      {doc}
+      oncreate={() => {
+        window.__webview__?.emitEvent('webviewReady');
+      }}
+      bind:editor
+    />
 
-      {#if editor}
-        <Placeholder {editor} />
-      {/if}
-    </div>
+    {#if editor}
+      <Placeholder {editor} />
+    {/if}
   </div>
 </div>
