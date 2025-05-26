@@ -136,31 +136,39 @@ class _EntityList extends HookWidget {
       builder: (context, form) {
         return Screen(
           heading: Heading(
-            titleWidget: isRenaming.value
-                ? HookFormTextField.collapsed(
-                    name: 'name',
-                    controller: textEditingController,
-                    autofocus: true,
-                    initialValue: folder!.name,
-                    placeholder: '폴더 이름',
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                  )
-                : GestureDetector(
-                    onDoubleTap: () {
-                      if (entity != null) {
-                        isRenaming.value = true;
-                      }
-                    },
-                    child: Text(
-                      entity == null
-                          ? '내 포스트'
-                          : textEditingController.text.isEmpty
-                          ? folder!.name
-                          : textEditingController.text,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+            titleWidget: Row(
+              spacing: 8,
+              children: [
+                Icon(entity == null ? LucideLightIcons.folder_open : LucideLightIcons.folder, size: 20),
+                Expanded(
+                  child: isRenaming.value
+                      ? HookFormTextField.collapsed(
+                          name: 'name',
+                          controller: textEditingController,
+                          autofocus: true,
+                          initialValue: folder!.name,
+                          placeholder: '폴더 이름',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        )
+                      : GestureDetector(
+                          onDoubleTap: () {
+                            if (entity != null) {
+                              isRenaming.value = true;
+                            }
+                          },
+                          child: Text(
+                            entity == null
+                                ? '내 포스트'
+                                : textEditingController.text.isEmpty
+                                ? folder!.name
+                                : textEditingController.text,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                ),
+              ],
+            ),
             actions: [
               if (!isRenaming.value && !isReordering.value)
                 HeadingAction(

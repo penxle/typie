@@ -9,6 +9,7 @@ import 'package:typie/context/modal.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/icons/lucide_lab.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/__generated__/editor.req.gql.dart';
 import 'package:typie/screens/editor/schema.dart';
@@ -73,6 +74,7 @@ class Editor extends HookWidget {
       builder: (context, client, data) {
         return Screen(
           heading: Heading(
+            titleIcon: LucideLabIcons.text_square,
             title: data.post.title,
             actions: [
               HeadingAction(

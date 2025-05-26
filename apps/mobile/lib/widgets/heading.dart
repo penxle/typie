@@ -11,6 +11,7 @@ import 'package:typie/widgets/vertical_divider.dart';
 class Heading extends StatelessWidget implements PreferredSizeWidget {
   const Heading({
     this.leadingIcon,
+    this.titleIcon,
     this.title,
     this.titleWidget,
     this.actions,
@@ -20,6 +21,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
   }) : assert(title != null || titleWidget != null, 'title or titleWidget must be provided');
 
   final IconData? leadingIcon;
+  final IconData? titleIcon;
   final String? title;
   final Widget? titleWidget;
   final List<Widget>? actions;
@@ -71,12 +73,13 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                   const AppVerticalDivider(color: AppColors.gray_950),
                   const Gap(20),
                 ],
+                if (titleIcon != null) ...[Icon(titleIcon, size: 20), const Gap(8)],
                 Expanded(
                   child:
                       titleWidget ??
                       Text(
                         title!,
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                 ),
