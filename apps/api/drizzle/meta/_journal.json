@@ -50,6 +50,13 @@
       "when": 1747037400010,
       "tag": "0006_volatile_richard_fisk",
       "breakpoints": false
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1748261070529,
+      "tag": "0007_opposite_lake",
+      "breakpoints": false
     }
   ]
 }
