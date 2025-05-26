@@ -169,6 +169,15 @@ class _EntityList extends HookWidget {
                 ),
               ],
             ),
+            leadingWidget: isRenaming.value
+                ? HeadingLeading(
+                    icon: LucideLightIcons.x,
+                    onTap: () {
+                      isRenaming.value = false;
+                      textEditingController.text = '';
+                    },
+                  )
+                : null,
             actions: [
               if (!isRenaming.value && !isReordering.value)
                 HeadingAction(
@@ -259,15 +268,7 @@ class _EntityList extends HookWidget {
                     );
                   },
                 )
-              else ...[
-                if (isRenaming.value)
-                  HeadingAction(
-                    icon: LucideLightIcons.x,
-                    onTap: () {
-                      isRenaming.value = false;
-                      textEditingController.text = '';
-                    },
-                  ),
+              else
                 HeadingAction(
                   icon: LucideLightIcons.check,
                   onTap: () async {
@@ -278,7 +279,6 @@ class _EntityList extends HookWidget {
                     }
                   },
                 ),
-              ],
             ],
           ),
           child: entities.isEmpty
