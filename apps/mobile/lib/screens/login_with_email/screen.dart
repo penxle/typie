@@ -2,17 +2,19 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/error.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/login_with_email/__generated__/screen.req.gql.dart';
-import 'package:typie/widgets/btn.dart';
+import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
 class LoginWithEmailScreen extends HookWidget {
@@ -24,7 +26,7 @@ class LoginWithEmailScreen extends HookWidget {
 
     return Screen(
       heading: const Heading(title: '이메일로 로그인'),
-      padding: const Pad(all: 24),
+      safeArea: false,
       resizeToAvoidBottomInset: true,
       child: HookForm(
         schema: l.schema({
@@ -50,37 +52,57 @@ class LoginWithEmailScreen extends HookWidget {
                 'invalid_credentials' => '이메일 또는 비밀번호가 올바르지 않아요.',
                 'password_not_set' => '비밀번호가 설정되지 않았어요.',
                 _ => '오류가 발생했어요. 잠시 후 다시 시도해주세요.',
-              });
+              }, bottom: 64);
             }
           }
         },
         builder: (context, form) {
-          return Column(
-            spacing: 16,
-            children: [
-              const HookFormTextField(
-                name: 'email',
-                label: '이메일',
-                placeholder: 'me@example.com',
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                autofocus: true,
-              ),
-              const HookFormTextField(
-                name: 'password',
-                label: '비밀번호',
-                placeholder: '********',
-                obscureText: true,
-                keyboardType: TextInputType.visiblePassword,
-              ),
-              const Spacer(),
-              Btn(
-                '로그인',
-                onTap: () async {
-                  await form.submit();
-                },
-              ),
-            ],
+          return AutofillGroup(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Gap(24),
+                const Padding(
+                  padding: Pad(horizontal: 20),
+                  child: HookFormTextField(
+                    name: 'email',
+                    label: '이메일',
+                    placeholder: 'me@example.com',
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: [AutofillHints.email],
+                    autofocus: true,
+                  ),
+                ),
+                const Gap(16),
+                const Padding(
+                  padding: Pad(horizontal: 20),
+                  child: HookFormTextField(
+                    name: 'password',
+                    label: '비밀번호',
+                    placeholder: '********',
+                    obscureText: true,
+                    keyboardType: TextInputType.visiblePassword,
+                    autofillHints: [AutofillHints.password],
+                  ),
+                ),
+                const Spacer(),
+                Tappable(
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(color: AppColors.gray_950),
+                    padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
+                    child: const Text(
+                      '로그인',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                    ),
+                  ),
+                  onTap: () async {
+                    await form.submit();
+                  },
+                ),
+              ],
+            ),
           );
         },
       ),
