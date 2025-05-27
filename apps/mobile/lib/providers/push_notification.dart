@@ -39,7 +39,7 @@ class PushNotificationProvider extends HookWidget {
       });
 
       return subscription.cancel;
-    });
+    }, []);
 
     return const SizedBox.shrink();
   }

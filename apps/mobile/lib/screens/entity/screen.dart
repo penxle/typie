@@ -110,7 +110,7 @@ class _EntityList extends HookWidget {
 
       primaryScrollController.addListener(listener);
       return () => primaryScrollController.removeListener(listener);
-    });
+    }, [primaryScrollController]);
 
     useAsyncEffect(() async {
       if (isRenaming.value) {

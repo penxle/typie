@@ -44,7 +44,7 @@ class InAppPurchaseProvider extends HookWidget {
       });
 
       return subscription.cancel;
-    });
+    }, []);
 
     return const SizedBox.shrink();
   }
