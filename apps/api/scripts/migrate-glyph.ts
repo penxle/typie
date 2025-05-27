@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+/* eslint @typescript-eslint/no-non-null-assertion: 0 */
 
 import { stdin, stdout } from 'node:process';
 import * as readline from 'node:readline/promises';
@@ -71,7 +72,6 @@ const getBlobSize = (node: Node) => {
   return sizes.reduce((acc, size) => acc + size, 0);
 };
 
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 const sqlGlyph = postgres(process.env.GLYPH_DATABASE_URL!);
 
 const s3Glyph = new S3Client({
@@ -81,8 +81,6 @@ const s3Glyph = new S3Client({
   },
   region: 'ap-northeast-2',
 });
-
-/* eslint-enable @typescript-eslint/no-non-null-assertion */
 
 const rl = readline.createInterface(stdin, stdout);
 
@@ -237,9 +235,15 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
         .then((result) => ({ attrs: result }));
     })
     .with('file', async () => {
+      if (!node.attrs!.id) {
+        console.warn('Warn: File has no id');
+        console.warn(node);
+        return [];
+      }
+
       const originalFile = await sqlGlyph<
         { name: string; format: string; size: number; path: string }[]
-      >`SELECT name, format, size, path FROM files WHERE id = ${node.attrs?.id}`.then(firstOrThrow);
+      >`SELECT name, format, size, path FROM files WHERE id = ${node.attrs!.id}`.then(firstOrThrow);
 
       const { Body: fileBody } = await s3Glyph.send(
         new GetObjectCommand({
@@ -248,7 +252,6 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
         }),
       );
 
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const arrayBuffer = await fileBody!.transformToByteArray();
 
       await aws.s3.send(
@@ -291,9 +294,15 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
       };
     })
     .with('image', async () => {
+      if (!node.attrs!.id) {
+        console.warn('Warn: Image has no id');
+        console.warn(node);
+        return [];
+      }
+
       const originalImage = await sqlGlyph<
         { name: string; format: string; width: number; height: number; size: number; path: string; placeholder: string }[]
-      >`SELECT name, format, width, height, size, path, placeholder FROM images WHERE id = ${node.attrs?.id}`.then(firstOrThrow);
+      >`SELECT name, format, width, height, size, path, placeholder FROM images WHERE id = ${node.attrs!.id}`.then(firstOrThrow);
 
       const { Body: imageBody } = await s3Glyph.send(
         new GetObjectCommand({
@@ -302,7 +311,6 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
         }),
       );
 
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const arrayBuffer = await imageBody!.transformToByteArray();
 
       await aws.s3.send(
@@ -378,7 +386,6 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
             }),
           );
 
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const arrayBuffer = await imageBody!.transformToByteArray();
 
           await aws.s3.send(
