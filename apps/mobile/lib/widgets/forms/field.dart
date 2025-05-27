@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/widgets/forms/form.dart';
 
 class HookFormFieldController<T> {
@@ -25,16 +24,17 @@ class HookFormField<T> extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final form = HookFormScope.of(context);
-
-    useListenableSelector(form, () => form.errors[name]);
-    final value = useState(initialValue);
     final field = useMemoized(() => HookFormFieldController<T>(form: form, name: name));
 
-    useAsyncEffect(() async {
-      form.setValue(name, value.value);
+    useListenableSelector(form, () => form.data[name]);
+    useListenableSelector(form, () => form.errors[name]);
 
+    useEffect(() {
+      if (initialValue != null) {
+        form.setValue(name, initialValue);
+      }
       return null;
-    }, [value.value]);
+    }, []);
 
     return HookBuilder(
       builder: (context) {
