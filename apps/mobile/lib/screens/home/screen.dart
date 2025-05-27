@@ -27,7 +27,7 @@ class HomeScreen extends HookWidget {
           .listen((_) {});
 
       return subscription.cancel;
-    });
+    }, []);
 
     return AutoTabsRouter(
       routes: const [EntityRouter(), SearchRoute(), InboxRoute(), ProfileRoute()],
