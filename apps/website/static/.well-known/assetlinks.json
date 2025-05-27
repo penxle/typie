@@ -1,0 +1,22 @@
+[
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "web",
+      "site": "https://typie.co"
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls", "delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "co.typie",
+      "sha256_cert_fingerprints": [
+        "AD:9F:09:41:F2:B3:8F:25:A6:A0:72:10:A2:32:27:72:B6:E7:32:8A:A3:5D:B5:BA:5E:15:46:C6:BF:A5:45:B3",
+        "1D:CC:49:B4:00:09:57:89:9C:3B:C9:03:78:26:6A:0F:95:9D:B4:B7:16:6E:45:F1:F5:0F:4A:FD:2D:44:2E:D2",
+        "28:5D:80:E0:73:8A:B8:8B:98:28:CC:3B:90:FA:E9:A0:CA:5A:B5:D8:0C:85:4E:6D:66:90:00:0F:1C:EC:14:8D",
+        "9A:1E:3B:41:7E:CE:A0:FE:58:D3:6D:9C:11:20:4D:D4:11:32:8D:5D:FB:6E:E8:60:6E:DB:D4:25:9B:59:61:FF"
+      ]
+    }
+  }
+]

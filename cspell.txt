@@ -14,6 +14,7 @@ bullmq
 bytea
 cdylib
 crds
+creds
 dmarc
 dotenv
 dotum
