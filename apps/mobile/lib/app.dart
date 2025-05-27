@@ -57,10 +57,18 @@ class App extends HookWidget {
           cupertinoOverrideTheme: const CupertinoThemeData(primaryColor: AppColors.gray_950),
         ),
         builder: (context, child) {
-          return Stack(
-            children: [
-              child!,
-              const Offstage(child: Stack(children: [InAppPurchaseProvider(), PushNotificationProvider()])),
+          return Overlay(
+            initialEntries: [
+              OverlayEntry(
+                builder: (context) {
+                  return Stack(
+                    children: [
+                      child!,
+                      const Offstage(child: Stack(children: [InAppPurchaseProvider(), PushNotificationProvider()])),
+                    ],
+                  );
+                },
+              ),
             ],
           );
         },
