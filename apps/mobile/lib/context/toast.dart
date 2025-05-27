@@ -75,9 +75,9 @@ class _Widget extends HookWidget {
                     ),
                     child: Center(
                       child: switch (type) {
-                        ToastType.success => const Icon(LucideLightIcons.check, color: AppColors.white, size: 14),
-                        ToastType.error => const Icon(TypieIcons.exclamation, color: AppColors.white, size: 14),
-                        ToastType.notification => const Icon(LucideLightIcons.bell, color: AppColors.white, size: 14),
+                        ToastType.success => const Icon(LucideLightIcons.check, color: AppColors.white, size: 12),
+                        ToastType.error => const Icon(TypieIcons.exclamation, color: AppColors.white, size: 12),
+                        ToastType.notification => const Icon(LucideLightIcons.bell, color: AppColors.white, size: 12),
                       },
                     ),
                   ),
@@ -85,9 +85,9 @@ class _Widget extends HookWidget {
                   Expanded(
                     child: Text(
                       message,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.white),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                 ],
