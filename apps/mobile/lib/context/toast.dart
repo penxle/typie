@@ -11,12 +11,19 @@ import 'package:typie/styles/colors.dart';
 enum ToastType { success, error, notification }
 
 class _Widget extends HookWidget {
-  const _Widget({required this.type, required this.message, required this.duration, required this.completer});
+  const _Widget({
+    required this.type,
+    required this.message,
+    required this.bottom,
+    required this.duration,
+    required this.completer,
+  });
 
   final Completer<void> completer;
 
   final ToastType type;
   final String message;
+  final double bottom;
   final Duration duration;
 
   @override
@@ -48,7 +55,7 @@ class _Widget extends HookWidget {
     final keyboardHeight = mediaQuery.viewInsets.bottom;
 
     return Positioned(
-      bottom: safeAreaBottom + keyboardHeight + 12,
+      bottom: safeAreaBottom + keyboardHeight + bottom,
       left: 24,
       right: 24,
       child: Material(
@@ -103,7 +110,7 @@ class _Widget extends HookWidget {
 extension ToastExtension on BuildContext {
   static OverlayEntry? _entry;
 
-  void toast(ToastType type, String message, {Duration? duration}) {
+  void toast(ToastType type, String message, {Duration? duration, double bottom = 12}) {
     if (_entry != null) {
       _entry?.remove();
     }
@@ -115,6 +122,7 @@ extension ToastExtension on BuildContext {
         return _Widget(
           type: type,
           message: message,
+          bottom: bottom,
           duration: duration ?? const Duration(seconds: 2),
           completer: completer,
         );
