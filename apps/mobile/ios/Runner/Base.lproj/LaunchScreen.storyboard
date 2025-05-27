@@ -17,15 +17,15 @@
                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                         <subviews>
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="SplashIcon" translatesAutoresizingMaskIntoConstraints="NO" id="gI7-gO-agb">
-                                <rect key="frame" x="76.666666666666686" y="387" width="240" height="128"/>
+                                <rect key="frame" x="176.66666666666666" y="431" width="40" height="40"/>
                                 <constraints>
-                                    <constraint firstAttribute="width" constant="240" id="IKo-t7-8gH"/>
-                                    <constraint firstAttribute="height" constant="128" id="sun-jy-v9L"/>
+                                    <constraint firstAttribute="width" constant="40" id="IKo-t7-8gH"/>
+                                    <constraint firstAttribute="height" constant="40" id="sun-jy-v9L"/>
                                 </constraints>
                             </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="GdD-a5-ymi"/>
-                        <color key="backgroundColor" red="0.38823529411764707" green="0.40000000000000002" blue="0.94509803921568625" alpha="1" colorSpace="calibratedRGB"/>
+                        <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
                         <constraints>
                             <constraint firstItem="gI7-gO-agb" firstAttribute="centerY" secondItem="GdD-a5-ymi" secondAttribute="centerY" id="ITK-xJ-QTZ"/>
                             <constraint firstItem="gI7-gO-agb" firstAttribute="centerX" secondItem="GdD-a5-ymi" secondAttribute="centerX" id="vFk-UD-HXB"/>
@@ -38,6 +38,6 @@
         </scene>
     </scenes>
     <resources>
-        <image name="SplashIcon" width="512" height="512"/>
+        <image name="SplashIcon" width="48" height="48"/>
     </resources>
 </document>

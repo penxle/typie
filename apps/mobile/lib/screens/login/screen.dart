@@ -45,31 +45,33 @@ class LoginScreen extends HookWidget {
     });
 
     return Screen(
+      backgroundColor: AppColors.white,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SvgImage('logos/full', height: 52, color: AppColors.gray_950),
+                SvgImage('logos/full', height: 48),
                 Gap(24),
-                Text('쓰고, 공유하고, 정리하는', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
+                Text('생각을 정리하고 공유하는', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
                 Gap(4),
-                Text('글쓰기 공간', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                Text('나만의 글쓰기 공간', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               ],
             ),
           ),
           Padding(
-            padding: const Pad(horizontal: 24),
+            padding: const Pad(horizontal: 20),
             child: Column(
               spacing: 8,
               children: [
                 _Button(
                   text: '구글로 시작하기',
                   icon: const SvgImage('brands/google', width: 20),
+                  borderColor: AppColors.gray_200,
                   foregroundColor: AppColors.gray_950,
                   backgroundColor: AppColors.white,
-                  borderColor: AppColors.gray_200,
                   onTap: () async {
                     await googleSignIn.signOut();
                     final result = await googleSignIn.signIn();
@@ -150,17 +152,14 @@ class LoginScreen extends HookWidget {
                       await login(GSingleSignOnProvider.APPLE, {'code': result.authorizationCode});
                     },
                   ),
+                Tappable(
+                  padding: const Pad(horizontal: 24, vertical: 8),
+                  onTap: () async {
+                    await context.router.push(const LoginWithEmailRoute());
+                  },
+                  child: const Text('이메일로 가입하셨나요?', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
+                ),
               ],
-            ),
-          ),
-          Padding(
-            padding: const Pad(all: 12),
-            child: Tappable(
-              padding: const Pad(horizontal: 24, vertical: 12),
-              onTap: () async {
-                await context.router.push(const LoginWithEmailRoute());
-              },
-              child: const Text('이메일로 가입하셨나요?', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
             ),
           ),
         ],
@@ -175,15 +174,15 @@ class _Button extends StatelessWidget {
     required this.foregroundColor,
     required this.backgroundColor,
     required this.onTap,
-    this.icon,
     this.borderColor,
+    this.icon,
   });
 
   final Widget? icon;
   final String text;
-  final Color? borderColor;
   final Color foregroundColor;
   final Color backgroundColor;
+  final Color? borderColor;
   final Future<void> Function() onTap;
 
   @override
@@ -192,7 +191,7 @@ class _Button extends StatelessWidget {
       onTap: () async {
         try {
           await onTap();
-        } on Exception {
+        } catch (_) {
           if (context.mounted) {
             context.toast(ToastType.error, '로그인에 실패했어요. 다시 시도해주세요.');
           }
@@ -202,7 +201,7 @@ class _Button extends StatelessWidget {
         height: 48,
         decoration: BoxDecoration(
           border: Border.all(color: borderColor ?? backgroundColor),
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(999),
           color: backgroundColor,
         ),
         child: Stack(
