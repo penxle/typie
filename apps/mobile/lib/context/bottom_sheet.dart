@@ -3,6 +3,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -53,20 +54,15 @@ extension BottomSheetExtension on BuildContext {
   }
 }
 
-class BottomSheet extends HookWidget {
-  const BottomSheet({required this.child, this.padding, super.key});
+class _BottomSheet extends HookWidget {
+  const _BottomSheet({required this.child});
 
   final Widget child;
-  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
     final sheetKey = useMemoized(GlobalKey.new);
     final controller = useAnimationController(upperBound: double.infinity, duration: const Duration(milliseconds: 300));
-
-    final mediaQuery = MediaQuery.of(context);
-    final maxHeight = (mediaQuery.size.height - mediaQuery.padding.top) * 0.9;
-    final bottomPadding = mediaQuery.padding.bottom;
 
     return GestureDetector(
       onVerticalDragStart: (details) {
@@ -106,7 +102,6 @@ class BottomSheet extends HookWidget {
             key: sheetKey,
             width: double.infinity,
             decoration: const BoxDecoration(
-              color: AppColors.gray_50,
               border: Border(
                 top: BorderSide(color: AppColors.gray_950),
                 left: BorderSide(color: AppColors.gray_950),
@@ -114,31 +109,96 @@ class BottomSheet extends HookWidget {
               ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxHeight),
-              child: Padding(
-                padding: Pad(top: 8, bottom: bottomPadding + 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 16,
-                  children: [
-                    const SizedBox(
-                      width: 60,
-                      height: 4,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: AppColors.gray_200,
-                          borderRadius: BorderRadius.all(Radius.circular(999)),
-                        ),
-                      ),
-                    ),
-                    if (padding == null) child else Padding(padding: padding!, child: child),
-                  ],
-                ),
-              ),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: child,
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class AppBottomSheet extends HookWidget {
+  const AppBottomSheet({required this.child, this.padding, super.key});
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final maxHeight = (mediaQuery.size.height - mediaQuery.padding.top) * 0.9;
+    final bottomPadding = mediaQuery.padding.bottom;
+
+    return _BottomSheet(
+      child: Container(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        decoration: const BoxDecoration(color: AppColors.gray_50),
+        child: Padding(
+          padding: Pad(top: 8, bottom: bottomPadding + 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 16,
+            children: [
+              const SizedBox(
+                width: 60,
+                height: 4,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.gray_200,
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                  ),
+                ),
+              ),
+              if (padding == null) child else Padding(padding: padding!, child: child),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AppFullBottomSheet extends HookWidget {
+  const AppFullBottomSheet({required this.title, required this.child, super.key});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BottomSheet(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 52,
+            decoration: const BoxDecoration(
+              color: AppColors.white,
+              border: Border(bottom: BorderSide(color: AppColors.gray_200)),
+            ),
+            padding: const Pad(horizontal: 8),
+            child: NavigationToolbar(
+              leading: Tappable(
+                padding: const Pad(horizontal: 4),
+                onTap: () async {
+                  await context.router.maybePop();
+                },
+                child: const Icon(LucideLightIcons.x, size: 24, color: AppColors.gray_950),
+              ),
+              middle: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              decoration: const BoxDecoration(color: AppColors.white),
+              padding: const Pad(all: 20),
+              child: child,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -151,7 +211,7 @@ class BottomMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BottomSheet(child: Column(children: items));
+    return AppBottomSheet(child: Column(children: items));
   }
 }
 
