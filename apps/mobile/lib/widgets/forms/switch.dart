@@ -31,62 +31,57 @@ class HookFormSwitch extends HookWidget {
           return null;
         }, [field.value]);
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Tappable(
-              onTap: () {
-                field.value = !value;
-              },
-              child: Container(
-                width: 44,
-                height: 24,
-                foregroundDecoration: BoxDecoration(
-                  border: Border.all(color: AppColors.gray_950),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Stack(
+        return Tappable(
+          onTap: () {
+            field.value = !value;
+          },
+          child: Container(
+            width: 44,
+            height: 24,
+            foregroundDecoration: BoxDecoration(
+              border: Border.all(color: AppColors.gray_950),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Stack(
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(child: Container(color: AppColors.green_500)),
-                          Expanded(child: Container(color: AppColors.gray_100)),
-                        ],
-                      ),
-                      AnimatedBuilder(
-                        animation: curve,
-                        builder: (context, child) {
-                          return Align(
-                            alignment: Alignment.lerp(Alignment.centerLeft, Alignment.centerRight, curve.value)!,
-                            child: Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                border: Border(
-                                  left: curve.value > 0
-                                      ? BorderSide(color: AppColors.gray_950, width: curve.value)
-                                      : BorderSide.none,
-                                  right: curve.value < 1
-                                      ? BorderSide(color: AppColors.gray_950, width: 1 - curve.value)
-                                      : BorderSide.none,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: const Icon(LucideLightIcons.check, size: 16),
-                      ),
+                      Expanded(child: Container(color: AppColors.green_500)),
+                      Expanded(child: Container(color: AppColors.gray_100)),
                     ],
                   ),
-                ),
+                  AnimatedBuilder(
+                    animation: curve,
+                    builder: (context, child) {
+                      return Align(
+                        alignment: Alignment.lerp(Alignment.centerLeft, Alignment.centerRight, curve.value)!,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border(
+                              left: curve.value > 0
+                                  ? BorderSide(color: AppColors.gray_950, width: curve.value)
+                                  : BorderSide.none,
+                              right: curve.value < 1
+                                  ? BorderSide(color: AppColors.gray_950, width: 1 - curve.value)
+                                  : BorderSide.none,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: const Icon(LucideLightIcons.check, size: 16),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         );
       },
     );
