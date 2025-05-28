@@ -88,9 +88,9 @@ class ProfileScreen extends HookWidget {
                 Tappable(
                   onTap: () async {
                     if (data.me!.plan == null) {
-                      await context.pushRoute(const PurchasePlanRoute());
+                      await context.router.push(const EnrollPlanRoute());
                     } else {
-                      await context.pushRoute(const PlanInfoRoute());
+                      await context.router.push(const CurrentPlanRoute());
                     }
                   },
                   child: Container(
@@ -99,20 +99,20 @@ class ProfileScreen extends HookWidget {
                       borderRadius: BorderRadius.circular(8),
                       color: AppColors.white,
                     ),
-                    padding: const Pad(horizontal: 16, vertical: 20),
+                    padding: const Pad(all: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       spacing: 4,
                       children: [
                         Row(
                           children: [
-                            const Text('현재 이용권', style: TextStyle(color: AppColors.gray_600, fontSize: 14)),
+                            const Text('현재 이용권', style: TextStyle(color: AppColors.gray_500, fontSize: 14)),
                             const Spacer(),
                             if (data.me!.plan == null) ...[
-                              const Text('이용권 구매', style: TextStyle(fontSize: 12, color: AppColors.brand_500)),
-                              const Icon(LucideLightIcons.chevron_right, size: 14, color: AppColors.brand_500),
+                              const Text('이용권 구매하기', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
+                              const Icon(LucideLightIcons.chevron_right, size: 14, color: AppColors.gray_700),
                             ] else ...[
-                              const Text('이용권 정보', style: TextStyle(fontSize: 12, color: AppColors.gray_500)),
+                              const Text('이용권 정보', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
                               const Icon(LucideLightIcons.chevron_right, size: 14, color: AppColors.gray_500),
                             ],
                           ],
