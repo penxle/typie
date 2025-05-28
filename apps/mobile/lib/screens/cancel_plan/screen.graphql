@@ -1,0 +1,10 @@
+query CancelPlanScreen_Query {
+  me {
+    id
+
+    plan {
+      id
+      expiresAt
+    }
+  }
+}

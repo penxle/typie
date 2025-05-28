@@ -8,5 +8,9 @@ query ProfileScreen_Query {
       id
       url
     }
+
+    plan {
+      id
+    }
   }
 }
