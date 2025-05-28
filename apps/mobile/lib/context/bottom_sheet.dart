@@ -120,7 +120,7 @@ class _BottomSheet extends HookWidget {
   }
 }
 
-class AppBottomSheet extends HookWidget {
+class AppBottomSheet extends StatelessWidget {
   const AppBottomSheet({required this.child, this.padding, super.key});
 
   final Widget child;
@@ -161,7 +161,7 @@ class AppBottomSheet extends HookWidget {
   }
 }
 
-class AppFullBottomSheet extends HookWidget {
+class AppFullBottomSheet extends StatelessWidget {
   const AppFullBottomSheet({required this.title, required this.child, super.key});
 
   final String title;

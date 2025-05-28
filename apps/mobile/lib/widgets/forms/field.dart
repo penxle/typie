@@ -36,10 +36,6 @@ class HookFormField<T> extends HookWidget {
       return null;
     }, []);
 
-    return HookBuilder(
-      builder: (context) {
-        return builder(context, field);
-      },
-    );
+    return builder(context, field);
   }
 }
