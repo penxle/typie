@@ -49,16 +49,20 @@ class HookFormController extends ChangeNotifier {
     }
 
     final result = schema!.validateSchema<dynamic>(_data);
-    if (result.isValid) {
-      _errors.clear();
-    } else if (result case SchemaValidationError(:final errors)) {
-      for (final field in _data.entries) {
-        final error = (errors[field.key] as List<dynamic>?)?.first as String?;
-        if (error == null) {
-          _errors.remove(field.key);
-        } else {
-          _errors[field.key] = error;
-        }
+    if (result case SchemaValidationSuccess(:final data)) {
+      for (final field in (data as Map<String, dynamic>).entries) {
+        _data[field.key] = field.value;
+        _errors.remove(field.key);
+      }
+    } else if (result case SchemaValidationError(:final data, :final errors)) {
+      for (final field in (data as Map<String, dynamic>).entries) {
+        _data[field.key] = field.value;
+        _errors.remove(field.key);
+      }
+
+      for (final field in errors.entries) {
+        final error = (errors[field.key] as List<dynamic>).first as String;
+        _errors[field.key] = error;
       }
     }
 
