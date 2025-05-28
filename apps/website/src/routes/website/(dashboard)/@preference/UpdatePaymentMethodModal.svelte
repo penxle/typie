@@ -144,6 +144,7 @@
       const errorMessages: Record<string, string> = {
         billing_key_issue_failed: '결제 키 발급에 실패했습니다. 카드 정보를 다시 확인해주세요.',
         plan_already_enrolled: '이미 결제 정보가 등록되어 있습니다.',
+        unpaid_invoice_exists: '정산되지 않은 결제가 있어 플랜을 변경할 수 없습니다.',
         payment_failed: '결제에 실패했습니다. 카드 정보를 다시 확인해주세요.',
       };
 

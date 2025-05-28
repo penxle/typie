@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, eq, gt, lt } from 'drizzle-orm';
 import {
   CreditCodes,
   db,
@@ -198,16 +198,12 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const existingUserPlan = await db
         .select({
-          id: UserPlans.id,
+          planId: UserPlans.planId,
+          expiresAt: UserPlans.expiresAt,
         })
         .from(UserPlans)
-        .where(eq(UserPlans.userId, ctx.session.userId))
+        .where(and(eq(UserPlans.userId, ctx.session.userId), gt(UserPlans.expiresAt, dayjs())))
         .then(first);
-
-      if (existingUserPlan) {
-        // TODO: 플랜 변경 & 정산 처리 추후 구현 (아예 다른 플랜? 결제주기만 변경?)
-        throw new TypieError({ code: 'plan_already_enrolled' });
-      }
 
       const plan = await db
         .select({ id: Plans.id, name: Plans.name, fee: Plans.fee })
@@ -218,6 +214,51 @@ builder.mutationFields((t) => ({
       const enrolledAt = dayjs.kst().startOf('day');
       const paymentAmount = calculatePaymentAmount(input.billingCycle, plan.fee);
 
+      if (existingUserPlan) {
+        if (existingUserPlan.planId !== input.planId) {
+          // TODO: 다른 플랜 자체가 없으니까... 나중에 다른 플랜이 생기면 생각해보기
+          throw new TypieError({ code: 'plan_already_enrolled' });
+        }
+
+        return await db.transaction(async (tx) => {
+          const userPlan = await tx
+            .update(UserPlans)
+            .set({
+              state: UserPlanState.ACTIVE,
+              fee: plan.fee,
+              billingCycle: input.billingCycle,
+            })
+            .where(eq(UserPlans.userId, ctx.session.userId))
+            .returning()
+            .then(firstOrThrow);
+
+          await tx
+            .update(PaymentInvoices)
+            .set({
+              amount: paymentAmount,
+            })
+            .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)));
+
+          return userPlan;
+        });
+      }
+
+      const unpaidInvoice = await db
+        .select({ id: PaymentInvoices.id })
+        .from(PaymentInvoices)
+        .where(
+          and(
+            eq(PaymentInvoices.userId, ctx.session.userId),
+            eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING),
+            lt(PaymentInvoices.billingAt, dayjs()),
+          ),
+        )
+        .then(first);
+
+      if (unpaidInvoice) {
+        throw new TypieError({ code: 'unpaid_invoice_exists' });
+      }
+
       const { userPlan } = await db.transaction(async (tx) => {
         const userPlan = await tx
           .insert(UserPlans)
@@ -227,6 +268,16 @@ builder.mutationFields((t) => ({
             fee: plan.fee,
             billingCycle: input.billingCycle,
             expiresAt: enrolledAt,
+          })
+          .onConflictDoUpdate({
+            target: [UserPlans.userId],
+            set: {
+              planId: plan.id,
+              fee: plan.fee,
+              billingCycle: input.billingCycle,
+              expiresAt: enrolledAt,
+              state: UserPlanState.ACTIVE,
+            },
           })
           .returning()
           .then(firstOrThrow);
