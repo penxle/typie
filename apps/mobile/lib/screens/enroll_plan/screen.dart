@@ -185,7 +185,7 @@ class _PurchaseButton extends StatelessWidget {
             Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             const Spacer(),
             if (product == null)
-              const Center(child: CircularProgressIndicator())
+              const Center(child: SizedBox.square(dimension: 16, child: CircularProgressIndicator()))
             else ...[
               Text(product!.price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               const Gap(4),
