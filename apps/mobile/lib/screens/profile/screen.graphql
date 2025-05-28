@@ -1,6 +1,12 @@
 query ProfileScreen_Query {
   me {
     id
+    name
     email
+
+    avatar {
+      id
+      url
+    }
   }
 }
