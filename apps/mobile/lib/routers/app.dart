@@ -37,6 +37,7 @@ class AppRouter extends RootStackRouter {
                 AutoRoute(page: ProfileRoute.page),
               ],
             ),
+            AutoRoute(page: UpdateProfileRoute.page),
             AutoRoute(page: EditorRoute.page, fullscreenDialog: true),
           ],
         ),
