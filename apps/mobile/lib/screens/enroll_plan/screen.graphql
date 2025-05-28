@@ -1,4 +1,4 @@
-query PurchasePlanScreen_Query {
+query EnrollPlanScreen_Query {
   me {
     id
     uuid

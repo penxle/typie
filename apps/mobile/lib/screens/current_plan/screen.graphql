@@ -1,4 +1,4 @@
-query PlanInfoScreen_Query {
+query CurrentPlanScreen_Query {
   me {
     id
     credit
