@@ -114,9 +114,9 @@ class EditorToolbar extends HookWidget {
               const SizedBox.expand(),
               GridView.extent(
                 maxCrossAxisExtent: 96,
-                padding: const Pad(all: 20),
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
+                padding: const Pad(all: 16),
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
                 children: [
                   _BoxButton(
                     icon: 'image',
