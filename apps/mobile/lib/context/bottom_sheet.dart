@@ -102,11 +102,7 @@ class _BottomSheet extends HookWidget {
             key: sheetKey,
             width: double.infinity,
             decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: AppColors.gray_950),
-                left: BorderSide(color: AppColors.gray_950),
-                right: BorderSide(color: AppColors.gray_950),
-              ),
+              border: Border(top: BorderSide(color: AppColors.gray_950)),
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: ClipRRect(
@@ -162,9 +158,10 @@ class AppBottomSheet extends StatelessWidget {
 }
 
 class AppFullBottomSheet extends StatelessWidget {
-  const AppFullBottomSheet({required this.title, required this.child, super.key});
+  const AppFullBottomSheet({required this.title, required this.child, this.padding = const Pad(all: 20), super.key});
 
   final String title;
+  final EdgeInsetsGeometry? padding;
   final Widget child;
 
   @override
@@ -194,7 +191,7 @@ class AppFullBottomSheet extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: const BoxDecoration(color: AppColors.white),
-              padding: const Pad(all: 20),
+              padding: padding,
               child: child,
             ),
           ),
@@ -222,11 +219,13 @@ class BottomMenuItem extends StatelessWidget {
     required this.onTap,
     this.iconColor = AppColors.gray_950,
     this.labelColor = AppColors.gray_950,
+    this.trailing,
     super.key,
   });
 
   final IconData icon;
   final String label;
+  final Widget? trailing;
 
   final Color iconColor;
   final Color labelColor;
@@ -245,7 +244,10 @@ class BottomMenuItem extends StatelessWidget {
         spacing: 16,
         children: [
           Icon(icon, size: 20, color: iconColor),
-          Text(label, style: TextStyle(fontSize: 17, color: labelColor)),
+          Expanded(
+            child: Text(label, style: TextStyle(fontSize: 17, color: labelColor)),
+          ),
+          if (trailing != null) trailing!,
         ],
       ),
     );

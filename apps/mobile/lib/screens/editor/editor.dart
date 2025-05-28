@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -89,10 +90,22 @@ class Editor extends HookWidget {
                         BottomMenuItem(
                           icon: LucideLightIcons.blend,
                           label: '공유하기',
+                          trailing: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: AppColors.gray_950),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            padding: const Pad(horizontal: 8, vertical: 4),
+                            child: const Text(
+                              '링크 공개 중',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.gray_950),
+                            ),
+                          ),
                           onTap: () async {
                             await context.showBottomSheet(intercept: true, child: const ShareBottomSheet());
                           },
                         ),
+                        BottomMenuItem(icon: LucideLightIcons.copy, label: '복제하기', onTap: () {}),
                         BottomMenuItem(
                           icon: LucideLightIcons.trash,
                           label: '삭제하기',

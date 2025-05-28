@@ -1,3 +1,4 @@
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
@@ -7,6 +8,7 @@ import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/switch.dart';
+import 'package:typie/widgets/tappable.dart';
 
 class ShareBottomSheet extends StatelessWidget {
   const ShareBottomSheet({super.key});
@@ -15,95 +17,122 @@ class ShareBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppFullBottomSheet(
       title: '이 포스트 공유하기',
+      padding: null,
       child: HookForm(
         builder: (context, form) {
-          return const Column(
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 40,
             children: [
-              _Section(
-                title: '포스트 조회 권한',
-                children: [
-                  _Option(
-                    icon: LucideLightIcons.blend,
-                    label: '공개 범위',
-                    trailing: HookFormSelect(
-                      name: 'visibility',
-                      initialValue: GEntityVisibility.UNLISTED,
-                      items: [
-                        HookFormSelectItem(
-                          icon: LucideLightIcons.link,
-                          label: '링크가 있는 사람',
-                          description: '링크가 있는 누구나 볼 수 있어요.',
-                          value: GEntityVisibility.UNLISTED,
-                        ),
-                        HookFormSelectItem(
-                          icon: LucideLightIcons.lock,
-                          label: '비공개',
-                          description: '나만 볼 수 있어요.',
-                          value: GEntityVisibility.PRIVATE,
-                        ),
-                      ],
-                    ),
+              const Expanded(
+                child: Padding(
+                  padding: Pad(all: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 32,
+                    children: [
+                      _Section(
+                        title: '포스트 조회 권한',
+                        children: [
+                          _Option(
+                            icon: LucideLightIcons.blend,
+                            label: '공개 범위',
+                            trailing: HookFormSelect(
+                              name: 'visibility',
+                              initialValue: GEntityVisibility.UNLISTED,
+                              items: [
+                                HookFormSelectItem(
+                                  icon: LucideLightIcons.link,
+                                  label: '링크가 있는 사람',
+                                  description: '링크가 있는 누구나 볼 수 있어요.',
+                                  value: GEntityVisibility.UNLISTED,
+                                ),
+                                HookFormSelectItem(
+                                  icon: LucideLightIcons.lock,
+                                  label: '비공개',
+                                  description: '나만 볼 수 있어요.',
+                                  value: GEntityVisibility.PRIVATE,
+                                ),
+                              ],
+                            ),
+                          ),
+                          _Option(
+                            icon: LucideLightIcons.lock_keyhole,
+                            label: '비밀번호 보호',
+                            trailing: HookFormSwitch(name: 'hasPassword'),
+                          ),
+                          _Option(
+                            icon: LucideLightIcons.id_card,
+                            label: '연령 제한',
+                            trailing: HookFormSelect(
+                              name: 'contentRating',
+                              initialValue: GPostContentRating.ALL,
+                              items: [
+                                HookFormSelectItem(label: '없음', value: GPostContentRating.ALL),
+                                HookFormSelectItem(label: '15세', value: GPostContentRating.R15),
+                                HookFormSelectItem(label: '성인', value: GPostContentRating.R19),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      _Section(
+                        title: '포스트 상호작용',
+                        children: [
+                          _Option(
+                            icon: LucideLightIcons.message_square,
+                            label: '댓글',
+                            trailing: HookFormSelect(
+                              name: 'allowComment',
+                              initialValue: true,
+                              items: [
+                                HookFormSelectItem(
+                                  icon: LucideLightIcons.circle_user_round,
+                                  label: '로그인한 이용자',
+                                  value: true,
+                                ),
+                                HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
+                              ],
+                            ),
+                          ),
+                          _Option(
+                            icon: LucideLightIcons.smile,
+                            label: '이모지 반응',
+                            trailing: HookFormSelect(
+                              name: 'allowReaction',
+                              initialValue: true,
+                              items: [
+                                HookFormSelectItem(icon: LucideLightIcons.users_round, label: '누구나', value: true),
+                                HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      _Section(
+                        title: '포스트 보호',
+                        children: [
+                          _Option(
+                            icon: LucideLightIcons.shield,
+                            label: '내용 보호',
+                            trailing: HookFormSwitch(name: 'protectContent'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  _Option(
-                    icon: LucideLightIcons.lock_keyhole,
-                    label: '비밀번호 보호',
-                    trailing: HookFormSwitch(name: 'hasPassword'),
-                  ),
-                  _Option(
-                    icon: LucideLightIcons.id_card,
-                    label: '연령 제한',
-                    trailing: HookFormSelect(
-                      name: 'contentRating',
-                      initialValue: GPostContentRating.ALL,
-                      items: [
-                        HookFormSelectItem(label: '없음', value: GPostContentRating.ALL),
-                        HookFormSelectItem(label: '15세', value: GPostContentRating.R15),
-                        HookFormSelectItem(label: '성인', value: GPostContentRating.R19),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
-              _Section(
-                title: '포스트 상호작용',
-                children: [
-                  _Option(
-                    icon: LucideLightIcons.message_square,
-                    label: '댓글',
-                    trailing: HookFormSelect(
-                      name: 'allowComment',
-                      initialValue: true,
-                      items: [
-                        HookFormSelectItem(icon: LucideLightIcons.circle_user_round, label: '로그인한 이용자', value: true),
-                        HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
-                      ],
-                    ),
+              Tappable(
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(color: AppColors.gray_950),
+                  padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
+                  child: const Text(
+                    '공유하기',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
                   ),
-                  _Option(
-                    icon: LucideLightIcons.smile,
-                    label: '이모지 반응',
-                    trailing: HookFormSelect(
-                      name: 'allowReaction',
-                      initialValue: true,
-                      items: [
-                        HookFormSelectItem(icon: LucideLightIcons.users_round, label: '누구나', value: true),
-                        HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              _Section(
-                title: '포스트 보호',
-                children: [
-                  _Option(
-                    icon: LucideLightIcons.shield,
-                    label: '내용 보호',
-                    trailing: HookFormSwitch(name: 'protectContent'),
-                  ),
-                ],
+                ),
+                onTap: () {},
               ),
             ],
           );
@@ -125,7 +154,10 @@ class _Section extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 16,
       children: [
-        Text(title, style: const TextStyle(fontSize: 16, color: AppColors.gray_500)),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+        ),
         ...children,
       ],
     );
@@ -145,7 +177,7 @@ class _Option extends StatelessWidget {
       height: 24,
       child: Row(
         children: [
-          Icon(icon, size: 20, color: AppColors.gray_500),
+          Icon(icon, size: 20, color: AppColors.gray_700),
           const Gap(8),
           Expanded(
             child: Text(label, style: const TextStyle(fontSize: 16, color: AppColors.gray_700)),
