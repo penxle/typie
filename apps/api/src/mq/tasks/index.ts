@@ -1,9 +1,9 @@
 import { CreateNotificationJob } from './notification';
+import { PaymentCron } from './payment';
 import { PostSyncCollectJob } from './post';
-import { TestCron } from './test';
 
 export const jobs = [PostSyncCollectJob, CreateNotificationJob];
-export const crons = [TestCron];
+export const crons = [PaymentCron];
 
 export type Jobs = typeof jobs;
 export type JobName = Jobs[number]['name'];

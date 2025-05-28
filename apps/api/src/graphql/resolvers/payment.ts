@@ -8,12 +8,9 @@ import {
   firstOrThrowWith,
   PaymentBillingKeys,
   PaymentInvoices,
-  PaymentRecords,
   Plans,
   TableCode,
-  UserPaymentCredits,
   UserPlans,
-  Users,
   validateDbId,
 } from '@/db';
 import { defaultPlanRules } from '@/db/schemas/json';
@@ -22,8 +19,6 @@ import {
   InAppPurchaseStore,
   PaymentBillingKeyState,
   PaymentInvoiceState,
-  PaymentMethodType,
-  PaymentRecordState,
   PlanAvailability,
   UserPlanBillingCycle,
   UserPlanState,
@@ -34,7 +29,7 @@ import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
 import * as portone from '@/external/portone';
 import * as slack from '@/external/slack';
-import { calculatePaymentAmount, getNextPaymentDate } from '@/utils';
+import { calculatePaymentAmount, payInvoice } from '@/utils';
 import { delay } from '@/utils/promise';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
@@ -201,7 +196,7 @@ builder.mutationFields((t) => ({
       billingCycle: t.input.field({ type: UserPlanBillingCycle }),
     },
     resolve: async (_, { input }, ctx) => {
-      const userPlan = await db
+      const existingUserPlan = await db
         .select({
           id: UserPlans.id,
         })
@@ -209,16 +204,10 @@ builder.mutationFields((t) => ({
         .where(eq(UserPlans.userId, ctx.session.userId))
         .then(first);
 
-      if (userPlan) {
+      if (existingUserPlan) {
         // TODO: 플랜 변경 & 정산 처리 추후 구현 (아예 다른 플랜? 결제주기만 변경?)
         throw new TypieError({ code: 'plan_already_enrolled' });
       }
-
-      const user = await db
-        .select({ name: Users.name, email: Users.email })
-        .from(Users)
-        .where(eq(Users.id, ctx.session.userId))
-        .then(firstOrThrow);
 
       const plan = await db
         .select({ id: Plans.id, name: Plans.name, fee: Plans.fee })
@@ -226,17 +215,10 @@ builder.mutationFields((t) => ({
         .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.PUBLIC)))
         .then(firstOrThrow);
 
-      const paymentBillingKey = await db
-        .select({ id: PaymentBillingKeys.id, billingKey: PaymentBillingKeys.billingKey })
-        .from(PaymentBillingKeys)
-        .where(and(eq(PaymentBillingKeys.userId, ctx.session.userId), eq(PaymentBillingKeys.state, PaymentBillingKeyState.ACTIVE)))
-        .then(firstOrThrow);
-
       const enrolledAt = dayjs.kst().startOf('day');
-      const nextPaymentDate = getNextPaymentDate(input.billingCycle, enrolledAt);
       const paymentAmount = calculatePaymentAmount(input.billingCycle, plan.fee);
 
-      return await db.transaction(async (tx) => {
+      const { userPlan } = await db.transaction(async (tx) => {
         const userPlan = await tx
           .insert(UserPlans)
           .values({
@@ -244,7 +226,7 @@ builder.mutationFields((t) => ({
             planId: plan.id,
             fee: plan.fee,
             billingCycle: input.billingCycle,
-            expiresAt: nextPaymentDate,
+            expiresAt: enrolledAt,
           })
           .returning()
           .then(firstOrThrow);
@@ -255,70 +237,26 @@ builder.mutationFields((t) => ({
             userId: ctx.session.userId,
             amount: paymentAmount,
             billingAt: enrolledAt,
-            state: PaymentInvoiceState.PAID,
+            state: PaymentInvoiceState.UPCOMING,
           })
           .returning({ id: PaymentInvoices.id })
           .then(firstOrThrow);
 
-        await tx.insert(PaymentInvoices).values({
-          userId: ctx.session.userId,
-          amount: paymentAmount,
-          billingAt: nextPaymentDate,
-          state: PaymentInvoiceState.UPCOMING,
+        const payInvoiceResult = await payInvoice({
+          tx,
+          invoiceId: invoice.id,
+          makeRecordWhenFail: false,
         });
 
-        const paymentCredit = await tx
-          .select({ id: UserPaymentCredits.id, amount: UserPaymentCredits.amount })
-          .from(UserPaymentCredits)
-          .where(eq(UserPaymentCredits.userId, ctx.session.userId))
-          .for('update')
-          .then(first);
-
-        const creditPaymentAmount = Math.min(paymentCredit?.amount ?? 0, paymentAmount);
-
-        if (paymentCredit && creditPaymentAmount > 0) {
-          await tx.insert(PaymentRecords).values({
-            invoiceId: invoice.id,
-            methodType: PaymentMethodType.CREDIT,
-            methodId: paymentCredit.id,
-            state: PaymentRecordState.SUCCEEDED,
-            amount: creditPaymentAmount,
-          });
-
-          await tx
-            .update(UserPaymentCredits)
-            .set({ amount: paymentCredit.amount - creditPaymentAmount })
-            .where(eq(UserPaymentCredits.id, paymentCredit.id));
+        if (payInvoiceResult.status === 'failed') {
+          // 에러 던져서 tx 롤백 일으키기 (여기서 실패하면 로그 쌓을 필요 X)
+          throw new TypieError({ code: 'payment_failed', message: payInvoiceResult.message });
         }
 
-        const billingKeyPaymentAmount = paymentAmount - creditPaymentAmount;
-
-        if (billingKeyPaymentAmount > 0) {
-          const paymentResult = await portone.makePayment({
-            paymentId: invoice.id,
-            billingKey: paymentBillingKey.billingKey,
-            customerName: user.name,
-            customerEmail: user.email,
-            orderName: '타이피 정기결제',
-            amount: billingKeyPaymentAmount,
-          });
-
-          if (paymentResult.status === 'failed') {
-            throw new TypieError({ code: 'payment_failed', message: paymentResult.message });
-          }
-
-          await tx.insert(PaymentRecords).values({
-            invoiceId: invoice.id,
-            methodType: PaymentMethodType.BILLING_KEY,
-            methodId: paymentBillingKey.id,
-            state: PaymentRecordState.SUCCEEDED,
-            amount: billingKeyPaymentAmount,
-            receiptUrl: paymentResult.receiptUrl,
-          });
-        }
-
-        return userPlan;
+        return { userPlan };
       });
+
+      return userPlan;
     },
   }),
 
