@@ -19,6 +19,7 @@ import 'package:typie/screens/editor/values.dart';
 import 'package:typie/services/blob.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
+import 'package:typie/widgets/svg_image.dart';
 import 'package:typie/widgets/vertical_divider.dart';
 
 class EditorToolbar extends HookWidget {
@@ -53,10 +54,11 @@ class EditorToolbar extends HookWidget {
           height: 48,
           decoration: const BoxDecoration(
             color: AppColors.white,
-            border: Border(top: BorderSide(color: AppColors.gray_200)),
+            border: Border(top: BorderSide(color: AppColors.gray_100)),
           ),
+          padding: const Pad(right: 8),
           child: Row(
-            spacing: 16,
+            spacing: 8,
             children: [
               Expanded(
                 child: switch (proseMirrorState?.currentNode?.type) {
@@ -97,7 +99,6 @@ class EditorToolbar extends HookWidget {
                   ),
                 ],
               ),
-              const SizedBox.shrink(),
             ],
           ),
         ),
@@ -105,20 +106,20 @@ class EditorToolbar extends HookWidget {
           height: keyboardHeight,
           decoration: const BoxDecoration(
             color: AppColors.white,
-            border: Border(top: BorderSide(color: AppColors.gray_200)),
+            border: Border(top: BorderSide(color: AppColors.gray_100)),
           ),
           child: AnimatedIndexedSwitcher(
             index: max(selectedToolboxIdx, 0),
             children: [
               const SizedBox.expand(),
               GridView.extent(
-                maxCrossAxisExtent: 100,
-                padding: const Pad(all: 12),
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
+                maxCrossAxisExtent: 96,
+                padding: const Pad(all: 20),
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
                 children: [
                   _BoxButton(
-                    icon: LucideLightIcons.image,
+                    icon: 'image',
                     label: '이미지',
                     isActive: proseMirrorState?.isNodeActive('image') ?? false,
                     onTap: () async {
@@ -127,7 +128,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.paperclip,
+                    icon: 'paperclip',
                     label: '파일',
                     isActive: proseMirrorState?.isNodeActive('file') ?? false,
                     onTap: () async {
@@ -136,7 +137,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.file_up,
+                    icon: 'file-up',
                     label: '임베드',
                     isActive: proseMirrorState?.isNodeActive('embed') ?? false,
                     onTap: () async {
@@ -145,7 +146,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: TypieIcons.horizontal_rule,
+                    icon: 'horizontal-rule',
                     label: '구분선',
                     isActive: proseMirrorState?.isNodeActive('horizontal_rule') ?? false,
                     onTap: () async {
@@ -154,7 +155,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.quote,
+                    icon: 'quote',
                     label: '인용구',
                     isActive: proseMirrorState?.isNodeActive('blockquote') ?? false,
                     onTap: () async {
@@ -163,7 +164,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.gallery_vertical_end,
+                    icon: 'gallery-vertical-end',
                     label: '콜아웃',
                     isActive: proseMirrorState?.isNodeActive('callout') ?? false,
                     onTap: () async {
@@ -172,7 +173,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.chevrons_down_up,
+                    icon: 'chevrons-down-up',
                     label: '폴드',
                     isActive: proseMirrorState?.isNodeActive('fold') ?? false,
                     onTap: () async {
@@ -181,7 +182,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.table,
+                    icon: 'table',
                     label: '표',
                     isActive: proseMirrorState?.isNodeActive('table') ?? false,
                     onTap: () async {
@@ -190,7 +191,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.list,
+                    icon: 'list',
                     label: '목록',
                     isActive:
                         (proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
@@ -200,7 +201,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.code,
+                    icon: 'code',
                     label: '코드',
                     isActive: proseMirrorState?.isNodeActive('code_block') ?? false,
                     onTap: () async {
@@ -209,7 +210,7 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                   _BoxButton(
-                    icon: LucideLightIcons.code_xml,
+                    icon: 'code-xml',
                     label: 'HTML',
                     isActive: proseMirrorState?.isNodeActive('html_block') ?? false,
                     onTap: () async {
@@ -240,9 +241,9 @@ class _DefaultToolbar extends HookWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const Pad(left: 16),
+      padding: const Pad(left: 8),
       child: Row(
-        spacing: 16,
+        spacing: 4,
         children: [
           _IconToolbarButton(
             icon: LucideLightIcons.plus,
@@ -307,7 +308,7 @@ class _NodeToolbar extends HookWidget {
         spacing: 16,
         children: [
           Text(label, style: const TextStyle(fontSize: 16, color: AppColors.gray_700)),
-          const AppVerticalDivider(height: 20, color: AppColors.gray_200),
+          const AppVerticalDivider(height: 20),
           ...children,
           _TextToolbarButton(
             text: '삭제',
@@ -510,7 +511,7 @@ class _Textbar extends HookWidget {
           height: 48,
           decoration: const BoxDecoration(
             color: AppColors.white,
-            border: Border(top: BorderSide(color: AppColors.gray_200)),
+            border: Border(top: BorderSide(color: AppColors.gray_100)),
           ),
           child: HookBuilder(
             builder: (context) {
@@ -675,7 +676,7 @@ class _DefaultTextbar extends HookWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const Pad(horizontal: 16),
       child: Row(
-        spacing: 12,
+        spacing: 4,
         children: [
           _ColorToolbarButton(
             hex:
@@ -691,6 +692,7 @@ class _DefaultTextbar extends HookWidget {
             },
           ),
           _TextToolbarButton(
+            color: AppColors.gray_700,
             text:
                 editorValues['fontFamily']?.firstWhere(
                       (e) =>
@@ -705,6 +707,7 @@ class _DefaultTextbar extends HookWidget {
             },
           ),
           _TextToolbarButton(
+            color: AppColors.gray_700,
             text:
                 editorValues['fontSize']?.firstWhere(
                       (e) =>
@@ -717,7 +720,7 @@ class _DefaultTextbar extends HookWidget {
               scope.selectedTextbarIdx.value = 3;
             },
           ),
-          const AppVerticalDivider(height: 20, color: AppColors.gray_200),
+          const AppVerticalDivider(height: 20),
           _IconToolbarButton(
             icon: LucideLightIcons.bold,
             isActive: proseMirrorState?.isMarkActive('bold') ?? false,
@@ -746,10 +749,10 @@ class _DefaultTextbar extends HookWidget {
               await scope.command('strike');
             },
           ),
-          const AppVerticalDivider(height: 20, color: AppColors.gray_200),
+          const AppVerticalDivider(height: 20),
           _IconToolbarButton(icon: LucideLightIcons.link, onTap: () {}),
           _IconToolbarButton(icon: TypieIcons.ruby, onTap: () {}),
-          const AppVerticalDivider(height: 20, color: AppColors.gray_200),
+          const AppVerticalDivider(height: 20),
           _IconToolbarButton(
             icon: LucideLightIcons.align_left,
             onTap: () {
@@ -834,7 +837,7 @@ class _SelectTextbar extends HookWidget {
     }, [activeValue]);
 
     return Row(
-      spacing: 12,
+      spacing: 4,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ...editorValues[name]!.mapIndexed(
@@ -856,7 +859,7 @@ class _BaseButton extends HookWidget {
     this.color = AppColors.gray_700,
   });
 
-  final Widget Function(BuildContext context, Color color) builder;
+  final Widget Function(BuildContext context, Color color, Color? backgroundColor) builder;
 
   final Color color;
   final bool isActive;
@@ -874,20 +877,32 @@ class _BaseButton extends HookWidget {
 
     final controller = useAnimationController(duration: const Duration(milliseconds: 150));
     final curve = useMemoized(() => CurvedAnimation(parent: controller, curve: Curves.ease), [controller]);
-    final colorTween = useRef<ColorTween?>(null);
+
+    final defaultForegroundColor = isActive ? AppColors.gray_950 : color;
+    final foregroundTween = useRef<ColorTween?>(null);
+    final backgroundTween = useRef<ColorTween?>(null);
 
     final repeatTimer = useRef<Timer?>(null);
 
     useEffect(() {
-      final begin = colorTween.value?.evaluate(curve) ?? (isActive ? AppColors.brand_500 : color);
+      foregroundTween.value = ColorTween(
+        begin: foregroundTween.value?.evaluate(curve) ?? defaultForegroundColor,
+        end: switch (effectiveState) {
+          _ButtonState.idle => color,
+          _ButtonState.pressed => AppColors.gray_300,
+          _ButtonState.active => AppColors.gray_950,
+        },
+      );
 
-      final end = switch (effectiveState) {
-        _ButtonState.idle => color,
-        _ButtonState.pressed => AppColors.gray_300,
-        _ButtonState.active => AppColors.brand_500,
-      };
+      backgroundTween.value = ColorTween(
+        begin: backgroundTween.value?.evaluate(curve),
+        end: switch (effectiveState) {
+          _ButtonState.idle => null,
+          _ButtonState.pressed => null,
+          _ButtonState.active => AppColors.gray_100,
+        },
+      );
 
-      colorTween.value = ColorTween(begin: begin, end: end);
       controller.forward(from: 0);
 
       return null;
@@ -914,9 +929,10 @@ class _BaseButton extends HookWidget {
       child: AnimatedBuilder(
         animation: controller,
         builder: (context, child) {
-          final currentColor = colorTween.value?.evaluate(curve) ?? color;
+          final foregroundColor = foregroundTween.value?.evaluate(curve) ?? defaultForegroundColor;
+          final backgroundColor = backgroundTween.value?.evaluate(curve);
 
-          return builder(context, currentColor);
+          return builder(context, foregroundColor, backgroundColor);
         },
       ),
     );
@@ -938,10 +954,11 @@ class _IconToolbarButton extends StatelessWidget {
       isActive: isActive,
       isRepeatable: isRepeatable,
       onTap: onTap,
-      builder: (context, color) {
-        return Padding(
-          padding: const Pad(all: 4),
-          child: Icon(icon, size: 22, color: color),
+      builder: (context, color, backgroundColor) {
+        return Container(
+          decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6)),
+          padding: const Pad(all: 8),
+          child: Icon(icon, size: 20, color: color),
         );
       },
     );
@@ -964,8 +981,8 @@ class _ColorToolbarButton extends StatelessWidget {
       onTap: onTap,
       child: Center(
         child: Container(
-          width: 24,
-          height: 24,
+          width: 26,
+          height: 26,
           decoration: BoxDecoration(
             border: Border.all(
               width: 2,
@@ -974,10 +991,10 @@ class _ColorToolbarButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
           ),
           child: Container(
-            padding: const Pad(all: 1),
+            margin: const Pad(all: 2),
             decoration: BoxDecoration(
               color: color,
-              border: Border.all(color: AppColors.gray_200),
+              border: Border.all(color: hex == '#ffffff' ? AppColors.gray_200 : color),
               borderRadius: BorderRadius.circular(999),
             ),
           ),
@@ -992,7 +1009,7 @@ class _TextToolbarButton extends StatelessWidget {
     required this.onTap,
     required this.text,
     this.isActive = false,
-    this.color = AppColors.gray_700,
+    this.color = AppColors.gray_400,
   });
 
   final String text;
@@ -1006,11 +1023,12 @@ class _TextToolbarButton extends StatelessWidget {
       isActive: isActive,
       onTap: onTap,
       color: color,
-      builder: (context, color) {
-        return Container(
-          alignment: Alignment.center,
-          padding: const Pad(all: 4),
-          child: Text(text, style: TextStyle(fontSize: 16, color: color)),
+      builder: (context, color, _) {
+        return Center(
+          child: Container(
+            padding: const Pad(all: 8),
+            child: Text(text, style: TextStyle(fontSize: 16, color: color)),
+          ),
         );
       },
     );
@@ -1020,7 +1038,7 @@ class _TextToolbarButton extends StatelessWidget {
 class _BoxButton extends StatelessWidget {
   const _BoxButton({required this.icon, required this.label, required this.onTap, this.isActive = false});
 
-  final IconData icon;
+  final String icon;
   final String label;
   final bool isActive;
   final void Function() onTap;
@@ -1030,19 +1048,14 @@ class _BoxButton extends StatelessWidget {
     return _BaseButton(
       isActive: isActive,
       onTap: onTap,
-      builder: (context, color) {
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            spacing: 8,
-            children: [
-              Icon(icon, size: 24, color: color),
-              Text(
-                label,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color),
-              ),
-            ],
-          ),
+      builder: (context, color, backgroundColor) {
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: 12,
+          children: [
+            SvgImage('icons/$icon', width: 28, height: 28, color: color),
+            Text(label, style: TextStyle(fontSize: 15, color: color)),
+          ],
         );
       },
     );
