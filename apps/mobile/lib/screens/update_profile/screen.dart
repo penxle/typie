@@ -57,7 +57,7 @@ class UpdateProfileScreen extends HookWidget {
                 if (context.mounted) {
                   await context.router.maybePop();
                 }
-              } on Exception {
+              } catch (_) {
                 if (context.mounted) {
                   context.toast(ToastType.error, '프로필 변경에 실패했어요. 다시 시도해주세요.');
                 }

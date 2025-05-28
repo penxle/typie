@@ -68,8 +68,8 @@ class GraphQLClient {
 
     try {
       resp = await _client.request(request).first;
-    } on Exception catch (e) {
-      throw OperationError.exception(e);
+    } catch (err) {
+      throw OperationError.exception(err);
     }
 
     if (resp.linkException != null) {

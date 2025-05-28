@@ -69,7 +69,7 @@ class Auth extends ValueNotifier<AuthState> {
 
       _pref.siteId = me.sites.first.id;
       value = AuthState.authenticated(sessionToken: sessionToken, accessToken: accessToken, me: me);
-    } on Exception {
+    } catch (_) {
       await _clearTokens();
     }
   }
@@ -94,7 +94,7 @@ class Auth extends ValueNotifier<AuthState> {
             validateStatus: (status) => status == 302,
           ),
         );
-      } on Exception {
+      } catch (_) {
         // pass
       }
     }

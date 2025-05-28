@@ -5,7 +5,7 @@ part 'error.freezed.dart';
 
 @freezed
 sealed class OperationError with _$OperationError implements Exception {
-  const factory OperationError.exception(Exception exception) = ExceptionError;
+  const factory OperationError.exception(Object error) = ExceptionError;
   factory OperationError.graphql(gql.GraphQLError error) = GraphQLError;
 }
 

@@ -97,7 +97,7 @@ class LoginScreen extends HookWidget {
 
                     try {
                       await UserApi.instance.logout();
-                    } on Exception {
+                    } catch (_) {
                       // pass
                     }
 

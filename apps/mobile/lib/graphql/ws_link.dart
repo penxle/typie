@@ -145,7 +145,7 @@ class WsLink extends Link {
       await completer.future;
 
       _stateNotifier.value = WsState.connected(ws: ws);
-    } on Exception {
+    } catch (_) {
       _stateNotifier.value = const WsState.disconnected();
     }
   }

@@ -67,7 +67,7 @@ Future<void> _registerToken(GraphQLClient client) async {
     await client.request(
       GPushNotificationProvider_RegisterPushNotificationToken_MutationReq((b) => b..vars.input.token = token),
     );
-  } on Exception {
+  } catch (_) {
     // pass
   }
 }
@@ -75,7 +75,7 @@ Future<void> _registerToken(GraphQLClient client) async {
 Future<void> _deleteToken() async {
   try {
     await FirebaseMessaging.instance.deleteToken();
-  } on Exception {
+  } catch (_) {
     // pass
   }
 }
