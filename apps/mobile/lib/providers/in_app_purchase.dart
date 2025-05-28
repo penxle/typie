@@ -33,8 +33,8 @@ class InAppPurchaseProvider extends HookWidget {
                 ),
               );
             }
-          } on Exception catch (e) {
-            log.e('InAppPurchaseProvider', error: e);
+          } catch (err) {
+            log.e('InAppPurchaseProvider', error: err);
           } finally {
             if (purchaseDetails.pendingCompletePurchase) {
               await InAppPurchase.instance.completePurchase(purchaseDetails);

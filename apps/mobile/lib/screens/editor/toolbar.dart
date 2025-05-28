@@ -386,7 +386,7 @@ class _ImageToolbar extends HookWidget {
                     },
                   },
                 });
-              } on Exception {
+              } catch (_) {
                 await scope.webViewController.value?.emitEvent('nodeview', {'nodeId': nodeId, 'name': 'error'});
               }
             },
@@ -455,7 +455,7 @@ class _FileToolbar extends HookWidget {
                     },
                   },
                 });
-              } on Exception {
+              } catch (_) {
                 await scope.webViewController.value?.emitEvent('nodeview', {'nodeId': nodeId, 'name': 'error'});
               }
             },
