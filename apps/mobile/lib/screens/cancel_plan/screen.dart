@@ -72,7 +72,7 @@ class CancelPlanScreen extends StatelessWidget {
                 onTap: () async {
                   final url = Platform.isIOS
                       ? Uri.parse('https://apps.apple.com/account/subscriptions')
-                      : Uri.parse('https://play.google.com/store/account/subscriptions?package=co.typie');
+                      : Uri.parse('https://play.google.com/store/account/subscriptions?package=co.typie&sku=plan.full');
 
                   await launchUrl(url, mode: LaunchMode.externalApplication);
                 },
