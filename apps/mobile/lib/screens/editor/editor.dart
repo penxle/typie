@@ -14,6 +14,7 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/__generated__/editor.req.gql.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
+import 'package:typie/screens/editor/share.dart';
 import 'package:typie/screens/editor/toolbar.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/services/keyboard.dart';
@@ -85,6 +86,13 @@ class Editor extends HookWidget {
                     intercept: true,
                     child: BottomMenu(
                       items: [
+                        BottomMenuItem(
+                          icon: LucideLightIcons.blend,
+                          label: '공유하기',
+                          onTap: () async {
+                            await context.showBottomSheet(intercept: true, child: const ShareBottomSheet());
+                          },
+                        ),
                         BottomMenuItem(
                           icon: LucideLightIcons.trash,
                           label: '삭제하기',

@@ -5,7 +5,7 @@
   import BanIcon from '~icons/lucide/ban';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
-  import UserIcon from '~icons/lucide/circle-user-round';
+  import CircleUserRoundIcon from '~icons/lucide/circle-user-round';
   import EyeIcon from '~icons/lucide/eye';
   import EyeOffIcon from '~icons/lucide/eye-off';
   import IdCardIcon from '~icons/lucide/id-card';
@@ -15,7 +15,7 @@
   import MessageSquareIcon from '~icons/lucide/message-square';
   import ShieldIcon from '~icons/lucide/shield';
   import SmileIcon from '~icons/lucide/smile';
-  import UsersIcon from '~icons/lucide/users-round';
+  import UsersRoundIcon from '~icons/lucide/users-round';
   import { fragment, graphql } from '$graphql';
   import { tooltip } from '$lib/actions';
   import { HorizontalDivider, Icon, Select, Switch } from '$lib/components';
@@ -268,7 +268,7 @@
 
       <Select
         items={[
-          { icon: UserIcon, label: '로그인한 이용자', value: true },
+          { icon: CircleUserRoundIcon, label: '로그인한 이용자', value: true },
           { icon: BanIcon, label: '비허용', value: false },
         ]}
         bind:value={form.fields.allowComment}
@@ -283,7 +283,7 @@
 
       <Select
         items={[
-          { icon: UsersIcon, label: '누구나', value: true },
+          { icon: UsersRoundIcon, label: '누구나', value: true },
           { icon: BanIcon, label: '비허용', value: false },
         ]}
         bind:value={form.fields.allowReaction}

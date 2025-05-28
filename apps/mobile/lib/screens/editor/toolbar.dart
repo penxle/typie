@@ -831,7 +831,7 @@ class _SelectTextbar extends HookWidget {
       }
 
       return null;
-    });
+    }, [activeValue]);
 
     return Row(
       spacing: 12,
