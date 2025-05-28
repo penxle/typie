@@ -53,7 +53,7 @@ class ProfileScreen extends HookWidget {
                         child: ClipOval(
                           child: CachedNetworkImage(
                             imageUrl:
-                                '${data.me!.avatar.url}?s=${pow(2, (log(80 * MediaQuery.of(context).devicePixelRatio) / log(2)).ceil()).toInt()}&q=75',
+                                '${data.me!.avatar.url}?s=${pow(2, (log(80 * MediaQuery.devicePixelRatioOf(context)) / log(2)).ceil()).toInt()}&q=75',
                             width: 80,
                             height: 80,
                             fit: BoxFit.cover,
