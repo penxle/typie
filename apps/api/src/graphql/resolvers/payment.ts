@@ -263,8 +263,8 @@ builder.mutationFields((t) => ({
   cancelPlan: t.withAuth({ session: true }).field({
     type: UserPlan,
     resolve: async (_, __, ctx) => {
-      await db
-        .select()
+      const userPlan = await db
+        .select({ expiresAt: UserPlans.expiresAt })
         .from(UserPlans)
         .where(and(eq(UserPlans.userId, ctx.session.userId), eq(UserPlans.state, UserPlanState.ACTIVE)))
         .then(firstOrThrow);
@@ -275,12 +275,16 @@ builder.mutationFields((t) => ({
           .set({ state: PaymentInvoiceState.CANCELED })
           .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)));
 
-        return await tx
-          .update(UserPlans)
-          .set({ state: UserPlanState.CANCELED })
-          .where(and(eq(UserPlans.userId, ctx.session.userId), eq(UserPlans.state, UserPlanState.ACTIVE)))
-          .returning()
-          .then(firstOrThrow);
+        if (userPlan.expiresAt.isAfter(dayjs())) {
+          return await tx
+            .update(UserPlans)
+            .set({ state: UserPlanState.CANCELED })
+            .where(and(eq(UserPlans.userId, ctx.session.userId), eq(UserPlans.state, UserPlanState.ACTIVE)))
+            .returning()
+            .then(firstOrThrow);
+        } else {
+          return await tx.delete(UserPlans).where(eq(UserPlans.userId, ctx.session.userId)).returning().then(firstOrThrow);
+        }
       });
     },
   }),

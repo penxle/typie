@@ -1,6 +1,8 @@
-import { eq } from 'drizzle-orm';
+import dayjs from 'dayjs';
+import { and, eq, gt, or } from 'drizzle-orm';
 import { db, first, Plans, UserPlans } from '@/db';
 import { defaultPlanRules } from '@/db/schemas/json';
+import { UserPlanState } from '@/enums';
 import type { PlanRules } from '@/db/schemas/json';
 
 type GetPlanParams<T extends keyof PlanRules> = {
@@ -13,7 +15,12 @@ const getPlanRuleValue = async <T extends keyof PlanRules>({ userId, rule }: Get
     .select({ rules: Plans.rules })
     .from(Plans)
     .innerJoin(UserPlans, eq(Plans.id, UserPlans.planId))
-    .where(eq(UserPlans.userId, userId))
+    .where(
+      and(
+        eq(UserPlans.userId, userId),
+        or(eq(UserPlans.state, UserPlanState.ACTIVE), and(eq(UserPlans.state, UserPlanState.CANCELED), gt(UserPlans.expiresAt, dayjs()))),
+      ),
+    )
     .then(first);
 
   return plan?.rules[rule] === undefined ? defaultPlanRules[rule] : plan.rules[rule];
