@@ -1,0 +1,18 @@
+query PlanInfoScreen_Query {
+  me {
+    id
+    credit
+
+    plan {
+      id
+      createdAt
+      expiresAt
+
+      nextInvoice {
+        id
+        amount
+        billingAt
+      }
+    }
+  }
+}

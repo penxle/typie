@@ -1,0 +1,11 @@
+query PurchasePlanScreen_Query {
+  me {
+    id
+    uuid
+
+    plan {
+      id
+      billingCycle
+    }
+  }
+}
