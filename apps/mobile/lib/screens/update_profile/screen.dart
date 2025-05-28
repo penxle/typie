@@ -100,6 +100,7 @@ class UpdateProfileScreen extends HookWidget {
                               width: 80,
                               height: 80,
                               fit: BoxFit.cover,
+                              fadeInDuration: const Duration(milliseconds: 150),
                             ),
                           ),
                           Container(
@@ -119,9 +120,10 @@ class UpdateProfileScreen extends HookWidget {
                     padding: const Pad(horizontal: 20),
                     child: HookFormTextField(
                       name: 'name',
-                      label: '프로필 이름',
-                      placeholder: '프로필 이름',
+                      label: '닉네임',
+                      placeholder: '닉네임',
                       initialValue: data.me!.name,
+                      autofocus: true,
                     ),
                   ),
                   const Spacer(),
