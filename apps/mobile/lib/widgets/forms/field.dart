@@ -31,8 +31,9 @@ class HookFormField<T> extends HookWidget {
 
     useEffect(() {
       if (initialValue != null) {
-        form.setValue(name, initialValue);
+        form.setValue(name, initialValue, notify: false);
       }
+
       return null;
     }, []);
 

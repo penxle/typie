@@ -1,0 +1,31 @@
+query EditorScreen_Share_Query($slug: String!) {
+  post(slug: $slug) {
+    id
+    password
+    contentRating
+    allowComment
+    allowReaction
+    protectContent
+
+    entity {
+      id
+      visibility
+    }
+  }
+}
+
+mutation EditorScreen_Share_UpdatePostOption_Mutation($input: UpdatePostOptionInput!) {
+  updatePostOption(input: $input) {
+    id
+    password
+    contentRating
+    allowComment
+    allowReaction
+    protectContent
+
+    entity {
+      id
+      visibility
+    }
+  }
+}

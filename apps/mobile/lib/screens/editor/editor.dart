@@ -8,6 +8,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/env.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_lab.dart';
@@ -90,19 +91,25 @@ class Editor extends HookWidget {
                         BottomMenuItem(
                           icon: LucideLightIcons.blend,
                           label: '공유하기',
-                          trailing: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: AppColors.gray_950),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            padding: const Pad(horizontal: 8, vertical: 4),
-                            child: const Text(
-                              '링크 공개 중',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.gray_950),
-                            ),
-                          ),
+                          trailing: data.post.entity.visibility == GEntityVisibility.UNLISTED
+                              ? Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: AppColors.gray_950),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  padding: const Pad(horizontal: 8, vertical: 4),
+                                  child: const Text(
+                                    '링크 공개 중',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.gray_950,
+                                    ),
+                                  ),
+                                )
+                              : null,
                           onTap: () async {
-                            await context.showBottomSheet(intercept: true, child: const ShareBottomSheet());
+                            await context.showBottomSheet(intercept: true, child: ShareBottomSheet(slug: slug));
                           },
                         ),
                         BottomMenuItem(icon: LucideLightIcons.copy, label: '복제하기', onTap: () {}),
