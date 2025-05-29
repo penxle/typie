@@ -1,0 +1,9 @@
+query SettingScreen_Query {
+  me {
+    id
+
+    plan {
+      id
+    }
+  }
+}

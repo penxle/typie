@@ -1,0 +1,10 @@
+query UpdateEmailScreen_Query {
+  me {
+    id
+    email
+  }
+}
+
+mutation UpdateEmailScreen_SendEmailUpdateEmail_Mutation($input: SendEmailUpdateEmailInput!) {
+  sendEmailUpdateEmail(input: $input)
+}
