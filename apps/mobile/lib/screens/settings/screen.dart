@@ -45,7 +45,12 @@ class SettingsScreen extends HookWidget {
                       },
                     ),
                     const _Divider(),
-                    _Item(label: '본인 인증', onTap: () {}),
+                    _Item(
+                      label: '프로필 변경',
+                      onTap: () async {
+                        await context.router.push(const UpdateProfileRoute());
+                      },
+                    ),
                   ],
                 ),
                 if (data.me!.plan != null)
