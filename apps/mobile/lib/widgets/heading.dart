@@ -37,6 +37,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
     return AnnotatedRegion(
       key: context.router.current.key,
       value: const SystemUiOverlayStyle(
+        statusBarColor: AppColors.transparent,
         statusBarBrightness: Brightness.light,
         statusBarIconBrightness: Brightness.dark,
         systemNavigationBarDividerColor: AppColors.transparent,
