@@ -6,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:jiffy/jiffy.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:typie/context/modal.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
@@ -13,6 +14,7 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/settings/__generated__/screen.req.gql.dart';
 import 'package:typie/services/auth.dart';
+import 'package:typie/services/preference.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/switch.dart';
@@ -29,8 +31,12 @@ class SettingsScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final auth = useService<Auth>();
+    final pref = useService<Pref>();
+
     final packageInfoFuture = useMemoized(PackageInfo.fromPlatform);
     final packageInfo = useFuture(packageInfoFuture);
+
+    final devModeTapCount = useState(0);
 
     return Screen(
       heading: const Heading(title: '설정'),
@@ -143,9 +149,46 @@ class SettingsScreen extends HookWidget {
                               style: const TextStyle(fontSize: 16),
                             )
                           : const SizedBox.square(dimension: 16, child: CircularProgressIndicator()),
+                      onTap: () {
+                        if (pref.devMode) {
+                          context.toast(ToastType.success, '이미 개발자입니다.');
+                          return;
+                        }
+
+                        devModeTapCount.value += 1;
+
+                        if (devModeTapCount.value >= 7) {
+                          pref.devMode = true;
+                          context.toast(ToastType.success, '개발자가 되셨습니다.');
+                          return;
+                        }
+
+                        if (devModeTapCount.value >= 4) {
+                          context.toast(ToastType.success, '개발자가 되기까지 ${7 - devModeTapCount.value}번...');
+                          return;
+                        }
+                      },
                     ),
                   ],
                 ),
+                if (pref.devMode)
+                  _Section(
+                    title: '개발자',
+                    children: [
+                      _Item(
+                        label: '개발자 모드',
+                        trailing: HookForm(
+                          submitMode: HookFormSubmitMode.onChange,
+                          onSubmit: (form) async {
+                            pref.devMode = form.data['devMode'] as bool;
+                          },
+                          builder: (context, form) {
+                            return HookFormSwitch(name: 'devMode', initialValue: pref.devMode);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 _Section(
                   title: '기타',
                   children: [
