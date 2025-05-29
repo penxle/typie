@@ -40,7 +40,8 @@ extension ModalExtension on BuildContext {
                 ),
               ),
             ),
-            SafeArea(
+            Padding(
+              padding: const Pad(horizontal: 40),
               child: Center(
                 child: FadeTransition(opacity: tweenedOpacity, child: child),
               ),
@@ -63,7 +64,6 @@ class Modal extends StatelessWidget {
     return Material(
       color: AppColors.transparent,
       child: Container(
-        margin: const Pad(horizontal: 40),
         width: 300,
         decoration: BoxDecoration(
           color: AppColors.white,
