@@ -1,8 +1,12 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:jiffy/jiffy.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:typie/context/modal.dart';
+import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -16,6 +20,7 @@ import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 @RoutePage()
 class SettingsScreen extends HookWidget {
@@ -24,6 +29,8 @@ class SettingsScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final auth = useService<Auth>();
+    final packageInfoFuture = useMemoized(PackageInfo.fromPlatform);
+    final packageInfo = useFuture(packageInfoFuture);
 
     return Screen(
       heading: const Heading(title: '설정'),
@@ -73,9 +80,11 @@ class SettingsScreen extends HookWidget {
                     HookForm(
                       submitMode: HookFormSubmitMode.onChange,
                       onSubmit: (form) async {
+                        final marketingConsent = form.data['marketingConsent'] as bool;
+
                         await client.request(
                           GSettingsScreen_UpdateMarketingConsent_MutationReq(
-                            (b) => b..vars.input.marketingConsent = form.data['marketingConsent'] as bool,
+                            (b) => b..vars.input.marketingConsent = marketingConsent,
                           ),
                         );
 
@@ -83,8 +92,7 @@ class SettingsScreen extends HookWidget {
                           await context.showModal(
                             child: AlertModal(
                               title: '타이피 마케팅 수신 동의',
-                              message:
-                                  '타이피 마케팅 수신 동의 설정이 ${form.data['marketingConsent'] as bool ? '동의' : '거부'}처리되었어요.',
+                              message: '${Jiffy.now().yyyyMMddKorean}에 ${marketingConsent ? '동의' : '거부'}처리되었어요.',
                             ),
                           );
                         }
@@ -92,7 +100,6 @@ class SettingsScreen extends HookWidget {
                       builder: (context, form) {
                         return _Item(
                           label: '이벤트 및 타이피 소식 받아보기',
-                          onTap: () {},
                           trailing: HookFormSwitch(name: 'marketingConsent', initialValue: data.me!.marketingConsent),
                         );
                       },
@@ -102,13 +109,41 @@ class SettingsScreen extends HookWidget {
                 _Section(
                   title: '서비스 정보',
                   children: [
-                    _Item(label: '이용약관', onTap: () {}),
+                    _Item(
+                      label: '이용약관',
+                      onTap: () async {
+                        final url = Uri.parse('https://help.typie.co/legal/terms');
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      },
+                    ),
                     const _Divider(),
-                    _Item(label: '사업자 정보', onTap: () {}),
+                    _Item(
+                      label: '개인정보처리방침',
+                      onTap: () async {
+                        final url = Uri.parse('https://help.typie.co/legal/privacy');
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      },
+                    ),
+                    const _Divider(),
+                    _Item(
+                      label: '사업자 정보',
+                      onTap: () async {
+                        final url = Uri.parse('https://www.ftc.go.kr/bizCommPop.do?wrkr_no=6108803078');
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      },
+                    ),
                     const _Divider(),
                     _Item(label: '오픈소스 라이센스', onTap: () {}),
                     const _Divider(),
-                    _Item(label: '버전 정보', onTap: () {}),
+                    _Item(
+                      label: '버전 정보',
+                      trailing: packageInfo.hasData
+                          ? Text(
+                              '${packageInfo.data!.version} (${kDebugMode ? 'dev' : packageInfo.data!.buildNumber})',
+                              style: const TextStyle(fontSize: 16),
+                            )
+                          : const SizedBox.square(dimension: 16, child: CircularProgressIndicator()),
+                    ),
                   ],
                 ),
                 _Section(
@@ -186,23 +221,25 @@ class _Divider extends StatelessWidget {
 }
 
 class _Item extends StatelessWidget {
-  const _Item({required this.onTap, required this.label, this.trailing});
+  const _Item({required this.label, this.trailing, this.onTap});
 
-  final void Function() onTap;
+  final void Function()? onTap;
   final String label;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return Tappable(
-      onTap: onTap,
-      padding: const Pad(all: 16),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
-          if (trailing == null) const Icon(LucideLightIcons.chevron_right, size: 16) else trailing!,
-        ],
-      ),
+    final child = Row(
+      children: [
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
+        if (trailing == null) const Icon(LucideLightIcons.chevron_right, size: 16) else trailing!,
+      ],
     );
+
+    if (onTap == null) {
+      return Padding(padding: const Pad(all: 16), child: child);
+    } else {
+      return Tappable(onTap: onTap!, padding: const Pad(all: 16), child: child);
+    }
   }
 }
