@@ -1,9 +1,17 @@
 query SettingsScreen_Query {
   me {
     id
+    marketingConsent
 
     plan {
       id
     }
+  }
+}
+
+mutation SettingsScreen_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
+  updateMarketingConsent(input: $input) {
+    id
+    marketingConsent
   }
 }
