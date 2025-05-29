@@ -14,7 +14,7 @@ class InboxScreen extends StatelessWidget {
     return const Screen(
       heading: Heading(title: '알림', titleIcon: LucideLightIcons.inbox),
       child: Center(
-        child: Text('알림이 없어요', style: TextStyle(fontSize: 15, color: AppColors.gray_600)),
+        child: Text('아직 알림이 없어요', style: TextStyle(fontSize: 15, color: AppColors.gray_500)),
       ),
     );
   }
