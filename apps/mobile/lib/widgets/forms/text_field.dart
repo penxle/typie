@@ -133,6 +133,7 @@ class HookFormTextField extends HookWidget {
             controller: controller ?? builtinController,
             focusNode: focusNode ?? builtinFocusNode,
             autocorrect: false,
+            smartDashesType: SmartDashesType.disabled,
             obscureText: obscureText,
             keyboardType: keyboardType,
             textInputAction: textInputAction,

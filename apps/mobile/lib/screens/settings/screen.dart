@@ -50,7 +50,14 @@ class SettingsScreen extends HookWidget {
                 if (data.me!.plan != null)
                   _Section(
                     title: '사이트 설정',
-                    children: [_Item(label: '사이트 주소 변경', onTap: () {})],
+                    children: [
+                      _Item(
+                        label: '사이트 주소 변경',
+                        onTap: () async {
+                          await context.router.push(const UpdateSiteSlugRoute());
+                        },
+                      ),
+                    ],
                   ),
                 _Section(
                   title: '이벤트 알림 설정',
