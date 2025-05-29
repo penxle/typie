@@ -30,7 +30,7 @@ const worker = new Worker(
   lane,
   async (job) => {
     const fn = taskMap[job.name];
-    await fn(job.data);
+    await fn?.(job.data);
   },
   {
     prefix: `${stack}:{mq}`,
