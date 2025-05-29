@@ -293,7 +293,7 @@ class _EntityList extends HookWidget {
               : ReorderableList(
                   controller: primaryScrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const Pad(horizontal: 20, vertical: 12),
+                  padding: const Pad(horizontal: 20, vertical: 14),
                   itemCount: entities.length,
                   itemBuilder: (context, index) {
                     return Padding(
@@ -327,12 +327,8 @@ class _EntityList extends HookWidget {
                                     child: const Listener(
                                       behavior: HitTestBehavior.opaque,
                                       child: Padding(
-                                        padding: Pad(horizontal: 12, vertical: 12),
-                                        child: Icon(
-                                          LucideLightIcons.grip_vertical,
-                                          size: 20,
-                                          color: AppColors.gray_950,
-                                        ),
+                                        padding: Pad(all: 12),
+                                        child: Icon(LucideLightIcons.grip_vertical, size: 20),
                                       ),
                                     ),
                                   ),
