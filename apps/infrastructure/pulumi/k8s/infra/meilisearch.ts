@@ -43,6 +43,11 @@ new k8s.helm.v4.Chart('meilisearch', {
       existingClaim: pvc.metadata.name,
     },
 
+    resources: {
+      requests: { cpu: '2000m' },
+      limits: { memory: '4000Mi' },
+    },
+
     service: {
       type: 'NodePort',
     },
