@@ -139,7 +139,7 @@ class ConfirmModal extends StatelessWidget {
     this.onCancel,
     this.confirmText = '확인',
     this.cancelText = '취소',
-    this.confirmColor = AppColors.brand_500,
+    this.confirmColor = AppColors.gray_950,
     this.cancelColor = AppColors.gray_100,
     super.key,
   });

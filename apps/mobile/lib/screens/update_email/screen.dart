@@ -80,6 +80,8 @@ class UpdateEmailScreen extends StatelessWidget {
                       name: 'email',
                       label: '변경할 이메일 주소',
                       placeholder: 'me@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: [AutofillHints.email],
                       autofocus: true,
                     ),
                   ),
