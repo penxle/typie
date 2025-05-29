@@ -85,7 +85,7 @@ class CancelPlanScreen extends StatelessWidget {
                   ),
                   padding: const Pad(vertical: 12),
                   child: const Text(
-                    '해지하기',
+                    '스토어로 이동해서 해지하기',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.white),
                   ),
                 ),
