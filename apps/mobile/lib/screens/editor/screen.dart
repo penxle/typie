@@ -14,8 +14,6 @@ class EditorScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = Editor(slug: slug);
-
     final webViewController = useValueNotifier<WebViewController?>(null);
     final proseMirrorState = useValueNotifier<ProseMirrorState?>(null);
     final keyboardHeight = useValueNotifier<double>(0);
@@ -30,7 +28,7 @@ class EditorScreen extends HookWidget {
       isKeyboardVisible: isKeyboardVisible,
       selectedToolboxIdx: selectedToolboxIdx,
       selectedTextbarIdx: selectedTextbarIdx,
-      child: child,
+      child: Editor(slug: slug),
     );
   }
 }

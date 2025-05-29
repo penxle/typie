@@ -3,14 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/styles/colors.dart';
-import 'package:typie/widgets/screen.dart';
 
 class GraphQLOperation<TData, TVars> extends HookWidget {
-  const GraphQLOperation({required this.operation, required this.builder, this.onLoaded, super.key});
+  const GraphQLOperation({
+    required this.operation,
+    required this.builder,
+    this.initialBackgroundColor,
+    this.onLoaded,
+    super.key,
+  });
 
   final OperationRequest<TData, TVars> operation;
   final Widget Function(BuildContext context, GraphQLClient client, TData data) builder;
+  final Color? initialBackgroundColor;
   final void Function(TData data)? onLoaded;
 
   @override
@@ -38,13 +43,14 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
     }, [snapshot.data]);
 
     final data = snapshot.data?.data;
-    if (data == null) {
-      return const Screen(child: SizedBox.expand());
-    }
+    final child = data == null
+        ? const SizedBox.shrink()
+        : FadeTransition(opacity: tweenedOpacity, child: builder(context, client, data));
 
-    return ColoredBox(
-      color: AppColors.gray_50,
-      child: FadeTransition(opacity: tweenedOpacity, child: builder(context, client, data)),
-    );
+    if (initialBackgroundColor == null) {
+      return child;
+    } else {
+      return ColoredBox(color: initialBackgroundColor!, child: child);
+    }
   }
 }
