@@ -10,6 +10,8 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/settings/__generated__/screen.req.gql.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/forms/form.dart';
+import 'package:typie/widgets/forms/switch.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
@@ -67,7 +69,35 @@ class SettingsScreen extends HookWidget {
                   ),
                 _Section(
                   title: '이벤트 알림 설정',
-                  children: [_Item(label: '이벤트 및 타이피 소식 받아보기', onTap: () {})],
+                  children: [
+                    HookForm(
+                      submitMode: HookFormSubmitMode.onChange,
+                      onSubmit: (form) async {
+                        await client.request(
+                          GSettingsScreen_UpdateMarketingConsent_MutationReq(
+                            (b) => b..vars.input.marketingConsent = form.data['marketingConsent'] as bool,
+                          ),
+                        );
+
+                        if (context.mounted) {
+                          await context.showModal(
+                            child: AlertModal(
+                              title: '타이피 마케팅 수신 동의',
+                              message:
+                                  '타이피 마케팅 수신 동의 설정이 ${form.data['marketingConsent'] as bool ? '동의' : '거부'}처리되었어요.',
+                            ),
+                          );
+                        }
+                      },
+                      builder: (context, form) {
+                        return _Item(
+                          label: '이벤트 및 타이피 소식 받아보기',
+                          onTap: () {},
+                          trailing: HookFormSwitch(name: 'marketingConsent', initialValue: data.me!.marketingConsent),
+                        );
+                      },
+                    ),
+                  ],
                 ),
                 _Section(
                   title: '서비스 정보',
@@ -156,10 +186,11 @@ class _Divider extends StatelessWidget {
 }
 
 class _Item extends StatelessWidget {
-  const _Item({required this.onTap, required this.label});
+  const _Item({required this.onTap, required this.label, this.trailing});
 
   final void Function() onTap;
   final String label;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +200,7 @@ class _Item extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
-          const Icon(LucideLightIcons.chevron_right, size: 16),
+          if (trailing == null) const Icon(LucideLightIcons.chevron_right, size: 16) else trailing!,
         ],
       ),
     );
