@@ -110,24 +110,18 @@ class EnrollPlanScreen extends HookWidget {
                           _PurchaseButton(
                             label: '1개월 구독하기',
                             product: productDetailsMap.data?[BillingCycle.monthly],
-                            onTap: () async {
+                            onTap: (product) async {
                               await context.runWithLoader(() async {
-                                await _purchaseProduct(
-                                  productDetailsMap.data![BillingCycle.monthly]!,
-                                  uuid: data.me!.uuid,
-                                );
+                                await _purchaseProduct(product, uuid: data.me!.uuid);
                               });
                             },
                           ),
                           _PurchaseButton(
                             label: '1년 구독하기',
                             product: productDetailsMap.data?[BillingCycle.yearly],
-                            onTap: () async {
+                            onTap: (product) async {
                               await context.runWithLoader(() async {
-                                await _purchaseProduct(
-                                  productDetailsMap.data![BillingCycle.yearly]!,
-                                  uuid: data.me!.uuid,
-                                );
+                                await _purchaseProduct(product, uuid: data.me!.uuid);
                               });
                             },
                           ),
@@ -168,12 +162,18 @@ class _PurchaseButton extends StatelessWidget {
 
   final _Product? product;
   final String label;
-  final void Function() onTap;
+  final void Function(_Product product) onTap;
 
   @override
   Widget build(BuildContext context) {
     return Tappable(
-      onTap: onTap,
+      onTap: () {
+        if (product == null) {
+          return;
+        }
+
+        onTap(product!);
+      },
       child: Container(
         decoration: BoxDecoration(
           border: Border.all(color: AppColors.gray_950),
@@ -185,7 +185,7 @@ class _PurchaseButton extends StatelessWidget {
             Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             const Spacer(),
             if (product == null)
-              const Center(child: SizedBox.square(dimension: 16, child: CircularProgressIndicator()))
+              const Center(child: SizedBox.square(dimension: 14, child: CircularProgressIndicator()))
             else ...[
               Text(product!.price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               const Gap(4),

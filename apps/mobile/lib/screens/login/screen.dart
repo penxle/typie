@@ -45,6 +45,7 @@ class LoginScreen extends HookWidget {
     });
 
     return Screen(
+      safeArea: true,
       backgroundColor: AppColors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
