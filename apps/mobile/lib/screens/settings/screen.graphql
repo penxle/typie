@@ -1,4 +1,4 @@
-query SettingScreen_Query {
+query SettingsScreen_Query {
   me {
     id
 

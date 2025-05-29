@@ -30,7 +30,6 @@ class UpdateProfileScreen extends HookWidget {
 
     return Screen(
       heading: const Heading(title: '프로필 변경'),
-      safeArea: false,
       resizeToAvoidBottomInset: true,
       child: GraphQLOperation(
         operation: GUpdateProfileScreen_QueryReq(),

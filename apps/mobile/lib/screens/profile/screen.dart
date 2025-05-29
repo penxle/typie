@@ -123,7 +123,7 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 Tappable(
                   onTap: () async {
-                    await context.router.push(const SettingRoute());
+                    await context.router.push(const SettingsRoute());
                   },
                   child: Container(
                     decoration: BoxDecoration(
@@ -131,18 +131,21 @@ class ProfileScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       color: AppColors.white,
                     ),
-                    padding: const Pad(horizontal: 16, vertical: 20),
+                    padding: const Pad(all: 16),
                     child: const Row(
-                      spacing: 6,
+                      spacing: 8,
                       children: [
-                        Icon(LucideLightIcons.settings, size: 16),
-                        Text('설정', style: TextStyle(fontWeight: FontWeight.w500)),
+                        Icon(LucideLightIcons.settings, size: 20),
+                        Expanded(
+                          child: Text('설정', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                        ),
+                        Icon(LucideLightIcons.chevron_right, size: 16),
                       ],
                     ),
                   ),
                 ),
                 Row(
-                  spacing: 10,
+                  spacing: 16,
                   children: [
                     Expanded(
                       child: Container(
@@ -151,10 +154,10 @@ class ProfileScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                           color: AppColors.white,
                         ),
-                        padding: const Pad(horizontal: 16, vertical: 20),
+                        padding: const Pad(all: 16),
                         child: Tappable(
                           onTap: () async {
-                            final Uri url = Uri.parse('https://penxle.channel.io/home');
+                            final url = Uri.parse('https://penxle.channel.io/home');
                             await launchUrl(url, mode: LaunchMode.externalApplication);
                           },
                           child: const Column(
@@ -162,7 +165,7 @@ class ProfileScreen extends StatelessWidget {
                             spacing: 16,
                             children: [
                               Icon(LucideLightIcons.headphones, size: 20),
-                              Text('고객센터', style: TextStyle(fontWeight: FontWeight.w500)),
+                              Text('고객센터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                             ],
                           ),
                         ),
@@ -175,10 +178,10 @@ class ProfileScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                           color: AppColors.white,
                         ),
-                        padding: const Pad(horizontal: 16, vertical: 20),
+                        padding: const Pad(all: 16),
                         child: Tappable(
                           onTap: () async {
-                            final Uri url = Uri.parse('https://x.com/typieofficial');
+                            final url = Uri.parse('https://x.com/typieofficial');
                             await launchUrl(url, mode: LaunchMode.externalApplication);
                           },
                           child: const Column(
@@ -186,7 +189,7 @@ class ProfileScreen extends StatelessWidget {
                             spacing: 16,
                             children: [
                               Icon(LucideLightIcons.twitter, size: 20),
-                              Text('타이피 트위터', style: TextStyle(fontWeight: FontWeight.w500)),
+                              Text('타이피 공식 트위터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                             ],
                           ),
                         ),

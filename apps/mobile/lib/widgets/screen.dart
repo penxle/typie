@@ -8,7 +8,8 @@ class Screen extends StatelessWidget {
     required this.child,
     super.key,
     this.heading = const EmptyHeading(),
-    this.safeArea = true,
+    this.expand = true,
+    this.safeArea = false,
     this.resizeToAvoidBottomInset = false,
     this.keyboardDismiss = true,
     this.padding,
@@ -17,6 +18,7 @@ class Screen extends StatelessWidget {
 
   final PreferredSizeWidget? heading;
   final Widget child;
+  final bool expand;
   final bool safeArea;
   final bool resizeToAvoidBottomInset;
   final bool keyboardDismiss;
@@ -26,6 +28,10 @@ class Screen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var body = child;
+
+    if (expand) {
+      body = SizedBox.expand(child: body);
+    }
 
     if (padding != null) {
       body = Padding(padding: padding!, child: body);

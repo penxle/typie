@@ -82,6 +82,55 @@ class Modal extends StatelessWidget {
   }
 }
 
+class AlertModal extends StatelessWidget {
+  const AlertModal({
+    required this.title,
+    required this.message,
+    this.onConfirm,
+    this.confirmText = '확인',
+    this.confirmColor = AppColors.gray_950,
+    super.key,
+  });
+
+  final String title;
+  final String message;
+
+  final String confirmText;
+  final Color? confirmColor;
+  final void Function()? onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Modal(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const Gap(8),
+          Text(message, style: const TextStyle(fontSize: 16)),
+          const Gap(24),
+          Tappable(
+            onTap: () async {
+              await context.router.maybePop();
+              onConfirm?.call();
+            },
+            child: Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: confirmColor, borderRadius: BorderRadius.circular(999)),
+              padding: const Pad(vertical: 12),
+              child: Text(
+                confirmText,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ConfirmModal extends StatelessWidget {
   const ConfirmModal({
     required this.title,
