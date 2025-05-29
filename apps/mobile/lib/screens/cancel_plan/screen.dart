@@ -21,7 +21,7 @@ class CancelPlanScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Screen(
       heading: const Heading(title: '이용권 해지'),
-      padding: const Pad(horizontal: 20, top: 40, bottom: 20),
+      padding: const Pad(horizontal: 20, top: 40),
       child: GraphQLOperation(
         operation: GCancelPlanScreen_QueryReq(),
         builder: (context, client, data) {
@@ -90,7 +90,7 @@ class CancelPlanScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              const Gap(6),
+              const Gap(8),
               Tappable(
                 onTap: () async {
                   await context.router.maybePop();

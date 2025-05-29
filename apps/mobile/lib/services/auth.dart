@@ -70,7 +70,7 @@ class Auth extends ValueNotifier<AuthState> {
       _pref.siteId = me.sites.first.id;
       value = AuthState.authenticated(sessionToken: sessionToken, accessToken: accessToken, me: me);
     } catch (_) {
-      await _clearTokens();
+      await clearTokens();
     }
   }
 
@@ -99,10 +99,10 @@ class Auth extends ValueNotifier<AuthState> {
       }
     }
 
-    await _clearTokens();
+    await clearTokens();
   }
 
-  Future<void> _clearTokens() async {
+  Future<void> clearTokens() async {
     await _box.deleteAll([_sessionTokenKey, _accessTokenKey]);
 
     value = const AuthState.unauthenticated();

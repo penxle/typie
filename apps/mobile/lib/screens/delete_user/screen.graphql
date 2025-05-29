@@ -1,0 +1,3 @@
+mutation DeleteUserScreen_DeleteUser_Mutation {
+  deleteUser
+}

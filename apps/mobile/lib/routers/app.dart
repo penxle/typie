@@ -44,6 +44,7 @@ class AppRouter extends RootStackRouter {
             AutoRoute(page: CurrentPlanRoute.page),
             AutoRoute(page: EnrollPlanRoute.page),
             AutoRoute(page: CancelPlanRoute.page),
+            AutoRoute(page: DeleteUserRoute.page),
             AutoRoute(page: EditorRoute.page, fullscreenDialog: true),
           ],
         ),
