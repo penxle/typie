@@ -139,7 +139,12 @@ class SettingsScreen extends HookWidget {
                       },
                     ),
                     const _Divider(),
-                    _Item(label: '오픈소스 라이센스', onTap: () {}),
+                    _Item(
+                      label: '오픈소스 라이센스',
+                      onTap: () async {
+                        await context.router.push(const OssLicensesRoute());
+                      },
+                    ),
                     const _Divider(),
                     _Item(
                       label: '버전 정보',
