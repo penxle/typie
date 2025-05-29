@@ -1,7 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
 import 'package:typie/context/modal.dart';
@@ -17,14 +16,13 @@ import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
-class UpdateEmailScreen extends HookWidget {
+class UpdateEmailScreen extends StatelessWidget {
   const UpdateEmailScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Screen(
       heading: const Heading(title: '이메일 변경'),
-      safeArea: false,
       resizeToAvoidBottomInset: true,
       padding: const Pad(top: 20),
       child: GraphQLOperation(
@@ -44,37 +42,12 @@ class UpdateEmailScreen extends HookWidget {
 
                 if (context.mounted) {
                   await context.showModal(
-                    child: Modal(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text('변경할 이메일 주소로 인증 메일을 발송했어요. 메일함을 확인해주세요.'),
-                          const Gap(24),
-                          Tappable(
-                            onTap: () async {
-                              await context.router.root.maybePop();
-                              if (context.mounted) {
-                                await context.router.maybePop();
-                              }
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: AppColors.gray_100,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              padding: const Pad(vertical: 12),
-                              child: const Text(
-                                '확인',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    child: const AlertModal(title: '이메일 인증', message: '변경할 이메일 주소로 인증 메일을 발송했어요. 메일함을 확인해주세요.'),
                   );
+                }
+
+                if (context.mounted) {
+                  await context.router.maybePop();
                 }
               } on TypieError catch (e) {
                 if (context.mounted) {
@@ -88,33 +61,33 @@ class UpdateEmailScreen extends HookWidget {
             builder: (context, form) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: 16,
                 children: [
                   Padding(
                     padding: const Pad(horizontal: 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      spacing: 2,
+                      spacing: 4,
                       children: [
                         const Text('현재 이메일 주소', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                        Text(
-                          data.me!.email,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_600),
-                        ),
+                        Text(data.me!.email, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                       ],
                     ),
                   ),
+                  const Gap(20),
                   const Padding(
                     padding: Pad(horizontal: 20),
                     child: HookFormTextField(
                       name: 'email',
                       label: '변경할 이메일 주소',
-                      placeholder: '변경할 이메일 주소',
+                      placeholder: 'me@example.com',
                       autofocus: true,
                     ),
                   ),
                   const Spacer(),
                   Tappable(
+                    onTap: () async {
+                      await form.submit();
+                    },
                     child: Container(
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(color: AppColors.gray_950),
@@ -124,9 +97,6 @@ class UpdateEmailScreen extends HookWidget {
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
                       ),
                     ),
-                    onTap: () async {
-                      await form.submit();
-                    },
                   ),
                 ],
               );

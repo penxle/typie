@@ -31,6 +31,7 @@ class CurrentPlanScreen extends StatelessWidget {
           },
         ),
       ),
+      expand: false,
       padding: const Pad(all: 20),
       child: GraphQLOperation(
         operation: GCurrentPlanScreen_QueryReq(),
