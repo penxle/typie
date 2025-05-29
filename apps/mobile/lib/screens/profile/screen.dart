@@ -4,27 +4,23 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/graphql/widget.dart';
-import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/profile/__generated__/screen.req.gql.dart';
-import 'package:typie/services/auth.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 @RoutePage()
-class ProfileScreen extends HookWidget {
+class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final auth = useService<Auth>();
-
     return Screen(
       heading: const Heading(title: '프로필', titleIcon: LucideLightIcons.circle_user_round),
       child: GraphQLOperation(
@@ -126,10 +122,77 @@ class ProfileScreen extends HookWidget {
                   ),
                 ),
                 Tappable(
-                  child: const Text('logout'),
                   onTap: () async {
-                    await auth.logout();
+                    await context.router.push(const SettingRoute());
                   },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.gray_950),
+                      borderRadius: BorderRadius.circular(8),
+                      color: AppColors.white,
+                    ),
+                    padding: const Pad(horizontal: 16, vertical: 20),
+                    child: const Row(
+                      spacing: 6,
+                      children: [
+                        Icon(LucideLightIcons.settings, size: 16),
+                        Text('설정', style: TextStyle(fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
+                ),
+                Row(
+                  spacing: 10,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.gray_950),
+                          borderRadius: BorderRadius.circular(8),
+                          color: AppColors.white,
+                        ),
+                        padding: const Pad(horizontal: 16, vertical: 20),
+                        child: Tappable(
+                          onTap: () async {
+                            final Uri url = Uri.parse('https://penxle.channel.io/home');
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          },
+                          child: const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            spacing: 16,
+                            children: [
+                              Icon(LucideLightIcons.headphones, size: 20),
+                              Text('고객센터', style: TextStyle(fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.gray_950),
+                          borderRadius: BorderRadius.circular(8),
+                          color: AppColors.white,
+                        ),
+                        padding: const Pad(horizontal: 16, vertical: 20),
+                        child: Tappable(
+                          onTap: () async {
+                            final Uri url = Uri.parse('https://x.com/typieofficial');
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          },
+                          child: const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            spacing: 16,
+                            children: [
+                              Icon(LucideLightIcons.twitter, size: 20),
+                              Text('타이피 트위터', style: TextStyle(fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
