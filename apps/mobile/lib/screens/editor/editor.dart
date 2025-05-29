@@ -73,6 +73,7 @@ class Editor extends HookWidget {
     }, [webViewController]);
 
     return GraphQLOperation(
+      initialBackgroundColor: AppColors.white,
       operation: GEditorScreen_QueryReq((b) => b..vars.slug = slug),
       builder: (context, client, data) {
         return Screen(

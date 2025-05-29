@@ -110,7 +110,7 @@ class _Widget extends HookWidget {
 extension ToastExtension on BuildContext {
   static OverlayEntry? _entry;
 
-  void toast(ToastType type, String message, {Duration? duration, double bottom = 12}) {
+  void toast(ToastType type, String message, {Duration duration = const Duration(seconds: 2), double bottom = 12}) {
     if (_entry != null) {
       _entry?.remove();
     }
@@ -119,13 +119,7 @@ extension ToastExtension on BuildContext {
 
     _entry = OverlayEntry(
       builder: (context) {
-        return _Widget(
-          type: type,
-          message: message,
-          bottom: bottom,
-          duration: duration ?? const Duration(seconds: 2),
-          completer: completer,
-        );
+        return _Widget(type: type, message: message, bottom: bottom, duration: duration, completer: completer);
       },
     );
 

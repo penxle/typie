@@ -50,6 +50,7 @@ class _WithSiteId extends HookWidget {
     final pref = useService<Pref>();
 
     return GraphQLOperation(
+      initialBackgroundColor: AppColors.gray_50,
       operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
       builder: (context, client, data) {
         return _EntityList(null, data.site.entities.toList());
@@ -66,6 +67,7 @@ class _WithEntityId extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GraphQLOperation(
+      initialBackgroundColor: AppColors.gray_50,
       operation: GEntityScreen_WithEntityId_QueryReq((b) => b..vars.entityId = entityId),
       builder: (context, client, data) {
         return _EntityList(data.entity, data.entity.children.toList());
