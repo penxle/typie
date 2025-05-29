@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
+import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/screens/editor/__generated__/share.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
@@ -11,130 +13,154 @@ import 'package:typie/widgets/forms/switch.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class ShareBottomSheet extends StatelessWidget {
-  const ShareBottomSheet({super.key});
+  const ShareBottomSheet({required this.slug, super.key});
+
+  final String slug;
 
   @override
   Widget build(BuildContext context) {
     return AppFullBottomSheet(
       title: '이 포스트 공유하기',
       padding: null,
-      child: HookForm(
-        builder: (context, form) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Expanded(
-                child: Padding(
-                  padding: Pad(all: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: 32,
-                    children: [
-                      _Section(
-                        title: '포스트 조회 권한',
-                        children: [
-                          _Option(
-                            icon: LucideLightIcons.blend,
-                            label: '공개 범위',
-                            trailing: HookFormSelect(
-                              name: 'visibility',
-                              initialValue: GEntityVisibility.UNLISTED,
-                              items: [
-                                HookFormSelectItem(
-                                  icon: LucideLightIcons.link,
-                                  label: '링크가 있는 사람',
-                                  description: '링크가 있는 누구나 볼 수 있어요.',
-                                  value: GEntityVisibility.UNLISTED,
-                                ),
-                                HookFormSelectItem(
-                                  icon: LucideLightIcons.lock,
-                                  label: '비공개',
-                                  description: '나만 볼 수 있어요.',
-                                  value: GEntityVisibility.PRIVATE,
-                                ),
-                              ],
-                            ),
-                          ),
-                          _Option(
-                            icon: LucideLightIcons.lock_keyhole,
-                            label: '비밀번호 보호',
-                            trailing: HookFormSwitch(name: 'hasPassword'),
-                          ),
-                          _Option(
-                            icon: LucideLightIcons.id_card,
-                            label: '연령 제한',
-                            trailing: HookFormSelect(
-                              name: 'contentRating',
-                              initialValue: GPostContentRating.ALL,
-                              items: [
-                                HookFormSelectItem(label: '없음', value: GPostContentRating.ALL),
-                                HookFormSelectItem(label: '15세', value: GPostContentRating.R15),
-                                HookFormSelectItem(label: '성인', value: GPostContentRating.R19),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      _Section(
-                        title: '포스트 상호작용',
-                        children: [
-                          _Option(
-                            icon: LucideLightIcons.message_square,
-                            label: '댓글',
-                            trailing: HookFormSelect(
-                              name: 'allowComment',
-                              initialValue: true,
-                              items: [
-                                HookFormSelectItem(
-                                  icon: LucideLightIcons.circle_user_round,
-                                  label: '로그인한 이용자',
-                                  value: true,
-                                ),
-                                HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
-                              ],
-                            ),
-                          ),
-                          _Option(
-                            icon: LucideLightIcons.smile,
-                            label: '이모지 반응',
-                            trailing: HookFormSelect(
-                              name: 'allowReaction',
-                              initialValue: true,
-                              items: [
-                                HookFormSelectItem(icon: LucideLightIcons.users_round, label: '누구나', value: true),
-                                HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      _Section(
-                        title: '포스트 보호',
-                        children: [
-                          _Option(
-                            icon: LucideLightIcons.shield,
-                            label: '내용 보호',
-                            trailing: HookFormSwitch(name: 'protectContent'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+      child: GraphQLOperation(
+        operation: GEditorScreen_Share_QueryReq((b) => b..vars.slug = slug),
+        builder: (context, client, data) {
+          return HookForm(
+            submitMode: HookFormSubmitMode.onChange,
+            onSubmit: (form) async {
+              await client.request(
+                GEditorScreen_Share_UpdatePostOption_MutationReq(
+                  (b) => b
+                    ..vars.input.postId = data.post.id
+                    ..vars.input.visibility = form.data['visibility'] as GEntityVisibility
+                    ..vars.input.contentRating = form.data['contentRating'] as GPostContentRating
+                    ..vars.input.allowComment = form.data['allowComment'] as bool
+                    ..vars.input.allowReaction = form.data['allowReaction'] as bool
+                    ..vars.input.protectContent = form.data['protectContent'] as bool,
                 ),
-              ),
-              Tappable(
-                child: Container(
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(color: AppColors.gray_950),
-                  padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
-                  child: const Text(
-                    '공유하기',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+              );
+            },
+            builder: (context, form) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const Pad(all: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        spacing: 32,
+                        children: [
+                          _Section(
+                            title: '포스트 조회 권한',
+                            children: [
+                              _Option(
+                                icon: LucideLightIcons.blend,
+                                label: '공개 범위',
+                                trailing: HookFormSelect(
+                                  name: 'visibility',
+                                  initialValue: data.post.entity.visibility,
+                                  items: const [
+                                    HookFormSelectItem(
+                                      icon: LucideLightIcons.link,
+                                      label: '링크가 있는 사람',
+                                      description: '링크가 있는 누구나 볼 수 있어요.',
+                                      value: GEntityVisibility.UNLISTED,
+                                    ),
+                                    HookFormSelectItem(
+                                      icon: LucideLightIcons.lock,
+                                      label: '비공개',
+                                      description: '나만 볼 수 있어요.',
+                                      value: GEntityVisibility.PRIVATE,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const _Option(
+                                icon: LucideLightIcons.lock_keyhole,
+                                label: '비밀번호 보호',
+                                trailing: HookFormSwitch(name: 'hasPassword'),
+                              ),
+                              _Option(
+                                icon: LucideLightIcons.id_card,
+                                label: '연령 제한',
+                                trailing: HookFormSelect(
+                                  name: 'contentRating',
+                                  initialValue: data.post.contentRating,
+                                  items: const [
+                                    HookFormSelectItem(label: '없음', value: GPostContentRating.ALL),
+                                    HookFormSelectItem(label: '15세', value: GPostContentRating.R15),
+                                    HookFormSelectItem(label: '성인', value: GPostContentRating.R19),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          _Section(
+                            title: '포스트 상호작용',
+                            children: [
+                              _Option(
+                                icon: LucideLightIcons.message_square,
+                                label: '댓글',
+                                trailing: HookFormSelect(
+                                  name: 'allowComment',
+                                  initialValue: data.post.allowComment,
+                                  items: const [
+                                    HookFormSelectItem(
+                                      icon: LucideLightIcons.circle_user_round,
+                                      label: '로그인한 이용자',
+                                      value: true,
+                                    ),
+                                    HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
+                                  ],
+                                ),
+                              ),
+                              _Option(
+                                icon: LucideLightIcons.smile,
+                                label: '이모지 반응',
+                                trailing: HookFormSelect(
+                                  name: 'allowReaction',
+                                  initialValue: data.post.allowReaction,
+                                  items: const [
+                                    HookFormSelectItem(icon: LucideLightIcons.users_round, label: '누구나', value: true),
+                                    HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          _Section(
+                            title: '포스트 보호',
+                            children: [
+                              _Option(
+                                icon: LucideLightIcons.shield,
+                                label: '내용 보호',
+                                trailing: HookFormSwitch(
+                                  name: 'protectContent',
+                                  initialValue: data.post.protectContent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                onTap: () {},
-              ),
-            ],
+                  Tappable(
+                    child: Container(
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(color: AppColors.gray_950),
+                      padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
+                      child: const Text(
+                        '공유하기',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                      ),
+                    ),
+                    onTap: () {},
+                  ),
+                ],
+              );
+            },
           );
         },
       ),

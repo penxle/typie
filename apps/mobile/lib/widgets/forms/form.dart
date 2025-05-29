@@ -5,10 +5,11 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:luthor/luthor.dart';
 
 class HookFormController extends ChangeNotifier {
-  HookFormController({this.schema, this.onSubmit});
+  HookFormController({this.schema, this.onSubmit, this.submitMode = HookFormSubmitMode.onSubmit});
 
   final Validator? schema;
   final Future<void>? Function(HookFormController form)? onSubmit;
+  final HookFormSubmitMode submitMode;
 
   final Map<String, dynamic> _data = {};
   final Map<String, String> _errors = {};
@@ -19,12 +20,19 @@ class HookFormController extends ChangeNotifier {
   Map<String, String> get errors => _errors;
   bool get isValid => !_validated || _errors.isEmpty;
 
-  void setValue(String name, dynamic value) {
+  void setValue(String name, dynamic value, {bool notify = true}) {
     _data[name] = value;
+
+    if (!notify) {
+      return;
+    }
+
     notifyListeners();
 
-    if (_validated) {
+    if (_validated && submitMode == HookFormSubmitMode.onSubmit) {
       _validate();
+    } else if (submitMode == HookFormSubmitMode.onChange) {
+      unawaited(submit());
     }
   }
 
@@ -70,17 +78,27 @@ class HookFormController extends ChangeNotifier {
   }
 }
 
+enum HookFormSubmitMode { onSubmit, onChange }
+
 class HookForm extends HookWidget {
-  const HookForm({required this.builder, this.onSubmit, this.schema, super.key});
+  const HookForm({
+    required this.builder,
+    this.onSubmit,
+    this.schema,
+    this.submitMode = HookFormSubmitMode.onSubmit,
+    super.key,
+  });
 
   final Widget Function(BuildContext context, HookFormController form) builder;
+  final HookFormSubmitMode submitMode;
   final Validator? schema;
   final Future<void>? Function(HookFormController form)? onSubmit;
 
   @override
   Widget build(BuildContext context) {
-    final controller = useMemoized(() => HookFormController(schema: schema, onSubmit: onSubmit));
-    useListenableSelector(controller, () => controller.isValid);
+    final controller = useMemoized(
+      () => HookFormController(schema: schema, onSubmit: onSubmit, submitMode: submitMode),
+    );
 
     return HookFormScope(controller: controller, child: builder(context, controller));
   }

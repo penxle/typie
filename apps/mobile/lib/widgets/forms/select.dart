@@ -27,7 +27,7 @@ class HookFormSelect<T> extends StatelessWidget {
           onTap: () async {
             await context.showBottomSheet(
               child: AppBottomSheet(
-                padding: const Pad(horizontal: 20),
+                padding: const Pad(horizontal: 20, bottom: 8),
                 child: Column(
                   spacing: 8,
                   children: [
