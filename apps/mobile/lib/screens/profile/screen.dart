@@ -144,58 +144,61 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                Row(
-                  spacing: 16,
-                  children: [
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.gray_950),
-                          borderRadius: BorderRadius.circular(8),
-                          color: AppColors.white,
-                        ),
-                        padding: const Pad(all: 16),
-                        child: Tappable(
-                          onTap: () async {
-                            final url = Uri.parse('https://penxle.channel.io/home');
-                            await launchUrl(url, mode: LaunchMode.externalApplication);
-                          },
-                          child: const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            spacing: 16,
-                            children: [
-                              Icon(LucideLightIcons.headphones, size: 20),
-                              Text('고객센터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                            ],
+                IntrinsicHeight(
+                  child: Row(
+                    spacing: 16,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.gray_950),
+                            borderRadius: BorderRadius.circular(8),
+                            color: AppColors.white,
+                          ),
+                          padding: const Pad(all: 16),
+                          child: Tappable(
+                            onTap: () async {
+                              final url = Uri.parse('https://penxle.channel.io/home');
+                              await launchUrl(url, mode: LaunchMode.externalApplication);
+                            },
+                            child: const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              spacing: 12,
+                              children: [
+                                Icon(LucideLightIcons.headphones, size: 20),
+                                Text('고객센터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.gray_950),
-                          borderRadius: BorderRadius.circular(8),
-                          color: AppColors.white,
-                        ),
-                        padding: const Pad(all: 16),
-                        child: Tappable(
-                          onTap: () async {
-                            final url = Uri.parse('https://x.com/typieofficial');
-                            await launchUrl(url, mode: LaunchMode.externalApplication);
-                          },
-                          child: const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            spacing: 16,
-                            children: [
-                              Icon(LucideLightIcons.twitter, size: 20),
-                              Text('타이피 공식 트위터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                            ],
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.gray_950),
+                            borderRadius: BorderRadius.circular(8),
+                            color: AppColors.white,
+                          ),
+                          padding: const Pad(all: 16),
+                          child: Tappable(
+                            onTap: () async {
+                              final url = Uri.parse('https://x.com/typieofficial');
+                              await launchUrl(url, mode: LaunchMode.externalApplication);
+                            },
+                            child: const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              spacing: 12,
+                              children: [
+                                Icon(LucideLightIcons.twitter, size: 20),
+                                Text('타이피\n공식 트위터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
