@@ -95,7 +95,12 @@ class SettingsScreen extends HookWidget {
                       },
                     ),
                     const _Divider(),
-                    _Item(label: '회원탈퇴', onTap: () {}),
+                    _Item(
+                      label: '회원 탈퇴',
+                      onTap: () async {
+                        await context.router.push(const DeleteUserRoute());
+                      },
+                    ),
                   ],
                 ),
               ],
