@@ -12,7 +12,12 @@ const certificate = await ky.get('https://truststore.pki.rds.amazonaws.com/globa
 export const pg = new Pool({
   connectionString: env.DATABASE_URL,
   ssl: { ca: certificate },
+  min: 5,
   max: 20,
+  maxLifetimeSeconds: 5 * 60,
+  idle_in_transaction_session_timeout: 30 * 1000,
+  lock_timeout: 30 * 1000,
+  statement_timeout: 30 * 1000,
 });
 
 export const db = drizzle(pg, {
