@@ -58,7 +58,7 @@ export const payInvoice = async ({ invoiceId, tx, makeRecordWhenFail }: PayInvoi
     )
     .innerJoin(UserPlans, eq(Users.id, UserPlans.userId))
     .where(eq(PaymentInvoices.id, invoiceId))
-    .for('update')
+    .for('no key update')
     .then(firstOrThrow);
 
   const user = await tx
