@@ -97,6 +97,8 @@ class _EntityList extends HookWidget {
     final isReordering = useState(false);
     final isRenaming = useState(false);
 
+    const maxDepth = 3;
+
     useEffect(() {
       void listener() {
         if (primaryScrollController.position.pixels > 0) {
@@ -205,24 +207,25 @@ class _EntityList extends HookWidget {
                               }
                             },
                           ),
-                          BottomMenuItem(
-                            icon: LucideLightIcons.folder_plus,
-                            label: '하위 폴더 만들기',
-                            onTap: () async {
-                              final resp = await client.request(
-                                GEntityScreen_CreateFolder_MutationReq(
-                                  (b) => b
-                                    ..vars.input.siteId = pref.siteId
-                                    ..vars.input.parentEntityId = entity?.id
-                                    ..vars.input.name = '새 폴더',
-                                ),
-                              );
+                          if ((entity?.depth ?? 0) < maxDepth - 1)
+                            BottomMenuItem(
+                              icon: LucideLightIcons.folder_plus,
+                              label: '하위 폴더 만들기',
+                              onTap: () async {
+                                final resp = await client.request(
+                                  GEntityScreen_CreateFolder_MutationReq(
+                                    (b) => b
+                                      ..vars.input.siteId = pref.siteId
+                                      ..vars.input.parentEntityId = entity?.id
+                                      ..vars.input.name = '새 폴더',
+                                  ),
+                                );
 
-                              if (context.mounted) {
-                                await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
-                              }
-                            },
-                          ),
+                                if (context.mounted) {
+                                  await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
+                                }
+                              },
+                            ),
                           if (entities.length > 1)
                             BottomMenuItem(
                               icon: LucideLightIcons.chevrons_up_down,
