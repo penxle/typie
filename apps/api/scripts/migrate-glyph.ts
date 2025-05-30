@@ -14,7 +14,7 @@ import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { db, Embeds, Entities, Files, first, firstOrThrow, Folders, Images, PostContents, Posts, PostSnapshots, Sites, Users } from '@/db';
 import { EntityType } from '@/enums';
-import { env } from '@/env';
+import { stack } from '@/env';
 import * as aws from '@/external/aws';
 import * as iframely from '@/external/iframely';
 import { schema } from '@/pm';
@@ -262,7 +262,7 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
           ContentType: originalFile.format,
           Tagging: qs.stringify({
             UserId: userId,
-            Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+            Environment: stack,
           }),
         }),
       );
@@ -321,7 +321,7 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
           ContentType: originalImage.format,
           Tagging: qs.stringify({
             UserId: userId,
-            Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+            Environment: stack,
           }),
         }),
       );
@@ -396,7 +396,7 @@ const migrateNode = async ({ node, userId, tx }: MigrateNodeParams): Promise<JSO
               ContentType: originalImage.format,
               Tagging: qs.stringify({
                 UserId: userId,
-                Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+                Environment: stack,
               }),
             }),
           );

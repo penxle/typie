@@ -6,8 +6,7 @@ import Redis from 'ioredis';
 import { dev, env, stack } from '@/env';
 import { crons, jobs } from './tasks';
 
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-const lane = dev ? os.hostname() : env.PUBLIC_PULUMI_STACK!;
+const lane = dev ? os.hostname() : stack;
 const taskMap = Object.fromEntries([...jobs, ...crons].map((job) => [job.name, job.fn]));
 
 export const queue = new Queue(lane, {
