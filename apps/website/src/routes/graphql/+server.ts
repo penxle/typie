@@ -21,6 +21,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
   const response = await fetch(`${env.PUBLIC_API_URL}/graphql`, {
     method: 'POST',
     headers: {
+      'Accept-Encoding': 'br',
       'Content-Type': 'application/json',
       'X-Client-IP': getClientAddress(),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -33,12 +34,13 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     cookies.delete('typie-at', { path: '/' });
   }
 
+  const responseBody = await response.blob();
   const responseHeaders = new Headers(response.headers);
   responseHeaders.delete('Content-Length');
   responseHeaders.delete('Content-Encoding');
   responseHeaders.delete('Transfer-Encoding');
 
-  return new Response(response.body, {
+  return new Response(responseBody, {
     status: response.status,
     statusText: response.statusText,
     headers: responseHeaders,
