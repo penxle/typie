@@ -35,6 +35,9 @@ abstract class Env {
   static String sentryDsn = _Env.sentryDsn;
 
   @EnviedField()
+  static String usersiteUrl = _Env.usersiteUrl;
+
+  @EnviedField()
   static String websiteUrl = _Env.websiteUrl;
 
   @EnviedField()

@@ -12,6 +12,7 @@ query EntityScreen_WithSiteId_Query($siteId: ID!) {
 query EntityScreen_WithEntityId_Query($entityId: ID!) {
   entity(entityId: $entityId) {
     id
+    depth
 
     ancestors {
       id

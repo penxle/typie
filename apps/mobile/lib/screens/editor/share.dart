@@ -1,7 +1,9 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/env.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -147,6 +149,11 @@ class ShareBottomSheet extends StatelessWidget {
                     ),
                   ),
                   Tappable(
+                    onTap: () async {
+                      final baseUrl = Env.usersiteUrl.replaceAll('*.', '');
+                      final url = Uri.parse('$baseUrl/${data.post.entity.permalink}');
+                      await SharePlus.instance.share(ShareParams(title: data.post.title, uri: url));
+                    },
                     child: Container(
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(color: AppColors.gray_950),
@@ -156,7 +163,6 @@ class ShareBottomSheet extends StatelessWidget {
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
                       ),
                     ),
-                    onTap: () {},
                   ),
                 ],
               );

@@ -55,6 +55,7 @@ dependencies:
   pointer_interceptor: ^0.10.1+2
   sentry: ^8.14.2
   sentry_flutter: ^8.14.2
+  share_plus: ^11.0.0
   sign_in_with_apple: ^7.0.1
   transparent_image: ^2.0.1
   url_launcher: ^6.3.1

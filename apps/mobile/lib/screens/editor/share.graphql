@@ -1,6 +1,7 @@
 query EditorScreen_Share_Query($slug: String!) {
   post(slug: $slug) {
     id
+    title
     password
     contentRating
     allowComment
@@ -9,6 +10,7 @@ query EditorScreen_Share_Query($slug: String!) {
 
     entity {
       id
+      permalink
       visibility
     }
   }
