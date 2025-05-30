@@ -689,7 +689,7 @@ builder.mutationFields((t) => ({
         return await tx
           .update(Posts)
           .set({
-            password: input.password,
+            password: input.password || null,
             contentRating: input.contentRating,
             allowComment: input.allowComment,
             allowReaction: input.allowReaction,

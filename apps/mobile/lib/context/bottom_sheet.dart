@@ -96,18 +96,20 @@ class _BottomSheet extends HookWidget {
         builder: (context, child) {
           return Transform.translate(offset: Offset(0, controller.value), child: child);
         },
-        child: Material(
-          color: AppColors.transparent,
-          child: Container(
-            key: sheetKey,
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.gray_950)),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: child,
+        child: KeyboardDismiss(
+          child: Material(
+            color: AppColors.transparent,
+            child: Container(
+              key: sheetKey,
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.gray_950)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: child,
+              ),
             ),
           ),
         ),

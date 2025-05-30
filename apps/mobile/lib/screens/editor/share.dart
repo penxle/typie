@@ -12,6 +12,7 @@ import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/switch.dart';
+import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class ShareBottomSheet extends StatelessWidget {
@@ -36,6 +37,7 @@ class ShareBottomSheet extends StatelessWidget {
                     ..vars.input.postId = data.post.id
                     ..vars.input.visibility = form.data['visibility'] as GEntityVisibility
                     ..vars.input.contentRating = form.data['contentRating'] as GPostContentRating
+                    ..vars.input.password = form.data['hasPassword'] as bool ? form.data['password'] as String? : null
                     ..vars.input.allowComment = form.data['allowComment'] as bool
                     ..vars.input.allowReaction = form.data['allowReaction'] as bool
                     ..vars.input.protectContent = form.data['protectContent'] as bool,
@@ -78,11 +80,6 @@ class ShareBottomSheet extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              const _Option(
-                                icon: LucideLightIcons.lock_keyhole,
-                                label: '비밀번호 보호',
-                                trailing: HookFormSwitch(name: 'hasPassword'),
-                              ),
                               _Option(
                                 icon: LucideLightIcons.id_card,
                                 label: '연령 제한',
@@ -96,6 +93,19 @@ class ShareBottomSheet extends StatelessWidget {
                                   ],
                                 ),
                               ),
+                              _Option(
+                                icon: LucideLightIcons.lock_keyhole,
+                                label: '비밀번호 보호',
+                                trailing: HookFormSwitch(name: 'hasPassword', initialValue: data.post.password != null),
+                              ),
+                              if (form.data['hasPassword'] as bool? ?? false)
+                                HookFormTextField(
+                                  name: 'password',
+                                  label: '비밀번호',
+                                  placeholder: '비밀번호를 입력해주세요.',
+                                  keyboardType: TextInputType.visiblePassword,
+                                  initialValue: data.post.password,
+                                ),
                             ],
                           ),
                           _Section(
@@ -157,7 +167,7 @@ class ShareBottomSheet extends StatelessWidget {
                     child: Container(
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(color: AppColors.gray_950),
-                      padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
+                      padding: Pad(vertical: 16, bottom: MediaQuery.viewPaddingOf(context).bottom),
                       child: const Text(
                         '공유하기',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
