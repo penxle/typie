@@ -100,6 +100,8 @@ class HookForm extends HookWidget {
       () => HookFormController(schema: schema, onSubmit: onSubmit, submitMode: submitMode),
     );
 
+    useListenable(controller);
+
     return HookFormScope(controller: controller, child: builder(context, controller));
   }
 }

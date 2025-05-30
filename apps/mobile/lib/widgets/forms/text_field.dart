@@ -66,7 +66,7 @@ class HookFormTextField extends HookWidget {
       }
 
       return null;
-    }, [initialValue]);
+    }, []);
 
     useAsyncEffect(() async {
       if (autofocus) {
