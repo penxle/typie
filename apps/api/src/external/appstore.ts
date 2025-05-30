@@ -1,6 +1,10 @@
-import { AppStoreServerAPIClient, Environment, SignedDataVerifier } from '@apple/app-store-server-library';
+import { AppStoreServerAPIClient, Environment, SignedDataVerifier, Status } from '@apple/app-store-server-library';
 import ky from 'ky';
+import { match } from 'ts-pattern';
+import { PlanId } from '@/const';
+import { UserPlanBillingCycle } from '@/enums';
 import { env } from '@/env';
+import { TypieError } from '@/errors';
 
 const certificateUrls = [
   'https://www.apple.com/appleca/AppleIncRootCertificate.cer',
@@ -44,6 +48,18 @@ export const getTransaction = async ({ environment, transactionId }: GetTransact
   return transaction;
 };
 
+type GetSubscriptionParams = { environment: 'production' | 'sandbox'; transactionId: string };
+export const getSubscription = async ({ environment, transactionId }: GetSubscriptionParams) => {
+  const client = clients[environment];
+  const verifier = verifiers[environment];
+
+  const subscription = await client.getAllSubscriptionStatuses(transactionId, [Status.ACTIVE]);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const transaction = await verifier.verifyAndDecodeTransaction(subscription.data![0].lastTransactions![0].signedTransactionInfo!);
+
+  return transaction;
+};
+
 type DecodeNotificationParams = { environment: 'production' | 'sandbox'; signedPayload: string };
 export const decodeNotification = async ({ environment, signedPayload }: DecodeNotificationParams) => {
   const verifier = verifiers[environment];
@@ -52,3 +68,11 @@ export const decodeNotification = async ({ environment, signedPayload }: DecodeN
 
   return notification;
 };
+
+export const getPlanInfoByProductId = (productId: string | undefined) =>
+  match(productId)
+    .with('plan.full.1month', () => ({ planId: PlanId.PLUS, billingCycle: UserPlanBillingCycle.MONTHLY }))
+    .with('plan.full.1year', () => ({ planId: PlanId.PLUS, billingCycle: UserPlanBillingCycle.YEARLY }))
+    .otherwise(() => {
+      throw new TypieError({ code: 'not_found' });
+    });

@@ -482,12 +482,32 @@ export const UserPlans = pgTable('user_plans', {
     .references(() => Plans.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   fee: integer('fee').notNull(),
   billingCycle: E._UserPlanBillingCycle('billing_cycle').notNull(),
+  billingMethod: E._UserPlanBillingMethod('billing_method').notNull().default('BILLING_KEY_AND_CREDIT'),
   state: E._UserPlanState('state').notNull().default('ACTIVE'),
   expiresAt: datetime('expires_at').notNull(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
 });
+
+export const UserIAPSubscriptions = pgTable(
+  'user_iap_subscriptions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.USER_IAP_SUBSCRIPTIONS)),
+    userId: text('user_id')
+      .unique()
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    store: E._InAppPurchaseStore('store').notNull(),
+    subscriptionId: text('subscription_id').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.store, t.subscriptionId)],
+);
 
 export const UserPushNotificationTokens = pgTable('user_push_notification_tokens', {
   id: text('id')

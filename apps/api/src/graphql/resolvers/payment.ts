@@ -1,4 +1,4 @@
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import { and, eq, gt, lt } from 'drizzle-orm';
 import {
   CreditCodes,
@@ -10,6 +10,7 @@ import {
   PaymentInvoices,
   Plans,
   TableCode,
+  UserIAPSubscriptions,
   UserPlans,
   validateDbId,
 } from '@/db';
@@ -21,6 +22,7 @@ import {
   PaymentInvoiceState,
   PlanAvailability,
   UserPlanBillingCycle,
+  UserPlanBillingMethod,
   UserPlanState,
 } from '@/enums';
 import { production } from '@/env';
@@ -200,9 +202,10 @@ builder.mutationFields((t) => ({
         .select({
           planId: UserPlans.planId,
           expiresAt: UserPlans.expiresAt,
+          billingMethod: UserPlans.billingMethod,
         })
         .from(UserPlans)
-        .where(and(eq(UserPlans.userId, ctx.session.userId), gt(UserPlans.expiresAt, dayjs())))
+        .where(eq(UserPlans.userId, ctx.session.userId))
         .then(first);
 
       const plan = await db
@@ -215,32 +218,34 @@ builder.mutationFields((t) => ({
       const paymentAmount = calculatePaymentAmount(input.billingCycle, plan.fee);
 
       if (existingUserPlan) {
-        if (existingUserPlan.planId !== input.planId) {
+        if (existingUserPlan.planId !== input.planId || existingUserPlan.billingMethod !== UserPlanBillingMethod.BILLING_KEY_AND_CREDIT) {
           // TODO: 다른 플랜 자체가 없으니까... 나중에 다른 플랜이 생기면 생각해보기
           throw new TypieError({ code: 'plan_already_enrolled' });
         }
 
-        return await db.transaction(async (tx) => {
-          const userPlan = await tx
-            .update(UserPlans)
-            .set({
-              state: UserPlanState.ACTIVE,
-              fee: plan.fee,
-              billingCycle: input.billingCycle,
-            })
-            .where(eq(UserPlans.userId, ctx.session.userId))
-            .returning()
-            .then(firstOrThrow);
+        if (existingUserPlan.expiresAt.isAfter(dayjs())) {
+          return await db.transaction(async (tx) => {
+            const userPlan = await tx
+              .update(UserPlans)
+              .set({
+                state: UserPlanState.ACTIVE,
+                fee: plan.fee,
+                billingCycle: input.billingCycle,
+              })
+              .where(eq(UserPlans.userId, ctx.session.userId))
+              .returning()
+              .then(firstOrThrow);
 
-          await tx
-            .update(PaymentInvoices)
-            .set({
-              amount: paymentAmount,
-            })
-            .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)));
+            await tx
+              .update(PaymentInvoices)
+              .set({
+                amount: paymentAmount,
+              })
+              .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)));
 
-          return userPlan;
-        });
+            return userPlan;
+          });
+        }
       }
 
       const unpaidInvoice = await db
@@ -267,6 +272,7 @@ builder.mutationFields((t) => ({
             planId: plan.id,
             fee: plan.fee,
             billingCycle: input.billingCycle,
+            billingMethod: UserPlanBillingMethod.BILLING_KEY_AND_CREDIT,
             expiresAt: enrolledAt,
           })
           .onConflictDoUpdate({
@@ -315,10 +321,14 @@ builder.mutationFields((t) => ({
     type: UserPlan,
     resolve: async (_, __, ctx) => {
       const userPlan = await db
-        .select({ expiresAt: UserPlans.expiresAt })
+        .select({ expiresAt: UserPlans.expiresAt, billingMethod: UserPlans.billingMethod })
         .from(UserPlans)
         .where(and(eq(UserPlans.userId, ctx.session.userId), eq(UserPlans.state, UserPlanState.ACTIVE)))
         .then(firstOrThrow);
+
+      if (userPlan.billingMethod === UserPlanBillingMethod.APP_STORE || userPlan.billingMethod === UserPlanBillingMethod.GOOGLE_PLAY) {
+        throw new TypieError({ code: 'iap_subscription' });
+      }
 
       return await db.transaction(async (tx) => {
         await tx
@@ -346,23 +356,120 @@ builder.mutationFields((t) => ({
       store: t.input.field({ type: InAppPurchaseStore }),
       data: t.input.string(),
     },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
+      let subscriptionId: string;
+      let planId: string;
+      let expiresAt: Dayjs;
+      let billingCycle: UserPlanBillingCycle;
+
       if (input.store === InAppPurchaseStore.APP_STORE) {
-        const transaction = await appstore.getTransaction({
+        const transaction = await appstore.getSubscription({
           environment: production ? 'production' : 'sandbox',
           transactionId: input.data,
         });
 
         await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'mutation/appstore', transaction }, null, 2) });
+
+        if (!transaction.originalTransactionId) {
+          throw new TypieError({ code: 'subscription_not_active' });
+        }
+
+        subscriptionId = transaction.originalTransactionId;
+        expiresAt = dayjs(transaction.expiresDate);
+        ({ planId, billingCycle } = appstore.getPlanInfoByProductId(transaction.productId));
       } else if (input.store === InAppPurchaseStore.GOOGLE_PLAY) {
         const subscription = await googleplay.getSubscription({
           purchaseToken: input.data,
         });
 
         await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'mutation/googleplay', subscription }, null, 2) });
+
+        if (subscription.subscriptionState !== 'SUBSCRIPTION_STATE_ACTIVE') {
+          throw new TypieError({ code: 'subscription_not_active' });
+        }
+
+        subscriptionId = input.data;
+        expiresAt = dayjs(subscription.lineItems?.[0].expiryTime);
+        planId = googleplay.getPlanIdByProductId(subscription.lineItems?.[0].productId);
+        billingCycle = googleplay.getPlanBillingCycleByBasePlanId(subscription.lineItems?.[0].offerDetails?.basePlanId);
+      } else {
+        throw new Error('Should not reach here');
       }
 
-      return true;
+      if (expiresAt.isBefore(dayjs())) {
+        throw new TypieError({ code: 'subscription_expired' });
+      }
+
+      const plan = await db
+        .select({
+          id: Plans.id,
+          fee: Plans.fee,
+        })
+        .from(Plans)
+        .where(eq(Plans.id, planId))
+        .then(firstOrThrow);
+
+      const existingUserPlan = await db
+        .select({
+          planId: UserPlans.planId,
+          billingMethod: UserPlans.billingMethod,
+        })
+        .from(UserPlans)
+        .leftJoin(UserIAPSubscriptions, eq(UserPlans.userId, UserIAPSubscriptions.userId))
+        .where(eq(UserPlans.userId, ctx.session.userId))
+        .then(first);
+
+      const iapSubscription = await db
+        .select({
+          userId: UserIAPSubscriptions.userId,
+        })
+        .from(UserIAPSubscriptions)
+        .where(and(eq(UserIAPSubscriptions.store, input.store), eq(UserIAPSubscriptions.subscriptionId, subscriptionId)))
+        .then(first);
+
+      if (existingUserPlan && (existingUserPlan.planId !== plan.id || existingUserPlan.billingMethod !== input.store)) {
+        throw new TypieError({ code: 'already_enrolled' });
+      }
+
+      if (iapSubscription && iapSubscription.userId !== ctx.session.userId) {
+        throw new TypieError({ code: 'already_enrolled_by_other_account' });
+      }
+
+      return await db.transaction(async (tx) => {
+        await tx
+          .insert(UserPlans)
+          .values({
+            userId: ctx.session.userId,
+            planId: plan.id,
+            fee: plan.fee,
+            billingCycle,
+            billingMethod: input.store,
+            expiresAt,
+          })
+          .onConflictDoUpdate({
+            target: [UserPlans.userId],
+            set: {
+              billingCycle,
+            },
+          });
+
+        await tx
+          .insert(UserIAPSubscriptions)
+          .values({
+            userId: ctx.session.userId,
+            store: input.store,
+            subscriptionId,
+          })
+          .onConflictDoUpdate({
+            target: [UserIAPSubscriptions.userId],
+            set: {
+              store: input.store,
+              subscriptionId,
+            },
+          });
+
+        return true;
+      });
     },
   }),
 }));
