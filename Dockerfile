@@ -1,7 +1,7 @@
 FROM amazonlinux:2023 AS base
 
 RUN dnf install -y unzip
-RUN curl -fsSL https://bun.sh/install | bash
+RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.2.13"
 ENV PATH="/root/.bun/bin:$PATH"
 
 FROM base AS builder
