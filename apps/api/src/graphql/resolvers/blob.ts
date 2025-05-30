@@ -7,7 +7,7 @@ import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
 import { db, Files, firstOrThrow, Fonts, Images, TableCode, validateDbId } from '@/db';
-import { env } from '@/env';
+import { stack } from '@/env';
 import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
 import { builder } from '../builder';
@@ -136,7 +136,7 @@ builder.mutationFields((t) => ({
           TaggingDirective: 'REPLACE',
           Tagging: qs.stringify({
             UserId: ctx.session?.userId ?? 'anonymous',
-            Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+            Environment: stack,
           }),
         }),
       );
@@ -221,7 +221,7 @@ builder.mutationFields((t) => ({
           ContentType: mimetype,
           Tagging: qs.stringify({
             UserId: ctx.session?.userId ?? 'anonymous',
-            Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+            Environment: stack,
           }),
         }),
       );
@@ -286,7 +286,7 @@ builder.mutationFields((t) => ({
           ContentType: 'font/woff2',
           Tagging: qs.stringify({
             UserId: ctx.session?.userId ?? 'anonymous',
-            Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+            Environment: stack,
           }),
         }),
       );

@@ -5,7 +5,7 @@ import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
 import { db, firstOrThrow, Images } from '@/db';
-import { env } from '@/env';
+import { stack } from '@/env';
 import * as aws from '@/external/aws';
 
 type PersistBlobAsImageParams = { userId?: string; file: File };
@@ -52,7 +52,7 @@ export const persistBlobAsImage = async ({ userId, file }: PersistBlobAsImagePar
         ContentType: mimetype,
         Tagging: qs.stringify({
           UserId: userId ?? 'anonymous',
-          Environment: env.PUBLIC_PULUMI_STACK ?? 'local',
+          Environment: stack,
         }),
       }),
     );
