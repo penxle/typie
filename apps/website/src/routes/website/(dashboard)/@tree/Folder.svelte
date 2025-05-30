@@ -125,7 +125,9 @@
 
   $effect(() => {
     if (editing) {
-      inputEl?.select();
+      setTimeout(() => {
+        inputEl?.select();
+      }, 0);
     }
   });
 
