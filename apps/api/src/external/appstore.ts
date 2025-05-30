@@ -66,7 +66,15 @@ export const decodeNotification = async ({ environment, signedPayload }: DecodeN
 
   const notification = await verifier.verifyAndDecodeNotification(signedPayload);
 
-  return notification;
+  return {
+    ...notification,
+    data: {
+      ...notification.data,
+      transaction: notification.data?.signedTransactionInfo
+        ? await verifier.verifyAndDecodeTransaction(notification.data.signedTransactionInfo)
+        : undefined,
+    },
+  };
 };
 
 export const getPlanInfoByProductId = (productId: string | undefined) =>
