@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.21.1",
-    "@types/bun": "^1.2.13",
+    "@types/bun": "^1.2.15",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "hono": "^4.7.10",
