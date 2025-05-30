@@ -1,0 +1,126 @@
+---
+description: 
+globs: **/*.dart
+alwaysApply: false
+---
+# Dart/Flutter Hooks 베스트 프랙티스
+
+## 위젯 작성
+
+- **HookWidget 사용**: 상태가 필요한 모든 위젯은 HookWidget을 사용하세요. StatefulWidget은 사용하지 마세요.
+- **StatelessWidget 적절히 사용**: 상태가 전혀 필요하지 않고 hooks도 사용하지 않는 순수 UI 위젯만 StatelessWidget을 사용하세요.
+- **작은 위젯 작성**: 위젯은 하나의 역할만 수행하도록 작게 유지하세요.
+- **위젯 조합 활용**: 복잡한 UI는 작은 위젯들을 조합하여 구성하세요.
+- **const 생성자 사용**: 변경되지 않는 위젯은 항상 const 생성자를 사용하세요.
+- **useMemoized 활용**: 비용이 큰 객체 생성은 useMemoized로 메모이제이션하세요.
+
+## Hooks 기반 상태 관리
+
+- **useState 사용**: 로컬 상태 관리는 항상 useState를 사용하세요.
+- **useEffect 활용**: 생명주기 이벤트와 부작용 처리는 useEffect를 사용하세요.
+- **자동 dispose**: hooks는 자동으로 dispose되므로 수동 cleanup이 불필요합니다.
+- **useCallback 활용**: 함수 재생성을 방지하려면 useCallback을 사용하세요.
+- **useMemoized 활용**: 비용이 큰 계산은 useMemoized로 캐싱하세요.
+- **useRef 활용**: 렌더링과 무관한 가변 값은 useRef를 사용하세요.
+
+## 비동기 데이터 처리
+
+- **useFuture 사용**: Future 데이터는 FutureBuilder 대신 useFuture를 사용하세요.
+- **useStream 사용**: Stream 데이터는 StreamBuilder 대신 useStream을 사용하세요.
+- **AsyncSnapshot 처리**: useFuture와 useStream의 결과는 적절히 로딩/에러 상태를 처리하세요.
+- **useEffect로 API 호출**: 컴포넌트 마운트 시 API 호출은 useEffect를 사용하세요.
+- **의존성 배열 관리**: useEffect의 두 번째 인자로 의존성을 명시하여 불필요한 재실행을 방지하세요.
+
+## 애니메이션과 컨트롤러
+
+- **useAnimationController 사용**: AnimationController는 useAnimationController로 생성하세요.
+- **useSingleTickerProvider 활용**: 단일 애니메이션에는 useSingleTickerProvider를 사용하세요.
+- **useAnimation 활용**: Animation 값의 변화를 감지할 때 useAnimation을 사용하세요.
+- **자동 dispose**: 모든 컨트롤러는 hooks에 의해 자동으로 dispose됩니다.
+
+## 폼과 입력 처리
+
+- **useTextEditingController 사용**: TextEditingController는 useTextEditingController로 생성하세요.
+- **useFocusNode 사용**: FocusNode는 useFocusNode로 생성하세요.
+- **useListenable 활용**: 컨트롤러의 변화를 감지할 때 useListenable을 사용하세요.
+
+## 변수 및 상태 관리
+
+- **final 우선 사용**: 재할당이 필요 없는 변수는 항상 `final`로 선언하세요.
+- **var 최소화**: 타입이 명확하지 않은 경우를 제외하고 `var` 사용을 최소화하세요.
+- **전역 변수 피하기**: 전역 변수 사용을 최소화하고 필요하다면 Provider 패턴을 사용하세요.
+- **불변성 유지**: 리스트와 맵은 불변으로 다루고, 새 컬렉션을 생성하여 변경사항을 적용하세요.
+- **구조 분해 할당 활용**: 레코드나 패턴 매칭을 사용하여 값을 추출하세요.
+- **late 키워드 신중히 사용**: null이 아닌 변수를 늦게 초기화할 때만 `late` 키워드를 사용하세요.
+
+## 코드 구조화
+
+- **조기 반환**: 복잡한 중첩 조건문 대신 조기 반환 패턴을 사용하세요.
+- **삼항 연산자 적절히 사용**: 간단한 조건부 표현식에는 삼항 연산자를 사용하세요.
+- **가드 절 패턴**: 예외 케이스를 먼저 처리하여 메인 로직을 깔끔하게 유지하세요.
+- **모듈화**: 코드를 작고 재사용 가능한 위젯과 유틸리티로 분리하세요.
+- **단일 책임 원칙**: 각 위젯과 클래스는 하나의 명확한 책임만 가져야 합니다.
+- **커스텀 훅 생성**: 복잡한 로직은 커스텀 훅으로 분리하여 재사용하세요.
+
+## 성능 최적화
+
+- **useMemoized 활용**: 비용이 큰 계산이나 객체 생성은 useMemoized로 최적화하세요.
+- **useCallback 활용**: 자식 위젯에 전달하는 콜백 함수는 useCallback으로 최적화하세요.
+- **const 위젯 사용**: 변경되지 않는 위젯은 const로 선언하여 rebuild를 방지하세요.
+- **의존성 배열 최적화**: useEffect, useMemoized, useCallback의 의존성 배열을 최적화하세요.
+- **불필요한 hooks 사용 피하기**: 단순한 값은 일반 변수로 선언하고 hooks 남용을 피하세요.
+
+## 에러 처리
+
+- **AsyncSnapshot 에러 처리**: useFuture와 useStream의 결과에서 에러 상태를 적절히 처리하세요.
+- **useEffect 에러 처리**: useEffect 내부의 비동기 작업은 try-catch로 감싸세요.
+- **사용자 친화적 에러 UI**: 에러 발생 시 사용자에게 명확한 피드백을 제공하세요.
+- **에러 중앙화**: 애플리케이션 전체적인 에러 처리 전략과 로깅을 구축하세요.
+- **Fallback UI**: 에러 발생 시 적절한 fallback UI를 제공하세요.
+
+## 커스텀 훅 개발
+
+- **로직 재사용**: 반복되는 상태 로직은 커스텀 훅으로 분리하세요.
+- **단일 책임**: 각 커스텀 훅은 하나의 명확한 역할만 수행해야 합니다.
+- **적절한 반환값**: 커스텀 훅은 필요한 값과 함수만 반환하세요.
+- **use 접두사**: 커스텀 훅의 이름은 항상 'use'로 시작해야 합니다.
+- **의존성 관리**: 커스텀 훅 내부에서도 의존성 배열을 적절히 관리하세요.
+
+## 코드 가독성
+
+- **일관된 네이밍 컨벤션**: 변수, 함수, 클래스 등에 일관된 네이밍 패턴을 적용하세요.
+- **의미있는 이름 사용**: 약어 대신 서술적이고 의미가 명확한 이름을 사용하세요.
+- **주석 작성**: 복잡한 로직이나 의도가 명확하지 않은 코드에는 주석을 추가하세요.
+- **일관된 코드 스타일**: 들여쓰기, 공백, 괄호 등의 스타일을 일관되게 유지하세요.
+
+## 모던 Dart 기능 활용
+
+- **Null Safety**: null 안전성을 활용하여 런타임 에러를 방지하세요.
+- **Extension 메서드**: 기존 클래스에 새로운 기능을 추가할 때 extension을 사용하세요.
+- **패턴 매칭**: Dart 3.0의 패턴 매칭을 활용하여 복잡한 조건문을 단순화하세요.
+- **레코드 타입**: 간단한 데이터 구조는 레코드 타입을 사용하세요.
+- **스프레드 연산자**: 리스트나 맵을 복사하거나 병합할 때 스프레드 연산자(`...`)를 사용하세요.
+
+## 네이밍 컨벤션
+
+- **파일명**: `snake_case.dart` 형식을 사용하세요.
+- **클래스명**: `PascalCase`를 사용하세요 (예: `UserProfile`, `LoginButton`).
+- **변수/함수명**: `camelCase`를 사용하세요 (예: `userName`, `getUserData`).
+- **상수**: `lowerCamelCase`를 사용하세요 (예: `maxRetryCount`, `apiBaseUrl`).
+- **private 멤버**: 앞에 `_`를 붙여 사용하세요 (예: `_privateMethod`).
+- **불리언 변수**: is, has, can 등의 접두사를 사용하세요 (예: `isLoading`, `hasError`).
+
+## 타입 시스템
+
+- **dynamic 타입 사용 금지**: `dynamic` 타입은 타입 검사를 우회하므로 사용하지 마세요. 대신 명시적인 타입이나 `Object?`를 사용하세요.
+- **타입 추론 활용**: 타입 추론이 명확한 경우에는 중복된 타입 선언을 피하세요.
+- **제네릭 활용**: 함수나 클래스에서 다양한 타입을 지원해야 할 때는 제네릭을 사용하세요.
+- **typedef 활용**: 복잡한 함수 시그니처는 typedef로 타입 별칭을 만드세요.
+
+## Hooks 사용 패턴
+
+- **useState 패턴**: `final state = useState(initialValue);` 형태로 사용하세요.
+- **useEffect 패턴**: 의존성 배열을 명시하여 불필요한 재실행을 방지하세요.
+- **useMemoized 패턴**: `final value = useMemoized(() => expensiveComputation(), [dependency]);`
+- **useCallback 패턴**: `final callback = useCallback((param) => doSomething(param), [dependency]);`
+- **조건부 훅 금지**: 조건문 내부에서 훅을 호출하지 마세요. 항상 위젯의 최상위 레벨에서 호출하세요.
