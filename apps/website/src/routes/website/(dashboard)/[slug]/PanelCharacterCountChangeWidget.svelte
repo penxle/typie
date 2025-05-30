@@ -35,8 +35,8 @@
   const difference = $derived($post.characterCountChange.additions - $post.characterCountChange.deletions);
 </script>
 
-<details class={flex({ flexDirection: 'column', gap: '8px', marginBottom: open ? '12px' : '0' })} bind:open>
-  <summary class={flex({ alignItems: 'center', gap: '4px', cursor: 'pointer', userSelect: 'none' })}>
+<details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '0' })} bind:open>
+  <summary class={flex({ alignItems: 'center', gap: '4px', cursor: 'pointer', marginBottom: open ? '8px' : '0', userSelect: 'none' })}>
     <Icon style={{ color: 'gray.500' }} icon={GoalIcon} size={12} />
     <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.700' })}>오늘의 기록</div>
     <Icon style={css.raw({ color: 'gray.500', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={IconChevronRight} size={14} />

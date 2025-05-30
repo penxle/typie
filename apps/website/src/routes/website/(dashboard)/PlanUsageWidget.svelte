@@ -96,7 +96,7 @@
     }}
     type="button"
   >
-    <div class={flex({ flexDirection: 'column', gap: '2px' })}>
+    <div class={flex({ flexDirection: 'column', gap: '2px', width: 'full' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '2px' })}>
         <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500' })}>글자 수</div>
 
@@ -125,7 +125,7 @@
       </div>
     </div>
 
-    <div class={flex({ flexDirection: 'column', gap: '2px' })}>
+    <div class={flex({ flexDirection: 'column', gap: '2px', width: 'full' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '4px' })}>
         <div class={css({ fontSize: '12px', color: 'gray.700' })}>파일 업로드</div>
 
