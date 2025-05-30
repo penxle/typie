@@ -149,6 +149,13 @@ export const UserPlanBillingCycle = {
   YEARLY: 'YEARLY',
 } as const;
 
+export type UserPlanBillingMethod = keyof typeof UserPlanBillingMethod;
+export const UserPlanBillingMethod = {
+  BILLING_KEY_AND_CREDIT: 'BILLING_KEY_AND_CREDIT',
+  APP_STORE: 'APP_STORE',
+  GOOGLE_PLAY: 'GOOGLE_PLAY',
+} as const;
+
 export type UserPlanState = keyof typeof UserPlanState;
 export const UserPlanState = {
   ACTIVE: 'ACTIVE',
