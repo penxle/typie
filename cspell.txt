@@ -20,6 +20,7 @@ dotenv
 dotum
 eulyoo
 fira
+getmeili
 glyphr
 healthz
 iconify

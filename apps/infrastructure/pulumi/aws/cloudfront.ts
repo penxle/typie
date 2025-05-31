@@ -287,4 +287,9 @@ export const outputs = {
   AWS_CLOUDFRONT_DYNAMIC_CACHE_POLICY_ID: dynamicCachePolicy.id,
   AWS_CLOUDFRONT_DYNAMIC_ORIGIN_REQUEST_POLICY_ID: dynamicOriginRequestPolicy.id,
   AWS_CLOUDFRONT_DYNAMIC_RESPONSE_HEADERS_POLICY_ID: dynamicResponseHeadersPolicy.id,
+  AWS_CLOUDFRONT_TYPIE_CO_CERTIFICATE_ARN: certificates.typie_co.arn,
+  AWS_CLOUDFRONT_TYPIE_DEV_CERTIFICATE_ARN: certificates.typie_dev.arn,
+  AWS_CLOUDFRONT_TYPIE_ME_CERTIFICATE_ARN: certificates.typie_me.arn,
+  AWS_CLOUDFRONT_TYPIE_NET_CERTIFICATE_ARN: certificates.typie_net.arn,
+  AWS_CLOUDFRONT_TYPIE_IO_CERTIFICATE_ARN: certificates.typie_io.arn,
 };

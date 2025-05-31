@@ -1,13 +1,12 @@
-import * as k8s from '@pulumi/kubernetes';
+import * as aws from '@pulumi/aws';
 import * as pulumi from '@pulumi/pulumi';
 import * as typie from '@typie/pulumi';
-import { match } from 'ts-pattern';
 
 const stack = pulumi.getStack();
 const config = new pulumi.Config('typie');
 const ref = new pulumi.StackReference('typie/infrastructure/base');
 
-const app = new typie.App('api', {
+new typie.Service('api', {
   name: 'api',
 
   image: {
@@ -17,8 +16,8 @@ const app = new typie.App('api', {
   },
 
   resources: {
-    cpu: '2000m',
-    memory: '4Gi',
+    cpu: '2048',
+    memory: '4096',
   },
 
   autoscale: {
@@ -27,8 +26,10 @@ const app = new typie.App('api', {
     averageCpuUtilization: 50,
   },
 
+  domains: stack === 'dev' ? ['api.typie.dev'] : ['api.typie.co'],
+
   iam: {
-    base: {
+    policy: {
       Version: '2012-10-17',
       Statement: [
         {
@@ -60,47 +61,66 @@ const app = new typie.App('api', {
     },
   },
 
-  secret: {
-    project: 'typie-api',
-  },
-});
-
-const host = match(stack)
-  .with('prod', () => 'api.typie.co')
-  .with('dev', () => 'api.typie.dev')
-  .run();
-
-new k8s.networking.v1.Ingress('api', {
-  metadata: {
-    name: 'api',
-    namespace: app.service.metadata.namespace,
-    annotations: {
-      'alb.ingress.kubernetes.io/group.name': 'public-alb',
-      'alb.ingress.kubernetes.io/group.order': '10',
-      'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
-      'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
-    },
-  },
-  spec: {
-    ingressClassName: 'alb',
-    rules: [
-      {
-        host,
-        http: {
-          paths: [
-            {
-              path: '/',
-              pathType: 'Prefix',
-              backend: {
-                service: {
-                  name: app.service.metadata.name,
-                  port: { number: app.service.spec.ports[0].port },
-                },
-              },
-            },
-          ],
-        },
-      },
+  env: {
+    entries: [
+      'APPLE_APP_APPLE_ID',
+      'APPLE_APP_BUNDLE_ID',
+      'APPLE_IAP_ISSUER_ID',
+      'APPLE_IAP_KEY_ID',
+      'APPLE_IAP_PRIVATE_KEY',
+      'APPLE_SIGN_IN_KEY_ID',
+      'APPLE_SIGN_IN_PRIVATE_KEY',
+      'APPLE_TEAM_ID',
+      'AUTH_URL',
+      'DATABASE_URL',
+      'GOOGLE_OAUTH_CLIENT_ID',
+      'GOOGLE_OAUTH_CLIENT_SECRET',
+      'GOOGLE_PLAY_PACKAGE_NAME',
+      'GOOGLE_SERVICE_ACCOUNT',
+      'IFRAMELY_API_KEY',
+      'KAKAO_CLIENT_ID',
+      'KAKAO_CLIENT_SECRET',
+      'MEILISEARCH_API_KEY',
+      'NAVER_CLIENT_ID',
+      'NAVER_CLIENT_SECRET',
+      'OIDC_CLIENT_ID',
+      'OIDC_CLIENT_SECRET',
+      'OIDC_JWK',
+      'PORTONE_API_SECRET',
+      'PORTONE_CHANNEL_KEY',
+      'REDIS_URL',
+      'SENTRY_DSN',
+      'SLACK_WEBHOOK_URL',
+      'USERSITE_URL',
+      'WEBSITE_URL',
     ],
   },
 });
+
+if (stack === 'dev') {
+  new aws.route53.Record('api.typie.dev', {
+    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_DEV_ZONE_ID'),
+    type: 'A',
+    name: 'api.typie.dev',
+    aliases: [
+      {
+        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
+        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
+        evaluateTargetHealth: true,
+      },
+    ],
+  });
+} else {
+  new aws.route53.Record('api.typie.co', {
+    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_CO_ZONE_ID'),
+    type: 'A',
+    name: 'api.typie.co',
+    aliases: [
+      {
+        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
+        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
+        evaluateTargetHealth: true,
+      },
+    ],
+  });
+}
