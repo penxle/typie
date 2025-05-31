@@ -28,7 +28,7 @@ new aws.iam.RolePolicy('execution@ecs', {
   },
 });
 
-const cluster = new aws.ecs.Cluster('typie', {
+export const cluster = new aws.ecs.Cluster('typie', {
   name: 'typie',
 
   settings: [{ name: 'containerInsights', value: 'enhanced' }],

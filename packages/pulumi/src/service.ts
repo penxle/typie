@@ -43,19 +43,27 @@ export class Service extends pulumi.ComponentResource {
 
     const serviceName = pulumi.interpolate`${stack}-${args.name}`;
 
-    let role;
-    if (args.iam) {
-      role = new aws.iam.Role(
-        `${name}@ecs-tasks`,
-        {
-          name: pulumi.interpolate`${serviceName}@ecs-tasks`,
-          assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
-            Service: 'ecs-tasks.amazonaws.com',
-          }),
-        },
-        { parent: this },
-      );
+    const role = new aws.iam.Role(
+      `${name}@ecs-tasks`,
+      {
+        name: pulumi.interpolate`${serviceName}@ecs-tasks`,
+        assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+          Service: 'ecs-tasks.amazonaws.com',
+        }),
+      },
+      { parent: this },
+    );
 
+    new aws.iam.RolePolicyAttachment(
+      `${name}@ecs-tasks`,
+      {
+        role: role.name,
+        policyArn: ref.requireOutput('AWS_IAM_OTEL_POLICY_ARN'),
+      },
+      { parent: this },
+    );
+
+    if (args.iam) {
       new aws.iam.RolePolicy(`${name}@ecs-tasks`, { role: role.name, policy: args.iam.policy }, { parent: this });
     }
 
@@ -148,6 +156,24 @@ export class Service extends pulumi.ComponentResource {
               enabled: true,
               ignoredExitCodes: [0],
               restartAttemptPeriod: 60,
+            },
+          },
+          {
+            essential: true,
+
+            name: 'aws-otel-collector',
+            image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest',
+
+            secrets: [{ name: 'AOT_CONFIG_CONTENT', valueFrom: '/infra/otel-collector/config.yaml' }],
+
+            logConfiguration: {
+              logDriver: 'awslogs',
+              options: {
+                'awslogs-group': '/ecs/ecs-aws-otel-sidecar-collector',
+                'awslogs-region': 'ap-northeast-2',
+                'awslogs-stream-prefix': 'ecs',
+                'awslogs-create-group': 'true',
+              },
             },
           },
         ]),

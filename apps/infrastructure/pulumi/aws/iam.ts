@@ -172,6 +172,29 @@ const datadogRole = new aws.iam.Role('datadog@monitoring', {
   managedPolicyArns: [aws.iam.ManagedPolicy.SecurityAudit],
 });
 
+const otelPolicy = new aws.iam.Policy('otel@ecs-tasks', {
+  name: 'otel@ecs-tasks',
+  policy: {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Action: [
+          'logs:PutLogEvents',
+          'logs:CreateLogGroup',
+          'logs:CreateLogStream',
+          'logs:DescribeLogStreams',
+          'logs:DescribeLogGroups',
+          'logs:PutRetentionPolicy',
+          'ssm:GetParameters',
+          'aps:RemoteWrite',
+        ],
+        Resource: '*',
+      },
+    ],
+  },
+});
+
 // spell-checker:disable
 new aws.iam.RolePolicy('datadog@monitoring', {
   role: datadogRole.name,
@@ -535,4 +558,5 @@ export const roles = {
 export const outputs = {
   AWS_IAM_DEVELOPER_ACCESS_KEY_ID: developerAccessKey.id,
   AWS_IAM_DEVELOPER_SECRET_ACCESS_KEY: developerAccessKey.secret,
+  AWS_IAM_OTEL_POLICY_ARN: otelPolicy.arn,
 };
