@@ -1,6 +1,5 @@
 import * as aws from '@pulumi/aws';
 import * as random from '@pulumi/random';
-import { zones } from '$aws/route53';
 import { securityGroups, subnets } from '$aws/vpc';
 
 const password = new random.RandomPassword('typie@rds', {
@@ -81,31 +80,6 @@ const instance = new aws.rds.ClusterInstance('typie-1', {
   applyImmediately: true,
 });
 
-new aws.rds.ClusterInstance('typie-2', {
-  clusterIdentifier: cluster.id,
-  identifier: 'typie-2',
-
-  engine: 'aurora-postgresql',
-  instanceClass: 'db.r7g.large',
-
-  availabilityZone: subnets.private.az2.availabilityZone,
-  caCertIdentifier: 'rds-ca-ecc384-g1',
-
-  preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
-
-  promotionTier: 1,
-
-  applyImmediately: true,
-});
-
-new aws.route53.Record('db.typie.io', {
-  zoneId: zones.typie_io.zoneId,
-  type: 'CNAME',
-  name: 'db.typie.io',
-  records: [cluster.endpoint],
-  ttl: 300,
-});
-
 const devCluster = new aws.rds.Cluster('typie-dev', {
   clusterIdentifier: 'typie-dev',
 
@@ -151,14 +125,6 @@ new aws.rds.ClusterInstance('typie-dev-1', {
   promotionTier: 0,
 
   applyImmediately: true,
-});
-
-new aws.route53.Record('dev.db.typie.io', {
-  zoneId: zones.typie_io.zoneId,
-  type: 'CNAME',
-  name: 'dev.db.typie.io',
-  records: [devCluster.endpoint],
-  ttl: 300,
 });
 
 export const db = {

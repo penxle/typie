@@ -1,5 +1,4 @@
 import * as aws from '@pulumi/aws';
-import { zones } from '$aws/route53';
 import { securityGroups, subnets } from '$aws/vpc';
 
 const subnetGroup = new aws.elasticache.SubnetGroup('private', {
@@ -18,7 +17,7 @@ const parameterGroup = new aws.elasticache.ParameterGroup('typie-valkey8-cluster
   ],
 });
 
-const cluster = new aws.elasticache.ReplicationGroup('typie', {
+new aws.elasticache.ReplicationGroup('typie', {
   replicationGroupId: 'typie',
   description: 'Valkey cluster',
 
@@ -26,7 +25,7 @@ const cluster = new aws.elasticache.ReplicationGroup('typie', {
   engineVersion: '8.0',
   parameterGroupName: parameterGroup.name,
 
-  nodeType: 'cache.r7g.large',
+  nodeType: 'cache.t4g.medium',
 
   clusterMode: 'enabled',
   numNodeGroups: 1,
@@ -48,12 +47,4 @@ const cluster = new aws.elasticache.ReplicationGroup('typie', {
   maintenanceWindow: 'sun:20:00-sun:22:00',
 
   applyImmediately: true,
-});
-
-new aws.route53.Record('redis.typie.io', {
-  zoneId: zones.typie_io.zoneId,
-  type: 'CNAME',
-  name: 'redis.typie.io',
-  records: [cluster.configurationEndpointAddress],
-  ttl: 300,
 });
