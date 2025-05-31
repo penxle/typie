@@ -21,7 +21,7 @@ new typie.Service('website', {
   },
 
   autoscale: {
-    minCount: 4,
+    minCount: 2,
     maxCount: 20,
     averageCpuUtilization: 50,
   },
