@@ -72,7 +72,6 @@
     "zod": "^3.25.7"
   },
   "devDependencies": {
-    "@pulumi/kubernetes": "^4.23.0",
     "@pulumi/pulumi": "^3.170.0",
     "@types/bun": "^1.2.13",
     "@types/pg": "^8.15.2",
