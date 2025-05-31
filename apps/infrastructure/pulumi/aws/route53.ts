@@ -59,3 +59,11 @@ new aws.route53.Record('k3._domainkey.typie.co', {
   records: ['dkim3.mcsv.net'],
   ttl: 300,
 });
+
+export const outputs = {
+  AWS_ROUTE53_TYPIE_CO_ZONE_ID: zones.typie_co.zoneId,
+  AWS_ROUTE53_TYPIE_DEV_ZONE_ID: zones.typie_dev.zoneId,
+  AWS_ROUTE53_TYPIE_ME_ZONE_ID: zones.typie_me.zoneId,
+  AWS_ROUTE53_TYPIE_NET_ZONE_ID: zones.typie_net.zoneId,
+  AWS_ROUTE53_TYPIE_IO_ZONE_ID: zones.typie_io.zoneId,
+};

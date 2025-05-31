@@ -232,4 +232,12 @@ export const subnets = {
 export const securityGroups = {
   tailnet: tailnetSecurityGroup,
   internal: internalSecurityGroup,
+  publicWeb: publicWebSecurityGroup,
+};
+
+export const outputs = {
+  AWS_VPC_ID: vpc.id,
+  AWS_VPC_SUBNET_PRIVATE_AZ1_ID: privateAz1Subnet.id,
+  AWS_VPC_SUBNET_PRIVATE_AZ2_ID: privateAz2Subnet.id,
+  AWS_VPC_SECURITY_GROUP_INTERNAL_ID: internalSecurityGroup.id,
 };

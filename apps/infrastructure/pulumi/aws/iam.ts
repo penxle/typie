@@ -108,6 +108,50 @@ new aws.iam.RolePolicy('actions@github', {
   },
 });
 
+const dopplerRole = new aws.iam.Role('integration@doppler', {
+  name: 'integration@doppler',
+  assumeRolePolicy: {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Principal: { AWS: '299900769157' },
+        Action: 'sts:AssumeRole',
+        Condition: {
+          StringEquals: {
+            'sts:ExternalId': 'a622bad8b546cbb9c2be',
+          },
+        },
+      },
+    ],
+  },
+});
+
+new aws.iam.RolePolicy('integration@doppler', {
+  role: dopplerRole.name,
+  policy: {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Action: [
+          'ssm:PutParameter',
+          'ssm:LabelParameterVersion',
+          'ssm:DeleteParameter',
+          'ssm:RemoveTagsFromResource',
+          'ssm:GetParameterHistory',
+          'ssm:AddTagsToResource',
+          'ssm:GetParametersByPath',
+          'ssm:GetParameters',
+          'ssm:GetParameter',
+          'ssm:DeleteParameters',
+        ],
+        Resource: '*',
+      },
+    ],
+  },
+});
+
 const datadogRole = new aws.iam.Role('datadog@monitoring', {
   name: 'datadog@monitoring',
   assumeRolePolicy: {
