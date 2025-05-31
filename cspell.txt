@@ -29,8 +29,6 @@ ilike
 indexeddb
 ipaddr
 kakao
-karpenter
-kubeconfig
 lucide
 luthor
 meili
@@ -41,7 +39,6 @@ napi
 natgw
 noeviction
 noreferrer
-oidcs
 oklch
 on+
 oslllo
@@ -61,7 +58,6 @@ sindresorhus
 smembers
 srem
 sslmode
-stakater
 stibee
 tini
 tsup

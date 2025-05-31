@@ -13,7 +13,6 @@ const publicAz1Subnet = new aws.ec2.Subnet('public-az1', {
   mapPublicIpOnLaunch: true,
   tags: {
     Name: 'public-az1',
-    'kubernetes.io/role/elb': '1',
   },
 });
 
@@ -24,7 +23,6 @@ const publicAz2Subnet = new aws.ec2.Subnet('public-az2', {
   mapPublicIpOnLaunch: true,
   tags: {
     Name: 'public-az2',
-    'kubernetes.io/role/elb': '1',
   },
 });
 
@@ -34,7 +32,6 @@ const privateAz1Subnet = new aws.ec2.Subnet('private-az1', {
   cidrBlock: '10.64.200.0/22',
   tags: {
     Name: 'private-az1',
-    'kubernetes.io/role/internal-elb': '1',
   },
 });
 
@@ -44,7 +41,6 @@ const privateAz2Subnet = new aws.ec2.Subnet('private-az2', {
   cidrBlock: '10.64.204.0/22',
   tags: {
     Name: 'private-az2',
-    'kubernetes.io/role/internal-elb': '1',
   },
 });
 
