@@ -90,16 +90,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Connect tailnet
-        uses: tailscale/github-action@v2
-        with:
-          oauth-client-id: ${{ vars.TAILSCALE_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
-          tags: tag:github-actions
-
-      - name: Update kubeconfig
-        run: aws eks update-kubeconfig --name typie
-
       - name: Apply infrastructure
         uses: pulumi/actions@v6
         with:
