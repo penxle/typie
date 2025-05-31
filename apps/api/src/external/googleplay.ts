@@ -1,5 +1,9 @@
 import { androidpublisher, auth } from '@googleapis/androidpublisher';
+import { match } from 'ts-pattern';
+import { PlanId } from '@/const';
+import { UserPlanBillingCycle } from '@/enums';
 import { env } from '@/env';
+import { TypieError } from '@/errors';
 
 const client = androidpublisher({
   version: 'v3',
@@ -73,3 +77,18 @@ export type DeveloperNotification = {
   voidedPurchaseNotification?: VoidedPurchaseNotification;
   testNotification?: TestNotification;
 };
+
+export const getPlanIdByProductId = (productId: string | undefined | null) =>
+  match(productId)
+    .with('plan.full', () => PlanId.PLUS)
+    .otherwise(() => {
+      throw new TypieError({ code: 'not_found' });
+    });
+
+export const getPlanBillingCycleByBasePlanId = (basePlanId: string | undefined | null) =>
+  match(basePlanId)
+    .with('1month', () => UserPlanBillingCycle.MONTHLY)
+    .with('1year', () => UserPlanBillingCycle.YEARLY)
+    .otherwise(() => {
+      throw new TypieError({ code: 'not_found' });
+    });
