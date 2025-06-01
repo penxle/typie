@@ -50,15 +50,7 @@ export class Service extends pulumi.ComponentResource {
         assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
           Service: 'ecs-tasks.amazonaws.com',
         }),
-      },
-      { parent: this },
-    );
-
-    new aws.iam.RolePolicyAttachment(
-      `${name}@ecs-tasks`,
-      {
-        role: role.name,
-        policyArn: ref.requireOutput('AWS_IAM_OTEL_POLICY_ARN'),
+        managedPolicyArns: [aws.iam.ManagedPolicy.AmazonSSMReadOnlyAccess, aws.iam.ManagedPolicy.CloudWatchLogsFullAccess],
       },
       { parent: this },
     );
@@ -161,15 +153,20 @@ export class Service extends pulumi.ComponentResource {
           {
             essential: true,
 
-            name: 'aws-otel-collector',
-            image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest',
+            name: 'datadog-agent',
+            image: 'public.ecr.aws/datadog/agent:latest',
 
-            secrets: [{ name: 'AOT_CONFIG_CONTENT', valueFrom: '/infra/otel-collector/config.yaml' }],
+            environment: [
+              { name: 'ECS_FARGATE', value: 'true' },
+              { name: 'DD_SITE', value: 'ap1.datadoghq.com' },
+            ],
+
+            secrets: [{ name: 'DD_API_KEY', valueFrom: '/datadog/api-key' }],
 
             logConfiguration: {
               logDriver: 'awslogs',
               options: {
-                'awslogs-group': '/ecs/ecs-aws-otel-sidecar-collector',
+                'awslogs-group': '/ecs/datadog-agent',
                 'awslogs-region': 'ap-northeast-2',
                 'awslogs-stream-prefix': 'ecs',
                 'awslogs-create-group': 'true',
