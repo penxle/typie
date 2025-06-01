@@ -6,8 +6,7 @@ type ServiceArgs = {
 
   image: {
     name: pulumi.Input<string>;
-    digest: pulumi.Input<string>;
-    command?: pulumi.Input<string[]>;
+    version: pulumi.Input<string>;
   };
 
   resources: {
@@ -116,8 +115,7 @@ export class Service extends pulumi.ComponentResource {
             essential: true,
 
             name: 'app',
-            image: pulumi.interpolate`${args.image.name}@${args.image.digest}`,
-            command: args.image.command,
+            image: pulumi.interpolate`${args.image.name}:${args.image.version}`,
 
             portMappings: [{ containerPort: 3000, hostPort: 3000, protocol: 'tcp' }],
 
@@ -214,10 +212,6 @@ export class Service extends pulumi.ComponentResource {
             targetGroupArn: targetGroup.arn,
           },
         ],
-
-        enableEcsManagedTags: true,
-
-        waitForSteadyState: true,
       },
       { parent: this, dependsOn: [rule], ignoreChanges: ['desiredCount'] },
     );

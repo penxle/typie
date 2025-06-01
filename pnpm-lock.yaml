@@ -133,6 +133,9 @@ importers:
       '@typie/lib':
         specifier: workspace:*
         version: link:../../packages/lib
+      '@typie/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
       apple-signin-auth:
         specifier: ^2.0.0
         version: 2.0.0
@@ -229,9 +232,15 @@ importers:
       ts-pattern:
         specifier: ^5.7.1
         version: 5.7.1
+      tsx:
+        specifier: ^4.19.4
+        version: 4.19.4
       twemoji:
         specifier: ^14.0.2
         version: 14.0.2
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -263,9 +272,6 @@ importers:
       '@typie/pulumi':
         specifier: workspace:*
         version: link:../../packages/pulumi
-      '@typie/tsconfig':
-        specifier: workspace:*
-        version: link:../../packages/tsconfig
       drizzle-kit:
         specifier: ^0.31.1
         version: 0.31.1
@@ -275,12 +281,6 @@ importers:
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
-      tsx:
-        specifier: ^4.19.4
-        version: 4.19.4
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
 
   apps/caddy: {}
 
@@ -574,31 +574,32 @@ importers:
         version: 5.8.3
 
   packages/lib:
-    devDependencies:
+    dependencies:
       '@hono/node-server':
         specifier: ^1.14.3
         version: 1.14.3(hono@4.7.11)
       '@logtape/logtape':
         specifier: ^0.10.0
         version: 0.10.0
-      '@sveltejs/kit':
-        specifier: ^2.21.1
-        version: 2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.11)(vite@6.3.5(@types/node@22.15.29)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0)))(svelte@5.33.11)(vite@6.3.5(@types/node@22.15.29)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0))
-      '@typie/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
       dayjs:
         specifier: ^1.11.13
         version: 1.11.13
-      hono:
-        specifier: ^4.7.10
-        version: 4.7.11
       ipaddr.js:
         specifier: ^2.2.0
         version: 2.2.0
       remeda:
         specifier: ^2.21.6
         version: 2.22.5
+    devDependencies:
+      '@sveltejs/kit':
+        specifier: ^2.21.1
+        version: 2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.11)(vite@6.3.5(@types/node@22.15.29)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0)))(svelte@5.33.11)(vite@6.3.5(@types/node@22.15.29)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0))
+      '@typie/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      hono:
+        specifier: ^4.7.10
+        version: 4.7.11
       svelte:
         specifier: ^5.31.1
         version: 5.33.11

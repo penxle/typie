@@ -7,7 +7,8 @@
     "build": "vite build",
     "codegen": "svelte-kit sync && panda codegen && sark codegen",
     "dev": "doppler run -- pnpm vite dev",
-    "lint:svelte": "svelte-check --fail-on-warnings"
+    "lint:svelte": "svelte-check --fail-on-warnings",
+    "start": "node dist/index.js"
   },
   "devDependencies": {
     "@ctrl/tinycolor": "^4.1.0",

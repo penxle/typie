@@ -1,0 +1,32 @@
+name: Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: 'Version to deploy'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy-prod-api:
+    name: Deployment (prod-api)
+    uses: ./.github/workflows/deployment.yml
+    with:
+      stack: prod
+      app: api
+      version: ${{ inputs.version }}
+    secrets: inherit
+
+  deploy-prod-website:
+    name: Deployment (prod-website)
+    uses: ./.github/workflows/deployment.yml
+    with:
+      stack: prod
+      app: website
+      version: ${{ inputs.version }}
+    secrets: inherit

@@ -15,15 +15,17 @@
   "scripts": {
     "lint:typecheck": "tsc"
   },
-  "devDependencies": {
+  "dependencies": {
     "@hono/node-server": "^1.14.3",
     "@logtape/logtape": "^0.10.0",
+    "dayjs": "^1.11.13",
+    "ipaddr.js": "^2.2.0",
+    "remeda": "^2.21.6"
+  },
+  "devDependencies": {
     "@sveltejs/kit": "^2.21.1",
     "@typie/tsconfig": "workspace:*",
-    "dayjs": "^1.11.13",
     "hono": "^4.7.10",
-    "ipaddr.js": "^2.2.0",
-    "remeda": "^2.21.6",
     "svelte": "^5.31.1",
     "svgo": "^3.3.2",
     "typescript": "^5.8.3",

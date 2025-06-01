@@ -1,0 +1,90 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
+        description: The app to build.
+    outputs:
+      version:
+        value: ${{ jobs.build.outputs.version }}
+        description: The version of the built image.
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TURBO_TEAM: penxle
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_CACHE: remote:rw
+
+jobs:
+  build:
+    name: Build
+    runs-on: linux-arm64-4vcpu
+
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::509399603331:role/actions@github
+          aws-region: ap-northeast-2
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prune workspace
+        run: pnpm turbo prune --docker @typie/${{ inputs.app }}
+
+      - name: Build application
+        run: pnpm turbo run build --filter=@typie/${{ inputs.app }}
+        env:
+          NODE_ENV: production
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            name=${{ steps.ecr.outputs.registry }}/${{ inputs.app }}
+          flavor: |
+            latest=true
+          tags: |
+            type=sha
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          context: .
+          file: apps/${{ inputs.app }}/Dockerfile
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ steps.ecr.outputs.registry }}/${{ inputs.app }}:cache
+          cache-to: type=registry,ref=${{ steps.ecr.outputs.registry }}/${{ inputs.app }}:cache,mode=max,image-manifest=true,oci-mediatypes=true
+          provenance: false
