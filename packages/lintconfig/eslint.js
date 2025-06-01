@@ -30,6 +30,7 @@ export default defineConfig([
       'object-shorthand': ['error', 'always'],
       '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
       '@typescript-eslint/no-empty-object-type': ['error', { allowObjectTypes: 'always' }],
+      '@typescript-eslint/no-unused-expressions': 'off',
       'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
       'import/first': 'error',
       'import/newline-after-import': ['error', { considerComments: true }],

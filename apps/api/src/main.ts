@@ -13,8 +13,9 @@ import { graphql } from '@/graphql';
 import { rest } from '@/rest';
 import { injectWebSocket } from '@/ws';
 
-app.use('*', compress());
+const log = logger.getChild('main');
 
+app.use('*', compress());
 app.use('*', async (c, next) => {
   const context = await deriveContext(c);
   c.set('context', context);
@@ -34,7 +35,7 @@ app.onError((err, c) => {
     return err.getResponse();
   }
 
-  logger.error(err);
+  log.error`Unhandled error: ${err}`;
 
   return c.text('Internal Server Error', { status: 500 });
 });
@@ -46,7 +47,7 @@ const server = serve(
     port: env.LISTEN_PORT ?? 3000,
   },
   (addr) => {
-    console.log(`Listening on ${addr.address}:${addr.port}`);
+    log.info`Listening on ${addr.address}:${addr.port}`;
   },
 );
 

@@ -39,15 +39,15 @@ const worker = new Worker(
 );
 
 worker.on('completed', (job) => {
-  logger.info(`Job ${job.id} (${job.name}) completed`);
+  logger.info`Job ${job.id} (${job.name}) completed`;
 });
 
 worker.on('failed', (job, error) => {
-  logger.error(error, `Job ${job?.id} (${job?.name}) failed`);
+  logger.error`Job ${job?.id} (${job?.name}) failed: ${error}`;
   Sentry.captureException(error);
 });
 
 worker.on('error', (error) => {
-  logger.error(error);
+  logger.error`Job error: ${error}`;
   Sentry.captureException(error);
 });

@@ -7,6 +7,8 @@ import { TypieError } from '@/errors';
 import type { AsyncIterableIteratorOrValue, ExecutionResult } from '@envelop/core';
 import type { Plugin } from 'graphql-yoga';
 
+const log = logger.getChild('graphql');
+
 class UnexpectedError extends GraphQLError {
   public eventId: string;
 
@@ -34,10 +36,10 @@ const transformError = (error: unknown): GraphQLError => {
   } else if (error instanceof GraphQLError && error.originalError) {
     return transformError(error.originalError);
   } else if (error instanceof Error) {
-    logger.error(error);
+    log.error`Unexpected error: ${error}`;
     return new UnexpectedError(error);
   } else {
-    logger.error(error);
+    log.error`Unexpected error: ${error}`;
     return new UnexpectedError(new Error(String(error)));
   }
 };
