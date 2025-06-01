@@ -3,16 +3,15 @@ import * as pulumi from '@pulumi/pulumi';
 import * as typie from '@typie/pulumi';
 
 const stack = pulumi.getStack();
-const config = new pulumi.Config('typie');
+const config = new pulumi.Config();
 const ref = new pulumi.StackReference('typie/infrastructure/base');
 
 new typie.Service('api', {
   name: 'api',
 
   image: {
-    name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/typie',
-    digest: config.require('digest'),
-    command: ['node', 'apps/api/index.js'],
+    name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/api',
+    version: config.require('version'),
   },
 
   resources: {

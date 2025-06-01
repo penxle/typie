@@ -4,6 +4,7 @@ import { serve as honoServe } from '@hono/node-server';
 import { getClientAddress } from '@typie/lib';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
+import { getMimeType } from 'hono/utils/mime';
 
 /**
  * @typedef {Object} ServeParams
@@ -17,7 +18,7 @@ import { compress } from 'hono/compress';
  */
 
 export const serve = async ({ Server, manifest, prerendered }) => {
-  const basePath = import.meta.dir;
+  const basePath = import.meta.dirname;
 
   const sveltekit = new Server(manifest);
   await sveltekit.init({ env: process.env });
@@ -34,14 +35,19 @@ export const serve = async ({ Server, manifest, prerendered }) => {
       const immutable = relativePath.startsWith(`${manifest.appPath}/immutable`);
       const filePath = path.join(basePath, 'assets', relativePath);
 
+      let file;
       try {
-        const file = await fs.open(filePath, 'r');
+        file = await fs.open(filePath, 'r');
         const stat = await file.stat();
 
         if (stat.size > 0) {
-          return c.body(file, {
+          const buffer = await file.readFile();
+          const mime = getMimeType(filePath);
+
+          return c.body(buffer, {
             headers: {
               'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate',
+              'content-type': mime || 'application/octet-stream',
             },
           });
         } else {
@@ -53,21 +59,26 @@ export const serve = async ({ Server, manifest, prerendered }) => {
           });
         }
       } finally {
-        await file.close();
+        await file?.close();
       }
     }
 
     if (c.req.path in prerendered) {
       const filePath = path.join(basePath, 'assets', prerendered[c.req.path]);
 
+      let file;
       try {
-        const file = await fs.open(filePath, 'r');
+        file = await fs.open(filePath, 'r');
         const stat = await file.stat();
 
         if (stat.size > 0) {
-          return c.body(file, {
+          const buffer = await file.readFile();
+          const mime = getMimeType(filePath);
+
+          return c.body(buffer, {
             headers: {
               'cache-control': 'public, max-age=0, must-revalidate',
+              'content-type': mime || 'application/octet-stream',
             },
           });
         } else {
@@ -79,7 +90,7 @@ export const serve = async ({ Server, manifest, prerendered }) => {
           });
         }
       } finally {
-        await file.close();
+        await file?.close();
       }
     }
 

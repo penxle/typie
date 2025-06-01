@@ -1,0 +1,43 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-api:
+    name: Build (api)
+    uses: ./.github/workflows/build.yml
+    with:
+      app: api
+
+  build-website:
+    name: Build (website)
+    uses: ./.github/workflows/build.yml
+    with:
+      app: website
+
+  deploy-dev-api:
+    name: Deployment (dev-api)
+    needs: build-api
+    uses: ./.github/workflows/deployment.yml
+    with:
+      stack: dev
+      app: api
+      version: ${{ needs.build-api.outputs.version }}
+    secrets: inherit
+
+  deploy-dev-website:
+    name: Deployment (dev-website)
+    needs: build-website
+    uses: ./.github/workflows/deployment.yml
+    with:
+      stack: dev
+      app: website
+      version: ${{ needs.build-website.outputs.version }}
+    secrets: inherit

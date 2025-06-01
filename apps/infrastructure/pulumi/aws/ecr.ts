@@ -27,10 +27,9 @@ class Repository extends pulumi.ComponentResource {
             {
               rulePriority: 1,
               selection: {
-                tagStatus: 'untagged',
-                countType: 'sinceImagePushed',
-                countUnit: 'days',
-                countNumber: 7,
+                tagStatus: 'any',
+                countType: 'imageCountMoreThan',
+                countNumber: 50,
               },
               action: {
                 type: 'expire',
@@ -49,3 +48,5 @@ const createRepository = (name: string) => {
 };
 
 createRepository('typie');
+createRepository('api');
+createRepository('website');

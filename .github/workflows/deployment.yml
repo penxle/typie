@@ -1,0 +1,63 @@
+name: Deployment
+
+on:
+  workflow_call:
+    inputs:
+      stack:
+        required: true
+        type: string
+        description: The stack to deploy to.
+      app:
+        required: true
+        type: string
+        description: The app to deploy.
+      version:
+        required: true
+        type: string
+        description: The version of the image to deploy.
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deployment
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.stack }}-${{ inputs.app }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::509399603331:role/actions@github
+          aws-region: ap-northeast-2
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply infrastructure
+        uses: pulumi/actions@v6
+        with:
+          command: up
+          work-dir: apps/${{ inputs.app }}
+          stack-name: typie/${{ inputs.stack }}
+          upsert: true
+          refresh: true
+          comment-on-summary: true
+          config-map: |
+            { "version": { "value": "${{ inputs.version }}" } }
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
