@@ -17,7 +17,7 @@
     "@sveltejs/kit": "^2.21.1",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
-    "hono": "^4.7.10",
+    "hono": "^4.7.11",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3"
   }

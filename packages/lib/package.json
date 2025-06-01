@@ -20,13 +20,13 @@
     "@logtape/logtape": "^0.10.0",
     "dayjs": "^1.11.13",
     "ipaddr.js": "^2.2.0",
-    "remeda": "^2.21.6"
+    "remeda": "^2.22.5"
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.21.1",
     "@typie/tsconfig": "workspace:*",
-    "hono": "^4.7.10",
-    "svelte": "^5.31.1",
+    "hono": "^4.7.11",
+    "svelte": "^5.33.11",
     "svgo": "^3.3.2",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
