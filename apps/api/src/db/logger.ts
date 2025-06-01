@@ -2,6 +2,8 @@ import { logger } from '@typie/lib';
 import { dev } from '@/env';
 import type { Logger } from 'drizzle-orm/logger';
 
+const log = logger.getChild('db');
+
 export class DrizzleLogger implements Logger {
   logQuery(query: string, params: unknown[]): void {
     if (!dev) {
@@ -15,8 +17,7 @@ export class DrizzleLogger implements Logger {
       })
       .replaceAll('"', '');
 
-    logger.trace({
-      scope: 'database',
+    log.debug('Executed query: {query}', {
       query: interpolatedQuery.slice(0, 1000),
     });
   }

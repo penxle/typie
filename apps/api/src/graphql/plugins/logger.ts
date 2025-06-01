@@ -4,8 +4,7 @@ import type { Context } from '@/context';
 
 export const useLogger = (): Plugin<Context> => ({
   onExecute: ({ args }) => {
-    logger.info({
-      scope: 'graphql',
+    logger.info('Executed operation: {operation_name} ({variables}), by user {user} from {ip}', {
       ip: args.contextValue.ip,
       user: args.contextValue.session?.userId,
       operation_name: args.operationName,
