@@ -9,7 +9,7 @@ import { redis, redlock } from '@/cache';
 import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, Posts, PostSnapshots } from '@/db';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
-import { meili } from '@/search';
+import { elastic } from '@/search';
 import { makeText } from '@/utils';
 import { queue } from '../bullmq';
 import { enqueueJob } from '../index';
@@ -172,8 +172,10 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
           })
           .where(eq(PostContents.postId, postId));
 
-        await meili.index('posts').addDocuments([
-          {
+        await elastic.index({
+          index: 'posts',
+          id: postId,
+          document: {
             id: postId,
             siteId: post.siteId,
             title,
@@ -181,7 +183,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
             text,
             updatedAt: updatedAt.unix(),
           },
-        ]);
+        });
       }
 
       signal.throwIfAborted();

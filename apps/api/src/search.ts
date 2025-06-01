@@ -1,7 +1,8 @@
-import { MeiliSearch } from 'meilisearch';
+import { Client, HttpConnection } from '@elastic/elasticsearch';
 import { env } from '@/env';
 
-export const meili = new MeiliSearch({
-  host: 'https://meili.typie.io',
-  apiKey: env.MEILISEARCH_API_KEY,
+export const elastic = new Client({
+  Connection: HttpConnection,
+  node: env.ELASTICSEARCH_URL,
+  auth: { apiKey: env.ELASTICSEARCH_API_KEY },
 });
