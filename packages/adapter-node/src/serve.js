@@ -1,7 +1,9 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
+import { serve as honoServe } from '@hono/node-server';
 import { getClientAddress } from '@typie/lib';
 import { Hono } from 'hono';
-import { compress } from 'hono-compress';
+import { compress } from 'hono/compress';
 
 /**
  * @typedef {Object} ServeParams
@@ -15,7 +17,7 @@ import { compress } from 'hono-compress';
  */
 
 export const serve = async ({ Server, manifest, prerendered }) => {
-  const basePath = path.dirname(Bun.main);
+  const basePath = import.meta.dir;
 
   const sveltekit = new Server(manifest);
   await sveltekit.init({ env: process.env });
@@ -31,41 +33,53 @@ export const serve = async ({ Server, manifest, prerendered }) => {
     if (manifest.assets.has(relativePath) || relativePath.startsWith(manifest.appPath)) {
       const immutable = relativePath.startsWith(`${manifest.appPath}/immutable`);
       const filePath = path.join(basePath, 'assets', relativePath);
-      const file = Bun.file(filePath);
 
-      if (await file.exists()) {
-        return c.body(file, {
-          headers: {
-            'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate',
-          },
-        });
-      } else {
-        return c.text('Not Found', {
-          status: 404,
-          headers: {
-            'cache-control': 'no-store',
-          },
-        });
+      try {
+        const file = await fs.open(filePath, 'r');
+        const stat = await file.stat();
+
+        if (stat.size > 0) {
+          return c.body(file, {
+            headers: {
+              'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate',
+            },
+          });
+        } else {
+          return c.text('Not Found', {
+            status: 404,
+            headers: {
+              'cache-control': 'no-store',
+            },
+          });
+        }
+      } finally {
+        await file.close();
       }
     }
 
     if (c.req.path in prerendered) {
       const filePath = path.join(basePath, 'assets', prerendered[c.req.path]);
-      const file = Bun.file(filePath);
 
-      if (await file.exists()) {
-        return c.body(file, {
-          headers: {
-            'cache-control': 'public, max-age=0, must-revalidate',
-          },
-        });
-      } else {
-        return c.text('Not Found', {
-          status: 404,
-          headers: {
-            'cache-control': 'no-store',
-          },
-        });
+      try {
+        const file = await fs.open(filePath, 'r');
+        const stat = await file.stat();
+
+        if (stat.size > 0) {
+          return c.body(file, {
+            headers: {
+              'cache-control': 'public, max-age=0, must-revalidate',
+            },
+          });
+        } else {
+          return c.text('Not Found', {
+            status: 404,
+            headers: {
+              'cache-control': 'no-store',
+            },
+          });
+        }
+      } finally {
+        await file.close();
       }
     }
 
@@ -90,26 +104,9 @@ export const serve = async ({ Server, manifest, prerendered }) => {
     return response;
   });
 
-  Bun.serve({
+  honoServe({
     fetch: app.fetch,
-    error: (err) => {
-      if (err.code === 'ENOENT') {
-        return new Response('Not Found', {
-          status: 404,
-          headers: {
-            'cache-control': 'no-store',
-          },
-        });
-      }
-
-      return new Response('Internal Server Error', {
-        status: 500,
-        headers: {
-          'cache-control': 'no-store',
-        },
-      });
-    },
+    hostname: '0.0.0.0',
     port: 3000,
-    idleTimeout: 0,
   });
 };

@@ -1,10 +1,10 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import * as jose from 'jose';
 import { base64url } from 'rfc4648';
 
 if (!process.argv[2]) {
-  console.error('Usage: bun scripts/generate-jwk.ts <kid>');
+  console.error('Usage: node scripts/generate-jwk.ts <kid>');
   process.exit(1);
 }
 

@@ -1,8 +1,8 @@
 FROM amazonlinux:2023 AS base
 
-RUN dnf install -y unzip
-RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.2.13"
-ENV PATH="/root/.bun/bin:$PATH"
+RUN curl -fsSL https://rpm.nodesource.com/setup_24.x | bash
+RUN dnf install -y nodejs
+RUN corepack enable
 
 FROM base AS builder
 WORKDIR /build
@@ -15,14 +15,14 @@ ENV TURBO_REMOTE_ONLY=true
 ENV NODE_ENV=production
 
 COPY . .
-RUN bun install --frozen-lockfile
-RUN bun run build
+RUN pnpm install --frozen-lockfile
+RUN pnpm run build
 
 FROM base AS deps
 WORKDIR /deps
 
 COPY . .
-RUN bun install --production
+RUN pnpm install --frozen-lockfile --production
 
 FROM base AS runner
 WORKDIR /app

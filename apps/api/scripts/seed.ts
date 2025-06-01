@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import { PlanId } from '@/const';
 import { db, Plans } from '@/db';

@@ -12,7 +12,7 @@ new typie.Service('website', {
   image: {
     name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/typie',
     digest: config.require('digest'),
-    command: ['bun', 'run', 'apps/website/index.js'],
+    command: ['node', 'apps/website/index.js'],
   },
 
   resources: {

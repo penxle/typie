@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import dayjs from 'dayjs';
 import { and, eq, lt } from 'drizzle-orm';
 import { PLAN_PAYMENT_GRACE_DAYS } from '@/const';

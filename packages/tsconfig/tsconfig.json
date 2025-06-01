@@ -12,17 +12,17 @@
     "allowImportingTsExtensions": true,
     "allowJs": true,
 
-    "jsx": "react-jsx",
-
     "noEmit": true,
     "skipLibCheck": true,
+
+    "jsx": "react-jsx",
 
     "allowUnreachableCode": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
 
-    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   }
 }

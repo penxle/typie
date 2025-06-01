@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import dayjs from 'dayjs';
 import { eq, isNull } from 'drizzle-orm';

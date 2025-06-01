@@ -1,3 +1,3 @@
-export * from '../logging';
-export * from './hooks';
-export * from './sitemap';
+export * from '../logging.ts';
+export * from './hooks.ts';
+export * from './sitemap.ts';
