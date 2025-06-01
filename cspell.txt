@@ -20,7 +20,6 @@ dotenv
 dotum
 eulyoo
 fira
-getmeili
 glyphr
 healthz
 iconify
@@ -31,14 +30,13 @@ ipaddr
 kakao
 lucide
 luthor
-meili
-meilisearch
 myeongjo
 nanum
 napi
 natgw
 noeviction
 noreferrer
+nori
 oklch
 on+
 oslllo

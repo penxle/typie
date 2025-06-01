@@ -3,9 +3,8 @@
 import { eq } from 'drizzle-orm';
 import { db, Entities, PostContents, Posts } from '@/db';
 import { EntityState } from '@/enums';
-import { meili } from '@/search';
+import { elastic } from '@/search';
 
-const index = meili.index('posts');
 const CHUNK_SIZE = 100;
 
 const processPostsInChunks = async (): Promise<number> => {
@@ -34,12 +33,23 @@ const processPostsInChunks = async (): Promise<number> => {
       break;
     }
 
-    const documents = posts.map(({ updatedAt, ...rest }) => ({
-      ...rest,
-      updatedAt: updatedAt.unix(),
-    }));
+    const operations = posts.flatMap(({ id, siteId, title, subtitle, text, updatedAt }) => [
+      { index: { _index: 'posts', _id: id } },
+      {
+        id,
+        siteId,
+        title,
+        subtitle,
+        text,
+        updatedAt: updatedAt.unix(),
+      },
+    ]);
 
-    await index.addDocuments(documents);
+    if (operations.length > 0) {
+      await elastic.bulk({
+        operations,
+      });
+    }
 
     totalProcessed += posts.length;
     offset += CHUNK_SIZE;
@@ -70,8 +80,15 @@ const processDeletedPostsInChunks = async (): Promise<number> => {
       break;
     }
 
-    const ids = deletedPosts.map(({ id }) => id);
-    await index.deleteDocuments(ids);
+    const operations = deletedPosts.map(({ id }) => ({
+      delete: { _index: 'posts', _id: id },
+    }));
+
+    if (operations.length > 0) {
+      await elastic.bulk({
+        operations,
+      });
+    }
 
     totalProcessed += deletedPosts.length;
     offset += CHUNK_SIZE;
@@ -85,9 +102,13 @@ const processDeletedPostsInChunks = async (): Promise<number> => {
 };
 
 try {
-  await processDeletedPostsInChunks();
-  await processPostsInChunks();
-} catch {
+  const deletedCount = await processDeletedPostsInChunks();
+  console.log(`Deleted ${deletedCount} posts from Elasticsearch index.`);
+
+  const updatedCount = await processPostsInChunks();
+  console.log(`Updated ${updatedCount} posts in Elasticsearch index.`);
+} catch (err) {
+  console.error('Error updating Elasticsearch index:', err);
   process.exit(1);
 }
 
