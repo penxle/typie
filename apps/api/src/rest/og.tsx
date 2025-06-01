@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { renderAsync } from '@resvg/resvg-js';
 import { and, eq } from 'drizzle-orm';
@@ -17,16 +19,19 @@ export const og = new Hono<Env>();
 
 const loadFonts = async <T extends string>(names: T[]) => {
   const load = async (name: string) => {
-    const file = Bun.file(`/tmp/fonts/${name}.otf`);
-    if (await file.exists()) {
-      return await file.arrayBuffer();
+    const filePath = path.join('/tmp/fonts', `${name}.otf`);
+
+    try {
+      return await fs.readFile(filePath);
+    } catch {
+      const url = `https://cdn.typie.net/fonts/otf/${name}.otf`;
+      const resp = await ky.get(url).arrayBuffer();
+
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, Buffer.from(resp));
+
+      return resp;
     }
-
-    const url = `https://cdn.typie.net/fonts/otf/${name}.otf`;
-    const resp = await ky.get(url).arrayBuffer();
-    await file.write(resp);
-
-    return resp;
   };
 
   return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await load(name)]))) as Record<T, ArrayBuffer>;

@@ -1,0 +1,21 @@
+packages:
+  - apps/*
+  - crates/*
+  - packages/*
+ignoredBuiltDependencies:
+  - '@firebase/util'
+  - es5-ext
+  - msgpackr-extract
+  - protobufjs
+  - svelte-preprocess
+  - ttf2woff2
+includeWorkspaceRoot: true
+onlyBuiltDependencies:
+  - argon2
+  - esbuild
+  - sharp
+patchedDependencies:
+  happy-dom-without-node: patches/happy-dom-without-node.patch
+publicHoistPattern:
+  - '*eslint*'
+  - '*prettier*'

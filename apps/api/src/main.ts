@@ -2,18 +2,16 @@ import '@/instrument';
 import '@typie/lib/dayjs';
 import '@/mq';
 
+import { serve } from '@hono/node-server';
 import { logger } from '@typie/lib';
-import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { HTTPException } from 'hono/http-exception';
-import { compress } from 'hono-compress';
+import { app } from '@/app';
 import { deriveContext } from '@/context';
 import { env } from '@/env';
 import { graphql } from '@/graphql';
 import { rest } from '@/rest';
-import { websocket } from '@/ws';
-import type { Env } from '@/context';
-
-const app = new Hono<Env>();
+import { injectWebSocket } from '@/ws';
 
 app.use('*', compress());
 
@@ -41,24 +39,15 @@ app.onError((err, c) => {
   return c.text('Internal Server Error', { status: 500 });
 });
 
-const server = Bun.serve({
-  fetch: app.fetch,
-  error: (err) => {
-    if (err.code === 'ENOENT') {
-      return new Response('Not Found', {
-        status: 404,
-      });
-    }
-
-    logger.error(err);
-
-    return new Response('Internal Server Error', {
-      status: 500,
-    });
+const server = serve(
+  {
+    fetch: app.fetch,
+    hostname: '0.0.0.0',
+    port: env.LISTEN_PORT ?? 3000,
   },
-  websocket,
-  port: env.LISTEN_PORT ?? 3000,
-  idleTimeout: 0,
-});
+  (addr) => {
+    console.log(`Listening on ${addr.address}:${addr.port}`);
+  },
+);
 
-console.log(`Listening on ${server.url}`);
+injectWebSocket(server);

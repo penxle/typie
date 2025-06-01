@@ -1,4 +1,4 @@
-import { getConnInfo } from 'hono/bun';
+import { getConnInfo } from '@hono/node-server/conninfo';
 import IPAddr from 'ipaddr.js';
 import * as R from 'remeda';
 import type { Context } from 'hono';

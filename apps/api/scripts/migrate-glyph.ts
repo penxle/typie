@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /* eslint @typescript-eslint/no-non-null-assertion: 0 */
 
 import { stdin, stdout } from 'node:process';

@@ -1,10 +1,10 @@
 import fs from 'node:fs/promises';
-import { $ } from 'bun';
+import { $ } from 'execa';
 
 await fs.rm('dist/layers', { recursive: true, force: true });
 await fs.mkdir('dist/layers/sharp/nodejs', { recursive: true });
 
-const $$ = $.cwd('dist/layers/sharp');
+const $$ = $({ cwd: 'dist/layers/sharp' });
 
 await $$`tar xJf ../../../../../vendor/sharp.tar.xz`;
 await $$`mv node_modules nodejs`;

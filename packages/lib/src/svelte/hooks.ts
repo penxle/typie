@@ -1,4 +1,4 @@
-import { logger } from '../logging';
+import { logger } from '../logging.ts';
 import type { Handle } from '@sveltejs/kit';
 
 export const logging: Handle = async ({ event, resolve }) => {

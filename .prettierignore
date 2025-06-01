@@ -1,6 +1,7 @@
 .husky/_/
 
 LICENSE
+pnpm-lock.yaml
 docs/*
 !docs/*.md
 *.rs

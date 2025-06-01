@@ -14,7 +14,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "sark": "./bin/sark.ts"
+    "sark": "./bin/sark.js"
   },
   "scripts": {
     "build": "tsup",
@@ -28,9 +28,11 @@
     "fast-json-stable-stringify": "^2.1.0",
     "graphql": "^16.11.0",
     "graphql-sse": "^2.5.4",
+    "graphql-ws": "^6.0.5",
     "nanoid": "^5.1.5",
     "rapidhash-js": "^2.0.0",
     "recast": "^0.23.11",
+    "remeda": "^2.21.6",
     "svelte": "^5.31.1",
     "ts-pattern": "^5.7.1",
     "tsup": "^8.5.0",
