@@ -5,4 +5,5 @@ Sentry.init({
   enabled: !dev,
   dsn: env.SENTRY_DSN,
   environment: stack,
+  tracePropagationTargets: [],
 });

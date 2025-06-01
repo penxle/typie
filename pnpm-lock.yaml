@@ -17,16 +17,16 @@ importers:
         specifier: workspace:*
         version: link:packages/lintconfig
       cspell:
-        specifier: ^9.0.1
+        specifier: ^9.0.2
         version: 9.0.2
       eslint:
-        specifier: ^9.27.0
+        specifier: ^9.28.0
         version: 9.28.0
       husky:
         specifier: ^9.1.7
         version: 9.1.7
       lint-staged:
-        specifier: ^16.0.0
+        specifier: ^16.1.0
         version: 16.1.0
       prettier:
         specifier: ^3.5.3
@@ -35,7 +35,7 @@ importers:
         specifier: ^13.0.4
         version: 13.0.4(typescript@5.8.3)
       turbo:
-        specifier: ^2.5.3
+        specifier: ^2.5.4
         version: 2.5.4
       typescript:
         specifier: ^5.8.3
@@ -47,13 +47,16 @@ importers:
         specifier: ^1.5.0
         version: 1.5.0(encoding@0.1.13)
       '@aws-sdk/client-s3':
-        specifier: ^3.812.0
+        specifier: ^3.821.0
         version: 3.821.0
       '@aws-sdk/client-ses':
-        specifier: ^3.812.0
+        specifier: ^3.821.0
         version: 3.821.0
+      '@aws-sdk/node-http-handler':
+        specifier: ^3.374.0
+        version: 3.374.0
       '@aws-sdk/s3-presigned-post':
-        specifier: ^3.812.0
+        specifier: ^3.821.0
         version: 3.821.0
       '@ctrl/tinycolor':
         specifier: ^4.1.0
@@ -83,8 +86,8 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       '@portone/server-sdk':
-        specifier: ^0.14.0
-        version: 0.14.0
+        specifier: ^0.15.0
+        version: 0.15.0
       '@pothos/core':
         specifier: ^4.6.2
         version: 4.6.2(graphql@16.11.0)
@@ -143,7 +146,7 @@ importers:
         specifier: ^0.43.0
         version: 0.43.0
       bullmq:
-        specifier: ^5.52.3
+        specifier: ^5.53.1
         version: 5.53.1
       dataloader:
         specifier: ^2.2.3
@@ -152,8 +155,8 @@ importers:
         specifier: ^1.11.13
         version: 1.11.13
       drizzle-orm:
-        specifier: ^0.43.1
-        version: 0.43.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.2)(pg@8.16.0)(postgres@3.4.7)
+        specifier: ^0.44.1
+        version: 0.44.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.3)(pg@8.16.0)(postgres@3.4.7)
       escape-string-regexp:
         specifier: ^5.0.0
         version: 5.0.0
@@ -179,10 +182,10 @@ importers:
         specifier: ^6.0.5
         version: 6.0.5(graphql@16.11.0)(ws@8.18.2)
       graphql-yoga:
-        specifier: ^5.13.4
+        specifier: ^5.13.5
         version: 5.13.5(graphql@16.11.0)
       hono:
-        specifier: ^4.7.10
+        specifier: ^4.7.11
         version: 4.7.11
       ioredis:
         specifier: ^5.6.1
@@ -206,7 +209,7 @@ importers:
         specifier: ^3.4.7
         version: 3.4.7
       query-string:
-        specifier: ^9.1.2
+        specifier: ^9.2.0
         version: 9.2.0
       react:
         specifier: ^19.1.0
@@ -215,7 +218,7 @@ importers:
         specifier: ^19.1.0
         version: 19.1.0(react@19.1.0)
       remeda:
-        specifier: ^2.21.6
+        specifier: ^2.22.5
         version: 2.22.5
       rfc4648:
         specifier: ^1.5.4
@@ -224,7 +227,7 @@ importers:
         specifier: ^0.13.1
         version: 0.13.1
       sharp:
-        specifier: ^0.34.1
+        specifier: ^0.34.2
         version: 0.34.2
       thumbhash:
         specifier: ^0.1.1
@@ -251,20 +254,20 @@ importers:
         specifier: ^13.6.27
         version: 13.6.27
       zod:
-        specifier: ^3.25.7
+        specifier: ^3.25.46
         version: 3.25.46
     devDependencies:
       '@pulumi/aws':
-        specifier: ^6.80.0
+        specifier: ^6.81.0
         version: 6.81.0(typescript@5.8.3)
       '@pulumi/pulumi':
-        specifier: ^3.170.0
+        specifier: ^3.173.0
         version: 3.173.0(typescript@5.8.3)
       '@types/pg':
-        specifier: ^8.15.2
-        version: 8.15.2
+        specifier: ^8.15.3
+        version: 8.15.3
       '@types/react':
-        specifier: ^19.1.4
+        specifier: ^19.1.6
         version: 19.1.6
       '@types/react-dom':
         specifier: ^19.1.5
@@ -287,10 +290,10 @@ importers:
   apps/infrastructure:
     devDependencies:
       '@pulumi/aws':
-        specifier: ^6.80.0
+        specifier: ^6.81.0
         version: 6.81.0(typescript@5.8.3)
       '@pulumi/pulumi':
-        specifier: ^3.170.0
+        specifier: ^3.173.0
         version: 3.173.0(typescript@5.8.3)
       '@pulumi/random':
         specifier: ^4.18.2
@@ -320,13 +323,13 @@ importers:
   apps/literoom:
     devDependencies:
       '@aws-sdk/client-s3':
-        specifier: ^3.812.0
+        specifier: ^3.821.0
         version: 3.821.0
       '@pulumi/aws':
-        specifier: ^6.80.0
+        specifier: ^6.81.0
         version: 6.81.0(typescript@5.8.3)
       '@pulumi/pulumi':
-        specifier: ^3.170.0
+        specifier: ^3.173.0
         version: 3.173.0(typescript@5.8.3)
       '@typie/tsconfig':
         specifier: workspace:*
@@ -335,7 +338,7 @@ importers:
         specifier: ^9.6.0
         version: 9.6.0
       sharp:
-        specifier: ^0.34.1
+        specifier: ^0.34.2
         version: 0.34.2
       tsup:
         specifier: ^8.5.0
@@ -350,7 +353,7 @@ importers:
   apps/mobile:
     devDependencies:
       '@iconify-json/lucide':
-        specifier: ^1.2.44
+        specifier: ^1.2.45
         version: 1.2.45
       '@iconify-json/lucide-lab':
         specifier: ^1.2.3
@@ -380,25 +383,25 @@ importers:
         specifier: ^1.14.3
         version: 1.14.3(hono@4.7.11)
       '@iconify-json/lucide':
-        specifier: ^1.2.44
+        specifier: ^1.2.45
         version: 1.2.45
       '@iconify-json/simple-icons':
-        specifier: ^1.2.34
+        specifier: ^1.2.36
         version: 1.2.36
       '@iconify-json/twemoji':
         specifier: ^1.2.2
         version: 1.2.2
       '@pandacss/dev':
-        specifier: ^0.53.6
+        specifier: ^0.53.7
         version: 0.53.7(jsdom@26.1.0)(typescript@5.8.3)
       '@portone/browser-sdk':
-        specifier: ^0.0.20
-        version: 0.0.20
+        specifier: ^0.0.21
+        version: 0.0.21
       '@pulumi/aws':
-        specifier: ^6.80.0
+        specifier: ^6.81.0
         version: 6.81.0(typescript@5.8.3)
       '@pulumi/pulumi':
-        specifier: ^3.170.0
+        specifier: ^3.173.0
         version: 3.173.0(typescript@5.8.3)
       '@sindresorhus/string-hash':
         specifier: ^2.0.0
@@ -458,13 +461,13 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0
       focus-trap:
-        specifier: ^7.6.4
+        specifier: ^7.6.5
         version: 7.6.5
       graphql-ws:
         specifier: ^6.0.5
         version: 6.0.5(graphql@16.11.0)(ws@8.18.2)
       hono:
-        specifier: ^4.7.10
+        specifier: ^4.7.11
         version: 4.7.11
       ky:
         specifier: ^1.8.1
@@ -473,19 +476,19 @@ importers:
         specifier: ^4.3.1
         version: 4.3.1
       match-sorter:
-        specifier: ^8.0.1
+        specifier: ^8.0.2
         version: 8.0.2
       mixpanel-browser:
-        specifier: ^2.64.0
+        specifier: ^2.65.0
         version: 2.65.0
       nanoid:
         specifier: ^5.1.5
         version: 5.1.5
       query-string:
-        specifier: ^9.1.2
+        specifier: ^9.2.0
         version: 9.2.0
       remeda:
-        specifier: ^2.21.6
+        specifier: ^2.22.5
         version: 2.22.5
       rfc4648:
         specifier: ^1.5.4
@@ -494,7 +497,7 @@ importers:
         specifier: ^3.4.2
         version: 3.4.2
       svelte:
-        specifier: ^5.31.1
+        specifier: ^5.33.11
         version: 5.33.11
       svelte-check:
         specifier: ^4.2.1
@@ -542,7 +545,7 @@ importers:
         specifier: ^0.15.1
         version: 0.15.1
       zod:
-        specifier: ^3.25.7
+        specifier: ^3.25.46
         version: 3.25.46
 
   crates/fondue: {}
@@ -564,7 +567,7 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
       hono:
-        specifier: ^4.7.10
+        specifier: ^4.7.11
         version: 4.7.11
       tsup:
         specifier: ^8.5.0
@@ -588,7 +591,7 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0
       remeda:
-        specifier: ^2.21.6
+        specifier: ^2.22.5
         version: 2.22.5
     devDependencies:
       '@sveltejs/kit':
@@ -598,10 +601,10 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
       hono:
-        specifier: ^4.7.10
+        specifier: ^4.7.11
         version: 4.7.11
       svelte:
-        specifier: ^5.31.1
+        specifier: ^5.33.11
         version: 5.33.11
       svgo:
         specifier: ^3.3.2
@@ -629,7 +632,7 @@ importers:
         specifier: ^3.3.1
         version: 3.3.1
       '@eslint/js':
-        specifier: ^9.27.0
+        specifier: ^9.28.0
         version: 9.28.0
       '@prettier/plugin-xml':
         specifier: ^3.4.1
@@ -641,19 +644,19 @@ importers:
         specifier: ^12.1.1
         version: 12.1.1(eslint@9.28.0)
       eslint-plugin-svelte:
-        specifier: ^3.8.1
+        specifier: ^3.9.0
         version: 3.9.0(eslint@9.28.0)(svelte@5.33.11)
       eslint-plugin-unicorn:
         specifier: ^59.0.1
         version: 59.0.1(eslint@9.28.0)
       globals:
-        specifier: ^16.1.0
+        specifier: ^16.2.0
         version: 16.2.0
       ignore:
-        specifier: ^7.0.4
+        specifier: ^7.0.5
         version: 7.0.5
       prettier-plugin-packagejson:
-        specifier: ^2.5.14
+        specifier: ^2.5.15
         version: 2.5.15(prettier@3.5.3)
       prettier-plugin-sh:
         specifier: ^0.17.4
@@ -662,16 +665,16 @@ importers:
         specifier: ^3.4.0
         version: 3.4.0(prettier@3.5.3)(svelte@5.33.11)
       typescript-eslint:
-        specifier: ^8.32.1
+        specifier: ^8.33.0
         version: 8.33.0(eslint@9.28.0)(typescript@5.8.3)
 
   packages/pulumi:
     devDependencies:
       '@pulumi/aws':
-        specifier: ^6.80.0
+        specifier: ^6.81.0
         version: 6.81.0(typescript@5.8.3)
       '@pulumi/pulumi':
-        specifier: ^3.170.0
+        specifier: ^3.173.0
         version: 3.173.0(typescript@5.8.3)
       '@typie/tsconfig':
         specifier: workspace:*
@@ -710,16 +713,16 @@ importers:
         specifier: ^5.1.5
         version: 5.1.5
       rapidhash-js:
-        specifier: ^2.0.0
+        specifier: ^2.2.0
         version: 2.2.0
       recast:
         specifier: ^0.23.11
         version: 0.23.11
       remeda:
-        specifier: ^2.21.6
+        specifier: ^2.22.5
         version: 2.22.5
       svelte:
-        specifier: ^5.31.1
+        specifier: ^5.33.11
         version: 5.33.11
       ts-pattern:
         specifier: ^5.7.1
@@ -870,6 +873,11 @@ packages:
   '@aws-sdk/nested-clients@3.821.0':
     resolution: {integrity: sha512-2IuHcUsWw44ftSEDYU4dvktTEqgyDvkOcfpoGC/UmT4Qo6TVCP3U5tWEGpNK9nN+7nLvekruxxG/jaMt5/oWVw==}
     engines: {node: '>=18.0.0'}
+
+  '@aws-sdk/node-http-handler@3.374.0':
+    resolution: {integrity: sha512-v1Z6m0wwkf65/tKuhwrtPRqVoOtNkDTRn2MBMtxCwEw+8V8Q+YRFqVgGN+J1n53ktE0G5OYVBux/NHiAjJHReQ==}
+    engines: {node: '>=14.0.0'}
+    deprecated: This package has moved to @smithy/node-http-handler
 
   '@aws-sdk/region-config-resolver@3.821.0':
     resolution: {integrity: sha512-t8og+lRCIIy5nlId0bScNpCkif8sc0LhmtaKsbm0ZPm3sCa/WhCbSZibjbZ28FNjVCV+p0D9RYZx0VDDbtWyjw==}
@@ -2667,18 +2675,18 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@pkgr/core@0.2.5':
-    resolution: {integrity: sha512-YRx7tFgLkrpFkDAzVSV5sUJydmf2ZDrW+O3IbQ1JyeMW7B0FiWroFJTnR4/fD9CsusnAn4qRUcbb5jFnZSd6uw==}
+  '@pkgr/core@0.2.7':
+    resolution: {integrity: sha512-YLT9Zo3oNPJoBjBc4q8G2mjU4tqIbf5CEOORbUUr48dCD9q3umJ3IPlVqOqDakPfd2HuwccBaqlGhN4Gmr5OWg==}
     engines: {node: ^12.20.0 || ^14.18.0 || >=16.0.0}
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
 
-  '@portone/browser-sdk@0.0.20':
-    resolution: {integrity: sha512-Mg1/Eqp+WvVo/gN/N3tbGUdKpB7hZfyxZYf6FbZAnTo5Ctk8HcM+jY034ZDVF9rwq5xCsbA5WVLrm4BxvHTnwA==}
+  '@portone/browser-sdk@0.0.21':
+    resolution: {integrity: sha512-VUNbECVwkza9OH7BI1f2F9bLWrqi01bIhScPzdwT5KpdHZ59PC/u7e9ouPbQAOQgDlv8P28kpoqh7vbj/vB7Mg==}
 
-  '@portone/server-sdk@0.14.0':
-    resolution: {integrity: sha512-SW+3VxH8w+CRTtPbwHfS4iksGzMGj2khGq+Sv2ADgmp3KGSMjWgWwiBjovvFOJd5RI+oI0sjNLaj6SADO8QT7A==}
+  '@portone/server-sdk@0.15.0':
+    resolution: {integrity: sha512-eLRkC/BBoQ6yqi2iSAVwGWL6lYyXXXkYlwXnvTU6cqsWGy+k1jBp8Xmpl1sw7qJwrn4i9QQj/PWMavkgMiLSrg==}
 
   '@pothos/core@4.6.2':
     resolution: {integrity: sha512-3mwMf1t87VnfFIAZNJPptR3+k3TVLsynV35PXsFrodtCGv/IOlRDJNjgavIeObPz5qI38cjJ6DeFy6XDXrvudQ==}
@@ -3202,6 +3210,10 @@ packages:
     resolution: {integrity: sha512-eNmMOd5DZkiu9LxIeHdh1XvDbcpFXV4HdBqg9hlg8YNKDvE6qmHiJ+Vy+rFrzXofRYmtheNv4A3ESad8unxwwA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
+  '@smithy/abort-controller@1.1.0':
+    resolution: {integrity: sha512-5imgGUlZL4dW4YWdMYAKLmal9ny/tlenM81QZY7xYyb76z9Z/QOg7oM5Ak9HQl8QfFTlGVWwcMXl+54jroRgEQ==}
+    engines: {node: '>=14.0.0'}
+
   '@smithy/abort-controller@4.0.4':
     resolution: {integrity: sha512-gJnEjZMvigPDQWHrW3oPrFhQtkrgqBkyjj3pCIdF3A5M6vsZODG93KNlfJprv6bp4245bdT32fsHK4kkH3KYDA==}
     engines: {node: '>=18.0.0'}
@@ -3302,6 +3314,10 @@ packages:
     resolution: {integrity: sha512-HGHQr2s59qaU1lrVH6MbLlmOBxadtzTsoO4c+bF5asdgVik3I8o7JIOzoeqWc5MjVa+vD36/LWE0iXKpNqooRw==}
     engines: {node: '>=18.0.0'}
 
+  '@smithy/node-http-handler@1.1.0':
+    resolution: {integrity: sha512-d3kRriEgaIiGXLziAM8bjnaLn1fthCJeTLZIwEIpzQqe6yPX0a+yQoLCTyjb2fvdLwkMoG4p7THIIB5cj5lkbg==}
+    engines: {node: '>=14.0.0'}
+
   '@smithy/node-http-handler@4.0.6':
     resolution: {integrity: sha512-NqbmSz7AW2rvw4kXhKGrYTiJVDHnMsFnX4i+/FzcZAfbOBauPYs2ekuECkSbtqaxETLLTu9Rl/ex6+I2BKErPA==}
     engines: {node: '>=18.0.0'}
@@ -3310,9 +3326,17 @@ packages:
     resolution: {integrity: sha512-qHJ2sSgu4FqF4U/5UUp4DhXNmdTrgmoAai6oQiM+c5RZ/sbDwJ12qxB1M6FnP+Tn/ggkPZf9ccn4jqKSINaquw==}
     engines: {node: '>=18.0.0'}
 
+  '@smithy/protocol-http@1.2.0':
+    resolution: {integrity: sha512-GfGfruksi3nXdFok5RhgtOnWe5f6BndzYfmEXISD+5gAGdayFGpjWu5pIqIweTudMtse20bGbc+7MFZXT1Tb8Q==}
+    engines: {node: '>=14.0.0'}
+
   '@smithy/protocol-http@5.1.2':
     resolution: {integrity: sha512-rOG5cNLBXovxIrICSBm95dLqzfvxjEmuZx4KK3hWwPFHGdW3lxY0fZNXfv2zebfRO7sJZ5pKJYHScsqopeIWtQ==}
     engines: {node: '>=18.0.0'}
+
+  '@smithy/querystring-builder@1.1.0':
+    resolution: {integrity: sha512-gDEi4LxIGLbdfjrjiY45QNbuDmpkwh9DX4xzrR2AzjjXpxwGyfSpbJaYhXARw9p17VH0h9UewnNQXNwaQyYMDA==}
+    engines: {node: '>=14.0.0'}
 
   '@smithy/querystring-builder@4.0.4':
     resolution: {integrity: sha512-SwREZcDnEYoh9tLNgMbpop+UTGq44Hl9tdj3rf+yeLcfH7+J8OXEBaMc2kDxtyRHu8BhSg9ADEx0gFHvpJgU8w==}
@@ -3337,6 +3361,10 @@ packages:
   '@smithy/smithy-client@4.4.1':
     resolution: {integrity: sha512-XPbcHRfd0iwx8dY5XCBCGyI7uweMW0oezYezxXcG8ANgvZ5YPuC6Ylh+n0bTHpdU3SCMZOnhzgVklYz+p3fIhw==}
     engines: {node: '>=18.0.0'}
+
+  '@smithy/types@1.2.0':
+    resolution: {integrity: sha512-z1r00TvBqF3dh4aHhya7nz1HhvCg4TRmw51fjMrh5do3h+ngSstt/yKlNbHeb9QxJmFbmN8KEVSWgb1bRvfEoA==}
+    engines: {node: '>=14.0.0'}
 
   '@smithy/types@4.3.1':
     resolution: {integrity: sha512-UqKOQBL2x6+HWl3P+3QqFD4ncKq0I8Nuz9QItGv5WuKuMHuuwlhvqcZCoXGfc+P1QmfJE7VieykoYYmrOoFJxA==}
@@ -3397,6 +3425,10 @@ packages:
   '@smithy/util-stream@4.2.2':
     resolution: {integrity: sha512-aI+GLi7MJoVxg24/3J1ipwLoYzgkB4kUfogZfnslcYlynj3xsQ0e7vk4TnTro9hhsS5PvX1mwmkRqqHQjwcU7w==}
     engines: {node: '>=18.0.0'}
+
+  '@smithy/util-uri-escape@1.1.0':
+    resolution: {integrity: sha512-/jL/V1xdVRt5XppwiaEU8Etp5WHZj609n0xMTuehmCqdoOFbId1M+aEeDWZsQ+8JbEB/BJ6ynY2SlYmOaKtt8w==}
+    engines: {node: '>=14.0.0'}
 
   '@smithy/util-uri-escape@4.0.0':
     resolution: {integrity: sha512-77yfbCbQMtgtTylO9itEAdpPXSog3ZxMe09AEhm0dU0NLTalV70ghDZFR+Nfi1C60jnJoh/Re4090/DuZh2Omg==}
@@ -3606,8 +3638,8 @@ packages:
   '@types/pg-pool@2.0.6':
     resolution: {integrity: sha512-TaAUE5rq2VQYxab5Ts7WZhKNmuN78Q6PiFonTDdpbx8a1H0M1vhy3rhiMjl+e2iHmogyMw7jZF4FrE6eJUy5HQ==}
 
-  '@types/pg@8.15.2':
-    resolution: {integrity: sha512-+BKxo5mM6+/A1soSHBI7ufUglqYXntChLDyTbvcAn1Lawi9J7J9Ok3jt6w7I0+T/UDJ4CyhHk66+GZbwmkYxSg==}
+  '@types/pg@8.15.3':
+    resolution: {integrity: sha512-/566mCD6naXuDdCO9LN9IBGYuuLfmCbew3PjdDT1LTQNAWWNYk/zTSNQ4I8oq4F4tN9p4UWQieJyFmuvK98A4A==}
 
   '@types/pg@8.6.1':
     resolution: {integrity: sha512-1Kc4oAGzAl7uqUStZCDvaLFqZrW9qWSjXOmBfdgyBP5La7Us6Mg4GBvRlSoaZMhQF/zSj1C8CtKMBkoiT8eL8w==}
@@ -4664,8 +4696,8 @@ packages:
     resolution: {integrity: sha512-PUjYKWtzOzPtdtQlTHQG3qfv4Y0XT8+Eas6UbxCmxTj7qgMf+39dDujf1BP1I+qqZtw9uzwTh8jYtkMuCq+B0Q==}
     hasBin: true
 
-  drizzle-orm@0.43.1:
-    resolution: {integrity: sha512-dUcDaZtE/zN4RV/xqGrVSMpnEczxd5cIaoDeor7Zst9wOe/HzC/7eAaulywWGYXdDEc9oBPMjayVEDg0ziTLJA==}
+  drizzle-orm@0.44.1:
+    resolution: {integrity: sha512-prIWOlwJbiYInvcJxE+IMiJCtMiFVrSUJCwx6AXSJvGOdLu35qZ46QncTZDgloiLNCG0XxTC8agQElSmsl++TA==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=4'
@@ -4681,6 +4713,7 @@ packages:
       '@types/better-sqlite3': '*'
       '@types/pg': '*'
       '@types/sql.js': '*'
+      '@upstash/redis': '>=1.34.7'
       '@vercel/postgres': '>=0.8.0'
       '@xata.io/client': '*'
       better-sqlite3: '>=7'
@@ -4723,6 +4756,8 @@ packages:
       '@types/pg':
         optional: true
       '@types/sql.js':
+        optional: true
+      '@upstash/redis':
         optional: true
       '@vercel/postgres':
         optional: true
@@ -6730,9 +6765,6 @@ packages:
     resolution: {integrity: sha512-gXah6aZrcUxjWg2zR2MwouP2eHlCBzdV4pygudehaKXSGW4v2AsRQUK+lwwXhii6KFZcunEnmSUoYp5CXibxtA==}
     engines: {node: '>= 0.4'}
 
-  obuf@1.1.2:
-    resolution: {integrity: sha512-PX1wu0AmAdPqOL1mWhqmlOd8kOIZQwGZw6rh7uby9fTc5lhaOWFLX3I6R1hrF9k3zUY40e6igsLGkDXK92LJNg==}
-
   omggif@1.0.10:
     resolution: {integrity: sha512-LMJTtvgc/nugXj0Vcrrs68Mn2D1r0zf630VNtqtpI1FEO7e+O9FP4gqs9AcnBaSEeoHIPm28u6qgPR0oyEpGSw==}
 
@@ -6948,10 +6980,6 @@ packages:
     resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
     engines: {node: '>=4.0.0'}
 
-  pg-numeric@1.0.2:
-    resolution: {integrity: sha512-BM/Thnrw5jm2kKLE5uJkXqqExRUY/toLHda65XgFTBTFYZyopbKjBe29Ii3RbkvlsMoFwD+tHeGaCjjv0gHlyw==}
-    engines: {node: '>=4'}
-
   pg-pool@3.10.0:
     resolution: {integrity: sha512-DzZ26On4sQ0KmqnO34muPcmKbhrjmyiO4lCCR0VwEd7MjmiKf5NTg/6+apUEu0NF7ESa37CGzFxH513CoUmWnA==}
     peerDependencies:
@@ -6963,10 +6991,6 @@ packages:
   pg-types@2.2.0:
     resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
     engines: {node: '>=4'}
-
-  pg-types@4.0.2:
-    resolution: {integrity: sha512-cRL3JpS3lKMGsKaWndugWQoLOCoP+Cic8oseVcbr0qhPzYD5DWXK+RZ9LY9wxRf7RQia4SCwQlXk0q6FCPrVng==}
-    engines: {node: '>=10'}
 
   pg@8.16.0:
     resolution: {integrity: sha512-7SKfdvP8CTNXjMUzfcVTaI+TDzBEeaUnVwiVGZQD1Hh33Kpev7liQba9uLd4CfN8r9mCVsD0JIpq03+Unpz+kg==}
@@ -7149,36 +7173,17 @@ packages:
     resolution: {integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==}
     engines: {node: '>=4'}
 
-  postgres-array@3.0.4:
-    resolution: {integrity: sha512-nAUSGfSDGOaOAEGwqsRY27GPOea7CNipJPOA7lPbdEpx5Kg3qzdP0AaWC5MlhTWV9s4hFX39nomVZ+C4tnGOJQ==}
-    engines: {node: '>=12'}
-
   postgres-bytea@1.0.0:
     resolution: {integrity: sha512-xy3pmLuQqRBZBXDULy7KbaitYqLcmxigw14Q5sj8QBVLqEwXfeybIKVWiqAXTlcvdvb0+xkOtDbfQMOf4lST1w==}
     engines: {node: '>=0.10.0'}
-
-  postgres-bytea@3.0.0:
-    resolution: {integrity: sha512-CNd4jim9RFPkObHSjVHlVrxoVQXz7quwNFpz7RY1okNNme49+sVyiTvTRobiLV548Hx/hb1BG+iE7h9493WzFw==}
-    engines: {node: '>= 6'}
 
   postgres-date@1.0.7:
     resolution: {integrity: sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==}
     engines: {node: '>=0.10.0'}
 
-  postgres-date@2.1.0:
-    resolution: {integrity: sha512-K7Juri8gtgXVcDfZttFKVmhglp7epKb1K4pgrkLxehjqkrgPhfG6OO8LHLkfaqkbpjNRnra018XwAr1yQFWGcA==}
-    engines: {node: '>=12'}
-
   postgres-interval@1.2.0:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
-
-  postgres-interval@3.0.0:
-    resolution: {integrity: sha512-BSNDnbyZCXSxgA+1f5UU2GmwhoI0aU5yMxRGO8CdFEcY2BQF9xm/7MqKnYoM1nJDk8nONNWDk9WeSmePFhQdlw==}
-    engines: {node: '>=12'}
-
-  postgres-range@1.1.4:
-    resolution: {integrity: sha512-i/hbxIE9803Alj/6ytL7UHQxRvZkI9O4Sy+J3HGc4F4oo/2eQAjTSNJ0bfxyse3bH0nuVesCk+3IRLaMtG3H6w==}
 
   postgres@3.4.7:
     resolution: {integrity: sha512-Jtc2612XINuBjIl/QTWsV5UvE8UHuNblcO3vVADSrKsrc6RqGX6lOW1cEo3CM2v0XG4Nat8nI+YM7/f26VxXLw==}
@@ -9321,6 +9326,11 @@ snapshots:
     transitivePeerDependencies:
       - aws-crt
 
+  '@aws-sdk/node-http-handler@3.374.0':
+    dependencies:
+      '@smithy/node-http-handler': 1.1.0
+      tslib: 2.8.1
+
   '@aws-sdk/region-config-resolver@3.821.0':
     dependencies:
       '@aws-sdk/types': 3.821.0
@@ -11309,13 +11319,13 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@pkgr/core@0.2.5': {}
+  '@pkgr/core@0.2.7': {}
 
   '@polka/url@1.0.0-next.29': {}
 
-  '@portone/browser-sdk@0.0.20': {}
+  '@portone/browser-sdk@0.0.21': {}
 
-  '@portone/server-sdk@0.14.0': {}
+  '@portone/server-sdk@0.15.0': {}
 
   '@pothos/core@4.6.2(graphql@16.11.0)':
     dependencies:
@@ -11835,6 +11845,11 @@ snapshots:
     dependencies:
       '@sindresorhus/fnv1a': 3.1.0
 
+  '@smithy/abort-controller@1.1.0':
+    dependencies:
+      '@smithy/types': 1.2.0
+      tslib: 2.8.1
+
   '@smithy/abort-controller@4.0.4':
     dependencies:
       '@smithy/types': 4.3.1
@@ -12001,6 +12016,14 @@ snapshots:
       '@smithy/types': 4.3.1
       tslib: 2.8.1
 
+  '@smithy/node-http-handler@1.1.0':
+    dependencies:
+      '@smithy/abort-controller': 1.1.0
+      '@smithy/protocol-http': 1.2.0
+      '@smithy/querystring-builder': 1.1.0
+      '@smithy/types': 1.2.0
+      tslib: 2.8.1
+
   '@smithy/node-http-handler@4.0.6':
     dependencies:
       '@smithy/abort-controller': 4.0.4
@@ -12014,9 +12037,20 @@ snapshots:
       '@smithy/types': 4.3.1
       tslib: 2.8.1
 
+  '@smithy/protocol-http@1.2.0':
+    dependencies:
+      '@smithy/types': 1.2.0
+      tslib: 2.8.1
+
   '@smithy/protocol-http@5.1.2':
     dependencies:
       '@smithy/types': 4.3.1
+      tslib: 2.8.1
+
+  '@smithy/querystring-builder@1.1.0':
+    dependencies:
+      '@smithy/types': 1.2.0
+      '@smithy/util-uri-escape': 1.1.0
       tslib: 2.8.1
 
   '@smithy/querystring-builder@4.0.4':
@@ -12058,6 +12092,10 @@ snapshots:
       '@smithy/protocol-http': 5.1.2
       '@smithy/types': 4.3.1
       '@smithy/util-stream': 4.2.2
+      tslib: 2.8.1
+
+  '@smithy/types@1.2.0':
+    dependencies:
       tslib: 2.8.1
 
   '@smithy/types@4.3.1':
@@ -12146,6 +12184,10 @@ snapshots:
       '@smithy/util-buffer-from': 4.0.0
       '@smithy/util-hex-encoding': 4.0.0
       '@smithy/util-utf8': 4.0.0
+      tslib: 2.8.1
+
+  '@smithy/util-uri-escape@1.1.0':
+    dependencies:
       tslib: 2.8.1
 
   '@smithy/util-uri-escape@4.0.0':
@@ -12397,13 +12439,13 @@ snapshots:
 
   '@types/pg-pool@2.0.6':
     dependencies:
-      '@types/pg': 8.15.2
+      '@types/pg': 8.15.3
 
-  '@types/pg@8.15.2':
+  '@types/pg@8.15.3':
     dependencies:
       '@types/node': 22.15.29
       pg-protocol: 1.10.0
-      pg-types: 4.0.2
+      pg-types: 2.2.0
 
   '@types/pg@8.6.1':
     dependencies:
@@ -13617,10 +13659,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.43.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.2)(pg@8.16.0)(postgres@3.4.7):
+  drizzle-orm@0.44.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.3)(pg@8.16.0)(postgres@3.4.7):
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
-      '@types/pg': 8.15.2
+      '@types/pg': 8.15.3
       pg: 8.16.0
       postgres: 3.4.7
 
@@ -15948,8 +15990,6 @@ snapshots:
       define-properties: 1.2.1
       es-object-atoms: 1.1.1
 
-  obuf@1.1.2: {}
-
   omggif@1.0.10: {}
 
   once@1.4.0:
@@ -16198,8 +16238,6 @@ snapshots:
 
   pg-int8@1.0.1: {}
 
-  pg-numeric@1.0.2: {}
-
   pg-pool@3.10.0(pg@8.16.0):
     dependencies:
       pg: 8.16.0
@@ -16213,16 +16251,6 @@ snapshots:
       postgres-bytea: 1.0.0
       postgres-date: 1.0.7
       postgres-interval: 1.2.0
-
-  pg-types@4.0.2:
-    dependencies:
-      pg-int8: 1.0.1
-      pg-numeric: 1.0.2
-      postgres-array: 3.0.4
-      postgres-bytea: 3.0.0
-      postgres-date: 2.1.0
-      postgres-interval: 3.0.0
-      postgres-range: 1.1.4
 
   pg@8.16.0:
     dependencies:
@@ -16390,25 +16418,13 @@ snapshots:
 
   postgres-array@2.0.0: {}
 
-  postgres-array@3.0.4: {}
-
   postgres-bytea@1.0.0: {}
 
-  postgres-bytea@3.0.0:
-    dependencies:
-      obuf: 1.1.2
-
   postgres-date@1.0.7: {}
-
-  postgres-date@2.1.0: {}
 
   postgres-interval@1.2.0:
     dependencies:
       xtend: 4.0.2
-
-  postgres-interval@3.0.0: {}
-
-  postgres-range@1.1.4: {}
 
   postgres@3.4.7: {}
 
@@ -17408,7 +17424,7 @@ snapshots:
 
   synckit@0.11.8:
     dependencies:
-      '@pkgr/core': 0.2.5
+      '@pkgr/core': 0.2.7
 
   syncpack@13.0.4(typescript@5.8.3):
     dependencies:
