@@ -14,15 +14,15 @@ export const calculatePaymentAmount = (billingCycle: UserPlanBillingCycle, fee: 
 };
 
 export const getNextPaymentDate = (billingCycle: UserPlanBillingCycle, enrolledAt: dayjs.Dayjs, previousPaymentDate?: dayjs.Dayjs) => {
-  const date = previousPaymentDate ?? dayjs.kst();
-  const startOfMonth = date.startOf('month').startOf('day');
+  const date = previousPaymentDate?.kst() ?? dayjs.kst();
+  const startOfMonth = date.kst().startOf('month').startOf('day');
 
   const nextCycleMonth = match(billingCycle)
     .with(UserPlanBillingCycle.MONTHLY, () => startOfMonth.add(1, 'month'))
     .with(UserPlanBillingCycle.YEARLY, () => startOfMonth.add(1, 'year'))
     .exhaustive();
 
-  return nextCycleMonth.date(Math.min(enrolledAt.date(), nextCycleMonth.daysInMonth()));
+  return nextCycleMonth.date(Math.min(enrolledAt.kst().date(), nextCycleMonth.daysInMonth()));
 };
 
 type PayInvoiceParams = {
