@@ -29,7 +29,7 @@
       zIndex: '1',
     })}
   >
-    <Logo class={css({ height: '20px' })} />
+    <Logo class={css({ height: '32px' })} />
 
     <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>
       {#if page.status === 404}
