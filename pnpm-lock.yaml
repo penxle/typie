@@ -424,9 +424,6 @@ importers:
       '@typie/adapter-node':
         specifier: workspace:*
         version: link:../../packages/adapter-node
-      '@typie/glyphr':
-        specifier: workspace:*
-        version: link:../../crates/glyphr
       '@typie/lib':
         specifier: workspace:*
         version: link:../../packages/lib
@@ -543,8 +540,6 @@ importers:
         version: 3.25.46
 
   crates/fondue: {}
-
-  crates/glyphr: {}
 
   packages/adapter-node:
     devDependencies:
