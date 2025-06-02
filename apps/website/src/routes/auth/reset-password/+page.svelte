@@ -52,7 +52,7 @@
 
 <div class={flex({ flexDirection: 'column', gap: '24px' })}>
   <div class={flex({ justifyContent: 'flex-start' })}>
-    <Logo class={css({ height: '20px' })} />
+    <Logo class={css({ height: '32px' })} />
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>

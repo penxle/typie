@@ -83,7 +83,7 @@
       })}
     >
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', paddingX: '16px', paddingY: '8px' })}>
-        <Logo class={css({ height: '24px' })} />
+        <Logo class={css({ height: '20px' })} />
 
         <a
           style:--background-color={token('colors.brand.500')}
