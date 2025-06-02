@@ -20,7 +20,6 @@ dotenv
 dotum
 eulyoo
 fira
-glyphr
 healthz
 iconify
 iframely
