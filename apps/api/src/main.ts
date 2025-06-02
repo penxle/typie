@@ -4,7 +4,6 @@ import '@/mq';
 
 import { serve } from '@hono/node-server';
 import { logger } from '@typie/lib';
-import { compress } from 'hono/compress';
 import { HTTPException } from 'hono/http-exception';
 import { app } from '@/app';
 import { deriveContext } from '@/context';
@@ -15,7 +14,6 @@ import { injectWebSocket } from '@/ws';
 
 const log = logger.getChild('main');
 
-app.use('*', compress());
 app.use('*', async (c, next) => {
   const context = await deriveContext(c);
   c.set('context', context);
