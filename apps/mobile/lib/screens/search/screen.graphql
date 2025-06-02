@@ -1,0 +1,20 @@
+query SearchScreen_Query($siteId: ID!, $query: String!) {
+  search(siteId: $siteId, query: $query) {
+    hits {
+      ... on SearchHitPost {
+        title
+        text
+
+        post {
+          id
+          updatedAt
+
+          entity {
+            id
+            slug
+          }
+        }
+      }
+    }
+  }
+}
