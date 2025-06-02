@@ -54,8 +54,6 @@ const cluster = new aws.rds.Cluster('typie', {
   preferredBackupWindow: '19:00-20:00',
   preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
 
-  performanceInsightsEnabled: true,
-
   masterUsername: 'root',
   masterPassword: password.result,
 
@@ -100,8 +98,6 @@ const devCluster = new aws.rds.Cluster('typie-dev', {
 
   preferredBackupWindow: '19:00-20:00',
   preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
-
-  performanceInsightsEnabled: true,
 
   masterUsername: 'root',
   masterPassword: devPassword.result,
