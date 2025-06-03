@@ -22,7 +22,7 @@ new typie.Service('website', {
   autoscale: {
     minCount: 2,
     maxCount: 20,
-    averageCpuUtilization: 50,
+    averageCpuUtilization: 80,
   },
 
   domains:
