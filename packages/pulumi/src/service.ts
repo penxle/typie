@@ -160,16 +160,6 @@ export class Service extends pulumi.ComponentResource {
             ],
 
             secrets: [{ name: 'DD_API_KEY', valueFrom: '/datadog/api-key' }],
-
-            logConfiguration: {
-              logDriver: 'awslogs',
-              options: {
-                'awslogs-group': '/ecs/datadog-agent',
-                'awslogs-region': 'ap-northeast-2',
-                'awslogs-stream-prefix': 'ecs',
-                'awslogs-create-group': 'true',
-              },
-            },
           },
         ]),
       },
@@ -188,7 +178,7 @@ export class Service extends pulumi.ComponentResource {
         desiredCount: stack === 'dev' ? 1 : undefined,
 
         capacityProviderStrategies: [
-          { capacityProvider: 'FARGATE', base: 1 },
+          { capacityProvider: 'FARGATE', base: 0 },
           { capacityProvider: 'FARGATE_SPOT', weight: 100 },
         ],
 
@@ -212,6 +202,11 @@ export class Service extends pulumi.ComponentResource {
             targetGroupArn: targetGroup.arn,
           },
         ],
+
+        forceNewDeployment: true,
+        triggers: {
+          timestamp: 'plantimestamp()',
+        },
       },
       { parent: this, dependsOn: [rule], ignoreChanges: ['desiredCount'] },
     );

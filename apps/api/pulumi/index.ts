@@ -15,14 +15,14 @@ new typie.Service('api', {
   },
 
   resources: {
-    cpu: '2048',
-    memory: '4096',
+    cpu: '1024',
+    memory: '2048',
   },
 
   autoscale: {
     minCount: 2,
     maxCount: 20,
-    averageCpuUtilization: 50,
+    averageCpuUtilization: 80,
   },
 
   domains: stack === 'dev' ? ['api.typie.dev'] : ['api.typie.co'],
