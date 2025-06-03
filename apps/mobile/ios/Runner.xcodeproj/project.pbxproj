@@ -14,12 +14,13 @@
 		5E66CF64DF7CADE78DF022A6 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 47739866FDA449A813E36CF6 /* GoogleService-Info.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		8C3DDA1B0F839431C970D517 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 52DF332886BBF5D0CBD37A5A /* Pods_RunnerTests.framework */; };
-		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		B60149372DD4C8F00055A06B /* KeyboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60149362DD4C8E80055A06B /* KeyboardPlugin.swift */; };
 		B60149392DD4D5460055A06B /* AppWKWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60149382DD4D53F0055A06B /* AppWKWebView.swift */; };
 		B67D40782DD26A43002679B6 /* Configuration.storekit in Resources */ = {isa = PBXBuildFile; fileRef = B67D40772DD26A43002679B6 /* Configuration.storekit */; };
-		B6C8B4172DCCE23C0089DBE2 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B6C8B4152DCCE23C0089DBE2 /* LaunchScreen.storyboard */; };
+		B6D0B1912DEDFA1600CC8EF8 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B6D0B1902DEDFA1600CC8EF8 /* InfoPlist.xcstrings */; };
+		B6D0B1972DEDFC6400CC8EF8 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B6D0B1962DEDFC6400CC8EF8 /* Main.storyboard */; };
+		B6D0B1992DEDFC6800CC8EF8 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */; };
 		B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC503E2DD388C900F2B218 /* AppWebView.swift */; };
 		B6FC50412DD3890600F2B218 /* AppWebViewFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */; };
 /* End PBXBuildFile section */
@@ -65,14 +66,15 @@
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		97C146FB1CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B60149362DD4C8E80055A06B /* KeyboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardPlugin.swift; sourceTree = "<group>"; };
 		B60149382DD4D53F0055A06B /* AppWKWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWKWebView.swift; sourceTree = "<group>"; };
 		B625650C2DD0A1F500958764 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		B67D40772DD26A43002679B6 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration.storekit; sourceTree = "<group>"; };
-		B6C8B4162DCCE23C0089DBE2 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		B6D0B1902DEDFA1600CC8EF8 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		B6D0B1962DEDFC6400CC8EF8 /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
+		B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		B6FC503E2DD388C900F2B218 /* AppWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWebView.swift; sourceTree = "<group>"; };
 		B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWebViewFactory.swift; sourceTree = "<group>"; };
 		BE9D161B413A5C0F3D8C8AEC /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
@@ -155,10 +157,11 @@
 				B60149352DD4C8E00055A06B /* Keyboard */,
 				B6FC503C2DD3882000F2B218 /* WebView */,
 				B625650C2DD0A1F500958764 /* Runner.entitlements */,
-				97C146FA1CF9000F007C117D /* Main.storyboard */,
-				B6C8B4152DCCE23C0089DBE2 /* LaunchScreen.storyboard */,
+				B6D0B1962DEDFC6400CC8EF8 /* Main.storyboard */,
+				B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C147021CF9000F007C117D /* Info.plist */,
+				B6D0B1902DEDFA1600CC8EF8 /* InfoPlist.xcstrings */,
 				1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */,
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
@@ -270,8 +273,8 @@
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				ko,
 				en,
-				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
@@ -297,10 +300,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
+				B6D0B1912DEDFA1600CC8EF8 /* InfoPlist.xcstrings in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
-				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+				B6D0B1972DEDFC6400CC8EF8 /* Main.storyboard in Resources */,
 				B67D40782DD26A43002679B6 /* Configuration.storekit in Resources */,
-				B6C8B4172DCCE23C0089DBE2 /* LaunchScreen.storyboard in Resources */,
+				B6D0B1992DEDFC6800CC8EF8 /* LaunchScreen.storyboard in Resources */,
 				5E66CF64DF7CADE78DF022A6 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -443,31 +447,13 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin PBXVariantGroup section */
-		97C146FA1CF9000F007C117D /* Main.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				97C146FB1CF9000F007C117D /* Base */,
-			);
-			name = Main.storyboard;
-			sourceTree = "<group>";
-		};
-		B6C8B4152DCCE23C0089DBE2 /* LaunchScreen.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				B6C8B4162DCCE23C0089DBE2 /* Base */,
-			);
-			name = LaunchScreen.storyboard;
-			sourceTree = "<group>";
-		};
-/* End PBXVariantGroup section */
-
 /* Begin XCBuildConfiguration section */
 		249021D3217E4FDB00AE95B9 /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -511,6 +497,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 			};
@@ -599,6 +586,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -648,6 +636,7 @@
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -657,6 +646,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -701,6 +691,7 @@
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
