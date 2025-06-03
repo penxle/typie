@@ -30,14 +30,40 @@ platform :ios do
     Dir.chdir("../..") do
       sh "dart run build_runner clean"
       sh "dart run build_runner build --delete-conflicting-outputs"
-      sh "flutter build ipa --build-number=#{target_build_number} --export-options-plist=./ios/ExportOptions.plist"
+      sh "flutter build ipa --build-number=#{target_build_number} --export-options-plist=./ios/ExportOptions.AdHoc.plist"
     end
 
-    dist = firebase_app_distribution(
+    firebase_app_distribution(
       app: "1:378927208010:ios:470c2238efaee1db34b8b3",
       service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-      ipa_path: "../build/ios/ipa/타이피.ipa",
+      ipa_path: "../build/ios/ipa/Typie.ipa",
       groups: "ios",
+    )
+  end
+
+  desc "Build and submit the app for review"
+  lane :submit do
+    latest_release = firebase_app_distribution_get_latest_release(
+      app: "1:378927208010:ios:470c2238efaee1db34b8b3",
+      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+    )
+
+    target_build_number = (latest_release&.dig(:buildVersion)).to_i
+
+    Dir.chdir("../..") do
+      sh "dart run build_runner clean"
+      sh "dart run build_runner build --delete-conflicting-outputs"
+      sh "flutter build ipa --build-number=#{target_build_number} --export-options-plist=./ios/ExportOptions.AppStore.plist"
+    end
+
+    app_store_connect_api_key
+
+    upload_to_app_store(
+      ipa: "../build/ios/ipa/Typie.ipa",
+      force: true,
+      # submit_for_review: true,
+      # automatic_release: true,
+      run_precheck_before_submit: false,
     )
   end
 end

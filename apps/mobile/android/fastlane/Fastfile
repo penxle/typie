@@ -27,4 +27,25 @@ platform :android do
       groups: "android",
     )
   end
+
+  desc "Build and submit the app for review"
+  lane :submit do
+    latest_release = firebase_app_distribution_get_latest_release(
+      app: "1:378927208010:android:43c0f4af9b2ffcf234b8b3",
+      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+    )
+
+    target_build_number = (latest_release&.dig(:buildVersion)).to_i
+
+    Dir.chdir("../..") do
+      sh "dart run build_runner clean"
+      sh "dart run build_runner build --delete-conflicting-outputs"
+      sh "flutter build appbundle --build-number=#{target_build_number}"
+    end
+
+    upload_to_play_store(
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      json_key_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+    )
+  end
 end
