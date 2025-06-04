@@ -3,28 +3,58 @@
     "paragraph": {
       "content": "inline*",
       "group": "block",
-      "attrs": { "textAlign": { "default": "left" }, "lineHeight": { "default": 1.6 }, "letterSpacing": { "default": 0 } },
+      "attrs": {
+        "nodeId": { "default": null },
+        "textAlign": { "default": "left" },
+        "lineHeight": { "default": 1.6 },
+        "letterSpacing": { "default": 0 }
+      },
       "parseDOM": [{ "tag": "p" }]
     },
     "doc": { "content": "body" },
-    "body": { "content": "block+", "attrs": { "paragraphIndent": { "default": 1 }, "blockGap": { "default": 1 } } },
+    "body": {
+      "content": "block+",
+      "attrs": { "nodeId": { "default": null }, "paragraphIndent": { "default": 1 }, "blockGap": { "default": 1 } }
+    },
     "text": { "group": "inline", "inline": true },
-    "bullet_list": { "content": "list_item+", "group": "block list", "parseDOM": [{ "tag": "ul" }] },
-    "hard_break": { "group": "inline", "inline": true, "selectable": false, "linebreakReplacement": true, "parseDOM": [{ "tag": "br" }] },
-    "list_item": { "content": "paragraph{1,2} list*", "defining": true, "parseDOM": [{ "tag": "li" }] },
-    "ordered_list": { "content": "list_item+", "group": "block list", "parseDOM": [{ "tag": "ol" }] },
+    "bullet_list": {
+      "content": "list_item+",
+      "group": "block list",
+      "attrs": { "nodeId": { "default": null } },
+      "parseDOM": [{ "tag": "ul" }]
+    },
+    "hard_break": {
+      "group": "inline",
+      "inline": true,
+      "selectable": false,
+      "linebreakReplacement": true,
+      "attrs": { "nodeId": { "default": null } },
+      "parseDOM": [{ "tag": "br" }]
+    },
+    "list_item": {
+      "content": "paragraph{1,2} list*",
+      "defining": true,
+      "attrs": { "nodeId": { "default": null } },
+      "parseDOM": [{ "tag": "li" }]
+    },
+    "ordered_list": {
+      "content": "list_item+",
+      "group": "block list",
+      "attrs": { "nodeId": { "default": null } },
+      "parseDOM": [{ "tag": "ol" }]
+    },
     "blockquote": {
       "content": "paragraph+",
       "group": "block",
       "defining": true,
-      "attrs": { "type": { "default": "left-line" } },
+      "attrs": { "nodeId": { "default": null }, "type": { "default": "left-line" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=blockquote]" }]
     },
     "callout": {
       "content": "paragraph+",
       "group": "block",
       "defining": true,
-      "attrs": { "type": { "default": "info" } },
+      "attrs": { "nodeId": { "default": null }, "type": { "default": "info" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=callout]" }]
     },
     "code_block": {
@@ -32,13 +62,14 @@
       "marks": "",
       "group": "block",
       "code": true,
-      "attrs": { "language": { "default": "text" } },
+      "attrs": { "nodeId": { "default": null }, "language": { "default": "text" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=code_block]" }, { "tag": "pre" }]
     },
     "embed": {
       "group": "block",
       "draggable": true,
       "attrs": {
+        "nodeId": { "default": null },
         "id": { "default": null },
         "url": { "default": null },
         "title": { "default": null },
@@ -50,19 +81,25 @@
     },
     "file": {
       "group": "block",
-      "attrs": { "id": { "default": null }, "name": { "default": null }, "size": { "default": null }, "url": { "default": null } },
+      "attrs": {
+        "nodeId": { "default": null },
+        "id": { "default": null },
+        "name": { "default": null },
+        "size": { "default": null },
+        "url": { "default": null }
+      },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=file]" }]
     },
     "fold": {
       "content": "block+",
       "group": "block",
       "defining": true,
-      "attrs": { "open": { "default": true }, "title": { "default": "" } },
+      "attrs": { "nodeId": { "default": null }, "open": { "default": true }, "title": { "default": "" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=fold]" }]
     },
     "horizontal_rule": {
       "group": "block",
-      "attrs": { "type": { "default": "light-line" } },
+      "attrs": { "nodeId": { "default": null }, "type": { "default": "light-line" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=horizontal_rule]" }]
     },
     "html_block": {
@@ -76,6 +113,7 @@
       "group": "block",
       "draggable": true,
       "attrs": {
+        "nodeId": { "default": null },
         "id": { "default": null },
         "url": { "default": null },
         "ratio": { "default": null },
@@ -90,17 +128,17 @@
       "content": "table_row+",
       "group": "block",
       "isolating": true,
-      "attrs": { "borderStyle": { "default": "solid" } },
+      "attrs": { "nodeId": { "default": null }, "borderStyle": { "default": "solid" } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=table]" }, { "tag": "table" }]
     },
     "table_cell": {
       "tableRole": "cell",
       "content": "block+",
       "isolating": true,
-      "attrs": { "colspan": { "default": 1 }, "rowspan": { "default": 1 }, "colwidth": { "default": null } },
+      "attrs": { "nodeId": { "default": null }, "colspan": { "default": 1 }, "rowspan": { "default": 1 }, "colwidth": { "default": null } },
       "parseDOM": [{ "tag": "td" }]
     },
-    "table_row": { "tableRole": "row", "content": "table_cell+", "parseDOM": [{ "tag": "tr" }] }
+    "table_row": { "tableRole": "row", "content": "table_cell+", "attrs": { "nodeId": { "default": null } }, "parseDOM": [{ "tag": "tr" }] }
   },
   "marks": {
     "link": { "inclusive": false, "attrs": { "href": { "default": null } }, "parseDOM": [{ "tag": "a[href]" }] },
