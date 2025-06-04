@@ -20,6 +20,7 @@ import 'package:typie/services/blob.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
 import 'package:typie/widgets/svg_image.dart';
+import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/vertical_divider.dart';
 
 class EditorToolbar extends HookWidget {
@@ -49,7 +50,110 @@ class EditorToolbar extends HookWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Textbar(),
+        _SubToolBar(
+          isVisible: selectedTextbarIdx != -1,
+          isAlternate: selectedTextbarIdx > 0,
+          alternate: _AlternateTextbar(
+            children: [
+              _SelectTextbar(
+                name: 'textColor',
+                activeValue:
+                    proseMirrorState?.getMarkAttributes('text_style')?['textColor'] as String? ??
+                    editorDefaultValues['textColor'],
+                builder: (context, e, isActive) {
+                  return _ColorToolbarButton(
+                    hex: e['hex'] as String,
+                    isActive: isActive,
+                    onTap: () async {
+                      await scope.command('text_style', attrs: {'textColor': e['value']});
+                    },
+                  );
+                },
+              ),
+              _SelectTextbar(
+                name: 'fontFamily',
+                activeValue:
+                    proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String? ??
+                    editorDefaultValues['fontFamily'],
+                builder: (context, e, isActive) {
+                  return _TextToolbarButton(
+                    text: e['label'] as String,
+                    isActive: isActive,
+                    onTap: () async {
+                      await scope.command('text_style', attrs: {'fontFamily': e['value']});
+                    },
+                  );
+                },
+              ),
+              _SelectTextbar(
+                name: 'fontSize',
+                activeValue:
+                    proseMirrorState?.getMarkAttributes('text_style')?['fontSize'] as num? ??
+                    editorDefaultValues['fontSize'],
+                builder: (context, e, isActive) {
+                  return _TextToolbarButton(
+                    text: e['label'] as String,
+                    isActive: isActive,
+                    onTap: () async {
+                      await scope.command('text_style', attrs: {'fontSize': e['value']});
+                    },
+                  );
+                },
+              ),
+              _SelectTextbar(
+                name: 'textAlign',
+                activeValue:
+                    proseMirrorState?.getNodeAttributes('paragraph')?['textAlign'] as String? ??
+                    editorDefaultValues['textAlign'],
+                builder: (context, e, isActive) {
+                  return _TextToolbarButton(
+                    text: e['label'] as String,
+                    isActive: isActive,
+                    onTap: () async {
+                      await scope.command('paragraph', attrs: {'textAlign': e['value']});
+                    },
+                  );
+                },
+              ),
+              _SelectTextbar(
+                name: 'lineHeight',
+                activeValue:
+                    proseMirrorState?.getNodeAttributes('paragraph')?['lineHeight'] as num? ??
+                    editorDefaultValues['lineHeight'],
+                builder: (context, e, isActive) {
+                  return _TextToolbarButton(
+                    text: e['label'] as String,
+                    isActive: isActive,
+                    onTap: () async {
+                      await scope.command('paragraph', attrs: {'lineHeight': e['value']});
+                    },
+                  );
+                },
+              ),
+              _SelectTextbar(
+                name: 'letterSpacing',
+                activeValue:
+                    proseMirrorState?.getNodeAttributes('paragraph')?['letterSpacing'] as num? ??
+                    editorDefaultValues['letterSpacing'],
+                builder: (context, e, isActive) {
+                  return _TextToolbarButton(
+                    text: e['label'] as String,
+                    isActive: isActive,
+                    onTap: () async {
+                      await scope.command('paragraph', attrs: {'letterSpacing': e['value']});
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+          child: const _DefaultTextbar(),
+        ),
+        _SubToolBar(
+          isVisible:
+              proseMirrorState?.currentNode?.type == 'embed' && proseMirrorState?.currentNode?.attrs?['id'] == null,
+          child: const _DefaultEmbedbar(),
+        ),
         Container(
           height: 48,
           decoration: const BoxDecoration(
@@ -64,6 +168,7 @@ class EditorToolbar extends HookWidget {
                 child: switch (proseMirrorState?.currentNode?.type) {
                   'file' => const _FileToolbar(),
                   'image' => const _ImageToolbar(),
+                  'embed' => const _EmbedToolbar(),
                   _ => const _DefaultToolbar(),
                 },
               ),
@@ -466,8 +571,22 @@ class _FileToolbar extends HookWidget {
   }
 }
 
-class _Textbar extends HookWidget {
-  const _Textbar();
+class _EmbedToolbar extends StatelessWidget {
+  const _EmbedToolbar();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _NodeToolbar(label: '임베드', children: []);
+  }
+}
+
+class _SubToolBar extends HookWidget {
+  const _SubToolBar({required this.child, required this.isVisible, this.alternate, this.isAlternate = false});
+
+  final Widget child;
+  final bool isVisible;
+  final Widget? alternate;
+  final bool isAlternate;
 
   @override
   Widget build(BuildContext context) {
@@ -479,10 +598,6 @@ class _Textbar extends HookWidget {
     final tweenedOpacity = useMemoized(() => Tween<double>(begin: 0, end: 1).animate(curve), [curve]);
     final tweenedSizeFactor = useMemoized(() => Tween<double>(begin: 0, end: 1).animate(curve), [curve]);
 
-    final scope = EditorStateScope.of(context);
-    final selectedTextbarIdx = useValueListenable(scope.selectedTextbarIdx);
-
-    final isVisible = selectedTextbarIdx != -1;
     final isDismissed = useState(controller.isDismissed);
 
     useAsyncEffect(() async {
@@ -521,14 +636,10 @@ class _Textbar extends HookWidget {
                 [controller],
               );
 
-              final proseMirrorState = useValueListenable(scope.proseMirrorState);
-
               final defaultOpacityTween = Tween<double>(begin: 1, end: 0);
               final alternateOpacityTween = Tween<double>(begin: 0, end: 1);
               final defaultPositionLeftTween = Tween<double>(begin: 0, end: -10);
               final alternatePositionLeftTween = Tween<double>(begin: 10, end: 0);
-
-              final isAlternate = selectedTextbarIdx > 0;
 
               useEffect(() {
                 if (isAlternate) {
@@ -548,108 +659,12 @@ class _Textbar extends HookWidget {
                     children: [
                       Positioned.fill(
                         left: defaultPositionLeftTween.evaluate(curve),
-                        child: Opacity(opacity: defaultOpacityTween.evaluate(curve), child: const _DefaultTextbar()),
+                        child: Opacity(opacity: defaultOpacityTween.evaluate(curve), child: this.child),
                       ),
                       if (!controller.isDismissed)
                         Positioned.fill(
                           left: alternatePositionLeftTween.evaluate(curve),
-                          child: Opacity(
-                            opacity: alternateOpacityTween.evaluate(curve),
-                            child: _AlternateTextbar(
-                              children: [
-                                _SelectTextbar(
-                                  name: 'textColor',
-                                  activeValue:
-                                      proseMirrorState?.getMarkAttributes('text_style')?['textColor'] as String? ??
-                                      editorDefaultValues['textColor'],
-                                  builder: (context, e, isActive) {
-                                    return _ColorToolbarButton(
-                                      hex: e['hex'] as String,
-                                      isActive: isActive,
-                                      onTap: () async {
-                                        await scope.command('text_style', attrs: {'textColor': e['value']});
-                                      },
-                                    );
-                                  },
-                                ),
-                                _SelectTextbar(
-                                  name: 'fontFamily',
-                                  activeValue:
-                                      proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String? ??
-                                      editorDefaultValues['fontFamily'],
-                                  builder: (context, e, isActive) {
-                                    return _TextToolbarButton(
-                                      text: e['label'] as String,
-                                      isActive: isActive,
-                                      onTap: () async {
-                                        await scope.command('text_style', attrs: {'fontFamily': e['value']});
-                                      },
-                                    );
-                                  },
-                                ),
-                                _SelectTextbar(
-                                  name: 'fontSize',
-                                  activeValue:
-                                      proseMirrorState?.getMarkAttributes('text_style')?['fontSize'] as num? ??
-                                      editorDefaultValues['fontSize'],
-                                  builder: (context, e, isActive) {
-                                    return _TextToolbarButton(
-                                      text: e['label'] as String,
-                                      isActive: isActive,
-                                      onTap: () async {
-                                        await scope.command('text_style', attrs: {'fontSize': e['value']});
-                                      },
-                                    );
-                                  },
-                                ),
-                                _SelectTextbar(
-                                  name: 'textAlign',
-                                  activeValue:
-                                      proseMirrorState?.getNodeAttributes('paragraph')?['textAlign'] as String? ??
-                                      editorDefaultValues['textAlign'],
-                                  builder: (context, e, isActive) {
-                                    return _TextToolbarButton(
-                                      text: e['label'] as String,
-                                      isActive: isActive,
-                                      onTap: () async {
-                                        await scope.command('paragraph', attrs: {'textAlign': e['value']});
-                                      },
-                                    );
-                                  },
-                                ),
-                                _SelectTextbar(
-                                  name: 'lineHeight',
-                                  activeValue:
-                                      proseMirrorState?.getNodeAttributes('paragraph')?['lineHeight'] as num? ??
-                                      editorDefaultValues['lineHeight'],
-                                  builder: (context, e, isActive) {
-                                    return _TextToolbarButton(
-                                      text: e['label'] as String,
-                                      isActive: isActive,
-                                      onTap: () async {
-                                        await scope.command('paragraph', attrs: {'lineHeight': e['value']});
-                                      },
-                                    );
-                                  },
-                                ),
-                                _SelectTextbar(
-                                  name: 'letterSpacing',
-                                  activeValue:
-                                      proseMirrorState?.getNodeAttributes('paragraph')?['letterSpacing'] as num? ??
-                                      editorDefaultValues['letterSpacing'],
-                                  builder: (context, e, isActive) {
-                                    return _TextToolbarButton(
-                                      text: e['label'] as String,
-                                      isActive: isActive,
-                                      onTap: () async {
-                                        await scope.command('paragraph', attrs: {'letterSpacing': e['value']});
-                                      },
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
+                          child: Opacity(opacity: alternateOpacityTween.evaluate(curve), child: alternate),
                         ),
                     ],
                   );
@@ -658,6 +673,83 @@ class _Textbar extends HookWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DefaultEmbedbar extends HookWidget {
+  const _DefaultEmbedbar();
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = EditorStateScope.of(context);
+    final proseMirrorState = useValueListenable(scope.proseMirrorState);
+    final client = useService<GraphQLClient>();
+
+    final embedUrl = useState('');
+
+    return Padding(
+      padding: const Pad(horizontal: 20),
+      child: Row(
+        spacing: 8,
+        children: [
+          Expanded(
+            child: TextField(
+              autocorrect: false,
+              autofocus: true,
+              decoration: const InputDecoration.collapsed(
+                hintText: 'https://...',
+                hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
+              ),
+              onChanged: (value) {
+                embedUrl.value = value;
+              },
+            ),
+          ),
+          Tappable(
+            onTap: () async {
+              final nodeId = proseMirrorState?.currentNode!.attrs?['nodeId'] as String?;
+              if (nodeId == null) {
+                return;
+              }
+
+              final url = RegExp(r'^[^:]+:\/\/').hasMatch(embedUrl.value)
+                  ? embedUrl.value
+                  : 'https://${embedUrl.value}';
+
+              await scope.webViewController.value?.emitEvent('nodeview', {
+                'nodeId': nodeId,
+                'name': 'inflight',
+                'detail': {'url': url},
+              });
+
+              try {
+                final result = await client.request(
+                  GEditorScreen_UnfurlEmbed_MutationReq((b) => b..vars.input.url = url),
+                );
+
+                await scope.webViewController.value?.emitEvent('nodeview', {
+                  'nodeId': nodeId,
+                  'name': 'success',
+                  'detail': {
+                    'attrs': {
+                      'id': result.unfurlEmbed.id,
+                      'url': result.unfurlEmbed.url,
+                      'title': result.unfurlEmbed.title,
+                      'description': result.unfurlEmbed.description,
+                      'thumbnailUrl': result.unfurlEmbed.thumbnailUrl,
+                      'html': result.unfurlEmbed.html,
+                    },
+                  },
+                });
+              } catch (_) {
+                await scope.webViewController.value?.emitEvent('nodeview', {'nodeId': nodeId, 'name': 'error'});
+              }
+            },
+            child: const Text('확인'),
+          ),
+        ],
       ),
     );
   }

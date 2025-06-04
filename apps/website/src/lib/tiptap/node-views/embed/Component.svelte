@@ -33,7 +33,7 @@
     }
   `);
 
-  let url = $state('');
+  let inflightUrl = $state<string>();
   let inflight = $state(false);
   let pickerOpened = $state(false);
   let inputEl = $state<HTMLInputElement>();
@@ -60,19 +60,30 @@
   });
 
   const handleInsert = async () => {
-    if (!url) {
+    if (!inflightUrl) {
       return;
     }
 
     inflight = true;
     try {
       const attrs = await unfurlEmbed({
-        url: /^[^:]+:\/\//.test(url) ? url : `https://${url}`,
+        url: /^[^:]+:\/\//.test(inflightUrl) ? inflightUrl : `https://${inflightUrl}`,
       });
 
       updateAttributes(attrs);
     } finally {
       inflight = false;
+    }
+  };
+
+  export const handle = (event: CustomEvent) => {
+    if (event.type === 'inflight') {
+      inflightUrl = event.detail.url;
+    } else if (event.type === 'success') {
+      inflightUrl = undefined;
+      updateAttributes(event.detail.attrs);
+    } else if (event.type === 'error') {
+      inflightUrl = undefined;
     }
   };
 
@@ -136,7 +147,7 @@
         </svelte:element>
       {/if}
 
-      {#if editor?.current.isEditable}
+      {#if editor?.current.isEditable && !window.__webview__}
         <button
           class={css({
             position: 'absolute',
@@ -186,14 +197,14 @@
           {:else}
             <Icon icon={FileUpIcon} size={20} />
             {#if editor?.current.isEditable}
-              링크 임베드
+              링크 임베드(Youtube, Google Drive, 일반 링크 등)
             {:else}
               링크 임베드 없음
             {/if}
           {/if}
         </div>
 
-        {#if editor?.current.isEditable}
+        {#if editor?.current.isEditable && !window.__webview__}
           <Menu>
             {#snippet button({ open })}
               <div
@@ -226,7 +237,7 @@
   </div>
 </NodeView>
 
-{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable}
+{#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable && !window.__webview__}
   <form
     class={center({
       flexDirection: 'column',
@@ -251,7 +262,14 @@
       다양한 콘텐츠를 임베드할 수 있어요
     </span>
 
-    <TextInput name="url" style={css.raw({ width: 'full' })} placeholder="https://..." size="sm" bind:element={inputEl} bind:value={url} />
+    <TextInput
+      name="url"
+      style={css.raw({ width: 'full' })}
+      placeholder="https://..."
+      size="sm"
+      bind:element={inputEl}
+      bind:value={inflightUrl}
+    />
 
     <Button style={css.raw({ width: 'full' })} size="sm" type="submit">확인</Button>
   </form>
