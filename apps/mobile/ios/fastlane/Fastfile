@@ -5,65 +5,52 @@ platform :ios do
   lane :certificates do
     app_store_connect_api_key
 
-    firebase_app_distribution_get_udids(
-      project_number: "378927208010",
-      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-      output_file: "udids.txt",
-    )
-
-    register_devices(devices_file: "./udids.txt")
-    
     match(type: "development")
-    match(type: "adhoc", force_for_new_devices: true)
     match(type: "appstore")
   end
 
-  desc "Build and distribute the app for beta"
-  lane :beta do
-    latest_release = firebase_app_distribution_get_latest_release(
-      app: "1:378927208010:ios:470c2238efaee1db34b8b3",
-      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-    )
-
-    target_build_number = (latest_release&.dig(:buildVersion)).to_i + 1
+  desc "Build and distribute the app for internal testing"
+  lane :internal do
+    app_store_connect_api_key
 
     Dir.chdir("../..") do
       sh "dart run build_runner clean"
       sh "dart run build_runner build --delete-conflicting-outputs"
-      sh "flutter build ipa --build-number=#{target_build_number} --export-options-plist=./ios/ExportOptions.AdHoc.plist"
+      sh "flutter build ipa --build-number=#{latest_testflight_build_number + 1} --export-options-plist=./ios/ExportOptions.AppStore.plist"
     end
 
-    firebase_app_distribution(
-      app: "1:378927208010:ios:470c2238efaee1db34b8b3",
-      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-      ipa_path: "../build/ios/ipa/Typie.ipa",
-      groups: "ios",
+    upload_to_testflight(
+      ipa: "../build/ios/ipa/Typie.ipa",
+      notify_external_testers: false,
+      groups: "Team",
     )
   end
 
-  desc "Build and submit the app for review"
-  lane :submit do
-    latest_release = firebase_app_distribution_get_latest_release(
-      app: "1:378927208010:ios:470c2238efaee1db34b8b3",
-      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+  desc "Distribute the latest build for external testing"
+  lane :external do
+    app_store_connect_api_key
+
+    upload_to_testflight(
+      build_number: latest_testflight_build_number,
+      app_platform: "ios",
+      distribute_only: true,
+      distribute_external: true,
+      notify_external_testers: true,
+      groups: "Community",
     )
+  end
 
-    target_build_number = (latest_release&.dig(:buildVersion)).to_i
-
-    Dir.chdir("../..") do
-      sh "dart run build_runner clean"
-      sh "dart run build_runner build --delete-conflicting-outputs"
-      sh "flutter build ipa --build-number=#{target_build_number} --export-options-plist=./ios/ExportOptions.AppStore.plist"
-    end
-
+  desc "Submit the latest build for review"
+  lane :submit do
     app_store_connect_api_key
 
     upload_to_app_store(
-      ipa: "../build/ios/ipa/Typie.ipa",
-      force: true,
-      # submit_for_review: true,
-      # automatic_release: true,
+      build_number: latest_testflight_build_number.to_s,
+      skip_binary_upload: true,
+      submit_for_review: true,
+      # automatic_release: false,
       run_precheck_before_submit: false,
+      force: true,
     )
   end
 end

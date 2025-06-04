@@ -6,46 +6,35 @@ platform :android do
     sh "echo $KEYSTORE | base64 -d > ../keystore-release.jks"
   end
 
-  lane :beta do
-    latest_release = firebase_app_distribution_get_latest_release(
-      app: "1:378927208010:android:43c0f4af9b2ffcf234b8b3",
-      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-    )
-
-    target_build_number = (latest_release&.dig(:buildVersion)).to_i + 1
+  desc "Build and distribute the app for internal testing"
+  lane :internal do
+    latest_build_number = google_play_track_version_codes(track: "internal")[0]
 
     Dir.chdir("../..") do
       sh "dart run build_runner clean"
       sh "dart run build_runner build --delete-conflicting-outputs"
-      sh "flutter build apk --build-number=#{target_build_number}"
-    end
-
-    firebase_app_distribution(
-      app: "1:378927208010:android:43c0f4af9b2ffcf234b8b3",
-      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-      android_artifact_path: "../build/app/outputs/apk/release/app-release.apk",
-      groups: "android",
-    )
-  end
-
-  desc "Build and submit the app for review"
-  lane :submit do
-    latest_release = firebase_app_distribution_get_latest_release(
-      app: "1:378927208010:android:43c0f4af9b2ffcf234b8b3",
-      service_credentials_json_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
-    )
-
-    target_build_number = (latest_release&.dig(:buildVersion)).to_i
-
-    Dir.chdir("../..") do
-      sh "dart run build_runner clean"
-      sh "dart run build_runner build --delete-conflicting-outputs"
-      sh "flutter build appbundle --build-number=#{target_build_number}"
+      sh "flutter build appbundle --build-number=#{latest_build_number + 1}"
     end
 
     upload_to_play_store(
       aab: "../build/app/outputs/bundle/release/app-release.aab",
-      json_key_data: ENV["GOOGLE_SERVICE_ACCOUNT"],
+      track: "internal",
+    )
+  end
+
+  desc "Distribute the latest build for external testing"
+  lane :external do
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "alpha",
+    )
+  end
+
+  desc "Submit the latest build for review"
+  lane :submit do
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "production",
     )
   end
 end
