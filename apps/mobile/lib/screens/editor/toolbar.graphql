@@ -16,3 +16,14 @@ mutation EditorScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInpu
     size
   }
 }
+
+mutation EditorScreen_UnfurlEmbed_Mutation($input: UnfurlEmbedInput!) {
+  unfurlEmbed(input: $input) {
+    id
+    url
+    title
+    description
+    thumbnailUrl
+    html
+  }
+}
