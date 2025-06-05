@@ -1,6 +1,8 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
+  import { PlanId } from '@/const';
+  import { PlanInterval } from '@/enums';
   import { TypieError } from '@/errors';
   import { cardSchema, redeemCodeSchema } from '@/validation';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -12,7 +14,6 @@
   import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import type { UserPlanBillingCycle } from '@/enums';
   import type { DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user } from '$graphql';
 
   type Props = {
@@ -29,7 +30,7 @@
         id
         credit
 
-        plan {
+        subscription {
           id
         }
       }
@@ -46,11 +47,9 @@
     }
   `);
 
-  const updatePaymentBillingKey = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdatePaymentBillingKey_Mutation(
-      $input: UpdatePaymentBillingKeyInput!
-    ) {
-      updatePaymentBillingKey(input: $input) {
+  const updateBillingKey = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdateBillingKey_Mutation($input: UpdateBillingKeyInput!) {
+      updateBillingKey(input: $input) {
         id
         name
         createdAt
@@ -67,23 +66,17 @@
     }
   `);
 
-  const enrollPlan = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_EnrollPlan_Mutation($input: EnrollPlanInput!) {
-      enrollPlan(input: $input) {
+  const subscribePlanWithBillingKey = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_SubscribePlanWithBillingKey_Mutation(
+      $input: SubscribePlanWithBillingKeyInput!
+    ) {
+      subscribePlanWithBillingKey(input: $input) {
         id
-        fee
-        createdAt
-        billingCycle
-
-        plan {
-          id
-          name
-        }
       }
     }
   `);
 
-  let billingCycle = $state<UserPlanBillingCycle>('MONTHLY');
+  let interval = $state<PlanInterval>(PlanInterval.MONTHLY);
 
   const redeemCodeForm = createForm({
     schema: z.object({
@@ -106,7 +99,7 @@
       passwordTwoDigits: cardSchema.passwordTwoDigits,
     }),
     onSubmit: async (data) => {
-      await updatePaymentBillingKey({
+      await updateBillingKey({
         birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
         cardNumber: data.cardNumber,
         expiryDate: data.expiryDate,
@@ -114,7 +107,7 @@
       });
       mixpanel.track('update_payment_billing_key');
 
-      if ($user.plan) {
+      if ($user.subscription) {
         open = false;
       } else {
         if (redeemCode) {
@@ -122,21 +115,27 @@
           mixpanel.track('redeem_credit_code', { via: 'update-payment-method-modal' });
         }
 
+        const handleSubscription = async () => {
+          if (interval === PlanInterval.MONTHLY) {
+            await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1MONTH });
+            mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1MONTH });
+          } else if (interval === PlanInterval.YEARLY) {
+            await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1YEAR });
+            mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1YEAR });
+          }
+
+          open = false;
+        };
+
         if (!redeemCode && (redeemCodeForm.errors.code || (redeemCodeForm.fields.code?.length ?? 0) > 0)) {
           Dialog.confirm({
             title: '할인 코드 사용',
             message: '할인 코드가 적용되지 않았어요. 그래도 결제를 할까요?',
             actionLabel: '결제',
-            actionHandler: async () => {
-              await enrollPlan({ billingCycle, planId: 'PL0PLUS' });
-              mixpanel.track('enroll_plan', { billingCycle, planId: 'PL0PLUS' });
-              open = false;
-            },
+            actionHandler: handleSubscription,
           });
         } else {
-          await enrollPlan({ billingCycle, planId: 'PL0PLUS' });
-          mixpanel.track('enroll_plan', { billingCycle, planId: 'PL0PLUS' });
-          open = false;
+          await handleSubscription();
         }
       }
     },
@@ -164,7 +163,7 @@
   const allChecked = $derived(agreementChecks.every(Boolean));
   let redeemInputOpen = $state(false);
   let redeemCode = $state<{ id: string; amount: number; code: string } | null>(null);
-  let planFee = $derived(billingCycle === 'MONTHLY' ? 4900 : 49_000);
+  let planFee = $derived(interval === 'MONTHLY' ? 4900 : 49_000);
   let paymentAmount = $derived(
     planFee -
       ($user.credit >= planFee ? $user.credit - ($user.credit - planFee) : $user.credit) -
@@ -199,18 +198,18 @@
 <Modal style={css.raw({ gap: '24px', padding: '20px', maxWidth: '500px' })} bind:open>
   <p class={css({ fontWeight: 'semibold' })}>카드 등록 및 결제</p>
 
-  {#if !$user.plan}
+  {#if !$user.subscription}
     <div class={css({ position: 'relative' })}>
       <SegmentButtons
         items={[
-          { label: '월 결제', value: 'MONTHLY' },
-          { label: '연 결제', value: 'YEARLY' },
+          { label: '월 결제', value: PlanInterval.MONTHLY },
+          { label: '연 결제', value: PlanInterval.YEARLY },
         ]}
         onselect={(value) => {
-          billingCycle = value as UserPlanBillingCycle;
+          interval = value;
         }}
         size="sm"
-        value={billingCycle}
+        value={interval}
       />
 
       <div

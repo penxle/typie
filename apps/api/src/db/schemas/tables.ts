@@ -168,29 +168,6 @@ export const Notifications = pgTable('notifications', {
     .default(sql`now()`),
 });
 
-export const PaymentBillingKeys = pgTable(
-  'payment_billing_keys',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.PAYMENT_BILLING_KEYS)),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    name: text('name').notNull(),
-    billingKey: text('billing_key').notNull(),
-    state: E._PaymentBillingKeyState('state').notNull().default('ACTIVE'),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [
-    uniqueIndex()
-      .on(t.userId)
-      .where(eq(t.state, sql`'ACTIVE'`)),
-  ],
-);
-
 export const PaymentInvoices = pgTable('payment_invoices', {
   id: text('id')
     .primaryKey()
@@ -198,9 +175,12 @@ export const PaymentInvoices = pgTable('payment_invoices', {
   userId: text('user_id')
     .notNull()
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  state: E._PaymentInvoiceState('state').notNull(),
+  subscriptionId: text('subscription_id')
+    .notNull()
+    .references(() => Subscriptions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   amount: integer('amount').notNull(),
-  billingAt: datetime('billing_at').notNull(),
+  state: E._PaymentInvoiceState('state').notNull(),
+  dueAt: datetime('due_at').notNull(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -213,11 +193,10 @@ export const PaymentRecords = pgTable('payment_records', {
   invoiceId: text('invoice_id')
     .notNull()
     .references(() => PaymentInvoices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  methodType: E._PaymentMethodType('method_type').notNull(),
-  methodId: text('method_id').notNull(),
-  state: E._PaymentRecordState('state').notNull(),
-  amount: integer('amount').notNull(),
-  receiptUrl: text('receipt_url'),
+  outcome: E._PaymentOutcome('outcome').notNull(),
+  billingAmount: integer('billing_amount').notNull(),
+  creditAmount: integer('credit_amount').notNull(),
+  data: jsonb('data').notNull(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -228,9 +207,10 @@ export const Plans = pgTable('plans', {
     .primaryKey()
     .$defaultFn(() => createDbId(TableCode.PLANS)),
   name: text('name').notNull(),
-  rules: jsonb('rules').notNull().$type<Partial<PlanRules>>(),
+  rule: jsonb('rule').notNull().$type<Partial<PlanRules>>(),
   fee: integer('fee').notNull(),
-  availability: E._PlanAvailability('availability').notNull().default('PUBLIC'),
+  interval: E._PlanInterval('interval').notNull(),
+  availability: E._PlanAvailability('availability').notNull(),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -398,6 +378,24 @@ export const Sites = pgTable(
   ],
 );
 
+export const Subscriptions = pgTable('subscriptions', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.SUBSCRIPTIONS)),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  planId: text('plan_id')
+    .notNull()
+    .references(() => Plans.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  startsAt: datetime('starts_at').notNull(),
+  expiresAt: datetime('expires_at').notNull(),
+  state: E._SubscriptionState('state').notNull().default('ACTIVE'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Users = pgTable(
   'users',
   {
@@ -421,6 +419,39 @@ export const Users = pgTable(
       .on(t.email)
       .where(eq(t.state, sql`'ACTIVE'`)),
   ],
+);
+
+export const UserBillingKeys = pgTable('user_billing_keys', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_BILLING_KEYS)),
+  userId: text('user_id')
+    .unique()
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  billingKey: text('billing_key').unique().notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const UserInAppPurchases = pgTable(
+  'user_in_app_purchases',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.USER_IN_APP_PURCHASES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    store: E._InAppPurchaseStore('store').notNull(),
+    identifier: text('identifier').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.store, t.identifier)],
 );
 
 export const UserMarketingConsents = pgTable('user_marketing_consents', {
@@ -467,26 +498,6 @@ export const UserPersonalIdentities = pgTable('user_personal_identities', {
     .notNull()
     .default(sql`now()`),
   expiresAt: datetime('expires_at').notNull(),
-});
-
-export const UserPlans = pgTable('user_plans', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.USER_PLANS)),
-  userId: text('user_id')
-    .unique()
-    .notNull()
-    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  planId: text('plan_id')
-    .notNull()
-    .references(() => Plans.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  fee: integer('fee').notNull(),
-  billingCycle: E._UserPlanBillingCycle('billing_cycle').notNull(),
-  state: E._UserPlanState('state').notNull().default('ACTIVE'),
-  expiresAt: datetime('expires_at').notNull(),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
 });
 
 export const UserPushNotificationTokens = pgTable('user_push_notification_tokens', {

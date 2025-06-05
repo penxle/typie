@@ -70,7 +70,7 @@ export const deleteBillingKey = async (params: DeleteBillingKeyParams): Promise<
   }
 };
 
-type MakePaymentParams = {
+type PayWithBillingKeyParams = {
   paymentId: string;
   billingKey: string;
   customerName: string;
@@ -78,8 +78,8 @@ type MakePaymentParams = {
   orderName: string;
   amount: number;
 };
-type MakePaymentResult = PortOneResult<{ approvalNumber: string; receiptUrl: string }>;
-export const makePayment = async (params: MakePaymentParams): Promise<MakePaymentResult> => {
+type PayWithBillingKeyResult = PortOneResult<{ approvalNumber: string; receiptUrl: string }>;
+export const payWithBillingKey = async (params: PayWithBillingKeyParams): Promise<PayWithBillingKeyResult> => {
   try {
     await client.payment.payWithBillingKey({
       paymentId: params.paymentId,

@@ -1,9 +1,23 @@
 import { CreateNotificationJob } from './notification';
-import { PaymentCron } from './payment';
 import { PostSyncCollectJob } from './post';
+import {
+  SubscriptionRenewalCancelJob,
+  SubscriptionRenewalCron,
+  SubscriptionRenewalInitialJob,
+  SubscriptionRenewalPlanChangeJob,
+  SubscriptionRenewalRetryJob,
+} from './subscription';
 
-export const jobs = [PostSyncCollectJob, CreateNotificationJob];
-export const crons = [PaymentCron];
+export const jobs = [
+  PostSyncCollectJob,
+  CreateNotificationJob,
+  SubscriptionRenewalInitialJob,
+  SubscriptionRenewalRetryJob,
+  SubscriptionRenewalPlanChangeJob,
+  SubscriptionRenewalCancelJob,
+];
+
+export const crons = [SubscriptionRenewalCron];
 
 export type Jobs = typeof jobs;
 export type JobName = Jobs[number]['name'];

@@ -35,7 +35,7 @@
       fragment DashboardLayout_PreferenceModal_user on User {
         id
 
-        plan {
+        subscription {
           id
         }
 
@@ -54,7 +54,7 @@
       icon: UserIcon,
       component: AccountTab,
     },
-    ...($user.plan
+    ...($user.subscription
       ? [
           {
             path: '/preference/site',

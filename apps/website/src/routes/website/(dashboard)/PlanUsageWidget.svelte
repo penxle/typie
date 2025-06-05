@@ -1,5 +1,6 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
+  import { defaultPlanRules } from '@/const';
   import { pushState } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { getAppContext } from '$lib/context';
@@ -21,13 +22,17 @@
       fragment DashboardLayout_PlanUsageWidget_user on User {
         id
 
-        planRule {
-          maxTotalCharacterCount
-          maxTotalBlobSize
-        }
-
-        plan {
+        subscription {
           id
+
+          plan {
+            id
+
+            rule {
+              maxTotalCharacterCount
+              maxTotalBlobSize
+            }
+          }
         }
       }
     `),
@@ -49,20 +54,22 @@
 
   const app = getAppContext();
 
+  const planRule = $derived($user.subscription?.plan?.rule ?? defaultPlanRules);
+
   const totalCharacterCountProgress = $derived.by(() => {
-    if ($user.planRule.maxTotalCharacterCount === -1) {
+    if (planRule.maxTotalCharacterCount === -1) {
       return -1;
     }
 
-    return Math.min(1, $site.usage.totalCharacterCount / $user.planRule.maxTotalCharacterCount);
+    return Math.min(1, $site.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
   });
 
   const totalBlobSizeProgress = $derived.by(() => {
-    if ($user.planRule.maxTotalBlobSize === -1) {
+    if (planRule.maxTotalBlobSize === -1) {
       return -1;
     }
 
-    return Math.min(1, $site.usage.totalBlobSize / $user.planRule.maxTotalBlobSize);
+    return Math.min(1, $site.usage.totalBlobSize / planRule.maxTotalBlobSize);
   });
 
   $effect(() => {
@@ -101,7 +108,7 @@
         <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500' })}>글자 수</div>
 
         <div class={css({ fontSize: '12px', color: 'gray.500' })}>
-          {comma($site.usage.totalCharacterCount)}자 / {comma($user.planRule.maxTotalCharacterCount)}자
+          {comma($site.usage.totalCharacterCount)}자 / {comma(planRule.maxTotalCharacterCount)}자
         </div>
       </div>
 
@@ -130,7 +137,7 @@
         <div class={css({ fontSize: '12px', color: 'gray.700' })}>파일 업로드</div>
 
         <div class={css({ fontSize: '12px', color: 'gray.500' })}>
-          {formatBytes($site.usage.totalBlobSize)} / {formatBytes($user.planRule.maxTotalBlobSize)}
+          {formatBytes($site.usage.totalBlobSize)} / {formatBytes(planRule.maxTotalBlobSize)}
         </div>
       </div>
 

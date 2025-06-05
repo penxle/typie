@@ -1,4 +1,4 @@
-import { AppStoreServerAPIClient, Environment, SignedDataVerifier } from '@apple/app-store-server-library';
+import { AppStoreServerAPIClient, Environment, SignedDataVerifier, Status } from '@apple/app-store-server-library';
 import ky from 'ky';
 import { env } from '@/env';
 
@@ -32,14 +32,14 @@ const verifiers = {
   sandbox: new SignedDataVerifier(certificates, true, Environment.SANDBOX, env.APPLE_APP_BUNDLE_ID, env.APPLE_APP_APPLE_ID),
 };
 
-type GetTransactionParams = { environment: 'production' | 'sandbox'; transactionId: string };
-export const getTransaction = async ({ environment, transactionId }: GetTransactionParams) => {
+type GetSubscriptionParams = { environment: 'production' | 'sandbox'; transactionId: string };
+export const getSubscription = async ({ environment, transactionId }: GetSubscriptionParams) => {
   const client = clients[environment];
   const verifier = verifiers[environment];
 
-  const transactionInfo = await client.getTransactionInfo(transactionId);
+  const subscription = await client.getAllSubscriptionStatuses(transactionId, [Status.ACTIVE]);
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const transaction = await verifier.verifyAndDecodeTransaction(transactionInfo.signedTransactionInfo!);
+  const transaction = await verifier.verifyAndDecodeTransaction(subscription.data![0].lastTransactions![0].signedTransactionInfo!);
 
   return transaction;
 };
@@ -50,5 +50,15 @@ export const decodeNotification = async ({ environment, signedPayload }: DecodeN
 
   const notification = await verifier.verifyAndDecodeNotification(signedPayload);
 
-  return notification;
+  return {
+    ...notification,
+    data: {
+      ...notification.data,
+      transaction: notification.data?.signedTransactionInfo
+        ? await verifier.verifyAndDecodeTransaction(notification.data.signedTransactionInfo)
+        : undefined,
+      signedRenewalInfo: undefined,
+      signedTransactionInfo: undefined,
+    },
+  };
 };

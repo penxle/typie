@@ -189,7 +189,7 @@ export const getReferencedFragments = (selections: Selection[], fragmentMap: Map
     if (selection.kind === 'FragmentSpread') {
       const fragment = fragmentMap.get(selection.name);
       if (!fragment) {
-        throw new Error('Fragment not found');
+        throw new Error(`Fragment not found: ${selection.name}`);
       }
 
       fragments.push(fragment, ...getReferencedFragments(fragment.selections, fragmentMap));
