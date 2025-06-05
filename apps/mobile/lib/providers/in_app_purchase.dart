@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
@@ -32,6 +33,12 @@ class InAppPurchaseProvider extends HookWidget {
                         : purchaseDetails.verificationData.serverVerificationData,
                 ),
               );
+
+              if (context.mounted) {
+                await context.showModal(
+                  child: const AlertModal(title: '구독이 완료되었어요', message: '타이피의 모든 기능을 이용해보세요!'),
+                );
+              }
             }
           } catch (err) {
             log.e('InAppPurchaseProvider', error: err);
