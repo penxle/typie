@@ -35,6 +35,7 @@
       editorProps: {
         attributes: {
           class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style),
+          autocorrect: 'off',
           autocapitalize: 'off',
           spellcheck: 'false',
         },
