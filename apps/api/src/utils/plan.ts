@@ -15,7 +15,10 @@ const getPlanRuleValue = async <T extends keyof PlanRules>({ userId, rule }: Get
     .from(Plans)
     .innerJoin(Subscriptions, eq(Plans.id, Subscriptions.planId))
     .where(
-      and(eq(Subscriptions.userId, userId), inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD])),
+      and(
+        eq(Subscriptions.userId, userId),
+        inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
+      ),
     )
     .then(first);
 
