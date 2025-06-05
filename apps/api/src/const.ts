@@ -2,8 +2,10 @@ import type { PlanRules } from '@/db/schemas/json';
 
 export type PlanId = keyof typeof PlanId;
 export const PlanId = {
-  FULL_ACCESS_1MONTH: 'PL0FULL1MONTH',
-  FULL_ACCESS_1YEAR: 'PL0FULL1YEAR',
+  FULL_ACCESS_1MONTH_WITH_BILLING_KEY: 'PL0FL1MBK',
+  FULL_ACCESS_1YEAR_WITH_BILLING_KEY: 'PL0FL1YBK',
+  FULL_ACCESS_1MONTH_WITH_IN_APP_PURCHASE: 'PL0FL1MAP',
+  FULL_ACCESS_1YEAR_WITH_IN_APP_PURCHASE: 'PL0FL1YAP',
 } as const;
 
 export const defaultPlanRules: PlanRules = {
