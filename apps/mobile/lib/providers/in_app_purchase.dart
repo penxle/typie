@@ -34,6 +34,8 @@ class InAppPurchaseProvider extends HookWidget {
                 ),
               );
 
+              await client.request(GInAppPurchase_QueryReq());
+
               if (context.mounted) {
                 await context.showModal(
                   child: const AlertModal(title: '구독이 완료되었어요', message: '타이피의 모든 기능을 이용해보세요!'),
