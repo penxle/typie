@@ -68,7 +68,7 @@ class SettingsScreen extends HookWidget {
                     ),
                   ],
                 ),
-                if (data.me!.plan != null)
+                if (data.me!.subscription != null)
                   _Section(
                     title: '사이트 설정',
                     children: [

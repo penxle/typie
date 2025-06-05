@@ -53,18 +53,14 @@ class CurrentPlanScreen extends StatelessWidget {
                     children: [
                       const Text('현재 이용권', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
                       const Gap(4),
-                      const Text('타이피 FULL ACCESS', style: TextStyle(fontWeight: FontWeight.w600)),
+                      Text(data.me!.subscription!.plan.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                       const Gap(8),
                       Text(
-                        '이용기간: ${data.me!.plan!.createdAt.yyyyMMdd} - ${data.me!.plan!.expiresAt.yyyyMMdd}',
-                        style: const TextStyle(fontSize: 14, color: AppColors.gray_500),
+                        '이용기간: ${data.me!.subscription!.startsAt.yyyyMMdd} - ${data.me!.subscription!.expiresAt.yyyyMMdd}',
+                        style: const TextStyle(fontSize: 12, color: AppColors.gray_500),
                       ),
                       Text(
-                        '다음 결제 예정일: ${data.me!.plan!.nextInvoice!.billingAt.yyyyMMdd}',
-                        style: const TextStyle(fontSize: 14, color: AppColors.gray_500),
-                      ),
-                      Text(
-                        '결제 예정 금액: ${data.me!.plan!.nextInvoice!.amount.comma}원',
+                        '다음 결제 예정 금액: ${data.me!.subscription!.plan.fee.comma}원',
                         style: const TextStyle(fontSize: 14, color: AppColors.gray_500),
                       ),
                     ],

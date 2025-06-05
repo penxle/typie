@@ -73,7 +73,7 @@ Subscription.implement({
     id: t.exposeID('id'),
     plan: t.expose('planId', { type: Plan }),
     startsAt: t.expose('startsAt', { type: 'DateTime' }),
-    expiresAt: t.expose('expiresAt', { type: 'DateTime', nullable: true }),
+    expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
     state: t.expose('state', { type: SubscriptionState }),
   }),
 });

@@ -3,9 +3,8 @@ query EnrollPlanScreen_Query {
     id
     uuid
 
-    plan {
+    subscription {
       id
-      billingCycle
     }
   }
 }

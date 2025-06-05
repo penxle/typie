@@ -693,7 +693,7 @@ enum SubscriptionState {
 }
 
 type Subscription_ {
-  expiresAt: DateTime
+  expiresAt: DateTime!
   id: ID!
   plan: Plan!
   startsAt: DateTime!

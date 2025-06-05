@@ -37,7 +37,7 @@ class EnrollPlanScreen extends HookWidget {
           return Column(
             spacing: 12,
             children: [
-              if (data.me!.plan == null)
+              if (data.me!.subscription == null)
                 Container(
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.gray_950),

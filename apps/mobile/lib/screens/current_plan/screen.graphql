@@ -3,15 +3,15 @@ query CurrentPlanScreen_Query {
     id
     credit
 
-    plan {
+    subscription {
       id
-      createdAt
+      startsAt
       expiresAt
 
-      nextInvoice {
+      plan {
         id
-        amount
-        billingAt
+        name
+        fee
       }
     }
   }

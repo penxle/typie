@@ -2,9 +2,14 @@ query CancelPlanScreen_Query {
   me {
     id
 
-    plan {
+    subscription {
       id
       expiresAt
+
+      plan {
+        id
+        name
+      }
     }
   }
 }

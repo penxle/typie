@@ -3,7 +3,7 @@ query SettingsScreen_Query {
     id
     marketingConsent
 
-    plan {
+    subscription {
       id
     }
   }
