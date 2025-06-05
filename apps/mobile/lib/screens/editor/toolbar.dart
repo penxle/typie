@@ -51,6 +51,14 @@ class EditorToolbar extends HookWidget {
     }, [proseMirrorState?.isNodeActive('blockquote')]);
 
     useAsyncEffect(() async {
+      if ((proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
+          (proseMirrorState?.isNodeActive('ordered_list') ?? false)) {
+        scope.selectedTextbarIdx.value = 0;
+      }
+      return null;
+    }, [proseMirrorState?.isNodeActive('bullet_list'), proseMirrorState?.isNodeActive('ordered_list')]);
+
+    useAsyncEffect(() async {
       if (proseMirrorState?.currentNode?.type == 'horizontal_rule' && scope.selectedToolboxIdx.value != 2) {
         await webViewController?.clearFocus();
         scope.selectedToolboxIdx.value = 2;
@@ -183,6 +191,9 @@ class EditorToolbar extends HookWidget {
                 child: () {
                   if (proseMirrorState?.isNodeActive('blockquote') ?? false) {
                     return const _BlockQuoteToolbar();
+                  } else if ((proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
+                      (proseMirrorState?.isNodeActive('ordered_list') ?? false)) {
+                    return const _ListToolbar();
                   }
 
                   switch (proseMirrorState?.currentNode?.type) {
@@ -332,6 +343,7 @@ class EditorToolbar extends HookWidget {
                         (proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
                         (proseMirrorState?.isNodeActive('ordered_list') ?? false),
                     onTap: () async {
+                      await scope.command('bullet_list');
                       await webViewController?.requestFocus();
                     },
                   ),
@@ -462,11 +474,13 @@ class _NodeToolbar extends HookWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const Pad(left: 16),
       child: Row(
-        spacing: 16,
+        spacing: 8,
         children: [
           if (label != null) ...[
             Text(label!, style: const TextStyle(fontSize: 16, color: AppColors.gray_700)),
+            const Gap(0),
             const AppVerticalDivider(height: 20),
+            const Gap(0),
           ],
           ...children,
           if (withDelete)
@@ -552,6 +566,36 @@ class _ImageToolbar extends HookWidget {
               }
             },
           ),
+      ],
+    );
+  }
+}
+
+class _ListToolbar extends HookWidget {
+  const _ListToolbar();
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = EditorStateScope.of(context);
+    final proseMirrorState = useValueListenable(scope.proseMirrorState);
+
+    return _NodeToolbar(
+      withDelete: false,
+      children: [
+        _IconToolbarButton(
+          icon: LucideLightIcons.list,
+          isActive: proseMirrorState?.isNodeActive('bullet_list') ?? false,
+          onTap: () async {
+            await scope.command('bullet_list');
+          },
+        ),
+        _IconToolbarButton(
+          icon: LucideLightIcons.list_ordered,
+          isActive: proseMirrorState?.isNodeActive('ordered_list') ?? false,
+          onTap: () async {
+            await scope.command('ordered_list');
+          },
+        ),
       ],
     );
   }
