@@ -44,6 +44,13 @@ class EditorToolbar extends HookWidget {
     }, [proseMirrorState?.currentNode]);
 
     useAsyncEffect(() async {
+      if (proseMirrorState?.isNodeActive('blockquote') ?? false) {
+        scope.selectedTextbarIdx.value = 0;
+      }
+      return null;
+    }, [proseMirrorState?.isNodeActive('blockquote')]);
+
+    useAsyncEffect(() async {
       if (proseMirrorState?.currentNode?.type == 'horizontal_rule' && scope.selectedToolboxIdx.value != 2) {
         await webViewController?.clearFocus();
         scope.selectedToolboxIdx.value = 2;
@@ -173,13 +180,24 @@ class EditorToolbar extends HookWidget {
             spacing: 8,
             children: [
               Expanded(
-                child: switch (proseMirrorState?.currentNode?.type) {
-                  'file' => const _FileToolbar(),
-                  'image' => const _ImageToolbar(),
-                  'embed' => const _NodeToolbar(label: '임베드', children: []),
-                  'horizontal_rule' => const _NodeToolbar(label: '구분선', children: []),
-                  _ => const _DefaultToolbar(),
-                },
+                child: () {
+                  if (proseMirrorState?.isNodeActive('blockquote') ?? false) {
+                    return const _BlockQuoteToolbar();
+                  }
+
+                  switch (proseMirrorState?.currentNode?.type) {
+                    case 'file':
+                      return const _FileToolbar();
+                    case 'image':
+                      return const _ImageToolbar();
+                    case 'embed':
+                      return const _NodeToolbar(label: '임베드', children: []);
+                    case 'horizontal_rule':
+                      return const _NodeToolbar(label: '구분선', children: []);
+                    default:
+                      return const _DefaultToolbar();
+                  }
+                }(),
               ),
               _IconToolbarButton(
                 icon: LucideLightIcons.chevron_left,
@@ -276,7 +294,7 @@ class EditorToolbar extends HookWidget {
                     label: '인용구',
                     isActive: proseMirrorState?.isNodeActive('blockquote') ?? false,
                     onTap: () async {
-                      await scope.command('blockquote');
+                      await scope.command('blockquote', attrs: {'blockquote': editorDefaultValues['blockquote']});
                       await webViewController?.requestFocus();
                     },
                   ),
@@ -428,10 +446,11 @@ class _DefaultToolbar extends HookWidget {
 }
 
 class _NodeToolbar extends HookWidget {
-  const _NodeToolbar({required this.label, required this.children});
+  const _NodeToolbar({this.label, required this.children, this.withDelete = true});
 
-  final String label;
+  final String? label;
   final List<Widget> children;
+  final bool withDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -445,17 +464,20 @@ class _NodeToolbar extends HookWidget {
       child: Row(
         spacing: 16,
         children: [
-          Text(label, style: const TextStyle(fontSize: 16, color: AppColors.gray_700)),
-          const AppVerticalDivider(height: 20),
+          if (label != null) ...[
+            Text(label!, style: const TextStyle(fontSize: 16, color: AppColors.gray_700)),
+            const AppVerticalDivider(height: 20),
+          ],
           ...children,
-          _TextToolbarButton(
-            text: '삭제',
-            color: AppColors.red_500,
-            onTap: () async {
-              await scope.command('delete');
-              await webViewController?.requestFocus();
-            },
-          ),
+          if (withDelete)
+            _TextToolbarButton(
+              text: '삭제',
+              color: AppColors.red_500,
+              onTap: () async {
+                await scope.command('delete');
+                await webViewController?.requestFocus();
+              },
+            ),
         ],
       ),
     );
@@ -530,6 +552,43 @@ class _ImageToolbar extends HookWidget {
               }
             },
           ),
+      ],
+    );
+  }
+}
+
+class _BlockQuoteToolbar extends HookWidget {
+  const _BlockQuoteToolbar();
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = EditorStateScope.of(context);
+    final proseMirrorState = useValueListenable(scope.proseMirrorState);
+
+    return _NodeToolbar(
+      withDelete: false,
+      children: [
+        Padding(
+          padding: const Pad(vertical: 8),
+          child: _SelectValuesBar(
+            name: 'blockquote',
+            activeValue:
+                proseMirrorState?.getNodeAttributes('blockquote')?['type'] as String? ??
+                editorDefaultValues['blockquote'],
+            valueKey: 'type',
+            builder: (context, e, isActive) {
+              return Center(
+                child: _WidgetToolbarButton(
+                  widget: e['component'] as Widget,
+                  isActive: isActive,
+                  onTap: () async {
+                    await scope.command('blockquote', attrs: {'blockquote': e['type']});
+                  },
+                ),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
@@ -1060,6 +1119,30 @@ class _BaseButton extends HookWidget {
           return builder(context, foregroundColor, backgroundColor);
         },
       ),
+    );
+  }
+}
+
+class _WidgetToolbarButton extends StatelessWidget {
+  const _WidgetToolbarButton({required this.onTap, required this.widget, this.isActive = false});
+
+  final Widget widget;
+
+  final bool isActive;
+  final void Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BaseButton(
+      isActive: isActive,
+      onTap: onTap,
+      builder: (context, color, backgroundColor) {
+        return Container(
+          decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6)),
+          padding: const Pad(all: 8),
+          child: widget,
+        );
+      },
     );
   }
 }
