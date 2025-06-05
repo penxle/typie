@@ -9,8 +9,13 @@ query ProfileScreen_Query {
       url
     }
 
-    plan {
+    subscription {
       id
+
+      plan {
+        id
+        name
+      }
     }
   }
 }

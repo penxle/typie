@@ -1,3 +1,14 @@
-mutation InAppPurchase_EnrollPlanWithInAppPurchase_Mutation($input: EnrollPlanWithInAppPurchaseInput!) {
-  enrollPlanWithInAppPurchase(input: $input)
+mutation InAppPurchase_SubscribeOrChangePlanWithInAppPurchase_Mutation($input: SubscribeOrChangePlanWithInAppPurchaseInput!) {
+  subscribeOrChangePlanWithInAppPurchase(input: $input) {
+    id
+    state
+    startsAt
+    expiresAt
+    plan {
+      id
+      name
+      fee
+      interval
+    }
+  }
 }

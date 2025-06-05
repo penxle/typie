@@ -83,7 +83,7 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 Tappable(
                   onTap: () async {
-                    if (data.me!.plan == null) {
+                    if (data.me!.subscription == null) {
                       await context.router.push(const EnrollPlanRoute());
                     } else {
                       await context.router.push(const CurrentPlanRoute());
@@ -104,7 +104,7 @@ class ProfileScreen extends StatelessWidget {
                           children: [
                             const Text('현재 이용권', style: TextStyle(color: AppColors.gray_500, fontSize: 14)),
                             const Spacer(),
-                            if (data.me!.plan == null) ...[
+                            if (data.me!.subscription == null) ...[
                               const Text('이용권 구매하기', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
                               const Icon(LucideLightIcons.chevron_right, size: 14, color: AppColors.gray_700),
                             ] else ...[
@@ -114,7 +114,7 @@ class ProfileScreen extends StatelessWidget {
                           ],
                         ),
                         Text(
-                          data.me!.plan == null ? '타이피 BASIC ACCESS' : '타이피 FULL ACCESS',
+                          data.me!.subscription == null ? '타이피 BASIC ACCESS' : data.me!.subscription!.plan.name,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ],

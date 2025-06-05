@@ -64,7 +64,7 @@ class CancelPlanScreen extends StatelessWidget {
               ),
               const Gap(8),
               Text(
-                '지금 해지하더라도 ${data.me!.plan!.expiresAt.toLocal().subtract(days: 1).format(pattern: 'yyyy년 MM월 dd일')}까지는 계속해서 타이피 FULL ACCESS 혜택을 이용할 수 있어요.',
+                '지금 해지하더라도 ${data.me!.subscription!.expiresAt.toLocal().subtract(days: 1).format(pattern: 'yyyy년 MM월 dd일')}까지는 계속해서 ${data.me!.subscription!.plan.name} 혜택을 이용할 수 있어요.',
                 style: const TextStyle(fontSize: 14, color: AppColors.gray_500),
               ),
               const Gap(24),

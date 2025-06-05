@@ -23,7 +23,7 @@ class InAppPurchaseProvider extends HookWidget {
           try {
             if (purchaseDetails.status == PurchaseStatus.purchased) {
               await client.request(
-                GInAppPurchase_EnrollPlanWithInAppPurchase_MutationReq(
+                GInAppPurchase_SubscribeOrChangePlanWithInAppPurchase_MutationReq(
                   (b) => b
                     ..vars.input.store = Platform.isIOS
                         ? GInAppPurchaseStore.APP_STORE
