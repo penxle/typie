@@ -1,50 +1,42 @@
 import dayjs from 'dayjs';
-import { and, eq, gt, lt } from 'drizzle-orm';
+import { and, eq, gt, ne } from 'drizzle-orm';
+import { defaultPlanRules } from '@/const';
 import {
   CreditCodes,
   db,
   first,
   firstOrThrow,
   firstOrThrowWith,
-  PaymentBillingKeys,
   PaymentInvoices,
   Plans,
+  Subscriptions,
   TableCode,
-  UserPlans,
+  UserBillingKeys,
+  UserInAppPurchases,
   validateDbId,
 } from '@/db';
-import { defaultPlanRules } from '@/db/schemas/json';
-import {
-  CreditCodeState,
-  InAppPurchaseStore,
-  PaymentBillingKeyState,
-  PaymentInvoiceState,
-  PlanAvailability,
-  UserPlanBillingCycle,
-  UserPlanState,
-} from '@/enums';
+import { CreditCodeState, InAppPurchaseStore, PaymentInvoiceState, PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
 import { production } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
 import * as portone from '@/external/portone';
-import * as slack from '@/external/slack';
-import { calculatePaymentAmount, payInvoice } from '@/utils';
+import { getSubscriptionExpiresAt, payInvoiceWithBillingKey } from '@/utils';
 import { delay } from '@/utils/promise';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
-import { CreditCode, isTypeOf, PaymentBillingKey, PaymentInvoice, Plan, PlanRule, UserPlan } from '../objects';
+import { CreditCode, isTypeOf, PaymentInvoice, Plan, PlanRule, Subscription, UserBillingKey } from '../objects';
 
 /**
  * * Types
  */
 
-PaymentBillingKey.implement({
-  isTypeOf: isTypeOf(TableCode.PAYMENT_BILLING_KEYS),
+CreditCode.implement({
+  isTypeOf: isTypeOf(TableCode.CREDIT_CODES),
   fields: (t) => ({
     id: t.exposeID('id'),
-    name: t.exposeString('name'),
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+    code: t.exposeString('code'),
+    amount: t.exposeInt('amount'),
   }),
 });
 
@@ -53,8 +45,7 @@ PaymentInvoice.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     state: t.expose('state', { type: PaymentInvoiceState }),
-    amount: t.exposeInt('amount'),
-    billingAt: t.expose('billingAt', { type: 'DateTime' }),
+    dueAt: t.expose('dueAt', { type: 'DateTime' }),
   }),
 });
 
@@ -64,8 +55,8 @@ Plan.implement({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
     fee: t.exposeInt('fee'),
-
-    rules: t.expose('rules', { type: PlanRule }),
+    interval: t.expose('interval', { type: PlanInterval }),
+    rule: t.expose('rule', { type: PlanRule }),
   }),
 });
 
@@ -76,37 +67,14 @@ PlanRule.implement({
   }),
 });
 
-UserPlan.implement({
-  isTypeOf: isTypeOf(TableCode.USER_PLANS),
+Subscription.implement({
+  isTypeOf: isTypeOf(TableCode.SUBSCRIPTIONS),
   fields: (t) => ({
     id: t.exposeID('id'),
-    fee: t.exposeInt('fee'),
-    billingCycle: t.expose('billingCycle', { type: UserPlanBillingCycle }),
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
-    expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
-    state: t.expose('state', { type: UserPlanState }),
-
     plan: t.expose('planId', { type: Plan }),
-
-    nextInvoice: t.field({
-      type: PaymentInvoice,
-      nullable: true,
-      resolve: async (self) => {
-        return await db
-          .select()
-          .from(PaymentInvoices)
-          .where(and(eq(PaymentInvoices.userId, self.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)))
-          .then(first);
-      },
-    }),
-  }),
-});
-
-CreditCode.implement({
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    code: t.exposeString('code'),
-    amount: t.exposeInt('amount'),
+    startsAt: t.expose('startsAt', { type: 'DateTime' }),
+    expiresAt: t.expose('expiresAt', { type: 'DateTime', nullable: true }),
+    state: t.expose('state', { type: SubscriptionState }),
   }),
 });
 
@@ -117,9 +85,7 @@ CreditCode.implement({
 builder.queryFields((t) => ({
   creditCode: t.withAuth({ session: true }).field({
     type: CreditCode,
-    args: {
-      code: t.input.string({ validate: { schema: redeemCodeSchema } }),
-    },
+    args: { code: t.input.string({ validate: { schema: redeemCodeSchema } }) },
     resolve: async (_, args) => {
       const code = args.code.toUpperCase().replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1');
 
@@ -139,8 +105,8 @@ builder.queryFields((t) => ({
  */
 
 builder.mutationFields((t) => ({
-  updatePaymentBillingKey: t.withAuth({ session: true }).fieldWithInput({
-    type: PaymentBillingKey,
+  updateBillingKey: t.withAuth({ session: true }).fieldWithInput({
+    type: UserBillingKey,
     input: {
       cardNumber: t.input.string({ validate: { schema: cardSchema.cardNumber } }),
       expiryDate: t.input.string({ validate: { schema: cardSchema.expiryDate } }),
@@ -166,18 +132,18 @@ builder.mutationFields((t) => ({
       }
 
       return await db.transaction(async (tx) => {
-        const billingKeys = await tx
-          .update(PaymentBillingKeys)
-          .set({ state: PaymentBillingKeyState.DEACTIVATED })
-          .where(and(eq(PaymentBillingKeys.userId, ctx.session.userId), eq(PaymentBillingKeys.state, PaymentBillingKeyState.ACTIVE)))
-          .returning({ billingKey: PaymentBillingKeys.billingKey });
+        const existingBillingKey = await tx
+          .delete(UserBillingKeys)
+          .where(eq(UserBillingKeys.userId, ctx.session.userId))
+          .returning({ billingKey: UserBillingKeys.billingKey })
+          .then(first);
 
-        for (const billingKey of billingKeys) {
-          await portone.deleteBillingKey({ billingKey: billingKey.billingKey });
+        if (existingBillingKey) {
+          await portone.deleteBillingKey({ billingKey: existingBillingKey.billingKey });
         }
 
         return await tx
-          .insert(PaymentBillingKeys)
+          .insert(UserBillingKeys)
           .values({
             userId: ctx.session.userId,
             name: `${result.cardName} ${input.cardNumber.slice(-4)}`,
@@ -189,95 +155,38 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  enrollPlan: t.withAuth({ session: true }).fieldWithInput({
-    type: UserPlan,
-    input: {
-      planId: t.input.id({ validate: validateDbId(TableCode.PLANS) }),
-      billingCycle: t.input.field({ type: UserPlanBillingCycle }),
-    },
+  subscribePlanWithBillingKey: t.withAuth({ session: true }).fieldWithInput({
+    type: Subscription,
+    input: { planId: t.input.id({ validate: validateDbId(TableCode.PLANS) }) },
     resolve: async (_, { input }, ctx) => {
-      const existingUserPlan = await db
-        .select({
-          planId: UserPlans.planId,
-          expiresAt: UserPlans.expiresAt,
-        })
-        .from(UserPlans)
-        .where(and(eq(UserPlans.userId, ctx.session.userId), gt(UserPlans.expiresAt, dayjs())))
+      const existingSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .where(and(eq(Subscriptions.userId, ctx.session.userId), ne(Subscriptions.state, SubscriptionState.EXPIRED)))
         .then(first);
+
+      if (existingSubscription) {
+        throw new TypieError({ code: 'subscription_already_exists' });
+      }
 
       const plan = await db
-        .select({ id: Plans.id, name: Plans.name, fee: Plans.fee })
+        .select({ id: Plans.id, name: Plans.name, fee: Plans.fee, interval: Plans.interval })
         .from(Plans)
-        .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.PUBLIC)))
+        .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.BILLING_KEY)))
         .then(firstOrThrow);
 
-      const enrolledAt = dayjs.kst().startOf('day');
-      const paymentAmount = calculatePaymentAmount(input.billingCycle, plan.fee);
+      const startsAt = dayjs();
+      const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
 
-      if (existingUserPlan) {
-        if (existingUserPlan.planId !== input.planId) {
-          // TODO: 다른 플랜 자체가 없으니까... 나중에 다른 플랜이 생기면 생각해보기
-          throw new TypieError({ code: 'plan_already_enrolled' });
-        }
-
-        return await db.transaction(async (tx) => {
-          const userPlan = await tx
-            .update(UserPlans)
-            .set({
-              state: UserPlanState.ACTIVE,
-              fee: plan.fee,
-              billingCycle: input.billingCycle,
-            })
-            .where(eq(UserPlans.userId, ctx.session.userId))
-            .returning()
-            .then(firstOrThrow);
-
-          await tx
-            .update(PaymentInvoices)
-            .set({
-              amount: paymentAmount,
-            })
-            .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)));
-
-          return userPlan;
-        });
-      }
-
-      const unpaidInvoice = await db
-        .select({ id: PaymentInvoices.id })
-        .from(PaymentInvoices)
-        .where(
-          and(
-            eq(PaymentInvoices.userId, ctx.session.userId),
-            eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING),
-            lt(PaymentInvoices.billingAt, dayjs()),
-          ),
-        )
-        .then(first);
-
-      if (unpaidInvoice) {
-        throw new TypieError({ code: 'unpaid_invoice_exists' });
-      }
-
-      const { userPlan } = await db.transaction(async (tx) => {
-        const userPlan = await tx
-          .insert(UserPlans)
+      return await db.transaction(async (tx) => {
+        const subscription = await tx
+          .insert(Subscriptions)
           .values({
             userId: ctx.session.userId,
             planId: plan.id,
-            fee: plan.fee,
-            billingCycle: input.billingCycle,
-            expiresAt: enrolledAt,
-          })
-          .onConflictDoUpdate({
-            target: [UserPlans.userId],
-            set: {
-              planId: plan.id,
-              fee: plan.fee,
-              billingCycle: input.billingCycle,
-              expiresAt: enrolledAt,
-              state: UserPlanState.ACTIVE,
-            },
+            startsAt,
+            expiresAt,
+            state: SubscriptionState.ACTIVE,
           })
           .returning()
           .then(firstOrThrow);
@@ -286,83 +195,253 @@ builder.mutationFields((t) => ({
           .insert(PaymentInvoices)
           .values({
             userId: ctx.session.userId,
-            amount: paymentAmount,
-            billingAt: enrolledAt,
-            state: PaymentInvoiceState.UPCOMING,
+            subscriptionId: subscription.id,
+            amount: plan.fee,
+            dueAt: startsAt,
+            state: PaymentInvoiceState.PAID,
           })
           .returning({ id: PaymentInvoices.id })
           .then(firstOrThrow);
 
-        const payInvoiceResult = await payInvoice({
-          tx,
-          invoiceId: invoice.id,
-          makeRecordWhenFail: false,
-        });
-
-        if (payInvoiceResult.status === 'failed') {
-          // 에러 던져서 tx 롤백 일으키기 (여기서 실패하면 로그 쌓을 필요 X)
-          throw new TypieError({ code: 'payment_failed', message: payInvoiceResult.message });
+        const success = await payInvoiceWithBillingKey(tx, invoice.id);
+        if (!success) {
+          throw new TypieError({ code: 'payment_failed' });
         }
 
-        return { userPlan };
+        return subscription;
       });
-
-      return userPlan;
     },
   }),
 
-  cancelPlan: t.withAuth({ session: true }).field({
-    type: UserPlan,
+  schedulePlanChange: t.withAuth({ session: true }).fieldWithInput({
+    type: Subscription,
+    input: { planId: t.input.id({ validate: validateDbId(TableCode.PLANS) }) },
+    resolve: async (_, { input }, ctx) => {
+      const activeSubscription = await db
+        .select({ id: Subscriptions.id, expiresAt: Subscriptions.expiresAt })
+        .from(Subscriptions)
+        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.ACTIVE)))
+        .then(firstOrThrow);
+
+      const plan = await db
+        .select({ id: Plans.id, fee: Plans.fee, interval: Plans.interval })
+        .from(Plans)
+        .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.BILLING_KEY)))
+        .then(firstOrThrow);
+
+      const startsAt = activeSubscription.expiresAt;
+      const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
+
+      return await db.transaction(async (tx) => {
+        await tx.update(Subscriptions).set({ state: SubscriptionState.WILL_EXPIRE }).where(eq(Subscriptions.id, activeSubscription.id));
+
+        return await tx
+          .insert(Subscriptions)
+          .values({
+            userId: ctx.session.userId,
+            planId: plan.id,
+            startsAt,
+            expiresAt,
+            state: SubscriptionState.WILL_ACTIVATE,
+          })
+          .returning()
+          .then(firstOrThrow);
+      });
+    },
+  }),
+
+  cancelPlanChange: t.withAuth({ session: true }).field({
+    type: Subscription,
     resolve: async (_, __, ctx) => {
-      const userPlan = await db
-        .select({ expiresAt: UserPlans.expiresAt })
-        .from(UserPlans)
-        .where(and(eq(UserPlans.userId, ctx.session.userId), eq(UserPlans.state, UserPlanState.ACTIVE)))
+      const willExpireSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE)))
+        .then(firstOrThrow);
+
+      const willActivateSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
         .then(firstOrThrow);
 
       return await db.transaction(async (tx) => {
-        await tx
-          .update(PaymentInvoices)
-          .set({ state: PaymentInvoiceState.CANCELED })
-          .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.UPCOMING)));
+        await tx.delete(Subscriptions).where(eq(Subscriptions.id, willActivateSubscription.id));
 
-        if (userPlan.expiresAt.isAfter(dayjs())) {
-          return await tx
-            .update(UserPlans)
-            .set({ state: UserPlanState.CANCELED })
-            .where(and(eq(UserPlans.userId, ctx.session.userId), eq(UserPlans.state, UserPlanState.ACTIVE)))
-            .returning()
-            .then(firstOrThrow);
-        } else {
-          return await tx.delete(UserPlans).where(eq(UserPlans.userId, ctx.session.userId)).returning().then(firstOrThrow);
-        }
+        return await tx
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.ACTIVE })
+          .where(eq(Subscriptions.id, willExpireSubscription.id))
+          .returning()
+          .then(firstOrThrow);
       });
     },
   }),
 
-  enrollPlanWithInAppPurchase: t.withAuth({ session: true }).fieldWithInput({
-    type: 'Boolean',
+  subscribeOrChangePlanWithInAppPurchase: t.withAuth({ session: true }).fieldWithInput({
+    type: Subscription,
     input: {
       store: t.input.field({ type: InAppPurchaseStore }),
       data: t.input.string(),
     },
-    resolve: async (_, { input }) => {
+    resolve: async (_, { input }, ctx) => {
+      const existingSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.userId, ctx.session.userId),
+            ne(Subscriptions.state, SubscriptionState.EXPIRED),
+            ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+          ),
+        )
+        .then(first);
+
+      if (existingSubscription) {
+        throw new TypieError({ code: 'subscription_already_exists' });
+      }
+
+      let identifier: string;
+      let planId: string;
+      let startsAt: dayjs.Dayjs;
+      let expiresAt: dayjs.Dayjs;
+
       if (input.store === InAppPurchaseStore.APP_STORE) {
-        const transaction = await appstore.getTransaction({
+        const subscription = await appstore.getSubscription({
           environment: production ? 'production' : 'sandbox',
           transactionId: input.data,
         });
 
-        await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'mutation/appstore', transaction }, null, 2) });
+        if (!subscription.productId || !subscription.originalTransactionId || !subscription.purchaseDate || !subscription.expiresDate) {
+          throw new Error('required fields are missing');
+        }
+
+        identifier = subscription.originalTransactionId;
+        planId = subscription.productId;
+        startsAt = dayjs(subscription.purchaseDate);
+        expiresAt = dayjs(subscription.expiresDate);
       } else if (input.store === InAppPurchaseStore.GOOGLE_PLAY) {
         const subscription = await googleplay.getSubscription({
           purchaseToken: input.data,
         });
 
-        await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'mutation/googleplay', subscription }, null, 2) });
+        if (subscription.subscriptionState !== 'SUBSCRIPTION_STATE_ACTIVE') {
+          throw new Error('subscriptionState is not active');
+        }
+
+        const item = subscription.lineItems?.[0];
+        if (!item || !item.offerDetails?.basePlanId || !subscription.startTime || !item.expiryTime) {
+          throw new Error('required fields are missing');
+        }
+
+        identifier = input.data;
+        planId = item.offerDetails.basePlanId;
+        startsAt = dayjs(subscription.startTime);
+        expiresAt = dayjs(item.expiryTime);
+      } else {
+        throw new Error('Invalid store');
       }
 
-      return true;
+      if (!expiresAt.isAfter(dayjs())) {
+        throw new Error('expiresAt should be in the future');
+      }
+
+      const plan = await db
+        .select({ id: Plans.id, availability: Plans.availability })
+        .from(Plans)
+        .where(eq(Plans.id, planId))
+        .then(firstOrThrow);
+
+      if (plan.availability !== PlanAvailability.IN_APP_PURCHASE) {
+        throw new TypieError({ code: 'invalid_plan_availability' });
+      }
+
+      return await db.transaction(async (tx) => {
+        await tx
+          .insert(UserInAppPurchases)
+          .values({
+            userId: ctx.session.userId,
+            store: input.store,
+            identifier,
+          })
+          .onConflictDoUpdate({
+            target: [UserInAppPurchases.userId],
+            set: { store: input.store, identifier },
+          });
+
+        return await tx
+          .insert(Subscriptions)
+          .values({
+            userId: ctx.session.userId,
+            planId,
+            startsAt,
+            expiresAt,
+          })
+          .onConflictDoUpdate({
+            target: [Subscriptions.userId],
+            set: { planId, startsAt, expiresAt },
+          })
+          .returning()
+          .then(firstOrThrow);
+      });
+    },
+  }),
+
+  scheduleSubscriptionCancellation: t.withAuth({ session: true }).field({
+    type: Subscription,
+    resolve: async (_, __, ctx) => {
+      const activeSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.userId, ctx.session.userId),
+            eq(Subscriptions.state, SubscriptionState.ACTIVE),
+            eq(Plans.availability, PlanAvailability.BILLING_KEY),
+          ),
+        )
+        .then(firstOrThrow);
+
+      const willActivateSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
+        .then(first);
+
+      return await db.transaction(async (tx) => {
+        if (willActivateSubscription) {
+          await tx.delete(Subscriptions).where(eq(Subscriptions.id, willActivateSubscription.id));
+        }
+
+        return await tx
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.WILL_EXPIRE })
+          .where(eq(Subscriptions.id, activeSubscription.id))
+          .returning()
+          .then(firstOrThrow);
+      });
+    },
+  }),
+
+  cancelSubscriptionCancellation: t.withAuth({ session: true }).field({
+    type: Subscription,
+    resolve: async (_, __, ctx) => {
+      const willExpireSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE)))
+        .then(firstOrThrow);
+
+      return await db.transaction(async (tx) => {
+        return await tx
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.ACTIVE })
+          .where(eq(Subscriptions.id, willExpireSubscription.id))
+          .returning()
+          .then(firstOrThrow);
+      });
     },
   }),
 }));

@@ -40,7 +40,7 @@
         user {
           id
 
-          plan {
+          subscription {
             id
           }
         }
@@ -151,7 +151,7 @@
         </ToolbarDropdownMenuItem>
       {/each}
 
-      {#if $site?.user.plan}
+      {#if $site?.user.subscription}
         {#each $site.fonts as { id, name } (id)}
           <ToolbarDropdownMenuItem
             active={(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily) === name}

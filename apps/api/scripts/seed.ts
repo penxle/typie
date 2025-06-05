@@ -2,25 +2,31 @@
 
 import { PlanId } from '@/const';
 import { db, Plans } from '@/db';
-import { PlanAvailability } from '@/enums';
+import { PlanAvailability, PlanInterval } from '@/enums';
 
 await db.transaction(async (tx) => {
   await tx.insert(Plans).values({
-    id: PlanId.PLUS,
-    name: 'Plus',
+    id: PlanId.FULL_ACCESS_1MONTH,
+    name: '타이피 FULL ACCESS (월간)',
     fee: 4900,
-    rules: {
+    availability: PlanAvailability.BILLING_KEY,
+    interval: PlanInterval.MONTHLY,
+    rule: {
       maxTotalCharacterCount: -1,
       maxTotalBlobSize: -1,
     },
   });
 
   await tx.insert(Plans).values({
-    id: 'PL0PENXLE',
-    name: 'PENXLE',
-    fee: 0,
-    rules: {},
-    availability: PlanAvailability.PRIVATE,
+    id: PlanId.FULL_ACCESS_1YEAR,
+    name: '타이피 FULL ACCESS (연간)',
+    fee: 49_000,
+    availability: PlanAvailability.BILLING_KEY,
+    interval: PlanInterval.YEARLY,
+    rule: {
+      maxTotalCharacterCount: -1,
+      maxTotalBlobSize: -1,
+    },
   });
 });
 

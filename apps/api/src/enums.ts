@@ -52,36 +52,32 @@ export const NotificationState = {
   READ: 'READ',
 } as const;
 
-export type PaymentBillingKeyState = keyof typeof PaymentBillingKeyState;
-export const PaymentBillingKeyState = {
-  ACTIVE: 'ACTIVE',
-  DEACTIVATED: 'DEACTIVATED',
-} as const;
-
 export type PaymentInvoiceState = keyof typeof PaymentInvoiceState;
 export const PaymentInvoiceState = {
   UPCOMING: 'UPCOMING',
   PAID: 'PAID',
-  UNPAID: 'UNPAID',
+  OVERDUE: 'OVERDUE',
   CANCELED: 'CANCELED',
 } as const;
 
-export type PaymentMethodType = keyof typeof PaymentMethodType;
-export const PaymentMethodType = {
-  BILLING_KEY: 'BILLING_KEY',
-  CREDIT: 'CREDIT',
-} as const;
-
-export type PaymentRecordState = keyof typeof PaymentRecordState;
-export const PaymentRecordState = {
-  SUCCEEDED: 'SUCCEEDED',
-  FAILED: 'FAILED',
+export type PaymentOutcome = keyof typeof PaymentOutcome;
+export const PaymentOutcome = {
+  SUCCESS: 'SUCCESS',
+  FAILURE: 'FAILURE',
 } as const;
 
 export type PlanAvailability = keyof typeof PlanAvailability;
 export const PlanAvailability = {
-  PUBLIC: 'PUBLIC',
-  PRIVATE: 'PRIVATE',
+  BILLING_KEY: 'BILLING_KEY',
+  IN_APP_PURCHASE: 'IN_APP_PURCHASE',
+  MANUAL: 'MANUAL',
+} as const;
+
+export type PlanInterval = keyof typeof PlanInterval;
+export const PlanInterval = {
+  MONTHLY: 'MONTHLY',
+  YEARLY: 'YEARLY',
+  LIFETIME: 'LIFETIME',
 } as const;
 
 export const PostAvailableAction = {
@@ -143,16 +139,13 @@ export const SiteState = {
   DELETED: 'DELETED',
 } as const;
 
-export type UserPlanBillingCycle = keyof typeof UserPlanBillingCycle;
-export const UserPlanBillingCycle = {
-  MONTHLY: 'MONTHLY',
-  YEARLY: 'YEARLY',
-} as const;
-
-export type UserPlanState = keyof typeof UserPlanState;
-export const UserPlanState = {
+export type SubscriptionState = keyof typeof SubscriptionState;
+export const SubscriptionState = {
   ACTIVE: 'ACTIVE',
-  CANCELED: 'CANCELED',
+  WILL_ACTIVATE: 'WILL_ACTIVATE',
+  WILL_EXPIRE: 'WILL_EXPIRE',
+  IN_GRACE_PERIOD: 'IN_GRACE_PERIOD',
+  EXPIRED: 'EXPIRED',
 } as const;
 
 export type UserState = keyof typeof UserState;

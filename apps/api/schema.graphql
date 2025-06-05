@@ -100,16 +100,6 @@ type Embed {
   url: String!
 }
 
-input EnrollPlanInput {
-  billingCycle: UserPlanBillingCycle!
-  planId: ID!
-}
-
-input EnrollPlanWithInAppPurchaseInput {
-  data: String!
-  store: InAppPurchaseStore!
-}
-
 type Entity implements IEntity {
   ancestors: [Entity!]!
   children: [Entity!]!
@@ -301,7 +291,8 @@ type Mutation {
   addSiteFont(input: AddSiteFontInput!): Site!
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): String!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
-  cancelPlan: UserPlan!
+  cancelPlanChange: Subscription_!
+  cancelSubscriptionCancellation: Subscription_!
   createComment(input: CreateCommentInput!): Comment!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
@@ -313,8 +304,6 @@ type Mutation {
   deletePost(input: DeletePostInput!): Post!
   deleteUser: Boolean!
   duplicatePost(input: DuplicatePostInput!): Post!
-  enrollPlan(input: EnrollPlanInput!): UserPlan!
-  enrollPlanWithInAppPurchase(input: EnrollPlanWithInAppPurchaseInput!): Boolean!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
@@ -332,16 +321,20 @@ type Mutation {
   renameFolder(input: RenameFolderInput!): Folder!
   reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
+  schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
+  scheduleSubscriptionCancellation: Subscription_!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
+  subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
+  subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
+  updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
-  updatePaymentBillingKey(input: UpdatePaymentBillingKeyInput!): PaymentBillingKey!
   updatePostOption(input: UpdatePostOptionInput!): Post!
   updatePostType(input: UpdatePostTypeInput!): Post!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
@@ -377,39 +370,22 @@ enum NotificationState {
   UNREAD
 }
 
-type PaymentBillingKey {
-  createdAt: DateTime!
-  id: ID!
-  name: String!
-}
-
-enum PaymentBillingKeyState {
-  ACTIVE
-  DEACTIVATED
-}
-
 type PaymentInvoice {
-  amount: Int!
-  billingAt: DateTime!
+  dueAt: DateTime!
   id: ID!
   state: PaymentInvoiceState!
 }
 
 enum PaymentInvoiceState {
   CANCELED
+  OVERDUE
   PAID
-  UNPAID
   UPCOMING
 }
 
-enum PaymentMethodType {
-  BILLING_KEY
-  CREDIT
-}
-
-enum PaymentRecordState {
-  FAILED
-  SUCCEEDED
+enum PaymentOutcome {
+  FAILURE
+  SUCCESS
 }
 
 type Permalink {
@@ -433,13 +409,21 @@ input PersistBlobAsImageInput {
 type Plan {
   fee: Int!
   id: ID!
+  interval: PlanInterval!
   name: String!
-  rules: PlanRule!
+  rule: PlanRule!
 }
 
 enum PlanAvailability {
-  PRIVATE
-  PUBLIC
+  BILLING_KEY
+  IN_APP_PURCHASE
+  MANUAL
+}
+
+enum PlanInterval {
+  LIFETIME
+  MONTHLY
+  YEARLY
 }
 
 type PlanRule {
@@ -604,6 +588,10 @@ input ResetPasswordInput {
   password: String!
 }
 
+input SchedulePlanChangeInput {
+  planId: ID!
+}
+
 union SearchHit = SearchHitPost
 
 type SearchHitPost {
@@ -681,10 +669,35 @@ type SiteView implements ISite {
   url: String!
 }
 
+input SubscribeOrChangePlanWithInAppPurchaseInput {
+  data: String!
+  store: InAppPurchaseStore!
+}
+
+input SubscribePlanWithBillingKeyInput {
+  planId: ID!
+}
+
 type Subscription {
   postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
+}
+
+enum SubscriptionState {
+  ACTIVE
+  EXPIRED
+  IN_GRACE_PERIOD
+  WILL_ACTIVATE
+  WILL_EXPIRE
+}
+
+type Subscription_ {
+  expiresAt: DateTime
+  id: ID!
+  plan: Plan!
+  startsAt: DateTime!
+  state: SubscriptionState!
 }
 
 input SyncPostInput {
@@ -703,6 +716,13 @@ input UnlockPostViewInput {
   postId: ID!
 }
 
+input UpdateBillingKeyInput {
+  birthOrBusinessRegistrationNumber: String!
+  cardNumber: String!
+  expiryDate: String!
+  passwordTwoDigits: String!
+}
+
 input UpdateEmailInput {
   code: String!
 }
@@ -714,13 +734,6 @@ input UpdateFolderOptionInput {
 
 input UpdateMarketingConsentInput {
   marketingConsent: Boolean!
-}
-
-input UpdatePaymentBillingKeyInput {
-  birthOrBusinessRegistrationNumber: String!
-  cardNumber: String!
-  expiryDate: String!
-  passwordTwoDigits: String!
 }
 
 input UpdatePostOptionInput {
@@ -750,6 +763,7 @@ input UpdateUserInput {
 
 type User {
   avatar: Image!
+  billingKey: UserBillingKey
   characterCountChanges: [CharacterCountChange!]!
   credit: Int!
   email: String!
@@ -757,42 +771,24 @@ type User {
   marketingConsent: Boolean!
   name: String!
   notifications: [Notification!]!
-  paymentBillingKey: PaymentBillingKey
   personalIdentity: UserPersonalIdentity
-  plan: UserPlan
-  planRule: PlanRule!
   recentPosts: [Post!]!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
-  usage: UserUsage!
+  subscription: Subscription_
   uuid: String!
+}
+
+type UserBillingKey {
+  createdAt: DateTime!
+  id: ID!
+  name: String!
 }
 
 type UserPersonalIdentity {
   birthDate: DateTime!
   expiresAt: DateTime!
   id: ID!
-}
-
-type UserPlan {
-  billingCycle: UserPlanBillingCycle!
-  createdAt: DateTime!
-  expiresAt: DateTime!
-  fee: Int!
-  id: ID!
-  nextInvoice: PaymentInvoice
-  plan: Plan!
-  state: UserPlanState!
-}
-
-enum UserPlanBillingCycle {
-  MONTHLY
-  YEARLY
-}
-
-enum UserPlanState {
-  ACTIVE
-  CANCELED
 }
 
 type UserSingleSignOn {
@@ -804,10 +800,6 @@ type UserSingleSignOn {
 enum UserState {
   ACTIVE
   DEACTIVATED
-}
-
-type UserUsage {
-  postCount: Int!
 }
 
 input VerifyPersonalIdentityInput {

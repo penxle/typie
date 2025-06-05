@@ -1,6 +1,7 @@
 <script lang="ts">
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
+  import { SubscriptionState } from '@/enums';
   import TypeIcon from '~icons/lucide/book-open-text';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FlaskConicalIcon from '~icons/lucide/flask-conical';
@@ -33,17 +34,15 @@
         credit
         ...DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user
 
-        paymentBillingKey {
+        billingKey {
           id
           name
         }
 
-        plan {
+        subscription {
           id
-          fee
-          billingCycle
           state
-          createdAt
+          startsAt
           expiresAt
 
           plan {
@@ -51,20 +50,14 @@
             name
             fee
           }
-
-          nextInvoice {
-            id
-            amount
-            billingAt
-          }
         }
       }
     `),
   );
 
-  const cancelPlan = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_CancelPlan_Mutation {
-      cancelPlan {
+  const scheduleSubscriptionCancellation = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_ScheduleSubscriptionCancellation_Mutation {
+      scheduleSubscriptionCancellation {
         id
       }
     }
@@ -188,7 +181,7 @@
     </div>
   </div>
 
-  {#if !$user.plan || !$user.paymentBillingKey}
+  {#if !$user.subscription || !$user.billingKey}
     <div class={flex({ direction: 'column', gap: '8px' })}>
       <p class={css({ fontWeight: 'medium' })}>이용중인 플랜</p>
 
@@ -216,17 +209,17 @@
 
       <div class={css({ borderRadius: '8px', paddingX: '16px', paddingY: '12px', backgroundColor: 'gray.100' })}>
         <p class={css({ fontSize: '15px', fontWeight: 'medium', color: 'gray.700' })}>
-          {$user.plan.plan.name} 플랜
+          {$user.subscription.plan.name} 플랜
         </p>
 
         <p class={css({ marginTop: '4px', fontSize: '14px', color: 'gray.600' })}>
-          {dayjs($user.plan.createdAt).formatAsDate()} - {dayjs($user.plan.expiresAt).formatAsDate()}
+          {dayjs($user.subscription.startsAt).formatAsDate()} - {dayjs($user.subscription.expiresAt).formatAsDate()}
 
           <span class={css({ fontSize: '12px', color: 'gray.400' })}>
-            {#if $user.plan.nextInvoice}
-              ({dayjs($user.plan.nextInvoice.billingAt).formatAsDate()}에 {comma($user.plan.nextInvoice.amount)}원 결제 예정)
-            {:else}
-              ({dayjs($user.plan.expiresAt).formatAsDate()} 해지 예정)
+            {#if $user.subscription.state === SubscriptionState.ACTIVE}
+              ({dayjs($user.subscription.expiresAt).formatAsDate()}에 {comma($user.subscription.plan.fee)}원 결제 예정)
+            {:else if $user.subscription.state === SubscriptionState.WILL_EXPIRE}
+              ({dayjs($user.subscription.expiresAt).formatAsDate()} 해지 예정)
             {/if}
           </span>
         </p>
@@ -257,21 +250,21 @@
     </Button>
   </div>
 
-  {#if $user.paymentBillingKey}
+  {#if $user.billingKey}
     <HorizontalDivider color="secondary" />
 
     <div>
       <p class={css({ fontWeight: 'medium' })}>결제 카드 정보</p>
 
       <div class={flex({ align: 'center', justify: 'space-between', fontSize: '15px', color: 'gray.700' })}>
-        {$user.paymentBillingKey.name}
+        {$user.billingKey.name}
 
         <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">결제 카드 변경</Button>
       </div>
     </div>
   {/if}
 
-  {#if $user.plan?.state === 'ACTIVE'}
+  {#if $user.subscription?.state === SubscriptionState.ACTIVE}
     <HorizontalDivider color="secondary" />
     <button
       class={css({ padding: '4px', fontSize: '13px', color: 'gray.400', width: 'fit' })}
@@ -282,7 +275,7 @@
           action: 'danger',
           actionLabel: '해지',
           actionHandler: async () => {
-            await cancelPlan();
+            await scheduleSubscriptionCancellation();
             mixpanel.track('cancel_plan');
           },
         });

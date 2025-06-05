@@ -57,6 +57,13 @@
       "when": 1748261070529,
       "tag": "0007_opposite_lake",
       "breakpoints": false
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1749116956124,
+      "tag": "0008_warm_wild_child",
+      "breakpoints": false
     }
   ]
 }

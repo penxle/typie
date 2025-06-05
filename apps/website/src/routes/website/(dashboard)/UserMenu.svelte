@@ -28,15 +28,6 @@
           id
           ...Img_image
         }
-
-        plan {
-          id
-
-          plan {
-            id
-            name
-          }
-        }
       }
     `),
   );

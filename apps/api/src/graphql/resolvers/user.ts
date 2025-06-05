@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, getTableColumns, gt, gte, inArray, lt, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import * as uuid from 'uuid';
 import { redis } from '@/cache';
@@ -11,26 +11,26 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   Notifications,
-  PaymentBillingKeys,
-  Plans,
+  PaymentInvoices,
   PostCharacterCountChanges,
   Posts,
   Sites,
+  Subscriptions,
   TableCode,
+  UserBillingKeys,
+  UserInAppPurchases,
   UserMarketingConsents,
   UserPaymentCredits,
   UserPersonalIdentities,
-  UserPlans,
   UserPushNotificationTokens,
   Users,
   UserSessions,
   UserSingleSignOns,
   validateDbId,
 } from '@/db';
-import { defaultPlanRules } from '@/db/schemas/json';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { CreditCodeState, EntityState, PaymentBillingKeyState, SingleSignOnProvider, SiteState, UserPlanState, UserState } from '@/enums';
+import { CreditCodeState, EntityState, PaymentInvoiceState, SingleSignOnProvider, SiteState, SubscriptionState, UserState } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
@@ -42,13 +42,12 @@ import {
   Image,
   isTypeOf,
   Notification,
-  PaymentBillingKey,
-  PlanRule,
   Post,
   Site,
+  Subscription,
   User,
+  UserBillingKey,
   UserPersonalIdentity,
-  UserPlan,
   UserSingleSignOn,
 } from '../objects';
 
@@ -71,85 +70,39 @@ User.implement({
 
     sites: t.field({
       type: [Site],
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'User.sites',
-          many: true,
-          load: async (ids) => {
-            return await db
-              .select()
-              .from(Sites)
-              .where(and(inArray(Sites.userId, ids), eq(Sites.state, SiteState.ACTIVE)));
-          },
-          key: ({ userId }) => userId,
-        });
-
-        return await loader.load(self.id);
+      resolve: async (self) => {
+        return await db
+          .select()
+          .from(Sites)
+          .where(and(eq(Sites.userId, self.id), eq(Sites.state, SiteState.ACTIVE)))
+          .orderBy(desc(Sites.createdAt));
       },
     }),
 
-    paymentBillingKey: t.field({
-      type: PaymentBillingKey,
+    billingKey: t.field({
+      type: UserBillingKey,
       nullable: true,
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'User.paymentBillingKey',
-          nullable: true,
-          load: async (ids) => {
-            return await db
-              .select()
-              .from(PaymentBillingKeys)
-              .where(and(inArray(PaymentBillingKeys.userId, ids), eq(PaymentBillingKeys.state, PaymentBillingKeyState.ACTIVE)));
-          },
-          key: (row) => row?.userId,
-        });
-
-        return await loader.load(self.id);
+      resolve: async (self) => {
+        return await db.select().from(UserBillingKeys).where(eq(UserBillingKeys.userId, self.id)).then(first);
       },
     }),
 
-    plan: t.field({
-      type: UserPlan,
+    subscription: t.field({
+      type: Subscription,
       nullable: true,
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'User.enrolledPlan',
-          nullable: true,
-          load: async (ids) => {
-            return await db
-              .select()
-              .from(UserPlans)
-              .where(and(inArray(UserPlans.userId, ids), inArray(UserPlans.state, [UserPlanState.ACTIVE, UserPlanState.CANCELED])));
-          },
-          key: (row) => row?.userId,
-        });
-
-        return await loader.load(self.id);
+      resolve: async (self) => {
+        return await db
+          .select()
+          .from(Subscriptions)
+          .where(
+            and(
+              eq(Subscriptions.userId, self.id),
+              inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD]),
+            ),
+          )
+          .then(first);
       },
     }),
-
-    planRule: t.field({
-      type: PlanRule,
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'User.planRule',
-          nullable: true,
-          load: async (ids) => {
-            return await db
-              .select({ ...getTableColumns(Plans), userId: UserPlans.userId })
-              .from(Plans)
-              .innerJoin(UserPlans, eq(Plans.id, UserPlans.planId))
-              .where(and(inArray(UserPlans.userId, ids), inArray(UserPlans.state, [UserPlanState.ACTIVE, UserPlanState.CANCELED])));
-          },
-          key: (row) => row?.userId,
-        });
-
-        const plan = await loader.load(self.id);
-        return plan?.rules ?? defaultPlanRules;
-      },
-    }),
-
-    usage: t.expose('id', { type: UserUsage }),
 
     recentPosts: t.field({
       type: [Post],
@@ -246,6 +199,15 @@ User.implement({
   }),
 });
 
+UserBillingKey.implement({
+  isTypeOf: isTypeOf(TableCode.USER_BILLING_KEYS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    name: t.exposeString('name'),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+  }),
+});
+
 UserPersonalIdentity.implement({
   isTypeOf: isTypeOf(TableCode.USER_PERSONAL_IDENTITIES),
   fields: (t) => ({
@@ -261,22 +223,6 @@ UserSingleSignOn.implement({
     id: t.exposeID('id'),
     provider: t.expose('provider', { type: SingleSignOnProvider }),
     email: t.exposeString('email'),
-  }),
-});
-
-const UserUsage = builder.objectRef<string>('UserUsage');
-UserUsage.implement({
-  fields: (t) => ({
-    postCount: t.int({
-      resolve: async (userId) => {
-        return await db
-          .select({ count: count() })
-          .from(Posts)
-          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-          .where(and(eq(Entities.userId, userId), eq(Entities.state, EntityState.ACTIVE)))
-          .then((result) => result[0]?.count ?? 0);
-      },
-    }),
   }),
 });
 
@@ -411,6 +357,15 @@ builder.mutationFields((t) => ({
   deleteUser: t.withAuth({ session: true }).field({
     type: 'Boolean',
     resolve: async (_, __, ctx) => {
+      const overdueInvoices = await db
+        .select({ id: PaymentInvoices.id })
+        .from(PaymentInvoices)
+        .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE)));
+
+      if (overdueInvoices.length > 0) {
+        throw new TypieError({ code: 'overdue_invoices_exist' });
+      }
+
       await db.transaction(async (tx) => {
         await tx
           .update(Entities)
@@ -428,11 +383,9 @@ builder.mutationFields((t) => ({
 
         await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.userId, ctx.session.userId));
 
-        await tx.delete(UserPlans).where(eq(UserPlans.userId, ctx.session.userId));
-        await tx
-          .update(PaymentBillingKeys)
-          .set({ state: PaymentBillingKeyState.DEACTIVATED })
-          .where(eq(PaymentBillingKeys.userId, ctx.session.userId));
+        await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.userId, ctx.session.userId));
+        await tx.delete(UserBillingKeys).where(eq(UserBillingKeys.userId, ctx.session.userId));
+        await tx.delete(UserInAppPurchases).where(eq(UserInAppPurchases.userId, ctx.session.userId));
 
         await tx.delete(UserPersonalIdentities).where(eq(UserPersonalIdentities.userId, ctx.session.userId));
 

@@ -5,11 +5,6 @@ export type PlanRules = {
   maxTotalBlobSize: number;
 };
 
-export const defaultPlanRules: PlanRules = {
-  maxTotalCharacterCount: 16_000,
-  maxTotalBlobSize: 20 * 1000 * 1000,
-};
-
 export type NotificationAnnouncementData = {
   category: typeof NotificationCategory.ANNOUNCEMENT;
   message: string;

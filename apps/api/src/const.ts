@@ -1,6 +1,14 @@
+import type { PlanRules } from '@/db/schemas/json';
+
 export type PlanId = keyof typeof PlanId;
 export const PlanId = {
-  PLUS: 'PL0PLUS',
+  FULL_ACCESS_1MONTH: 'PL0FULL1MONTH',
+  FULL_ACCESS_1YEAR: 'PL0FULL1YEAR',
 } as const;
 
-export const PLAN_PAYMENT_GRACE_DAYS = 7;
+export const defaultPlanRules: PlanRules = {
+  maxTotalCharacterCount: 16_000,
+  maxTotalBlobSize: 20 * 1000 * 1000,
+};
+
+export const SUBSCRIPTION_GRACE_DAYS = 7;
