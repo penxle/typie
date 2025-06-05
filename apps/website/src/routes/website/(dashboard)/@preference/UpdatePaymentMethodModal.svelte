@@ -117,11 +117,11 @@
 
         const handleSubscription = async () => {
           if (interval === PlanInterval.MONTHLY) {
-            await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1MONTH });
-            mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1MONTH });
+            await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
+            mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
           } else if (interval === PlanInterval.YEARLY) {
-            await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1YEAR });
-            mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1YEAR });
+            await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
+            mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
           }
 
           open = false;
