@@ -97,7 +97,7 @@ User.implement({
           .where(
             and(
               eq(Subscriptions.userId, self.id),
-              inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD]),
+              inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
             ),
           )
           .then(first);
