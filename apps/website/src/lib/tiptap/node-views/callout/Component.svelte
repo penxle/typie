@@ -56,7 +56,7 @@
           justifyContent: 'center',
           borderRadius: '2px',
           size: '28px',
-          _hover: {
+          _supportHover: {
             backgroundColor: 'gray.900/8',
           },
         },
