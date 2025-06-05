@@ -318,7 +318,7 @@ builder.mutationFields((t) => ({
         }
 
         identifier = subscription.originalTransactionId;
-        planId = subscription.productId;
+        planId = subscription.productId.toUpperCase();
         startsAt = dayjs(subscription.purchaseDate);
         expiresAt = dayjs(subscription.expiresDate);
       } else if (input.store === InAppPurchaseStore.GOOGLE_PLAY) {
@@ -336,7 +336,7 @@ builder.mutationFields((t) => ({
         }
 
         identifier = input.data;
-        planId = item.offerDetails.basePlanId;
+        planId = item.offerDetails.basePlanId.toUpperCase();
         startsAt = dayjs(subscription.startTime);
         expiresAt = dayjs(item.expiryTime);
       } else {
@@ -347,15 +347,11 @@ builder.mutationFields((t) => ({
         throw new Error('expiresAt should be in the future');
       }
 
-      const plan = await db
-        .select({ id: Plans.id, availability: Plans.availability })
+      await db
+        .select({ id: Plans.id })
         .from(Plans)
-        .where(eq(Plans.id, planId))
+        .where(and(eq(Plans.id, planId), eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)))
         .then(firstOrThrow);
-
-      if (plan.availability !== PlanAvailability.IN_APP_PURCHASE) {
-        throw new TypieError({ code: 'invalid_plan_availability' });
-      }
 
       return await db.transaction(async (tx) => {
         await tx
@@ -377,6 +373,7 @@ builder.mutationFields((t) => ({
             planId,
             startsAt,
             expiresAt,
+            state: SubscriptionState.ACTIVE,
           })
           .onConflictDoUpdate({
             target: [Subscriptions.userId],
