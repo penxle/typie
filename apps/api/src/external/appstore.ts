@@ -32,33 +32,49 @@ const verifiers = {
   sandbox: new SignedDataVerifier(certificates, true, Environment.SANDBOX, env.APPLE_APP_BUNDLE_ID, env.APPLE_APP_APPLE_ID),
 };
 
-type GetSubscriptionParams = { environment: 'production' | 'sandbox'; transactionId: string };
-export const getSubscription = async ({ environment, transactionId }: GetSubscriptionParams) => {
-  const client = clients[environment];
-  const verifier = verifiers[environment];
+const environments = ['production', 'sandbox'] as const;
 
-  const subscription = await client.getAllSubscriptionStatuses(transactionId, [Status.ACTIVE]);
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const transaction = await verifier.verifyAndDecodeTransaction(subscription.data![0].lastTransactions![0].signedTransactionInfo!);
+export const getSubscription = async (transactionId: string) => {
+  for (const environment of environments) {
+    const client = clients[environment];
+    const verifier = verifiers[environment];
 
-  return transaction;
+    try {
+      const subscription = await client.getAllSubscriptionStatuses(transactionId, [Status.ACTIVE]);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const transaction = await verifier.verifyAndDecodeTransaction(subscription.data![0].lastTransactions![0].signedTransactionInfo!);
+
+      return transaction;
+    } catch {
+      // pass
+    }
+  }
+
+  throw new Error('Transaction not found');
 };
 
-type DecodeNotificationParams = { environment: 'production' | 'sandbox'; signedPayload: string };
-export const decodeNotification = async ({ environment, signedPayload }: DecodeNotificationParams) => {
-  const verifier = verifiers[environment];
+export const decodeNotification = async (signedPayload: string) => {
+  for (const environment of environments) {
+    const verifier = verifiers[environment];
 
-  const notification = await verifier.verifyAndDecodeNotification(signedPayload);
+    try {
+      const notification = await verifier.verifyAndDecodeNotification(signedPayload);
 
-  return {
-    ...notification,
-    data: {
-      ...notification.data,
-      transaction: notification.data?.signedTransactionInfo
-        ? await verifier.verifyAndDecodeTransaction(notification.data.signedTransactionInfo)
-        : undefined,
-      signedRenewalInfo: undefined,
-      signedTransactionInfo: undefined,
-    },
-  };
+      return {
+        ...notification,
+        data: {
+          ...notification.data,
+          transaction: notification.data?.signedTransactionInfo
+            ? await verifier.verifyAndDecodeTransaction(notification.data.signedTransactionInfo)
+            : undefined,
+          signedRenewalInfo: undefined,
+          signedTransactionInfo: undefined,
+        },
+      };
+    } catch {
+      // pass
+    }
+  }
+
+  throw new Error('Notification verification failed');
 };

@@ -16,7 +16,6 @@ import {
   validateDbId,
 } from '@/db';
 import { CreditCodeState, InAppPurchaseStore, PaymentInvoiceState, PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
-import { production } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
@@ -308,10 +307,7 @@ builder.mutationFields((t) => ({
       let expiresAt: dayjs.Dayjs;
 
       if (input.store === InAppPurchaseStore.APP_STORE) {
-        const subscription = await appstore.getSubscription({
-          environment: production ? 'production' : 'sandbox',
-          transactionId: input.data,
-        });
+        const subscription = await appstore.getSubscription(input.data);
 
         if (!subscription.productId || !subscription.originalTransactionId || !subscription.purchaseDate || !subscription.expiresDate) {
           throw new Error('required fields are missing');

@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { production } from '@/env';
 import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
 import * as slack from '@/external/slack';
@@ -15,10 +14,7 @@ iap.post('/appstore', async (c) => {
     return c.json({ error: 'invalid_request' }, 400);
   }
 
-  const notification = await appstore.decodeNotification({
-    environment: production ? 'production' : 'sandbox',
-    signedPayload: body.signedPayload,
-  });
+  const notification = await appstore.decodeNotification(body.signedPayload);
 
   await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'rest/appstore', notification }, null, 2) });
 

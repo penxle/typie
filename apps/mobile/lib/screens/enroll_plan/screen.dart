@@ -17,7 +17,7 @@ import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
-enum BillingCycle { monthly, yearly }
+enum PlanInterval { monthly, yearly }
 
 @RoutePage()
 class EnrollPlanScreen extends HookWidget {
@@ -109,7 +109,7 @@ class EnrollPlanScreen extends HookWidget {
                         children: [
                           _PurchaseButton(
                             label: '1개월 구독하기',
-                            product: productDetailsMap.data?[BillingCycle.monthly],
+                            product: productDetailsMap.data?[PlanInterval.monthly],
                             onTap: (product) async {
                               await context.runWithLoader(() async {
                                 await _purchaseProduct(product, uuid: data.me!.uuid);
@@ -118,7 +118,7 @@ class EnrollPlanScreen extends HookWidget {
                           ),
                           _PurchaseButton(
                             label: '1년 구독하기',
-                            product: productDetailsMap.data?[BillingCycle.yearly],
+                            product: productDetailsMap.data?[PlanInterval.yearly],
                             onTap: (product) async {
                               await context.runWithLoader(() async {
                                 await _purchaseProduct(product, uuid: data.me!.uuid);
@@ -206,34 +206,34 @@ class _Product {
   String get price => details.price;
 }
 
-Future<Map<BillingCycle, _Product>> _fetchProductMap() async {
+Future<Map<PlanInterval, _Product>> _fetchProductMap() async {
   if (Platform.isIOS) {
-    final response = await InAppPurchase.instance.queryProductDetails({'plan.full.1month', 'plan.full.1year'});
+    final response = await InAppPurchase.instance.queryProductDetails({'pl0fl1map', 'pl0fl1yap'});
     return {
-      BillingCycle.monthly: _Product(
-        response.productDetails.firstWhere((productDetails) => productDetails.id == 'plan.full.1month'),
+      PlanInterval.monthly: _Product(
+        response.productDetails.firstWhere((productDetails) => productDetails.id == 'pl0fl1map'),
       ),
-      BillingCycle.yearly: _Product(
-        response.productDetails.firstWhere((productDetails) => productDetails.id == 'plan.full.1year'),
+      PlanInterval.yearly: _Product(
+        response.productDetails.firstWhere((productDetails) => productDetails.id == 'pl0fl1yap'),
       ),
     };
   } else {
     final response = await InAppPurchase.instance.queryProductDetails({'plan.full'});
     return {
-      BillingCycle.monthly: _Product(
+      PlanInterval.monthly: _Product(
         response.productDetails.firstWhere(
           (productDetails) =>
               productDetails is GooglePlayProductDetails &&
               productDetails.productDetails.subscriptionOfferDetails![productDetails.subscriptionIndex!].basePlanId ==
-                  '1month',
+                  'pl0fl1map',
         ),
       ),
-      BillingCycle.yearly: _Product(
+      PlanInterval.yearly: _Product(
         response.productDetails.firstWhere(
           (productDetails) =>
               productDetails is GooglePlayProductDetails &&
               productDetails.productDetails.subscriptionOfferDetails![productDetails.subscriptionIndex!].basePlanId ==
-                  '1year',
+                  'pl0fl1yap',
         ),
       ),
     };

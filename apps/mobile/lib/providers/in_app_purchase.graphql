@@ -1,14 +1,17 @@
+query InAppPurchase_Query {
+  me {
+    subscription {
+      id
+
+      plan {
+        id
+      }
+    }
+  }
+}
+
 mutation InAppPurchase_SubscribeOrChangePlanWithInAppPurchase_Mutation($input: SubscribeOrChangePlanWithInAppPurchaseInput!) {
   subscribeOrChangePlanWithInAppPurchase(input: $input) {
     id
-    state
-    startsAt
-    expiresAt
-    plan {
-      id
-      name
-      fee
-      interval
-    }
   }
 }
