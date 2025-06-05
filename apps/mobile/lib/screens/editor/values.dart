@@ -1,3 +1,10 @@
+import 'dart:math';
+
+import 'package:flutter/material.dart';
+import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/horizontal_divider.dart';
+import 'package:typie/widgets/svg_image.dart';
+
 final editorValues = <String, List<Map<String, dynamic>>>{
   'fontFamily': [
     {'label': '프리텐다드', 'value': 'Pretendard'},
@@ -81,15 +88,138 @@ final editorValues = <String, List<Map<String, dynamic>>>{
   ],
 
   'horizontalRule': [
-    {'label': '옅은 선', 'type': 'light-line'},
-    {'label': '점선', 'type': 'dashed-line'},
-    {'label': '동그라미가 있는 선', 'type': 'circle-line'},
-    {'label': '마름모가 있는 선', 'type': 'diamond-line'},
-    {'label': '동그라미', 'type': 'circle'},
-    {'label': '마름모', 'type': 'diamond'},
-    {'label': '세 개의 동그라미', 'type': 'three-circles'},
-    {'label': '세 개의 마름모', 'type': 'three-diamonds'},
-    {'label': '지그재그', 'type': 'zigzag'},
+    {'label': '옅은 선', 'type': 'light-line', 'component': const HorizontalDivider(color: AppColors.gray_200)},
+    {
+      'label': '점선',
+      'type': 'dashed-line',
+      'component': Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 8,
+        children: List.generate(6 * 2 - 1, (_) {
+          return Container(width: 8, height: 1, color: AppColors.gray_700);
+        }),
+      ),
+    },
+    {
+      'label': '동그라미가 있는 선',
+      'type': 'circle-line',
+      'component': Row(
+        spacing: 10,
+        children: [
+          const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
+          ),
+          const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
+        ],
+      ),
+    },
+    {
+      'label': '마름모가 있는 선',
+      'type': 'diamond-line',
+      'component': Row(
+        spacing: 8,
+        children: [
+          const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
+          Transform.rotate(
+            angle: pi / 4,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+            ),
+          ),
+          const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
+        ],
+      ),
+    },
+    {
+      'label': '동그라미',
+      'type': 'circle',
+      'component': Container(
+        width: 10,
+        height: 10,
+        decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
+      ),
+    },
+    {
+      'label': '마름모',
+      'type': 'diamond',
+      'component': Transform.rotate(
+        angle: pi / 4,
+        child: Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+        ),
+      ),
+    },
+    {
+      'label': '세 개의 동그라미',
+      'type': 'three-circles',
+      'component': Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        spacing: 8,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
+          ),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
+          ),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
+          ),
+        ],
+      ),
+    },
+    {
+      'label': '세 개의 마름모',
+      'type': 'three-diamonds',
+      'component': Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        spacing: 8,
+        children: [
+          Transform.rotate(
+            angle: pi / 4,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+            ),
+          ),
+          Transform.rotate(
+            angle: pi / 4,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+            ),
+          ),
+          Transform.rotate(
+            angle: pi / 4,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+            ),
+          ),
+        ],
+      ),
+    },
+    {
+      'label': '지그재그',
+      'type': 'zigzag',
+      'component': const SvgImage('icons/zigzag', height: 12, color: AppColors.gray_700),
+    },
   ],
 
   'callout': [

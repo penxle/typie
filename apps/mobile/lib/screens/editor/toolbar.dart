@@ -43,6 +43,14 @@ class EditorToolbar extends HookWidget {
       return null;
     }, [proseMirrorState?.currentNode]);
 
+    useAsyncEffect(() async {
+      if (proseMirrorState?.currentNode?.type == 'horizontal_rule' && scope.selectedToolboxIdx.value != 2) {
+        await webViewController?.clearFocus();
+        scope.selectedToolboxIdx.value = 2;
+      }
+      return null;
+    }, [proseMirrorState?.currentNode?.type]);
+
     if (!isKeyboardVisible && selectedToolboxIdx == -1) {
       return const SizedBox.shrink();
     }
@@ -55,7 +63,7 @@ class EditorToolbar extends HookWidget {
           isAlternate: selectedTextbarIdx > 0,
           alternate: _AlternateTextbar(
             children: [
-              _SelectTextbar(
+              _SelectValuesBar(
                 name: 'textColor',
                 activeValue:
                     proseMirrorState?.getMarkAttributes('text_style')?['textColor'] as String? ??
@@ -70,7 +78,7 @@ class EditorToolbar extends HookWidget {
                   );
                 },
               ),
-              _SelectTextbar(
+              _SelectValuesBar(
                 name: 'fontFamily',
                 activeValue:
                     proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String? ??
@@ -85,7 +93,7 @@ class EditorToolbar extends HookWidget {
                   );
                 },
               ),
-              _SelectTextbar(
+              _SelectValuesBar(
                 name: 'fontSize',
                 activeValue:
                     proseMirrorState?.getMarkAttributes('text_style')?['fontSize'] as num? ??
@@ -100,7 +108,7 @@ class EditorToolbar extends HookWidget {
                   );
                 },
               ),
-              _SelectTextbar(
+              _SelectValuesBar(
                 name: 'textAlign',
                 activeValue:
                     proseMirrorState?.getNodeAttributes('paragraph')?['textAlign'] as String? ??
@@ -115,7 +123,7 @@ class EditorToolbar extends HookWidget {
                   );
                 },
               ),
-              _SelectTextbar(
+              _SelectValuesBar(
                 name: 'lineHeight',
                 activeValue:
                     proseMirrorState?.getNodeAttributes('paragraph')?['lineHeight'] as num? ??
@@ -130,7 +138,7 @@ class EditorToolbar extends HookWidget {
                   );
                 },
               ),
-              _SelectTextbar(
+              _SelectValuesBar(
                 name: 'letterSpacing',
                 activeValue:
                     proseMirrorState?.getNodeAttributes('paragraph')?['letterSpacing'] as num? ??
@@ -168,7 +176,8 @@ class EditorToolbar extends HookWidget {
                 child: switch (proseMirrorState?.currentNode?.type) {
                   'file' => const _FileToolbar(),
                   'image' => const _ImageToolbar(),
-                  'embed' => const _EmbedToolbar(),
+                  'embed' => const _NodeToolbar(label: '임베드', children: []),
+                  'horizontal_rule' => const _NodeToolbar(label: '구분선', children: []),
                   _ => const _DefaultToolbar(),
                 },
               ),
@@ -255,7 +264,10 @@ class EditorToolbar extends HookWidget {
                     label: '구분선',
                     isActive: proseMirrorState?.isNodeActive('horizontal_rule') ?? false,
                     onTap: () async {
-                      await scope.command('horizontal_rule');
+                      await scope.command(
+                        'horizontal_rule',
+                        attrs: {'horizontalRule': editorDefaultValues['horizontalRule']},
+                      );
                       await webViewController?.requestFocus();
                     },
                   ),
@@ -324,6 +336,27 @@ class EditorToolbar extends HookWidget {
                     },
                   ),
                 ],
+              ),
+              SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const Pad(all: 20),
+                child: _SelectValuesBar(
+                  name: 'horizontalRule',
+                  activeValue:
+                      proseMirrorState?.getNodeAttributes('horizontal_rule')?['type'] as String? ??
+                      editorDefaultValues['horizontalRule'],
+                  valueKey: 'type',
+                  direction: Axis.vertical,
+                  builder: (context, e, isActive) {
+                    return _ListButton(
+                      component: e['component'] as Widget,
+                      isActive: isActive,
+                      onTap: () async {
+                        await scope.command('horizontal_rule', attrs: {'horizontalRule': e['type']});
+                      },
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -568,15 +601,6 @@ class _FileToolbar extends HookWidget {
           ),
       ],
     );
-  }
-}
-
-class _EmbedToolbar extends StatelessWidget {
-  const _EmbedToolbar();
-
-  @override
-  Widget build(BuildContext context) {
-    return const _NodeToolbar(label: '임베드', children: []);
   }
 }
 
@@ -902,20 +926,28 @@ class _AlternateTextbar extends HookWidget {
   }
 }
 
-class _SelectTextbar extends HookWidget {
-  const _SelectTextbar({required this.name, required this.activeValue, required this.builder});
+class _SelectValuesBar extends HookWidget {
+  const _SelectValuesBar({
+    required this.name,
+    required this.activeValue,
+    required this.builder,
+    this.direction = Axis.horizontal,
+    this.valueKey = 'value',
+  });
 
   final String name;
   final dynamic activeValue;
   // ignore: avoid_positional_boolean_parameters for simplicity
   final Widget Function(BuildContext context, Map<String, dynamic> e, bool isActive) builder;
+  final Axis direction;
+  final String? valueKey;
 
   @override
   Widget build(BuildContext context) {
     final keys = useMemoized(() => List.generate(editorValues[name]!.length, (_) => GlobalKey()), []);
 
     useAsyncEffect(() async {
-      final index = editorValues[name]!.indexWhere((e) => e['value'] == activeValue);
+      final index = editorValues[name]!.indexWhere((e) => e[valueKey] == activeValue);
 
       if (index != -1 && keys[index].currentContext != null) {
         await Scrollable.ensureVisible(
@@ -928,12 +960,13 @@ class _SelectTextbar extends HookWidget {
       return null;
     }, [activeValue]);
 
-    return Row(
+    return Flex(
+      direction: direction,
       spacing: 4,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ...editorValues[name]!.mapIndexed(
-          (index, e) => KeyedSubtree(key: keys[index], child: builder(context, e, e['value'] == activeValue)),
+          (index, e) => KeyedSubtree(key: keys[index], child: builder(context, e, e[valueKey] == activeValue)),
         ),
       ],
     );
@@ -1148,6 +1181,29 @@ class _BoxButton extends StatelessWidget {
             SvgImage('icons/$icon', width: 28, height: 28, color: color),
             Text(label, style: TextStyle(fontSize: 15, color: color)),
           ],
+        );
+      },
+    );
+  }
+}
+
+class _ListButton extends StatelessWidget {
+  const _ListButton({required this.component, required this.onTap, this.isActive = false});
+
+  final Widget component;
+  final bool isActive;
+  final void Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BaseButton(
+      isActive: isActive,
+      onTap: onTap,
+      builder: (context, color, backgroundColor) {
+        return Container(
+          decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6)),
+          height: 48,
+          child: Align(child: component),
         );
       },
     );
