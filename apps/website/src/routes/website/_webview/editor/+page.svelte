@@ -266,7 +266,7 @@
       } else if (name === 'horizontal_rule') {
         editor?.current.chain().focus().setHorizontalRule(attrs.horizontalRule).run();
       } else if (name === 'blockquote') {
-        editor?.current.chain().focus().toggleBlockquote().run();
+        editor?.current.chain().focus().toggleBlockquote(attrs.blockquote).run();
       } else if (name === 'callout') {
         editor?.current.chain().focus().toggleCallout().run();
       } else if (name === 'fold') {

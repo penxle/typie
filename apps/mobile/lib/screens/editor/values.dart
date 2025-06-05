@@ -83,8 +83,12 @@ final editorValues = <String, List<Map<String, dynamic>>>{
   ],
 
   'blockquote': [
-    {'label': '왼쪽 선', 'type': 'left-line'},
-    {'label': '왼쪽 따옴표', 'type': 'left-quote'},
+    {'label': '왼쪽 선', 'type': 'left-line', 'component': const VerticalDivider(color: AppColors.gray_200, thickness: 4)},
+    {
+      'label': '왼쪽 따옴표',
+      'type': 'left-quote',
+      'component': const SvgImage('icons/left-quote', height: 16, color: AppColors.gray_900),
+    },
   ],
 
   'horizontalRule': [
