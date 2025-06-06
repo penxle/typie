@@ -28,12 +28,12 @@ app.notFound((c) => {
   return c.text('Not Found', { status: 404 });
 });
 
-app.onError((err, c) => {
-  if (err instanceof HTTPException) {
-    return err.getResponse();
+app.onError((error, c) => {
+  if (error instanceof HTTPException) {
+    return error.getResponse();
   }
 
-  log.error`Unhandled error: ${err}`;
+  log.error('Unhandled error {*}', { error });
 
   return c.text('Internal Server Error', { status: 500 });
 });
@@ -45,7 +45,7 @@ const server = serve(
     port: env.LISTEN_PORT ?? 3000,
   },
   (addr) => {
-    log.info`Listening on ${addr.address}:${addr.port}`;
+    log.info('Listening {*}', { address: addr.address, port: addr.port });
   },
 );
 

@@ -4,11 +4,11 @@ import type { Handle } from '@sveltejs/kit';
 const log = logger.getChild('http');
 
 export const logging: Handle = async ({ event, resolve }) => {
-  log.info('Request: {method} {host} {path} from {ip} ({ua})', {
-    ip: event.getClientAddress(),
+  log.info('Handled request {*}', {
     method: event.request.method,
     host: event.url.hostname,
     path: event.url.pathname,
+    ip: event.getClientAddress(),
     ua: event.request.headers.get('user-agent'),
   });
 

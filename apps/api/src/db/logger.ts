@@ -10,15 +10,6 @@ export class DrizzleLogger implements Logger {
       return;
     }
 
-    const interpolatedQuery = query
-      .replaceAll(/\$(\d+)/g, (_, a) => {
-        const param = params[a - 1];
-        return typeof param === 'string' ? `'${param}'` : String(param);
-      })
-      .replaceAll('"', '');
-
-    log.debug('Executed query: {query}', {
-      query: interpolatedQuery.slice(0, 1000),
-    });
+    log.debug('Executed query {*}', { query, params });
   }
 }
