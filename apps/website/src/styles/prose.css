@@ -1,5 +1,5 @@
 :root {
-  --prosemirror-color-selection: #90baf8;
+  --prosemirror-color-selection: #93c5fd; /* colors.blue.300 */
 }
 
 .ProseMirror-body {
