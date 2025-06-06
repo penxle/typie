@@ -133,8 +133,9 @@ class AlertModal extends StatelessWidget {
 
 class ConfirmModal extends StatelessWidget {
   const ConfirmModal({
-    required this.title,
-    required this.message,
+    this.title,
+    this.message,
+    this.child,
     required this.onConfirm,
     this.onCancel,
     this.confirmText = '확인',
@@ -144,8 +145,9 @@ class ConfirmModal extends StatelessWidget {
     super.key,
   });
 
-  final String title;
-  final String message;
+  final String? title;
+  final String? message;
+  final Widget? child;
 
   final String confirmText;
   final String cancelText;
@@ -163,10 +165,12 @@ class ConfirmModal extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const Gap(8),
-          Text(message, style: const TextStyle(fontSize: 16)),
-          const Gap(24),
+          if (title != null) ...[
+            Text(title!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const Gap(8),
+          ],
+          if (message != null) ...[Text(message!, style: const TextStyle(fontSize: 16)), const Gap(24)],
+          if (child != null) ...[child!, const Gap(24)],
           Row(
             spacing: 8,
             children: [

@@ -247,6 +247,8 @@
         if (attrs.textColor !== undefined) {
           editor?.current.chain().focus().setTextColor(attrs.textColor).run();
         }
+      } else if (name === 'link') {
+        editor?.current.chain().focus().setLink(attrs.url).run();
       } else if (name === 'paragraph') {
         if (attrs.textAlign !== undefined) {
           editor?.current.chain().focus().setParagraphTextAlign(attrs.textAlign).run();
