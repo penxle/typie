@@ -918,9 +918,9 @@ class _DefaultTextbar extends HookWidget {
                           e['value'] ==
                           (proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String? ??
                               editorDefaultValues['fontFamily']),
+                      orElse: () => {'label': '(알 수 없음)'},
                     )['label']
-                    as String? ??
-                '(알 수 없음)',
+                    as String,
             onTap: () {
               scope.selectedTextbarIdx.value = 2;
             },
