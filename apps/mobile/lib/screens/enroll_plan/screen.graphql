@@ -8,3 +8,9 @@ query EnrollPlanScreen_Query {
     }
   }
 }
+
+mutation EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation($input: SubscribeOrChangePlanWithInAppPurchaseInput!) {
+  subscribeOrChangePlanWithInAppPurchase(input: $input) {
+    id
+  }
+}

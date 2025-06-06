@@ -7,10 +7,17 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/context/loader.dart';
+import 'package:typie/context/modal.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
+import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/logger.dart';
 import 'package:typie/screens/enroll_plan/__generated__/screen.req.gql.dart';
+import 'package:typie/screens/profile/__generated__/screen.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
@@ -25,8 +32,50 @@ class EnrollPlanScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    final client = useService<GraphQLClient>();
     final future = useMemoized(_fetchProductMap);
     final productDetailsMap = useFuture(future);
+
+    useEffect(() {
+      final subscription = InAppPurchase.instance.purchaseStream.listen((purchaseDetailsList) async {
+        for (final purchaseDetails in purchaseDetailsList) {
+          try {
+            if (purchaseDetails.status == PurchaseStatus.purchased ||
+                purchaseDetails.status == PurchaseStatus.restored) {
+              await client.request(
+                GEnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_MutationReq(
+                  (b) => b
+                    ..vars.input.store = Platform.isIOS
+                        ? GInAppPurchaseStore.APP_STORE
+                        : GInAppPurchaseStore.GOOGLE_PLAY
+                    ..vars.input.data = Platform.isIOS
+                        ? purchaseDetails.purchaseID
+                        : purchaseDetails.verificationData.serverVerificationData,
+                ),
+              );
+
+              await client.refetch(GEnrollPlanScreen_QueryReq());
+              await client.refetch(GProfileScreen_QueryReq());
+
+              if (context.mounted) {
+                await context.showModal(
+                  child: const AlertModal(title: '구독이 완료되었어요', message: '타이피의 모든 기능을 이용해보세요!'),
+                );
+              }
+            }
+          } catch (err) {
+            log.e('EnrollPlanScreen', error: err);
+            await Sentry.captureException(err);
+          } finally {
+            if (purchaseDetails.pendingCompletePurchase) {
+              await InAppPurchase.instance.completePurchase(purchaseDetails);
+            }
+          }
+        }
+      });
+
+      return subscription.cancel;
+    }, []);
 
     return Screen(
       heading: const Heading(title: '이용권 구매/변경'),
