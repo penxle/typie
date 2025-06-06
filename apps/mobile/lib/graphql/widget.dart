@@ -1,8 +1,12 @@
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:ferry/ferry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/tappable.dart';
 
 class GraphQLOperation<TData, TVars> extends HookWidget {
   const GraphQLOperation({
@@ -41,6 +45,33 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
 
       return null;
     }, [snapshot.data]);
+
+    if (snapshot.hasError || (snapshot.data?.hasErrors ?? false)) {
+      return Material(
+        color: initialBackgroundColor ?? AppColors.transparent,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('앗! 문제가 발생했어요', style: TextStyle(fontSize: 16)),
+            const Text('잠시 후 다시 시도해주세요.', style: TextStyle(fontSize: 15, color: AppColors.gray_500)),
+            const Gap(16),
+            Tappable(
+              onTap: () async {
+                await client.refetch(operation);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.gray_950),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const Pad(horizontal: 16, vertical: 8),
+                child: const Text('다시 시도하기', style: TextStyle(fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     final data = snapshot.data?.data;
     final child = data == null
