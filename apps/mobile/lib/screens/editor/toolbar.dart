@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
@@ -19,6 +20,8 @@ import 'package:typie/screens/editor/values.dart';
 import 'package:typie/services/blob.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
+import 'package:typie/widgets/forms/form.dart';
+import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/svg_image.dart';
 import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/vertical_divider.dart';
@@ -194,6 +197,12 @@ class EditorToolbar extends HookWidget {
                   } else if ((proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
                       (proseMirrorState?.isNodeActive('ordered_list') ?? false)) {
                     return const _ListToolbar();
+                  } else if (proseMirrorState?.isMarkActive('link') ?? false) {
+                    return _NodeToolbar(
+                      label: '링크',
+                      withDelete: false,
+                      children: [Text((proseMirrorState?.getMarkAttributes('link')?['href'] ?? '') as String)],
+                    );
                   }
 
                   switch (proseMirrorState?.currentNode?.type) {
@@ -969,7 +978,35 @@ class _DefaultTextbar extends HookWidget {
             },
           ),
           const AppVerticalDivider(height: 20),
-          _IconToolbarButton(icon: LucideLightIcons.link, onTap: () {}),
+          _IconToolbarButton(
+            icon: LucideLightIcons.link,
+            onTap: () async {
+              await context.showModal(
+                intercept: true,
+                child: HookForm(
+                  onSubmit: (form) async {
+                    await scope.command('link', attrs: {'url': form.data['url']});
+                  },
+                  builder: (context, form) {
+                    return ConfirmModal(
+                      title: '링크 삽입',
+                      confirmText: '삽입',
+                      onConfirm: () async {
+                        await form.submit();
+                      },
+                      child: HookFormTextField.collapsed(
+                        initialValue: (proseMirrorState?.getMarkAttributes('link')?['href'] ?? '') as String,
+                        name: 'url',
+                        placeholder: 'https://...',
+                        style: const TextStyle(fontSize: 16),
+                        autofocus: true,
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
           _IconToolbarButton(icon: TypieIcons.ruby, onTap: () {}),
           const AppVerticalDivider(height: 20),
           _IconToolbarButton(
