@@ -318,9 +318,7 @@ builder.mutationFields((t) => ({
         startsAt = dayjs(subscription.purchaseDate);
         expiresAt = dayjs(subscription.expiresDate);
       } else if (input.store === InAppPurchaseStore.GOOGLE_PLAY) {
-        const subscription = await googleplay.getSubscription({
-          purchaseToken: input.data,
-        });
+        const subscription = await googleplay.getSubscription(input.data);
 
         if (subscription.subscriptionState !== 'SUBSCRIPTION_STATE_ACTIVE') {
           throw new Error('subscriptionState is not active');
@@ -373,6 +371,7 @@ builder.mutationFields((t) => ({
           })
           .onConflictDoUpdate({
             target: [Subscriptions.userId],
+            targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
             set: { planId, startsAt, expiresAt },
           })
           .returning()

@@ -9,8 +9,7 @@ const client = androidpublisher({
   }),
 });
 
-type GetSubscriptionParams = { purchaseToken: string };
-export const getSubscription = async ({ purchaseToken }: GetSubscriptionParams) => {
+export const getSubscription = async (purchaseToken: string) => {
   // spell-checker:disable-next-line
   const response = await client.purchases.subscriptionsv2.get({
     packageName: env.GOOGLE_PLAY_PACKAGE_NAME,

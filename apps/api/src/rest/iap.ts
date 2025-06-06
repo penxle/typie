@@ -29,9 +29,7 @@ iap.post('/googleplay', async (c) => {
   });
 
   if (notification.subscriptionNotification) {
-    const subscription = await googleplay.getSubscription({
-      purchaseToken: notification.subscriptionNotification.purchaseToken,
-    });
+    const subscription = await googleplay.getSubscription(notification.subscriptionNotification.purchaseToken);
 
     await slack.sendMessage({
       channel: 'iap',
