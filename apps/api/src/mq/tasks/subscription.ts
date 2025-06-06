@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { and, eq, lte } from 'drizzle-orm';
 import { SUBSCRIPTION_GRACE_DAYS } from '@/const';
 import { db, firstOrThrow, PaymentInvoices, Plans, Subscriptions } from '@/db';
-import { PaymentInvoiceState, SubscriptionState } from '@/enums';
+import { PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@/enums';
 import { getSubscriptionExpiresAt, payInvoiceWithBillingKey } from '@/utils';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
@@ -24,7 +24,14 @@ export const SubscriptionRenewalCron = defineCron('subscription:renewal', '0 10 
       const initialSubscriptions = await tx
         .select({ id: Subscriptions.id })
         .from(Subscriptions)
-        .where(and(eq(Subscriptions.state, SubscriptionState.ACTIVE), lte(Subscriptions.expiresAt, now)));
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.state, SubscriptionState.ACTIVE),
+            lte(Subscriptions.expiresAt, now),
+            eq(Plans.availability, PlanAvailability.BILLING_KEY),
+          ),
+        );
 
       for (const subscription of initialSubscriptions) {
         await enqueueJob('subscription:renewal:initial', subscription.id);

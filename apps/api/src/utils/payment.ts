@@ -53,43 +53,62 @@ export const payInvoiceWithBillingKey = async (tx: Transaction, invoiceId: strin
   const billingAmount = invoice.amount - creditAmount;
 
   try {
-    const result = await portone.payWithBillingKey({
-      paymentId: invoice.id,
-      billingKey: billingKey.billingKey,
-      customerName: user.name,
-      customerEmail: user.email,
-      orderName: '타이피 정기결제',
-      amount: billingAmount,
-    });
+    if (billingAmount > 0) {
+      const result = await portone.payWithBillingKey({
+        paymentId: invoice.id,
+        billingKey: billingKey.billingKey,
+        customerName: user.name,
+        customerEmail: user.email,
+        orderName: '타이피 정기결제',
+        amount: billingAmount,
+      });
 
-    if (result.status === 'succeeded') {
+      if (result.status === 'succeeded') {
+        await tx.insert(PaymentRecords).values({
+          invoiceId: invoice.id,
+          outcome: PaymentOutcome.SUCCESS,
+          billingAmount,
+          creditAmount,
+          data: { approvalNumber: result.approvalNumber, receiptUrl: result.receiptUrl },
+        });
+
+        if (paymentCredit && creditAmount > 0) {
+          await tx
+            .update(UserPaymentCredits)
+            .set({ amount: paymentCredit.amount - creditAmount })
+            .where(eq(UserPaymentCredits.id, paymentCredit.id));
+        }
+
+        return true;
+      } else if (result.status === 'failed') {
+        await tx.insert(PaymentRecords).values({
+          invoiceId: invoice.id,
+          outcome: PaymentOutcome.FAILURE,
+          billingAmount,
+          creditAmount,
+          data: { code: result.code, message: result.message },
+        });
+
+        return false;
+      }
+    } else if (paymentCredit && creditAmount > 0) {
       await tx.insert(PaymentRecords).values({
         invoiceId: invoice.id,
         outcome: PaymentOutcome.SUCCESS,
         billingAmount,
         creditAmount,
-        data: { approvalNumber: result.approvalNumber, receiptUrl: result.receiptUrl },
+        data: {},
       });
 
-      if (paymentCredit && creditAmount > 0) {
-        await tx
-          .update(UserPaymentCredits)
-          .set({ amount: paymentCredit.amount - creditAmount })
-          .where(eq(UserPaymentCredits.id, paymentCredit.id));
-      }
+      await tx
+        .update(UserPaymentCredits)
+        .set({ amount: paymentCredit.amount - creditAmount })
+        .where(eq(UserPaymentCredits.id, paymentCredit.id));
 
       return true;
-    } else if (result.status === 'failed') {
-      await tx.insert(PaymentRecords).values({
-        invoiceId: invoice.id,
-        outcome: PaymentOutcome.FAILURE,
-        billingAmount,
-        creditAmount,
-        data: { code: result.code, message: result.message },
-      });
-
-      return false;
     }
+
+    throw new Error('Invalid billing amount');
   } catch (err) {
     await tx.insert(PaymentRecords).values({
       invoiceId: invoice.id,
