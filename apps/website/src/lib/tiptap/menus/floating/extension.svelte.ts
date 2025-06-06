@@ -13,7 +13,7 @@ export const FloatingMenu = Extension.create({
   name: 'floating_menu',
 
   addProseMirrorPlugins() {
-    if (!this.editor.isEditable) {
+    if (!this.editor.isEditable || window.__webview__) {
       return [];
     }
 
