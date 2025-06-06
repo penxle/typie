@@ -36,10 +36,10 @@ const transformError = (error: unknown): GraphQLError => {
   } else if (error instanceof GraphQLError && error.originalError) {
     return transformError(error.originalError);
   } else if (error instanceof Error) {
-    log.error`Unexpected error: ${error}`;
+    log.error('Unexpected error {*}', { error });
     return new UnexpectedError(error);
   } else {
-    log.error`Unexpected error: ${error}`;
+    log.error('Unexpected error {*}', { error });
     return new UnexpectedError(new Error(String(error)));
   }
 };

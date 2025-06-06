@@ -4,11 +4,10 @@ import type { Context } from '@/context';
 
 export const useLogger = (): Plugin<Context> => ({
   onExecute: ({ args }) => {
-    logger.info('Executed operation: {operation_name} ({variables}), by user {user} from {ip}', {
+    logger.info('Executed operation {*}', {
+      operationName: args.operationName,
       ip: args.contextValue.ip,
-      user: args.contextValue.session?.userId,
-      operation_name: args.operationName,
-      variables: args.variableValues,
+      userId: args.contextValue.session?.userId,
     });
   },
 });

@@ -6,6 +6,7 @@ import Redis from 'ioredis';
 import { dev, env, stack } from '@/env';
 import { crons, jobs } from './tasks';
 
+const log = logger.getChild('mq');
 const lane = dev ? os.hostname() : stack;
 const taskMap = Object.fromEntries([...jobs, ...crons].map((job) => [job.name, job.fn]));
 
@@ -39,15 +40,15 @@ const worker = new Worker(
 );
 
 worker.on('completed', (job) => {
-  logger.info`Job ${job.id} (${job.name}) completed`;
+  log.info('Job completed {*}', { id: job.id, name: job.name });
 });
 
 worker.on('failed', (job, error) => {
-  logger.error`Job ${job?.id} (${job?.name}) failed: ${error}`;
+  log.error('Job failed {*}', { id: job?.id, name: job?.name, error });
   Sentry.captureException(error);
 });
 
 worker.on('error', (error) => {
-  logger.error`Job error: ${error}`;
+  log.error('Job error {*}', { error });
   Sentry.captureException(error);
 });

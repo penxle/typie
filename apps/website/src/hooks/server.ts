@@ -9,5 +9,5 @@ const log = logger.getChild('http');
 export const handle = sequence(logging);
 
 export const handleError: HandleServerError = ({ error, status, message }) => {
-  log.error`Server error (status: ${status}, message: ${message}): ${error}`;
+  log.error('Server error {*}', { status, message, error });
 };
