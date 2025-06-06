@@ -355,7 +355,7 @@
 <div
   bind:this={containerEl}
   style:--prosemirror-max-width={`${maxWidth.current}px`}
-  style:--prosemirror-color-selection={token.var('colors.gray.950')}
+  style:--prosemirror-color-selection={token.var('colors.gray.300')}
   class={flex({
     flexDirection: 'column',
     alignItems: 'center',
