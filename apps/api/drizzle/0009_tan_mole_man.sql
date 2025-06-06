@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "subscriptions_user_id_index" ON "subscriptions" USING btree ("user_id") WHERE "subscriptions"."state" = 'ACTIVE';
+ALTER TABLE "user_in_app_purchases" ADD CONSTRAINT "user_in_app_purchases_user_id_unique" UNIQUE("user_id");

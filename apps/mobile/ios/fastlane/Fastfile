@@ -32,7 +32,7 @@ platform :ios do
     app_store_connect_api_key
 
     upload_to_testflight(
-      build_number: latest_testflight_build_number,
+      build_number: latest_testflight_build_number.to_s,
       app_platform: "ios",
       distribute_only: true,
       distribute_external: true,

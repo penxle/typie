@@ -378,23 +378,31 @@ export const Sites = pgTable(
   ],
 );
 
-export const Subscriptions = pgTable('subscriptions', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.SUBSCRIPTIONS)),
-  userId: text('user_id')
-    .notNull()
-    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  planId: text('plan_id')
-    .notNull()
-    .references(() => Plans.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  startsAt: datetime('starts_at').notNull(),
-  expiresAt: datetime('expires_at').notNull(),
-  state: E._SubscriptionState('state').notNull().default('ACTIVE'),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const Subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.SUBSCRIPTIONS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    planId: text('plan_id')
+      .notNull()
+      .references(() => Plans.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    startsAt: datetime('starts_at').notNull(),
+    expiresAt: datetime('expires_at').notNull(),
+    state: E._SubscriptionState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex()
+      .on(t.userId)
+      .where(eq(t.state, sql`'ACTIVE'`)),
+  ],
+);
 
 export const Users = pgTable(
   'users',
@@ -444,6 +452,7 @@ export const UserInAppPurchases = pgTable(
       .$defaultFn(() => createDbId(TableCode.USER_IN_APP_PURCHASES)),
     userId: text('user_id')
       .notNull()
+      .unique()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     store: E._InAppPurchaseStore('store').notNull(),
     identifier: text('identifier').notNull(),
