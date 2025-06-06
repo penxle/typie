@@ -792,6 +792,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.1+1"
+  gql_error_link:
+    dependency: "direct main"
+    description:
+      name: gql_error_link
+      sha256: "93901458f3c050e33386dedb0ca7173e08cebd7078e4e0deca4bf23ab7a71f63"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0+1"
   gql_exec:
     dependency: "direct main"
     description:

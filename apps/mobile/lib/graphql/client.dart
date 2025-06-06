@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:dio/dio.dart';
@@ -6,6 +7,7 @@ import 'package:ferry/ferry.dart';
 import 'package:ferry/ferry_isolate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gql_dio_link/gql_dio_link.dart';
+import 'package:gql_error_link/gql_error_link.dart';
 import 'package:gql_exec/gql_exec.dart';
 import 'package:injectable/injectable.dart';
 import 'package:sentry/sentry_io.dart';
@@ -126,6 +128,16 @@ Future<Client> _createClient(_CreateClientParams params, SendPort? sendPort) asy
       : (Dio()..httpClientAdapter = Http2Adapter(ConnectionManager()));
 
   final link = Link.from([
+    ErrorLink(
+      onGraphQLError: (request, forward, response) {
+        unawaited(Sentry.captureException(response.errors!.first));
+        return null;
+      },
+      onException: (request, forward, exception) {
+        unawaited(Sentry.captureException(exception));
+        return null;
+      },
+    ),
     authLink(getAccessToken: () => accessToken),
     cookieLink(
       setter: (cookie) {
