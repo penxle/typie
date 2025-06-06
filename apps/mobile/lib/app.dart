@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:typie/providers/in_app_purchase.dart';
 import 'package:typie/providers/push_notification.dart';
 import 'package:typie/routers/app.dart';
 import 'package:typie/styles/colors.dart';
@@ -64,7 +63,7 @@ class App extends HookWidget {
                   return Stack(
                     children: [
                       child!,
-                      const Offstage(child: Stack(children: [InAppPurchaseProvider(), PushNotificationProvider()])),
+                      const Offstage(child: Stack(children: [PushNotificationProvider()])),
                     ],
                   );
                 },
