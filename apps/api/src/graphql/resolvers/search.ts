@@ -49,12 +49,19 @@ builder.queryFields((t) => ({
         siteId: args.siteId,
       });
 
+      if (!args.query.trim()) {
+        return {
+          totalHits: 0,
+          hits: [],
+        };
+      }
+
       const result = await meilisearch.multiSearch({
         federation: {},
         queries: [
           {
             indexUid: 'posts',
-            q: args.query,
+            q: args.query.trim(),
             filter: [`siteId = ${args.siteId}`],
             attributesToCrop: ['*'],
             attributesToHighlight: ['title', 'subtitle', 'text'],
