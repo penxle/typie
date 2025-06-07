@@ -832,8 +832,9 @@ class _DefaultEmbedbar extends HookWidget {
         children: [
           Expanded(
             child: TextField(
-              autocorrect: false,
               autofocus: true,
+              smartDashesType: SmartDashesType.disabled,
+              smartQuotesType: SmartQuotesType.disabled,
               decoration: const InputDecoration.collapsed(
                 hintText: 'https://...',
                 hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
