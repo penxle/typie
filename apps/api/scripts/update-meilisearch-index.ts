@@ -3,8 +3,9 @@
 import { eq } from 'drizzle-orm';
 import { db, Entities, PostContents, Posts } from '@/db';
 import { EntityState } from '@/enums';
-import { elastic } from '@/search';
+import { meilisearch } from '@/search';
 
+const index = meilisearch.index('posts');
 const CHUNK_SIZE = 100;
 
 const processPostsInChunks = async (): Promise<number> => {
@@ -33,23 +34,12 @@ const processPostsInChunks = async (): Promise<number> => {
       break;
     }
 
-    const operations = posts.flatMap(({ id, siteId, title, subtitle, text, updatedAt }) => [
-      { index: { _index: 'posts', _id: id } },
-      {
-        id,
-        siteId,
-        title,
-        subtitle,
-        text,
-        updatedAt: updatedAt.unix(),
-      },
-    ]);
+    const documents = posts.map(({ updatedAt, ...rest }) => ({
+      ...rest,
+      updatedAt: updatedAt.unix(),
+    }));
 
-    if (operations.length > 0) {
-      await elastic.bulk({
-        operations,
-      });
-    }
+    await index.addDocuments(documents);
 
     totalProcessed += posts.length;
     offset += CHUNK_SIZE;
@@ -80,15 +70,8 @@ const processDeletedPostsInChunks = async (): Promise<number> => {
       break;
     }
 
-    const operations = deletedPosts.map(({ id }) => ({
-      delete: { _index: 'posts', _id: id },
-    }));
-
-    if (operations.length > 0) {
-      await elastic.bulk({
-        operations,
-      });
-    }
+    const ids = deletedPosts.map(({ id }) => id);
+    await index.deleteDocuments(ids);
 
     totalProcessed += deletedPosts.length;
     offset += CHUNK_SIZE;
@@ -102,13 +85,9 @@ const processDeletedPostsInChunks = async (): Promise<number> => {
 };
 
 try {
-  const deletedCount = await processDeletedPostsInChunks();
-  console.log(`Deleted ${deletedCount} posts from Elasticsearch index.`);
-
-  const updatedCount = await processPostsInChunks();
-  console.log(`Updated ${updatedCount} posts in Elasticsearch index.`);
-} catch (err) {
-  console.error('Error updating Elasticsearch index:', err);
+  await processDeletedPostsInChunks();
+  await processPostsInChunks();
+} catch {
   process.exit(1);
 }
 
