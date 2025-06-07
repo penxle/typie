@@ -16,7 +16,7 @@ const meilisearch = new aws.ec2.Instance(
       mostRecent: true,
     }).id,
 
-    instanceType: 't4g.micro',
+    instanceType: 't4g.medium',
 
     subnetId: subnets.private.az1.id,
     vpcSecurityGroupIds: [securityGroups.internal.id],
