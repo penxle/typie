@@ -165,7 +165,7 @@ class Editor extends HookWidget {
                         },
                       ),
                     ),
-                    const EditorToolbar(),
+                    EditorToolbar(site: data.post.entity.site),
                   ],
                 ),
               ),

@@ -14,6 +14,7 @@ import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
+import 'package:typie/screens/editor/__generated__/toolbar.data.gql.dart';
 import 'package:typie/screens/editor/__generated__/toolbar.req.gql.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/values.dart';
@@ -27,7 +28,9 @@ import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/vertical_divider.dart';
 
 class EditorToolbar extends HookWidget {
-  const EditorToolbar({super.key});
+  const EditorToolbar({required this.site, super.key});
+
+  final GEditorScreen_Toolbar_site site;
 
   @override
   Widget build(BuildContext context) {
@@ -96,20 +99,11 @@ class EditorToolbar extends HookWidget {
                   );
                 },
               ),
-              _SelectValuesBar(
-                name: 'fontFamily',
+              _SelectFontFamilyBar(
+                site: site,
                 activeValue:
                     proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String? ??
                     editorDefaultValues['fontFamily'],
-                builder: (context, e, isActive) {
-                  return _TextToolbarButton(
-                    text: e['label'] as String,
-                    isActive: isActive,
-                    onTap: () async {
-                      await scope.command('text_style', attrs: {'fontFamily': e['value']});
-                    },
-                  );
-                },
               ),
               _SelectValuesBar(
                 name: 'fontSize',
@@ -173,7 +167,7 @@ class EditorToolbar extends HookWidget {
               ),
             ],
           ),
-          child: const _DefaultTextbar(),
+          child: _DefaultTextbar(site: site),
         ),
         _SubToolBar(
           isVisible:
@@ -893,7 +887,9 @@ class _DefaultEmbedbar extends HookWidget {
 }
 
 class _DefaultTextbar extends HookWidget {
-  const _DefaultTextbar();
+  const _DefaultTextbar({required this.site});
+
+  final GEditorScreen_Toolbar_site site;
 
   @override
   Widget build(BuildContext context) {
@@ -923,14 +919,19 @@ class _DefaultTextbar extends HookWidget {
           _TextToolbarButton(
             color: AppColors.gray_700,
             text:
-                editorValues['fontFamily']?.firstWhere(
+                editorValues['fontFamily']?.firstWhereOrNull(
                       (e) =>
                           e['value'] ==
                           (proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String? ??
                               editorDefaultValues['fontFamily']),
-                      orElse: () => {'label': '(알 수 없음)'},
-                    )['label']
-                    as String,
+                    )?['label']
+                    as String? ??
+                site.fonts
+                    .firstWhereOrNull(
+                      (e) => e.id == proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String?,
+                    )
+                    ?.name ??
+                '(알 수 없음)',
             onTap: () {
               scope.selectedTextbarIdx.value = 2;
             },
@@ -1107,6 +1108,71 @@ class _SelectValuesBar extends HookWidget {
       children: [
         ...editorValues[name]!.mapIndexed(
           (index, e) => KeyedSubtree(key: keys[index], child: builder(context, e, e[valueKey] == activeValue)),
+        ),
+      ],
+    );
+  }
+}
+
+class _SelectFontFamilyBar extends HookWidget {
+  const _SelectFontFamilyBar({required this.site, required this.activeValue});
+
+  final GEditorScreen_Toolbar_site site;
+  final dynamic activeValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = EditorStateScope.of(context);
+    final count = editorValues['fontFamily']!.length + site.fonts.length;
+    final keys = useMemoized(() => List.generate(count, (_) => GlobalKey()), []);
+
+    useAsyncEffect(() async {
+      final index1 = editorValues['fontFamily']!.indexWhere((e) => e['value'] == activeValue);
+      final index2 = site.fonts.indexWhere((e) => e.id == activeValue);
+      final index = index1 != -1
+          ? index1
+          : index2 != -1
+          ? index2 + editorValues['fontFamily']!.length
+          : -1;
+
+      if (index != -1 && keys[index].currentContext != null) {
+        await Scrollable.ensureVisible(
+          keys[index].currentContext!,
+          alignment: 0.45,
+          duration: const Duration(milliseconds: 150),
+        );
+      }
+
+      return null;
+    }, [activeValue]);
+
+    return Row(
+      spacing: 4,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...editorValues['fontFamily']!.mapIndexed(
+          (index, e) => KeyedSubtree(
+            key: keys[index],
+            child: _TextToolbarButton(
+              text: e['label'] as String,
+              isActive: e['value'] == activeValue,
+              onTap: () async {
+                await scope.command('text_style', attrs: {'fontFamily': e['value']});
+              },
+            ),
+          ),
+        ),
+        ...site.fonts.mapIndexed(
+          (index, e) => KeyedSubtree(
+            key: keys[index + editorValues['fontFamily']!.length],
+            child: _TextToolbarButton(
+              text: e.name,
+              isActive: e.id == activeValue,
+              onTap: () async {
+                await scope.command('text_style', attrs: {'fontFamily': e.id});
+              },
+            ),
+          ),
         ),
       ],
     );
