@@ -159,7 +159,7 @@ class EnrollPlanScreen extends HookWidget {
                           _PurchaseButton(
                             label: '1개월 구독하기',
                             product: productDetailsMap.data?[PlanInterval.monthly],
-                            isActive: data.me!.subscription!.plan.id == 'PL0FL1MAP',
+                            isActive: data.me!.subscription?.plan.id == 'PL0FL1MAP',
                             onTap: (product) async {
                               await context.runWithLoader(() async {
                                 await _purchaseProduct(product, uuid: data.me!.uuid);
@@ -169,7 +169,7 @@ class EnrollPlanScreen extends HookWidget {
                           _PurchaseButton(
                             label: '1년 구독하기',
                             product: productDetailsMap.data?[PlanInterval.yearly],
-                            isActive: data.me!.subscription!.plan.id == 'PL0FL1YAP',
+                            isActive: data.me!.subscription?.plan.id == 'PL0FL1YAP',
                             onTap: (product) async {
                               await context.runWithLoader(() async {
                                 await _purchaseProduct(product, uuid: data.me!.uuid);
