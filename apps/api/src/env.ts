@@ -11,8 +11,6 @@ const schema = z.object({
   APPLE_TEAM_ID: z.string(),
   AUTH_URL: z.string(),
   DATABASE_URL: z.string(),
-  ELASTICSEARCH_API_KEY: z.string(),
-  ELASTICSEARCH_URL: z.string(),
   GOOGLE_OAUTH_CLIENT_ID: z.string(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string(),
   GOOGLE_PLAY_PACKAGE_NAME: z.string(),
