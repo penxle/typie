@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/node';
 import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
 import { eq, sql } from 'drizzle-orm';
@@ -172,21 +171,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
             updatedAt,
           })
           .where(eq(PostContents.postId, postId));
-
-        try {
-          await meilisearch.index('posts').addDocuments([
-            {
-              id: postId,
-              siteId: post.siteId,
-              title,
-              subtitle,
-              text,
-              updatedAt: updatedAt.unix(),
-            },
-          ]);
-        } catch (err) {
-          Sentry.captureException(err);
-        }
       }
 
       signal.throwIfAborted();
@@ -215,5 +199,37 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
     pubsub.publish('site:usage:update', siteId, null);
+
+    await enqueueJob('post:index', postId, {
+      deduplication: {
+        id: `post:index:${postId}`,
+      },
+    });
   }
+});
+
+export const PostIndexJob = defineJob('post:index', async (postId: string) => {
+  const post = await db
+    .select({
+      id: Posts.id,
+      siteId: Entities.siteId,
+      title: Posts.title,
+      subtitle: Posts.subtitle,
+      text: PostContents.text,
+    })
+    .from(Posts)
+    .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
+    .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+    .where(eq(Posts.id, postId))
+    .then(firstOrThrow);
+
+  await meilisearch.index('posts').addDocuments([
+    {
+      id: post.id,
+      siteId: post.siteId,
+      title: post.title,
+      subtitle: post.subtitle,
+      text: post.text,
+    },
+  ]);
 });
