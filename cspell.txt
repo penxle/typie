@@ -29,6 +29,7 @@ ipaddr
 kakao
 lucide
 luthor
+meilisearch
 myeongjo
 nanum
 napi

@@ -298,6 +298,9 @@ importers:
       '@pulumi/tailscale':
         specifier: ^0.20.0
         version: 0.20.0(typescript@5.8.3)
+      '@pulumi/tls':
+        specifier: ^5.2.0
+        version: 5.2.0(typescript@5.8.3)
       '@typie/pulumi':
         specifier: workspace:*
         version: link:../../packages/pulumi
@@ -2778,6 +2781,9 @@ packages:
 
   '@pulumi/tailscale@0.20.0':
     resolution: {integrity: sha512-/1DtwHCErWrYGs/mw8Oe4XT7wg7dVybgCrxYCQzxYF57u/momBPmTR5c8YxwF4Uh0Rgz6B1Y7lXExKTA2ntxNQ==}
+
+  '@pulumi/tls@5.2.0':
+    resolution: {integrity: sha512-wnhjCa3pz0eEv1DS5msN7yo5Ew1HrsbkMVZEiGve8fApIPKEIzfWnK11NlLlJyJNn2ffTuGao6hbAD4RKPiuuA==}
 
   '@react-email/body@0.0.11':
     resolution: {integrity: sha512-ZSD2SxVSgUjHGrB0Wi+4tu3MEpB4fYSbezsFNEJk2xCWDBkFiOeEsjTmR5dvi+CxTK691hQTQlHv0XWuP7ENTg==}
@@ -11468,6 +11474,15 @@ snapshots:
       - typescript
 
   '@pulumi/tailscale@0.20.0(typescript@5.8.3)':
+    dependencies:
+      '@pulumi/pulumi': 3.175.0(typescript@5.8.3)
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+      - ts-node
+      - typescript
+
+  '@pulumi/tls@5.2.0(typescript@5.8.3)':
     dependencies:
       '@pulumi/pulumi': 3.175.0(typescript@5.8.3)
     transitivePeerDependencies:

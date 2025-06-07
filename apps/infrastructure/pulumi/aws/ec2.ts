@@ -1,7 +1,17 @@
 import * as aws from '@pulumi/aws';
 import * as pulumi from '@pulumi/pulumi';
+import * as tls from '@pulumi/tls';
 import { securityGroups, subnets, vpc } from '$aws/vpc';
 import { tailnet } from '$tailscale/key';
+
+const privateKey = new tls.PrivateKey('ec2', {
+  algorithm: 'ED25519',
+});
+
+export const keyPair = new aws.ec2.KeyPair('ec2', {
+  keyName: 'ec2',
+  publicKey: privateKey.publicKeyOpenssh,
+});
 
 new aws.ec2.Instance(
   'tailnet-vpc-router',
@@ -42,3 +52,7 @@ runcmd:
     deleteBeforeReplace: true,
   },
 );
+
+export const outputs = {
+  AWS_EC2_KEYPAIR_PRIVATE_KEY: privateKey.privateKeyOpenssh,
+};

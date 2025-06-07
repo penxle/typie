@@ -31,7 +31,7 @@ new aws.iam.RolePolicy('execution@ecs', {
 export const cluster = new aws.ecs.Cluster('typie', {
   name: 'typie',
 
-  settings: [{ name: 'containerInsights', value: 'enhanced' }],
+  settings: [{ name: 'containerInsights', value: 'disabled' }],
 });
 
 new aws.ecs.ClusterCapacityProviders('typie', {
