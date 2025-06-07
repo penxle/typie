@@ -22,13 +22,11 @@ WORKDIR /app
 ADD https://github.com/krallin/tini/releases/download/v0.19.0/tini-arm64 /tini
 RUN chmod +x /tini
 
-ENV LD_LIBRARY_PATH="/opt/sharp/lib"
-ADD vendor/sharp.tar.xz /opt/sharp
-
 COPY --from=deps /deps ./
 COPY out/full ./
 
-RUN cp -rf /opt/sharp/node_modules/* /app/apps/api/node_modules/
+ADD vendor/sharp.tar.xz /app/apps/api/
+ENV LD_LIBRARY_PATH="/app/apps/api/lib"
 
 WORKDIR /app/apps/api
 EXPOSE 3000
