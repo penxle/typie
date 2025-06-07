@@ -1,5 +1,5 @@
 import { CreateNotificationJob } from './notification';
-import { PostSyncCollectJob } from './post';
+import { PostIndexJob, PostSyncCollectJob } from './post';
 import {
   SubscriptionRenewalCancelJob,
   SubscriptionRenewalCron,
@@ -9,6 +9,7 @@ import {
 } from './subscription';
 
 export const jobs = [
+  PostIndexJob,
   PostSyncCollectJob,
   CreateNotificationJob,
   SubscriptionRenewalInitialJob,
