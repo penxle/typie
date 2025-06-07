@@ -16,12 +16,16 @@ const meilisearch = new aws.ec2.Instance(
       mostRecent: true,
     }).id,
 
-    instanceType: 't4g.nano',
+    instanceType: 't4g.micro',
 
     subnetId: subnets.private.az1.id,
     vpcSecurityGroupIds: [securityGroups.internal.id],
 
     keyName: keyPair.keyName,
+
+    rootBlockDevice: {
+      volumeSize: 20,
+    },
 
     userData: `
 #cloud-config
