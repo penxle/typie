@@ -1078,7 +1078,6 @@ class _SelectValuesBar extends HookWidget {
 
   final String name;
   final dynamic activeValue;
-  // ignore: avoid_positional_boolean_parameters for simplicity
   final Widget Function(BuildContext context, Map<String, dynamic> e, bool isActive) builder;
   final Axis direction;
   final String? valueKey;
