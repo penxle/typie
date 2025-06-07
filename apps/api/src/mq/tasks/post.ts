@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
 import { eq, sql } from 'drizzle-orm';
@@ -9,7 +10,7 @@ import { redis, redlock } from '@/cache';
 import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, Posts, PostSnapshots } from '@/db';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
-import { elastic } from '@/search';
+import { meilisearch } from '@/search';
 import { makeText } from '@/utils';
 import { queue } from '../bullmq';
 import { enqueueJob } from '../index';
@@ -172,18 +173,20 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
           })
           .where(eq(PostContents.postId, postId));
 
-        await elastic.index({
-          index: 'posts',
-          id: postId,
-          document: {
-            id: postId,
-            siteId: post.siteId,
-            title,
-            subtitle,
-            text,
-            updatedAt: updatedAt.unix(),
-          },
-        });
+        try {
+          await meilisearch.index('posts').addDocuments([
+            {
+              id: postId,
+              siteId: post.siteId,
+              title,
+              subtitle,
+              text,
+              updatedAt: updatedAt.unix(),
+            },
+          ]);
+        } catch (err) {
+          Sentry.captureException(err);
+        }
       }
 
       signal.throwIfAborted();

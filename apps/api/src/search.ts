@@ -1,8 +1,7 @@
-import { Client, HttpConnection } from '@elastic/elasticsearch';
+import { MeiliSearch } from 'meilisearch';
 import { env } from '@/env';
 
-export const elastic = new Client({
-  Connection: HttpConnection,
-  node: env.ELASTICSEARCH_URL,
-  auth: { apiKey: env.ELASTICSEARCH_API_KEY },
+export const meilisearch = new MeiliSearch({
+  host: env.MEILISEARCH_URL,
+  apiKey: env.MEILISEARCH_API_KEY,
 });
