@@ -159,6 +159,7 @@ class EnrollPlanScreen extends HookWidget {
                           _PurchaseButton(
                             label: '1개월 구독하기',
                             product: productDetailsMap.data?[PlanInterval.monthly],
+                            isActive: data.me!.subscription!.plan.id == 'PL0FL1MAP',
                             onTap: (product) async {
                               await context.runWithLoader(() async {
                                 await _purchaseProduct(product, uuid: data.me!.uuid);
@@ -168,6 +169,7 @@ class EnrollPlanScreen extends HookWidget {
                           _PurchaseButton(
                             label: '1년 구독하기',
                             product: productDetailsMap.data?[PlanInterval.yearly],
+                            isActive: data.me!.subscription!.plan.id == 'PL0FL1YAP',
                             onTap: (product) async {
                               await context.runWithLoader(() async {
                                 await _purchaseProduct(product, uuid: data.me!.uuid);
@@ -207,10 +209,11 @@ class _FeatureItem extends StatelessWidget {
 }
 
 class _PurchaseButton extends StatelessWidget {
-  const _PurchaseButton({required this.label, required this.onTap, this.product});
+  const _PurchaseButton({required this.label, required this.onTap, required this.isActive, this.product});
 
   final _Product? product;
   final String label;
+  final bool isActive;
   final void Function(_Product product) onTap;
 
   @override
@@ -232,6 +235,10 @@ class _PurchaseButton extends StatelessWidget {
         child: Row(
           children: [
             Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            if (isActive) ...[
+              const Gap(4),
+              const Text('(현재 이용중)', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+            ],
             const Spacer(),
             if (product == null)
               const Center(child: SizedBox.square(dimension: 14, child: CircularProgressIndicator()))

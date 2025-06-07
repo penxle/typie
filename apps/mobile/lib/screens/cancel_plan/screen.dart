@@ -4,6 +4,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/cancel_plan/__generated__/screen.req.gql.dart';
@@ -64,7 +65,7 @@ class CancelPlanScreen extends StatelessWidget {
               ),
               const Gap(8),
               Text(
-                '지금 해지하더라도 ${data.me!.subscription!.expiresAt.toLocal().subtract(days: 1).format(pattern: 'yyyy년 MM월 dd일')}까지는 계속해서 ${data.me!.subscription!.plan.name} 혜택을 이용할 수 있어요.',
+                '지금 해지하더라도 ${data.me!.subscription!.expiresAt.toLocal().subtract(days: 1).yyyyMMddKorean}까지는 계속해서 ${data.me!.subscription!.plan.name} 혜택을 이용할 수 있어요.',
                 style: const TextStyle(fontSize: 14, color: AppColors.gray_500),
               ),
               const Gap(24),
