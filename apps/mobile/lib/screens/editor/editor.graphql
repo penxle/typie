@@ -1,3 +1,5 @@
+# import "./toolbar.graphql"
+
 query EditorScreen_Query($slug: String!) {
   post(slug: $slug) {
     id
@@ -6,6 +8,10 @@ query EditorScreen_Query($slug: String!) {
     entity {
       id
       visibility
+
+      site {
+        ...EditorScreen_Toolbar_site
+      }
     }
   }
 }
