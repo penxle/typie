@@ -64,14 +64,6 @@ class EditorToolbar extends HookWidget {
       return null;
     }, [proseMirrorState?.isNodeActive('bullet_list'), proseMirrorState?.isNodeActive('ordered_list')]);
 
-    useAsyncEffect(() async {
-      if (proseMirrorState?.currentNode?.type == 'horizontal_rule' && scope.selectedToolboxIdx.value != 2) {
-        await webViewController?.clearFocus();
-        scope.selectedToolboxIdx.value = 2;
-      }
-      return null;
-    }, [proseMirrorState?.currentNode?.type]);
-
     if (!isKeyboardVisible && selectedToolboxIdx == -1) {
       return const SizedBox.shrink();
     }
@@ -207,7 +199,23 @@ class EditorToolbar extends HookWidget {
                     case 'embed':
                       return const _NodeToolbar(label: '임베드', children: []);
                     case 'horizontal_rule':
-                      return const _NodeToolbar(label: '구분선', children: []);
+                      return _NodeToolbar(
+                        label: '구분선',
+                        children: [
+                          _TextToolbarButton(
+                            text: '변경',
+                            color: AppColors.gray_700,
+                            onTap: () async {
+                              if (scope.selectedToolboxIdx.value == 2) {
+                                await webViewController?.requestFocus();
+                              } else {
+                                scope.selectedToolboxIdx.value = 2;
+                                await webViewController?.clearFocus();
+                              }
+                            },
+                          ),
+                        ],
+                      );
                     default:
                       return const _DefaultToolbar();
                   }
@@ -217,6 +225,7 @@ class EditorToolbar extends HookWidget {
                 icon: LucideLightIcons.chevron_left,
                 isRepeatable: true,
                 onTap: () async {
+                  await webViewController?.requestFocus();
                   await scope.webViewController.value?.emitEvent('caret', {'direction': -1});
                 },
               ),
@@ -224,6 +233,7 @@ class EditorToolbar extends HookWidget {
                 icon: LucideLightIcons.chevron_right,
                 isRepeatable: true,
                 onTap: () async {
+                  await webViewController?.requestFocus();
                   await scope.webViewController.value?.emitEvent('caret', {'direction': 1});
                 },
               ),
@@ -518,6 +528,7 @@ class _ImageToolbar extends HookWidget {
         if (proseMirrorState!.currentNode!.attrs?['id'] == null)
           _TextToolbarButton(
             text: '업로드',
+            color: AppColors.gray_700,
             onTap: () async {
               final nodeId = proseMirrorState.currentNode!.attrs?['nodeId'] as String?;
               if (nodeId == null) {
@@ -658,6 +669,7 @@ class _FileToolbar extends HookWidget {
         if (proseMirrorState!.currentNode!.attrs?['id'] == null)
           _TextToolbarButton(
             text: '업로드',
+            color: AppColors.gray_700,
             onTap: () async {
               final nodeId = proseMirrorState.currentNode!.attrs?['nodeId'] as String?;
               if (nodeId == null) {
