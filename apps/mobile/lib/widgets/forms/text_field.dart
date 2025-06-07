@@ -132,8 +132,8 @@ class HookFormTextField extends HookWidget {
           child: TextField(
             controller: controller ?? builtinController,
             focusNode: focusNode ?? builtinFocusNode,
-            autocorrect: false,
             smartDashesType: SmartDashesType.disabled,
+            smartQuotesType: SmartQuotesType.disabled,
             obscureText: obscureText,
             keyboardType: keyboardType,
             textInputAction: textInputAction,
@@ -205,7 +205,8 @@ class _HookFormCollapsedTextField extends HookFormTextField {
         return TextField(
           controller: effectiveController,
           focusNode: effectiveFocusNode,
-          autocorrect: false,
+          smartDashesType: SmartDashesType.disabled,
+          smartQuotesType: SmartQuotesType.disabled,
           obscureText: obscureText,
           keyboardType: keyboardType,
           textInputAction: textInputAction,

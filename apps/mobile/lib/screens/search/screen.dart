@@ -22,7 +22,9 @@ class SearchScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final pref = useService<Pref>();
-    final query = useState('');
+    final controller = useTextEditingController();
+
+    final value = useValueListenable(controller);
 
     return Screen(
       heading: Heading(
@@ -30,14 +32,13 @@ class SearchScreen extends HookWidget {
         titleWidget: Padding(
           padding: const Pad(left: 4),
           child: TextField(
+            controller: controller,
+            textInputAction: TextInputAction.search,
             decoration: const InputDecoration.collapsed(
               hintText: '검색어를 입력하세요',
               hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
             ),
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            onChanged: (value) {
-              query.value = value;
-            },
           ),
         ),
       ),
@@ -45,18 +46,18 @@ class SearchScreen extends HookWidget {
         operation: GSearchScreen_QueryReq(
           (b) => b
             ..vars.siteId = pref.siteId
-            ..vars.query = query.value,
+            ..vars.query = value.text,
         ),
         builder: (context, client, data) {
-          if (query.value.isEmpty) {
+          if (value.text.isEmpty) {
             return const Center(
-              child: Text('검색어를 입력해주세요', style: TextStyle(fontSize: 15, color: AppColors.gray_700)),
+              child: Text('검색어를 입력해주세요', style: TextStyle(fontSize: 15, color: AppColors.gray_500)),
             );
           }
 
           if (data.search.hits.isEmpty) {
             return const Center(
-              child: Text('검색 결과가 없어요', style: TextStyle(fontSize: 15, color: AppColors.gray_700)),
+              child: Text('검색 결과가 없어요', style: TextStyle(fontSize: 15, color: AppColors.gray_500)),
             );
           }
 
