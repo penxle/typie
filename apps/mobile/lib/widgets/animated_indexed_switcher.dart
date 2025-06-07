@@ -33,11 +33,7 @@ class AnimatedIndexedSwitcher extends StatelessWidget {
       switchOutCurve: switchOutCurve,
       transitionBuilder: transitionBuilder,
       layoutBuilder: (currentChild, previousChildren) {
-        return Stack(
-          fit: fit,
-          alignment: alignment,
-          children: <Widget>[...previousChildren, if (currentChild != null) currentChild],
-        );
+        return Stack(fit: fit, alignment: alignment, children: <Widget>[...previousChildren, ?currentChild]);
       },
       child: IndexedStack(key: ValueKey(index), sizing: fit, alignment: alignment, index: index, children: children),
     );
