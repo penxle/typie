@@ -28,7 +28,7 @@ ADD vendor/sharp.tar.xz /opt/sharp
 COPY --from=deps /deps ./
 COPY out/full ./
 
-RUN mv /opt/sharp/node_modules /app/apps/api
+RUN cp -rf /opt/sharp/node_modules/* /app/apps/api/node_modules/
 
 WORKDIR /app/apps/api
 EXPOSE 3000
