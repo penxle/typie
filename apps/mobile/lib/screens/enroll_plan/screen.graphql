@@ -5,6 +5,10 @@ query EnrollPlanScreen_Query {
 
     subscription {
       id
+
+      plan {
+        id
+      }
     }
   }
 }

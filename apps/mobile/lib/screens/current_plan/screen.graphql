@@ -12,6 +12,7 @@ query CurrentPlanScreen_Query {
         id
         name
         fee
+        availability
       }
     }
   }

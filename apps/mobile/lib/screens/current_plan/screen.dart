@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/extensions/num.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
@@ -56,45 +57,62 @@ class CurrentPlanScreen extends StatelessWidget {
                       Text(data.me!.subscription!.plan.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                       const Gap(8),
                       Text(
-                        '이용기간: ${data.me!.subscription!.startsAt.yyyyMMdd} - ${data.me!.subscription!.expiresAt.yyyyMMdd}',
-                        style: const TextStyle(fontSize: 12, color: AppColors.gray_500),
+                        '이용권 가격: ${data.me!.subscription!.plan.fee.comma}원',
+                        style: const TextStyle(fontSize: 14, color: AppColors.gray_500),
                       ),
                       Text(
-                        '다음 결제 예정 금액: ${data.me!.subscription!.plan.fee.comma}원',
+                        '다음 결제일: ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}',
                         style: const TextStyle(fontSize: 14, color: AppColors.gray_500),
                       ),
                     ],
                   ),
                 ),
                 const HorizontalDivider(color: AppColors.gray_950),
-                SizedBox(
-                  height: 48,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Tappable(
-                          onTap: () async {
-                            await context.router.push(const CancelPlanRoute());
-                          },
-                          child: const Center(
-                            child: Text('해지하기', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                if (data.me!.subscription!.plan.availability == GPlanAvailability.IN_APP_PURCHASE)
+                  SizedBox(
+                    height: 48,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Tappable(
+                            onTap: () async {
+                              await context.router.push(const CancelPlanRoute());
+                            },
+                            child: const Center(
+                              child: Text('해지하기', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                            ),
                           ),
                         ),
-                      ),
-                      const AppVerticalDivider(color: AppColors.gray_950),
-                      Expanded(
-                        child: Tappable(
-                          onTap: () async {
-                            await context.router.push(const EnrollPlanRoute());
-                          },
-                          child: const Center(
-                            child: Text('변경하기', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                        const AppVerticalDivider(color: AppColors.gray_950),
+                        Expanded(
+                          child: Tappable(
+                            onTap: () async {
+                              await context.router.push(const EnrollPlanRoute());
+                            },
+                            child: const Center(
+                              child: Text('변경하기', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  )
+                else if (data.me!.subscription!.plan.availability == GPlanAvailability.BILLING_KEY)
+                  const Padding(
+                    padding: Pad(all: 16),
+                    child: Text(
+                      '웹사이트에서 가입한 이용권이에요.\n정보 변경이 필요할 경우 웹사이트에서 진행해주세요.',
+                      style: TextStyle(fontSize: 14, color: AppColors.gray_500),
+                    ),
+                  )
+                else if (data.me!.subscription!.plan.availability == GPlanAvailability.MANUAL)
+                  const Padding(
+                    padding: Pad(all: 16),
+                    child: Text(
+                      '정보 변경을 할 수 없는 이용권이에요.\n정보 변경이 필요할 경우 고객센터에 문의해주세요.',
+                      style: TextStyle(fontSize: 14, color: AppColors.gray_500),
+                    ),
                   ),
-                ),
               ],
             ),
           );

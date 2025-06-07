@@ -407,6 +407,7 @@ input PersistBlobAsImageInput {
 }
 
 type Plan {
+  availability: PlanAvailability!
   fee: Int!
   id: ID!
   interval: PlanInterval!

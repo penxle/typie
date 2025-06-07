@@ -55,6 +55,7 @@ Plan.implement({
     name: t.exposeString('name'),
     fee: t.exposeInt('fee'),
     interval: t.expose('interval', { type: PlanInterval }),
+    availability: t.expose('availability', { type: PlanAvailability }),
     rule: t.expose('rule', { type: PlanRule }),
   }),
 });
