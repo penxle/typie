@@ -27,7 +27,7 @@ export default createClient({
     fetchExchange(),
     ...(browser
       ? [
-          wsExchange(`${env.PUBLIC_API_URL}/graphql`, {
+          wsExchange(`${env.PUBLIC_WS_URL}/graphql`, {
             connectionParams: async () => {
               const resp = await ky
                 .post(`/graphql`, {
