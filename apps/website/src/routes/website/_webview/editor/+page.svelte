@@ -2,7 +2,6 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import { Mark } from '@tiptap/pm/model';
-  import { disableBodyScroll, enableBodyScroll } from 'body-scroll-lock-upgrade';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -139,10 +138,6 @@
   };
 
   onMount(() => {
-    if (containerEl) {
-      disableBodyScroll(containerEl);
-    }
-
     const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
       if (payload.type === PostSyncType.UPDATE) {
         Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
@@ -331,10 +326,6 @@
       persistence.destroy();
       awareness.destroy();
       doc.destroy();
-
-      if (containerEl) {
-        enableBodyScroll(containerEl);
-      }
     };
   });
 </script>
@@ -357,10 +348,11 @@
     paddingX: '20px',
     width: '[100dvw]',
     height: '[100dvh]',
-    overflow: 'scroll',
+    overflowX: 'hidden',
+    overflowY: 'scroll',
     scrollbarWidth: 'none',
     userSelect: 'text',
-    touchAction: 'manipulation',
+    touchAction: 'pan-y',
     WebkitTouchCallout: 'none',
     WebkitOverflowScrolling: 'touch',
   })}

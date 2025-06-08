@@ -56,6 +56,14 @@ class AppWebView(
       cacheMode = WebSettings.LOAD_DEFAULT
     }
 
+    webView.apply {
+      overScrollMode = View.OVER_SCROLL_NEVER
+      isVerticalScrollBarEnabled = false
+      isHorizontalScrollBarEnabled = false
+      isNestedScrollingEnabled = true
+      scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
+    }
+
     webView.webViewClient = object : WebViewClient() {
       override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
