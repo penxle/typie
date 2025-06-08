@@ -7,7 +7,7 @@ import 'package:gap/gap.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/cancel_plan/__generated__/screen.req.gql.dart';
+import 'package:typie/screens/cancel_plan/__generated__/cancel_plan_query.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';

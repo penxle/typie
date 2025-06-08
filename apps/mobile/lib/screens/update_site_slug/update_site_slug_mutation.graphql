@@ -1,14 +1,3 @@
-query UpdateSiteSlugScreen_Query {
-  me {
-    id
-
-    sites {
-      id
-      slug
-    }
-  }
-}
-
 mutation UpdateSiteSlugScreen_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
   updateSiteSlug(input: $input) {
     id

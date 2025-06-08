@@ -1,0 +1,10 @@
+query UpdateSiteSlugScreen_Query {
+  me {
+    id
+
+    sites {
+      id
+      slug
+    }
+  }
+}

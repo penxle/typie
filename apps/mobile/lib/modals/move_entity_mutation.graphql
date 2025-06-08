@@ -1,0 +1,5 @@
+mutation MoveEntityModal_MoveEntity_Mutation($input: MoveEntityInput!) {
+  moveEntity(input: $input) {
+    id
+  }
+}

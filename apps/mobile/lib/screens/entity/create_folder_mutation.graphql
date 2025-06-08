@@ -1,0 +1,9 @@
+mutation EntityScreen_CreateFolder_Mutation($input: CreateFolderInput!) {
+  createFolder(input: $input) {
+    id
+
+    entity {
+      id
+    }
+  }
+}

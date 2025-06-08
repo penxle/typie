@@ -17,7 +17,7 @@ import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/login/__generated__/screen.req.gql.dart';
+import 'package:typie/screens/login/__generated__/authorize_single_sign_on_mutation.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/svg_image.dart';

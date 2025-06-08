@@ -8,7 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/providers/__generated__/push_notification.req.gql.dart';
+import 'package:typie/providers/__generated__/register_push_notification_token_mutation.req.gql.dart';
 import 'package:typie/services/auth.dart';
 
 class PushNotificationProvider extends HookWidget {
