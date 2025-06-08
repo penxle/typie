@@ -18,7 +18,7 @@ class AppWebView: NSObject, FlutterPlatformView {
 
     configuration.suppressesIncrementalRendering = true
     configuration.selectionGranularity = .character
-    configuration.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+    configuration.websiteDataStore = WKWebsiteDataStore.default()
 
     configuration.setURLSchemeHandler(AppWebViewSchemeHandler(), forURLScheme: "picker")
 
@@ -71,7 +71,7 @@ class AppWebView: NSObject, FlutterPlatformView {
       {
         let request = URLRequest(
           url: nsUrl,
-          cachePolicy: .reloadIgnoringLocalCacheData,
+          cachePolicy: .useProtocolCachePolicy,
           timeoutInterval: 60.0
         )
 

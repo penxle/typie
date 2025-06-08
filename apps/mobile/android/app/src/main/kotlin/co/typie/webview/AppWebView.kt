@@ -53,7 +53,7 @@ class AppWebView(
       useWideViewPort = true
       setSupportZoom(false)
 
-      cacheMode = WebSettings.LOAD_NO_CACHE
+      cacheMode = WebSettings.LOAD_DEFAULT
     }
 
     webView.webViewClient = object : WebViewClient() {
