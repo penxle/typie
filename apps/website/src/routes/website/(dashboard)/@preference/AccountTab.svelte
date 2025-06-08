@@ -135,8 +135,7 @@
             }
 
             const resp = await uploadBlobAsImage(file, {
-              ensureAlpha: true,
-              resize: { width: 512, height: 512, fit: 'contain', background: '#00000000' },
+              resize: { width: 512, height: 512, fit: 'cover', withoutEnlargement: true },
               format: 'png',
             });
 
