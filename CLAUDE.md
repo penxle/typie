@@ -211,4 +211,7 @@ JWT-based auth with social login support (Google, Apple, Kakao, Naver). Tokens a
   git add <files>
   gt modify --no-interactive --message "<updated-commit-message>"
   gt submit --no-interactive --no-edit --publish # Force pushes updated commit
+
+  # Sync branches with remote (clean up merged PRs, restack branches)
+  gt sync --no-interactive --force # Run before submit if stack issues occur
   ```
