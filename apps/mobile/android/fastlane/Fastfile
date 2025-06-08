@@ -24,17 +24,24 @@ platform :android do
 
   desc "Distribute the latest build for external testing"
   lane :external do
+    latest_build_number = google_play_track_version_codes(track: "internal")[0]
+
     upload_to_play_store(
       track: "internal",
       track_promote_to: "alpha",
+      version_code: latest_build_number,
     )
   end
 
   desc "Submit the latest build for review"
   lane :submit do
+    latest_build_number = google_play_track_version_codes(track: "internal")[0]
+
     upload_to_play_store(
       track: "internal",
       track_promote_to: "production",
+      track_promote_release_status: 'draft',
+      version_code: latest_build_number,
     )
   end
 end
