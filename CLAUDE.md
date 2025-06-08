@@ -195,3 +195,20 @@ JWT-based auth with social login support (Google, Apple, Kakao, Naver). Tokens a
 - Test database migrations locally before deploying
 - Ensure proper error handling for GraphQL resolvers
 - Keep sensitive data in Doppler, never commit secrets
+- **ALWAYS run ESLint fix and Prettier write after modifying any file**:
+  ```bash
+  pnpm eslint <file_path> --fix
+  pnpm prettier --write <file_path>
+  ```
+- **Use Graphite for commits and PRs**:
+
+  ```bash
+  # Create new branch and commit
+  gt create <branch-name> --no-interactive --message "<commit-message>"
+  gt submit --no-interactive --no-edit --publish # Creates ready-for-review PRs
+
+  # Amend existing commit (instead of creating new PR)
+  git add <files>
+  gt modify --no-interactive --message "<updated-commit-message>"
+  gt submit --no-interactive --no-edit --publish # Force pushes updated commit
+  ```

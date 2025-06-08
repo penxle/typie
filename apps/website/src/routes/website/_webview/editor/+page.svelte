@@ -2,7 +2,6 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import { Mark } from '@tiptap/pm/model';
-  import { Selection } from '@tiptap/pm/state';
   import { disableBodyScroll, enableBodyScroll } from 'body-scroll-lock-upgrade';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
@@ -20,6 +19,7 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
+  import { handleCaretMovement } from './caret';
   import Placeholder from './Placeholder.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
@@ -316,17 +316,7 @@
         const position = clamp(subtitleEl.selectionStart + direction, 0, subtitleEl.value.length);
         subtitleEl.setSelectionRange(position, position);
       } else if (editor?.current.isFocused) {
-        editor.current.commands.command(({ state, tr, dispatch }) => {
-          const pos = state.doc.resolve(state.selection.anchor + direction);
-          const selection = Selection.near(pos, direction);
-
-          tr.setSelection(selection);
-          tr.scrollIntoView();
-
-          dispatch?.(tr);
-
-          return true;
-        });
+        handleCaretMovement(editor.current.view, direction);
       }
     });
 
