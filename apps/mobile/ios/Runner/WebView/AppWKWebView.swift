@@ -16,6 +16,10 @@ class AppWKWebView: WKWebView {
     return nil
   }
 
+  override var inputAssistantItem: UITextInputAssistantItem {
+    return UITextInputAssistantItem()
+  }
+
   func setKeyboardRequiresUserInteraction(_ value: Bool) {
     guard let WKContentView: AnyClass = NSClassFromString("WKContentView") else {
       fatalError("Cannot find the WKContentView class")
