@@ -1,0 +1,14 @@
+query EnrollPlanScreen_Query {
+  me {
+    id
+    uuid
+
+    subscription {
+      id
+
+      plan {
+        id
+      }
+    }
+  }
+}

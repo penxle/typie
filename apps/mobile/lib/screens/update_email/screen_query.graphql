@@ -1,0 +1,6 @@
+query UpdateEmailScreen_Query {
+  me {
+    id
+    email
+  }
+}

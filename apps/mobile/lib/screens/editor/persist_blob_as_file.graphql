@@ -1,0 +1,8 @@
+mutation EditorScreen_PersistBlobAsFile_Mutation($input: PersistBlobAsFileInput!) {
+  persistBlobAsFile(input: $input) {
+    id
+    url
+    name
+    size
+  }
+}

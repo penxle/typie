@@ -1,0 +1,12 @@
+# import "./entity_fragment.graphql"
+
+query EntityScreen_WithSiteId_Query($siteId: ID!) {
+  site(siteId: $siteId) {
+    id
+
+    entities {
+      id
+      ...EntityScreen_Entity_entity
+    }
+  }
+}

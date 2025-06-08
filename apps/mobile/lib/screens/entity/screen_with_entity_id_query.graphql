@@ -1,0 +1,31 @@
+# import "./entity_fragment.graphql"
+
+query EntityScreen_WithEntityId_Query($entityId: ID!) {
+  entity(entityId: $entityId) {
+    id
+    depth
+
+    ancestors {
+      id
+
+      node {
+        ... on Folder {
+          id
+          name
+        }
+      }
+    }
+
+    node {
+      ... on Folder {
+        id
+        name
+      }
+    }
+
+    children {
+      id
+      ...EntityScreen_Entity_entity
+    }
+  }
+}

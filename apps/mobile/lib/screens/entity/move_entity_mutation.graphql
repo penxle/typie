@@ -1,0 +1,5 @@
+mutation EntityScreen_MoveEntity_Mutation($input: MoveEntityInput!) {
+  moveEntity(input: $input) {
+    id
+  }
+}

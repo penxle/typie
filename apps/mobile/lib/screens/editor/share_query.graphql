@@ -1,0 +1,17 @@
+query EditorScreen_Share_Query($slug: String!) {
+  post(slug: $slug) {
+    id
+    title
+    password
+    contentRating
+    allowComment
+    allowReaction
+    protectContent
+
+    entity {
+      id
+      permalink
+      visibility
+    }
+  }
+}

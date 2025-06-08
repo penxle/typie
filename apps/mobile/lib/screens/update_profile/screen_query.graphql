@@ -1,0 +1,12 @@
+query UpdateProfileScreen_Query {
+  me {
+    id
+    email
+    name
+
+    avatar {
+      id
+      url
+    }
+  }
+}

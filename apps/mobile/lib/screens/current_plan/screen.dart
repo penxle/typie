@@ -8,7 +8,7 @@ import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/current_plan/__generated__/screen.req.gql.dart';
+import 'package:typie/screens/current_plan/__generated__/current_plan_query.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';

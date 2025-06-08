@@ -1,18 +1,3 @@
-query EnrollPlanScreen_Query {
-  me {
-    id
-    uuid
-
-    subscription {
-      id
-
-      plan {
-        id
-      }
-    }
-  }
-}
-
 mutation EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation($input: SubscribeOrChangePlanWithInAppPurchaseInput!) {
   subscribeOrChangePlanWithInAppPurchase(input: $input) {
     id

@@ -1,0 +1,19 @@
+fragment EntityScreen_Entity_entity on Entity {
+  id
+  slug
+  order
+
+  node {
+    ... on Folder {
+      id
+      name
+    }
+
+    ... on Post {
+      id
+      title
+      excerpt
+      updatedAt
+    }
+  }
+}

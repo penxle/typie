@@ -7,7 +7,7 @@ import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/delete_user/__generated__/screen.req.gql.dart';
+import 'package:typie/screens/delete_user/__generated__/delete_user_mutation.req.gql.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';

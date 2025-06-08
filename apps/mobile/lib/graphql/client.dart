@@ -12,7 +12,7 @@ import 'package:gql_exec/gql_exec.dart';
 import 'package:injectable/injectable.dart';
 import 'package:sentry/sentry_io.dart';
 import 'package:typie/env.dart';
-import 'package:typie/graphql/__generated__/client.req.gql.dart';
+import 'package:typie/graphql/__generated__/create_ws_session_mutation.req.gql.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart' show possibleTypesMap;
 import 'package:typie/graphql/auth_link.dart';
 import 'package:typie/graphql/cookie_link.dart';

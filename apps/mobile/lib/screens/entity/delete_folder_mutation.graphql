@@ -1,0 +1,5 @@
+mutation EntityScreen_DeleteFolder_Mutation($input: DeleteFolderInput!) {
+  deleteFolder(input: $input) {
+    id
+  }
+}

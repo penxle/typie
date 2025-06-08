@@ -9,8 +9,8 @@ import 'package:hive_ce/hive.dart';
 import 'package:injectable/injectable.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/auth_link.dart';
-import 'package:typie/services/__generated__/auth.data.gql.dart';
-import 'package:typie/services/__generated__/auth.req.gql.dart';
+import 'package:typie/services/__generated__/auth_query.data.gql.dart';
+import 'package:typie/services/__generated__/auth_query.req.gql.dart';
 import 'package:typie/services/kv.dart';
 import 'package:typie/services/preference.dart';
 

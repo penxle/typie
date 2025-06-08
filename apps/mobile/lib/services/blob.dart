@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 import 'package:mime/mime.dart';
 import 'package:typie/graphql/client.dart';
-import 'package:typie/services/__generated__/blob.req.gql.dart';
+import 'package:typie/services/__generated__/issue_blob_upload_url_mutation.req.gql.dart';
 
 @singleton
 class Blob {

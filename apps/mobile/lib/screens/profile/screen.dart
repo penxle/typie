@@ -8,7 +8,7 @@ import 'package:gap/gap.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/profile/__generated__/screen.req.gql.dart';
+import 'package:typie/screens/profile/__generated__/profile_query.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
