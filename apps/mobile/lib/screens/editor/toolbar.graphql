@@ -1,12 +1,3 @@
-fragment EditorScreen_Toolbar_site on Site {
-  id
-
-  fonts {
-    id
-    name
-  }
-}
-
 mutation EditorScreen_PersistBlobAsFile_Mutation($input: PersistBlobAsFileInput!) {
   persistBlobAsFile(input: $input) {
     id

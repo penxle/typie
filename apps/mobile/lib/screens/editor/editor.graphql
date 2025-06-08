@@ -1,4 +1,4 @@
-# import "./toolbar.graphql"
+# import "./toolbar_site_fragment.graphql"
 
 query EditorScreen_Query($slug: String!) {
   post(slug: $slug) {
