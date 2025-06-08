@@ -37,6 +37,7 @@ platform :ios do
       distribute_only: true,
       distribute_external: true,
       notify_external_testers: true,
+      reject_build_waiting_for_review: true,
       groups: "Community",
     )
   end
@@ -48,8 +49,8 @@ platform :ios do
     upload_to_app_store(
       build_number: latest_testflight_build_number.to_s,
       skip_binary_upload: true,
-      submit_for_review: true,
-      # automatic_release: false,
+      submit_for_review: false,
+      automatic_release: true,
       run_precheck_before_submit: false,
       force: true,
     )
