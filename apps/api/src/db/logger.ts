@@ -10,6 +10,11 @@ export class DrizzleLogger implements Logger {
       return;
     }
 
-    log.debug('Executed query {*}', { query, params });
+    log.debug('Executed query {*}', {
+      query,
+      params: params.map((param) =>
+        param instanceof Uint8Array || param instanceof Buffer ? `[${param.constructor.name}(${param.length} bytes)]` : param,
+      ),
+    });
   }
 }

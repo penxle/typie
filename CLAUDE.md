@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication Language
+
+**All responses should be in Korean (한국어).** Claude should communicate with users in Korean throughout the entire conversation.
+
 ## Overview
 
 Typie is a writing platform that provides a personal writing space with real-time collaboration capabilities. The project uses a monorepo structure managed by pnpm workspaces and Turbo.
