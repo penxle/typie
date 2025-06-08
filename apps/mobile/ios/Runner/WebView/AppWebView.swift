@@ -137,7 +137,22 @@ class AppWebView: NSObject, FlutterPlatformView {
   private func setupConsole() {
     let script = """
       (() => {
-        const log = (level) => (message) => window.webkit.messageHandlers.handler.postMessage({ name: 'console', attrs: { level, message: String(message) }});
+        const log = (level) => (...args) => {
+          const formatArg = (arg) => {
+            if (arg === null) return 'null';
+            if (arg === undefined) return 'undefined';
+            if (typeof arg === 'string') return arg;
+            if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
+            if (typeof arg === 'function') return arg.toString();
+            try {
+              return JSON.stringify(arg, null, 2);
+            } catch (e) {
+              return String(arg);
+            }
+          };
+          const message = args.map(formatArg).join(' ');
+          window.webkit.messageHandlers.handler.postMessage({ name: 'console', attrs: { level, message }});
+        };
         console.log = log('LOG'); console.debug = log('DEBUG'); console.info = log('INFO'); console.warn = log('WARN'); console.error = log('ERROR');
       })();
     """
