@@ -9,12 +9,10 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/error.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/login_with_email/__generated__/login_with_email_mutation.req.gql.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
-import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
 class LoginWithEmailScreen extends HookWidget {
@@ -23,11 +21,19 @@ class LoginWithEmailScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
+    final form = useHookForm();
 
     return Screen(
       heading: const Heading(title: '이메일로 로그인'),
       resizeToAvoidBottomInset: true,
+      bottomAction: BottomAction(
+        text: '로그인',
+        onTap: () async {
+          await form.submit();
+        },
+      ),
       child: HookForm(
+        form: form,
         schema: l.schema({
           'email': l
               .string()
@@ -56,12 +62,12 @@ class LoginWithEmailScreen extends HookWidget {
           }
         },
         builder: (context, form) {
-          return AutofillGroup(
+          return const AutofillGroup(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Gap(24),
-                const Padding(
+                Gap(24),
+                Padding(
                   padding: Pad(horizontal: 20),
                   child: HookFormTextField(
                     name: 'email',
@@ -73,8 +79,8 @@ class LoginWithEmailScreen extends HookWidget {
                     autofocus: true,
                   ),
                 ),
-                const Gap(16),
-                const Padding(
+                Gap(16),
+                Padding(
                   padding: Pad(horizontal: 20),
                   child: HookFormTextField(
                     name: 'password',
@@ -84,21 +90,6 @@ class LoginWithEmailScreen extends HookWidget {
                     keyboardType: TextInputType.visiblePassword,
                     autofillHints: [AutofillHints.password],
                   ),
-                ),
-                const Spacer(),
-                Tappable(
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: const BoxDecoration(color: AppColors.gray_950),
-                    padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
-                    child: const Text(
-                      '로그인',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
-                    ),
-                  ),
-                  onTap: () async {
-                    await form.submit();
-                  },
                 ),
               ],
             ),

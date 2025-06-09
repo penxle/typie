@@ -11,6 +11,7 @@ import 'package:typie/screens/home/__generated__/create_post.req.gql.dart';
 import 'package:typie/screens/home/__generated__/site_update_stream.req.gql.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
@@ -50,56 +51,58 @@ class HomeScreen extends HookWidget {
                 border: Border(top: BorderSide(color: AppColors.gray_200)),
                 color: AppColors.white,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const _Button(
-                    index: 0,
-                    icon: Icon(LucideLightIcons.folder_open, size: 24, color: AppColors.gray_700),
-                    activeIcon: Icon(TypieIcons.folder_open_filled, size: 24, color: AppColors.gray_950),
-                  ),
-                  const _Button(
-                    index: 1,
-                    icon: Icon(LucideLightIcons.search, size: 24, color: AppColors.gray_700),
-                    activeIcon: Icon(TypieIcons.search_filled, size: 24, color: AppColors.gray_950),
-                  ),
-                  Tappable(
-                    padding: const Pad(horizontal: 16),
-                    onTap: () async {
-                      String? parentEntityId;
+              child: ResponsiveContainer(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const _Button(
+                      index: 0,
+                      icon: Icon(LucideLightIcons.folder_open, size: 24, color: AppColors.gray_700),
+                      activeIcon: Icon(TypieIcons.folder_open_filled, size: 24, color: AppColors.gray_950),
+                    ),
+                    const _Button(
+                      index: 1,
+                      icon: Icon(LucideLightIcons.search, size: 24, color: AppColors.gray_700),
+                      activeIcon: Icon(TypieIcons.search_filled, size: 24, color: AppColors.gray_950),
+                    ),
+                    Tappable(
+                      padding: const Pad(horizontal: 16),
+                      onTap: () async {
+                        String? parentEntityId;
 
-                      final topRoute = context.topRoute;
-                      if (topRoute.name == EntityRoute.name) {
-                        final args = topRoute.argsAs<EntityRouteArgs>(orElse: EntityRouteArgs.new);
-                        parentEntityId = args.entityId;
-                      }
+                        final topRoute = context.topRoute;
+                        if (topRoute.name == EntityRoute.name) {
+                          final args = topRoute.argsAs<EntityRouteArgs>(orElse: EntityRouteArgs.new);
+                          parentEntityId = args.entityId;
+                        }
 
-                      final result = await client.request(
-                        GHomeScreen_CreatePost_MutationReq(
-                          (b) => b
-                            ..vars.input.siteId = pref.siteId
-                            ..vars.input.parentEntityId = parentEntityId,
-                        ),
-                      );
+                        final result = await client.request(
+                          GHomeScreen_CreatePost_MutationReq(
+                            (b) => b
+                              ..vars.input.siteId = pref.siteId
+                              ..vars.input.parentEntityId = parentEntityId,
+                          ),
+                        );
 
-                      if (context.mounted) {
-                        await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
-                      }
-                    },
-                    child: const Icon(LucideLightIcons.square_plus, size: 24, color: AppColors.gray_700),
-                  ),
-                  const _Button(
-                    index: 2,
-                    icon: Icon(LucideLightIcons.inbox, size: 24, color: AppColors.gray_700),
-                    activeIcon: Icon(TypieIcons.inbox_filled, size: 24, color: AppColors.gray_950),
-                  ),
-                  const _Button(
-                    index: 3,
-                    icon: Icon(LucideLightIcons.circle_user_round, size: 24, color: AppColors.gray_700),
-                    activeIcon: Icon(TypieIcons.circle_user_round_filled, size: 24, color: AppColors.gray_950),
-                  ),
-                ],
+                        if (context.mounted) {
+                          await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
+                        }
+                      },
+                      child: const Icon(LucideLightIcons.square_plus, size: 24, color: AppColors.gray_700),
+                    ),
+                    const _Button(
+                      index: 2,
+                      icon: Icon(LucideLightIcons.inbox, size: 24, color: AppColors.gray_700),
+                      activeIcon: Icon(TypieIcons.inbox_filled, size: 24, color: AppColors.gray_950),
+                    ),
+                    const _Button(
+                      index: 3,
+                      icon: Icon(LucideLightIcons.circle_user_round, size: 24, color: AppColors.gray_700),
+                      activeIcon: Icon(TypieIcons.circle_user_round_filled, size: 24, color: AppColors.gray_950),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
