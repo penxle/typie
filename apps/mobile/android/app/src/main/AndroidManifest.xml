@@ -42,6 +42,7 @@
         <data android:scheme="https" />
 
         <data android:host="typie.co" />
+        <data android:host="auth.typie.co" />
       </intent-filter>
     </activity>
 

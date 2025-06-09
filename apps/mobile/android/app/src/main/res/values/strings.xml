@@ -2,5 +2,5 @@
 <resources>
   <string name="app_label">타이피</string>
   <string name="default_notification_channel_id">default</string>
-  <string name="asset_statements" translatable="false">[{\"include\": \"https://typie.co/.well-known/assetlinks.json\"}]</string>
+  <string name="asset_statements" translatable="false">[{\"include\": \"https://typie.co/.well-known/assetlinks.json\"}, {\"include\": \"https://auth.typie.co/.well-known/assetlinks.json\"}]</string>
 </resources>
