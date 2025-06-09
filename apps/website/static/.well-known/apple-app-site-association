@@ -1,18 +1,4 @@
 {
-  "applinks": {
-    "details": [
-      {
-        "appIDs": [
-          "4V96GK9874.co.typie"
-        ],
-        "components": [
-          {
-            "/": "/*"
-          }
-        ]
-      }
-    ]
-  },
   "webcredentials": {
     "apps": [
       "4V96GK9874.co.typie"
