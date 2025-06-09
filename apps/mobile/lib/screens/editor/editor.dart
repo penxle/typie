@@ -13,7 +13,9 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_lab.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/editor/__generated__/delete_post_mutation.req.gql.dart';
+import 'package:typie/screens/editor/__generated__/duplicate_post_mutation.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
@@ -114,7 +116,19 @@ class Editor extends HookWidget {
                             await context.showBottomSheet(intercept: true, child: ShareBottomSheet(slug: slug));
                           },
                         ),
-                        BottomMenuItem(icon: LucideLightIcons.copy, label: '복제하기', onTap: () {}),
+                        BottomMenuItem(
+                          icon: LucideLightIcons.copy,
+                          label: '복제하기',
+                          onTap: () async {
+                            final res = await client.request(
+                              GEditorScreen_DuplicatePost_MutationReq((b) => b..vars.input.postId = data.post.id),
+                            );
+
+                            if (context.mounted) {
+                              await context.router.popAndPush(EditorRoute(slug: res.duplicatePost.entity.slug));
+                            }
+                          },
+                        ),
                         BottomMenuItem(
                           icon: LucideLightIcons.trash,
                           label: '삭제하기',
