@@ -7,4 +7,5 @@ export * from './node-id';
 export * from './placeholder';
 export * from './selection';
 export * from './syntax-highlight';
+export * from './trailing-node';
 export * from './typography';

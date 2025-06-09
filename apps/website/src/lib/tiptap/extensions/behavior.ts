@@ -1,5 +1,4 @@
 import { Extension } from '@tiptap/core';
-import { Plugin } from '@tiptap/pm/state';
 
 const arrayOrNull = <T>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
 
@@ -109,30 +108,5 @@ export const Behavior = Extension.create({
         return true;
       },
     };
-  },
-
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        props: {
-          handleClick: (view, pos) => {
-            const { state } = view;
-            const { doc } = state;
-
-            const body = doc.child(0);
-            const endOfDocument = pos === doc.content.size - 1;
-            const lastChildEmptyParagraph = body.lastChild?.type.name === 'paragraph' && body.lastChild?.childCount === 0;
-
-            if (endOfDocument && !lastChildEmptyParagraph && !window.__webview__) {
-              this.editor
-                .chain()
-                .insertContentAt(pos, { type: 'paragraph' })
-                .setTextSelection(pos + 1)
-                .run();
-            }
-          },
-        },
-      }),
-    ];
   },
 });
