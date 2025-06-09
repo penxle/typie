@@ -52,7 +52,7 @@ export const HorizontalRule = createNodeView(Component, {
               return false;
             }
 
-            return commands.insertContent({ type: this.name, attrs: { type } });
+            return commands.insertNode(this.type.create({ type }));
           }
         },
     };

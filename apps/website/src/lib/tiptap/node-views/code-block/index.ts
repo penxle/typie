@@ -38,7 +38,7 @@ export const CodeBlock = createNodeView(Component, {
             return false;
           }
 
-          return commands.insertContent({ type: this.name });
+          return commands.insertNode(this.type.create());
         },
     };
   },

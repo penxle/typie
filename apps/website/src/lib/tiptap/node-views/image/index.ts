@@ -1,5 +1,3 @@
-import { findChildrenInRange } from '@tiptap/core';
-import { NodeSelection } from '@tiptap/pm/state';
 import { createNodeView } from '../../lib';
 import Component from './Component.svelte';
 
@@ -32,24 +30,12 @@ export const Image = createNodeView(Component, {
     return {
       setImage:
         () =>
-        ({ can, tr, dispatch }) => {
+        ({ can, commands }) => {
           if (!can().isNodeAllowed(this.name)) {
             return false;
           }
 
-          const node = this.type.create();
-          tr.replaceSelectionWith(node);
-
-          const children = findChildrenInRange(tr.doc, { from: 0, to: tr.selection.anchor }, (node) => node.type === this.type);
-          const pos = children.at(-1)?.pos;
-
-          if (pos) {
-            tr.setSelection(NodeSelection.create(tr.doc, pos));
-          }
-
-          dispatch?.(tr);
-
-          return true;
+          return commands.insertNode(this.type.create());
         },
     };
   },
