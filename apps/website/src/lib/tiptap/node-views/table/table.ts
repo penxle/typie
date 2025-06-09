@@ -1,5 +1,4 @@
 import { callOrReturn, getExtensionField } from '@tiptap/core';
-import { TextSelection } from '@tiptap/pm/state';
 import {
   addColumnAfter,
   addColumnBefore,
@@ -80,7 +79,7 @@ export const Table = createNodeView(Component, {
     return {
       insertTable:
         ({ rows: rowsCount = 3, cols: colsCount = 3 } = {}) =>
-        ({ can, tr, dispatch, state }) => {
+        ({ can, commands, state }) => {
           if (!can().isNodeAllowed(this.name)) {
             return false;
           }
@@ -98,15 +97,7 @@ export const Table = createNodeView(Component, {
 
           const table = state.schema.nodes.table.createChecked(null, rows);
 
-          if (dispatch) {
-            const offset = tr.selection.from + 1;
-
-            tr.replaceSelectionWith(table)
-              .scrollIntoView()
-              .setSelection(TextSelection.near(tr.doc.resolve(offset)));
-          }
-
-          return true;
+          return commands.insertNode(table);
         },
       addRowBefore:
         () =>

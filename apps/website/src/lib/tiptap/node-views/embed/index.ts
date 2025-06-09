@@ -35,7 +35,7 @@ export const Embed = createNodeView(Component, {
             return false;
           }
 
-          return commands.insertContent({ type: this.name, attrs });
+          return commands.insertNode(this.type.create(attrs));
         },
     };
   },
