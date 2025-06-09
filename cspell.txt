@@ -37,6 +37,7 @@ natgw
 noeviction
 noreferrer
 nori
+observablehq
 oklch
 on+
 oslllo

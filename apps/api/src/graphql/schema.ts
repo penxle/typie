@@ -7,6 +7,7 @@ import './resolvers/entity';
 import './resolvers/folder';
 import './resolvers/internal';
 import './resolvers/notification';
+import './resolvers/stats';
 import './resolvers/payment';
 import './resolvers/post';
 import './resolvers/preorder';

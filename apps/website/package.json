@@ -17,6 +17,7 @@
     "@iconify-json/lucide": "^1.2.46",
     "@iconify-json/simple-icons": "^1.2.37",
     "@iconify-json/twemoji": "^1.2.2",
+    "@observablehq/plot": "^0.6.17",
     "@pandacss/dev": "^0.53.7",
     "@portone/browser-sdk": "^0.0.21",
     "@pulumi/aws": "^6.82.1",
