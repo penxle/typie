@@ -81,7 +81,7 @@
         size: '28px',
         borderRadius: '4px',
         color: copied ? 'green.500' : 'gray.500',
-        _hover: { backgroundColor: 'gray.200' },
+        _supportHover: { backgroundColor: 'gray.200' },
       })}
       onclick={handleCopy}
       type="button"
