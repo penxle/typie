@@ -244,6 +244,8 @@
         }
       } else if (name === 'link') {
         editor?.current.chain().focus().setLink(attrs.url).run();
+      } else if (name === 'ruby') {
+        editor?.current.chain().focus().setRuby(attrs.text).run();
       } else if (name === 'paragraph') {
         if (attrs.textAlign !== undefined) {
           editor?.current.chain().focus().setParagraphTextAlign(attrs.textAlign).run();
