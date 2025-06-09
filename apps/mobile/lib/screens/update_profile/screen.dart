@@ -30,10 +30,17 @@ class UpdateProfileScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final blob = useService<Blob>();
+    final form = useHookForm();
 
     return Screen(
       heading: const Heading(title: '프로필 변경'),
       resizeToAvoidBottomInset: true,
+      bottomAction: BottomAction(
+        text: '변경',
+        onTap: () async {
+          await form.submit();
+        },
+      ),
       child: GraphQLOperation(
         operation: GUpdateProfileScreen_QueryReq(),
         builder: (context, client, data) {
@@ -41,6 +48,7 @@ class UpdateProfileScreen extends HookWidget {
           final avatarUrl = useState<String>(data.me!.avatar.url);
 
           return HookForm(
+            form: form,
             schema: l.schema({
               'name': l.string().min(1, message: '이름을 입력해주세요.')
                 ..max(20, message: '이름은 20자를 넘을 수 없어요').required(message: '이름을 입력해주세요.'),
@@ -134,21 +142,6 @@ class UpdateProfileScreen extends HookWidget {
                       initialValue: data.me!.name,
                       autofocus: true,
                     ),
-                  ),
-                  const Spacer(),
-                  Tappable(
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(color: AppColors.gray_950),
-                      padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
-                      child: const Text(
-                        '변경',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
-                      ),
-                    ),
-                    onTap: () async {
-                      await form.submit();
-                    },
                   ),
                 ],
               );

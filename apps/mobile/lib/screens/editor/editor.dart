@@ -163,6 +163,7 @@ class Editor extends HookWidget {
           ),
           backgroundColor: AppColors.white,
           keyboardDismiss: false,
+          responsive: false,
           child: Stack(
             fit: StackFit.expand,
             children: [

@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
 
 extension BottomSheetExtension on BuildContext {
@@ -44,7 +45,10 @@ extension BottomSheetExtension on BuildContext {
               bottom: false,
               child: Align(
                 alignment: Alignment.bottomCenter,
-                child: SlideTransition(position: tweenedSlide, child: child),
+                child: ResponsiveContainer(
+                  alignment: Alignment.bottomCenter,
+                  child: SlideTransition(position: tweenedSlide, child: child),
+                ),
               ),
             ),
           ],

@@ -1,6 +1,7 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
 import 'package:typie/context/modal.dart';
@@ -9,27 +10,34 @@ import 'package:typie/graphql/error.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/screens/update_email/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/update_email/__generated__/send_email_update_email_mutation.req.gql.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
-import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
-class UpdateEmailScreen extends StatelessWidget {
+class UpdateEmailScreen extends HookWidget {
   const UpdateEmailScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final form = useHookForm();
+
     return Screen(
       heading: const Heading(title: '이메일 변경'),
       resizeToAvoidBottomInset: true,
       padding: const Pad(top: 20),
+      bottomAction: BottomAction(
+        text: '변경',
+        onTap: () async {
+          await form.submit();
+        },
+      ),
       child: GraphQLOperation(
         operation: GUpdateEmailScreen_QueryReq(),
         builder: (context, client, data) {
           return HookForm(
+            form: form,
             schema: l.schema({
               'email': l.string().email(message: '유효한 이메일 주소를 입력해주세요.')..required(message: '이메일 주소를 입력해주세요.'),
             }),
@@ -84,21 +92,6 @@ class UpdateEmailScreen extends StatelessWidget {
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: [AutofillHints.email],
                       autofocus: true,
-                    ),
-                  ),
-                  const Spacer(),
-                  Tappable(
-                    onTap: () async {
-                      await form.submit();
-                    },
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(color: AppColors.gray_950),
-                      padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
-                      child: const Text(
-                        '변경',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
-                      ),
                     ),
                   ),
                 ],

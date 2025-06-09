@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:ferry/ferry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/logger.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -46,7 +50,11 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
       return null;
     }, [snapshot.data]);
 
-    if (snapshot.hasError || (snapshot.data?.hasErrors ?? false)) {
+    final error = snapshot.error ?? snapshot.data?.graphqlErrors ?? snapshot.data?.linkException;
+    if (error != null) {
+      unawaited(Sentry.captureException(error));
+      log.e(error);
+
       return Material(
         color: initialBackgroundColor ?? AppColors.transparent,
         child: Column(

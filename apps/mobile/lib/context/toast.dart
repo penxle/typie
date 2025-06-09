@@ -7,6 +7,7 @@ import 'package:gap/gap.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/responsive_container.dart';
 
 enum ToastType { success, error, notification }
 
@@ -56,48 +57,57 @@ class _Widget extends HookWidget {
 
     return Positioned(
       bottom: safeAreaBottom + keyboardHeight + bottom,
-      left: 24,
-      right: 24,
+      left: 0,
+      right: 0,
       child: Material(
         type: MaterialType.transparency,
-        child: SlideTransition(
-          position: tweenedOffset,
-          child: FadeTransition(
-            opacity: tweenedOpacity,
-            child: Container(
-              decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(999)),
-              padding: const Pad(all: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      color: switch (type) {
-                        ToastType.success => AppColors.green_600,
-                        ToastType.error => AppColors.red_600,
-                        ToastType.notification => AppColors.blue_600,
-                      },
-                    ),
-                    child: Center(
-                      child: switch (type) {
-                        ToastType.success => const Icon(LucideLightIcons.check, color: AppColors.white, size: 12),
-                        ToastType.error => const Icon(TypieIcons.exclamation, color: AppColors.white, size: 12),
-                        ToastType.notification => const Icon(LucideLightIcons.bell, color: AppColors.white, size: 12),
-                      },
-                    ),
+        child: ResponsiveContainer(
+          child: Padding(
+            padding: const Pad(horizontal: 24),
+            child: SlideTransition(
+              position: tweenedOffset,
+              child: FadeTransition(
+                opacity: tweenedOpacity,
+                child: Container(
+                  decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(999)),
+                  padding: const Pad(all: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          color: switch (type) {
+                            ToastType.success => AppColors.green_600,
+                            ToastType.error => AppColors.red_600,
+                            ToastType.notification => AppColors.blue_600,
+                          },
+                        ),
+                        child: Center(
+                          child: switch (type) {
+                            ToastType.success => const Icon(LucideLightIcons.check, color: AppColors.white, size: 12),
+                            ToastType.error => const Icon(TypieIcons.exclamation, color: AppColors.white, size: 12),
+                            ToastType.notification => const Icon(
+                              LucideLightIcons.bell,
+                              color: AppColors.white,
+                              size: 12,
+                            ),
+                          },
+                        ),
+                      ),
+                      const Gap(8),
+                      Expanded(
+                        child: Text(
+                          message,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.white),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ],
                   ),
-                  const Gap(8),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.white),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
