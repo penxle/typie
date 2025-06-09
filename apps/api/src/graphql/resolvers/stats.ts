@@ -1,3 +1,4 @@
+import { GetCostAndUsageCommand } from '@aws-sdk/client-cost-explorer';
 import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
 import { redis } from '@/cache';
@@ -16,6 +17,8 @@ import {
   Users,
 } from '@/db';
 import { SubscriptionState, UserState } from '@/enums';
+import { env } from '@/env';
+import * as aws from '@/external/aws';
 import { builder } from '../builder';
 
 builder.queryField('stats', (t) =>
@@ -30,9 +33,118 @@ builder.queryField('stats', (t) =>
       }
 
       const now = dayjs();
-      const thirtyDaysAgo = now.subtract(30, 'day');
-      const twentyFourHoursAgo = now.subtract(24, 'hour');
-      const fortyEightHoursAgo = now.subtract(48, 'hour');
+      const thirtyDaysAgo = now.subtract(30, 'days');
+      const twentyFourHoursAgo = now.subtract(24, 'hours');
+      const fortyEightHoursAgo = now.subtract(48, 'hours');
+
+      const getGitStatistics = async () => {
+        const oneWeekAgo = dayjs().subtract(7, 'days').toISOString();
+
+        const query = `
+          query($owner: String!, $repo: String!, $since: GitTimestamp!) {
+            repository(owner: $owner, name: $repo) {
+              defaultBranchRef {
+                target {
+                  ... on Commit {
+                    totalCommits: history {
+                      totalCount
+                    }
+                    weeklyCommits: history(since: $since) {
+                      totalCount
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `;
+
+        const variables = {
+          owner: 'penxle',
+          repo: 'typie',
+          since: oneWeekAgo,
+        };
+
+        try {
+          const response = await fetch('https://api.github.com/graphql', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query, variables }),
+          });
+
+          const { data } = await response.json();
+
+          if (!data?.repository?.defaultBranchRef?.target) {
+            throw new Error('GitHub API response invalid');
+          }
+
+          return {
+            totalCommits: data.repository.defaultBranchRef.target.totalCommits.totalCount,
+            weeklyCommits: data.repository.defaultBranchRef.target.weeklyCommits.totalCount,
+          };
+        } catch {
+          return {
+            totalCommits: 0,
+            weeklyCommits: 0,
+          };
+        }
+      };
+
+      const getUsdToKrwRate = async (): Promise<number> => {
+        const cacheKey = 'usd-krw-rate';
+
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          return Number.parseFloat(cached);
+        }
+
+        try {
+          const response = await fetch('https://open.er-api.com/v6/latest/USD');
+          const data = await response.json();
+          const rate = data.rates.KRW;
+
+          if (rate && typeof rate === 'number') {
+            await redis.setex(cacheKey, 86_400, rate.toString());
+            return rate;
+          }
+
+          throw new Error('Invalid rate response');
+        } catch {
+          return 1350;
+        }
+      };
+
+      const getInfraCost = async () => {
+        const thirtyDaysAgo = dayjs().subtract(30, 'days');
+        const now = dayjs();
+
+        try {
+          const command = new GetCostAndUsageCommand({
+            TimePeriod: {
+              Start: thirtyDaysAgo.format('YYYY-MM-DD'),
+              End: now.format('YYYY-MM-DD'),
+            },
+            Granularity: 'MONTHLY',
+            Metrics: ['BlendedCost'],
+          });
+
+          const response = await aws.costExplorer.send(command);
+
+          if (!response.ResultsByTime?.[0]?.Total?.BlendedCost?.Amount) {
+            throw new Error('Cost Explorer response invalid');
+          }
+
+          const usdAmount = Number.parseFloat(response.ResultsByTime[0].Total.BlendedCost.Amount);
+          const usdToKrw = await getUsdToKrwRate();
+
+          return Math.round(usdAmount * usdToKrw);
+        } catch {
+          return 0;
+        }
+      };
 
       const getTotalUsers = () =>
         db.execute(sql`
@@ -545,6 +657,8 @@ builder.queryField('stats', (t) =>
         totalMediaSizeData,
         unlistedPrivatePostRatioData,
         serviceDaysData,
+        gitStatistics,
+        infraCost,
       ] = await Promise.all([
         getTotalUsers(),
         getNewSignups(),
@@ -564,6 +678,8 @@ builder.queryField('stats', (t) =>
         getTotalMediaSize(),
         getUnlistedPrivatePostRatio(),
         getServiceDays(),
+        getGitStatistics(),
+        getInfraCost(),
       ]);
 
       const transformToData = (rows: Record<string, unknown>[]) => {
@@ -594,6 +710,10 @@ builder.queryField('stats', (t) =>
         newMedia: transformToData(newMediaData.rows),
         totalMediaSize: transformToData(totalMediaSizeData.rows),
         serviceDays: transformToData(serviceDaysData.rows),
+
+        totalCommits: gitStatistics.totalCommits,
+        weeklyCommits: gitStatistics.weeklyCommits,
+        monthlyInfraCost: infraCost,
       };
 
       await redis.setex(cacheKey, 3600, JSON.stringify(result));
