@@ -185,12 +185,6 @@ class EditorToolbar extends HookWidget {
                   } else if ((proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
                       (proseMirrorState?.isNodeActive('ordered_list') ?? false)) {
                     return const _ListToolbar();
-                  } else if (proseMirrorState?.isMarkActive('link') ?? false) {
-                    return _NodeToolbar(
-                      label: '링크',
-                      withDelete: false,
-                      children: [Text((proseMirrorState?.getMarkAttributes('link')?['href'] ?? '') as String)],
-                    );
                   }
 
                   switch (proseMirrorState?.currentNode?.type) {
@@ -996,6 +990,7 @@ class _DefaultTextbar extends HookWidget {
           const AppVerticalDivider(height: 20),
           _IconToolbarButton(
             icon: LucideLightIcons.link,
+            isActive: proseMirrorState?.isMarkActive('link') ?? false,
             onTap: () async {
               await context.showModal(
                 intercept: true,
@@ -1023,7 +1018,36 @@ class _DefaultTextbar extends HookWidget {
               );
             },
           ),
-          _IconToolbarButton(icon: TypieIcons.ruby, onTap: () {}),
+          _IconToolbarButton(
+            icon: TypieIcons.ruby,
+            isActive: proseMirrorState?.isMarkActive('ruby') ?? false,
+            onTap: () async {
+              await context.showModal(
+                intercept: true,
+                child: HookForm(
+                  onSubmit: (form) async {
+                    await scope.command('ruby', attrs: {'text': form.data['text']});
+                  },
+                  builder: (context, form) {
+                    return ConfirmModal(
+                      title: '루비 삽입',
+                      confirmText: '삽입',
+                      onConfirm: () async {
+                        await form.submit();
+                      },
+                      child: HookFormTextField.collapsed(
+                        initialValue: (proseMirrorState?.getMarkAttributes('ruby')?['text'] ?? '') as String,
+                        name: 'text',
+                        placeholder: '텍스트 위에 들어갈 문구',
+                        style: const TextStyle(fontSize: 16),
+                        autofocus: true,
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
           const AppVerticalDivider(height: 20),
           _IconToolbarButton(
             icon: LucideLightIcons.align_left,
