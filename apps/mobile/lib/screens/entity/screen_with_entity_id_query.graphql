@@ -20,6 +20,7 @@ query EntityScreen_WithEntityId_Query($entityId: ID!) {
       ... on Folder {
         id
         name
+        maxDescendantFoldersDepth
       }
     }
 
