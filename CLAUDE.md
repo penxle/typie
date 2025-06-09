@@ -195,6 +195,11 @@ JWT-based auth with social login support (Google, Apple, Kakao, Naver). Tokens a
 - Test database migrations locally before deploying
 - Ensure proper error handling for GraphQL resolvers
 - Keep sensitive data in Doppler, never commit secrets
+- **PandaCSS Token Usage**:
+  - Use existing design tokens: colors (brand, gray, red, green, blue with numbers 50-950), shadows (small, medium, large)
+  - For non-standard CSS values, use bracket notation: `fontSize: '[48px]'`, `width: '[100dvw]'`
+  - Break compound values into individual properties: `margin: '0 auto'` → `marginX: 'auto'`, `padding: '40px 20px'` → `paddingY: '40px', paddingX: '20px'`
+  - Use TypeScript checking: `pnpm lint:svelte` for Svelte files, `pnpm lint:typecheck` for full project
 - **ALWAYS run ESLint fix and Prettier write after modifying any file**:
   ```bash
   pnpm eslint <file_path> --fix
@@ -214,4 +219,25 @@ JWT-based auth with social login support (Google, Apple, Kakao, Naver). Tokens a
 
   # Sync branches with remote (clean up merged PRs, restack branches)
   gt sync --no-interactive --force # Run before submit if stack issues occur
+  ```
+
+## Performance Optimization
+
+- **Parallel Tool Usage**: Always use parallel tasks whenever possible. When multiple independent pieces of information are needed or multiple operations must be performed, batch tool calls together in a single message to optimize performance.
+
+  Examples:
+
+  ```
+  # Good - Reading multiple files concurrently
+  Read tool call 1: file1.ts
+  Read tool call 2: file2.ts
+  Read tool call 3: file3.ts
+
+  # Good - Running multiple bash commands in parallel
+  Bash tool call 1: git status
+  Bash tool call 2: git diff
+  Bash tool call 3: npm run lint
+
+  # Bad - Sequential execution
+  Read file1.ts → response → Read file2.ts → response → Read file3.ts
   ```
