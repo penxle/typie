@@ -111,40 +111,67 @@
   };
 </script>
 
-<button
-  bind:this={buttonEl}
-  class={center({
-    gap: '4px',
-    borderRadius: '4px',
-    paddingX: '8px',
-    paddingY: '1px',
-    fontSize: '13px',
-    fontWeight: 'medium',
-    color: 'gray.600',
-    pointerEvents: 'auto',
-    userSelect: 'none',
-    _hover: {
-      backgroundColor: 'gray.200',
-    },
-    _expanded: {
-      backgroundColor: 'gray.200',
-    },
-  })}
-  aria-expanded={open}
-  onclick={() => (open = true)}
-  type="button"
-  use:anchor
->
-  {languages.find((language) => language.id === attrs.language)?.name ?? '?'}
-
-  {#if open}
-    <Icon style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronUp} size={14} />
-  {:else}
-    <Icon style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronDown} size={14} />
-  {/if}
-</button>
-
 <svelte:window onkeydown={handleKeyDown} />
+
+{#if window.__webview__}
+  <select
+    class={center({
+      gap: '4px',
+      borderRadius: '4px',
+      paddingX: '8px',
+      paddingY: '1px',
+      fontSize: '13px',
+      fontWeight: 'medium',
+      color: 'gray.600',
+      pointerEvents: 'auto',
+      userSelect: 'none',
+      appearance: 'none',
+      textAlignLast: 'center',
+    })}
+    onchange={(e) => updateAttributes({ language: e.currentTarget.value })}
+  >
+    <option value="">
+      {languages.find((language) => language.id === attrs.language)?.name ?? '?'}
+    </option>
+
+    {#each filteredLanguages as language (language.id)}
+      <option value={language.id}>{language.name}</option>
+    {/each}
+  </select>
+{:else}
+  <button
+    bind:this={buttonEl}
+    class={center({
+      gap: '4px',
+      borderRadius: '4px',
+      paddingX: '8px',
+      paddingY: '1px',
+      fontSize: '13px',
+      fontWeight: 'medium',
+      color: 'gray.600',
+      pointerEvents: 'auto',
+      userSelect: 'none',
+      _hover: {
+        backgroundColor: 'gray.200',
+      },
+      _expanded: {
+        backgroundColor: 'gray.200',
+      },
+    })}
+    aria-expanded={open}
+    onclick={() => (open = true)}
+    type="button"
+    use:anchor
+  >
+    {languages.find((language) => language.id === attrs.language)?.name ?? '?'}
+
+    {#if open}
+      <Icon style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronUp} size={14} />
+    {:else}
+      <Icon style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronDown} size={14} />
+    {/if}
+  </button>
+{/if}
 
 {#if open}
   <div
@@ -164,7 +191,13 @@
     use:floating
   >
     <div
-      class={css({ padding: '8px', backgroundColor: 'white', borderTopRadius: '12px', borderBottom: '1px solid', borderColor: 'gray.100' })}
+      class={css({
+        padding: '8px',
+        backgroundColor: 'white',
+        borderTopRadius: '12px',
+        borderBottom: '1px solid',
+        borderColor: 'gray.100',
+      })}
     >
       <label
         class={flex({
