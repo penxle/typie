@@ -150,6 +150,9 @@
           운영 데이터 공개는 정보 비대칭을 줄이기 위한 경영 원칙입니다. 모든 데이터는 자동 수집되며 1시간 단위로 갱신, 원본 상태로
           제공됩니다.
         </p>
+        <p class={css({ fontSize: '12px', color: 'gray.400', marginTop: '8px', lineHeight: '[1.3]', maxWidth: '[520px]' })}>
+          모든 통계는 자동 생성되는 튜토리얼 포스트 등을 제외해 계산되고 있습니다.
+        </p>
       </div>
     </header>
 
@@ -167,7 +170,7 @@
           핵심 지표
         </h2>
         <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.5]' })}>
-          타이피 성장의 핵심을 보여주는 지표들입니다. 사용자 증가, 창작 활동, 구독 수익의 30일 변화 추이를 함께 확인할 수 있습니다.
+          타이피 성장의 핵심을 보여주는 지표들입니다. 사용자 증가, 작성 활동, 구독 수익의 30일 변화 추이를 함께 확인할 수 있습니다.
         </p>
       </div>
 
@@ -357,6 +360,48 @@
             value={formatWithUnit($query.stats.newReactions.current, '개')}
           />
         </div>
+      </div>
+    </section>
+
+    <section class={css({ marginBottom: '[120px]' })}>
+      <div class={css({ marginBottom: '64px' })}>
+        <h2
+          class={css({
+            fontSize: { base: '[28px]', md: '[32px]' },
+            fontWeight: 'bold',
+            marginBottom: '12px',
+            color: 'gray.950',
+            letterSpacing: '[-.01em]',
+          })}
+        >
+          개발 및 인프라
+        </h2>
+        <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.5]' })}>
+          타이피의 개발 속도와 인프라 운영 현황을 보여주는 지표들입니다. 커밋 수, 배포 빈도, 인프라 비용 등 기술적 측면을 측정합니다.
+        </p>
+      </div>
+
+      <div class={grid({ columns: { base: 1, md: 2, lg: 3 }, gap: '16px' })}>
+        <SmallStatCard
+          data={[]}
+          description="전체 기간 누적 커밋 수"
+          title="총 커밋 수"
+          value={($query.stats.totalCommits || 0).toLocaleString() + '개'}
+        />
+
+        <SmallStatCard
+          data={[]}
+          description="지난 7일간 커밋 수"
+          title="주간 커밋 수"
+          value={($query.stats.weeklyCommits || 0).toLocaleString() + '개'}
+        />
+
+        <SmallStatCard
+          data={[]}
+          description="지난 30일간 AWS 인프라 비용"
+          title="월간 인프라 비용"
+          value={formatWithUnit($query.stats.monthlyInfraCost || 0, '원')}
+        />
       </div>
     </section>
 

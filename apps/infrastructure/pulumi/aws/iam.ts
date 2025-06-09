@@ -58,6 +58,11 @@ new aws.iam.UserPolicy('developer@team', {
           },
         },
       },
+      {
+        Effect: 'Allow',
+        Action: ['ce:GetCostAndUsage'],
+        Resource: '*',
+      },
     ],
   },
 });
