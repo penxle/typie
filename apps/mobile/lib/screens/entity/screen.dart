@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +9,7 @@ import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/async_effect.dart';
@@ -31,6 +34,8 @@ import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/vertical_divider.dart';
+
+const maxDepth = 3;
 
 @RoutePage()
 class EntityRouter extends AutoRouter {
@@ -103,8 +108,6 @@ class _EntityList extends HookWidget {
 
     final isReordering = useState(false);
     final isRenaming = useState(false);
-
-    const maxDepth = 3;
 
     useEffect(() {
       void listener() {
@@ -197,6 +200,14 @@ class _EntityList extends HookWidget {
                     await context.showBottomSheet(
                       child: BottomMenu(
                         items: [
+                          if (entity != null)
+                            BottomMenuItem(
+                              icon: LucideLightIcons.folder_symlink,
+                              label: '다른 폴더로 옮기기',
+                              onTap: () async {
+                                await context.showBottomSheet(intercept: true, child: _MoveEntityModal(entity!));
+                              },
+                            ),
                           BottomMenuItem(
                             icon: LucideLightIcons.square_pen,
                             label: '하위 포스트 만들기',
@@ -417,21 +428,22 @@ class _EntityList extends HookWidget {
 }
 
 class _Folder extends StatelessWidget {
-  const _Folder(this.entity);
+  const _Folder(this.entity, {this.color = AppColors.gray_950});
 
   final GEntityScreen_Entity_entity entity;
   GEntityScreen_Entity_entity_node__asFolder get folder => entity.node as GEntityScreen_Entity_entity_node__asFolder;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       spacing: 8,
       children: [
-        const Icon(TypieIcons.folder_filled, size: 18),
+        Icon(TypieIcons.folder_filled, size: 18, color: color),
         Expanded(
           child: Text(
             folder.name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: color),
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
           ),
@@ -475,6 +487,245 @@ class _Post extends StatelessWidget {
           maxLines: 1,
         ),
       ],
+    );
+  }
+}
+
+class _MoveEntityModal extends HookWidget {
+  const _MoveEntityModal(this.entity);
+  final GEntityScreen_WithEntityId_QueryData_entity entity;
+
+  @override
+  Widget build(BuildContext context) {
+    final pref = useService<Pref>();
+    final client = useService<GraphQLClient>();
+    final scrollController = useScrollController();
+
+    final loading = useState(false);
+    final entities = useState<List<GEntityScreen_Entity_entity>?>(null);
+    final currentEntity = useState<GEntityScreen_WithEntityId_QueryData_entity?>(null);
+
+    Future<void> fetchData(String? id) async {
+      loading.value = true;
+
+      if (id != null) {
+        final res = await client.request(GEntityScreen_WithEntityId_QueryReq((b) => b..vars.entityId = id));
+        currentEntity.value = res.entity;
+        entities.value = res.entity.children.toList();
+      } else {
+        final res = await client.request(GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId));
+        currentEntity.value = null;
+        entities.value = res.site.entities.toList();
+      }
+      loading.value = false;
+    }
+
+    useEffect(() {
+      unawaited(fetchData(null));
+
+      return null;
+    }, []);
+
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (scrollController.hasClients) {
+          await scrollController.animateTo(
+            scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+
+      return null;
+    }, [currentEntity.value]);
+
+    return AppFullBottomSheet(
+      title: '다른 폴더로 옮기기',
+      child: Stack(
+        children: [
+          Positioned(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              controller: scrollController,
+              child: Row(
+                spacing: 4,
+                children: [
+                  const Icon(LucideLightIcons.folder_open, size: 18),
+                  const Gap(4),
+                  Tappable(
+                    onTap: () async {
+                      if (currentEntity.value != null) {
+                        await fetchData(null);
+                      }
+                    },
+                    child: Text(
+                      '내 포스트',
+                      style: TextStyle(fontWeight: currentEntity.value == null ? FontWeight.w600 : null),
+                    ),
+                  ),
+                  if (currentEntity.value != null) ...[
+                    ...currentEntity.value!.ancestors
+                        .map(
+                          (ancestor) => [
+                            const Icon(LucideLightIcons.chevron_right, size: 14),
+                            Tappable(
+                              onTap: () async {
+                                await fetchData(ancestor.id);
+                              },
+                              child: Text(
+                                ancestor.node.when(
+                                  folder: (folder) => folder.name,
+                                  orElse: () => throw UnimplementedError(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                        .expand((e) => e),
+                    const Icon(LucideLightIcons.chevron_right, size: 14),
+                    Text(
+                      currentEntity.value!.node.when(
+                        folder: (folder) => folder.name,
+                        orElse: () => throw UnimplementedError(),
+                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const Pad(top: 40, bottom: 20),
+            child: (loading.value && entities.value == null)
+                ? const Center(child: CircularProgressIndicator())
+                : entities.value!.where((element) => element.node.G__typename == 'Folder').isEmpty
+                ? const Center(
+                    child: Text('하위 폴더가 없어요', style: TextStyle(fontSize: 15, color: AppColors.gray_500)),
+                  )
+                : ListView.builder(
+                    itemCount: entities.value!.length,
+                    itemBuilder: (context, index) {
+                      if (entities.value![index].node.G__typename != 'Folder') {
+                        return const SizedBox.shrink();
+                      }
+
+                      return ListTile(
+                        contentPadding: Pad.zero,
+                        onTap: () async {
+                          if (entity.id == entities.value![index].id) {
+                            return;
+                          }
+
+                          if (currentEntity.value?.id != entities.value![index].id) {
+                            await fetchData(entities.value![index].id);
+                          }
+                        },
+                        title: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.gray_950),
+                            borderRadius: const BorderRadius.all(Radius.circular(8)),
+                            color: entity.id == entities.value![index].id ? AppColors.gray_100 : AppColors.white,
+                          ),
+                          padding: const Pad(vertical: 12, horizontal: 16),
+                          child: entities.value![index].node.when(
+                            folder: (folder) => _Folder(
+                              entities.value![index],
+                              color: entity.id == entities.value![index].id ? AppColors.gray_500 : null,
+                            ),
+                            post: (_) => throw UnimplementedError(),
+                            orElse: () => throw UnimplementedError(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: const BoxDecoration(color: AppColors.white),
+              padding: const Pad(horizontal: 20, vertical: 4),
+              child: Row(
+                spacing: 8,
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: AppColors.gray_100,
+                        borderRadius: BorderRadius.all(Radius.circular(999)),
+                      ),
+                      padding: const Pad(vertical: 12),
+                      child: Tappable(
+                        onTap: () async {
+                          await context.router.maybePop();
+                        },
+                        child: const Text(
+                          '취소',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: entity.node.when(
+                          folder: (folder) =>
+                              (currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
+                                      (folder.maxDescendantFoldersDepth - entity.depth) >
+                                  (maxDepth - 1)
+                              ? AppColors.gray_400
+                              : AppColors.gray_950,
+                          orElse: () => throw UnimplementedError(),
+                        ),
+                        borderRadius: const BorderRadius.all(Radius.circular(999)),
+                      ),
+                      padding: const Pad(vertical: 12),
+                      child: Tappable(
+                        onTap: () async {
+                          if (entity.node.G__typename == 'Folder') {
+                            if ((currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
+                                    ((entity.node as GEntityScreen_WithEntityId_QueryData_entity_node__asFolder)
+                                            .maxDescendantFoldersDepth -
+                                        entity.depth) >
+                                (maxDepth - 1)) {
+                              context.toast(ToastType.error, '폴더의 최대 깊이를 초과했어요');
+                              return;
+                            }
+
+                            await client.request(
+                              GEntityScreen_MoveEntity_MutationReq(
+                                (b) => b
+                                  ..vars.input.entityId = entity.id
+                                  ..vars.input.parentEntityId = currentEntity.value?.id
+                                  ..vars.input.lowerOrder = entities.value![entities.value!.length - 1].order,
+                              ),
+                            );
+
+                            if (context.mounted) {
+                              await context.router.maybePop();
+                            }
+                          }
+                        },
+                        child: const Text(
+                          '옮기기',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontWeight: FontWeight.w500, color: AppColors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
