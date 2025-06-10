@@ -148,6 +148,12 @@ export const SubscriptionState = {
   EXPIRED: 'EXPIRED',
 } as const;
 
+export type UserRole = keyof typeof UserRole;
+export const UserRole = {
+  ADMIN: 'ADMIN',
+  USER: 'USER',
+} as const;
+
 export type UserState = keyof typeof UserState;
 export const UserState = {
   ACTIVE: 'ACTIVE',
