@@ -64,7 +64,6 @@
     "ky": "^1.8.1",
     "meilisearch": "^0.50.0",
     "nanoid": "^5.1.5",
-    "pg": "^8.16.0",
     "postgres": "^3.4.7",
     "query-string": "^9.2.0",
     "react": "^19.1.0",
@@ -86,7 +85,6 @@
   "devDependencies": {
     "@pulumi/aws": "^6.82.1",
     "@pulumi/pulumi": "^3.175.0",
-    "@types/pg": "^8.15.4",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
     "@typie/pulumi": "workspace:*",

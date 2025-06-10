@@ -87,7 +87,7 @@ Entity.implement({
     ancestors: t.field({
       type: [Entity],
       resolve: async (self) => {
-        const { rows } = await db.execute<{ id: string }>(sql`
+        const rows = await db.execute<{ id: string }>(sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.parentId}, 0 AS depth
             FROM ${Entities}
@@ -111,7 +111,7 @@ Entity.implement({
     descendants: t.field({
       type: [Entity],
       resolve: async (self) => {
-        const { rows } = await db.execute<{ id: string }>(sql`
+        const rows = await db.execute<{ id: string }>(sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.depth}
             FROM ${Entities}
@@ -194,7 +194,7 @@ EntityView.implement({
     ancestors: t.field({
       type: [EntityView],
       resolve: async (self) => {
-        const { rows } = await db.execute<{ id: string }>(sql`
+        const rows = await db.execute<{ id: string }>(sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.parentId}, 0 AS depth
             FROM ${Entities}
@@ -328,24 +328,26 @@ builder.mutationFields((t) => ({
           .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.siteId, entity.siteId)))
           .then(firstOrThrow);
 
-        const hasCycle = await db.execute<{ exists: boolean }>(
-          sql`
-            WITH RECURSIVE sq AS (
-              SELECT ${Entities.id}, ${Entities.parentId}
-              FROM ${Entities}
-              WHERE ${eq(Entities.id, parentEntity.id)}
-              UNION ALL
-              SELECT ${Entities.id}, ${Entities.parentId}
-              FROM ${Entities}
-              JOIN sq ON ${Entities.id} = sq.parent_id
-            )
-            SELECT EXISTS (
-              SELECT 1 FROM sq WHERE ${eq(sql`id`, entity.id)}
-            ) as exists
-          `,
-        );
+        const hasCycle = await db
+          .execute<{ exists: boolean }>(
+            sql`
+              WITH RECURSIVE sq AS (
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                WHERE ${eq(Entities.id, parentEntity.id)}
+                UNION ALL
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                JOIN sq ON ${Entities.id} = sq.parent_id
+              )
+              SELECT EXISTS (
+                SELECT 1 FROM sq WHERE ${eq(sql`id`, entity.id)}
+              ) as exists
+            `,
+          )
+          .then(firstOrThrow);
 
-        if (hasCycle.rows[0].exists) {
+        if (hasCycle.exists) {
           throw new TypieError({ code: 'circular_reference' });
         }
 

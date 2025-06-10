@@ -117,6 +117,9 @@ export class Service extends pulumi.ComponentResource {
             name: 'app',
             image: pulumi.interpolate`${args.image.name}:${args.image.version}`,
 
+            cpu: pulumi.output(args.resources.cpu).apply((cpu) => Number.parseInt(cpu)),
+            memory: pulumi.output(args.resources.memory).apply((memory) => Number.parseInt(memory)),
+
             portMappings: [{ containerPort: 3000, hostPort: 3000, protocol: 'tcp' }],
 
             environment: [

@@ -202,9 +202,6 @@ importers:
       nanoid:
         specifier: ^5.1.5
         version: 5.1.5
-      pg:
-        specifier: ^8.16.0
-        version: 8.16.0
       postgres:
         specifier: ^3.4.7
         version: 3.4.7
@@ -263,9 +260,6 @@ importers:
       '@pulumi/pulumi':
         specifier: ^3.175.0
         version: 3.175.0(typescript@5.8.3)
-      '@types/pg':
-        specifier: ^8.15.4
-        version: 8.15.4
       '@types/react':
         specifier: ^19.1.6
         version: 19.1.6
@@ -16802,13 +16796,15 @@ snapshots:
   pg-cloudflare@1.2.5:
     optional: true
 
-  pg-connection-string@2.9.0: {}
+  pg-connection-string@2.9.0:
+    optional: true
 
   pg-int8@1.0.1: {}
 
   pg-pool@3.10.0(pg@8.16.0):
     dependencies:
       pg: 8.16.0
+    optional: true
 
   pg-protocol@1.10.0: {}
 
@@ -16829,10 +16825,12 @@ snapshots:
       pgpass: 1.0.5
     optionalDependencies:
       pg-cloudflare: 1.2.5
+    optional: true
 
   pgpass@1.0.5:
     dependencies:
       split2: 4.2.0
+    optional: true
 
   phin@3.7.1:
     dependencies:
@@ -17764,7 +17762,8 @@ snapshots:
 
   split-on-first@3.0.0: {}
 
-  split2@4.2.0: {}
+  split2@4.2.0:
+    optional: true
 
   sponge-case@2.0.3: {}
 

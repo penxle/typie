@@ -20,7 +20,7 @@ new typie.Service('api', {
   },
 
   autoscale: {
-    minCount: 2,
+    minCount: 4,
     maxCount: 20,
     averageCpuUtilization: 50,
   },

@@ -69,7 +69,7 @@ Site.implement({
       nullable: true,
       args: { type: t.arg({ type: EntityType }) },
       resolve: async (self, args) => {
-        const { rows } = await db.execute<{ id: string }>(
+        const rows = await db.execute<{ id: string }>(
           sql`
             WITH RECURSIVE sq AS (
               SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.type}, ${Entities.order}, ${Entities.state}, ARRAY[${Entities.order}] as path_array, 1 as depth
