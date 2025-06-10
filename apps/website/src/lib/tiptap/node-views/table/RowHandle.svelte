@@ -18,10 +18,11 @@
     getPos: () => number | undefined;
     i: number;
     hoveredRowIndex?: number | null;
+    focusedRowIndex?: number | null;
     hasSpan?: boolean;
   };
 
-  let { editor, tableNode, getPos, i, hoveredRowIndex, hasSpan = false }: Props = $props();
+  let { editor, tableNode, getPos, i, hoveredRowIndex, focusedRowIndex, hasSpan = false }: Props = $props();
 
   function selectRow(rowIndex: number) {
     if (!editor) {
@@ -108,14 +109,16 @@
 <Menu
   offset={4}
   onopen={() => {
-    selectRow(i);
+    if (!window.__webview__) {
+      selectRow(i);
+    }
   }}
   placement="right-start"
 >
   {#snippet button({ open })}
     <div
       class={center({
-        display: open || hoveredRowIndex === i ? 'flex' : 'none',
+        display: open || hoveredRowIndex === i || focusedRowIndex === i ? 'flex' : 'none',
         '.block-selection-decoration &': {
           display: 'none',
         },
@@ -201,5 +204,17 @@
       <Icon icon={Trash2Icon} size={14} />
       <span>행 삭제</span>
     </MenuItem>
+    {#if window.__webview__}
+      <MenuItem
+        onclick={() => {
+          close();
+          editor?.current?.commands.deleteTable();
+        }}
+        variant="danger"
+      >
+        <Icon icon={Trash2Icon} size={14} />
+        <span>표 삭제</span>
+      </MenuItem>
+    {/if}
   {/snippet}
 </Menu>
