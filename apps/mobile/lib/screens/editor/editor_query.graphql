@@ -1,5 +1,3 @@
-# import "./toolbar_site_fragment.graphql"
-
 query EditorScreen_Query($slug: String!) {
   post(slug: $slug) {
     id
@@ -10,7 +8,12 @@ query EditorScreen_Query($slug: String!) {
       visibility
 
       site {
-        ...EditorScreen_Toolbar_site
+        id
+
+        fonts {
+          id
+          name
+        }
       }
     }
   }
