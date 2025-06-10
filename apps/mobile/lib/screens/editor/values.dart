@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/svg_image.dart';
+import 'package:typie/widgets/vertical_divider.dart';
 
 final editorValues = <String, List<Map<String, dynamic>>>{
   'fontFamily': [
@@ -83,31 +84,44 @@ final editorValues = <String, List<Map<String, dynamic>>>{
   ],
 
   'blockquote': [
-    {'label': '왼쪽 선', 'type': 'left-line', 'component': const VerticalDivider(color: AppColors.gray_200, thickness: 4)},
+    {'label': '왼쪽 선', 'type': 'left-line', 'widget': const AppVerticalDivider(color: AppColors.gray_200, width: 4)},
     {
       'label': '왼쪽 따옴표',
       'type': 'left-quote',
-      'component': const SvgImage('icons/left-quote', height: 16, color: AppColors.gray_900),
+      'widget': const SvgImage('icons/left-quote', height: 16, color: AppColors.gray_900),
     },
   ],
 
   'horizontalRule': [
-    {'label': '옅은 선', 'type': 'light-line', 'component': const HorizontalDivider(color: AppColors.gray_200)},
+    {'label': '옅은 선', 'type': 'light-line', 'widget': const HorizontalDivider(color: AppColors.gray_200)},
     {
       'label': '점선',
       'type': 'dashed-line',
-      'component': Row(
-        mainAxisSize: MainAxisSize.min,
-        spacing: 8,
-        children: List.generate(6 * 2 - 1, (_) {
-          return Container(width: 8, height: 1, color: AppColors.gray_700);
-        }),
+      'widget': LayoutBuilder(
+        builder: (context, constraints) {
+          const dashWidth = 8.0;
+          const gapWidth = 8.0;
+          final availableWidth = constraints.maxWidth;
+          final dashCount = (availableWidth / (dashWidth + gapWidth)).floor();
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(dashCount, (index) {
+              return Container(
+                width: dashWidth,
+                height: 1,
+                color: AppColors.gray_700,
+                margin: EdgeInsets.only(right: index < dashCount - 1 ? gapWidth : 0),
+              );
+            }),
+          );
+        },
       ),
     },
     {
       'label': '동그라미가 있는 선',
       'type': 'circle-line',
-      'component': Row(
+      'widget': Row(
         spacing: 10,
         children: [
           const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
@@ -123,7 +137,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '마름모가 있는 선',
       'type': 'diamond-line',
-      'component': Row(
+      'widget': Row(
         spacing: 8,
         children: [
           const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
@@ -142,7 +156,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '동그라미',
       'type': 'circle',
-      'component': Container(
+      'widget': Container(
         width: 10,
         height: 10,
         decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
@@ -151,7 +165,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '마름모',
       'type': 'diamond',
-      'component': Transform.rotate(
+      'widget': Transform.rotate(
         angle: pi / 4,
         child: Container(
           width: 10,
@@ -163,7 +177,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '세 개의 동그라미',
       'type': 'three-circles',
-      'component': Row(
+      'widget': Row(
         mainAxisAlignment: MainAxisAlignment.center,
         spacing: 8,
         children: [
@@ -188,7 +202,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '세 개의 마름모',
       'type': 'three-diamonds',
-      'component': Row(
+      'widget': Row(
         mainAxisAlignment: MainAxisAlignment.center,
         spacing: 8,
         children: [
@@ -222,7 +236,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '지그재그',
       'type': 'zigzag',
-      'component': const SvgImage('icons/zigzag', height: 12, color: AppColors.gray_700),
+      'widget': const SvgImage('icons/zigzag', height: 12, color: AppColors.gray_700),
     },
   ],
 

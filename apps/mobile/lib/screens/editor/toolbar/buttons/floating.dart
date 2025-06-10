@@ -2,10 +2,10 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/screens/editor/toolbar/buttons/base.dart';
 
-class CustomToolbarButton extends StatelessWidget {
-  const CustomToolbarButton({required this.onTap, required this.widget, this.isActive = false, super.key});
+class FloatingToolbarButton extends StatelessWidget {
+  const FloatingToolbarButton({required this.onTap, required this.icon, this.isActive = false, super.key});
 
-  final Widget widget;
+  final IconData icon;
 
   final bool isActive;
   final void Function() onTap;
@@ -17,9 +17,13 @@ class CustomToolbarButton extends StatelessWidget {
       onTap: onTap,
       builder: (context, color, backgroundColor) {
         return Container(
-          decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6)),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            border: Border.all(color: color),
+            borderRadius: BorderRadius.circular(999),
+          ),
           padding: const Pad(all: 8),
-          child: widget,
+          child: Icon(icon, size: 20, color: color),
         );
       },
     );

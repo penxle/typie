@@ -5,7 +5,7 @@ import 'package:typie/widgets/webview.dart';
 
 enum SecondaryToolbarMode { hidden, text, textColor, fontFamily, fontSize, textAlign, lineHeight, letterSpacing }
 
-enum BottomToolbarMode { hidden, insert }
+enum BottomToolbarMode { hidden, insert, horizontalRule, blockquote }
 
 class EditorStateScope extends InheritedWidget {
   const EditorStateScope({
