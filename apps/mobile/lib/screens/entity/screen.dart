@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -203,7 +204,7 @@ class _EntityList extends HookWidget {
                   onTap: () async {
                     await context.showBottomSheet(
                       child: BottomMenu(
-                        header: entity != null ? _BottomMenuHeader(entity: entity!) : null,
+                        header: _BottomMenuHeader(entity: entity),
                         items: [
                           if (entity != null) ...[
                             BottomMenuItem(
@@ -687,9 +688,9 @@ class _Post extends StatelessWidget {
 }
 
 class _BottomMenuHeader extends StatelessWidget {
-  const _BottomMenuHeader({required this.entity});
+  const _BottomMenuHeader({this.entity});
 
-  final GEntityScreen_Entity_entity entity;
+  final GEntityScreen_Entity_entity? entity;
 
   @override
   Widget build(BuildContext context) {
@@ -699,20 +700,21 @@ class _BottomMenuHeader extends StatelessWidget {
           spacing: 16,
           children: [
             Icon(
-              entity.node.when(
-                folder: (_) => LucideLightIcons.folder,
-                post: (_) => LucideLightIcons.file,
-                orElse: () => throw UnimplementedError(),
-              ),
+              entity?.node.when(
+                    folder: (_) => LucideLightIcons.folder,
+                    post: (_) => LucideLightIcons.file,
+                    orElse: () => throw UnimplementedError(),
+                  ) ??
+                  LucideLightIcons.folder_open,
               size: 20,
             ),
-
             Text(
-              entity.node.when(
-                folder: (folder) => folder.name,
-                post: (post) => post.title,
-                orElse: () => throw UnimplementedError(),
-              ),
+              entity?.node.when(
+                    folder: (folder) => folder.name,
+                    post: (post) => post.title,
+                    orElse: () => throw UnimplementedError(),
+                  ) ??
+                  '내 포스트',
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
           ],
@@ -722,7 +724,7 @@ class _BottomMenuHeader extends StatelessWidget {
           child: Row(
             children: [
               const Text('내 포스트', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
-              ...entity.ancestors
+              ...?entity?.ancestors
                   .map(
                     (ancestor) => [
                       const Icon(LucideLightIcons.chevron_right, size: 14),
@@ -732,7 +734,7 @@ class _BottomMenuHeader extends StatelessWidget {
                       ),
                     ],
                   )
-                  .expand((e) => e),
+                  .flattened,
             ],
           ),
         ),
