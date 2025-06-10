@@ -113,7 +113,7 @@ class Editor extends HookWidget {
                                 )
                               : null,
                           onTap: () async {
-                            await context.showBottomSheet(intercept: true, child: ShareBottomSheet(slug: slug));
+                            await context.showBottomSheet(intercept: true, child: SharePostBottomSheet(slug: slug));
                           },
                         ),
                         BottomMenuItem(

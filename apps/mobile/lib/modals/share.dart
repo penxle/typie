@@ -7,8 +7,11 @@ import 'package:typie/env.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/modals/__generated__/share_query.req.gql.dart';
-import 'package:typie/screens/editor/__generated__/update_post_option_mutation.req.gql.dart';
+import 'package:typie/modals/__generated__/share_folder_query.data.gql.dart';
+import 'package:typie/modals/__generated__/share_folder_query.req.gql.dart';
+import 'package:typie/modals/__generated__/share_post_query.req.gql.dart';
+import 'package:typie/modals/__generated__/update_folder_option_mutation.req.gql.dart';
+import 'package:typie/modals/__generated__/update_post_option_mutation.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
@@ -16,8 +19,8 @@ import 'package:typie/widgets/forms/switch.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/tappable.dart';
 
-class ShareBottomSheet extends StatelessWidget {
-  const ShareBottomSheet({required this.slug, super.key});
+class SharePostBottomSheet extends StatelessWidget {
+  const SharePostBottomSheet({required this.slug, super.key});
 
   final String slug;
 
@@ -27,13 +30,13 @@ class ShareBottomSheet extends StatelessWidget {
       title: '이 포스트 공유하기',
       padding: null,
       child: GraphQLOperation(
-        operation: GEditorScreen_Share_QueryReq((b) => b..vars.slug = slug),
+        operation: GSharePost_QueryReq((b) => b..vars.slug = slug),
         builder: (context, client, data) {
           return HookForm(
             submitMode: HookFormSubmitMode.onChange,
             onSubmit: (form) async {
               await client.request(
-                GEditorScreen_Share_UpdatePostOption_MutationReq(
+                GSharePost_UpdatePostOption_MutationReq(
                   (b) => b
                     ..vars.input.postId = data.post.id
                     ..vars.input.visibility = form.data['visibility'] as GEntityVisibility
@@ -164,6 +167,98 @@ class ShareBottomSheet extends StatelessWidget {
                       final baseUrl = Env.usersiteUrl.replaceAll('*.', '');
                       final url = Uri.parse('$baseUrl/${data.post.entity.permalink}');
                       await SharePlus.instance.share(ShareParams(title: data.post.title, uri: url));
+                    },
+                    child: Container(
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(color: AppColors.gray_950),
+                      padding: Pad(vertical: 16, bottom: MediaQuery.viewPaddingOf(context).bottom),
+                      child: const Text(
+                        '공유하기',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class ShareFolderBottomSheet extends StatelessWidget {
+  const ShareFolderBottomSheet({required this.entityId, super.key});
+
+  final String entityId;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppFullBottomSheet(
+      title: '폴더 공유하기',
+      padding: null,
+      child: GraphQLOperation(
+        operation: GShareFolder_QueryReq((b) => b..vars.entityId = entityId),
+        builder: (context, client, data) {
+          return HookForm(
+            submitMode: HookFormSubmitMode.onChange,
+            onSubmit: (form) async {
+              await client.request(
+                GShareFolder_UpdateFolderOption_MutationReq(
+                  (b) => b
+                    ..vars.input.folderId = (data.entity.node as GShareFolder_QueryData_entity_node__asFolder).id
+                    ..vars.input.visibility = form.data['visibility'] as GEntityVisibility,
+                ),
+              );
+            },
+            builder: (context, form) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const Pad(all: 20),
+                      child: _Section(
+                        title: '폴더 조회 권한',
+                        children: [
+                          _Option(
+                            icon: LucideLightIcons.blend,
+                            label: '공개 범위',
+                            trailing: HookFormSelect(
+                              name: 'visibility',
+                              initialValue: data.entity.visibility,
+                              items: const [
+                                HookFormSelectItem(
+                                  icon: LucideLightIcons.lock,
+                                  label: '비공개',
+                                  value: GEntityVisibility.PRIVATE,
+                                ),
+                                HookFormSelectItem(
+                                  icon: LucideLightIcons.link,
+                                  label: '링크가 있는 사람',
+                                  value: GEntityVisibility.UNLISTED,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Tappable(
+                    onTap: () async {
+                      final baseUrl = Env.usersiteUrl.replaceAll('*.', '');
+                      final url = Uri.parse('$baseUrl/${data.entity.permalink}');
+                      await SharePlus.instance.share(
+                        ShareParams(
+                          title: data.entity.node.when(
+                            folder: (folder) => folder.name,
+                            orElse: () => throw UnimplementedError(),
+                          ),
+                          uri: url,
+                        ),
+                      );
                     },
                     child: Container(
                       alignment: Alignment.center,

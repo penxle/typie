@@ -16,6 +16,7 @@ import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
+import 'package:typie/modals/share.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/create_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.dart';
@@ -220,6 +221,16 @@ class _EntityList extends HookWidget {
                                 await launchUrl(url, mode: LaunchMode.externalApplication);
                               },
                             ),
+                            BottomMenuItem(
+                              icon: LucideLightIcons.blend,
+                              label: '공유하기',
+                              onTap: () async {
+                                await context.showBottomSheet(
+                                  intercept: true,
+                                  child: ShareFolderBottomSheet(entityId: entity!.id),
+                                );
+                              },
+                            ),
                           ],
                           BottomMenuItem(
                             icon: LucideLightIcons.square_pen,
@@ -374,6 +385,16 @@ class _EntityList extends HookWidget {
                                     },
                                   ),
                                   BottomMenuItem(
+                                    icon: LucideLightIcons.blend,
+                                    label: '공유하기',
+                                    onTap: () async {
+                                      await context.showBottomSheet(
+                                        intercept: true,
+                                        child: ShareFolderBottomSheet(entityId: entities[index].id),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
                                     icon: LucideLightIcons.square_pen,
                                     label: '하위 포스트 만들기',
                                     onTap: () async {
@@ -465,7 +486,7 @@ class _EntityList extends HookWidget {
                                     onTap: () async {
                                       await context.showBottomSheet(
                                         intercept: true,
-                                        child: ShareBottomSheet(slug: entities[index].slug),
+                                        child: SharePostBottomSheet(slug: entities[index].slug),
                                       );
                                     },
                                   ),
