@@ -74,11 +74,11 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3(ioredis@5.6.1)
       '@hono/node-server':
-        specifier: ^1.14.3
-        version: 1.14.3(hono@4.7.11)
+        specifier: ^1.14.4
+        version: 1.14.4(hono@4.7.11)
       '@hono/node-ws':
         specifier: ^1.1.6
-        version: 1.1.6(@hono/node-server@1.14.3(hono@4.7.11))(hono@4.7.11)
+        version: 1.1.6(@hono/node-server@1.14.4(hono@4.7.11))(hono@4.7.11)
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -374,8 +374,8 @@ importers:
         specifier: ^1.7.1
         version: 1.7.1
       '@hono/node-server':
-        specifier: ^1.14.3
-        version: 1.14.3(hono@4.7.11)
+        specifier: ^1.14.4
+        version: 1.14.4(hono@4.7.11)
       '@iconify-json/lucide':
         specifier: ^1.2.46
         version: 1.2.46
@@ -551,8 +551,8 @@ importers:
   packages/adapter-node:
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.14.3
-        version: 1.14.3(hono@4.7.11)
+        specifier: ^1.14.4
+        version: 1.14.4(hono@4.7.11)
       '@sveltejs/kit':
         specifier: ^2.21.2
         version: 2.21.2(@sveltejs/vite-plugin-svelte@5.1.0(svelte@5.33.14)(vite@6.3.5(@types/node@22.15.30)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0)))(svelte@5.33.14)(vite@6.3.5(@types/node@22.15.30)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0))
@@ -575,8 +575,8 @@ importers:
   packages/lib:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.14.3
-        version: 1.14.3(hono@4.7.11)
+        specifier: ^1.14.4
+        version: 1.14.4(hono@4.7.11)
       '@logtape/logtape':
         specifier: ^0.11.0
         version: 0.11.0
@@ -1774,8 +1774,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@1.14.3':
-    resolution: {integrity: sha512-KuDMwwghtFYSmIpr4WrKs1VpelTrptvJ+6x6mbUcZnFcc213cumTF5BdqfHyW93B19TNI4Vaev14vOI2a0Ie3w==}
+  '@hono/node-server@1.14.4':
+    resolution: {integrity: sha512-DnxpshhYewr2q9ZN8ez/M5mmc3sucr8CT1sIgIy1bkeUXut9XWDkqHoFHRhWIQgkYnKpVRxunyhK7WzpJeJ6qQ==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -10561,13 +10561,13 @@ snapshots:
       protobufjs: 7.5.3
       yargs: 17.7.2
 
-  '@hono/node-server@1.14.3(hono@4.7.11)':
+  '@hono/node-server@1.14.4(hono@4.7.11)':
     dependencies:
       hono: 4.7.11
 
-  '@hono/node-ws@1.1.6(@hono/node-server@1.14.3(hono@4.7.11))(hono@4.7.11)':
+  '@hono/node-ws@1.1.6(@hono/node-server@1.14.4(hono@4.7.11))(hono@4.7.11)':
     dependencies:
-      '@hono/node-server': 1.14.3(hono@4.7.11)
+      '@hono/node-server': 1.14.4(hono@4.7.11)
       hono: 4.7.11
       ws: 8.18.2
     transitivePeerDependencies:

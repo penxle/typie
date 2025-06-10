@@ -3,7 +3,8 @@ import type { RequestHandler } from './$types';
 
 const handler: RequestHandler = async ({ url, request, params }) => {
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.delete('host');
+  requestHeaders.delete('Host');
+  requestHeaders.delete('Accept-Encoding');
 
   const response = await fetch(`${env.PUBLIC_API_URL}/auth/${params.rest}${url.search}`, {
     method: request.method,
