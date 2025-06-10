@@ -28,7 +28,7 @@ Folder.implement({
 
     maxDescendantFoldersDepth: t.int({
       resolve: async (self) => {
-        const { rows } = await db.execute<{ depth: number }>(
+        const rows = await db.execute<{ depth: number }>(
           sql`
             WITH RECURSIVE sq AS (
               SELECT ${Entities.id}, ${Entities.depth}
@@ -192,7 +192,7 @@ builder.mutationFields((t) => ({
         siteId: folder.siteId,
       });
 
-      const { rows: descendants } = await db.execute<{ id: string }>(
+      const descendants = await db.execute<{ id: string }>(
         sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
