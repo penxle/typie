@@ -65,6 +65,10 @@ class ToolbarButton extends HookWidget {
       return null;
     }, [effectiveState]);
 
+    useEffect(() {
+      return repeatTimer.value?.cancel;
+    }, []);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
