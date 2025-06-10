@@ -131,6 +131,7 @@ sealed class ProseMirrorSelection with _$ProseMirrorSelection {
   const factory ProseMirrorSelection.node({required int anchor}) = ProseMirrorNodeSelection;
   const factory ProseMirrorSelection.multinode({required int anchor, required int head}) =
       ProseMirrorMultiNodeSelection;
+  const factory ProseMirrorSelection.cell({required int anchor, required int head}) = ProseMirrorCellSelection;
 
   factory ProseMirrorSelection.fromJson(Map<String, dynamic> json) => _$ProseMirrorSelectionFromJson(json);
 }

@@ -176,12 +176,16 @@ class Editor extends HookWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
-                      child: WebView(
-                        initialUrl: '${Env.websiteUrl}/_webview/editor?slug=$slug',
-                        initialCookies: [Cookie('typie-at', (auth.value as Authenticated).accessToken)],
-                        onWebViewCreated: (controller) {
-                          scope.webViewController.value = controller;
-                        },
+                      child: Stack(
+                        children: [
+                          WebView(
+                            initialUrl: '${Env.websiteUrl}/_webview/editor?slug=$slug',
+                            initialCookies: [Cookie('typie-at', (auth.value as Authenticated).accessToken)],
+                            onWebViewCreated: (controller) {
+                              scope.webViewController.value = controller;
+                            },
+                          ),
+                        ],
                       ),
                     ),
                     const EditorToolbar(),
