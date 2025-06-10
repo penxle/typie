@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.14.4",
-    "@sveltejs/kit": "^2.21.2",
+    "@sveltejs/kit": "^2.21.4",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "hono": "^4.7.11",
