@@ -101,6 +101,7 @@ pnpm lint:syncpack   # Package.json consistency
 cd apps/mobile
 flutter analyze # Static analysis for Dart/Flutter code
 dart format     # Format Dart code (equivalent to Prettier for Dart)
+dart fix        # Fix Dart code (equivalent to ESLint fix for Dart)
 
 # Run tests
 pnpm test # Runs tests via Turbo (currently only in sark package)
