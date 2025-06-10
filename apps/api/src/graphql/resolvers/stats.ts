@@ -1,6 +1,7 @@
 import { GetCostAndUsageCommand } from '@aws-sdk/client-cost-explorer';
 import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
+import ky from 'ky';
 import { redis } from '@/cache';
 import {
   db,
@@ -32,13 +33,14 @@ builder.queryField('stats', (t) =>
         return JSON.parse(cached);
       }
 
-      const now = dayjs();
-      const thirtyDaysAgo = now.subtract(30, 'days');
-      const twentyFourHoursAgo = now.subtract(24, 'hours');
-      const fortyEightHoursAgo = now.subtract(48, 'hours');
+      const current = dayjs();
+      const now = current.toISOString();
+      const thirtyDaysAgo = current.subtract(30, 'days').toISOString();
+      const twentyFourHoursAgo = current.subtract(24, 'hours').toISOString();
+      const fortyEightHoursAgo = current.subtract(48, 'hours').toISOString();
 
       const getGitStatistics = async () => {
-        const oneWeekAgo = dayjs().subtract(7, 'days').toISOString();
+        const oneWeekAgo = current.subtract(7, 'days');
 
         const query = `
           query($owner: String!, $repo: String!, $since: GitTimestamp!) {
@@ -66,16 +68,20 @@ builder.queryField('stats', (t) =>
         };
 
         try {
-          const response = await fetch('https://api.github.com/graphql', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ query, variables }),
-          });
-
-          const { data } = await response.json();
+          const { data } = await ky
+            .post('https://api.github.com/graphql', {
+              headers: {
+                Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+              },
+              json: { query, variables },
+            })
+            .json<{
+              data: {
+                repository?: {
+                  defaultBranchRef?: { target?: { totalCommits: { totalCount: number }; weeklyCommits: { totalCount: number } } };
+                };
+              };
+            }>();
 
           if (!data?.repository?.defaultBranchRef?.target) {
             throw new Error('GitHub API response invalid');
@@ -102,8 +108,7 @@ builder.queryField('stats', (t) =>
         }
 
         try {
-          const response = await fetch('https://open.er-api.com/v6/latest/USD');
-          const data = await response.json();
+          const data = await ky.get('https://open.er-api.com/v6/latest/USD').json<{ rates: { KRW: number } }>();
           const rate = data.rates.KRW;
 
           if (rate && typeof rate === 'number') {
@@ -118,14 +123,11 @@ builder.queryField('stats', (t) =>
       };
 
       const getInfraCost = async () => {
-        const thirtyDaysAgo = dayjs().subtract(30, 'days');
-        const now = dayjs();
-
         try {
           const command = new GetCostAndUsageCommand({
             TimePeriod: {
-              Start: thirtyDaysAgo.format('YYYY-MM-DD'),
-              End: now.format('YYYY-MM-DD'),
+              Start: current.subtract(30, 'days').format('YYYY-MM-DD'),
+              End: current.format('YYYY-MM-DD'),
             },
             Granularity: 'MONTHLY',
             Metrics: ['BlendedCost'],
@@ -149,7 +151,7 @@ builder.queryField('stats', (t) =>
       const getTotalUsers = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
           SELECT 
             date_series.date::text as date,
@@ -164,20 +166,20 @@ builder.queryField('stats', (t) =>
       const getNewSignups = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           current_period AS (
             SELECT COUNT(${Users.id})::int as count
             FROM ${Users}
-            WHERE ${Users.createdAt} >= ${twentyFourHoursAgo.toDate()}
-              AND ${Users.createdAt} < ${now.toDate()}
+            WHERE ${Users.createdAt} >= ${twentyFourHoursAgo}
+              AND ${Users.createdAt} < ${now}
               AND ${Users.state} = ${UserState.ACTIVE}
           ),
           previous_period AS (
             SELECT COUNT(${Users.id})::int as count
             FROM ${Users}
-            WHERE ${Users.createdAt} >= ${fortyEightHoursAgo.toDate()}
-              AND ${Users.createdAt} < ${twentyFourHoursAgo.toDate()}
+            WHERE ${Users.createdAt} >= ${fortyEightHoursAgo}
+              AND ${Users.createdAt} < ${twentyFourHoursAgo}
               AND ${Users.state} = ${UserState.ACTIVE}
           )
           SELECT 
@@ -197,7 +199,7 @@ builder.queryField('stats', (t) =>
       const getActiveWriters = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           current_period AS (
             SELECT COUNT(DISTINCT ${PostCharacterCountChanges.userId})::int as count
@@ -205,8 +207,8 @@ builder.queryField('stats', (t) =>
             INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostCharacterCountChanges.bucket} >= ${twentyFourHoursAgo.toDate()}
-              AND ${PostCharacterCountChanges.bucket} < ${now.toDate()}
+            WHERE ${PostCharacterCountChanges.bucket} >= ${twentyFourHoursAgo}
+              AND ${PostCharacterCountChanges.bucket} < ${now}
               AND ${Entities.createdAt} != ${Sites.createdAt}
           ),
           previous_period AS (
@@ -215,8 +217,8 @@ builder.queryField('stats', (t) =>
             INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostCharacterCountChanges.bucket} >= ${fortyEightHoursAgo.toDate()}
-              AND ${PostCharacterCountChanges.bucket} < ${twentyFourHoursAgo.toDate()}
+            WHERE ${PostCharacterCountChanges.bucket} >= ${fortyEightHoursAgo}
+              AND ${PostCharacterCountChanges.bucket} < ${twentyFourHoursAgo}
               AND ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
@@ -239,7 +241,7 @@ builder.queryField('stats', (t) =>
       const getMonthlyRecurringRevenue = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           active_subscriptions AS (
             SELECT 
@@ -254,7 +256,7 @@ builder.queryField('stats', (t) =>
             FROM ${Subscriptions}
             INNER JOIN ${Plans} ON ${Subscriptions.planId} = ${Plans.id}
             WHERE ${Subscriptions.state} IN (${SubscriptionState.ACTIVE}, ${SubscriptionState.WILL_EXPIRE}, ${SubscriptionState.IN_GRACE_PERIOD})
-              AND ${Subscriptions.expiresAt} >= ${thirtyDaysAgo.toDate()}
+              AND ${Subscriptions.expiresAt} >= ${thirtyDaysAgo}
           )
           SELECT 
             date_series.date::text as date,
@@ -269,7 +271,7 @@ builder.queryField('stats', (t) =>
       const getActiveSubscriptions = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
           SELECT 
             date_series.date::text as date,
@@ -285,7 +287,7 @@ builder.queryField('stats', (t) =>
       const getRealPosts = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           real_posts AS (
             SELECT DISTINCT ${Posts.id}, ${Posts.createdAt} AS created_at
@@ -306,7 +308,7 @@ builder.queryField('stats', (t) =>
       const getNewRealPosts = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           real_posts AS (
             SELECT DISTINCT ${Posts.id}, ${Posts.createdAt} AS created_at
@@ -318,14 +320,14 @@ builder.queryField('stats', (t) =>
           current_period AS (
             SELECT COUNT(rp.id)::int as count
             FROM real_posts rp
-            WHERE rp.created_at >= ${twentyFourHoursAgo.toDate()}
-              AND rp.created_at < ${now.toDate()}
+            WHERE rp.created_at >= ${twentyFourHoursAgo}
+              AND rp.created_at < ${now}
           ),
           previous_period AS (
             SELECT COUNT(rp.id)::int as count
             FROM real_posts rp
-            WHERE rp.created_at >= ${fortyEightHoursAgo.toDate()}
-              AND rp.created_at < ${twentyFourHoursAgo.toDate()}
+            WHERE rp.created_at >= ${fortyEightHoursAgo}
+              AND rp.created_at < ${twentyFourHoursAgo}
           )
           SELECT 
             date_series.date::text as date,
@@ -343,7 +345,7 @@ builder.queryField('stats', (t) =>
       const getAveragePostLength = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           daily_avg AS (
             SELECT 
@@ -353,7 +355,7 @@ builder.queryField('stats', (t) =>
             INNER JOIN ${PostContents} ON ${Posts.id} = ${PostContents.postId}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Posts.createdAt} >= ${thirtyDaysAgo.toDate()}
+            WHERE ${Posts.createdAt} >= ${thirtyDaysAgo}
               AND ${Entities.createdAt} != ${Sites.createdAt}
             GROUP BY DATE(${Posts.createdAt})
           )
@@ -369,7 +371,7 @@ builder.queryField('stats', (t) =>
       const getTotalCharacters = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
           SELECT 
             date_series.date::text as date,
@@ -387,7 +389,7 @@ builder.queryField('stats', (t) =>
       const getTotalInputCharacters = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
           SELECT 
             date_series.date::text as date,
@@ -405,7 +407,7 @@ builder.queryField('stats', (t) =>
       const getDailyCharacters = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           current_period AS (
             SELECT SUM(${PostCharacterCountChanges.additions})::int as total
@@ -413,8 +415,8 @@ builder.queryField('stats', (t) =>
             INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostCharacterCountChanges.bucket} >= ${twentyFourHoursAgo.toDate()}
-              AND ${PostCharacterCountChanges.bucket} < ${now.toDate()}
+            WHERE ${PostCharacterCountChanges.bucket} >= ${twentyFourHoursAgo}
+              AND ${PostCharacterCountChanges.bucket} < ${now}
               AND ${Entities.createdAt} != ${Sites.createdAt}
           ),
           previous_period AS (
@@ -423,8 +425,8 @@ builder.queryField('stats', (t) =>
             INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostCharacterCountChanges.bucket} >= ${fortyEightHoursAgo.toDate()}
-              AND ${PostCharacterCountChanges.bucket} < ${twentyFourHoursAgo.toDate()}
+            WHERE ${PostCharacterCountChanges.bucket} >= ${fortyEightHoursAgo}
+              AND ${PostCharacterCountChanges.bucket} < ${twentyFourHoursAgo}
               AND ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
@@ -447,7 +449,7 @@ builder.queryField('stats', (t) =>
       const getTotalReactions = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
           SELECT 
             date_series.date::text as date,
@@ -465,7 +467,7 @@ builder.queryField('stats', (t) =>
       const getNewReactions = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           current_period AS (
             SELECT COUNT(${PostReactions.id})::int as count
@@ -473,8 +475,8 @@ builder.queryField('stats', (t) =>
             INNER JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostReactions.createdAt} >= ${twentyFourHoursAgo.toDate()}
-              AND ${PostReactions.createdAt} < ${now.toDate()}
+            WHERE ${PostReactions.createdAt} >= ${twentyFourHoursAgo}
+              AND ${PostReactions.createdAt} < ${now}
               AND ${Entities.createdAt} != ${Sites.createdAt}
           ),
           previous_period AS (
@@ -483,8 +485,8 @@ builder.queryField('stats', (t) =>
             INNER JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostReactions.createdAt} >= ${fortyEightHoursAgo.toDate()}
-              AND ${PostReactions.createdAt} < ${twentyFourHoursAgo.toDate()}
+            WHERE ${PostReactions.createdAt} >= ${fortyEightHoursAgo}
+              AND ${PostReactions.createdAt} < ${twentyFourHoursAgo}
               AND ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
@@ -507,22 +509,22 @@ builder.queryField('stats', (t) =>
       const getTotalMedia = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           media_base AS (
             SELECT 
-              ${thirtyDaysAgo.toDate()} as base_date,
-              (SELECT COUNT(*) FROM ${Images} WHERE ${Images.createdAt} < ${thirtyDaysAgo.toDate()}) +
-              (SELECT COUNT(*) FROM ${Files} WHERE ${Files.createdAt} < ${thirtyDaysAgo.toDate()}) as base_count
+              ${thirtyDaysAgo} as base_date,
+              (SELECT COUNT(*) FROM ${Images} WHERE ${Images.createdAt} < ${thirtyDaysAgo}) +
+              (SELECT COUNT(*) FROM ${Files} WHERE ${Files.createdAt} < ${thirtyDaysAgo}) as base_count
           ),
           daily_additions AS (
             SELECT 
               DATE(created_at) as date,
               COUNT(*) as additions
             FROM (
-              SELECT ${Images.createdAt} as created_at FROM ${Images} WHERE ${Images.createdAt} >= ${thirtyDaysAgo.toDate()}
+              SELECT ${Images.createdAt} as created_at FROM ${Images} WHERE ${Images.createdAt} >= ${thirtyDaysAgo}
               UNION ALL
-              SELECT ${Files.createdAt} as created_at FROM ${Files} WHERE ${Files.createdAt} >= ${thirtyDaysAgo.toDate()}
+              SELECT ${Files.createdAt} as created_at FROM ${Files} WHERE ${Files.createdAt} >= ${thirtyDaysAgo}
             ) combined
             GROUP BY DATE(created_at)
           )
@@ -531,7 +533,7 @@ builder.queryField('stats', (t) =>
             (mb.base_count + COALESCE(SUM(da.additions) FILTER (WHERE da.date <= ds.date), 0))::int as value
           FROM date_series ds
           CROSS JOIN media_base mb
-          LEFT JOIN daily_additions da ON da.date >= ${thirtyDaysAgo.toDate()}::date AND da.date <= ds.date
+          LEFT JOIN daily_additions da ON da.date >= ${thirtyDaysAgo}::date AND da.date <= ds.date
           GROUP BY ds.date, mb.base_count
           ORDER BY ds.date
         `);
@@ -539,17 +541,17 @@ builder.queryField('stats', (t) =>
       const getNewMedia = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           current_period AS (
             SELECT 
-              (SELECT COUNT(${Images.id}) FROM ${Images} WHERE ${Images.createdAt} >= ${twentyFourHoursAgo.toDate()} AND ${Images.createdAt} < ${now.toDate()}) +
-              (SELECT COUNT(${Files.id}) FROM ${Files} WHERE ${Files.createdAt} >= ${twentyFourHoursAgo.toDate()} AND ${Files.createdAt} < ${now.toDate()}) as count
+              (SELECT COUNT(${Images.id}) FROM ${Images} WHERE ${Images.createdAt} >= ${twentyFourHoursAgo} AND ${Images.createdAt} < ${now}) +
+              (SELECT COUNT(${Files.id}) FROM ${Files} WHERE ${Files.createdAt} >= ${twentyFourHoursAgo} AND ${Files.createdAt} < ${now}) as count
           ),
           previous_period AS (
             SELECT 
-              (SELECT COUNT(${Images.id}) FROM ${Images} WHERE ${Images.createdAt} >= ${fortyEightHoursAgo.toDate()} AND ${Images.createdAt} < ${twentyFourHoursAgo.toDate()}) +
-              (SELECT COUNT(${Files.id}) FROM ${Files} WHERE ${Files.createdAt} >= ${fortyEightHoursAgo.toDate()} AND ${Files.createdAt} < ${twentyFourHoursAgo.toDate()}) as count
+              (SELECT COUNT(${Images.id}) FROM ${Images} WHERE ${Images.createdAt} >= ${fortyEightHoursAgo} AND ${Images.createdAt} < ${twentyFourHoursAgo}) +
+              (SELECT COUNT(${Files.id}) FROM ${Files} WHERE ${Files.createdAt} >= ${fortyEightHoursAgo} AND ${Files.createdAt} < ${twentyFourHoursAgo}) as count
           ),
           daily_media AS (
             SELECT 
@@ -575,7 +577,7 @@ builder.queryField('stats', (t) =>
       const getTotalMediaSize = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
           SELECT 
             date_series.date::text as date,
@@ -591,7 +593,7 @@ builder.queryField('stats', (t) =>
       const getUnlistedPrivatePostRatio = () =>
         db.execute(sql`
           WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           daily_visibility AS (
             SELECT 
@@ -601,7 +603,7 @@ builder.queryField('stats', (t) =>
             FROM ${Posts}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Posts.createdAt} >= ${thirtyDaysAgo.toDate()}
+            WHERE ${Posts.createdAt} >= ${thirtyDaysAgo}
               AND ${Entities.createdAt} != ${Sites.createdAt}
             GROUP BY DATE(${Posts.createdAt})
           )
@@ -628,7 +630,7 @@ builder.queryField('stats', (t) =>
             WHERE ${Users.state} = ${UserState.ACTIVE}
           ),
           date_series AS (
-            SELECT generate_series(${thirtyDaysAgo.toDate()}, ${now.toDate()}, interval '1 day')::date AS date
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
           SELECT 
             date_series.date::text as date,
