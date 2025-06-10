@@ -19,4 +19,15 @@ fragment EntityScreen_Entity_entity on Entity {
       updatedAt
     }
   }
+
+  ancestors {
+    id
+
+    node {
+      ... on Folder {
+        id
+        name
+      }
+    }
+  }
 }
