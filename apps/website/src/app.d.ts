@@ -2,6 +2,12 @@
 
 import 'unplugin-icons/types/svelte';
 
+declare module 'svelte/elements' {
+  export interface HTMLTextareaAttributes {
+    autocorrect?: 'on' | 'off';
+  }
+}
+
 declare global {
   namespace App {
     // interface Locals {}
