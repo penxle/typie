@@ -30,7 +30,16 @@ import {
 } from '@/db';
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
-import { CreditCodeState, EntityState, PaymentInvoiceState, SingleSignOnProvider, SiteState, SubscriptionState, UserState } from '@/enums';
+import {
+  CreditCodeState,
+  EntityState,
+  PaymentInvoiceState,
+  SingleSignOnProvider,
+  SiteState,
+  SubscriptionState,
+  UserRole,
+  UserState,
+} from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
@@ -62,6 +71,7 @@ User.implement({
     name: t.exposeString('name'),
     email: t.exposeString('email'),
     avatar: t.expose('avatarId', { type: Image }),
+    role: t.expose('role', { type: UserRole }),
 
     uuid: t.string({
       // just a randomly-picked uuid for namespace

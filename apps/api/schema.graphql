@@ -775,6 +775,7 @@ type User {
   notifications: [Notification!]!
   personalIdentity: UserPersonalIdentity
   recentPosts: [Post!]!
+  role: UserRole!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
   subscription: Subscription_
@@ -791,6 +792,11 @@ type UserPersonalIdentity {
   birthDate: DateTime!
   expiresAt: DateTime!
   id: ID!
+}
+
+enum UserRole {
+  ADMIN
+  USER
 }
 
 type UserSingleSignOn {

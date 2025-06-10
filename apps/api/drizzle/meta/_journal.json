@@ -71,6 +71,13 @@
       "when": 1749188060794,
       "tag": "0009_tan_mole_man",
       "breakpoints": false
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1749552003236,
+      "tag": "0010_wooden_rage",
+      "breakpoints": false
     }
   ]
 }

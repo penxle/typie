@@ -23,4 +23,5 @@ export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.P
 export const _SiteState = createPgEnum('_site_state', E.SiteState);
 export const _SingleSignOnProvider = createPgEnum('_single_sign_on_provider', E.SingleSignOnProvider);
 export const _SubscriptionState = createPgEnum('_subscription_state', E.SubscriptionState);
+export const _UserRole = createPgEnum('_user_role', E.UserRole);
 export const _UserState = createPgEnum('_user_state', E.UserState);

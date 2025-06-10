@@ -416,6 +416,7 @@ export const Users = pgTable(
     avatarId: text('avatar_id')
       .notNull()
       .references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    role: E._UserRole('role').notNull().default('USER'),
     state: E._UserState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()
