@@ -1,6 +1,7 @@
-mutation EditorScreen_Share_UpdatePostOption_Mutation($input: UpdatePostOptionInput!) {
-  updatePostOption(input: $input) {
+query SharePost_Query($slug: String!) {
+  post(slug: $slug) {
     id
+    title
     password
     contentRating
     allowComment
@@ -9,6 +10,7 @@ mutation EditorScreen_Share_UpdatePostOption_Mutation($input: UpdatePostOptionIn
 
     entity {
       id
+      permalink
       visibility
     }
   }

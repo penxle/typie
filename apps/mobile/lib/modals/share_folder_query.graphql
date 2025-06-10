@@ -1,0 +1,14 @@
+query ShareFolder_Query($entityId: ID!) {
+  entity(entityId: $entityId) {
+    id
+    visibility
+    permalink
+    
+    node {
+      ... on Folder {
+        id
+        name
+      }
+    }
+  }
+}
