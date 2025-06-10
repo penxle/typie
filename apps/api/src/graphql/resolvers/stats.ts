@@ -148,7 +148,8 @@ builder.queryField('stats', (t) =>
         }
       };
 
-      const getTotalUsers = () =>
+      // User metrics
+      const getUsersTotal = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -163,7 +164,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getNewSignups = () =>
+      const getUsersNew = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -196,7 +197,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getActiveWriters = () =>
+      const getUsersActive = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -238,7 +239,8 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getMonthlyRecurringRevenue = () =>
+      // Subscription metrics
+      const getSubscriptionsRevenue = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -268,7 +270,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getActiveSubscriptions = () =>
+      const getSubscriptionsActive = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -284,7 +286,8 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getRealPosts = () =>
+      // Post metrics
+      const getPostsTotal = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -305,7 +308,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getNewRealPosts = () =>
+      const getPostsNew = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -342,7 +345,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getAveragePostLength = () =>
+      const getPostsAverageLength = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -368,7 +371,40 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getTotalCharacters = () =>
+      const getPostsPrivateRatio = () =>
+        db.execute(sql`
+          WITH date_series AS (
+            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
+          ),
+          daily_visibility AS (
+            SELECT 
+              DATE(${Posts.createdAt}) as post_date,
+              COUNT(DISTINCT CASE WHEN ${Entities.visibility} = 'PRIVATE' THEN ${Posts.id} END) as private_count,
+              COUNT(DISTINCT ${Posts.id}) as total_count
+            FROM ${Posts}
+            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Posts.createdAt} >= ${thirtyDaysAgo}
+              AND ${Entities.createdAt} != ${Sites.createdAt}
+            GROUP BY DATE(${Posts.createdAt})
+          )
+          SELECT 
+            date_series.date::text as date,
+            COALESCE(
+              CASE 
+                WHEN dv.total_count > 0 THEN ROUND((dv.private_count::float / dv.total_count::float) * 100)
+                ELSE 0 
+              END, 
+              0
+            )::int as value
+          FROM date_series
+          LEFT JOIN daily_visibility dv ON dv.post_date = date_series.date
+          GROUP BY date_series.date, dv.private_count, dv.total_count
+          ORDER BY date_series.date
+        `);
+
+      // Character metrics
+      const getCharactersTotal = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -386,7 +422,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getTotalInputCharacters = () =>
+      const getCharactersInput = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -404,7 +440,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getDailyCharacters = () =>
+      const getCharactersDaily = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -446,7 +482,8 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getTotalReactions = () =>
+      // Reaction metrics
+      const getReactionsTotal = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -464,7 +501,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getNewReactions = () =>
+      const getReactionsNew = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -506,7 +543,8 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getTotalMedia = () =>
+      // Media metrics
+      const getMediaTotal = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -538,7 +576,7 @@ builder.queryField('stats', (t) =>
           ORDER BY ds.date
         `);
 
-      const getNewMedia = () =>
+      const getMediaNew = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -574,7 +612,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getTotalMediaSize = () =>
+      const getMediaTotalSize = () =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -590,39 +628,8 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getUnlistedPrivatePostRatio = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          daily_visibility AS (
-            SELECT 
-              DATE(${Posts.createdAt}) as post_date,
-              COUNT(DISTINCT CASE WHEN ${Entities.visibility} = 'PRIVATE' THEN ${Posts.id} END) as private_count,
-              COUNT(DISTINCT ${Posts.id}) as total_count
-            FROM ${Posts}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Posts.createdAt} >= ${thirtyDaysAgo}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-            GROUP BY DATE(${Posts.createdAt})
-          )
-          SELECT 
-            date_series.date::text as date,
-            COALESCE(
-              CASE 
-                WHEN dv.total_count > 0 THEN ROUND((dv.private_count::float / dv.total_count::float) * 100)
-                ELSE 0 
-              END, 
-              0
-            )::int as value
-          FROM date_series
-          LEFT JOIN daily_visibility dv ON dv.post_date = date_series.date
-          GROUP BY date_series.date, dv.private_count, dv.total_count
-          ORDER BY date_series.date
-        `);
-
-      const getServiceDays = () =>
+      // System metrics
+      const getSystemServiceDays = () =>
         db.execute(sql`
           WITH service_launch AS (
             SELECT MIN(${Users.createdAt})::date as launch_date
@@ -641,45 +648,45 @@ builder.queryField('stats', (t) =>
         `);
 
       const [
-        totalUsersData,
-        newSignupsData,
-        activeWritersData,
-        monthlyRecurringRevenueData,
-        activeSubscriptionsData,
-        realPostsData,
-        newRealPostsData,
-        averagePostLengthData,
-        totalCharactersData,
-        totalInputCharactersData,
-        dailyCharactersData,
-        totalReactionsData,
-        newReactionsData,
-        totalMediaData,
-        newMediaData,
-        totalMediaSizeData,
-        unlistedPrivatePostRatioData,
-        serviceDaysData,
+        usersTotal,
+        usersNew,
+        usersActive,
+        subscriptionsRevenue,
+        subscriptionsActive,
+        postsTotal,
+        postsNew,
+        postsAverageLength,
+        postsPrivateRatio,
+        charactersTotal,
+        charactersInput,
+        charactersDaily,
+        reactionsTotal,
+        reactionsNew,
+        mediaTotal,
+        mediaNew,
+        mediaTotalSize,
+        systemServiceDays,
         gitStatistics,
         infraCost,
       ] = await Promise.all([
-        getTotalUsers(),
-        getNewSignups(),
-        getActiveWriters(),
-        getMonthlyRecurringRevenue(),
-        getActiveSubscriptions(),
-        getRealPosts(),
-        getNewRealPosts(),
-        getAveragePostLength(),
-        getTotalCharacters(),
-        getTotalInputCharacters(),
-        getDailyCharacters(),
-        getTotalReactions(),
-        getNewReactions(),
-        getTotalMedia(),
-        getNewMedia(),
-        getTotalMediaSize(),
-        getUnlistedPrivatePostRatio(),
-        getServiceDays(),
+        getUsersTotal(),
+        getUsersNew(),
+        getUsersActive(),
+        getSubscriptionsRevenue(),
+        getSubscriptionsActive(),
+        getPostsTotal(),
+        getPostsNew(),
+        getPostsAverageLength(),
+        getPostsPrivateRatio(),
+        getCharactersTotal(),
+        getCharactersInput(),
+        getCharactersDaily(),
+        getReactionsTotal(),
+        getReactionsNew(),
+        getMediaTotal(),
+        getMediaNew(),
+        getMediaTotalSize(),
+        getSystemServiceDays(),
         getGitStatistics(),
         getInfraCost(),
       ]);
@@ -693,29 +700,42 @@ builder.queryField('stats', (t) =>
       };
 
       const result = {
-        totalUsers: transformToData(totalUsersData),
-        newSignups: transformToData(newSignupsData),
-        dailyCharacters: transformToData(dailyCharactersData),
-        activeWriters: transformToData(activeWritersData),
-        monthlyRecurringRevenue: transformToData(monthlyRecurringRevenueData),
-        activeSubscriptions: transformToData(activeSubscriptionsData),
+        // User metrics
+        usersTotal: transformToData(usersTotal),
+        usersNew: transformToData(usersNew),
+        usersActive: transformToData(usersActive),
 
-        totalCharacters: transformToData(totalCharactersData),
-        totalInputCharacters: transformToData(totalInputCharactersData),
-        totalPosts: transformToData(realPostsData),
-        newPosts: transformToData(newRealPostsData),
-        totalReactions: transformToData(totalReactionsData),
-        newReactions: transformToData(newReactionsData),
-        averagePostLength: transformToData(averagePostLengthData),
-        unlistedPrivatePostRatio: transformToData(unlistedPrivatePostRatioData),
-        totalMedia: transformToData(totalMediaData),
-        newMedia: transformToData(newMediaData),
-        totalMediaSize: transformToData(totalMediaSizeData),
-        serviceDays: transformToData(serviceDaysData),
+        // Subscription metrics
+        subscriptionsRevenue: transformToData(subscriptionsRevenue),
+        subscriptionsActive: transformToData(subscriptionsActive),
 
-        totalCommits: gitStatistics.totalCommits,
-        weeklyCommits: gitStatistics.weeklyCommits,
-        monthlyInfraCost: infraCost,
+        // Post metrics
+        postsTotal: transformToData(postsTotal),
+        postsNew: transformToData(postsNew),
+        postsAverageLength: transformToData(postsAverageLength),
+        postsPrivateRatio: transformToData(postsPrivateRatio),
+
+        // Character metrics
+        charactersTotal: transformToData(charactersTotal),
+        charactersInput: transformToData(charactersInput),
+        charactersDaily: transformToData(charactersDaily),
+
+        // Reaction metrics
+        reactionsTotal: transformToData(reactionsTotal),
+        reactionsNew: transformToData(reactionsNew),
+
+        // Media metrics
+        mediaTotal: transformToData(mediaTotal),
+        mediaNew: transformToData(mediaNew),
+        mediaTotalSize: transformToData(mediaTotalSize),
+
+        // System metrics
+        systemServiceDays: transformToData(systemServiceDays),
+
+        // External metrics
+        gitTotalCommits: gitStatistics.totalCommits,
+        gitWeeklyCommits: gitStatistics.weeklyCommits,
+        infraMonthlyCost: infraCost,
       };
 
       await redis.setex(cacheKey, 3600, JSON.stringify(result));

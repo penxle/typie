@@ -176,51 +176,51 @@
 
       <div class={grid({ columns: { base: 1, md: 2, lg: 3 }, gap: '20px' })}>
         <StatCard
-          data={$query.stats.totalUsers.data}
+          data={$query.stats.usersTotal.data}
           description="누적 가입자 수"
           title="전체 사용자"
           type="daily"
-          value={formatWithUnit($query.stats.totalUsers.current, '명')}
+          value={formatWithUnit($query.stats.usersTotal.current, '명')}
         />
 
         <StatCard
-          data={$query.stats.newSignups.data}
+          data={$query.stats.usersNew.data}
           description="지난 24시간동안 가입한 사용자 수"
           title="신규 사용자"
           type="daily"
-          value={formatWithUnit($query.stats.newSignups.current, '명')}
+          value={formatWithUnit($query.stats.usersNew.current, '명')}
         />
 
         <StatCard
-          data={$query.stats.dailyCharacters.data}
+          data={$query.stats.charactersDaily.data}
           description="지난 24시간동안 입력된 글자 수"
           title="24시간 입력량"
           type="daily"
-          value={formatWithUnit($query.stats.dailyCharacters.current, '자')}
+          value={formatWithUnit($query.stats.charactersDaily.current, '자')}
         />
 
         <StatCard
-          data={$query.stats.activeWriters.data}
+          data={$query.stats.usersActive.data}
           description="지난 24시간동안 활동한 사용자 수"
           title="일일 활성 사용자 (DAU)"
           type="daily"
-          value={formatWithUnit($query.stats.activeWriters.current, '명')}
+          value={formatWithUnit($query.stats.usersActive.current, '명')}
         />
 
         <StatCard
-          data={$query.stats.monthlyRecurringRevenue.data}
+          data={$query.stats.subscriptionsRevenue.data}
           description="지난 30일 구독 수익"
           title="월간 반복 수익 (MRR)"
           type="accumulative"
-          value={formatWithUnit($query.stats.monthlyRecurringRevenue.current, '원')}
+          value={formatWithUnit($query.stats.subscriptionsRevenue.current, '원')}
         />
 
         <StatCard
-          data={$query.stats.activeSubscriptions.data}
+          data={$query.stats.subscriptionsActive.data}
           description="현재 활성 구독자 수"
           title="활성 구독자"
           type="accumulative"
-          value={formatWithUnit($query.stats.activeSubscriptions.current, '명')}
+          value={formatWithUnit($query.stats.subscriptionsActive.current, '명')}
         />
       </div>
     </section>
@@ -256,38 +256,38 @@
         </h3>
         <div class={grid({ columns: { base: 1, md: 2, lg: 4 }, gap: '16px' })}>
           <SmallStatCard
-            data={$query.stats.totalCharacters.data}
+            data={$query.stats.charactersTotal.data}
             description="전체 포스트의 총 글자 수"
             title="전체 글자 수"
-            value={formatWithUnit($query.stats.totalCharacters.current, '자')}
+            value={formatWithUnit($query.stats.charactersTotal.current, '자')}
           />
 
           <SmallStatCard
-            data={$query.stats.totalInputCharacters.data}
+            data={$query.stats.charactersInput.data}
             description="누적 입력 글자 수"
             title="누적 입력 글자 수"
-            value={formatWithUnit($query.stats.totalInputCharacters.current, '자')}
+            value={formatWithUnit($query.stats.charactersInput.current, '자')}
           />
 
           <SmallStatCard
-            data={$query.stats.totalPosts.data}
+            data={$query.stats.postsTotal.data}
             description="누적 작성 포스트 수"
             title="전체 작성 포스트"
-            value={formatWithUnit($query.stats.totalPosts.current, '개')}
+            value={formatWithUnit($query.stats.postsTotal.current, '개')}
           />
 
           <SmallStatCard
-            data={$query.stats.newPosts.data}
+            data={$query.stats.postsNew.data}
             description="지난 24시간동안 작성된 포스트 수"
             title="신규 작성 포스트"
-            value={formatWithUnit($query.stats.newPosts.current, '개')}
+            value={formatWithUnit($query.stats.postsNew.current, '개')}
           />
 
           <SmallStatCard
-            data={$query.stats.averagePostLength.data}
+            data={$query.stats.postsAverageLength.data}
             description="포스트당 평균 글자 수"
             title="평균 포스트 길이"
-            value={formatWithUnit($query.stats.averagePostLength.current, '자')}
+            value={formatWithUnit($query.stats.postsAverageLength.current, '자')}
           />
         </div>
       </div>
@@ -305,24 +305,24 @@
         </h3>
         <div class={grid({ columns: { base: 1, md: 2, lg: 4 }, gap: '16px' })}>
           <SmallStatCard
-            data={$query.stats.totalMedia.data}
+            data={$query.stats.mediaTotal.data}
             description="누적 업로드 이미지 및 파일 수"
             title="전체 이미지 및 파일"
-            value={formatWithUnit($query.stats.totalMedia.current, '개')}
+            value={formatWithUnit($query.stats.mediaTotal.current, '개')}
           />
 
           <SmallStatCard
-            data={$query.stats.newMedia.data}
+            data={$query.stats.mediaNew.data}
             description="지난 24시간동안 업로드된 이미지 및 파일 수"
             title="신규 이미지 및 파일"
-            value={formatWithUnit($query.stats.newMedia.current, '개')}
+            value={formatWithUnit($query.stats.mediaNew.current, '개')}
           />
 
           <SmallStatCard
-            data={$query.stats.totalMediaSize.data}
+            data={$query.stats.mediaTotalSize.data}
             description="전체 저장 용량"
             title="전체 이미지 및 파일 용량"
-            value={formatFileSize($query.stats.totalMediaSize.current)}
+            value={formatFileSize($query.stats.mediaTotalSize.current)}
           />
         </div>
       </div>
@@ -340,24 +340,24 @@
         </h3>
         <div class={grid({ columns: { base: 1, md: 2, lg: 4 }, gap: '16px' })}>
           <SmallStatCard
-            data={$query.stats.unlistedPrivatePostRatio.data}
+            data={$query.stats.postsPrivateRatio.data}
             description="비공개로 저장된 포스트의 비율"
             title="비공개 비율"
-            value={$query.stats.unlistedPrivatePostRatio.current + '%'}
+            value={$query.stats.postsPrivateRatio.current + '%'}
           />
 
           <SmallStatCard
-            data={$query.stats.totalReactions.data}
+            data={$query.stats.reactionsTotal.data}
             description="누적 이모지 반응 수"
             title="전체 이모지 반응"
-            value={formatWithUnit($query.stats.totalReactions.current, '개')}
+            value={formatWithUnit($query.stats.reactionsTotal.current, '개')}
           />
 
           <SmallStatCard
-            data={$query.stats.newReactions.data}
+            data={$query.stats.reactionsNew.data}
             description="지난 24시간동안 달린 이모지 반응 수"
             title="신규 이모지 반응"
-            value={formatWithUnit($query.stats.newReactions.current, '개')}
+            value={formatWithUnit($query.stats.reactionsNew.current, '개')}
           />
         </div>
       </div>
@@ -386,21 +386,21 @@
           data={[]}
           description="전체 기간 누적 커밋 수"
           title="총 커밋 수"
-          value={($query.stats.totalCommits || 0).toLocaleString() + '개'}
+          value={($query.stats.gitTotalCommits || 0).toLocaleString() + '개'}
         />
 
         <SmallStatCard
           data={[]}
           description="지난 7일간 커밋 수"
           title="주간 커밋 수"
-          value={($query.stats.weeklyCommits || 0).toLocaleString() + '개'}
+          value={($query.stats.gitWeeklyCommits || 0).toLocaleString() + '개'}
         />
 
         <SmallStatCard
           data={[]}
           description="지난 30일간 AWS 인프라 비용"
           title="월간 인프라 비용"
-          value={formatWithUnit($query.stats.monthlyInfraCost || 0, '원')}
+          value={formatWithUnit($query.stats.infraMonthlyCost || 0, '원')}
         />
       </div>
     </section>
@@ -463,7 +463,7 @@
                 lineHeight: '[1]',
               })}
             >
-              {formatWithUnit($query.stats.serviceDays.current, '일')}
+              {formatWithUnit($query.stats.systemServiceDays.current, '일')}
             </p>
             <p class={css({ fontSize: '16px', color: 'gray.300' })}>서비스 운영 일수</p>
             <p class={css({ fontSize: '13px', color: 'gray.500', marginTop: '4px' })}>서비스 출시 이후 현재까지의 운영 기간</p>
@@ -486,7 +486,7 @@
                 lineHeight: '[1]',
               })}
             >
-              {formatWithUnit($query.stats.totalPosts.current, '개')}
+              {formatWithUnit($query.stats.postsTotal.current, '개')}
             </p>
             <p class={css({ fontSize: '16px', color: 'gray.300' })}>누적 포스트 수</p>
             <p class={css({ fontSize: '13px', color: 'gray.500', marginTop: '4px' })}>서비스 전체 기간 동안 작성된 모든 포스트</p>
@@ -509,7 +509,7 @@
                 lineHeight: '[1]',
               })}
             >
-              {formatWithUnit($query.stats.totalUsers.current, '명')}
+              {formatWithUnit($query.stats.usersTotal.current, '명')}
             </p>
             <p class={css({ fontSize: '16px', color: 'gray.300' })}>누적 가입자 수</p>
             <p class={css({ fontSize: '13px', color: 'gray.500', marginTop: '4px' })}>서비스 전체 기간 동안 가입한 모든 사용자</p>
@@ -532,7 +532,7 @@
                 lineHeight: '[1]',
               })}
             >
-              {formatWithUnit($query.stats.totalInputCharacters.current, '자')}
+              {formatWithUnit($query.stats.charactersInput.current, '자')}
             </p>
             <p class={css({ fontSize: '16px', color: 'gray.300' })}>누적 입력 글자 수</p>
             <p class={css({ fontSize: '13px', color: 'gray.500', marginTop: '4px' })}>서비스 전체 기간 동안 입력된 모든 글자</p>
