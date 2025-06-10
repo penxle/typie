@@ -254,7 +254,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
   ],
 };
 
-final editorDefaultValues = <String, dynamic>{
+const editorDefaultValues = <String, dynamic>{
   'fontFamily': 'Pretendard',
   'fontSize': 16,
   'textColor': 'black',

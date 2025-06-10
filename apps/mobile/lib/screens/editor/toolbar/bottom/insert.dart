@@ -2,11 +2,41 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/editor/scope.dart';
-import 'package:typie/screens/editor/toolbar/buttons/toolbox.dart';
+import 'package:typie/screens/editor/toolbar/buttons/base.dart';
 import 'package:typie/screens/editor/values.dart';
+import 'package:typie/widgets/svg_image.dart';
+
+class _Node {
+  const _Node({required this.icon, required this.label, required this.type, this.activeNodeTypes, this.attrs});
+
+  final String icon;
+  final String label;
+  final String type;
+  final List<String>? activeNodeTypes;
+  final Map<String, dynamic>? attrs;
+}
 
 class InsertBottomToolbar extends HookWidget {
   const InsertBottomToolbar({super.key});
+
+  static final _nodes = [
+    const _Node(icon: 'image', label: '이미지', type: 'image'),
+    const _Node(icon: 'paperclip', label: '파일', type: 'file'),
+    const _Node(icon: 'file-up', label: '임베드', type: 'embed'),
+    _Node(
+      icon: 'horizontal-rule',
+      label: '구분선',
+      type: 'horizontal_rule',
+      attrs: {'type': editorDefaultValues['horizontalRule']},
+    ),
+    _Node(icon: 'quote', label: '인용구', type: 'blockquote', attrs: {'type': editorDefaultValues['blockquote']}),
+    const _Node(icon: 'gallery-vertical-end', label: '콜아웃', type: 'callout'),
+    const _Node(icon: 'chevrons-down-up', label: '폴드', type: 'fold'),
+    const _Node(icon: 'table', label: '표', type: 'table'),
+    const _Node(icon: 'list', label: '목록', type: 'bullet_list', activeNodeTypes: ['bullet_list', 'ordered_list']),
+    const _Node(icon: 'code', label: '코드', type: 'code_block'),
+    const _Node(icon: 'code-xml', label: 'HTML', type: 'html_block'),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -19,109 +49,28 @@ class InsertBottomToolbar extends HookWidget {
       padding: const Pad(all: 16),
       mainAxisSpacing: 16,
       crossAxisSpacing: 16,
-      children: [
-        ToolboxToolbarButton(
-          icon: 'image',
-          label: '이미지',
-          isActive: proseMirrorState?.isNodeActive('image') ?? false,
+      children: _nodes.map((node) {
+        final activeNodeTypes = node.activeNodeTypes ?? [node.type];
+        final isActive = activeNodeTypes.any((nodeType) => proseMirrorState?.isNodeActive(nodeType) ?? false);
+
+        return ToolbarButton(
+          isActive: isActive,
           onTap: () async {
-            await scope.command('image');
+            await scope.command(node.type, attrs: node.attrs);
             await webViewController?.requestFocus();
           },
-        ),
-        ToolboxToolbarButton(
-          icon: 'paperclip',
-          label: '파일',
-          isActive: proseMirrorState?.isNodeActive('file') ?? false,
-          onTap: () async {
-            await scope.command('file');
-            await webViewController?.requestFocus();
+          builder: (context, color, backgroundColor) {
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              spacing: 12,
+              children: [
+                SvgImage('icons/${node.icon}', width: 28, height: 28, color: color),
+                Text(node.label, style: TextStyle(fontSize: 15, color: color)),
+              ],
+            );
           },
-        ),
-        ToolboxToolbarButton(
-          icon: 'file-up',
-          label: '임베드',
-          isActive: proseMirrorState?.isNodeActive('embed') ?? false,
-          onTap: () async {
-            await scope.command('embed');
-            await webViewController?.requestFocus();
-          },
-        ),
-        ToolboxToolbarButton(
-          icon: 'horizontal-rule',
-          label: '구분선',
-          isActive: proseMirrorState?.isNodeActive('horizontal_rule') ?? false,
-          onTap: () async {
-            await scope.command('horizontal_rule', attrs: {'horizontalRule': editorDefaultValues['horizontalRule']});
-            await webViewController?.requestFocus();
-          },
-        ),
-        ToolboxToolbarButton(
-          icon: 'quote',
-          label: '인용구',
-          isActive: proseMirrorState?.isNodeActive('blockquote') ?? false,
-          onTap: () async {
-            await scope.command('blockquote', attrs: {'blockquote': editorDefaultValues['blockquote']});
-            await webViewController?.requestFocus();
-          },
-        ),
-        ToolboxToolbarButton(
-          icon: 'gallery-vertical-end',
-          label: '콜아웃',
-          isActive: proseMirrorState?.isNodeActive('callout') ?? false,
-          onTap: () async {
-            await scope.command('callout');
-            await webViewController?.requestFocus();
-          },
-        ),
-        ToolboxToolbarButton(
-          icon: 'chevrons-down-up',
-          label: '폴드',
-          isActive: proseMirrorState?.isNodeActive('fold') ?? false,
-          onTap: () async {
-            await scope.command('fold');
-            await webViewController?.requestFocus();
-          },
-        ),
-        ToolboxToolbarButton(
-          icon: 'table',
-          label: '표',
-          isActive: proseMirrorState?.isNodeActive('table') ?? false,
-          onTap: () async {
-            await scope.command('table');
-            await webViewController?.requestFocus();
-          },
-        ),
-        ToolboxToolbarButton(
-          icon: 'list',
-          label: '목록',
-          isActive:
-              (proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
-              (proseMirrorState?.isNodeActive('ordered_list') ?? false),
-          onTap: () async {
-            await scope.command('bullet_list');
-            await webViewController?.requestFocus();
-          },
-        ),
-        ToolboxToolbarButton(
-          icon: 'code',
-          label: '코드',
-          isActive: proseMirrorState?.isNodeActive('code_block') ?? false,
-          onTap: () async {
-            await scope.command('code_block');
-            await webViewController?.requestFocus();
-          },
-        ),
-        ToolboxToolbarButton(
-          icon: 'code-xml',
-          label: 'HTML',
-          isActive: proseMirrorState?.isNodeActive('html_block') ?? false,
-          onTap: () async {
-            await scope.command('html_block');
-            await webViewController?.requestFocus();
-          },
-        ),
-      ],
+        );
+      }).toList(),
     );
   }
 }
