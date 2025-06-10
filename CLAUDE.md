@@ -97,6 +97,11 @@ pnpm lint:svelte     # Svelte-specific checks
 pnpm lint:typecheck  # TypeScript type checking
 pnpm lint:syncpack   # Package.json consistency
 
+# Dart/Flutter specific linting and formatting
+cd apps/mobile
+flutter analyze # Static analysis for Dart/Flutter code
+dart format     # Format Dart code (equivalent to Prettier for Dart)
+
 # Run tests
 pnpm test # Runs tests via Turbo (currently only in sark package)
 ```
@@ -200,11 +205,19 @@ JWT-based auth with social login support (Google, Apple, Kakao, Naver). Tokens a
   - For non-standard CSS values, use bracket notation: `fontSize: '[48px]'`, `width: '[100dvw]'`
   - Break compound values into individual properties: `margin: '0 auto'` → `marginX: 'auto'`, `padding: '40px 20px'` → `paddingY: '40px', paddingX: '20px'`
   - Use TypeScript checking: `pnpm lint:svelte` for Svelte files, `pnpm lint:typecheck` for full project
-- **ALWAYS run ESLint fix and Prettier write after modifying any file**:
+- **ALWAYS run linting and formatting after modifying files**:
+
   ```bash
+  # For TypeScript/JavaScript/Svelte files
   pnpm eslint <file_path> --fix
   pnpm prettier --write <file_path>
+
+  # For Dart files (in apps/mobile directory)
+  cd apps/mobile
+  flutter analyze <file_path>  # Static analysis
+  dart format <file_path>      # Code formatting
   ```
+
 - **Use Graphite for commits and PRs**:
 
   ```bash

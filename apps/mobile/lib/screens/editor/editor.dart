@@ -47,7 +47,7 @@ class Editor extends HookWidget {
       final subscription = keyboard.onHeightChange.listen((height) {
         if (height > 0) {
           scope.keyboardHeight.value = height;
-          scope.selectedToolboxIdx.value = -1;
+          scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
         }
 
         scope.isKeyboardVisible.value = height > 0;
@@ -78,6 +78,9 @@ class Editor extends HookWidget {
     return GraphQLOperation(
       initialBackgroundColor: AppColors.white,
       operation: GEditorScreen_QueryReq((b) => b..vars.slug = slug),
+      onLoaded: (data) {
+        scope.data.value = data;
+      },
       builder: (context, client, data) {
         return Screen(
           heading: Heading(
@@ -181,7 +184,7 @@ class Editor extends HookWidget {
                         },
                       ),
                     ),
-                    EditorToolbar(site: data.post.entity.site),
+                    const EditorToolbar(),
                   ],
                 ),
               ),

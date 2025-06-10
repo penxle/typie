@@ -1,8 +1,0 @@
-fragment EditorScreen_Toolbar_site on Site {
-  id
-
-  fonts {
-    id
-    name
-  }
-}
