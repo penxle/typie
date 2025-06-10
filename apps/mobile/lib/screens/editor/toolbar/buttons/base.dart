@@ -54,8 +54,8 @@ class ToolbarButton extends HookWidget {
       backgroundTween.value = ColorTween(
         begin: backgroundTween.value?.evaluate(curve),
         end: switch (effectiveState) {
-          _ButtonState.idle => null,
-          _ButtonState.pressed => null,
+          _ButtonState.idle => AppColors.white,
+          _ButtonState.pressed => AppColors.white,
           _ButtonState.active => AppColors.gray_100,
         },
       );

@@ -20,7 +20,8 @@ import 'package:typie/screens/editor/__generated__/duplicate_post_mutation.req.g
 import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
-import 'package:typie/screens/editor/toolbar.dart';
+import 'package:typie/screens/editor/toolbar/floating/floating.dart';
+import 'package:typie/screens/editor/toolbar/toolbar.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/styles/colors.dart';
@@ -185,6 +186,7 @@ class Editor extends HookWidget {
                               scope.webViewController.value = controller;
                             },
                           ),
+                          const Positioned(bottom: 20, right: 20, child: EditorFloatingToolbar()),
                         ],
                       ),
                     ),

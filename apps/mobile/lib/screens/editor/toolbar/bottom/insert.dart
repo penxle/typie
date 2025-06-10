@@ -46,7 +46,7 @@ class InsertBottomToolbar extends HookWidget {
 
     return GridView.extent(
       maxCrossAxisExtent: 96,
-      padding: const Pad(all: 16),
+      padding: Pad(all: 16, bottom: MediaQuery.paddingOf(context).bottom),
       mainAxisSpacing: 16,
       crossAxisSpacing: 16,
       children: _nodes.map((node) {
