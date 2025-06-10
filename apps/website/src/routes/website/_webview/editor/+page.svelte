@@ -372,6 +372,7 @@
       })}
       autocapitalize="off"
       autocomplete="off"
+      autocorrect="off"
       maxlength="100"
       onkeydown={(e) => {
         if (e.isComposing) {
@@ -403,6 +404,7 @@
       })}
       autocapitalize="off"
       autocomplete="off"
+      autocorrect="off"
       maxlength="100"
       onkeydown={(e) => {
         if (e.isComposing) {
