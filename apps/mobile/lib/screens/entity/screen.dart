@@ -16,7 +16,6 @@ import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
-import 'package:typie/modals/share.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/create_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.dart';
@@ -203,6 +202,7 @@ class _EntityList extends HookWidget {
                   onTap: () async {
                     await context.showBottomSheet(
                       child: BottomMenu(
+                        header: entity != null ? _BottomMenuHeader(entity: entity!) : null,
                         items: [
                           if (entity != null) ...[
                             BottomMenuItem(
@@ -353,6 +353,7 @@ class _EntityList extends HookWidget {
                           await entities[index].node.when(
                             folder: (folder) => context.showBottomSheet(
                               child: BottomMenu(
+                                header: _BottomMenuHeader(entity: entities[index]),
                                 items: [
                                   BottomMenuItem(
                                     icon: LucideLightIcons.folder_symlink,
@@ -438,6 +439,7 @@ class _EntityList extends HookWidget {
                             ),
                             post: (post) => context.showBottomSheet(
                               child: BottomMenu(
+                                header: _BottomMenuHeader(entity: entities[index]),
                                 items: [
                                   BottomMenuItem(
                                     icon: LucideLightIcons.file_symlink,
@@ -663,6 +665,61 @@ class _Post extends StatelessWidget {
   }
 }
 
+class _BottomMenuHeader extends StatelessWidget {
+  const _BottomMenuHeader({required this.entity});
+
+  final GEntityScreen_Entity_entity entity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          spacing: 16,
+          children: [
+            Icon(
+              entity.node.when(
+                folder: (_) => LucideLightIcons.folder,
+                post: (_) => LucideLightIcons.file,
+                orElse: () => throw UnimplementedError(),
+              ),
+              size: 20,
+            ),
+
+            Text(
+              entity.node.when(
+                folder: (folder) => folder.name,
+                post: (post) => post.title,
+                orElse: () => throw UnimplementedError(),
+              ),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const Pad(left: 36),
+          child: Row(
+            children: [
+              const Text('내 포스트', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
+              ...entity.ancestors
+                  .map(
+                    (ancestor) => [
+                      const Icon(LucideLightIcons.chevron_right, size: 14),
+                      Text(
+                        ancestor.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
+                        style: const TextStyle(fontSize: 14, color: AppColors.gray_700),
+                      ),
+                    ],
+                  )
+                  .expand((e) => e),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _MoveEntityModal extends HookWidget {
   const _MoveEntityModal(this.entity);
 
@@ -881,7 +938,9 @@ class _MoveEntityModal extends HookWidget {
                               (b) => b
                                 ..vars.input.entityId = entity.id
                                 ..vars.input.parentEntityId = currentEntity.value?.id
-                                ..vars.input.lowerOrder = entities.value![entities.value!.length - 1].order,
+                                ..vars.input.lowerOrder = entities.value!.isNotEmpty
+                                    ? entities.value![entities.value!.length - 1].order
+                                    : null,
                             ),
                           );
 

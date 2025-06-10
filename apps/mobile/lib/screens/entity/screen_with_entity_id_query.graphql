@@ -5,17 +5,6 @@ query EntityScreen_WithEntityId_Query($entityId: ID!) {
     id
     ...EntityScreen_Entity_entity
 
-    ancestors {
-      id
-
-      node {
-        ... on Folder {
-          id
-          name
-        }
-      }
-    }
-
     children {
       id
       ...EntityScreen_Entity_entity
