@@ -16,10 +16,13 @@ import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
+import 'package:typie/modals/share.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/create_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gql.dart';
+import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.dart';
+import 'package:typie/screens/entity/__generated__/duplicate_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/move_entity_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/rename_folder_mutation.req.gql.dart';
@@ -34,6 +37,7 @@ import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/vertical_divider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const maxDepth = 3;
 
@@ -200,7 +204,7 @@ class _EntityList extends HookWidget {
                     await context.showBottomSheet(
                       child: BottomMenu(
                         items: [
-                          if (entity != null)
+                          if (entity != null) ...[
                             BottomMenuItem(
                               icon: LucideLightIcons.folder_symlink,
                               label: '다른 폴더로 옮기기',
@@ -208,6 +212,15 @@ class _EntityList extends HookWidget {
                                 await context.showBottomSheet(intercept: true, child: _MoveEntityModal(entity!));
                               },
                             ),
+                            BottomMenuItem(
+                              icon: LucideLightIcons.external_link,
+                              label: '사이트에서 열기',
+                              onTap: () async {
+                                final url = Uri.parse(entity!.url);
+                                await launchUrl(url, mode: LaunchMode.externalApplication);
+                              },
+                            ),
+                          ],
                           BottomMenuItem(
                             icon: LucideLightIcons.square_pen,
                             label: '하위 포스트 만들기',
@@ -320,7 +333,7 @@ class _EntityList extends HookWidget {
                     return Padding(
                       key: Key(entities[index].id),
                       padding: const Pad(vertical: 6),
-                      child: Tappable(
+                      child: GestureDetector(
                         onTap: () async {
                           if (isReordering.value) {
                             return;
@@ -329,6 +342,165 @@ class _EntityList extends HookWidget {
                           await entities[index].node.when(
                             folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
                             post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
+                            orElse: () => throw UnimplementedError(),
+                          );
+                        },
+                        onLongPress: () async {
+                          if (isReordering.value) {
+                            return;
+                          }
+
+                          await entities[index].node.when(
+                            folder: (folder) => context.showBottomSheet(
+                              child: BottomMenu(
+                                items: [
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.folder_symlink,
+                                    label: '다른 폴더로 옮기기',
+                                    onTap: () async {
+                                      await context.showBottomSheet(
+                                        intercept: true,
+                                        child: _MoveEntityModal(entities[index]),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.external_link,
+                                    label: '사이트에서 열기',
+                                    onTap: () async {
+                                      final url = Uri.parse(entities[index].url);
+                                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.square_pen,
+                                    label: '하위 포스트 만들기',
+                                    onTap: () async {
+                                      final resp = await client.request(
+                                        GEntityScreen_CreatePost_MutationReq(
+                                          (b) => b
+                                            ..vars.input.siteId = pref.siteId
+                                            ..vars.input.parentEntityId = entities[index].id,
+                                        ),
+                                      );
+
+                                      if (context.mounted) {
+                                        await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
+                                      }
+                                    },
+                                  ),
+                                  if (entities[index].depth < maxDepth - 1)
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.folder_plus,
+                                      label: '하위 폴더 만들기',
+                                      onTap: () async {
+                                        final resp = await client.request(
+                                          GEntityScreen_CreateFolder_MutationReq(
+                                            (b) => b
+                                              ..vars.input.siteId = pref.siteId
+                                              ..vars.input.parentEntityId = entities[index].id
+                                              ..vars.input.name = '새 폴더',
+                                          ),
+                                        );
+
+                                        if (context.mounted) {
+                                          await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
+                                        }
+                                      },
+                                    ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.trash,
+                                    label: '삭제하기',
+                                    onTap: () async {
+                                      await context.showModal(
+                                        child: ConfirmModal(
+                                          title: '폴더 삭제',
+                                          message: '"${folder.name}" 폴더를 삭제하시겠어요?',
+                                          confirmText: '삭제하기',
+                                          confirmColor: AppColors.red_500,
+                                          onConfirm: () async {
+                                            await client.request(
+                                              GEntityScreen_DeleteFolder_MutationReq(
+                                                (b) => b..vars.input.folderId = folder.id,
+                                              ),
+                                            );
+
+                                            if (context.mounted) {
+                                              await context.router.maybePop();
+                                            }
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            post: (post) => context.showBottomSheet(
+                              child: BottomMenu(
+                                items: [
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.file_symlink,
+                                    label: '다른 폴더로 옮기기',
+                                    onTap: () async {
+                                      await context.showBottomSheet(
+                                        intercept: true,
+                                        child: _MoveEntityModal(entities[index]),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.external_link,
+                                    label: '사이트에서 열기',
+                                    onTap: () async {
+                                      final url = Uri.parse(entities[index].url);
+                                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.blend,
+                                    label: '공유하기',
+                                    onTap: () async {
+                                      await context.showBottomSheet(
+                                        intercept: true,
+                                        child: ShareBottomSheet(slug: entities[index].slug),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.copy,
+                                    label: '복제하기',
+                                    onTap: () async {
+                                      await client.request(
+                                        GEntityScreen_DuplicatePost_MutationReq((b) => b..vars.input.postId = post.id),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.trash,
+                                    label: '삭제하기',
+                                    onTap: () async {
+                                      await context.showModal(
+                                        intercept: true,
+                                        child: ConfirmModal(
+                                          title: '포스트 삭제',
+                                          message: '"${post.title}" 포스트를 삭제하시겠어요?',
+                                          confirmText: '삭제하기',
+                                          confirmColor: AppColors.red_500,
+                                          onConfirm: () async {
+                                            await client.request(
+                                              GEntityScreen_DeletePost_MutationReq(
+                                                (b) => b..vars.input.postId = post.id,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
                             orElse: () => throw UnimplementedError(),
                           );
                         },
@@ -493,7 +665,8 @@ class _Post extends StatelessWidget {
 
 class _MoveEntityModal extends HookWidget {
   const _MoveEntityModal(this.entity);
-  final GEntityScreen_WithEntityId_QueryData_entity entity;
+
+  final GEntityScreen_Entity_entity entity;
 
   @override
   Widget build(BuildContext context) {
@@ -587,6 +760,7 @@ class _MoveEntityModal extends HookWidget {
                     Text(
                       currentEntity.value!.node.when(
                         folder: (folder) => folder.name,
+                        post: (_) => throw UnimplementedError(),
                         orElse: () => throw UnimplementedError(),
                       ),
                       style: const TextStyle(fontWeight: FontWeight.w600),
@@ -634,7 +808,7 @@ class _MoveEntityModal extends HookWidget {
                               entities.value![index],
                               color: entity.id == entities.value![index].id ? AppColors.gray_500 : null,
                             ),
-                            post: (_) => throw UnimplementedError(),
+                            post: (_) => const SizedBox.shrink(),
                             orElse: () => throw UnimplementedError(),
                           ),
                         ),
@@ -681,6 +855,7 @@ class _MoveEntityModal extends HookWidget {
                                   (maxDepth - 1)
                               ? AppColors.gray_400
                               : AppColors.gray_950,
+                          post: (_) => AppColors.gray_950,
                           orElse: () => throw UnimplementedError(),
                         ),
                         borderRadius: const BorderRadius.all(Radius.circular(999)),
@@ -688,28 +863,30 @@ class _MoveEntityModal extends HookWidget {
                       padding: const Pad(vertical: 12),
                       child: Tappable(
                         onTap: () async {
-                          if (entity.node.G__typename == 'Folder') {
-                            if ((currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
-                                    ((entity.node as GEntityScreen_WithEntityId_QueryData_entity_node__asFolder)
-                                            .maxDescendantFoldersDepth -
-                                        entity.depth) >
-                                (maxDepth - 1)) {
-                              context.toast(ToastType.error, '폴더의 최대 깊이를 초과했어요');
-                              return;
-                            }
+                          entity.node.when(
+                            folder: (folder) {
+                              if ((currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
+                                      (folder.maxDescendantFoldersDepth - entity.depth) >
+                                  (maxDepth - 1)) {
+                                context.toast(ToastType.error, '폴더의 최대 깊이를 초과했어요');
+                                return;
+                              }
+                            },
+                            post: (_) {},
+                            orElse: () => throw UnimplementedError(),
+                          );
 
-                            await client.request(
-                              GEntityScreen_MoveEntity_MutationReq(
-                                (b) => b
-                                  ..vars.input.entityId = entity.id
-                                  ..vars.input.parentEntityId = currentEntity.value?.id
-                                  ..vars.input.lowerOrder = entities.value![entities.value!.length - 1].order,
-                              ),
-                            );
+                          await client.request(
+                            GEntityScreen_MoveEntity_MutationReq(
+                              (b) => b
+                                ..vars.input.entityId = entity.id
+                                ..vars.input.parentEntityId = currentEntity.value?.id
+                                ..vars.input.lowerOrder = entities.value![entities.value!.length - 1].order,
+                            ),
+                          );
 
-                            if (context.mounted) {
-                              await context.router.maybePop();
-                            }
+                          if (context.mounted) {
+                            await context.router.maybePop();
                           }
                         },
                         child: const Text(

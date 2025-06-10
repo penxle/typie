@@ -1,12 +1,15 @@
 fragment EntityScreen_Entity_entity on Entity {
   id
+  depth
   slug
   order
+  url
 
   node {
     ... on Folder {
       id
       name
+      maxDescendantFoldersDepth
     }
 
     ... on Post {

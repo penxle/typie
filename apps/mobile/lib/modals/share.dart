@@ -7,7 +7,7 @@ import 'package:typie/env.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/editor/__generated__/share_query.req.gql.dart';
+import 'package:typie/modals/__generated__/share_query.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/update_post_option_mutation.req.gql.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
