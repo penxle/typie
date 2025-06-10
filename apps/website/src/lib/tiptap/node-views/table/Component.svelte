@@ -1,7 +1,7 @@
 <script lang="ts">
   import { mergeAttributes } from '@tiptap/core';
   import { TableMap } from '@tiptap/pm/tables';
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import { TiptapNodeViewBubbleMenu } from '../../components';
@@ -89,6 +89,8 @@
 
   let hoveredRowIndex = $state<number | null>(null);
   let hoveredColumnIndex = $state<number | null>(null);
+  let focusedRowIndex = $state<number | null>(null);
+  let focusedColumnIndex = $state<number | null>(null);
   const isLastRowHovered = $derived(hoveredRowIndex === rowElems.length - 1);
   const isLastColumnHovered = $derived(hoveredColumnIndex === cols.length - 1);
 
@@ -106,6 +108,50 @@
       hoveredColumnIndex = prevCols.reduce((acc, col) => acc + (col as HTMLTableCellElement).colSpan, 0);
     }
   }
+
+  function getSelectedCellPosition() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+
+    const range = selection.getRangeAt(0);
+    let node = range.startContainer as HTMLElement | null;
+
+    while (node && node.nodeName.toLowerCase() !== 'td') {
+      node = node.parentElement;
+    }
+
+    if (!node || node.nodeName.toLowerCase() !== 'td') return null;
+
+    const td = node;
+    const tr = td.parentElement;
+    const table = tr?.parentElement;
+
+    if (!tr || !table) return null;
+
+    const rowIndex = [...table.children].indexOf(tr);
+    const colIndex = [...tr.children].indexOf(td);
+
+    return { rowIndex, colIndex };
+  }
+
+  function handleSelectionChange() {
+    const pos = getSelectedCellPosition();
+
+    if (pos) {
+      focusedRowIndex = pos.rowIndex;
+      focusedColumnIndex = pos.colIndex;
+    } else {
+      focusedRowIndex = null;
+      focusedColumnIndex = null;
+    }
+  }
+
+  onMount(() => {
+    if (window.__webview__) {
+      document.addEventListener('selectionchange', handleSelectionChange);
+      return () => document.removeEventListener('selectionchange', handleSelectionChange);
+    }
+  });
 </script>
 
 <NodeView style={css.raw({ position: 'relative' })} {...HTMLAttributes}>
@@ -170,11 +216,11 @@
                 zIndex: '10',
                 width: '18px',
                 height: '24px',
-                pointerEvents: hoveredRowIndex === i ? 'auto' : 'none',
+                pointerEvents: hoveredRowIndex === i || focusedRowIndex === i ? 'auto' : 'none',
               })}
               role="row"
             >
-              <RowHandle {editor} {getPos} {hasSpan} {hoveredRowIndex} {i} tableNode={node} />
+              <RowHandle {editor} {focusedRowIndex} {getPos} {hasSpan} {hoveredRowIndex} {i} tableNode={node} />
             </div>
           {/each}
         </div>
@@ -183,7 +229,7 @@
           {#each colElems as col, i (i)}
             <div
               style:left={`${col.offsetLeft}px`}
-              style:width={`${col.clientWidth}px`}
+              style:width={`${col.offsetWidth}px`}
               class={center({
                 position: 'absolute',
                 top: '0',
@@ -192,13 +238,13 @@
                 zIndex: '10',
                 width: '24px',
                 height: '18px',
-                pointerEvents: hoveredColumnIndex === i ? 'auto' : 'none',
+                pointerEvents: hoveredColumnIndex === i || focusedColumnIndex === i ? 'auto' : 'none',
                 '.block-selection-decoration &': {
                   display: 'none',
                 },
               })}
             >
-              <ColHandle {editor} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
+              <ColHandle {editor} {focusedColumnIndex} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
             </div>
           {/each}
         {/if}
@@ -209,7 +255,7 @@
         as="tbody"
       />
     </table>
-    {#if editor?.current.isEditable}
+    {#if editor?.current.isEditable && !window.__webview__}
       <AddRowColButton {editor} {getPos} {isLastColumnHovered} {isLastRowHovered} tableNode={node} />
     {/if}
   </div>

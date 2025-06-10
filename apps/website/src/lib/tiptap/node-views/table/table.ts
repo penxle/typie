@@ -209,7 +209,7 @@ export const Table = createNodeView(Component, {
 
   addProseMirrorPlugins() {
     return [
-      ...(this.editor.isEditable
+      ...(this.editor.isEditable && !window.__webview__
         ? [
             columnResizing({
               handleWidth: 5,

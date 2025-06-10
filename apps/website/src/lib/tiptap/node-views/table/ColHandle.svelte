@@ -18,10 +18,11 @@
     getPos: () => number | undefined;
     i: number;
     hoveredColumnIndex?: number | null;
+    focusedColumnIndex?: number | null;
     hasSpan?: boolean;
   };
 
-  let { editor, tableNode, getPos, i, hoveredColumnIndex, hasSpan = false }: Props = $props();
+  let { editor, tableNode, getPos, i, hoveredColumnIndex, focusedColumnIndex, hasSpan = false }: Props = $props();
 
   const map = $derived(TableMap.get(tableNode));
 
@@ -118,14 +119,16 @@
 <Menu
   offset={4}
   onopen={() => {
-    selectColumn(i);
+    if (!window.__webview__) {
+      selectColumn(i);
+    }
   }}
   placement="bottom-start"
 >
   {#snippet button({ open })}
     <div
       class={center({
-        display: open || hoveredColumnIndex === i ? 'flex' : 'none',
+        display: open || hoveredColumnIndex === i || focusedColumnIndex === i ? 'flex' : 'none',
         _hover: {
           backgroundColor: 'gray.200',
         },
@@ -208,5 +211,17 @@
       <Icon icon={Trash2Icon} size={14} />
       <span>열 삭제</span>
     </MenuItem>
+    {#if window.__webview__}
+      <MenuItem
+        onclick={() => {
+          close();
+          editor?.current?.commands.deleteTable();
+        }}
+        variant="danger"
+      >
+        <Icon icon={Trash2Icon} size={14} />
+        <span>표 삭제</span>
+      </MenuItem>
+    {/if}
   {/snippet}
 </Menu>
