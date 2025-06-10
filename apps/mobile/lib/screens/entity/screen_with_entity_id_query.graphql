@@ -3,7 +3,7 @@
 query EntityScreen_WithEntityId_Query($entityId: ID!) {
   entity(entityId: $entityId) {
     id
-    depth
+    ...EntityScreen_Entity_entity
 
     ancestors {
       id
@@ -13,14 +13,6 @@ query EntityScreen_WithEntityId_Query($entityId: ID!) {
           id
           name
         }
-      }
-    }
-
-    node {
-      ... on Folder {
-        id
-        name
-        maxDescendantFoldersDepth
       }
     }
 
