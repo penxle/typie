@@ -5,6 +5,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/env.dart';
@@ -27,7 +28,9 @@ import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/webview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -74,8 +77,10 @@ class Editor extends HookWidget {
           case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
           case 'limitExceeded':
-            // show modal?
-            break;
+            await webViewController.clearFocus();
+            if (context.mounted) {
+              await context.showBottomSheet(intercept: true, child: const _LimitBottomSheet());
+            }
         }
       });
 
@@ -213,6 +218,138 @@ class Editor extends HookWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _LimitBottomSheet extends StatelessWidget {
+  const _LimitBottomSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final List<IconData> icons = [
+      LucideLightIcons.crown,
+      LucideLightIcons.tag,
+      LucideLightIcons.star,
+      LucideLightIcons.key,
+      LucideLightIcons.gift,
+    ];
+
+    return AppBottomSheet(
+      padding: const Pad(horizontal: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: SizedBox(
+              height: 32,
+              width: 32 + (icons.length - 1) * 22,
+              child: Stack(
+                children: [
+                  for (int i = 0; i < icons.length; i++)
+                    Positioned(
+                      left: i * 22,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.gray_950,
+                          border: Border.all(color: AppColors.white, width: 2),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        padding: const Pad(all: 6),
+                        child: Icon(icons[i], size: 16, color: AppColors.white),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const Gap(16),
+          const Text(
+            '플랜 업그레이드가 필요해요',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const Gap(4),
+          const Text(
+            '현재 플랜의 최대 사용량을 초과했어요.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: AppColors.gray_500),
+          ),
+          const Text(
+            '이어서 작성하려면 플랜을 업그레이드 해주세요.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: AppColors.gray_500),
+          ),
+          const Gap(16),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.gray_950),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Padding(
+              padding: Pad(all: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('타이피 FULL ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  Gap(12),
+                  HorizontalDivider(color: AppColors.gray_950),
+                  Gap(12),
+                  Column(
+                    spacing: 8,
+                    children: [
+                      _FeatureItem(icon: LucideLightIcons.book_open_text, label: '무제한 글자 수'),
+                      _FeatureItem(icon: LucideLightIcons.images, label: '무제한 파일 업로드'),
+                      _FeatureItem(icon: LucideLightIcons.link, label: '커스텀 공유 주소'),
+                      _FeatureItem(icon: LucideLightIcons.flask_conical, label: '베타 기능 우선 접근'),
+                      _FeatureItem(icon: LucideLightIcons.headset, label: '문제 발생 시 우선 지원'),
+                      _FeatureItem(icon: LucideLightIcons.sprout, label: '디스코드 커뮤니티 참여'),
+                      _FeatureItem(icon: LucideLightIcons.ellipsis, label: '그리고 더 많은 혜택'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Gap(16),
+          Tappable(
+            onTap: () async {
+              await context.router.root.maybePop();
+              if (context.mounted) {
+                await context.router.popAndPush(const EnrollPlanRoute());
+              }
+            },
+            child: Container(
+              decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(8)),
+              padding: const Pad(vertical: 16),
+              child: const Text(
+                '업그레이드',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeatureItem extends StatelessWidget {
+  const _FeatureItem({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      spacing: 8,
+      children: [
+        Icon(icon, size: 16),
+        Text(label, style: const TextStyle(fontSize: 14)),
+      ],
     );
   }
 }
