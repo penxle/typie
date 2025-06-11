@@ -28,6 +28,7 @@ import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/webview.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class Editor extends HookWidget {
   const Editor({required this.slug, super.key});
@@ -96,6 +97,14 @@ class Editor extends HookWidget {
                     intercept: true,
                     child: BottomMenu(
                       items: [
+                        BottomMenuItem(
+                          icon: LucideLightIcons.external_link,
+                          label: '사이트에서 열기',
+                          onTap: () async {
+                            final url = Uri.parse(data.post.entity.url);
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          },
+                        ),
                         BottomMenuItem(
                           icon: LucideLightIcons.blend,
                           label: '공유하기',
