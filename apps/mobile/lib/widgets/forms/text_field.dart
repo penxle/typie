@@ -21,6 +21,7 @@ class HookFormTextField extends HookWidget {
     this.textInputAction = TextInputAction.done,
     this.autofillHints,
     this.initialValue,
+    this.submitOnEnter = true,
   });
 
   const factory HookFormTextField.collapsed({
@@ -31,6 +32,9 @@ class HookFormTextField extends HookWidget {
     FocusNode? focusNode,
     bool autofocus,
     String? initialValue,
+    TextInputType? keyboardType,
+    TextInputAction textInputAction,
+    bool submitOnEnter,
     Key? key,
   }) = _HookFormCollapsedTextField;
 
@@ -45,6 +49,7 @@ class HookFormTextField extends HookWidget {
   final TextInputAction textInputAction;
   final List<String>? autofillHints;
   final String? initialValue;
+  final bool submitOnEnter;
 
   @override
   Widget build(BuildContext context) {
@@ -148,7 +153,7 @@ class HookFormTextField extends HookWidget {
               field.value = value;
             },
             onSubmitted: (value) async {
-              if (textInputAction == TextInputAction.done) {
+              if (submitOnEnter && textInputAction == TextInputAction.done) {
                 await field.form.submit();
               }
             },
@@ -168,6 +173,9 @@ class _HookFormCollapsedTextField extends HookFormTextField {
     super.focusNode,
     super.autofocus,
     super.initialValue,
+    super.keyboardType,
+    super.textInputAction = TextInputAction.done,
+    super.submitOnEnter = true,
     super.key,
   }) : super(label: '');
 
@@ -219,7 +227,7 @@ class _HookFormCollapsedTextField extends HookFormTextField {
             field.value = value;
           },
           onSubmitted: (value) async {
-            if (textInputAction == TextInputAction.done) {
+            if (submitOnEnter && textInputAction == TextInputAction.done) {
               await field.form.submit();
             }
           },

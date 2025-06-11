@@ -115,7 +115,14 @@ class WebViewController {
   }
 
   Future<void> emitEvent(String name, [dynamic data]) async {
-    await _channel.invokeMethod('emitEvent', {'name': name, 'data': jsonEncode(data)});
+    final jsonData = jsonEncode(data)
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\r', r'\r')
+        .replaceAll('\t', r'\t');
+
+    await _channel.invokeMethod('emitEvent', {'name': name, 'data': jsonData});
   }
 }
 

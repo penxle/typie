@@ -78,11 +78,14 @@
 
   export const handle = (event: CustomEvent) => {
     if (event.type === 'inflight') {
+      inflight = true;
       inflightUrl = event.detail.url;
     } else if (event.type === 'success') {
+      inflight = false;
       inflightUrl = undefined;
       updateAttributes(event.detail.attrs);
     } else if (event.type === 'error') {
+      inflight = false;
       inflightUrl = undefined;
     }
   };

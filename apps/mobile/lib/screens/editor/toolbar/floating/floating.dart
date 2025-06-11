@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/floating/blockquote.dart';
+import 'package:typie/screens/editor/toolbar/floating/embed.dart';
 import 'package:typie/screens/editor/toolbar/floating/file.dart';
 import 'package:typie/screens/editor/toolbar/floating/horizontal_rule.dart';
 import 'package:typie/screens/editor/toolbar/floating/image.dart';
@@ -31,6 +32,7 @@ class EditorFloatingToolbar extends HookWidget {
       'horizontal_rule' => const HorizontalRuleFloatingToolbar(),
       'image' => const ImageFloatingToolbar(),
       'file' => const FileFloatingToolbar(),
+      'embed' => const EmbedFloatingToolbar(),
       _ => const SizedBox.shrink(),
     };
   }

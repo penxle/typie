@@ -131,6 +131,8 @@ class TextToolbar extends HookWidget {
                         placeholder: 'https://...',
                         style: const TextStyle(fontSize: 16),
                         autofocus: true,
+                        submitOnEnter: false,
+                        keyboardType: TextInputType.url,
                       ),
                     );
                   },
@@ -161,6 +163,8 @@ class TextToolbar extends HookWidget {
                         placeholder: '텍스트 위에 들어갈 문구',
                         style: const TextStyle(fontSize: 16),
                         autofocus: true,
+                        submitOnEnter: false,
+                        keyboardType: TextInputType.text,
                       ),
                     );
                   },
