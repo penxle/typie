@@ -583,6 +583,9 @@ importers:
       dayjs:
         specifier: ^1.11.13
         version: 1.11.13
+      hono:
+        specifier: ^4.7.11
+        version: 4.7.11
       ipaddr.js:
         specifier: ^2.2.0
         version: 2.2.0
@@ -596,9 +599,6 @@ importers:
       '@typie/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
-      hono:
-        specifier: ^4.7.11
-        version: 4.7.11
       svelte:
         specifier: ^5.33.19
         version: 5.33.19
