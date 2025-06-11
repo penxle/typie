@@ -135,3 +135,14 @@ sealed class ProseMirrorSelection with _$ProseMirrorSelection {
 
   factory ProseMirrorSelection.fromJson(Map<String, dynamic> json) => _$ProseMirrorSelectionFromJson(json);
 }
+
+@freezed
+abstract class CharacterCountState with _$CharacterCountState {
+  const factory CharacterCountState({
+    required int countWithWhitespace,
+    required int countWithoutWhitespace,
+    required int countWithoutWhitespaceAndPunctuation,
+  }) = _CharacterCountState;
+
+  factory CharacterCountState.fromJson(Map<String, dynamic> json) => _$CharacterCountStateFromJson(json);
+}
