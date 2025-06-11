@@ -163,7 +163,12 @@ class AppWebView(
         if (name != null && data != null) {
           webView.evaluateJavascript(
             """
-              window.dispatchEvent(new CustomEvent('__webview__', { detail: { name: '$name', data: JSON.parse('$data') } }));
+              window.dispatchEvent(new CustomEvent('__webview__', { 
+                detail: { 
+                  name: "$name", 
+                  data: JSON.parse("$data") 
+                } 
+              }));
             """,
             null,
           )

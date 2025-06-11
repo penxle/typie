@@ -99,7 +99,12 @@ class AppWebView: NSObject, FlutterPlatformView {
       case "emitEvent":
         if let name = args["name"] as? String, let data = args["data"] as? String {
           webView.evaluateJavaScript("""
-            window.dispatchEvent(new CustomEvent('__webview__', { detail: { name: '\(name)', data: JSON.parse('\(data)') } }));
+            window.dispatchEvent(new CustomEvent('__webview__', { 
+              detail: { 
+                name: "\(name)", 
+                data: JSON.parse("\(data)") 
+              } 
+            }));
           """)
         }
         result(nil)
