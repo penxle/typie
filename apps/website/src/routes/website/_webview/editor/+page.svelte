@@ -274,6 +274,14 @@
 
     editor?.current.on('transaction', handler);
 
+    const handler2 = () => {
+      window.__webview__?.emitEvent('setYJSState', {
+        maxWidth: maxWidth.current,
+      });
+    };
+
+    doc.getMap('attrs').observe(handler2);
+
     window.__webview__?.addEventListener('appReady', () => {
       // titleEl?.focus();
     });
@@ -345,6 +353,15 @@
         editor?.current.chain().focus().redo().run();
       } else if (name === 'delete') {
         editor?.current.chain().focus().deleteSelection().run();
+      } else if (name === 'max_width') {
+        maxWidth.current = attrs.maxWidth;
+      } else if (name === 'body') {
+        if (attrs.paragraphIndent !== undefined) {
+          editor?.current.chain().focus().setBodyParagraphIndent(attrs.paragraphIndent).run();
+        }
+        if (attrs.blockGap !== undefined) {
+          editor?.current.chain().focus().setBodyBlockGap(attrs.blockGap).run();
+        }
       }
     });
 
@@ -384,6 +401,7 @@
       unsubscribe2();
 
       editor?.current.off('transaction', handler);
+      doc.getMap('attrs').unobserve(handler2);
 
       persistence.destroy();
       awareness.destroy();
