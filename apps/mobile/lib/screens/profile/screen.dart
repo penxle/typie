@@ -3,8 +3,11 @@ import 'dart:math';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
@@ -198,6 +201,63 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
+                ),
+                Tappable(
+                  onTap: () async {
+                    final packageInfo = await PackageInfo.fromPlatform();
+                    final deviceInfo = await DeviceInfoPlugin().deviceInfo;
+
+                    final (os, model) = switch (deviceInfo) {
+                      IosDeviceInfo() => (
+                        '${deviceInfo.systemName} ${deviceInfo.systemVersion}',
+                        '${deviceInfo.modelName} (${deviceInfo.model})',
+                      ),
+                      AndroidDeviceInfo() => (
+                        '${deviceInfo.version.baseOS} ${deviceInfo.version.release}',
+                        '${deviceInfo.manufacturer} ${deviceInfo.model} (${deviceInfo.brand})',
+                      ),
+                      _ => throw UnimplementedError(),
+                    };
+
+                    final encodedSubject = Uri.encodeComponent('[타이피] 앱 개선 의견');
+                    final encodedBody = Uri.encodeComponent(
+                      '-----\n'
+                      '로그인 정보: ${data.me!.id}\n'
+                      '버전 정보: ${packageInfo.version} (${packageInfo.buildNumber})\n'
+                      '디바이스 정보: $model - $os\n'
+                      '-----\n'
+                      '타이피 앱 및 서비스에 대한 개선 의견을 자유롭게 적어주세요. 모든 의견은 타이피 팀에서 꼼꼼히 확인하고 있어요.\n'
+                      '-----\n\n',
+                    );
+
+                    final uri = Uri.parse('mailto:hello@penxle.io?subject=$encodedSubject&body=$encodedBody');
+
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    } else {
+                      if (context.mounted) {
+                        context.toast(ToastType.error, '메일 앱을 먼저 설치해주세요.');
+                      }
+                    }
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.gray_950),
+                      borderRadius: BorderRadius.circular(8),
+                      color: AppColors.white,
+                    ),
+                    padding: const Pad(all: 16),
+                    child: const Row(
+                      spacing: 8,
+                      children: [
+                        Icon(LucideLightIcons.message_circle, size: 20),
+                        Expanded(
+                          child: Text('앱 개선 의견 보내기', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                        ),
+                        Icon(LucideLightIcons.chevron_right, size: 16),
+                      ],
+                    ),
                   ),
                 ),
               ],

@@ -94,7 +94,7 @@ class LoginScreen extends HookWidget {
                   onTap: () async {
                     if (!await isKakaoTalkInstalled()) {
                       if (context.mounted) {
-                        context.toast(ToastType.error, '카카오톡을 먼저 설치해주세요.');
+                        context.toast(ToastType.error, '카카오톡 앱을 먼저 설치해주세요.');
                       }
 
                       return;
