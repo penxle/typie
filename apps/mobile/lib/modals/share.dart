@@ -28,7 +28,6 @@ class SharePostBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppFullBottomSheet(
       title: '이 포스트 공유하기',
-      padding: null,
       child: GraphQLOperation(
         operation: GSharePost_QueryReq((b) => b..vars.slug = slug),
         builder: (context, client, data) {
@@ -53,130 +52,141 @@ class SharePostBottomSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    child: Padding(
-                      padding: const Pad(all: 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        spacing: 32,
-                        children: [
-                          _Section(
-                            title: '포스트 조회 권한',
-                            children: [
-                              _Option(
-                                icon: LucideLightIcons.blend,
-                                label: '공개 범위',
-                                trailing: HookFormSelect(
-                                  name: 'visibility',
-                                  initialValue: data.post.entity.visibility,
-                                  items: const [
-                                    HookFormSelectItem(
-                                      icon: LucideLightIcons.link,
-                                      label: '링크가 있는 사람',
-                                      description: '링크가 있는 누구나 볼 수 있어요.',
-                                      value: GEntityVisibility.UNLISTED,
-                                    ),
-                                    HookFormSelectItem(
-                                      icon: LucideLightIcons.lock,
-                                      label: '비공개',
-                                      description: '나만 볼 수 있어요.',
-                                      value: GEntityVisibility.PRIVATE,
-                                    ),
-                                  ],
-                                ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      spacing: 32,
+                      children: [
+                        _Section(
+                          title: '포스트 조회 권한',
+                          children: [
+                            _Option(
+                              icon: LucideLightIcons.blend,
+                              label: '공개 범위',
+                              trailing: HookFormSelect(
+                                name: 'visibility',
+                                initialValue: data.post.entity.visibility,
+                                items: const [
+                                  HookFormSelectItem(
+                                    icon: LucideLightIcons.link,
+                                    label: '링크가 있는 사람',
+                                    description: '링크가 있는 누구나 볼 수 있어요.',
+                                    value: GEntityVisibility.UNLISTED,
+                                  ),
+                                  HookFormSelectItem(
+                                    icon: LucideLightIcons.lock,
+                                    label: '비공개',
+                                    description: '나만 볼 수 있어요.',
+                                    value: GEntityVisibility.PRIVATE,
+                                  ),
+                                ],
                               ),
-                              _Option(
-                                icon: LucideLightIcons.id_card,
-                                label: '연령 제한',
-                                trailing: HookFormSelect(
-                                  name: 'contentRating',
-                                  initialValue: data.post.contentRating,
-                                  items: const [
-                                    HookFormSelectItem(label: '없음', value: GPostContentRating.ALL),
-                                    HookFormSelectItem(label: '15세', value: GPostContentRating.R15),
-                                    HookFormSelectItem(label: '성인', value: GPostContentRating.R19),
-                                  ],
-                                ),
+                            ),
+                            _Option(
+                              icon: LucideLightIcons.id_card,
+                              label: '연령 제한',
+                              trailing: HookFormSelect(
+                                name: 'contentRating',
+                                initialValue: data.post.contentRating,
+                                items: const [
+                                  HookFormSelectItem(label: '없음', value: GPostContentRating.ALL),
+                                  HookFormSelectItem(label: '15세', value: GPostContentRating.R15),
+                                  HookFormSelectItem(label: '성인', value: GPostContentRating.R19),
+                                ],
                               ),
-                              _Option(
-                                icon: LucideLightIcons.lock_keyhole,
-                                label: '비밀번호 보호',
-                                trailing: HookFormSwitch(name: 'hasPassword', initialValue: data.post.password != null),
+                            ),
+                            _Option(
+                              icon: LucideLightIcons.lock_keyhole,
+                              label: '비밀번호 보호',
+                              trailing: HookFormSwitch(name: 'hasPassword', initialValue: data.post.password != null),
+                            ),
+                            if (form.data['hasPassword'] as bool? ?? false)
+                              HookFormTextField(
+                                name: 'password',
+                                label: '비밀번호',
+                                placeholder: '비밀번호를 입력해주세요.',
+                                keyboardType: TextInputType.visiblePassword,
+                                initialValue: data.post.password,
                               ),
-                              if (form.data['hasPassword'] as bool? ?? false)
-                                HookFormTextField(
-                                  name: 'password',
-                                  label: '비밀번호',
-                                  placeholder: '비밀번호를 입력해주세요.',
-                                  keyboardType: TextInputType.visiblePassword,
-                                  initialValue: data.post.password,
-                                ),
-                            ],
-                          ),
-                          _Section(
-                            title: '포스트 상호작용',
-                            children: [
-                              _Option(
-                                icon: LucideLightIcons.message_square,
-                                label: '댓글',
-                                trailing: HookFormSelect(
-                                  name: 'allowComment',
-                                  initialValue: data.post.allowComment,
-                                  items: const [
-                                    HookFormSelectItem(
-                                      icon: LucideLightIcons.circle_user_round,
-                                      label: '로그인한 이용자',
-                                      value: true,
-                                    ),
-                                    HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
-                                  ],
-                                ),
+                          ],
+                        ),
+                        _Section(
+                          title: '포스트 상호작용',
+                          children: [
+                            _Option(
+                              icon: LucideLightIcons.message_square,
+                              label: '댓글',
+                              trailing: HookFormSelect(
+                                name: 'allowComment',
+                                initialValue: data.post.allowComment,
+                                items: const [
+                                  HookFormSelectItem(
+                                    icon: LucideLightIcons.circle_user_round,
+                                    label: '로그인한 이용자',
+                                    value: true,
+                                  ),
+                                  HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
+                                ],
                               ),
-                              _Option(
-                                icon: LucideLightIcons.smile,
-                                label: '이모지 반응',
-                                trailing: HookFormSelect(
-                                  name: 'allowReaction',
-                                  initialValue: data.post.allowReaction,
-                                  items: const [
-                                    HookFormSelectItem(icon: LucideLightIcons.users_round, label: '누구나', value: true),
-                                    HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
-                                  ],
-                                ),
+                            ),
+                            _Option(
+                              icon: LucideLightIcons.smile,
+                              label: '이모지 반응',
+                              trailing: HookFormSelect(
+                                name: 'allowReaction',
+                                initialValue: data.post.allowReaction,
+                                items: const [
+                                  HookFormSelectItem(icon: LucideLightIcons.users_round, label: '누구나', value: true),
+                                  HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
+                                ],
                               ),
-                            ],
-                          ),
-                          _Section(
-                            title: '포스트 보호',
-                            children: [
-                              _Option(
-                                icon: LucideLightIcons.shield,
-                                label: '내용 보호',
-                                trailing: HookFormSwitch(
-                                  name: 'protectContent',
-                                  initialValue: data.post.protectContent,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                            ),
+                          ],
+                        ),
+                        _Section(
+                          title: '포스트 보호',
+                          children: [
+                            _Option(
+                              icon: LucideLightIcons.shield,
+                              label: '내용 보호',
+                              trailing: HookFormSwitch(name: 'protectContent', initialValue: data.post.protectContent),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  Tappable(
-                    onTap: () async {
-                      final baseUrl = Env.usersiteUrl.replaceAll('*.', '');
-                      final url = Uri.parse('$baseUrl/${data.post.entity.permalink}');
-                      await SharePlus.instance.share(ShareParams(title: data.post.title, uri: url));
+                  Builder(
+                    builder: (context) {
+                      return Tappable(
+                        onTap: () async {
+                          final baseUrl = Env.usersiteUrl.replaceAll('*.', '');
+                          final url = Uri.parse('$baseUrl/${data.post.entity.permalink}');
+
+                          final box = context.findRenderObject() as RenderBox?;
+
+                          try {
+                            await SharePlus.instance.share(
+                              ShareParams(
+                                title: data.post.title,
+                                uri: url,
+                                sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
+                              ),
+                            );
+                          } catch (_) {
+                            // pass
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(8)),
+                          padding: const Pad(vertical: 16),
+                          child: const Text(
+                            '공유하기',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
                     },
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(color: AppColors.gray_950),
-                      padding: Pad(vertical: 16, bottom: MediaQuery.viewPaddingOf(context).bottom),
-                      child: const Text(
-                        '공유하기',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
-                      ),
-                    ),
                   ),
                 ],
               );
@@ -197,7 +207,6 @@ class ShareFolderBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppFullBottomSheet(
       title: '폴더 공유하기',
-      padding: null,
       child: GraphQLOperation(
         operation: GShareFolder_QueryReq((b) => b..vars.entityId = entityId),
         builder: (context, client, data) {
@@ -217,56 +226,63 @@ class ShareFolderBottomSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    child: Padding(
-                      padding: const Pad(all: 20),
-                      child: _Section(
-                        title: '폴더 조회 권한',
-                        children: [
-                          _Option(
-                            icon: LucideLightIcons.blend,
-                            label: '공개 범위',
-                            trailing: HookFormSelect(
-                              name: 'visibility',
-                              initialValue: data.entity.visibility,
-                              items: const [
-                                HookFormSelectItem(
-                                  icon: LucideLightIcons.lock,
-                                  label: '비공개',
-                                  value: GEntityVisibility.PRIVATE,
-                                ),
-                                HookFormSelectItem(
-                                  icon: LucideLightIcons.link,
-                                  label: '링크가 있는 사람',
-                                  value: GEntityVisibility.UNLISTED,
-                                ),
-                              ],
-                            ),
+                    child: _Section(
+                      title: '폴더 조회 권한',
+                      children: [
+                        _Option(
+                          icon: LucideLightIcons.blend,
+                          label: '공개 범위',
+                          trailing: HookFormSelect(
+                            name: 'visibility',
+                            initialValue: data.entity.visibility,
+                            items: const [
+                              HookFormSelectItem(
+                                icon: LucideLightIcons.lock,
+                                label: '비공개',
+                                value: GEntityVisibility.PRIVATE,
+                              ),
+                              HookFormSelectItem(
+                                icon: LucideLightIcons.link,
+                                label: '링크가 있는 사람',
+                                value: GEntityVisibility.UNLISTED,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                  Tappable(
-                    onTap: () async {
-                      final baseUrl = Env.usersiteUrl.replaceAll('*.', '');
-                      final url = Uri.parse('$baseUrl/${data.entity.permalink}');
-                      await SharePlus.instance.share(
-                        ShareParams(
-                          title: data.entity.node.when(
-                            folder: (folder) => folder.name,
-                            orElse: () => throw UnimplementedError(),
-                          ),
-                          uri: url,
+                  Builder(
+                    builder: (context) => Tappable(
+                      onTap: () async {
+                        final baseUrl = Env.usersiteUrl.replaceAll('*.', '');
+                        final url = Uri.parse('$baseUrl/${data.entity.permalink}');
+
+                        final box = context.findRenderObject() as RenderBox?;
+
+                        try {
+                          await SharePlus.instance.share(
+                            ShareParams(
+                              title: data.entity.node.when(
+                                folder: (folder) => folder.name,
+                                orElse: () => throw UnimplementedError(),
+                              ),
+                              uri: url,
+                              sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
+                            ),
+                          );
+                        } catch (_) {
+                          // pass
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(8)),
+                        padding: const Pad(vertical: 16),
+                        child: const Text(
+                          '공유하기',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                          textAlign: TextAlign.center,
                         ),
-                      );
-                    },
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(color: AppColors.gray_950),
-                      padding: Pad(vertical: 16, bottom: MediaQuery.viewPaddingOf(context).bottom),
-                      child: const Text(
-                        '공유하기',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
                       ),
                     ),
                   ),

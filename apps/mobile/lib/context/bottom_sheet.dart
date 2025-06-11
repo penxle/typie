@@ -166,7 +166,7 @@ class AppBottomSheet extends StatelessWidget {
 }
 
 class AppFullBottomSheet extends StatelessWidget {
-  const AppFullBottomSheet({required this.title, required this.child, this.padding = const Pad(all: 20), super.key});
+  const AppFullBottomSheet({required this.title, required this.child, this.padding, super.key});
 
   final String title;
   final EdgeInsetsGeometry? padding;
@@ -174,36 +174,45 @@ class AppFullBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final maxHeight = mediaQuery.size.shortestSide > 600
+        ? (mediaQuery.size.height - mediaQuery.padding.top) * 0.7
+        : double.infinity;
+    final bottomPadding = mediaQuery.padding.bottom;
+
     return _BottomSheet(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            height: 52,
-            decoration: const BoxDecoration(
-              color: AppColors.white,
-              border: Border(bottom: BorderSide(color: AppColors.gray_200)),
-            ),
-            padding: const Pad(horizontal: 8),
-            child: NavigationToolbar(
-              leading: Tappable(
-                padding: const Pad(horizontal: 4),
-                onTap: () async {
-                  await context.router.maybePop();
-                },
-                child: const Icon(LucideLightIcons.x, size: 24, color: AppColors.gray_950),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              height: 52,
+              decoration: const BoxDecoration(
+                color: AppColors.white,
+                border: Border(bottom: BorderSide(color: AppColors.gray_200)),
               ),
-              middle: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+              padding: const Pad(horizontal: 8),
+              child: NavigationToolbar(
+                leading: Tappable(
+                  padding: const Pad(horizontal: 4),
+                  onTap: () async {
+                    await context.router.maybePop();
+                  },
+                  child: const Icon(LucideLightIcons.x, size: 24, color: AppColors.gray_950),
+                ),
+                middle: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+              ),
             ),
-          ),
-          Expanded(
-            child: Container(
-              decoration: const BoxDecoration(color: AppColors.white),
-              padding: padding,
-              child: child,
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(color: AppColors.white),
+                padding: padding ?? Pad(top: 20, bottom: bottomPadding + 12, horizontal: 20),
+                child: child,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

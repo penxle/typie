@@ -708,14 +708,18 @@ class _BottomMenuHeader extends StatelessWidget {
                   LucideLightIcons.folder_open,
               size: 20,
             ),
-            Text(
-              entity?.node.when(
-                    folder: (folder) => folder.name,
-                    post: (post) => post.title,
-                    orElse: () => throw UnimplementedError(),
-                  ) ??
-                  '내 포스트',
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Expanded(
+              child: Text(
+                entity?.node.when(
+                      folder: (folder) => folder.name,
+                      post: (post) => post.title,
+                      orElse: () => throw UnimplementedError(),
+                    ) ??
+                    '내 포스트',
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ),
           ],
         ),
