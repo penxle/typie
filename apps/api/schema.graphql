@@ -548,6 +548,7 @@ type PreorderUser {
 type Query {
   announcements: [PostView!]!
   creditCode(code: String!): CreditCode!
+  defaultPlanRule: PlanRule!
   entity(entityId: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   image(imageId: ID!): Image!

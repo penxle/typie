@@ -8,7 +8,6 @@ import 'package:gap/gap.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/logger.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -53,7 +52,6 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
     final error = snapshot.error ?? snapshot.data?.graphqlErrors ?? snapshot.data?.linkException;
     if (error != null) {
       unawaited(Sentry.captureException(error));
-      log.e(error);
 
       return Material(
         color: initialBackgroundColor ?? AppColors.transparent,

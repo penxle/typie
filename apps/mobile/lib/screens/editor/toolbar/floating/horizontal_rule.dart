@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/icons/typie.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/buttons/floating.dart';
 
@@ -16,7 +17,7 @@ class HorizontalRuleFloatingToolbar extends HookWidget {
       spacing: 8,
       children: [
         FloatingToolbarButton(
-          icon: LucideLightIcons.refresh_cw,
+          icon: TypieIcons.horizontal_rule,
           onTap: () async {
             scope.bottomToolbarMode.value = BottomToolbarMode.horizontalRule;
             await webViewController?.clearFocus();

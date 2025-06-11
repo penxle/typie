@@ -12,23 +12,12 @@ class BlockquoteFloatingToolbar extends HookWidget {
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
 
-    return Row(
-      spacing: 8,
-      children: [
-        FloatingToolbarButton(
-          icon: LucideLightIcons.refresh_cw,
-          onTap: () async {
-            scope.bottomToolbarMode.value = BottomToolbarMode.blockquote;
-            await webViewController?.clearFocus();
-          },
-        ),
-        FloatingToolbarButton(
-          icon: LucideLightIcons.trash_2,
-          onTap: () async {
-            await scope.command('delete');
-          },
-        ),
-      ],
+    return FloatingToolbarButton(
+      icon: LucideLightIcons.quote,
+      onTap: () async {
+        scope.bottomToolbarMode.value = BottomToolbarMode.blockquote;
+        await webViewController?.clearFocus();
+      },
     );
   }
 }

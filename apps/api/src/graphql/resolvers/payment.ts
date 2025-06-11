@@ -83,6 +83,13 @@ Subscription.implement({
  */
 
 builder.queryFields((t) => ({
+  defaultPlanRule: t.field({
+    type: PlanRule,
+    resolve: async () => {
+      return defaultPlanRules;
+    },
+  }),
+
   creditCode: t.withAuth({ session: true }).field({
     type: CreditCode,
     args: { code: t.input.string({ validate: { schema: redeemCodeSchema } }) },
