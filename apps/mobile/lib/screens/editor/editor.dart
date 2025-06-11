@@ -24,6 +24,7 @@ import 'package:typie/screens/editor/toolbar/floating/floating.dart';
 import 'package:typie/screens/editor/toolbar/toolbar.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/services/keyboard.dart';
+import 'package:typie/services/preference.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
@@ -39,6 +40,7 @@ class Editor extends HookWidget {
   Widget build(BuildContext context) {
     final auth = useService<Auth>();
     final keyboard = useService<Keyboard>();
+    final pref = useService<Pref>();
 
     final isReady = useState(false);
 
@@ -71,6 +73,9 @@ class Editor extends HookWidget {
             await webViewController.emitEvent('appReady');
           case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
+          case 'limitExceeded':
+            // show modal?
+            break;
         }
       });
 
@@ -189,7 +194,7 @@ class Editor extends HookWidget {
                       child: Stack(
                         children: [
                           WebView(
-                            initialUrl: '${Env.websiteUrl}/_webview/editor?slug=$slug',
+                            initialUrl: '${Env.websiteUrl}/_webview/editor?siteId=${pref.siteId}&slug=$slug',
                             initialCookies: [Cookie('typie-at', (auth.value as Authenticated).accessToken)],
                             onWebViewCreated: (controller) {
                               scope.webViewController.value = controller;

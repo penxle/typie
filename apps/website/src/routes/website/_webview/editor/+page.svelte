@@ -19,13 +19,16 @@
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
   import { handleCaretMovement } from './caret';
+  import Limit from './Limit.svelte';
   import Placeholder from './Placeholder.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
 
   const query = graphql(`
-    query WebViewEditorPage_Query($slug: String!) {
+    query WebViewEditorPage_Query($slug: String!, $siteId: ID!) {
+      ...WebViewEditor_Limit_query
+
       me @required {
         id
         name
@@ -49,6 +52,15 @@
           }
         }
       }
+
+      site(siteId: $siteId) {
+        id
+
+        usage {
+          totalCharacterCount
+          totalBlobSize
+        }
+      }
     }
   `);
 
@@ -64,6 +76,21 @@
         postId
         type
         data
+      }
+    }
+  `);
+
+  const siteUsageUpdateStream = graphql(`
+    subscription WebViewEditor_SiteUsageUpdateStream($siteId: ID!) {
+      siteUsageUpdateStream(siteId: $siteId) {
+        ... on Site {
+          id
+
+          usage {
+            totalCharacterCount
+            totalBlobSize
+          }
+        }
       }
     }
   `);
@@ -169,6 +196,8 @@
         );
       }
     });
+
+    const unsubscribe2 = siteUsageUpdateStream.subscribe({ siteId: $query.site.id });
 
     const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
     persistence.on('synced', () => forceSync());
@@ -322,6 +351,7 @@
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
+      unsubscribe2();
 
       editor?.current.off('transaction', handler);
 
@@ -451,6 +481,7 @@
 
     {#if editor}
       <Placeholder {editor} />
+      <Limit {$query} {editor} />
     {/if}
   </div>
 </div>
