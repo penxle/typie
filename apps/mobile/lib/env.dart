@@ -20,6 +20,9 @@ abstract class Env {
   static String kakaoNativeAppKey = _Env.kakaoNativeAppKey;
 
   @EnviedField()
+  static String mixpanelToken = _Env.mixpanelToken;
+
+  @EnviedField()
   static String naverClientId = _Env.naverClientId;
 
   @EnviedField()

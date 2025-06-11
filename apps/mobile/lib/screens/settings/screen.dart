@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:jiffy/jiffy.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/toast.dart';
@@ -33,6 +36,7 @@ class SettingsScreen extends HookWidget {
   Widget build(BuildContext context) {
     final auth = useService<Auth>();
     final pref = useService<Pref>();
+    final mixpanel = useService<Mixpanel>();
 
     final packageInfoFuture = useMemoized(PackageInfo.fromPlatform);
     final packageInfo = useFuture(packageInfoFuture);
@@ -93,6 +97,11 @@ class SettingsScreen extends HookWidget {
                           GSettingsScreen_UpdateMarketingConsent_MutationReq(
                             (b) => b..vars.input.marketingConsent = marketingConsent,
                           ),
+                        );
+
+                        await mixpanel.track(
+                          'update_marketing_consent',
+                          properties: {'marketingConsent': marketingConsent},
                         );
 
                         if (context.mounted) {
@@ -207,6 +216,7 @@ class SettingsScreen extends HookWidget {
                             message: '정말 로그아웃하시겠어요?',
                             confirmText: '로그아웃',
                             onConfirm: () async {
+                              unawaited(mixpanel.track('logout', properties: {'via': 'profile'}));
                               await auth.logout();
                             },
                           ),

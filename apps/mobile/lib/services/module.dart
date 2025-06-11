@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:injectable/injectable.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/env.dart';
 import 'package:typie/styles/colors.dart';
 
@@ -15,6 +16,10 @@ abstract class RegisterModule {
   @singleton
   FlutterSecureStorage get flutterSecureStorage =>
       const FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true, resetOnError: true));
+
+  @preResolve
+  @singleton
+  Future<Mixpanel> get mixpanel => Mixpanel.init(Env.mixpanelToken, trackAutomaticEvents: false);
 
   @singleton
   Dio get dio => kDebugMode

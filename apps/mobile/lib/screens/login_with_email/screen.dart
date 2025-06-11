@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/error.dart';
@@ -21,6 +24,7 @@ class LoginWithEmailScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
+    final mixpanel = useService<Mixpanel>();
     final form = useHookForm();
 
     return Screen(
@@ -44,6 +48,7 @@ class LoginWithEmailScreen extends HookWidget {
         }),
         onSubmit: (form) async {
           try {
+            unawaited(mixpanel.track('login_with_email'));
             await client.request(
               GLoginWithEmailScreen_LoginWithEmail_MutationReq(
                 (b) => b

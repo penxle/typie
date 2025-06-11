@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/context/loader.dart';
 import 'package:typie/context/modal.dart';
@@ -34,6 +36,7 @@ class EnrollPlanScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
+    final mixpanel = useService<Mixpanel>();
     final future = useMemoized(_fetchProductMap);
     final productDetailsMap = useFuture(future);
 
@@ -58,6 +61,8 @@ class EnrollPlanScreen extends HookWidget {
               await client.refetch(GEnrollPlanScreen_QueryReq());
               await client.refetch(GProfileScreen_QueryReq());
 
+              unawaited(mixpanel.track('enroll_plan', properties: {'productId': purchaseDetails.productID}));
+
               if (context.mounted) {
                 await context.showModal(
                   child: const AlertModal(title: '구독이 완료되었어요', message: '타이피의 모든 기능을 이용해보세요!'),
@@ -65,8 +70,8 @@ class EnrollPlanScreen extends HookWidget {
               }
             }
           } catch (err) {
-            log.e('EnrollPlanScreen', error: err);
             await Sentry.captureException(err);
+            log.e('EnrollPlanScreen', error: err);
           } finally {
             if (purchaseDetails.pendingCompletePurchase) {
               await InAppPurchase.instance.completePurchase(purchaseDetails);
@@ -209,7 +214,7 @@ class _FeatureItem extends StatelessWidget {
   }
 }
 
-class _PurchaseButton extends StatelessWidget {
+class _PurchaseButton extends HookWidget {
   const _PurchaseButton({required this.label, required this.onTap, required this.isActive, this.product});
 
   final _Product? product;
@@ -219,11 +224,15 @@ class _PurchaseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mixpanel = useService<Mixpanel>();
+
     return Tappable(
       onTap: () {
         if (product == null) {
           return;
         }
+
+        unawaited(mixpanel.track('enroll_plan_try', properties: {'productId': product!.details.id}));
 
         onTap(product!);
       },

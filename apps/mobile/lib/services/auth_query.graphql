@@ -3,6 +3,12 @@ query Auth_Query {
     id
     uuid
     email
+    name
+
+    avatar {
+      id
+      url
+    }
 
     sites {
       id

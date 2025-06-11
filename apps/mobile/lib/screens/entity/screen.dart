@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/toast.dart';
@@ -106,6 +107,7 @@ class _EntityList extends HookWidget {
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final pref = useService<Pref>();
+    final mixpanel = useService<Mixpanel>();
 
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
     final textEditingController = useTextEditingController();
@@ -150,6 +152,7 @@ class _EntityList extends HookWidget {
           ),
         );
 
+        unawaited(mixpanel.track('rename_folder'));
         isRenaming.value = false;
       },
       builder: (context, form) {
@@ -211,6 +214,8 @@ class _EntityList extends HookWidget {
                               icon: LucideLightIcons.folder_symlink,
                               label: '다른 폴더로 옮기기',
                               onTap: () async {
+                                unawaited(mixpanel.track('move_entity_try', properties: {'via': 'entity_menu'}));
+
                                 await context.showBottomSheet(intercept: true, child: _MoveEntityModal(entity!));
                               },
                             ),
@@ -218,6 +223,8 @@ class _EntityList extends HookWidget {
                               icon: LucideLightIcons.external_link,
                               label: '사이트에서 열기',
                               onTap: () async {
+                                unawaited(mixpanel.track('open_folder_in_browser', properties: {'via': 'entity_menu'}));
+
                                 final url = Uri.parse(entity!.url);
                                 await launchUrl(url, mode: LaunchMode.externalApplication);
                               },
@@ -226,6 +233,10 @@ class _EntityList extends HookWidget {
                               icon: LucideLightIcons.blend,
                               label: '공유하기',
                               onTap: () async {
+                                unawaited(
+                                  mixpanel.track('open_folder_share_modal', properties: {'via': 'entity_menu'}),
+                                );
+
                                 await context.showBottomSheet(
                                   intercept: true,
                                   child: ShareFolderBottomSheet(entityId: entity!.id),
@@ -245,6 +256,8 @@ class _EntityList extends HookWidget {
                                 ),
                               );
 
+                              unawaited(mixpanel.track('create_post', properties: {'via': 'entity_menu'}));
+
                               if (context.mounted) {
                                 await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
                               }
@@ -263,6 +276,8 @@ class _EntityList extends HookWidget {
                                       ..vars.input.name = '새 폴더',
                                   ),
                                 );
+
+                                unawaited(mixpanel.track('create_folder'));
 
                                 if (context.mounted) {
                                   await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
@@ -301,6 +316,8 @@ class _EntityList extends HookWidget {
                                           (b) => b..vars.input.folderId = folder!.id,
                                         ),
                                       );
+
+                                      unawaited(mixpanel.track('delete_folder'));
 
                                       if (context.mounted) {
                                         await context.router.maybePop();
@@ -371,6 +388,10 @@ class _EntityList extends HookWidget {
                                     icon: LucideLightIcons.folder_symlink,
                                     label: '다른 폴더로 옮기기',
                                     onTap: () async {
+                                      unawaited(
+                                        mixpanel.track('move_entity_try', properties: {'via': 'entity_folder_menu'}),
+                                      );
+
                                       await context.showBottomSheet(
                                         intercept: true,
                                         child: _MoveEntityModal(entities[index]),
@@ -381,6 +402,13 @@ class _EntityList extends HookWidget {
                                     icon: LucideLightIcons.external_link,
                                     label: '사이트에서 열기',
                                     onTap: () async {
+                                      unawaited(
+                                        mixpanel.track(
+                                          'open_folder_in_browser',
+                                          properties: {'via': 'entity_folder_menu'},
+                                        ),
+                                      );
+
                                       final url = Uri.parse(entities[index].url);
                                       await launchUrl(url, mode: LaunchMode.externalApplication);
                                     },
@@ -389,6 +417,13 @@ class _EntityList extends HookWidget {
                                     icon: LucideLightIcons.blend,
                                     label: '공유하기',
                                     onTap: () async {
+                                      unawaited(
+                                        mixpanel.track(
+                                          'open_folder_share_modal',
+                                          properties: {'via': 'entity_folder_menu'},
+                                        ),
+                                      );
+
                                       await context.showBottomSheet(
                                         intercept: true,
                                         child: ShareFolderBottomSheet(entityId: entities[index].id),
@@ -405,6 +440,10 @@ class _EntityList extends HookWidget {
                                             ..vars.input.siteId = pref.siteId
                                             ..vars.input.parentEntityId = entities[index].id,
                                         ),
+                                      );
+
+                                      unawaited(
+                                        mixpanel.track('create_post', properties: {'via': 'entity_folder_menu'}),
                                       );
 
                                       if (context.mounted) {
@@ -424,6 +463,10 @@ class _EntityList extends HookWidget {
                                               ..vars.input.parentEntityId = entities[index].id
                                               ..vars.input.name = '새 폴더',
                                           ),
+                                        );
+
+                                        unawaited(
+                                          mixpanel.track('create_folder', properties: {'via': 'entity_folder_menu'}),
                                         );
 
                                         if (context.mounted) {
@@ -448,6 +491,13 @@ class _EntityList extends HookWidget {
                                               ),
                                             );
 
+                                            unawaited(
+                                              mixpanel.track(
+                                                'delete_folder',
+                                                properties: {'via': 'entity_folder_menu'},
+                                              ),
+                                            );
+
                                             if (context.mounted) {
                                               await context.router.maybePop();
                                             }
@@ -467,6 +517,10 @@ class _EntityList extends HookWidget {
                                     icon: LucideLightIcons.file_symlink,
                                     label: '다른 폴더로 옮기기',
                                     onTap: () async {
+                                      unawaited(
+                                        mixpanel.track('move_entity_try', properties: {'via': 'entity_post_menu'}),
+                                      );
+
                                       await context.showBottomSheet(
                                         intercept: true,
                                         child: _MoveEntityModal(entities[index]),
@@ -477,6 +531,10 @@ class _EntityList extends HookWidget {
                                     icon: LucideLightIcons.external_link,
                                     label: '사이트에서 열기',
                                     onTap: () async {
+                                      unawaited(
+                                        mixpanel.track('open_post_in_browser', properties: {'via': 'entity_post_menu'}),
+                                      );
+
                                       final url = Uri.parse(entities[index].url);
                                       await launchUrl(url, mode: LaunchMode.externalApplication);
                                     },
@@ -485,6 +543,13 @@ class _EntityList extends HookWidget {
                                     icon: LucideLightIcons.blend,
                                     label: '공유하기',
                                     onTap: () async {
+                                      unawaited(
+                                        mixpanel.track(
+                                          'open_post_share_modal',
+                                          properties: {'via': 'entity_post_menu'},
+                                        ),
+                                      );
+
                                       await context.showBottomSheet(
                                         intercept: true,
                                         child: SharePostBottomSheet(slug: entities[index].slug),
@@ -497,6 +562,10 @@ class _EntityList extends HookWidget {
                                     onTap: () async {
                                       await client.request(
                                         GEntityScreen_DuplicatePost_MutationReq((b) => b..vars.input.postId = post.id),
+                                      );
+
+                                      unawaited(
+                                        mixpanel.track('duplicate_post', properties: {'via': 'entity_post_menu'}),
                                       );
                                     },
                                   ),
@@ -516,6 +585,10 @@ class _EntityList extends HookWidget {
                                               GEntityScreen_DeletePost_MutationReq(
                                                 (b) => b..vars.input.postId = post.id,
                                               ),
+                                            );
+
+                                            unawaited(
+                                              mixpanel.track('delete_post', properties: {'via': 'entity_post_menu'}),
                                             );
                                           },
                                         ),
@@ -609,6 +682,8 @@ class _EntityList extends HookWidget {
                           ..vars.input.upperOrder = upperOrder,
                       ),
                     );
+
+                    unawaited(mixpanel.track('move_entity', properties: {'via': 'reorder'}));
                   },
                   onReorderStart: (index) async {
                     await HapticFeedback.lightImpact();
@@ -756,6 +831,7 @@ class _MoveEntityModal extends HookWidget {
   Widget build(BuildContext context) {
     final pref = useService<Pref>();
     final client = useService<GraphQLClient>();
+    final mixpanel = useService<Mixpanel>();
     final scrollController = useScrollController();
 
     final loading = useState(false);
@@ -970,6 +1046,8 @@ class _MoveEntityModal extends HookWidget {
                                     : null,
                             ),
                           );
+
+                          unawaited(mixpanel.track('move_entity', properties: {'via': 'modal'}));
 
                           if (context.mounted) {
                             await context.router.maybePop();

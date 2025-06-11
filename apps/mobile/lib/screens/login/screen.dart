@@ -9,6 +9,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:naver_login_sdk/naver_login_sdk.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:typie/context/loader.dart';
@@ -31,8 +32,11 @@ class LoginScreen extends HookWidget {
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final googleSignIn = useService<GoogleSignIn>();
+    final mixpanel = useService<Mixpanel>();
 
     final login = useCallback((GSingleSignOnProvider provider, Map<String, dynamic> params) async {
+      unawaited(mixpanel.track('login_with_sso', properties: {'provider': provider.name.toLowerCase()}));
+
       await context.runWithLoader(() async {
         await client.request(
           GLoginScreen_AuthorizeSingleSignOn_MutationReq(
