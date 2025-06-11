@@ -157,6 +157,29 @@ class SettingsScreen extends HookWidget {
                     ),
                     const _Divider(),
                     _Item(
+                      label: '의견 보내기',
+                      onTap: () async {
+                        final String encodedSubject = Uri.encodeComponent('[타이피] 의견 제안');
+                        final String version = packageInfo.data?.version ?? 'unknown';
+                        final String encodedBody = Uri.encodeComponent(
+                          '타이피 팀에 의견을 보내고 싶습니다.\n(앱 버전 정보: $version)\n\n',
+                        );
+
+                        final Uri emailUri = Uri.parse(
+                          'mailto:hello@penxle.io?subject=$encodedSubject&body=$encodedBody',
+                        );
+
+                        if (await canLaunchUrl(emailUri)) {
+                          await launchUrl(emailUri);
+                        } else {
+                          if (context.mounted) {
+                            context.toast(ToastType.error, '메일 앱을 열 수 없습니다.');
+                          }
+                        }
+                      },
+                    ),
+                    const _Divider(),
+                    _Item(
                       label: '버전 정보',
                       trailing: packageInfo.hasData
                           ? Text(
