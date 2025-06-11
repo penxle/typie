@@ -267,8 +267,8 @@ class _SettingBottomSheet extends HookWidget {
     final yjsState = useValueListenable(scope.yjsState);
     final proseMirrorState = useValueListenable(scope.proseMirrorState);
 
-    return AppFullBottomSheet(
-      title: '본문 설정',
+    return AppBottomSheet(
+      padding: const Pad(horizontal: 20),
       child: HookForm(
         submitMode: HookFormSubmitMode.onChange,
         onSubmit: (form) async {
@@ -298,7 +298,7 @@ class _SettingBottomSheet extends HookWidget {
                 label: '첫 줄 들여쓰기',
                 trailing: HookFormSelect(
                   name: 'paragraphIndent',
-                  initialValue: (proseMirrorState?.nodes.isNotEmpty ?? false) 
+                  initialValue: (proseMirrorState?.nodes.isNotEmpty ?? false)
                       ? (proseMirrorState!.nodes.first.attrs?['paragraphIndent'] ?? 1)
                       : 1,
                   items: const [
