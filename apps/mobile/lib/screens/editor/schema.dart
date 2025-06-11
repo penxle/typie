@@ -146,3 +146,10 @@ abstract class CharacterCountState with _$CharacterCountState {
 
   factory CharacterCountState.fromJson(Map<String, dynamic> json) => _$CharacterCountStateFromJson(json);
 }
+
+@freezed
+abstract class YJSState with _$YJSState {
+  const factory YJSState({required int maxWidth}) = _YJSState;
+
+  factory YJSState.fromJson(Map<String, dynamic> json) => _$YJSStateFromJson(json);
+}
