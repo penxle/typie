@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/error.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/update_email/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/update_email/__generated__/send_email_update_email_mutation.req.gql.dart';
 import 'package:typie/widgets/forms/form.dart';
@@ -22,6 +24,7 @@ class UpdateEmailScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final form = useHookForm();
+    final mixpanel = useService<Mixpanel>();
 
     return Screen(
       heading: const Heading(title: '이메일 변경'),
@@ -48,6 +51,8 @@ class UpdateEmailScreen extends HookWidget {
                     (b) => b..vars.input.email = form.data['email'] as String,
                   ),
                 );
+
+                await mixpanel.track('send_email_update_email');
 
                 if (context.mounted) {
                   await context.showModal(

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
@@ -22,6 +25,7 @@ class DeleteUserScreen extends HookWidget {
   Widget build(BuildContext context) {
     final auth = useService<Auth>();
     final client = useService<GraphQLClient>();
+    final mixpanel = useService<Mixpanel>();
 
     final isChecked = useState(false);
 
@@ -95,6 +99,9 @@ class DeleteUserScreen extends HookWidget {
               }
 
               await client.request(GDeleteUserScreen_DeleteUser_MutationReq());
+
+              unawaited(mixpanel.track('delete_user'));
+
               await auth.clearTokens();
             },
             child: Container(

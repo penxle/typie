@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -7,6 +8,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:gql_dio_link/gql_dio_link.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:injectable/injectable.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/auth_link.dart';
 import 'package:typie/services/__generated__/auth_query.data.gql.dart';
@@ -33,21 +35,23 @@ sealed class AuthState with _$AuthState {
 
 @singleton
 class Auth extends ValueNotifier<AuthState> {
-  Auth._(this._box, this._dio, this._pref) : super(const AuthState.initializing());
+  Auth._(this._box, this._dio, this._pref, this._mixpanel) : super(const AuthState.initializing());
 
   final Box<dynamic> _box;
   final Dio _dio;
   final Pref _pref;
+  final Mixpanel _mixpanel;
 
   final _sessionTokenKey = 'session_token';
   final _accessTokenKey = 'access_token';
 
   @FactoryMethod(preResolve: true)
-  static Future<Auth> create(KV hive, Dio dio, Pref pref) async {
+  static Future<Auth> create(KV hive, Dio dio, Pref pref, Mixpanel mixpanel) async {
     final box = await hive.openBox('auth_box', encrypted: true);
 
-    final auth = Auth._(box, dio, pref);
+    final auth = Auth._(box, dio, pref, mixpanel);
     await auth._refreshTokens();
+
     return auth;
   }
 
@@ -68,6 +72,12 @@ class Auth extends ValueNotifier<AuthState> {
       final me = await _validateAccessToken(accessToken);
 
       _pref.siteId = me.sites.first.id;
+
+      unawaited(_mixpanel.identify(me.id));
+      _mixpanel.getPeople().set(r'$email', me.email);
+      _mixpanel.getPeople().set(r'$name', me.name);
+      _mixpanel.getPeople().set(r'$avatar', '${me.avatar.url}?s=256&f=png');
+
       value = AuthState.authenticated(sessionToken: sessionToken, accessToken: accessToken, me: me);
     } catch (_) {
       await clearTokens();
@@ -106,6 +116,8 @@ class Auth extends ValueNotifier<AuthState> {
     await _box.deleteAll([_sessionTokenKey, _accessTokenKey]);
 
     value = const AuthState.unauthenticated();
+
+    unawaited(_mixpanel.reset());
   }
 
   Future<String> _getAccessToken(String sessionToken) async {

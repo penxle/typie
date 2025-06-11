@@ -1,11 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/cancel_plan/__generated__/cancel_plan_query.req.gql.dart';
 import 'package:typie/styles/colors.dart';
@@ -15,11 +19,12 @@ import 'package:typie/widgets/tappable.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 @RoutePage()
-class CancelPlanScreen extends StatelessWidget {
+class CancelPlanScreen extends HookWidget {
   const CancelPlanScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final mixpanel = useService<Mixpanel>();
     return Screen(
       heading: const Heading(title: '이용권 해지'),
       padding: const Pad(horizontal: 20, top: 40),
@@ -75,6 +80,7 @@ class CancelPlanScreen extends StatelessWidget {
                       ? Uri.parse('https://apps.apple.com/account/subscriptions')
                       : Uri.parse('https://play.google.com/store/account/subscriptions?package=co.typie&sku=plan.full');
 
+                  unawaited(mixpanel.track('cancel_plan_try'));
                   await launchUrl(url, mode: LaunchMode.externalApplication);
                 },
                 child: Container(

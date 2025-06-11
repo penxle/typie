@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/modals/__generated__/share_folder_query.data.gql.dart';
 import 'package:typie/modals/__generated__/share_folder_query.req.gql.dart';
@@ -19,13 +24,15 @@ import 'package:typie/widgets/forms/switch.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/tappable.dart';
 
-class SharePostBottomSheet extends StatelessWidget {
+class SharePostBottomSheet extends HookWidget {
   const SharePostBottomSheet({required this.slug, super.key});
 
   final String slug;
 
   @override
   Widget build(BuildContext context) {
+    final mixpanel = useService<Mixpanel>();
+
     return AppFullBottomSheet(
       title: '이 포스트 공유하기',
       child: GraphQLOperation(
@@ -34,16 +41,37 @@ class SharePostBottomSheet extends StatelessWidget {
           return HookForm(
             submitMode: HookFormSubmitMode.onChange,
             onSubmit: (form) async {
+              final visibility = form.data['visibility'] as GEntityVisibility;
+              final contentRating = form.data['contentRating'] as GPostContentRating;
+              final hasPassword = form.data['hasPassword'] as bool;
+              final allowComment = form.data['allowComment'] as bool;
+              final allowReaction = form.data['allowReaction'] as bool;
+              final protectContent = form.data['protectContent'] as bool;
+
               await client.request(
                 GSharePost_UpdatePostOption_MutationReq(
                   (b) => b
                     ..vars.input.postId = data.post.id
-                    ..vars.input.visibility = form.data['visibility'] as GEntityVisibility
-                    ..vars.input.contentRating = form.data['contentRating'] as GPostContentRating
-                    ..vars.input.password = form.data['hasPassword'] as bool ? form.data['password'] as String? : null
-                    ..vars.input.allowComment = form.data['allowComment'] as bool
-                    ..vars.input.allowReaction = form.data['allowReaction'] as bool
-                    ..vars.input.protectContent = form.data['protectContent'] as bool,
+                    ..vars.input.visibility = visibility
+                    ..vars.input.contentRating = contentRating
+                    ..vars.input.password = hasPassword ? form.data['password'] as String? : null
+                    ..vars.input.allowComment = allowComment
+                    ..vars.input.allowReaction = allowReaction
+                    ..vars.input.protectContent = protectContent,
+                ),
+              );
+
+              unawaited(
+                mixpanel.track(
+                  'update_post_option',
+                  properties: {
+                    'visibility': visibility.name,
+                    'hasPassword': hasPassword,
+                    'contentRating': contentRating.name,
+                    'allowComment': allowComment,
+                    'allowReaction': allowReaction,
+                    'protectContent': protectContent,
+                  },
                 ),
               );
             },
@@ -172,6 +200,8 @@ class SharePostBottomSheet extends StatelessWidget {
                                 sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
                               ),
                             );
+
+                            unawaited(mixpanel.track('copy_post_share_url'));
                           } catch (_) {
                             // pass
                           }
@@ -198,13 +228,15 @@ class SharePostBottomSheet extends StatelessWidget {
   }
 }
 
-class ShareFolderBottomSheet extends StatelessWidget {
+class ShareFolderBottomSheet extends HookWidget {
   const ShareFolderBottomSheet({required this.entityId, super.key});
 
   final String entityId;
 
   @override
   Widget build(BuildContext context) {
+    final mixpanel = useService<Mixpanel>();
+
     return AppFullBottomSheet(
       title: '폴더 공유하기',
       child: GraphQLOperation(
@@ -213,13 +245,17 @@ class ShareFolderBottomSheet extends StatelessWidget {
           return HookForm(
             submitMode: HookFormSubmitMode.onChange,
             onSubmit: (form) async {
+              final visibility = form.data['visibility'] as GEntityVisibility;
+
               await client.request(
                 GShareFolder_UpdateFolderOption_MutationReq(
                   (b) => b
                     ..vars.input.folderId = (data.entity.node as GShareFolder_QueryData_entity_node__asFolder).id
-                    ..vars.input.visibility = form.data['visibility'] as GEntityVisibility,
+                    ..vars.input.visibility = visibility,
                 ),
               );
+
+              unawaited(mixpanel.track('update_folder_option', properties: {'visibility': visibility.name}));
             },
             builder: (context, form) {
               return Column(
@@ -271,6 +307,8 @@ class ShareFolderBottomSheet extends StatelessWidget {
                               sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
                             ),
                           );
+
+                          unawaited(mixpanel.track('copy_folder_share_url'));
                         } catch (_) {
                           // pass
                         }

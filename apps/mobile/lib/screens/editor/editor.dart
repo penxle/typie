@@ -6,6 +6,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/env.dart';
@@ -47,6 +48,7 @@ class Editor extends HookWidget {
     final auth = useService<Auth>();
     final keyboard = useService<Keyboard>();
     final pref = useService<Pref>();
+    final mixpanel = useService<Mixpanel>();
 
     final isReady = useState(false);
 
@@ -118,6 +120,8 @@ class Editor extends HookWidget {
                           icon: LucideLightIcons.info,
                           label: '정보',
                           onTap: () async {
+                            unawaited(mixpanel.track('open_post_info_modal', properties: {'via': 'editor'}));
+
                             await context.showBottomSheet(
                               intercept: true,
                               child: _EditorInfoBottomSheet(characterCountState: scope.characterCountState),
@@ -135,6 +139,8 @@ class Editor extends HookWidget {
                           icon: LucideLightIcons.external_link,
                           label: '사이트에서 열기',
                           onTap: () async {
+                            unawaited(mixpanel.track('open_post_in_browser', properties: {'via': 'editor'}));
+
                             final url = Uri.parse(data.post.entity.url);
                             await launchUrl(url, mode: LaunchMode.externalApplication);
                           },
@@ -160,6 +166,7 @@ class Editor extends HookWidget {
                                 )
                               : null,
                           onTap: () async {
+                            unawaited(mixpanel.track('open_post_share_modal', properties: {'via': 'editor'}));
                             await context.showBottomSheet(intercept: true, child: SharePostBottomSheet(slug: slug));
                           },
                         ),
@@ -170,6 +177,8 @@ class Editor extends HookWidget {
                             final res = await client.request(
                               GEditorScreen_DuplicatePost_MutationReq((b) => b..vars.input.postId = data.post.id),
                             );
+
+                            unawaited(mixpanel.track('duplicate_post', properties: {'via': 'editor'}));
 
                             if (context.mounted) {
                               await context.router.popAndPush(EditorRoute(slug: res.duplicatePost.entity.slug));
@@ -191,6 +200,8 @@ class Editor extends HookWidget {
                                   await client.request(
                                     GEditorScreen_DeletePost_MutationReq((b) => b..vars.input.postId = data.post.id),
                                   );
+
+                                  unawaited(mixpanel.track('delete_post', properties: {'via': 'editor'}));
 
                                   if (context.mounted) {
                                     await context.router.maybePop();

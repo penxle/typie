@@ -3,9 +3,11 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:luthor/luthor.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/error.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/update_site_slug/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/update_site_slug/__generated__/update_site_slug_mutation.req.gql.dart';
 import 'package:typie/widgets/forms/form.dart';
@@ -20,6 +22,7 @@ class UpdateSiteSlugScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final form = useHookForm();
+    final mixpanel = useService<Mixpanel>();
 
     return Screen(
       heading: const Heading(title: '사이트 주소 변경'),
@@ -58,6 +61,8 @@ class UpdateSiteSlugScreen extends HookWidget {
                       ..vars.input.siteId = data.me!.sites[0].id,
                   ),
                 );
+
+                await mixpanel.track('update_site_slug');
 
                 if (context.mounted) {
                   context.toast(ToastType.success, '사이트 주소가 변경되었어요.');
