@@ -42,7 +42,7 @@ class DeleteUserScreen extends HookWidget {
           ),
           const Gap(4),
           const Text(
-            '지금 탈퇴하시면, 아래 내용이 즉시 적용돼요.',
+            '탈퇴 전 아래 유의사항을 확인해주세요.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: AppColors.gray_500),
           ),
@@ -59,23 +59,33 @@ class DeleteUserScreen extends HookWidget {
               children: [
                 Text('유의사항', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
                 Gap(4),
-                Text('- 작성한 모든 글과 데이터는 삭제되며 복구할 수 없어요.', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
                 Text(
-                  '- 탈퇴 시 회원 정보는 모두 삭제되며, 재가입하더라도 삭제된 데이터는 복구되지 않아요.',
+                  '- 작성한 모든 글과 데이터는 탈퇴와 함께 삭제되며 재가입시에도 복구할 수 없어요.',
                   style: TextStyle(fontSize: 14, color: AppColors.gray_700),
                 ),
-                Text('- 프리미엄 혜택은 더 이상 이용할 수 없어요.', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
-                Text('- 남은 기간의 환불은 제공되지 않아요.', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
+                Text(
+                  '- 이용중인 사이트 주소는 다시 이용할 수 없어요. 사이트 주소를 다시 사용할 계획이라면, 탈퇴 전 기존 주소를 변경해주세요.',
+                  style: TextStyle(fontSize: 14, color: AppColors.gray_700),
+                ),
+                Text(
+                  '- 남은 이용권 기간은 탈퇴와 함께 소멸되며, 환불은 별도로 제공되지 않아요.',
+                  style: TextStyle(fontSize: 14, color: AppColors.gray_700),
+                ),
+                Text(
+                  '- 스토어에서 이용권을 구매했을 경우, 구독 취소 처리는 스토어 규정상 스토어 내 설정에서 직접 진행해야 해요.',
+                  style: TextStyle(fontSize: 14, color: AppColors.gray_700),
+                ),
               ],
             ),
           ),
-          const Gap(8),
+          const Gap(12),
           Tappable(
             onTap: () {
               isChecked.value = !isChecked.value;
             },
             child: Row(
-              spacing: 4,
+              mainAxisAlignment: MainAxisAlignment.center,
+              spacing: 8,
               children: [
                 Container(
                   decoration: BoxDecoration(
