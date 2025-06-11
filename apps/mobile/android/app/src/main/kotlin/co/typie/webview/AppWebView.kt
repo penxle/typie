@@ -152,7 +152,7 @@ class AppWebView(
 
       "clearFocus" -> {
         view.windowInsetsController?.hide(WindowInsets.Type.ime())
-        webView.clearFocus()
+        // webView.clearFocus()
         result.success(null)
       }
 
