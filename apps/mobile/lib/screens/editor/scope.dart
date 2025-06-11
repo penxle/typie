@@ -13,6 +13,7 @@ class EditorStateScope extends InheritedWidget {
     required this.data,
     required this.webViewController,
     required this.proseMirrorState,
+    required this.characterCountState,
     required this.keyboardHeight,
     required this.isKeyboardVisible,
     required this.bottomToolbarMode,
@@ -23,6 +24,7 @@ class EditorStateScope extends InheritedWidget {
   final ValueNotifier<GEditorScreen_QueryData?> data;
   final ValueNotifier<WebViewController?> webViewController;
   final ValueNotifier<ProseMirrorState?> proseMirrorState;
+  final ValueNotifier<CharacterCountState?> characterCountState;
   final ValueNotifier<double> keyboardHeight;
   final ValueNotifier<bool> isKeyboardVisible;
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;

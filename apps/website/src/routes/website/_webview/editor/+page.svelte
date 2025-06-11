@@ -1,6 +1,7 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
+  import { getText } from '@tiptap/core';
   import { Mark } from '@tiptap/pm/model';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
@@ -10,6 +11,7 @@
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostSyncType } from '@/enums';
+  import { textSerializers } from '@/pm/serializer';
   import { browser } from '$app/environment';
   import { graphql } from '$graphql';
   import { autosize } from '$lib/actions';
@@ -32,6 +34,19 @@
       me @required {
         id
         name
+
+        subscription {
+          id
+
+          plan {
+            id
+
+            rule {
+              maxTotalCharacterCount
+              maxTotalBlobSize
+            }
+          }
+        }
       }
 
       post(slug: $slug) {
@@ -230,6 +245,21 @@
         marks: anchor.marks().map((mark) => mark.toJSON()),
         storedMarks: editor.state.storedMarks?.map((mark) => mark.toJSON()),
         selection: editor.state.selection.toJSON(),
+      });
+
+      const text = getText(editor.state.doc, {
+        blockSeparator: '\n',
+        textSerializers,
+      });
+
+      const countWithWhitespace = [...text.replaceAll(/\s+/g, ' ').trim()].length;
+      const countWithoutWhitespace = [...text.replaceAll(/\s/g, '').trim()].length;
+      const countWithoutWhitespaceAndPunctuation = [...text.replaceAll(/[\s\p{P}]/gu, '').trim()].length;
+
+      window.__webview__?.emitEvent('setCharacterCountState', {
+        countWithWhitespace,
+        countWithoutWhitespace,
+        countWithoutWhitespaceAndPunctuation,
       });
 
       const marks =

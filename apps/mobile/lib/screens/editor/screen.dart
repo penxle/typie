@@ -18,6 +18,7 @@ class EditorScreen extends HookWidget {
     final data = useValueNotifier<GEditorScreen_QueryData?>(null);
     final webViewController = useValueNotifier<WebViewController?>(null);
     final proseMirrorState = useValueNotifier<ProseMirrorState?>(null);
+    final characterCountState = useValueNotifier<CharacterCountState?>(null);
     final keyboardHeight = useValueNotifier<double>(0);
     final isKeyboardVisible = useValueNotifier<bool>(false);
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
@@ -27,6 +28,7 @@ class EditorScreen extends HookWidget {
       data: data,
       webViewController: webViewController,
       proseMirrorState: proseMirrorState,
+      characterCountState: characterCountState,
       keyboardHeight: keyboardHeight,
       isKeyboardVisible: isKeyboardVisible,
       bottomToolbarMode: bottomToolbarMode,

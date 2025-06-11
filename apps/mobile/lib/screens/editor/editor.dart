@@ -9,6 +9,7 @@ import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/env.dart';
+import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
@@ -76,6 +77,8 @@ class Editor extends HookWidget {
             await webViewController.emitEvent('appReady');
           case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
+          case 'setCharacterCountState':
+            scope.characterCountState.value = CharacterCountState.fromJson(event.data as Map<String, dynamic>);
           case 'limitExceeded':
             await webViewController.clearFocus();
             if (context.mounted) {
@@ -107,6 +110,16 @@ class Editor extends HookWidget {
                     intercept: true,
                     child: BottomMenu(
                       items: [
+                        BottomMenuItem(
+                          icon: LucideLightIcons.info,
+                          label: '정보',
+                          onTap: () async {
+                            await context.showBottomSheet(
+                              intercept: true,
+                              child: _EditorInfoBottomSheet(characterCountState: scope.characterCountState),
+                            );
+                          },
+                        ),
                         BottomMenuItem(
                           icon: LucideLightIcons.external_link,
                           label: '사이트에서 열기',
@@ -350,6 +363,66 @@ class _FeatureItem extends StatelessWidget {
         Icon(icon, size: 16),
         Text(label, style: const TextStyle(fontSize: 14)),
       ],
+    );
+  }
+}
+
+class _EditorInfoBottomSheet extends HookWidget {
+  const _EditorInfoBottomSheet({required this.characterCountState});
+
+  final ValueNotifier<CharacterCountState?> characterCountState;
+
+  @override
+  Widget build(BuildContext context) {
+    final characterCountValue = useValueListenable(characterCountState);
+
+    return AppBottomSheet(
+      padding: const Pad(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            '본문 정보',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray_700),
+          ),
+          const Gap(12),
+          const Text(
+            '글자 수',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+          ),
+          const Gap(8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('공백 포함', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text(
+                '${characterCountValue?.countWithWhitespace.comma ?? '0'}자',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('공백 미포함', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text(
+                '${characterCountValue?.countWithoutWhitespace.comma ?? '0'}자',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('공백/부호 미포함', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text(
+                '${characterCountValue?.countWithoutWhitespaceAndPunctuation.comma ?? '0'}자',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
