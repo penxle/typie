@@ -46,7 +46,7 @@ class OssLicensesScreen extends HookWidget {
                     await context.showBottomSheet(
                       child: AppFullBottomSheet(
                         title: license.key,
-                        padding: null,
+                        padding: Pad.zero,
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
