@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -107,71 +109,73 @@ class TextToolbar extends HookWidget {
               await scope.command('strike');
             },
           ),
-          const AppVerticalDivider(height: 20),
-          IconToolbarButton(
-            icon: LucideLightIcons.link,
-            isActive: proseMirrorState?.isMarkActive('link') ?? false,
-            onTap: () async {
-              await context.showModal(
-                intercept: true,
-                child: HookForm(
-                  onSubmit: (form) async {
-                    await scope.command('link', attrs: {'url': form.data['url']});
-                  },
-                  builder: (context, form) {
-                    return ConfirmModal(
-                      title: '링크 삽입',
-                      confirmText: '삽입',
-                      onConfirm: () async {
-                        await form.submit();
-                      },
-                      child: HookFormTextField.collapsed(
-                        initialValue: (proseMirrorState?.getMarkAttributes('link')?['href'] ?? '') as String,
-                        name: 'url',
-                        placeholder: 'https://...',
-                        style: const TextStyle(fontSize: 16),
-                        autofocus: true,
-                        submitOnEnter: false,
-                        keyboardType: TextInputType.url,
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-          IconToolbarButton(
-            icon: TypieIcons.ruby,
-            isActive: proseMirrorState?.isMarkActive('ruby') ?? false,
-            onTap: () async {
-              await context.showModal(
-                intercept: true,
-                child: HookForm(
-                  onSubmit: (form) async {
-                    await scope.command('ruby', attrs: {'text': form.data['text']});
-                  },
-                  builder: (context, form) {
-                    return ConfirmModal(
-                      title: '루비 삽입',
-                      confirmText: '삽입',
-                      onConfirm: () async {
-                        await form.submit();
-                      },
-                      child: HookFormTextField.collapsed(
-                        initialValue: (proseMirrorState?.getMarkAttributes('ruby')?['text'] ?? '') as String,
-                        name: 'text',
-                        placeholder: '텍스트 위에 들어갈 문구',
-                        style: const TextStyle(fontSize: 16),
-                        autofocus: true,
-                        submitOnEnter: false,
-                        keyboardType: TextInputType.text,
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
+          if (Platform.isIOS) ...[
+            const AppVerticalDivider(height: 20),
+            IconToolbarButton(
+              icon: LucideLightIcons.link,
+              isActive: proseMirrorState?.isMarkActive('link') ?? false,
+              onTap: () async {
+                await context.showModal(
+                  intercept: true,
+                  child: HookForm(
+                    onSubmit: (form) async {
+                      await scope.command('link', attrs: {'url': form.data['url']});
+                    },
+                    builder: (context, form) {
+                      return ConfirmModal(
+                        title: '링크 삽입',
+                        confirmText: '삽입',
+                        onConfirm: () async {
+                          await form.submit();
+                        },
+                        child: HookFormTextField.collapsed(
+                          initialValue: (proseMirrorState?.getMarkAttributes('link')?['href'] ?? '') as String,
+                          name: 'url',
+                          placeholder: 'https://...',
+                          style: const TextStyle(fontSize: 16),
+                          autofocus: true,
+                          submitOnEnter: false,
+                          keyboardType: TextInputType.url,
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+            IconToolbarButton(
+              icon: TypieIcons.ruby,
+              isActive: proseMirrorState?.isMarkActive('ruby') ?? false,
+              onTap: () async {
+                await context.showModal(
+                  intercept: true,
+                  child: HookForm(
+                    onSubmit: (form) async {
+                      await scope.command('ruby', attrs: {'text': form.data['text']});
+                    },
+                    builder: (context, form) {
+                      return ConfirmModal(
+                        title: '루비 삽입',
+                        confirmText: '삽입',
+                        onConfirm: () async {
+                          await form.submit();
+                        },
+                        child: HookFormTextField.collapsed(
+                          initialValue: (proseMirrorState?.getMarkAttributes('ruby')?['text'] ?? '') as String,
+                          name: 'text',
+                          placeholder: '텍스트 위에 들어갈 문구',
+                          style: const TextStyle(fontSize: 16),
+                          autofocus: true,
+                          submitOnEnter: false,
+                          keyboardType: TextInputType.text,
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ],
           const AppVerticalDivider(height: 20),
           IconToolbarButton(
             icon: LucideLightIcons.align_left,
