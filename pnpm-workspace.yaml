@@ -14,8 +14,6 @@ onlyBuiltDependencies:
   - argon2
   - esbuild
   - sharp
-patchedDependencies:
-  happy-dom-without-node: patches/happy-dom-without-node.patch
 publicHoistPattern:
   - '*eslint*'
   - '*prettier*'

@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  happy-dom-without-node:
-    hash: bdbd33de2d398b5705266810a5f85dec16e30c6eab564e2bd4a7d0acbefaa23b
-    path: patches/happy-dom-without-node.patch
-
 importers:
 
   .:
@@ -460,6 +455,9 @@ importers:
       graphql-ws:
         specifier: ^6.0.5
         version: 6.0.5(graphql@16.11.0)(ws@8.18.2)
+      happy-dom:
+        specifier: ^18.0.1
+        version: 18.0.1
       hono:
         specifier: ^4.7.11
         version: 4.7.11
@@ -734,7 +732,7 @@ importers:
         version: 6.3.5(@types/node@24.0.0)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0)
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@types/node@24.0.0)(jsdom@26.1.0)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@types/node@24.0.0)(happy-dom@18.0.1)(jsdom@26.1.0)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0)
       wonka:
         specifier: ^6.3.5
         version: 6.3.5
@@ -3601,6 +3599,9 @@ packages:
   '@types/node@17.0.45':
     resolution: {integrity: sha512-w+tIMs3rq2afQdsPJlODhoUEKzFP1ayaoyl1CcnwtIlsVe7K7bA1NGm4s3PraqTLlXnbIN84zuBlxBWo1u9BLw==}
 
+  '@types/node@20.19.0':
+    resolution: {integrity: sha512-hfrc+1tud1xcdVTABC2JiomZJEklMcXYNTVtZLAeqTVWD+qL5jkHKT+1lOtqDdGxt+mB53DTtiz673vfjU8D1Q==}
+
   '@types/node@22.15.31':
     resolution: {integrity: sha512-jnVe5ULKl6tijxUhvQeNbQG/84fHfg+yMak02cT8QVhBx/F05rAVxCGBYYTh2EKz22D6JF5ktXuNwdx7b9iEGw==}
 
@@ -3668,6 +3669,9 @@ packages:
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
 
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
@@ -5633,6 +5637,10 @@ packages:
   happy-dom-without-node@14.12.3:
     resolution: {integrity: sha512-1wp8+GFneT8mBjVnzancXHRuscEUH3vnb38lfCHPxuSu6OiRw1kQzHFbTGYlNCU2YXOlVIlzsS6xg9nAr7Xg6Q==}
     engines: {node: '>=16.0.0'}
+
+  happy-dom@18.0.1:
+    resolution: {integrity: sha512-qn+rKOW7KWpVTtgIUi6RVmTBZJSe2k0Db0vh1f7CWrWclkkc7/Q+FrOfkZIb2eiErLyqu5AXEzE7XthO9JVxRA==}
+    engines: {node: '>=20.0.0'}
 
   has-bigints@1.1.0:
     resolution: {integrity: sha512-R3pbpkcIqv2Pm3dUwgjclDRVmWpTJW2DcMzcIhEXEx1oh/CEMObMm3KLmRJOdvhM7o4uQBnwr8pzRK2sJWIqfg==}
@@ -12391,7 +12399,7 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.0.0-beta.7(@tiptap/pm@3.0.0-beta.7)
       '@tiptap/pm': 3.0.0-beta.7
-      happy-dom-without-node: 14.12.3(patch_hash=bdbd33de2d398b5705266810a5f85dec16e30c6eab564e2bd4a7d0acbefaa23b)
+      happy-dom-without-node: 14.12.3
 
   '@tiptap/pm@3.0.0-beta.7':
     dependencies:
@@ -12436,7 +12444,7 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 22.15.31
+      '@types/node': 24.0.0
 
   '@types/cacheable-request@6.0.3':
     dependencies:
@@ -12472,7 +12480,7 @@ snapshots:
 
   '@types/express-serve-static-core@4.19.6':
     dependencies:
-      '@types/node': 22.15.31
+      '@types/node': 24.0.0
       '@types/qs': 6.14.0
       '@types/range-parser': 1.2.7
       '@types/send': 0.17.5
@@ -12544,6 +12552,10 @@ snapshots:
 
   '@types/node@17.0.45': {}
 
+  '@types/node@20.19.0':
+    dependencies:
+      undici-types: 6.21.0
+
   '@types/node@22.15.31':
     dependencies:
       undici-types: 6.21.0
@@ -12584,7 +12596,7 @@ snapshots:
   '@types/request@2.48.12':
     dependencies:
       '@types/caseless': 0.12.5
-      '@types/node': 22.15.31
+      '@types/node': 24.0.0
       '@types/tough-cookie': 4.0.5
       form-data: 2.5.3
     optional: true
@@ -12598,12 +12610,12 @@ snapshots:
   '@types/send@0.17.5':
     dependencies:
       '@types/mime': 1.3.5
-      '@types/node': 22.15.31
+      '@types/node': 24.0.0
 
   '@types/serve-static@1.15.8':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 22.15.31
+      '@types/node': 24.0.0
       '@types/send': 0.17.5
 
   '@types/shimmer@1.2.0': {}
@@ -12628,6 +12640,8 @@ snapshots:
     optional: true
 
   '@types/unist@3.0.3': {}
+
+  '@types/whatwg-mimetype@3.0.2': {}
 
   '@types/yauzl@2.10.3':
     dependencies:
@@ -14972,12 +14986,18 @@ snapshots:
     optionalDependencies:
       uglify-js: 3.19.3
 
-  happy-dom-without-node@14.12.3(patch_hash=bdbd33de2d398b5705266810a5f85dec16e30c6eab564e2bd4a7d0acbefaa23b):
+  happy-dom-without-node@14.12.3:
     dependencies:
       entities: 4.5.0
       webidl-conversions: 7.0.0
       whatwg-mimetype: 3.0.0
       whatwg-url: 14.2.0
+
+  happy-dom@18.0.1:
+    dependencies:
+      '@types/node': 20.19.0
+      '@types/whatwg-mimetype': 3.0.2
+      whatwg-mimetype: 3.0.0
 
   has-bigints@1.1.0: {}
 
@@ -16911,7 +16931,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 22.15.31
+      '@types/node': 24.0.0
       long: 5.3.2
 
   proxy-from-env@1.1.0: {}
@@ -18264,7 +18284,7 @@ snapshots:
     optionalDependencies:
       vite: 6.3.5(@types/node@24.0.0)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0)
 
-  vitest@3.2.3(@types/node@24.0.0)(jsdom@26.1.0)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0):
+  vitest@3.2.3(@types/node@24.0.0)(happy-dom@18.0.1)(jsdom@26.1.0)(lightningcss@1.25.1)(tsx@4.19.4)(yaml@2.8.0):
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.3
@@ -18291,6 +18311,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.0.0
+      happy-dom: 18.0.1
       jsdom: 26.1.0
     transitivePeerDependencies:
       - jiti
