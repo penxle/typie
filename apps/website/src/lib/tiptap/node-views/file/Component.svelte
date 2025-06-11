@@ -134,49 +134,51 @@
       </div>
     {/if}
 
-    {#if editor?.current.isEditable && !window.__webview__}
-      <Menu>
-        {#snippet button({ open })}
-          <div
-            class={css(
-              {
-                marginRight: '12px',
-                borderRadius: '4px',
-                padding: '2px',
-                color: 'gray.400',
-                opacity: '0',
-                transition: 'common',
-                _hover: { backgroundColor: 'gray.200' },
-                _groupHover: { opacity: '100' },
-              },
-              open && { opacity: '100' },
-            )}
-          >
-            <Icon icon={EllipsisIcon} size={20} />
-          </div>
-        {/snippet}
+    {#if typeof window !== 'undefined' && !window.__webview__}
+      {#if editor?.current.isEditable}
+        <Menu>
+          {#snippet button({ open })}
+            <div
+              class={css(
+                {
+                  marginRight: '12px',
+                  borderRadius: '4px',
+                  padding: '2px',
+                  color: 'gray.400',
+                  opacity: '0',
+                  transition: 'common',
+                  _hover: { backgroundColor: 'gray.200' },
+                  _groupHover: { opacity: '100' },
+                },
+                open && { opacity: '100' },
+              )}
+            >
+              <Icon icon={EllipsisIcon} size={20} />
+            </div>
+          {/snippet}
 
-        <MenuItem onclick={() => deleteNode()} variant="danger">
-          <Icon icon={Trash2Icon} size={12} />
-          <span>삭제</span>
-        </MenuItem>
-      </Menu>
-    {:else if attrs.id}
-      <div
-        class={css({
-          marginRight: '12px',
-          borderRadius: '4px',
-          padding: '2px',
-          color: 'gray.400',
-        })}
-      >
-        <Icon icon={ArrowDownToLineIcon} size={20} />
-      </div>
+          <MenuItem onclick={() => deleteNode()} variant="danger">
+            <Icon icon={Trash2Icon} size={12} />
+            <span>삭제</span>
+          </MenuItem>
+        </Menu>
+      {:else if attrs.id}
+        <div
+          class={css({
+            marginRight: '12px',
+            borderRadius: '4px',
+            padding: '2px',
+            color: 'gray.400',
+          })}
+        >
+          <Icon icon={ArrowDownToLineIcon} size={20} />
+        </div>
+      {/if}
     {/if}
   </svelte:element>
 </NodeView>
 
-{#if pickerOpened && !attrs.id && !inflightFile && editor?.current.isEditable && !window.__webview__}
+{#if pickerOpened && !attrs.id && !inflightFile && editor?.current.isEditable && (typeof window === 'undefined' || !window.__webview__)}
   <div
     class={center({
       flexDirection: 'column',
