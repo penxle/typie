@@ -1,3 +1,4 @@
+/* eslint-disable no-var */
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -13,6 +14,12 @@ type NodeView = {
 };
 
 declare global {
+  import { Window } from 'happy-dom';
+
+  var __happydom__: {
+    Window: Window;
+  };
+
   interface Window {
     __webview__?: WebView;
   }

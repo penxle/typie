@@ -42,6 +42,7 @@
     "fast-json-stable-stringify": "^2.1.0",
     "focus-trap": "^7.6.5",
     "graphql-ws": "^6.0.5",
+    "happy-dom": "^18.0.1",
     "hono": "^4.7.11",
     "ky": "^1.8.1",
     "linkifyjs": "^4.3.1",
