@@ -154,13 +154,13 @@
 
       <div class={flex({ flexDirection: 'column', gap: '4px', wordBreak: 'keep-all' })}>
         <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>
-          아직 모바일에서는
+          타이피 앱에서
           <br />
-          서비스를 제공하지 않아요
+          글쓰기를 이어가 보세요
         </h1>
 
         <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>
-          PC에서 접속하시면 타이피의 모든 기능을 이용하실 수 있어요.
+          모바일에서도 타이피의 몰입감 있는 글쓰기 환경을 그대로 이용하실 수 있어요.
         </div>
       </div>
 
@@ -171,22 +171,9 @@
 
       <HorizontalDivider color="secondary" />
 
-      <div>
-        <Button
-          style={css.raw({ width: 'full' })}
-          external
-          href="https://x.com/intent/follow?screen_name=typieofficial"
-          size="lg"
-          type="link"
-          variant="secondary"
-        >
-          타이피 트위터 팔로우하기
-        </Button>
-
-        <p class={css({ marginTop: '6px', fontSize: '11px', textAlign: 'center', color: 'gray.500' })}>
-          타이피 트위터 팔로우하고 최근 소식을 가장 빠르게 받아보세요
-        </p>
-      </div>
+      <Button style={css.raw({ width: 'full' })} external href="https://typie.link" size="lg" type="link" variant="secondary">
+        타이피 앱 다운로드
+      </Button>
     </div>
   </div>
 {:else}
