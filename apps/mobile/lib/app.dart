@@ -5,6 +5,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/error.dart';
 import 'package:typie/providers/push_notification.dart';
 import 'package:typie/routers/app.dart';
+import 'package:typie/routers/observer.dart';
 import 'package:typie/styles/colors.dart';
 
 class App extends HookWidget {
@@ -24,7 +25,7 @@ class App extends HookWidget {
 
     return SentryWidget(
       child: MaterialApp.router(
-        routerConfig: router.config(navigatorObservers: () => [SentryNavigatorObserver()]),
+        routerConfig: router.config(navigatorObservers: () => [RouterObserver(), SentryNavigatorObserver()]),
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primaryColor: AppColors.gray_950,
