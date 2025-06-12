@@ -92,21 +92,13 @@ class LoginScreen extends HookWidget {
                   foregroundColor: AppColors.gray_950,
                   backgroundColor: const Color(0xFFFEE500),
                   onTap: () async {
-                    if (!await isKakaoTalkInstalled()) {
-                      if (context.mounted) {
-                        context.toast(ToastType.error, '카카오톡 앱을 먼저 설치해주세요.');
-                      }
-
-                      return;
-                    }
-
                     try {
                       await UserApi.instance.logout();
                     } catch (_) {
                       // pass
                     }
 
-                    final result = await UserApi.instance.loginWithKakaoTalk();
+                    final result = await UserApi.instance.loginWithKakaoAccount();
                     await login(GSingleSignOnProvider.KAKAO, {'access_token': result.accessToken});
                   },
                 ),
