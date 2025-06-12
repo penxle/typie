@@ -118,7 +118,6 @@ class LoginScreen extends HookWidget {
                   onTap: () async {
                     final completer = Completer<bool>();
 
-                    await NaverLoginSDK.logout();
                     await NaverLoginSDK.authenticate(
                       callback: OAuthLoginCallback(
                         onSuccess: () {
