@@ -181,7 +181,7 @@
     </div>
   </div>
 
-  {#if !$user.subscription || !$user.billingKey}
+  {#if !$user.subscription}
     <div class={flex({ direction: 'column', gap: '8px' })}>
       <p class={css({ fontWeight: 'medium' })}>이용중인 플랜</p>
 
