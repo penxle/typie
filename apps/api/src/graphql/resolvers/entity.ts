@@ -310,7 +310,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
-        .select({ id: Entities.id, siteId: Entities.siteId, depth: Entities.depth })
+        .select({ id: Entities.id, siteId: Entities.siteId, parentId: Entities.parentId, depth: Entities.depth })
         .from(Entities)
         .where(eq(Entities.id, input.entityId))
         .then(firstOrThrow);
@@ -320,8 +320,15 @@ builder.mutationFields((t) => ({
         siteId: entity.siteId,
       });
 
-      let depth = 0;
-      if (input.parentEntityId) {
+      let parentId, depth;
+
+      if (input.parentEntityId === null) {
+        parentId = null;
+        depth = 0;
+      } else if (input.parentEntityId === undefined) {
+        parentId = entity.parentId;
+        depth = entity.depth;
+      } else {
         const parentEntity = await db
           .select({ id: Entities.id, depth: Entities.depth })
           .from(Entities)
@@ -351,6 +358,7 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'circular_reference' });
         }
 
+        parentId = parentEntity.id;
         depth = parentEntity.depth + 1;
       }
 
@@ -360,31 +368,33 @@ builder.mutationFields((t) => ({
         const updatedEntity = await tx
           .update(Entities)
           .set({
-            parentId: input.parentEntityId,
+            parentId,
+            depth,
             order: generateEntityOrder({
               lower: input.lowerOrder,
               upper: input.upperOrder,
             }),
-            depth,
           })
           .where(eq(Entities.id, entity.id))
           .returning()
           .then(firstOrThrow);
 
-        await tx.execute(sql`
-          WITH RECURSIVE sq AS (
-            SELECT ${Entities.id}, ${Entities.depth}
-            FROM ${Entities}
-            WHERE ${eq(Entities.parentId, entity.id)}
-            UNION ALL
-            SELECT ${Entities.id}, ${Entities.depth}
-            FROM ${Entities}
-            JOIN sq ON ${Entities.parentId} = sq.id
-          )
-          UPDATE ${Entities}
-          SET depth = depth + ${depthDelta}
-          WHERE id IN (SELECT id FROM sq)
-        `);
+        if (depthDelta !== 0) {
+          await tx.execute(sql`
+            WITH RECURSIVE sq AS (
+              SELECT ${Entities.id}, ${Entities.depth}
+              FROM ${Entities}
+              WHERE ${eq(Entities.parentId, entity.id)}
+              UNION ALL
+              SELECT ${Entities.id}, ${Entities.depth}
+              FROM ${Entities}
+              JOIN sq ON ${Entities.parentId} = sq.id
+            )
+            UPDATE ${Entities}
+            SET depth = depth + ${depthDelta}
+            WHERE id IN (SELECT id FROM sq)
+          `);
+        }
 
         return updatedEntity;
       });
