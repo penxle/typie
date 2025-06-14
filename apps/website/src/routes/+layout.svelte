@@ -8,4 +8,6 @@
 
 {@render children()}
 
-<NotificationProvider />
+{#if typeof window !== 'undefined' && !window.__webview__}
+  <NotificationProvider />
+{/if}
