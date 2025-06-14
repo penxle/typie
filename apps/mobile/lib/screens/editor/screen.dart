@@ -5,6 +5,7 @@ import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/editor.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
+import 'package:typie/services/keyboard.dart';
 import 'package:typie/widgets/webview.dart';
 
 @RoutePage()
@@ -22,6 +23,7 @@ class EditorScreen extends HookWidget {
     final yjsState = useValueNotifier<YJSState?>(null);
     final keyboardHeight = useValueNotifier<double>(0);
     final isKeyboardVisible = useValueNotifier<bool>(false);
+    final keyboardType = useValueNotifier<KeyboardType>(KeyboardType.software);
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
 
@@ -33,6 +35,7 @@ class EditorScreen extends HookWidget {
       yjsState: yjsState,
       keyboardHeight: keyboardHeight,
       isKeyboardVisible: isKeyboardVisible,
+      keyboardType: keyboardType,
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
       child: Editor(slug: slug),

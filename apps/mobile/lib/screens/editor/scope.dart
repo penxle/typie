@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/schema.dart';
+import 'package:typie/services/keyboard.dart';
 import 'package:typie/widgets/webview.dart';
 
 enum SecondaryToolbarMode { hidden, text, textColor, fontFamily, fontSize, textAlign, lineHeight, letterSpacing }
@@ -17,6 +18,7 @@ class EditorStateScope extends InheritedWidget {
     required this.yjsState,
     required this.keyboardHeight,
     required this.isKeyboardVisible,
+    required this.keyboardType,
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
     super.key,
@@ -29,6 +31,7 @@ class EditorStateScope extends InheritedWidget {
   final ValueNotifier<YJSState?> yjsState;
   final ValueNotifier<double> keyboardHeight;
   final ValueNotifier<bool> isKeyboardVisible;
+  final ValueNotifier<KeyboardType> keyboardType;
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
 

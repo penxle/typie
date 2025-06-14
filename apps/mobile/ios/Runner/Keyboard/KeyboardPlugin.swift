@@ -1,4 +1,5 @@
 import Flutter
+import GameController
 import UIKit
 
 class KeyboardPlugin: NSObject, FlutterStreamHandler {
@@ -34,6 +35,26 @@ class KeyboardPlugin: NSObject, FlutterStreamHandler {
       object: nil
     )
     
+    #if targetEnvironment(simulator)
+      events(["type": "hardware", "hardware": false])
+    #else
+      NotificationCenter.default.addObserver(
+        self,
+        selector: #selector(hardwareKeyboardDidConnect),
+        name: .GCKeyboardDidConnect,
+        object: nil
+      )
+    
+      NotificationCenter.default.addObserver(
+        self,
+        selector: #selector(hardwareKeyboardDidDisconnect),
+        name: .GCKeyboardDidDisconnect,
+        object: nil
+      )
+    
+      events(["type": "hardware", "hardware": GCKeyboard.coalesced != nil])
+    #endif
+
     return nil
   }
   
@@ -48,12 +69,20 @@ class KeyboardPlugin: NSObject, FlutterStreamHandler {
   @objc private func keyboardWillShow(_ notification: Notification) {
     if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
       let keyboardHeight = keyboardFrame.height
-      events!(["height": Double(keyboardHeight)])
+      events!(["type": "height", "height": Double(keyboardHeight)])
     }
   }
   
   @objc private func keyboardWillHide(_ notification: Notification) {
-    events!(["height": 0.0])
+    events!(["type": "height", "height": 0.0])
+  }
+  
+  @objc private func hardwareKeyboardDidConnect(_ notification: Notification) {
+    events!(["type": "hardware", "hardware": true])
+  }
+
+  @objc private func hardwareKeyboardDidDisconnect(_ notification: Notification) {
+    events!(["type": "hardware", "hardware": false])
   }
 }
   

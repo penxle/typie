@@ -4,6 +4,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/buttons/base.dart';
 import 'package:typie/screens/editor/values.dart';
+import 'package:typie/services/keyboard.dart';
 import 'package:typie/widgets/svg_image.dart';
 
 class _Node {
@@ -42,6 +43,7 @@ class InsertBottomToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
+    final keyboardType = useValueListenable(scope.keyboardType);
     final proseMirrorState = useValueListenable(scope.proseMirrorState);
 
     return GridView.extent(
@@ -57,7 +59,12 @@ class InsertBottomToolbar extends HookWidget {
           isActive: isActive,
           onTap: () async {
             await scope.command(node.type, attrs: node.attrs);
-            await webViewController?.requestFocus();
+            switch (keyboardType) {
+              case KeyboardType.software:
+                await webViewController?.requestFocus();
+              case KeyboardType.hardware:
+                scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
+            }
           },
           builder: (context, color, backgroundColor) {
             return Column(

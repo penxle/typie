@@ -4,6 +4,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/buttons/icon.dart';
+import 'package:typie/services/keyboard.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
 
@@ -14,6 +15,7 @@ class PrimaryToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
+    final keyboardType = useValueListenable(scope.keyboardType);
     final secondaryToolbarMode = useValueListenable(scope.secondaryToolbarMode);
     final bottomToolbarMode = useValueListenable(scope.bottomToolbarMode);
 
@@ -40,10 +42,17 @@ class PrimaryToolbar extends HookWidget {
                     isActive: bottomToolbarMode == BottomToolbarMode.insert,
                     onTap: () async {
                       if (bottomToolbarMode == BottomToolbarMode.insert) {
-                        await webViewController?.requestFocus();
+                        switch (keyboardType) {
+                          case KeyboardType.software:
+                            await webViewController?.requestFocus();
+                          case KeyboardType.hardware:
+                            scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
+                        }
                       } else {
                         scope.bottomToolbarMode.value = BottomToolbarMode.insert;
-                        await webViewController?.clearFocus();
+                        if (keyboardType == KeyboardType.software) {
+                          await webViewController?.clearFocus();
+                        }
                       }
                     },
                   ),
@@ -103,13 +112,21 @@ class PrimaryToolbar extends HookWidget {
               IconToolbarButton(
                 icon: LucideLightIcons.keyboard_off,
                 onTap: () async {
-                  await webViewController?.clearFocus();
+                  if (keyboardType == KeyboardType.software) {
+                    await webViewController?.clearFocus();
+                  }
                 },
               ),
               IconToolbarButton(
                 icon: LucideLightIcons.circle_x,
                 onTap: () async {
-                  await webViewController?.requestFocus();
+                  switch (keyboardType) {
+                    case KeyboardType.software:
+                      await webViewController?.requestFocus();
+                    case KeyboardType.hardware:
+                      scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
+                  }
+
                   scope.secondaryToolbarMode.value = SecondaryToolbarMode.hidden;
                 },
               ),
