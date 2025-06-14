@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/buttons/widget.dart';
 import 'package:typie/screens/editor/values.dart';
+import 'package:typie/services/keyboard.dart';
 
 class BlockquoteBottomToolbar extends HookWidget {
   const BlockquoteBottomToolbar({super.key});
@@ -14,6 +15,7 @@ class BlockquoteBottomToolbar extends HookWidget {
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
     final proseMirrorState = useValueListenable(scope.proseMirrorState);
+    final keyboardType = useValueListenable(scope.keyboardType);
 
     return ListView.separated(
       padding: Pad(all: 16, bottom: MediaQuery.paddingOf(context).bottom),
@@ -24,7 +26,12 @@ class BlockquoteBottomToolbar extends HookWidget {
         return WidgetToolbarButton(
           onTap: () async {
             await scope.command('blockquote', attrs: {'type': item['type']});
-            await webViewController?.requestFocus();
+            switch (keyboardType) {
+              case KeyboardType.software:
+                await webViewController?.requestFocus();
+              case KeyboardType.hardware:
+                scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
+            }
           },
           isActive: proseMirrorState?.isNodeActive('blockquote', attrs: {'type': item['type']}) ?? false,
           widget: Container(height: 48, alignment: Alignment.center, child: item['widget'] as Widget),

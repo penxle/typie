@@ -4,6 +4,7 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/buttons/floating.dart';
+import 'package:typie/services/keyboard.dart';
 
 class HorizontalRuleFloatingToolbar extends HookWidget {
   const HorizontalRuleFloatingToolbar({super.key});
@@ -12,7 +13,7 @@ class HorizontalRuleFloatingToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
-
+    final keyboardType = useValueListenable(scope.keyboardType);
     return Row(
       spacing: 8,
       children: [
@@ -20,7 +21,9 @@ class HorizontalRuleFloatingToolbar extends HookWidget {
           icon: TypieIcons.horizontal_rule,
           onTap: () async {
             scope.bottomToolbarMode.value = BottomToolbarMode.horizontalRule;
-            await webViewController?.clearFocus();
+            if (keyboardType == KeyboardType.software) {
+              await webViewController?.clearFocus();
+            }
           },
         ),
         FloatingToolbarButton(

@@ -4,6 +4,7 @@ import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/bottom/blockquote.dart';
 import 'package:typie/screens/editor/toolbar/bottom/horizontal_rule.dart';
 import 'package:typie/screens/editor/toolbar/bottom/insert.dart';
+import 'package:typie/services/keyboard.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
 
@@ -14,10 +15,21 @@ class BottomToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
     final keyboardHeight = useValueListenable(scope.keyboardHeight);
+    final keyboardType = useValueListenable(scope.keyboardType);
     final bottomToolbarMode = useValueListenable(scope.bottomToolbarMode);
 
-    return Container(
-      height: keyboardHeight,
+    final mediaQuery = MediaQuery.of(context);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.ease,
+      height: switch (keyboardType) {
+        KeyboardType.software => keyboardHeight,
+        KeyboardType.hardware => switch (bottomToolbarMode) {
+          BottomToolbarMode.hidden => mediaQuery.viewPadding.bottom,
+          _ => mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2,
+        },
+      },
       decoration: const BoxDecoration(
         color: AppColors.white,
         border: Border(top: BorderSide(color: AppColors.gray_100)),

@@ -66,7 +66,15 @@ class Editor extends HookWidget {
       });
 
       return subscription.cancel;
-    }, [keyboard.onHeightChange]);
+    }, []);
+
+    useEffect(() {
+      final subscription = keyboard.onTypeChange.listen((type) {
+        scope.keyboardType.value = type;
+      });
+
+      return subscription.cancel;
+    }, []);
 
     useEffect(() {
       if (webViewController == null) {
