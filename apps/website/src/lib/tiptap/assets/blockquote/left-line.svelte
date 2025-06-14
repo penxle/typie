@@ -4,6 +4,7 @@
 
 <div
   class={css({
+    flexShrink: '0',
     width: '4px',
     alignSelf: 'stretch',
     backgroundColor: 'gray.200',
