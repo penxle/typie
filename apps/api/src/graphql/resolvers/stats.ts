@@ -221,20 +221,24 @@ builder.queryField('stats', (t) =>
             WHERE ${PostCharacterCountChanges.bucket} >= ${fortyEightHoursAgo}
               AND ${PostCharacterCountChanges.bucket} < ${twentyFourHoursAgo}
               AND ${Entities.createdAt} != ${Sites.createdAt}
+          ),
+          valid_user_activities AS (
+            SELECT DISTINCT ${PostCharacterCountChanges.userId}, ${PostCharacterCountChanges.bucket}
+            FROM ${PostCharacterCountChanges}
+            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
+            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
             date_series.date::text as date,
             CASE 
               WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT count FROM previous_period), 0)
               WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT count FROM current_period), 0)
-              ELSE COALESCE(COUNT(DISTINCT ${PostCharacterCountChanges.userId}), 0)
+              ELSE COALESCE(COUNT(DISTINCT vua.user_id), 0)
             END::int as value
           FROM date_series
-          LEFT JOIN ${PostCharacterCountChanges} ON DATE(${PostCharacterCountChanges.bucket}) = date_series.date
-          LEFT JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-          LEFT JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-          LEFT JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            AND ${Entities.createdAt} != ${Sites.createdAt}
+          LEFT JOIN valid_user_activities vua ON DATE(vua.bucket) = date_series.date
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
@@ -464,20 +468,24 @@ builder.queryField('stats', (t) =>
             WHERE ${PostCharacterCountChanges.bucket} >= ${fortyEightHoursAgo}
               AND ${PostCharacterCountChanges.bucket} < ${twentyFourHoursAgo}
               AND ${Entities.createdAt} != ${Sites.createdAt}
+          ),
+          valid_character_changes AS (
+            SELECT ${PostCharacterCountChanges.bucket}, ${PostCharacterCountChanges.additions}
+            FROM ${PostCharacterCountChanges}
+            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
+            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
             date_series.date::text as date,
             CASE 
               WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT total FROM previous_period), 0)
               WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT total FROM current_period), 0)
-              ELSE COALESCE(SUM(${PostCharacterCountChanges.additions}), 0)
+              ELSE COALESCE(SUM(vcc.additions), 0)
             END::int as value
           FROM date_series
-          LEFT JOIN ${PostCharacterCountChanges} ON DATE(${PostCharacterCountChanges.bucket}) = date_series.date
-          LEFT JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-          LEFT JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-          LEFT JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            AND ${Entities.createdAt} != ${Sites.createdAt}
+          LEFT JOIN valid_character_changes vcc ON DATE(vcc.bucket) = date_series.date
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
@@ -487,16 +495,20 @@ builder.queryField('stats', (t) =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
+          ),
+          valid_reactions AS (
+            SELECT ${PostReactions.id}, ${PostReactions.createdAt}
+            FROM ${PostReactions}
+            INNER JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
+            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
             date_series.date::text as date,
-            COALESCE(COUNT(${PostReactions.id}), 0)::int as value
+            COALESCE(COUNT(vr.id), 0)::int as value
           FROM date_series
-          LEFT JOIN ${PostReactions} ON ${PostReactions.createdAt} < (date_series.date + interval '1 day')
-          LEFT JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
-          LEFT JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-          LEFT JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            AND ${Entities.createdAt} != ${Sites.createdAt}
+          LEFT JOIN valid_reactions vr ON vr.created_at < (date_series.date + interval '1 day')
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
@@ -525,20 +537,24 @@ builder.queryField('stats', (t) =>
             WHERE ${PostReactions.createdAt} >= ${fortyEightHoursAgo}
               AND ${PostReactions.createdAt} < ${twentyFourHoursAgo}
               AND ${Entities.createdAt} != ${Sites.createdAt}
+          ),
+          valid_reactions AS (
+            SELECT ${PostReactions.id}, ${PostReactions.createdAt}
+            FROM ${PostReactions}
+            INNER JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
+            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
             date_series.date::text as date,
             CASE 
               WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT count FROM previous_period), 0)
               WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT count FROM current_period), 0)
-              ELSE COALESCE(COUNT(${PostReactions.id}), 0)
+              ELSE COALESCE(COUNT(vr.id), 0)
             END::int as value
           FROM date_series
-          LEFT JOIN ${PostReactions} ON DATE(${PostReactions.createdAt}) = date_series.date
-          LEFT JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
-          LEFT JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-          LEFT JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            AND ${Entities.createdAt} != ${Sites.createdAt}
+          LEFT JOIN valid_reactions vr ON DATE(vr.created_at) = date_series.date
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
@@ -594,11 +610,9 @@ builder.queryField('stats', (t) =>
           daily_media AS (
             SELECT 
               date_series.date,
-              COALESCE(COUNT(${Images.id}), 0) + COALESCE(COUNT(${Files.id}), 0) as daily_count
+              (SELECT COUNT(*) FROM ${Images} WHERE DATE(${Images.createdAt}) = date_series.date) +
+              (SELECT COUNT(*) FROM ${Files} WHERE DATE(${Files.createdAt}) = date_series.date) as daily_count
             FROM date_series
-            LEFT JOIN ${Images} ON DATE(${Images.createdAt}) = date_series.date
-            LEFT JOIN ${Files} ON DATE(${Files.createdAt}) = date_series.date
-            GROUP BY date_series.date
           )
           SELECT 
             date_series.date::text as date,

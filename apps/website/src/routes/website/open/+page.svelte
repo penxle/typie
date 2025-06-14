@@ -396,11 +396,12 @@
           value={($query.stats.gitWeeklyCommits || 0).toLocaleString() + '개'}
         />
 
+        <!-- AWS API 정상화 될 때까지 임시로 하드코딩 -->
         <SmallStatCard
           data={[]}
           description="지난 30일간 AWS 인프라 비용"
           title="월간 인프라 비용"
-          value={formatWithUnit($query.stats.infraMonthlyCost || 0, '원')}
+          value={formatWithUnit(2_210_000, '원')}
         />
       </div>
     </section>
