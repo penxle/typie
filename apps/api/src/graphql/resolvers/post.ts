@@ -16,6 +16,7 @@ import {
   PostContents,
   PostReactions,
   Posts,
+  PostSnapshotContributors,
   PostSnapshots,
   TableCode,
   UserPersonalIdentities,
@@ -474,10 +475,18 @@ builder.mutationFields((t) => ({
           vector: Y.encodeStateVector(doc),
         });
 
-        await tx.insert(PostSnapshots).values({
+        const postSnapshot = await tx
+          .insert(PostSnapshots)
+          .values({
+            postId: post.id,
+            snapshot: Y.encodeSnapshotV2(snapshot),
+          })
+          .returning({ id: PostSnapshots.id })
+          .then(firstOrThrow);
+
+        await tx.insert(PostSnapshotContributors).values({
+          snapshotId: postSnapshot.id,
           userId: ctx.session.userId,
-          postId: post.id,
-          snapshot: Y.encodeSnapshotV2(snapshot),
         });
 
         return post;
@@ -607,10 +616,18 @@ builder.mutationFields((t) => ({
           note: post.content.note,
         });
 
-        await tx.insert(PostSnapshots).values({
+        const postSnapshot = await tx
+          .insert(PostSnapshots)
+          .values({
+            postId: newPost.id,
+            snapshot: Y.encodeSnapshotV2(snapshot),
+          })
+          .returning({ id: PostSnapshots.id })
+          .then(firstOrThrow);
+
+        await tx.insert(PostSnapshotContributors).values({
+          snapshotId: postSnapshot.id,
           userId: ctx.session.userId,
-          postId: newPost.id,
-          snapshot: Y.encodeSnapshotV2(snapshot),
         });
 
         return newPost;

@@ -1,5 +1,5 @@
 import { CreateNotificationJob } from './notification';
-import { PostIndexJob, PostSyncCollectJob } from './post';
+import { PostCompactJob, PostCompactScanCron, PostIndexJob, PostSyncCollectJob } from './post';
 import {
   SubscriptionRenewalCancelJob,
   SubscriptionRenewalCron,
@@ -11,6 +11,7 @@ import {
 export const jobs = [
   PostIndexJob,
   PostSyncCollectJob,
+  PostCompactJob,
   CreateNotificationJob,
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalRetryJob,
@@ -18,7 +19,7 @@ export const jobs = [
   SubscriptionRenewalCancelJob,
 ];
 
-export const crons = [SubscriptionRenewalCron];
+export const crons = [PostCompactScanCron, SubscriptionRenewalCron];
 
 export type Jobs = typeof jobs;
 export type JobName = Jobs[number]['name'];

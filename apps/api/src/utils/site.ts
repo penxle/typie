@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import * as Y from 'yjs';
-import { Entities, first, firstOrThrow, Folders, PostContents, Posts, PostSnapshots, Sites } from '@/db';
+import { Entities, first, firstOrThrow, Folders, PostContents, Posts, PostSnapshotContributors, PostSnapshots, Sites } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { generatePermalink, generateSlug, makeYDoc } from './entity';
 import type { Transaction } from '@/db';
@@ -147,10 +147,18 @@ export const createSite = async ({ userId, name, slug, tx }: CreateSiteParams) =
         vector: Y.encodeStateVector(doc),
       });
 
-      await tx.insert(PostSnapshots).values({
+      const postSnapshot = await tx
+        .insert(PostSnapshots)
+        .values({
+          postId: newPost.id,
+          snapshot: Y.encodeSnapshotV2(snapshot),
+        })
+        .returning({ id: PostSnapshots.id })
+        .then(firstOrThrow);
+
+      await tx.insert(PostSnapshotContributors).values({
+        snapshotId: postSnapshot.id,
         userId,
-        postId: newPost.id,
-        snapshot: Y.encodeSnapshotV2(snapshot),
       });
     }
   }
