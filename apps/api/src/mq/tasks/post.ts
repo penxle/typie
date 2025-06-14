@@ -1,19 +1,19 @@
 import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
-import { eq, sql } from 'drizzle-orm';
+import { and, asc, eq, lt, notInArray, sql } from 'drizzle-orm';
 import * as R from 'remeda';
 import { base64 } from 'rfc4648';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis, redlock } from '@/cache';
-import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, Posts, PostSnapshots } from '@/db';
+import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, Posts, PostSnapshotContributors, PostSnapshots } from '@/db';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
 import { makeText } from '@/utils';
 import { queue } from '../bullmq';
 import { enqueueJob } from '../index';
-import { defineJob } from '../types';
+import { defineCron, defineJob } from '../types';
 import type { Node } from '@tiptap/pm/model';
 
 const getCharacterCount = (text: string) => {
@@ -35,7 +35,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
   let snapshotUpdated = false;
 
-  await redlock.using([`{lock}:post:sync:collect:${postId}`], 10_000, { retryCount: Infinity }, async (signal) => {
+  await redlock.using([`{lock}:post:${postId}`], 10_000, { retryCount: Infinity }, async (signal) => {
     const updates = await redis.smembers(`post:sync:updates:${postId}`);
     if (updates.length === 0) {
       return;
@@ -78,11 +78,20 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
         if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
           snapshotUpdated = true;
 
-          await tx.insert(PostSnapshots).values({
-            postId,
+          const postSnapshot = await tx
+            .insert(PostSnapshots)
+            .values({
+              postId,
+              snapshot: Y.encodeSnapshotV2(snapshot),
+              order: order++,
+            })
+            .returning({ id: PostSnapshots.id })
+            .then(firstOrThrow);
+
+          // 기여자 정보 저장
+          await tx.insert(PostSnapshotContributors).values({
+            snapshotId: postSnapshot.id,
             userId,
-            snapshot: Y.encodeSnapshotV2(snapshot),
-            order: order++,
           });
 
           const fragment = doc.getXmlFragment('body');
@@ -232,4 +241,166 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
       text: post.text,
     },
   ]);
+});
+
+type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
+
+export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
+  await redlock.using([`{lock}:post:${postId}`], 60_000, { retryCount: 5 }, async (signal) => {
+    await db.transaction(async (tx) => {
+      const snapshots = await tx
+        .select({ id: PostSnapshots.id, createdAt: PostSnapshots.createdAt })
+        .from(PostSnapshots)
+        .where(eq(PostSnapshots.postId, postId))
+        .orderBy(asc(PostSnapshots.createdAt), asc(PostSnapshots.order));
+
+      signal.throwIfAborted();
+
+      if (snapshots.length === 0) {
+        await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
+        return;
+      }
+
+      const contributors = await tx
+        .select({ snapshotId: PostSnapshotContributors.snapshotId, userId: PostSnapshotContributors.userId })
+        .from(PostSnapshotContributors)
+        .innerJoin(PostSnapshots, eq(PostSnapshotContributors.snapshotId, PostSnapshots.id))
+        .where(eq(PostSnapshots.postId, postId));
+
+      const contributorsBySnapshotId = new Map<string, Set<string>>();
+      for (const contributor of contributors) {
+        const userIds = contributorsBySnapshotId.get(contributor.snapshotId) ?? new Set();
+        userIds.add(contributor.userId);
+        contributorsBySnapshotId.set(contributor.snapshotId, userIds);
+      }
+
+      const threshold = dayjs().subtract(24, 'hours');
+      const retainedSnapshots: Snapshot[] = [];
+      const windowedSnapshots = new Map<string, Snapshot>();
+
+      for (const snapshot of snapshots) {
+        const userIds = [...(contributorsBySnapshotId.get(snapshot.id) ?? [])];
+
+        if (snapshot.createdAt.isAfter(threshold)) {
+          retainedSnapshots.push({
+            id: snapshot.id,
+            createdAt: snapshot.createdAt,
+            userIds: new Set(userIds),
+          });
+        } else {
+          const window = snapshot.createdAt.startOf('hour').toISOString();
+          const windowedSnapshot = windowedSnapshots.get(window);
+
+          if (windowedSnapshot) {
+            for (const userId of userIds) {
+              windowedSnapshot.userIds.add(userId);
+            }
+          } else {
+            windowedSnapshots.set(window, {
+              id: snapshot.id,
+              createdAt: snapshot.createdAt,
+              userIds: new Set(userIds),
+            });
+          }
+        }
+      }
+
+      retainedSnapshots.push(...windowedSnapshots.values());
+
+      signal.throwIfAborted();
+
+      if (retainedSnapshots.length === snapshots.length) {
+        await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
+        return;
+      }
+
+      const content = await tx
+        .select({ update: PostContents.update })
+        .from(PostContents)
+        .where(eq(PostContents.postId, postId))
+        .then(firstOrThrow);
+
+      const oldDoc = new Y.Doc({ gc: false });
+      Y.applyUpdateV2(oldDoc, content.update);
+
+      signal.throwIfAborted();
+
+      await tx.delete(PostSnapshots).where(
+        and(
+          eq(PostSnapshots.postId, postId),
+          notInArray(
+            PostSnapshots.id,
+            retainedSnapshots.map(({ id }) => id),
+          ),
+        ),
+      );
+
+      const newDoc = new Y.Doc({ gc: false });
+      let prevSnapshotDoc: Y.Doc | null = null;
+
+      const sortedSnapshots = retainedSnapshots.sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
+
+      for (const [index, snapshot] of sortedSnapshots.entries()) {
+        signal.throwIfAborted();
+
+        const { snapshot: snapshotData } = await tx
+          .delete(PostSnapshots)
+          .where(eq(PostSnapshots.id, snapshot.id))
+          .returning({ snapshot: PostSnapshots.snapshot })
+          .then(firstOrThrow);
+
+        const snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(snapshotData));
+
+        if (index === 0) {
+          Y.applyUpdateV2(newDoc, Y.encodeStateAsUpdateV2(snapshotDoc));
+        } else if (prevSnapshotDoc) {
+          Y.applyUpdateV2(newDoc, Y.diffUpdateV2(Y.encodeStateAsUpdateV2(prevSnapshotDoc), Y.encodeStateAsUpdateV2(snapshotDoc)));
+        }
+
+        const postSnapshot = await tx
+          .insert(PostSnapshots)
+          .values({
+            postId,
+            snapshot: Y.encodeSnapshotV2(Y.snapshot(newDoc)),
+            createdAt: snapshot.createdAt,
+            order: 0,
+          })
+          .returning({ id: PostSnapshots.id })
+          .then(firstOrThrow);
+
+        if (snapshot.userIds.size > 0) {
+          await tx.insert(PostSnapshotContributors).values(
+            [...snapshot.userIds].map((userId) => ({
+              snapshotId: postSnapshot.id,
+              userId,
+            })),
+          );
+        }
+
+        prevSnapshotDoc = snapshotDoc;
+      }
+
+      signal.throwIfAborted();
+
+      await tx
+        .update(PostContents)
+        .set({
+          update: Y.encodeStateAsUpdateV2(newDoc),
+          vector: Y.encodeStateVector(newDoc),
+          compactedAt: dayjs(),
+        })
+        .where(eq(PostContents.postId, postId));
+    });
+  });
+});
+
+export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', async () => {
+  const threshold = dayjs().subtract(24, 'hours');
+
+  const posts = await db
+    .select({ postId: PostContents.postId })
+    .from(PostContents)
+    .where(and(lt(PostContents.updatedAt, threshold), lt(PostContents.compactedAt, PostContents.updatedAt)));
+
+  await Promise.all(posts.map(({ postId }) => enqueueJob('post:compact', postId, { delay: Math.random() * 10 * 60 * 1000 })));
 });

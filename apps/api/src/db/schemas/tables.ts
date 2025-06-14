@@ -279,6 +279,9 @@ export const PostContents = pgTable('post_contents', {
   note: text('note').notNull().default(''),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
+  compactedAt: datetime('compacted_at')
+    .notNull()
+    .default(sql`now()`),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
@@ -296,9 +299,6 @@ export const PostSnapshots = pgTable(
     postId: text('post_id')
       .notNull()
       .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     snapshot: bytea('snapshot').notNull(),
     order: integer('order').notNull().default(0),
     createdAt: datetime('created_at')
@@ -306,6 +306,22 @@ export const PostSnapshots = pgTable(
       .default(sql`now()`),
   },
   (t) => [index().on(t.postId, t.createdAt, t.order)],
+);
+
+export const PostSnapshotContributors = pgTable(
+  'post_snapshot_contributors',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_SNAPSHOT_CONTRIBUTORS)),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => PostSnapshots.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  },
+  (t) => [unique().on(t.snapshotId, t.userId)],
 );
 
 export const PostReactions = pgTable(

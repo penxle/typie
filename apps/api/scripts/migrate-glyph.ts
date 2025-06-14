@@ -12,7 +12,22 @@ import qs from 'query-string';
 import { match } from 'ts-pattern';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
-import { db, Embeds, Entities, Files, first, firstOrThrow, Folders, Images, PostContents, Posts, PostSnapshots, Sites, Users } from '@/db';
+import {
+  db,
+  Embeds,
+  Entities,
+  Files,
+  first,
+  firstOrThrow,
+  Folders,
+  Images,
+  PostContents,
+  Posts,
+  PostSnapshotContributors,
+  PostSnapshots,
+  Sites,
+  Users,
+} from '@/db';
 import { EntityType } from '@/enums';
 import { stack } from '@/env';
 import * as aws from '@/external/aws';
@@ -515,10 +530,18 @@ const migratePost = async (params: MigratePostParams) => {
     blobSize,
   });
 
-  await params.tx.insert(PostSnapshots).values({
+  const postSnapshot = await params.tx
+    .insert(PostSnapshots)
+    .values({
+      postId: post.id,
+      snapshot: Y.encodeSnapshotV2(snapshot),
+    })
+    .returning({ id: PostSnapshots.id })
+    .then(firstOrThrow);
+
+  await params.tx.insert(PostSnapshotContributors).values({
+    snapshotId: postSnapshot.id,
     userId: params.userId,
-    postId: post.id,
-    snapshot: Y.encodeSnapshotV2(snapshot),
   });
 
   return entity;
