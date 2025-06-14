@@ -36,23 +36,28 @@ class _WebViewState extends State<WebView> {
           .toList(),
     };
 
-    if (Platform.isAndroid) {
-      return AndroidView(
+    final child = switch (Platform.operatingSystem) {
+      'android' => AndroidView(
         viewType: viewType,
         creationParams: creationParams,
         creationParamsCodec: const StandardMessageCodec(),
         onPlatformViewCreated: _onPlatformViewCreated,
-      );
-    } else if (Platform.isIOS) {
-      return UiKitView(
+      ),
+      'ios' => UiKitView(
         viewType: viewType,
         creationParams: creationParams,
         creationParamsCodec: const StandardMessageCodec(),
         onPlatformViewCreated: _onPlatformViewCreated,
-      );
-    }
+      ),
+      _ => throw UnimplementedError('WebView is not supported on ${Platform.operatingSystem}'),
+    };
 
-    throw UnimplementedError('WebView is not supported on ${Platform.operatingSystem}');
+    return Focus(
+      onKeyEvent: (node, event) {
+        return KeyEventResult.skipRemainingHandlers;
+      },
+      child: child,
+    );
   }
 
   @override
