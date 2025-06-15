@@ -10,7 +10,6 @@
   import { onMount } from 'svelte';
   import { on } from 'svelte/events';
   import { match } from 'ts-pattern';
-  import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostSyncType, PostType } from '@/enums';
@@ -273,9 +272,6 @@
       }
     });
 
-    const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
-    persistence.on('synced', () => forceSync());
-
     Y.applyUpdateV2(doc, base64.parse($query.post.update), 'remote');
     awareness.setLocalStateField('user', {
       name: $query.me.name,
@@ -337,7 +333,6 @@
 
       editor?.current.off('transaction', handler);
 
-      persistence.destroy();
       awareness.destroy();
       doc.destroy();
     };
