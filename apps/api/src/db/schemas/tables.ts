@@ -8,22 +8,26 @@ import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { NotificationData, PlanRules } from './json';
 
-export const Comments = pgTable('comments', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.COMMENTS)),
-  postId: text('post_id')
-    .notNull()
-    .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  userId: text('user_id')
-    .notNull()
-    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  state: E._CommentState('state').notNull().default('ACTIVE'),
-  content: text('content').notNull(),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const Comments = pgTable(
+  'comments',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.COMMENTS)),
+    postId: text('post_id')
+      .notNull()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    state: E._CommentState('state').notNull().default('ACTIVE'),
+    content: text('content').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.postId, t.createdAt)],
+);
 
 export const CreditCodes = pgTable('credit_codes', {
   id: text('id')
@@ -54,37 +58,45 @@ export const Files = pgTable('files', {
     .default(sql`now()`),
 });
 
-export const Folders = pgTable('folders', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.FOLDERS, { length: 'short' })),
-  entityId: text('entity_id')
-    .notNull()
-    .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  name: text('name').notNull(),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const Folders = pgTable(
+  'folders',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.FOLDERS, { length: 'short' })),
+    entityId: text('entity_id')
+      .notNull()
+      .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.entityId)],
+);
 
-export const Fonts = pgTable('fonts', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.FONTS)),
-  userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  siteId: text('site_id').references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  name: text('name').notNull(),
-  familyName: text('family_name'),
-  fullName: text('full_name'),
-  postScriptName: text('post_script_name'),
-  weight: integer('weight').notNull(),
-  size: integer('size').notNull(),
-  path: text('path').notNull(),
-  state: E._FontState('state').notNull().default('ACTIVE'),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const Fonts = pgTable(
+  'fonts',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.FONTS)),
+    userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    siteId: text('site_id').references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    familyName: text('family_name'),
+    fullName: text('full_name'),
+    postScriptName: text('post_script_name'),
+    weight: integer('weight').notNull(),
+    size: integer('size').notNull(),
+    path: text('path').notNull(),
+    state: E._FontState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.siteId, t.state)],
+);
 
 export const Embeds = pgTable('embeds', {
   id: text('id')
@@ -134,6 +146,10 @@ export const Entities = pgTable(
       .on(t.permalink)
       .where(eq(t.state, sql`'ACTIVE'`)),
     unique().on(t.siteId, t.parentId, t.order).nullsNotDistinct(),
+    index().on(t.userId, t.state),
+    index().on(t.siteId, t.state),
+    index().on(t.siteId, t.parentId, t.state),
+    index().on(t.parentId, t.state),
   ],
 );
 
@@ -154,37 +170,45 @@ export const Images = pgTable('images', {
     .default(sql`now()`),
 });
 
-export const Notifications = pgTable('notifications', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.NOTIFICATIONS)),
-  userId: text('user_id')
-    .notNull()
-    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  data: jsonb('data').notNull().$type<NotificationData>(),
-  state: E._NotificationState('state').notNull().default('UNREAD'),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const Notifications = pgTable(
+  'notifications',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.NOTIFICATIONS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    data: jsonb('data').notNull().$type<NotificationData>(),
+    state: E._NotificationState('state').notNull().default('UNREAD'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.userId, t.state), index().on(t.userId, t.createdAt)],
+);
 
-export const PaymentInvoices = pgTable('payment_invoices', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.PAYMENT_INVOICES)),
-  userId: text('user_id')
-    .notNull()
-    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  subscriptionId: text('subscription_id')
-    .notNull()
-    .references(() => Subscriptions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  amount: integer('amount').notNull(),
-  state: E._PaymentInvoiceState('state').notNull(),
-  dueAt: datetime('due_at').notNull(),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const PaymentInvoices = pgTable(
+  'payment_invoices',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PAYMENT_INVOICES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    subscriptionId: text('subscription_id')
+      .notNull()
+      .references(() => Subscriptions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    amount: integer('amount').notNull(),
+    state: E._PaymentInvoiceState('state').notNull(),
+    dueAt: datetime('due_at').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.userId, t.state)],
+);
 
 export const PaymentRecords = pgTable('payment_records', {
   id: text('id')
@@ -216,30 +240,34 @@ export const Plans = pgTable('plans', {
     .default(sql`now()`),
 });
 
-export const Posts = pgTable('posts', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.POSTS, { length: 'short' })),
-  entityId: text('entity_id')
-    .notNull()
-    .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  title: text('title'),
-  subtitle: text('subtitle'),
-  maxWidth: integer('max_width').notNull().default(800),
-  coverImageId: text('cover_image_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  password: text('password'),
-  contentRating: E._PostContentRating('content_rating').notNull().default('ALL'),
-  allowComment: boolean('allow_comment').notNull().default(true),
-  allowReaction: boolean('allow_reaction').notNull().default(true),
-  protectContent: boolean('protect_content').notNull().default(true),
-  type: E._PostType('type').notNull().default('NORMAL'),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-  updatedAt: datetime('updated_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const Posts = pgTable(
+  'posts',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POSTS, { length: 'short' })),
+    entityId: text('entity_id')
+      .notNull()
+      .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    title: text('title'),
+    subtitle: text('subtitle'),
+    maxWidth: integer('max_width').notNull().default(800),
+    coverImageId: text('cover_image_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    password: text('password'),
+    contentRating: E._PostContentRating('content_rating').notNull().default('ALL'),
+    allowComment: boolean('allow_comment').notNull().default(true),
+    allowReaction: boolean('allow_reaction').notNull().default(true),
+    protectContent: boolean('protect_content').notNull().default(true),
+    type: E._PostType('type').notNull().default('NORMAL'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.entityId), index().on(t.createdAt), index().on(t.updatedAt)],
+);
 
 export const PostCharacterCountChanges = pgTable(
   'post_character_count_changes',
@@ -260,7 +288,7 @@ export const PostCharacterCountChanges = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [uniqueIndex().on(t.userId, t.postId, t.bucket)],
+  (t) => [uniqueIndex().on(t.userId, t.postId, t.bucket), index().on(t.userId, t.bucket)],
 );
 
 export const PostContents = pgTable('post_contents', {
@@ -394,6 +422,7 @@ export const Sites = pgTable(
     uniqueIndex()
       .on(t.slug)
       .where(eq(t.state, sql`'ACTIVE'`)),
+    index().on(t.userId, t.state),
   ],
 );
 
@@ -529,18 +558,22 @@ export const UserPersonalIdentities = pgTable('user_personal_identities', {
   expiresAt: datetime('expires_at').notNull(),
 });
 
-export const UserPushNotificationTokens = pgTable('user_push_notification_tokens', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.USER_PUSH_NOTIFICATION_TOKENS)),
-  userId: text('user_id')
-    .notNull()
-    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  token: text('token').notNull().unique(),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const UserPushNotificationTokens = pgTable(
+  'user_push_notification_tokens',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.USER_PUSH_NOTIFICATION_TOKENS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    token: text('token').notNull().unique(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.userId)],
+);
 
 export const UserSessions = pgTable(
   'user_sessions',

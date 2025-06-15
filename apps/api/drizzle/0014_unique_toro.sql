@@ -1,0 +1,16 @@
+CREATE INDEX "comments_post_id_created_at_index" ON "comments" USING btree ("post_id","created_at");
+CREATE INDEX "entities_user_id_state_index" ON "entities" USING btree ("user_id","state");
+CREATE INDEX "entities_site_id_state_index" ON "entities" USING btree ("site_id","state");
+CREATE INDEX "entities_site_id_parent_id_state_index" ON "entities" USING btree ("site_id","parent_id","state");
+CREATE INDEX "entities_parent_id_state_index" ON "entities" USING btree ("parent_id","state");
+CREATE INDEX "folders_entity_id_index" ON "folders" USING btree ("entity_id");
+CREATE INDEX "fonts_site_id_state_index" ON "fonts" USING btree ("site_id","state");
+CREATE INDEX "notifications_user_id_state_index" ON "notifications" USING btree ("user_id","state");
+CREATE INDEX "notifications_user_id_created_at_index" ON "notifications" USING btree ("user_id","created_at");
+CREATE INDEX "payment_invoices_user_id_state_index" ON "payment_invoices" USING btree ("user_id","state");
+CREATE INDEX "post_character_count_changes_user_id_bucket_index" ON "post_character_count_changes" USING btree ("user_id","bucket");
+CREATE INDEX "posts_entity_id_index" ON "posts" USING btree ("entity_id");
+CREATE INDEX "posts_created_at_index" ON "posts" USING btree ("created_at");
+CREATE INDEX "posts_updated_at_index" ON "posts" USING btree ("updated_at");
+CREATE INDEX "sites_user_id_state_index" ON "sites" USING btree ("user_id","state");
+CREATE INDEX "user_push_notification_tokens_user_id_index" ON "user_push_notification_tokens" USING btree ("user_id");
