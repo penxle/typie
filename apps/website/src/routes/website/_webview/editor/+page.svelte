@@ -7,7 +7,6 @@
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
-  import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostSyncType } from '@/enums';
@@ -214,9 +213,6 @@
 
     const unsubscribe2 = siteUsageUpdateStream.subscribe({ siteId: $query.site.id });
 
-    const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
-    persistence.on('synced', () => forceSync());
-
     Y.applyUpdateV2(doc, base64.parse($query.post.update), 'remote');
     awareness.setLocalStateField('user', {
       name: $query.me.name,
@@ -403,7 +399,6 @@
       editor?.current.off('transaction', handler);
       doc.getMap('attrs').unobserve(handler2);
 
-      persistence.destroy();
       awareness.destroy();
       doc.destroy();
     };
