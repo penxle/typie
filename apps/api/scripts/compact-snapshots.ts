@@ -22,19 +22,15 @@ const batchSize = 100;
 for (let i = 0; i < posts.length; i += batchSize) {
   const batch = posts.slice(i, i + batchSize);
 
-  const promises = batch.map((post, index) =>
+  const promises = batch.map((post) =>
     enqueueJob('post:compact', post.postId, {
-      delay: index * 1000,
+      delay: Math.random() * 30 * 60 * 1000,
     }),
   );
 
   await Promise.all(promises);
 
   console.log(`Enqueued batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(posts.length / batchSize)}`);
-
-  if (i + batchSize < posts.length) {
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-  }
 }
 
 console.log('Migration script completed. Jobs have been queued.');
