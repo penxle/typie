@@ -320,6 +320,9 @@ export const PostSnapshotContributors = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
   },
   (t) => [unique().on(t.snapshotId, t.userId)],
 );
