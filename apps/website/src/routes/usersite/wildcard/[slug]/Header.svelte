@@ -51,10 +51,14 @@
     justifyContent: 'space-between',
     alignItems: 'center',
     flexShrink: '0',
+    position: 'fixed',
+    top: '0',
     borderBottomWidth: '1px',
     borderBottomColor: 'gray.200',
     paddingX: '20px',
+    width: 'full',
     height: '52px',
+    zIndex: '50',
     backgroundColor: 'white',
   })}
 >

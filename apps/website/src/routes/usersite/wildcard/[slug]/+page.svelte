@@ -1,6 +1,5 @@
 <script lang="ts">
   import { graphql } from '$graphql';
-  import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import FolderView from './FolderView.svelte';
   import Header from './Header.svelte';
@@ -29,14 +28,12 @@
   `);
 </script>
 
-<div class={flex({ flexDirection: 'column', width: '[100dvw]', height: '[100dvh]' })}>
+<div class={flex({ flexDirection: 'column', width: '[100dvw]', minHeight: '[100dvh]', height: 'full', paddingTop: '52px' })}>
   <Header $user={$query.me} />
 
-  <div class={css({ flexGrow: '1', overflowY: 'auto' })}>
-    {#if $query.entityView.node.__typename === 'PostView'}
-      <PostView $entityView={$query.entityView} $user={$query.me} />
-    {:else}
-      <FolderView $entityView={$query.entityView} />
-    {/if}
-  </div>
+  {#if $query.entityView.node.__typename === 'PostView'}
+    <PostView $entityView={$query.entityView} $user={$query.me} />
+  {:else}
+    <FolderView $entityView={$query.entityView} />
+  {/if}
 </div>
