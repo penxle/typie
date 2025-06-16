@@ -185,7 +185,7 @@
       onclick={async () => {
         Dialog.confirm({
           title: '포스트 삭제',
-          message: '정말 이 포스트를 삭제하시겠어요?',
+          message: `정말 "${$post.title}" 포스트를 삭제하시겠어요?`,
           action: 'danger',
           actionLabel: '삭제',
           actionHandler: async () => {
