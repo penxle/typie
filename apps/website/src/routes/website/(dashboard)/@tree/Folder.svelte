@@ -321,7 +321,7 @@
 
             Dialog.confirm({
               title: '폴더 삭제',
-              message: '정말 이 폴더를 삭제하시겠어요?',
+              message: `정말 "${$folder.name}" 폴더를 삭제하시겠어요?`,
               children: descendantsView,
               action: 'danger',
               actionLabel: '삭제',
