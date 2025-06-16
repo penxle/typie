@@ -73,18 +73,6 @@ class SettingsScreen extends HookWidget {
                     ),
                   ],
                 ),
-                if (data.me!.subscription != null)
-                  _Section(
-                    title: '사이트 설정',
-                    children: [
-                      _Item(
-                        label: '사이트 주소 변경',
-                        onTap: () async {
-                          await context.router.push(const UpdateSiteSlugRoute());
-                        },
-                      ),
-                    ],
-                  ),
                 _Section(
                   title: '이벤트 알림 설정',
                   children: [
@@ -122,6 +110,26 @@ class SettingsScreen extends HookWidget {
                     ),
                   ],
                 ),
+                if (data.me!.subscription != null)
+                  _Section(
+                    title: '타이피 멤버십',
+                    children: [
+                      _Item(
+                        label: '사이트 주소 변경',
+                        onTap: () async {
+                          await context.router.push(const UpdateSiteSlugRoute());
+                        },
+                      ),
+                      const _Divider(),
+                      _Item(
+                        label: '타이피 커뮤니티 참여하기',
+                        onTap: () async {
+                          final url = Uri.parse('https://typie.link/community');
+                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                        },
+                      ),
+                    ],
+                  ),
                 _Section(
                   title: '서비스 정보',
                   children: [
