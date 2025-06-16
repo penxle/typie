@@ -28,6 +28,10 @@
           id
           ...Img_image
         }
+
+        subscription {
+          id
+        }
       }
     `),
   );
@@ -109,6 +113,29 @@
   </button>
 
   <div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+
+  {#if $user.subscription}
+    <a
+      class={css({
+        paddingX: '16px',
+        paddingY: '12px',
+        width: 'full',
+        fontSize: '14px',
+        fontWeight: 'medium',
+        textAlign: 'center',
+        color: 'gray.700',
+        transition: 'common',
+        _hover: { backgroundColor: 'gray.100' },
+      })}
+      href="https://typie.link/community"
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      타이피 커뮤니티
+    </a>
+
+    <div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+  {/if}
 
   <a
     class={css({
