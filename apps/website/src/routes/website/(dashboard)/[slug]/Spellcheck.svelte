@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hide } from '@floating-ui/dom';
   import { Editor, posToDOMRect } from '@tiptap/core';
   import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Mapping } from '@tiptap/pm/transform';
@@ -57,6 +58,14 @@
   const { anchor, floating } = createFloatingActions({
     placement: 'top',
     offset: 4,
+    middleware: [
+      hide({
+        strategy: 'escaped',
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        boundary: document.querySelector('.editor')!,
+        padding: 32,
+      }),
+    ],
   });
 
   const spellcheck = async () => {
@@ -237,14 +246,7 @@
   {@const error = errors.find((error) => error.id === activeId)}
 
   {#if error}
-    <div
-      class={flex({
-        alignItems: 'center',
-        gap: '4px',
-        backgroundColor: 'white',
-      })}
-      use:floating
-    >
+    <div class={flex({ alignItems: 'center', gap: '4px', backgroundColor: 'white' })} use:floating>
       {#each error.corrections as correction, index (index)}
         <button
           class={flex({

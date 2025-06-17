@@ -33,7 +33,7 @@
   import { Dialog, Tip } from '$lib/notification';
   import { getNodeView, TiptapEditor } from '$lib/tiptap';
   import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
-  import { css } from '$styled-system/css';
+  import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
@@ -539,7 +539,7 @@
     <Toolbar $site={$query.post.entity.site} {doc} {editor} />
 
     <div class={flex({ flexGrow: '1', overflowY: 'hidden' })}>
-      <div class={css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' })}>
+      <div class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}>
         <div
           style:--prosemirror-max-width={`${maxWidth.current}px`}
           class={flex({

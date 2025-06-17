@@ -269,7 +269,7 @@
 
     <div class={css({ flexGrow: '1' })}></div>
 
-    {#if $site?.user.subscription}
+    {#if editor && $site?.user.subscription}
       <Spellcheck {editor} />
     {/if}
   </div>
