@@ -4,6 +4,8 @@ import * as Sentry from '@sentry/node';
 import { XMLParser } from 'fast-xml-parser';
 import ky from 'ky';
 import pMap from 'p-map';
+import { rapidhash } from 'rapidhash-js';
+import { redis } from '@/cache';
 import { env } from '@/env';
 
 const errorTypes = [
@@ -54,7 +56,10 @@ type PnuErrorWord = {
 };
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' });
+
 const MAX_CHUNK_SIZE = 500;
+const MAX_CONCURRENCY = 100;
+
 const ALLOWED_CHARS = /^[\u{AC00}-\u{D7AF}\u{3131}-\u{318E}A-Za-z0-9\s.,!?:;()[\]"'/\\@#$%&*+=_~`{}<>|^。、「」『』！？…·ㆍ-]$/u;
 const SENTENCE_PATTERN = /([.!?。！？]+\s*)/g;
 
@@ -116,10 +121,10 @@ export const check = async (text: string) => {
 
   const paragraphs: { text: string; start: number; end: number }[] = [];
 
-  while (offset < normalized.text.length) {
-    const nextNewline = normalized.text.indexOf('\n', offset);
-    const paragraphEnd = nextNewline === -1 ? normalized.text.length : nextNewline;
-    const paragraph = normalized.text.slice(offset, paragraphEnd);
+  while (offset < text.length) {
+    const nextNewline = text.indexOf('\n', offset);
+    const paragraphEnd = nextNewline === -1 ? text.length : nextNewline;
+    const paragraph = text.slice(offset, paragraphEnd);
 
     if (paragraph.trim().length > 0) {
       paragraphs.push({
@@ -132,89 +137,100 @@ export const check = async (text: string) => {
     offset = paragraphEnd + 1;
   }
 
+  let chunkEndOffset = 0;
+
   for (const paragraph of paragraphs) {
     if (chunk.length + (chunk ? 1 : 0) + paragraph.text.length <= MAX_CHUNK_SIZE) {
       if (chunk) {
         chunk += '\n' + paragraph.text;
+        chunkEndOffset = paragraph.end;
       } else {
         chunk = paragraph.text;
         chunkStartOffset = paragraph.start;
+        chunkEndOffset = paragraph.end;
       }
     } else {
-      if (chunk) {
+      if (chunk && chunkEndOffset > 0) {
         chunks.push({
-          text: chunk,
-          start: normalized.map(chunkStartOffset),
-          end: normalized.map(chunkStartOffset + chunk.length),
+          text: text.slice(chunkStartOffset, chunkEndOffset),
+          start: chunkStartOffset,
+          end: chunkEndOffset,
         });
       }
 
       if (paragraph.text.length > MAX_CHUNK_SIZE) {
         let sentenceChunk = '';
         let sentenceStartOffset = paragraph.start;
+        let sentenceEndOffset = paragraph.start;
         let endOffset = 0;
 
         const pattern = new RegExp(SENTENCE_PATTERN.source, SENTENCE_PATTERN.flags);
         let match;
 
         while ((match = pattern.exec(paragraph.text))) {
-          const sentenceEndOffset = match.index + match[0].length;
-          const sentence = paragraph.text.slice(endOffset, sentenceEndOffset);
+          const matchEndOffset = match.index + match[0].length;
+          const sentence = paragraph.text.slice(endOffset, matchEndOffset);
 
           if (sentenceChunk.length + sentence.length <= MAX_CHUNK_SIZE) {
             sentenceChunk += sentence;
+            sentenceEndOffset = paragraph.start + matchEndOffset;
           } else {
             if (sentenceChunk) {
               chunks.push({
-                text: sentenceChunk,
-                start: normalized.map(sentenceStartOffset),
-                end: normalized.map(sentenceStartOffset + sentenceChunk.length),
+                text: text.slice(sentenceStartOffset, sentenceEndOffset),
+                start: sentenceStartOffset,
+                end: sentenceEndOffset,
               });
             }
             sentenceChunk = sentence;
             sentenceStartOffset = paragraph.start + endOffset;
+            sentenceEndOffset = paragraph.start + matchEndOffset;
           }
-          endOffset = sentenceEndOffset;
+          endOffset = matchEndOffset;
         }
 
         const remaining = paragraph.text.slice(endOffset);
         if (remaining) {
           if (sentenceChunk.length + remaining.length <= MAX_CHUNK_SIZE) {
             sentenceChunk += remaining;
+            sentenceEndOffset = paragraph.end;
           } else {
             if (sentenceChunk) {
               chunks.push({
-                text: sentenceChunk,
-                start: normalized.map(sentenceStartOffset),
-                end: normalized.map(sentenceStartOffset + sentenceChunk.length),
+                text: text.slice(sentenceStartOffset, sentenceEndOffset),
+                start: sentenceStartOffset,
+                end: sentenceEndOffset,
               });
             }
             sentenceChunk = remaining;
             sentenceStartOffset = paragraph.start + endOffset;
+            sentenceEndOffset = paragraph.end;
           }
         }
 
         if (sentenceChunk) {
           chunks.push({
-            text: sentenceChunk,
-            start: normalized.map(sentenceStartOffset),
-            end: normalized.map(sentenceStartOffset + sentenceChunk.length),
+            text: text.slice(sentenceStartOffset, sentenceEndOffset),
+            start: sentenceStartOffset,
+            end: sentenceEndOffset,
           });
         }
 
         chunk = '';
+        chunkEndOffset = 0;
       } else {
         chunk = paragraph.text;
         chunkStartOffset = paragraph.start;
+        chunkEndOffset = paragraph.end;
       }
     }
   }
 
-  if (chunk) {
+  if (chunk && chunkEndOffset > 0) {
     chunks.push({
-      text: chunk,
-      start: normalized.map(chunkStartOffset),
-      end: normalized.map(chunkStartOffset + chunk.length),
+      text: text.slice(chunkStartOffset, chunkEndOffset),
+      start: chunkStartOffset,
+      end: chunkEndOffset,
     });
   }
 
@@ -222,12 +238,23 @@ export const check = async (text: string) => {
     chunks,
     async (chunk) => {
       try {
-        const xml = await ky
-          .post(env.SPELLCHECK_URL, {
-            headers: { 'x-api-key': env.SPELLCHECK_API_KEY },
-            json: { sentence: chunk.text },
-          })
-          .text();
+        const chunkText = chunk.text;
+        const normalized = normalize(chunkText);
+
+        const hash = rapidhash(normalized.text);
+        const key = `spellcheck:${hash}`;
+
+        let xml = await redis.get(key);
+        if (!xml) {
+          xml = await ky
+            .post(env.SPELLCHECK_URL, {
+              headers: { 'x-api-key': env.SPELLCHECK_API_KEY },
+              json: { sentence: normalized.text },
+            })
+            .text();
+
+          await redis.setex(key, 60 * 60 * 24, xml);
+        }
 
         const resp = parser.parse(xml) as CheckSpellResponse;
         const errorList = resp.PnuNlpSpeller?.PnuErrorWordList;
@@ -244,7 +271,6 @@ export const check = async (text: string) => {
         if (!errorList?.PnuErrorWord) return [];
 
         const errors = [errorList.PnuErrorWord].flat() as PnuErrorWord[];
-        const normalized = normalize(text.slice(chunk.start, chunk.end));
 
         return errors.map((error) => {
           const start = normalized.map(Number(error.m_nStart));
@@ -254,7 +280,7 @@ export const check = async (text: string) => {
             index: Number(error.nErrorIdx),
             start: chunk.start + start,
             end: chunk.start + end,
-            context: text.slice(chunk.start + start, chunk.start + end),
+            context: chunkText.slice(start, end),
             corrections:
               error.CandWordList && Number(error.CandWordList.m_nCount) > 0
                 ? [error.CandWordList.CandWord].flat().filter((x) => x !== undefined)
@@ -268,7 +294,7 @@ export const check = async (text: string) => {
         return [];
       }
     },
-    { concurrency: 10 },
+    { concurrency: MAX_CONCURRENCY },
   );
 
   return results.flat();

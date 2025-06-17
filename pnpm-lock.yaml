@@ -209,6 +209,9 @@ importers:
       query-string:
         specifier: ^9.2.0
         version: 9.2.0
+      rapidhash-js:
+        specifier: ^2.2.0
+        version: 2.2.0
       react:
         specifier: ^19.1.0
         version: 19.1.0

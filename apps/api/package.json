@@ -68,6 +68,7 @@
     "p-map": "^7.0.3",
     "postgres": "^3.4.7",
     "query-string": "^9.2.0",
+    "rapidhash-js": "^2.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "remeda": "^2.23.0",

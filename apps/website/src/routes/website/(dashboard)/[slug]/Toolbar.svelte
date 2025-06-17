@@ -31,6 +31,7 @@
   import { css } from '$styled-system/css';
   import { center, flex, grid } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
+  import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -60,6 +61,14 @@
     graphql(`
       fragment Editor_Toolbar_site on Site {
         id
+
+        user {
+          id
+
+          subscription {
+            id
+          }
+        }
 
         ...Editor_Toolbar_FontFamily_site
       }
@@ -257,6 +266,12 @@
       }}
       size="large"
     />
+
+    <div class={css({ flexGrow: '1' })}></div>
+
+    {#if $site?.user.subscription}
+      <Spellcheck {editor} />
+    {/if}
   </div>
 
   <HorizontalDivider color="secondary" />
