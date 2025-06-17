@@ -235,6 +235,17 @@ JWT-based auth with social login support (Google, Apple, Kakao, Naver). Tokens a
   gt sync --no-interactive --force # Run before submit if stack issues occur
   ```
 
+- **Running TypeScript scripts**: Always use Doppler for environment variables:
+
+  ```bash
+  # In each project directory (apps/api, apps/website, etc.)
+  doppler run -- pnpm tsx <script-path>
+
+  # Example:
+  cd apps/api
+  doppler run -- pnpm tsx scripts/test-script.ts
+  ```
+
 ## Performance Optimization
 
 - **Parallel Tool Usage**: Always use parallel tasks whenever possible. When multiple independent pieces of information are needed or multiple operations must be performed, batch tool calls together in a single message to optimize performance.
