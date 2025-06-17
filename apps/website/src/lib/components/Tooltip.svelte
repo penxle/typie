@@ -8,7 +8,7 @@
   import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
-    message?: string;
+    message?: string | Snippet;
     style?: SystemStyleObject;
     tooltipStyle?: SystemStyleObject;
     offset?: number;
@@ -54,7 +54,11 @@
     use:floating
     transition:scale|global={{ start: 0.9, duration: 200 }}
   >
-    {message}
+    {#if typeof message === 'string'}
+      {message}
+    {:else}
+      {@render message?.()}
+    {/if}
     <div
       class={css({
         borderTopLeftRadius: '2px',
