@@ -4,6 +4,7 @@
   import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Mapping } from '@tiptap/pm/transform';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
+  import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { untrack } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
@@ -80,6 +81,8 @@
 
       const body = editor.current.getJSON();
       const resp = await checkSpelling({ body });
+
+      mixpanel.track('spellcheck', { errors: resp.length });
 
       const map = (pos: number) => {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
