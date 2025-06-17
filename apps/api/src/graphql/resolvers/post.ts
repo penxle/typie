@@ -1,3 +1,4 @@
+import { Node } from '@tiptap/pm/model';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
@@ -36,8 +37,9 @@ import {
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import * as slack from '@/external/slack';
+import * as spellcheck from '@/external/spellcheck';
 import { enqueueJob } from '@/mq';
-import { schema } from '@/pm';
+import { schema, textSerializers } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
@@ -914,6 +916,95 @@ builder.mutationFields((t) => ({
       });
 
       return true;
+    },
+  }),
+
+  checkSpelling: t.withAuth({ session: true }).fieldWithInput({
+    type: [
+      builder.simpleObject('SpellingError', {
+        fields: (t) => ({
+          from: t.int(),
+          to: t.int(),
+          context: t.string(),
+          corrections: t.stringList(),
+          explanation: t.string(),
+        }),
+      }),
+    ],
+    input: { body: t.input.field({ type: 'JSON' }) },
+    resolve: async (_, { input }) => {
+      const node = Node.fromJSON(schema, input.body);
+
+      let text = '';
+      let textOffset = 0;
+
+      const textNodeMappings: { textStart: number; textEnd: number; pmStart: number }[] = [];
+
+      node.nodesBetween(0, node.content.size, (childNode, pos, parent, index) => {
+        const textSerializer = textSerializers[childNode.type.name];
+        if (textSerializer) {
+          if (parent) {
+            const range = { from: 0, to: node.content.size };
+            const serialized = textSerializer({ node: childNode, pos, parent, index, range });
+            text += serialized;
+            textOffset += serialized.length;
+          }
+
+          return false;
+        }
+
+        if (childNode.isBlock && pos > 0) {
+          text += '\n';
+          textOffset += 1;
+        }
+
+        if (childNode.isText) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          const content = childNode.text!;
+
+          textNodeMappings.push({
+            textStart: textOffset,
+            textEnd: textOffset + content.length,
+            pmStart: pos,
+          });
+
+          text += content;
+          textOffset += content.length;
+        }
+      });
+
+      const errors = await spellcheck.check(text);
+
+      const mapRange = (textStart: number, textEnd: number) => {
+        const startMapping = textNodeMappings.find((m) => textStart >= m.textStart && textStart < m.textEnd);
+        const endMapping = textNodeMappings.find((m) => textEnd > m.textStart && textEnd <= m.textEnd);
+
+        if (!startMapping || !endMapping || startMapping !== endMapping) {
+          return null;
+        }
+
+        const from = startMapping.pmStart + (textStart - startMapping.textStart);
+        const to = startMapping.pmStart + (textEnd - startMapping.textStart);
+
+        return { from, to };
+      };
+
+      return errors
+        .map((error) => {
+          const range = mapRange(error.start, error.end);
+
+          return {
+            from: range?.from,
+            to: range?.to,
+            context: error.context,
+            corrections: error.corrections,
+            explanation: error.explanation,
+          };
+        })
+        .filter(
+          (error): error is { from: number; to: number; context: string; corrections: string[]; explanation: string } =>
+            error.from !== undefined && error.to !== undefined,
+        );
     },
   }),
 }));
