@@ -32,6 +32,8 @@ const schema = z.object({
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
   SLACK_WEBHOOK_URL: z.string(),
+  SPELLCHECK_API_KEY: z.string(),
+  SPELLCHECK_URL: z.string(),
   USERSITE_URL: z.string(),
   WEBSITE_URL: z.string(),
 });

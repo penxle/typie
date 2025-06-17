@@ -25,6 +25,10 @@ type CharacterCountChange {
   deletions: Int!
 }
 
+input CheckSpellingInput {
+  body: JSON!
+}
+
 type Comment {
   content: String
   createdAt: DateTime!
@@ -293,6 +297,7 @@ type Mutation {
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlanChange: Subscription_!
   cancelSubscriptionCancellation: Subscription_!
+  checkSpelling(input: CheckSpellingInput!): [SpellingError!]!
   createComment(input: CreateCommentInput!): Comment!
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
@@ -670,6 +675,14 @@ type SiteView implements ISite {
   name: String!
   slug: String!
   url: String!
+}
+
+type SpellingError {
+  context: String!
+  corrections: [String!]!
+  explanation: String!
+  from: Int!
+  to: Int!
 }
 
 input SubscribeOrChangePlanWithInAppPurchaseInput {

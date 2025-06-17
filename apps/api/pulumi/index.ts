@@ -97,6 +97,8 @@ new typie.Service('api', {
       'REDIS_URL',
       'SENTRY_DSN',
       'SLACK_WEBHOOK_URL',
+      'SPELLCHECK_API_KEY',
+      'SPELLCHECK_URL',
       'USERSITE_URL',
       'WEBSITE_URL',
     ],
