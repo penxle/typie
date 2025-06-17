@@ -62,7 +62,9 @@
     backgroundColor: 'white',
   })}
 >
-  <Logo class={css({ flexShrink: '0', height: '20px' })} />
+  <a class={css({ flexShrink: '0', height: '20px' })} href={env.PUBLIC_WEBSITE_URL} rel="noopener noreferrer" target="_blank">
+    <Logo class={css({ height: 'full' })} />
+  </a>
 
   {#if $user}
     <Menu>
