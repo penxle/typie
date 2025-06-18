@@ -1,26 +1,12 @@
-import { mergeAttributes, Node } from '@tiptap/core';
-import { css } from '$styled-system/css';
+import { createNodeView } from '../../lib';
+import Component from './TableRow.svelte';
 
-export const TableRow = Node.create({
+export const TableRow = createNodeView(Component, {
   name: 'table_row',
   content: 'table_cell+',
   tableRole: 'row',
 
   parseHTML() {
     return [{ tag: 'tr' }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return [
-      'tr',
-      mergeAttributes(HTMLAttributes, {
-        class: css({
-          '&:last-child :is(td, th)': {
-            borderBottom: 'none',
-          },
-        }),
-      }),
-      0,
-    ];
   },
 });

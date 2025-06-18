@@ -1,7 +1,7 @@
-import { mergeAttributes, Node } from '@tiptap/core';
-import { css } from '$styled-system/css';
+import { createNodeView } from '../../lib';
+import Component from './TableCell.svelte';
 
-export const TableCell = Node.create({
+export const TableCell = createNodeView(Component, {
   name: 'table_cell',
   content: 'block+',
   isolating: true,
@@ -29,21 +29,5 @@ export const TableCell = Node.create({
 
   parseHTML() {
     return [{ tag: 'td' }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return [
-      'td',
-      mergeAttributes(HTMLAttributes, {
-        class: css({
-          borderWidth: '1px',
-          borderTopWidth: '0',
-          borderColor: 'gray.300',
-          paddingX: '14px',
-          paddingY: '10px',
-        }),
-      }),
-      0,
-    ];
   },
 });

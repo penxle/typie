@@ -89,7 +89,11 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
         throw new Error('<NodeViewContentEditable /> not found');
       }
 
-      this.#contentElement = contentElement;
+      if (contentElement.dataset.nodeViewContentEditableTransparent === 'true') {
+        this.#contentElement = element;
+      } else {
+        this.#contentElement = contentElement;
+      }
     }
 
     this.#handleSelectionUpdate = () => {

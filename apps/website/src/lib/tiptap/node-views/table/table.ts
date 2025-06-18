@@ -17,7 +17,7 @@ import {
   tableEditing,
 } from '@tiptap/pm/tables';
 import { createNodeView } from '../../lib';
-import Component from './Component.svelte';
+import Component from './Table.svelte';
 import { deleteTableWhenAllCellsSelected } from './utils';
 import type { ParentConfig } from '@tiptap/core';
 
@@ -63,10 +63,12 @@ export const Table = createNodeView(Component, {
     return {
       borderStyle: {
         default: 'solid',
-        rendered: false,
         parseHTML: (element) => {
-          return element.style.borderStyle;
+          return element.dataset.borderStyle;
         },
+        renderHTML: ({ borderStyle }) => ({
+          'data-border-style': borderStyle,
+        }),
       },
     };
   },
