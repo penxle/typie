@@ -244,6 +244,16 @@
 
   <HorizontalDivider color="secondary" />
 
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', maxWidth: '500px' })}>
+    <p class={css({ fontWeight: 'medium' })}>계정 ID</p>
+
+    <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+      {$user.id}
+    </div>
+  </div>
+
+  <HorizontalDivider color="secondary" />
+
   <button
     class={css({ padding: '4px', fontSize: '13px', color: 'gray.400', width: 'fit' })}
     onclick={async () => {
