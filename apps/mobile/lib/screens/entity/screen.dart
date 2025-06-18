@@ -12,6 +12,7 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/toast.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/async_effect.dart';
@@ -740,6 +741,7 @@ class _Post extends StatelessWidget {
         Row(
           spacing: 8,
           children: [
+            if (post.type == GPostType.TEMPLATE) const Icon(LucideLightIcons.shapes, size: 18),
             Expanded(
               child: Text(
                 post.title,
@@ -748,7 +750,8 @@ class _Post extends StatelessWidget {
                 maxLines: 1,
               ),
             ),
-            Text(post.updatedAt.fromNow(), style: const TextStyle(fontSize: 14, color: AppColors.gray_700)),
+            if (post.type == GPostType.NORMAL)
+              Text(post.updatedAt.fromNow(), style: const TextStyle(fontSize: 14, color: AppColors.gray_700)),
           ],
         ),
         Text(
