@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ShapesIcon from '~icons/lucide/shapes';
+  import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
@@ -46,6 +48,24 @@
       })}
     >
       <div class={css({ fontFamily: 'ui' })}>내용</div>
+
+      <div class={flex({ alignItems: 'center', gap: '4px' })}>
+        <div>혹은</div>
+        <button
+          class={flex({
+            alignItems: 'center',
+            gap: '4px',
+            pointerEvents: 'auto',
+          })}
+          onclick={() => {
+            window.__webview__?.emitEvent('useTemplate');
+          }}
+          type="button"
+        >
+          <Icon icon={ShapesIcon} size={16} />
+          <div>템플릿 사용하기</div>
+        </button>
+      </div>
     </div>
   </div>
 {/if}
