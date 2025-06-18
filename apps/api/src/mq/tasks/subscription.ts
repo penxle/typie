@@ -93,6 +93,8 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
     } else {
       await tx.update(Subscriptions).set({ state: SubscriptionState.IN_GRACE_PERIOD }).where(eq(Subscriptions.id, subscriptionId));
       await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.OVERDUE }).where(eq(PaymentInvoices.id, invoice.id));
+
+      await enqueueJob('email:subscription-grace-period', subscription.id, { delay: 5 * 60 * 1000 });
     }
   });
 });
@@ -102,7 +104,7 @@ export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry
     const invoice = await tx
       .select({
         id: PaymentInvoices.id,
-        subscription: { id: Subscriptions.id, expiresAt: Subscriptions.expiresAt },
+        subscription: { id: Subscriptions.id, userId: Subscriptions.userId, expiresAt: Subscriptions.expiresAt },
         plan: { interval: Plans.interval },
       })
       .from(PaymentInvoices)
@@ -119,9 +121,19 @@ export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry
         .set({ expiresAt: newExpiresAt, state: SubscriptionState.ACTIVE })
         .where(eq(Subscriptions.id, invoice.subscription.id));
       await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.PAID }).where(eq(PaymentInvoices.id, invoice.id));
-    } else if (invoice.subscription.expiresAt.isBefore(dayjs().subtract(SUBSCRIPTION_GRACE_DAYS, 'days'))) {
-      await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, invoice.subscription.id));
-      await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.CANCELED }).where(eq(PaymentInvoices.id, invoice.id));
+    } else {
+      const gracePeriodEndsAt = invoice.subscription.expiresAt.add(SUBSCRIPTION_GRACE_DAYS, 'days').kst();
+
+      if (gracePeriodEndsAt.subtract(1, 'day').isSame(dayjs.kst(), 'day')) {
+        await enqueueJob('email:subscription-expiring', invoice.subscription.id, { delay: 5 * 60 * 1000 });
+      }
+
+      if (gracePeriodEndsAt.isBefore(dayjs())) {
+        await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, invoice.subscription.id));
+        await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.CANCELED }).where(eq(PaymentInvoices.id, invoice.id));
+
+        await enqueueJob('email:subscription-expired', invoice.subscription.id, { delay: 5 * 60 * 1000 });
+      }
     }
   });
 });
@@ -157,6 +169,8 @@ export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:
         .set({ expiresAt: subscription.startsAt, state: SubscriptionState.IN_GRACE_PERIOD })
         .where(eq(Subscriptions.id, subscriptionId));
       await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.OVERDUE }).where(eq(PaymentInvoices.id, invoice.id));
+
+      await enqueueJob('email:subscription-grace-period', subscription.id, { delay: 5 * 60 * 1000 });
     }
   });
 });

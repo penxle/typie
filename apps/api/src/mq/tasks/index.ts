@@ -1,3 +1,4 @@
+import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email';
 import { CreateNotificationJob } from './notification';
 import { PostCompactJob, PostCompactScanCron, PostIndexJob, PostSyncCollectJob } from './post';
 import {
@@ -17,6 +18,9 @@ export const jobs = [
   SubscriptionRenewalRetryJob,
   SubscriptionRenewalPlanChangeJob,
   SubscriptionRenewalCancelJob,
+  SendSubscriptionGracePeriodEmailJob,
+  SendSubscriptionExpiringEmailJob,
+  SendSubscriptionExpiredEmailJob,
 ];
 
 export const crons = [PostCompactScanCron, SubscriptionRenewalCron];
