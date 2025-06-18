@@ -32,6 +32,8 @@
     const body = doc.child(0);
     return body.attrs.paragraphIndent;
   });
+
+  const isTemplateActive = false;
 </script>
 
 {#if isBodyEmpty}
@@ -49,23 +51,25 @@
     >
       <div class={css({ fontFamily: 'ui' })}>내용</div>
 
-      <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <div>혹은</div>
-        <button
-          class={flex({
-            alignItems: 'center',
-            gap: '4px',
-            pointerEvents: 'auto',
-          })}
-          onclick={() => {
-            window.__webview__?.emitEvent('useTemplate');
-          }}
-          type="button"
-        >
-          <Icon icon={ShapesIcon} size={16} />
-          <div>템플릿 사용하기</div>
-        </button>
-      </div>
+      {#if isTemplateActive}
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <div>혹은</div>
+          <button
+            class={flex({
+              alignItems: 'center',
+              gap: '4px',
+              pointerEvents: 'auto',
+            })}
+            onclick={() => {
+              window.__webview__?.emitEvent('useTemplate');
+            }}
+            type="button"
+          >
+            <Icon icon={ShapesIcon} size={16} />
+            <div>템플릿 사용하기</div>
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
