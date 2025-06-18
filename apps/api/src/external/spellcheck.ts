@@ -2,6 +2,7 @@
 
 import * as Sentry from '@sentry/node';
 import { XMLParser } from 'fast-xml-parser';
+import DOMPurify from 'isomorphic-dompurify';
 import ky from 'ky';
 import pMap from 'p-map';
 import { rapidhash } from 'rapidhash-js';
@@ -285,7 +286,7 @@ export const check = async (text: string) => {
               error.CandWordList && Number(error.CandWordList.m_nCount) > 0
                 ? [error.CandWordList.CandWord].flat().filter((x) => x !== undefined)
                 : [],
-            explanation: error.Help?.['#text'] ?? '',
+            explanation: DOMPurify.sanitize(error.Help?.['#text'] ?? '', { ALLOWED_TAGS: ['br'] }),
             type: errorTypes[Number(error.Help?.nCorrectMethod)],
           };
         });
