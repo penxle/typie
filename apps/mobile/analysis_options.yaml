@@ -10,6 +10,7 @@ linter:
   rules:
     avoid_types_on_closure_parameters: false
     discarded_futures: true
+    type_annotate_public_apis: false
     unsafe_variance: false
 formatter:
   page_width: 120

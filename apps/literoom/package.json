@@ -9,14 +9,14 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.826.0",
-    "@pulumi/aws": "^6.82.1",
-    "@pulumi/pulumi": "^3.175.0",
+    "@aws-sdk/client-s3": "^3.830.0",
+    "@pulumi/aws": "^6.83.0",
+    "@pulumi/pulumi": "^3.177.0",
     "@typie/tsconfig": "workspace:*",
     "execa": "^9.6.0",
     "sharp": "^0.34.2",
     "tsup": "^8.5.0",
-    "tsx": "^4.19.4",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }
 }

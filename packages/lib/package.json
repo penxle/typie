@@ -17,16 +17,16 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.14.4",
-    "@logtape/logtape": "^0.11.0",
+    "@logtape/logtape": "^0.12.0",
     "dayjs": "^1.11.13",
-    "hono": "^4.7.11",
+    "hono": "^4.8.0",
     "ipaddr.js": "^2.2.0",
     "remeda": "^2.23.0"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.21.4",
+    "@sveltejs/kit": "^2.21.5",
     "@typie/tsconfig": "workspace:*",
-    "svelte": "^5.33.19",
+    "svelte": "^5.34.5",
     "svgo": "^3.3.2",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
