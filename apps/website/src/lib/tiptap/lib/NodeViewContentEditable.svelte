@@ -5,10 +5,11 @@
   type Props = {
     as?: keyof HTMLElementTagNameMap;
     style?: SystemStyleObject | undefined;
+    transparent?: boolean;
     [key: string]: unknown;
   };
 
-  let { as = 'div', style, ...rest }: Props = $props();
+  let { as = 'div', style, transparent, ...rest }: Props = $props();
 </script>
 
 <svelte:element
@@ -18,5 +19,6 @@
     style,
   )}
   data-node-view-content-editable
+  data-node-view-content-editable-transparent={transparent}
   {...rest}
 />

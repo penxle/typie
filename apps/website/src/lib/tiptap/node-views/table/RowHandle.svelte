@@ -7,6 +7,7 @@
   import MoveUpIcon from '~icons/lucide/move-up';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { Icon, Menu, MenuItem, Tooltip } from '$lib/components';
+  import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
@@ -149,7 +150,11 @@
   {/snippet}
   {#snippet children({ close })}
     {#if i !== 0}
-      <Tooltip enabled={hasSpan} message="표에 병합된 셀이 없을 때만 이동할 수 있습니다.">
+      <Tooltip
+        style={css.raw({ display: 'flex', flexDirection: 'column' })}
+        enabled={hasSpan}
+        message="표에 병합된 셀이 없을 때만 이동할 수 있습니다."
+      >
         <MenuItem
           disabled={hasSpan}
           onclick={() => {
@@ -163,7 +168,11 @@
       </Tooltip>
     {/if}
     {#if i !== tableNode.childCount - 1}
-      <Tooltip enabled={hasSpan} message="표에 병합된 셀이 없을 때만 이동할 수 있습니다.">
+      <Tooltip
+        style={css.raw({ display: 'flex', flexDirection: 'column' })}
+        enabled={hasSpan}
+        message="표에 병합된 셀이 없을 때만 이동할 수 있습니다."
+      >
         <MenuItem
           disabled={hasSpan}
           onclick={() => {
