@@ -126,8 +126,8 @@
   let containerEl = $state<HTMLDivElement>();
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
-
   let editor = $state<Ref<Editor>>();
+  let featureFlags = $state<string[]>([]);
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -293,8 +293,8 @@
 
     doc.getMap('attrs').observe(handler2);
 
-    window.__webview__?.addEventListener('appReady', () => {
-      // titleEl?.focus();
+    window.__webview__?.addEventListener('appReady', (data) => {
+      featureFlags = data.featureFlags;
     });
 
     window.__webview__?.addEventListener('command', (data) => {
@@ -559,7 +559,7 @@
     />
 
     {#if editor}
-      <Placeholder {editor} />
+      <Placeholder {editor} isTemplateActive={featureFlags.includes('template')} />
       <Limit {$query} {editor} />
     {/if}
   </div>

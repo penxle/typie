@@ -87,7 +87,9 @@ class Editor extends HookWidget {
           case 'webviewReady':
             isReady.value = true;
             await webViewController.requestFocus();
-            await webViewController.emitEvent('appReady');
+            await webViewController.emitEvent('appReady', {
+              'featureFlags': ['template'],
+            });
           case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
           case 'setCharacterCountState':
@@ -101,7 +103,7 @@ class Editor extends HookWidget {
             }
           case 'useTemplate':
             if (context.mounted) {
-              await context.showBottomSheet(intercept: true, child: const _TemplateBottomSheet());
+              await context.showBottomSheet(intercept: true, child: _TemplateBottomSheet(scope: scope));
             }
         }
       });
@@ -615,11 +617,12 @@ class _EditorInfoBottomSheet extends HookWidget {
 }
 
 class _TemplateBottomSheet extends HookWidget {
-  const _TemplateBottomSheet();
+  const _TemplateBottomSheet({required this.scope});
+
+  final EditorStateScope scope;
 
   @override
   Widget build(BuildContext context) {
-    final scope = EditorStateScope.of(context);
     final data = useValueListenable(scope.data);
     final templates = data?.site.templates.toList() ?? [];
 

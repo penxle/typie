@@ -8,9 +8,10 @@
 
   type Props = {
     editor: Ref<Editor>;
+    isTemplateActive: boolean;
   };
 
-  let { editor }: Props = $props();
+  let { editor, isTemplateActive }: Props = $props();
 
   const isBodyEmpty = $derived.by(() => {
     const { doc, selection } = editor.current.state;
@@ -32,8 +33,6 @@
     const body = doc.child(0);
     return body.attrs.paragraphIndent;
   });
-
-  const isTemplateActive = false;
 </script>
 
 {#if isBodyEmpty}
