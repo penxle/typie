@@ -111,17 +111,92 @@ iap.post('/appstore', async (c) => {
 
 iap.post('/googleplay', async (c) => {
   const notification = await c.req.json<DeveloperNotification>();
-  await slack.sendMessage({
-    channel: 'iap',
-    message: JSON.stringify({ source: 'rest/googleplay', notification }, null, 2),
-  });
 
   if (notification.subscriptionNotification) {
-    const subscription = await googleplay.getSubscription(notification.subscriptionNotification.purchaseToken);
+    const googlePlaySubscription = await googleplay.getSubscription(notification.subscriptionNotification.purchaseToken);
 
+    const item = googlePlaySubscription.lineItems?.[0];
+    const planId = item?.offerDetails?.basePlanId?.toUpperCase();
+
+    if (!item || !planId) {
+      return c.json({ error: 'invalid_request' }, 400);
+    }
+
+    const { userId } = await db
+      .select({
+        userId: UserInAppPurchases.userId,
+      })
+      .from(UserInAppPurchases)
+      .where(
+        and(
+          eq(UserInAppPurchases.identifier, notification.subscriptionNotification.purchaseToken),
+          eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY),
+        ),
+      )
+      .then(firstOrThrow);
+
+    const subscription = await db
+      .select({
+        id: Subscriptions.id,
+        state: Subscriptions.state,
+        expiresAt: Subscriptions.expiresAt,
+      })
+      .from(Subscriptions)
+      .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+      .where(
+        and(
+          eq(Subscriptions.userId, userId),
+          eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+          inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
+        ),
+      )
+      .then(first);
+
+    await match(googlePlaySubscription.subscriptionState)
+      .with('SUBSCRIPTION_STATE_ACTIVE', async () => {
+        if (subscription) {
+          await db
+            .update(Subscriptions)
+            .set({
+              state: SubscriptionState.ACTIVE,
+              expiresAt: dayjs(item.expiryTime),
+            })
+            .where(eq(Subscriptions.id, subscription.id));
+        } else {
+          await db.insert(Subscriptions).values({
+            userId,
+            planId,
+            startsAt: dayjs(googlePlaySubscription.startTime),
+            expiresAt: dayjs(item.expiryTime),
+            state: SubscriptionState.ACTIVE,
+          });
+        }
+      })
+      .with('SUBSCRIPTION_STATE_EXPIRED', async () => {
+        if (subscription) {
+          await db.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, subscription.id));
+        }
+      })
+      .with('SUBSCRIPTION_STATE_CANCELED', async () => {
+        if (subscription) {
+          await db.update(Subscriptions).set({ state: SubscriptionState.WILL_EXPIRE }).where(eq(Subscriptions.id, subscription.id));
+        }
+      })
+      .with('SUBSCRIPTION_STATE_IN_GRACE_PERIOD', async () => {
+        if (subscription) {
+          await db.update(Subscriptions).set({ state: SubscriptionState.IN_GRACE_PERIOD }).where(eq(Subscriptions.id, subscription.id));
+        }
+      })
+      .otherwise(async () => {
+        await slack.sendMessage({
+          channel: 'iap',
+          message: JSON.stringify({ source: 'rest/googleplay', subscription }, null, 2),
+        });
+      });
+  } else {
     await slack.sendMessage({
       channel: 'iap',
-      message: JSON.stringify({ source: 'rest/googleplay', subscription }, null, 2),
+      message: JSON.stringify({ source: 'rest/googleplay', notification }, null, 2),
     });
   }
 
