@@ -585,8 +585,8 @@ importers:
         specifier: ^1.14.4
         version: 1.14.4(hono@4.8.0)
       '@logtape/logtape':
-        specifier: ^0.12.0
-        version: 0.12.0
+        specifier: ^0.11.0
+        version: 0.11.0
       dayjs:
         specifier: ^1.11.13
         version: 1.11.13
@@ -2106,8 +2106,8 @@ packages:
     resolution: {integrity: sha512-XGSsWDweP80Fks16lwkAUIr54ICyBs6PsI4mpfTLQaWgEJRtY9xEV+PeyDpJ+sJEGZxqINlpmAwe/6tS1pP8Ng==}
     engines: {node: '>=10.3.0'}
 
-  '@logtape/logtape@0.12.0':
-    resolution: {integrity: sha512-FPAI0VHDLaU/+sFC53k50RhJyMvj8tsuENF7Bzf+jKdMac2HavV2/eB4YyFltjt4PwSbvKimXc0cE9iwfHbPpw==}
+  '@logtape/logtape@0.11.0':
+    resolution: {integrity: sha512-CV14Jf+gXCdgICvMZbkUOrVPJ2eBuLFaacEYJ3vI6ohv6n2mVepakxTfuZNhtWYVeIB1EblRRQNkFs/n5vFYqA==}
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.3':
     resolution: {integrity: sha512-QZHtlVgbAdy2zAqNA9Gu1UpIuI8Xvsd1v8ic6B2pZmeFnFcMWiPLfWXh7TVw4eGEZ/C9TH281KwhVoeQUKbyjw==}
@@ -10744,7 +10744,7 @@ snapshots:
 
   '@logdna/tail-file@2.2.0': {}
 
-  '@logtape/logtape@0.12.0': {}
+  '@logtape/logtape@0.11.0': {}
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.3':
     optional: true
