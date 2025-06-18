@@ -4,3 +4,6 @@ export { default as PasswordResetEmail } from './PasswordResetEmail';
 export { default as PreorderCodeEmail } from './PreorderCodeEmail';
 export { default as PreorderCompletedEmail } from './PreorderCompletedEmail';
 export { default as SignUpEmail } from './SignUpEmail';
+export { default as SubscriptionExpiredEmail } from './SubscriptionExpiredEmail';
+export { default as SubscriptionExpiringEmail } from './SubscriptionExpiringEmail';
+export { default as SubscriptionGracePeriodEmail } from './SubscriptionGracePeriodEmail';
