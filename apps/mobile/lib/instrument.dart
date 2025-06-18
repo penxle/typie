@@ -12,9 +12,10 @@ Future<void> configureInstruments() async {
       ..dsn = Env.sentryDsn
       ..attachScreenshot = true
       ..sendDefaultPii = true
-      ..experimental.privacy.maskAllText = false
-      ..experimental.privacy.maskAllImages = false
-      ..experimental.replay.onErrorSampleRate = 1.0
-      ..experimental.replay.sessionSampleRate = 0.1;
+      ..privacy.maskAllText = false
+      ..privacy.maskAllImages = false
+      ..replay.onErrorSampleRate = 1.0
+      ..replay.sessionSampleRate = 0.1
+      ..replay.quality = SentryReplayQuality.high;
   });
 }
