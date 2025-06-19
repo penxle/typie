@@ -20,6 +20,7 @@
     "**/vendor/**",
     "CODEOWNERS",
     "drizzle",
+    "app.html",
     "naver*.html",
     "apps/mobile/android",
     "apps/mobile/ios"
