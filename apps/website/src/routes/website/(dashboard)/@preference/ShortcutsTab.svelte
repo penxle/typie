@@ -75,29 +75,15 @@
   ];
 </script>
 
-<div class={flex({ direction: 'column', gap: '24px' })}>
-  <h2
-    class={css({
-      fontSize: '18px',
-      fontWeight: 'semibold',
-      color: 'gray.900',
-      marginBottom: '4px',
-    })}
-  >
-    키보드 단축키
-  </h2>
+<div class={flex({ direction: 'column', gap: '32px' })}>
+  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'gray.900' })}>단축키</h1>
 
-  <div
-    class={flex({
-      direction: 'column',
-      gap: '20px',
-    })}
-  >
+  <div class={flex({ direction: 'column', gap: '16px' })}>
     {#each shortcutCategories as category (category.title)}
       <div
         class={css({
           borderWidth: '1px',
-          borderColor: 'gray.100',
+          borderColor: 'gray.200',
           borderRadius: '8px',
           backgroundColor: 'white',
           overflow: 'hidden',
@@ -115,14 +101,14 @@
           <h3
             class={css({
               fontSize: '13px',
-              fontWeight: 'semibold',
+              fontWeight: 'medium',
               color: 'gray.700',
             })}
           >
             {category.title}
           </h3>
         </div>
-        <div class={css({ padding: '8px' })}>
+        <div class={css({ padding: '12px' })}>
           {#each category.shortcuts as shortcut (shortcut.description)}
             <div
               class={flex({
@@ -180,18 +166,17 @@
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            minWidth: '24px',
-                            height: '24px',
+                            minWidth: '20px',
+                            height: '20px',
                             paddingX: '6px',
                             fontSize: '11px',
                             fontWeight: 'medium',
-                            fontFamily: '[monospace]',
+                            fontFamily: 'mono',
                             color: 'gray.600',
-                            backgroundColor: 'white',
+                            backgroundColor: 'gray.50',
                             borderWidth: '1px',
                             borderColor: 'gray.200',
-                            borderRadius: '3px',
-                            boxShadow: 'small',
+                            borderRadius: '4px',
                           })}
                         >
                           {key}

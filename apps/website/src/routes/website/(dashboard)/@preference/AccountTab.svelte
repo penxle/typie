@@ -7,7 +7,7 @@
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';
   import { fragment, graphql } from '$graphql';
-  import { Button, HorizontalDivider, Icon, LoadableImg, Switch, TextInput } from '$lib/components';
+  import { Button, Icon, LoadableImg, Switch, TextInput } from '$lib/components';
   import { createForm } from '$lib/form';
   import { Dialog } from '$lib/notification';
   import { uploadBlobAsImage } from '$lib/utils';
@@ -91,95 +91,95 @@
   let updateEmailOpen = $state(false);
 </script>
 
-<div class={flex({ direction: 'column', gap: '24px' })}>
-  <p class={css({ fontSize: '20px', fontWeight: 'bold' })}>계정 설정</p>
+<div class={flex({ direction: 'column', gap: '32px' })}>
+  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'gray.900' })}>계정</h1>
 
-  <div class={flex({ direction: 'column', gap: '8px' })}>
-    <p class={css({ fontWeight: 'medium' })}>프로필</p>
+  <div class={flex({ direction: 'column', gap: '16px' })}>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>프로필</h3>
 
-    <form class={flex({ direction: 'column', gap: '12px', width: 'full', maxWidth: '500px' })} onsubmit={form.handleSubmit}>
-      <label class={cx('group', center({ position: 'relative', size: '64px', cursor: 'pointer' }))}>
-        <LoadableImg
-          id={form.fields.avatarId}
-          style={css.raw({ size: '64px', borderWidth: '1px', borderColor: 'gray.100', borderRadius: '12px' })}
-          alt={`${$user.name}의 아바타`}
-          size={64}
-        />
+    <form class={flex({ direction: 'column', gap: '20px', width: 'full' })} onsubmit={form.handleSubmit}>
+      <div class={flex({ align: 'center', gap: '24px' })}>
+        <label class={cx('group', center({ position: 'relative', size: '64px', cursor: 'pointer' }))}>
+          <LoadableImg
+            id={form.fields.avatarId}
+            style={css.raw({ size: '64px', borderWidth: '1px', borderColor: 'gray.200', borderRadius: 'full' })}
+            alt={`${$user.name}의 아바타`}
+            size={128}
+          />
 
-        <div
-          class={css({
-            display: 'none',
-            _groupHover: {
-              position: 'absolute',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '12px',
-              size: 'full',
-              backgroundColor: 'gray.900/16',
-              color: 'white',
-            },
-          })}
-        >
-          <Icon icon={UploadIcon} size={28} />
+          <div
+            class={css({
+              display: 'none',
+              _groupHover: {
+                position: 'absolute',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'full',
+                size: 'full',
+                backgroundColor: 'gray.900/40',
+                color: 'white',
+              },
+            })}
+          >
+            <Icon icon={UploadIcon} size={24} />
+          </div>
+
+          <input
+            accept="image/*"
+            hidden
+            onchange={async (event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = '';
+              if (!file) {
+                return;
+              }
+
+              const resp = await uploadBlobAsImage(file, {
+                resize: { width: 512, height: 512, fit: 'cover', withoutEnlargement: true },
+                format: 'png',
+              });
+
+              form.fields.avatarId = resp.id;
+            }}
+            type="file"
+          />
+        </label>
+
+        <div class={flex({ direction: 'column', gap: '8px', flex: '1' })}>
+          <TextInput id="name" style={css.raw({ width: 'full' })} bind:value={form.fields.name} />
+
+          {#if form.errors.name}
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
+          {/if}
         </div>
+      </div>
 
-        <input
-          accept="image/*"
-          hidden
-          onchange={async (event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = '';
-            if (!file) {
-              return;
-            }
-
-            const resp = await uploadBlobAsImage(file, {
-              resize: { width: 512, height: 512, fit: 'cover', withoutEnlargement: true },
-              format: 'png',
-            });
-
-            form.fields.avatarId = resp.id;
-          }}
-          type="file"
-        />
-      </label>
-
-      <TextInput id="name" style={css.raw({ width: 'full' })} bind:value={form.fields.name} />
-
-      {#if form.errors.name}
-        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
-      {/if}
-
-      <Button
-        style={css.raw({ flex: 'none', marginLeft: 'auto', width: '104px', height: '38px' })}
-        disabled={!form.state.isDirty}
-        type="submit"
-      >
-        변경
+      <Button style={css.raw({ alignSelf: 'flex-start', height: '36px' })} disabled={!form.state.isDirty} type="submit" variant="secondary">
+        변경사항 저장
       </Button>
     </form>
   </div>
 
-  <HorizontalDivider color="secondary" />
+  <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
 
-  <div class={flex({ direction: 'column', gap: '8px' })}>
-    <p class={css({ fontWeight: 'medium' })}>이메일 주소</p>
+  <div class={flex({ direction: 'column', gap: '12px' })}>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>이메일 주소</h3>
 
-    <div class={flex({ gap: '12px', width: 'full', maxWidth: '500px' })}>
-      <TextInput id="name" style={css.raw({ width: 'full' })} readonly bind:value={$user.email} />
+    <div class={flex({ gap: '12px', width: 'full' })}>
+      <TextInput id="email" style={css.raw({ width: 'full', backgroundColor: 'gray.50' })} readonly bind:value={$user.email} />
 
-      <Button style={css.raw({ flex: 'none', width: '104px', height: '38px' })} onclick={() => (updateEmailOpen = true)}>
-        이메일 변경
+      <Button style={css.raw({ flex: 'none', height: '36px' })} onclick={() => (updateEmailOpen = true)} size="sm" variant="secondary">
+        변경
       </Button>
     </div>
   </div>
 
   {#if $user.singleSignOns.length > 0}
-    <HorizontalDivider color="secondary" />
+    <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
 
-    <div class={flex({ direction: 'column', gap: '12px' })}>
-      <p class={css({ fontWeight: 'medium' })}>연결된 SNS 계정</p>
+    <div class={flex({ direction: 'column', gap: '16px' })}>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>연결된 SNS 계정</h3>
 
       {#each $user.singleSignOns as singleSignOn (singleSignOn.id)}
         <div class={flex({ align: 'center', gap: '12px' })}>
@@ -222,10 +222,13 @@
     </div>
   {/if}
 
-  <HorizontalDivider color="secondary" />
+  <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
 
-  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', maxWidth: '500px' })}>
-    <p class={css({ fontWeight: 'medium' })}>마케팅 수신 동의</p>
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
+    <div>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>마케팅 수신 동의</h3>
+      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'gray.500' })}>타이피의 소식과 이벤트 정보를 받아보세요</p>
+    </div>
 
     <Switch
       checked={$user.marketingConsent}
@@ -242,20 +245,30 @@
     />
   </div>
 
-  <HorizontalDivider color="secondary" />
+  <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
 
-  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', maxWidth: '500px' })}>
-    <p class={css({ fontWeight: 'medium' })}>계정 ID</p>
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>계정 ID</h3>
 
-    <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+    <div class={css({ fontSize: '13px', fontFamily: 'mono', color: 'gray.500', letterSpacing: '[0]' })}>
       {$user.id}
     </div>
   </div>
 
-  <HorizontalDivider color="secondary" />
+  <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
 
   <button
-    class={css({ padding: '4px', fontSize: '13px', color: 'gray.400', width: 'fit' })}
+    class={css({
+      alignSelf: 'flex-start',
+      paddingX: '8px',
+      paddingY: '4px',
+      fontSize: '13px',
+      color: 'gray.500',
+      width: 'fit',
+      borderRadius: '4px',
+      transition: 'common',
+      _hover: { color: 'red.600', backgroundColor: 'red.50' },
+    })}
     onclick={async () => {
       Dialog.confirm({
         title: '정말로 탈퇴하시겠습니까?',
