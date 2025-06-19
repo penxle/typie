@@ -1,4 +1,5 @@
 import { Extension } from '@tiptap/core';
+import { Plugin } from '@tiptap/pm/state';
 
 const arrayOrNull = <T>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
 
@@ -73,5 +74,34 @@ export const Behavior = Extension.create({
         return true;
       },
     };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          handleDOMEvents: {
+            beforeinput(view, e) {
+              if (e.inputType === 'deleteContentBackward' && !e.data) {
+                const { tr } = view.state;
+                tr.deleteSelection();
+                view.dispatch(tr);
+                return true;
+              }
+
+              return false;
+            },
+            compositionupdate(_, e) {
+              if (e.data && /[\u3131-\u318E\uAC00-\uD7A3]/.test(e.data)) {
+                e.preventDefault();
+                return false;
+              }
+
+              return false;
+            },
+          },
+        },
+      }),
+    ];
   },
 });
