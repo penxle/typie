@@ -1,6 +1,6 @@
 import * as aws from '@pulumi/aws';
 
-export const executionRole = new aws.iam.Role('execution@ecs', {
+const executionRole = new aws.iam.Role('execution@ecs', {
   name: 'execution@ecs',
   assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
     Service: 'ecs-tasks.amazonaws.com',
@@ -28,6 +28,29 @@ new aws.iam.RolePolicy('execution@ecs', {
   },
 });
 
+const codedeployRole = new aws.iam.Role('codedeploy@ecs', {
+  name: 'codedeploy@ecs',
+  assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+    Service: 'codedeploy.amazonaws.com',
+  }),
+  managedPolicyArns: [aws.iam.ManagedPolicy.AWSCodeDeployRoleForECSLimited],
+});
+
+new aws.iam.RolePolicy('codedeploy@ecs', {
+  name: 'codedeploy@ecs',
+  role: codedeployRole.name,
+  policy: {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Action: 'iam:PassRole',
+        Resource: [executionRole.arn, 'arn:aws:iam::*:role/*@ecs-tasks'],
+      },
+    ],
+  },
+});
+
 export const cluster = new aws.ecs.Cluster('typie', {
   name: 'typie',
 
@@ -45,5 +68,6 @@ new aws.ecs.ClusterCapacityProviders('typie', {
 });
 
 export const outputs = {
+  AWS_ECS_CODEDEPLOY_ROLE_ARN: codedeployRole.arn,
   AWS_ECS_EXECUTION_ROLE_ARN: executionRole.arn,
 };

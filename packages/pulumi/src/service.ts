@@ -1,4 +1,5 @@
 import * as aws from '@pulumi/aws';
+import * as command from '@pulumi/command';
 import * as pulumi from '@pulumi/pulumi';
 
 type ServiceArgs = {
@@ -58,10 +59,35 @@ export class Service extends pulumi.ComponentResource {
       new aws.iam.RolePolicy(`${name}@ecs-tasks`, { role: role.name, policy: args.iam.policy }, { parent: this });
     }
 
-    const targetGroup = new aws.lb.TargetGroup(
-      `${name}@ecs-tasks`,
+    // Blue Target Group
+    const targetGroupBlue = new aws.lb.TargetGroup(
+      `${name}-blue@ecs-tasks`,
       {
-        name: pulumi.interpolate`ecs-tasks-${serviceName}`,
+        name: pulumi.interpolate`ecs-tasks-${serviceName}-blue`,
+
+        vpcId: ref.requireOutput('AWS_VPC_ID'),
+        targetType: 'ip',
+        protocol: 'HTTP',
+        port: 3000,
+
+        healthCheck: {
+          path: '/healthz',
+          interval: 10,
+          timeout: 5,
+          healthyThreshold: 2,
+          unhealthyThreshold: 2,
+        },
+
+        deregistrationDelay: 5,
+      },
+      { parent: this },
+    );
+
+    // Green Target Group
+    const targetGroupGreen = new aws.lb.TargetGroup(
+      `${name}-green@ecs-tasks`,
+      {
+        name: pulumi.interpolate`ecs-tasks-${serviceName}-green`,
 
         vpcId: ref.requireOutput('AWS_VPC_ID'),
         targetType: 'ip',
@@ -86,7 +112,7 @@ export class Service extends pulumi.ComponentResource {
       {
         listenerArn: ref.requireOutput('AWS_ELB_PUBLIC_LISTENER_ARN'),
         conditions: [{ hostHeader: { values: args.domains } }],
-        actions: [{ type: 'forward', forward: { targetGroups: [{ arn: targetGroup.arn }] } }],
+        actions: [{ type: 'forward', forward: { targetGroups: [{ arn: targetGroupBlue.arn }] } }],
       },
       { parent: this },
     );
@@ -178,18 +204,15 @@ export class Service extends pulumi.ComponentResource {
         taskDefinition: definition.arn,
         schedulingStrategy: 'REPLICA',
 
-        desiredCount: stack === 'dev' ? 1 : undefined,
+        desiredCount: stack === 'dev' ? 1 : args.autoscale?.minCount,
 
         capacityProviderStrategies: [
           { capacityProvider: 'FARGATE', base: 0 },
           { capacityProvider: 'FARGATE_SPOT', weight: 100 },
         ],
 
-        deploymentMinimumHealthyPercent: 100,
-        deploymentMaximumPercent: 200,
-        deploymentCircuitBreaker: {
-          enable: true,
-          rollback: true,
+        deploymentController: {
+          type: 'CODE_DEPLOY',
         },
 
         availabilityZoneRebalancing: 'ENABLED',
@@ -202,16 +225,112 @@ export class Service extends pulumi.ComponentResource {
           {
             containerName: 'app',
             containerPort: 3000,
-            targetGroupArn: targetGroup.arn,
+            targetGroupArn: targetGroupBlue.arn,
           },
         ],
+      },
+      { parent: this, dependsOn: [rule], ignoreChanges: ['desiredCount', 'taskDefinition', 'loadBalancers'] },
+    );
 
-        forceNewDeployment: true,
-        triggers: {
-          timestamp: 'plantimestamp()',
+    const app = new aws.codedeploy.Application(
+      `${name}@ecs-tasks`,
+      {
+        name: serviceName,
+        computePlatform: 'ECS',
+      },
+      { parent: this },
+    );
+
+    const deploymentGroup = new aws.codedeploy.DeploymentGroup(
+      `${name}@ecs-tasks`,
+      {
+        deploymentGroupName: serviceName,
+        appName: app.name,
+        serviceRoleArn: ref.requireOutput('AWS_ECS_CODEDEPLOY_ROLE_ARN'),
+
+        ecsService: {
+          clusterName: 'typie',
+          serviceName: service.name,
+        },
+
+        deploymentConfigName: 'CodeDeployDefault.ECSAllAtOnce',
+
+        deploymentStyle: {
+          deploymentType: 'BLUE_GREEN',
+          deploymentOption: 'WITH_TRAFFIC_CONTROL',
+        },
+
+        blueGreenDeploymentConfig: {
+          deploymentReadyOption: {
+            actionOnTimeout: 'CONTINUE_DEPLOYMENT',
+          },
+
+          terminateBlueInstancesOnDeploymentSuccess: {
+            action: 'TERMINATE',
+            terminationWaitTimeInMinutes: 5,
+          },
+        },
+
+        loadBalancerInfo: {
+          targetGroupPairInfo: {
+            prodTrafficRoute: {
+              listenerArns: [ref.requireOutput('AWS_ELB_PUBLIC_LISTENER_ARN')],
+            },
+
+            targetGroups: [
+              {
+                name: targetGroupBlue.name,
+              },
+              {
+                name: targetGroupGreen.name,
+              },
+            ],
+          },
+        },
+
+        autoRollbackConfiguration: {
+          enabled: true,
+          events: ['DEPLOYMENT_FAILURE', 'DEPLOYMENT_STOP_ON_ALARM'],
         },
       },
-      { parent: this, dependsOn: [rule], ignoreChanges: ['desiredCount'] },
+      { parent: this },
+    );
+
+    const deploymentInput = pulumi.jsonStringify({
+      applicationName: app.name,
+      deploymentGroupName: serviceName,
+      description: 'Deployment triggered by Pulumi',
+      revision: {
+        revisionType: 'AppSpecContent',
+        appSpecContent: {
+          content: pulumi.jsonStringify({
+            version: 0,
+            Resources: [
+              {
+                TargetService: {
+                  Type: 'AWS::ECS::Service',
+                  Properties: {
+                    TaskDefinition: definition.arn,
+                    LoadBalancerInfo: {
+                      ContainerName: 'app',
+                      ContainerPort: 3000,
+                    },
+                  },
+                },
+              },
+            ],
+          }),
+        },
+      },
+    });
+
+    new command.local.Command(
+      `${name}@codedeploy`,
+      {
+        create: pulumi.interpolate`aws deploy create-deployment --cli-input-json '${deploymentInput}' --output json`,
+        triggers: [definition.arn],
+      },
+      { parent: this, dependsOn: [deploymentGroup] },
     );
 
     if (args.autoscale && stack === 'prod') {
