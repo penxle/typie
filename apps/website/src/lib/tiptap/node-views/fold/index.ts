@@ -27,7 +27,10 @@ export const Fold = createNodeView(Component, {
       },
       title: {
         default: '',
-        rendered: false,
+        parseHTML: (element) => element.dataset.title,
+        renderHTML: ({ title }) => ({
+          'data-title': title,
+        }),
       },
     };
   },
