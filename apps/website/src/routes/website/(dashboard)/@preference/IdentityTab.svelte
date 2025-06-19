@@ -75,19 +75,19 @@
   };
 </script>
 
-<div class={flex({ direction: 'column', gap: '24px' })}>
-  <p class={css({ fontSize: '20px', fontWeight: 'bold' })}>인증 설정</p>
+<div class={flex({ direction: 'column', gap: '32px' })}>
+  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'gray.900' })}>인증</h1>
 
-  <div class={flex({ direction: 'column', gap: '8px' })}>
-    <p class={css({ fontWeight: 'medium' })}>본인 인증</p>
+  <div class={flex({ direction: 'column', gap: '16px' })}>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>본인 인증</h3>
 
     <div>
       {#if $user.personalIdentity}
-        <div class={css({ borderWidth: '1px', borderColor: 'gray.200', borderRadius: '4px', maxWidth: '360px' })}>
+        <div class={css({ borderWidth: '1px', borderColor: 'gray.200', borderRadius: '8px' })}>
           <div
             class={css({
               display: 'flex',
-              borderTopRadius: '4px',
+              borderTopRadius: '8px',
               borderBottomWidth: '1px',
               borderBottomColor: 'gray.200',
               fontSize: '14px',

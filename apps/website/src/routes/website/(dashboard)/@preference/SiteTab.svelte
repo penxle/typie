@@ -79,11 +79,11 @@
   });
 </script>
 
-<div class={flex({ direction: 'column', gap: '24px' })}>
-  <p class={css({ fontSize: '20px', fontWeight: 'bold' })}>사이트 설정</p>
+<div class={flex({ direction: 'column', gap: '32px' })}>
+  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'gray.900' })}>사이트</h1>
 
-  <div class={flex({ direction: 'column', gap: '8px' })}>
-    <p class={css({ fontWeight: 'medium' })}>주소</p>
+  <div class={flex({ direction: 'column', gap: '16px' })}>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>주소</h3>
 
     <form class={flex({ gap: '12px' })} onsubmit={form.handleSubmit}>
       <div class={css({ width: 'full', maxWidth: '380px' })}>
@@ -94,12 +94,14 @@
         {/if}
       </div>
 
-      <Button style={css.raw({ flex: 'none', height: '38px' })} disabled={!form.state.isDirty} type="submit">주소 변경</Button>
+      <Button style={css.raw({ flex: 'none', height: '36px' })} disabled={!form.state.isDirty} size="sm" type="submit" variant="secondary">
+        변경
+      </Button>
     </form>
   </div>
 
-  <div class={flex({ direction: 'column', gap: '8px' })}>
-    <p class={css({ fontWeight: 'medium' })}>폰트</p>
+  <div class={flex({ direction: 'column', gap: '16px' })}>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>폰트</h3>
 
     {#each $user.sites[0].fonts as { id, name, fullName } (id)}
       <div class={flex({ alignItems: 'center', gap: '8px' })}>

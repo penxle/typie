@@ -90,21 +90,40 @@
   const currentTab = $derived(tabs.find((tab) => tab.path === page.state.shallowRoute));
 </script>
 
-<Modal style={css.raw({ maxWidth: '1080px', height: 'full', maxHeight: '600px' })} onclose={() => history.back()} open={!!currentTab}>
+<Modal
+  style={css.raw({ maxWidth: '900px', height: 'full', maxHeight: '600px', padding: '0' })}
+  onclose={() => history.back()}
+  open={!!currentTab}
+>
   <div class={flex({ height: 'full' })}>
-    <div class={css({ flex: 'none', paddingY: '28px', paddingX: '8px', width: '240px', backgroundColor: 'gray.50' })}>
-      <nav class={flex({ direction: 'column', gap: '4px' })}>
+    <div
+      class={css({
+        flex: 'none',
+        paddingY: '24px',
+        paddingX: '12px',
+        width: '200px',
+        borderRightWidth: '1px',
+        borderRightColor: 'gray.100',
+      })}
+    >
+      <nav class={flex({ direction: 'column', gap: '1px' })}>
         {#each tabs as { icon, path, label } (path)}
           <button
             class={flex({
               align: 'center',
-              gap: '4px',
-              borderRadius: '4px',
-              padding: '8px',
-              fontSize: '14px',
-              color: 'gray.700',
-              _hover: { backgroundColor: 'gray.200' },
-              _selected: { color: 'gray.900', fontWeight: 'semibold', backgroundColor: 'gray.100' },
+              gap: '8px',
+              borderRadius: '6px',
+              paddingX: '10px',
+              paddingY: '8px',
+              fontSize: '13px',
+              color: 'gray.600',
+              transition: 'common',
+              _hover: { backgroundColor: 'gray.50' },
+              _selected: {
+                color: 'gray.900',
+                fontWeight: 'medium',
+                backgroundColor: 'gray.100',
+              },
             })}
             aria-selected={currentTab?.path === path}
             onclick={() => {
@@ -113,14 +132,14 @@
             role="tab"
             type="button"
           >
-            <Icon {icon} size={16} />
+            <Icon style={css.raw({ color: currentTab?.path === path ? 'gray.700' : 'gray.400' })} {icon} size={16} />
             <span>{label}</span>
           </button>
         {/each}
       </nav>
     </div>
 
-    <div class={css({ paddingX: '24px', paddingY: '30px', width: 'full', overflowY: 'auto' })}>
+    <div class={css({ paddingX: '40px', paddingY: '32px', width: 'full', overflowY: 'auto' })}>
       {#if currentTab}
         {@const Component = currentTab.component}
 
