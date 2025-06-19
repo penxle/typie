@@ -1,5 +1,6 @@
 <script lang="ts">
   import CreditCardIcon from '~icons/lucide/credit-card';
+  import KeyboardIcon from '~icons/lucide/keyboard';
   import PanelTopIcon from '~icons/lucide/panel-top';
   import ShieldCheckIcon from '~icons/lucide/shield-check';
   import UserIcon from '~icons/lucide/user';
@@ -12,6 +13,7 @@
   import AccountTab from './AccountTab.svelte';
   import BillingTab from './BillingTab.svelte';
   import IdentityTab from './IdentityTab.svelte';
+  import ShortcutsTab from './ShortcutsTab.svelte';
   import SiteTab from './SiteTab.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_PreferenceModal_user } from '$graphql';
@@ -43,6 +45,7 @@
         ...DashboardLayout_PreferenceModal_BillingTab_user
         ...DashboardLayout_PreferenceModal_IdentityTab_user
         ...DashboardLayout_PreferenceModal_SiteTab_user
+        ...DashboardLayout_PreferenceModal_ShortcutsTab_user
       }
     `),
   );
@@ -75,6 +78,12 @@
       label: '결제',
       icon: CreditCardIcon,
       component: BillingTab,
+    },
+    {
+      path: '/preference/shortcuts',
+      label: '단축키',
+      icon: KeyboardIcon,
+      component: ShortcutsTab,
     },
   ] satisfies Tab[];
 

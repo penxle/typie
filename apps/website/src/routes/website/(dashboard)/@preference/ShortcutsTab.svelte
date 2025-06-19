@@ -1,0 +1,245 @@
+<script lang="ts">
+  import { fragment, graphql } from '$graphql';
+  import { css } from '$styled-system/css';
+  import { flex } from '$styled-system/patterns';
+  import type { DashboardLayout_PreferenceModal_ShortcutsTab_user } from '$graphql';
+
+  type Props = {
+    $user: DashboardLayout_PreferenceModal_ShortcutsTab_user;
+  };
+
+  let { $user: _user }: Props = $props();
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment DashboardLayout_PreferenceModal_ShortcutsTab_user on User {
+        id
+      }
+    `),
+  );
+
+  type ShortcutCategory = {
+    title: string;
+    shortcuts: {
+      keys: string[] | string[][];
+      description: string;
+    }[];
+  };
+
+  const isMac = typeof window !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+  const modKey = isMac ? 'Cmd' : 'Ctrl';
+
+  const shortcutCategories: ShortcutCategory[] = [
+    {
+      title: '텍스트 서식',
+      shortcuts: [
+        { keys: [modKey, 'B'], description: '굵게' },
+        { keys: [modKey, 'I'], description: '기울임' },
+        { keys: [modKey, 'Shift', 'S'], description: '취소선' },
+        { keys: [modKey, 'U'], description: '밑줄' },
+      ],
+    },
+    {
+      title: '편집',
+      shortcuts: [
+        { keys: [modKey, 'Z'], description: '실행 취소' },
+        { keys: [modKey, 'Shift', 'Z'], description: '다시 실행' },
+        { keys: [modKey, 'X'], description: '잘라내기' },
+        { keys: [modKey, 'C'], description: '복사' },
+        { keys: [modKey, 'V'], description: '붙여넣기' },
+        { keys: [modKey, 'A'], description: '문단 선택 (반복시 전체 선택)' },
+      ],
+    },
+    {
+      title: '삽입',
+      shortcuts: [
+        { keys: ['Enter'], description: '문단 나누기' },
+        { keys: ['Shift', 'Enter'], description: '줄바꿈' },
+        { keys: [['드래그 앤 드롭'], [modKey, 'V']], description: '이미지/파일 삽입' },
+        { keys: ['--'], description: '긴 대시 (—)' },
+        { keys: ['...'], description: '말줄임표 (…)' },
+        { keys: ['"'], description: '큰따옴표 (“”)' },
+        { keys: ["'"], description: '작은따옴표 (‘’)' },
+      ],
+    },
+    {
+      title: '메뉴',
+      shortcuts: [
+        { keys: [modKey, 'K'], description: '빠른 검색 열기' },
+        { keys: ['/'], description: '슬래시 메뉴 열기' },
+        { keys: ['Esc'], description: '열린 메뉴 닫기' },
+      ],
+    },
+  ];
+</script>
+
+<div class={flex({ direction: 'column', gap: '24px' })}>
+  <h2
+    class={css({
+      fontSize: '18px',
+      fontWeight: 'semibold',
+      color: 'gray.900',
+      marginBottom: '4px',
+    })}
+  >
+    키보드 단축키
+  </h2>
+
+  <div
+    class={flex({
+      direction: 'column',
+      gap: '20px',
+    })}
+  >
+    {#each shortcutCategories as category (category.title)}
+      <div
+        class={css({
+          borderWidth: '1px',
+          borderColor: 'gray.100',
+          borderRadius: '8px',
+          backgroundColor: 'white',
+          overflow: 'hidden',
+        })}
+      >
+        <div
+          class={css({
+            paddingX: '16px',
+            paddingY: '12px',
+            backgroundColor: 'gray.50',
+            borderBottomWidth: '1px',
+            borderBottomColor: 'gray.100',
+          })}
+        >
+          <h3
+            class={css({
+              fontSize: '13px',
+              fontWeight: 'semibold',
+              color: 'gray.700',
+            })}
+          >
+            {category.title}
+          </h3>
+        </div>
+        <div class={css({ padding: '8px' })}>
+          {#each category.shortcuts as shortcut (shortcut.description)}
+            <div
+              class={flex({
+                align: 'center',
+                justify: 'space-between',
+                paddingX: '12px',
+                paddingY: '8px',
+                borderRadius: '4px',
+              })}
+            >
+              <span
+                class={css({
+                  fontSize: '13px',
+                  color: 'gray.700',
+                })}
+              >
+                {shortcut.description}
+              </span>
+              <div
+                class={flex({
+                  align: 'center',
+                  gap: '4px',
+                  flexShrink: 0,
+                })}
+              >
+                {#if Array.isArray(shortcut.keys[0])}
+                  {#each shortcut.keys as keyGroup, groupIndex (groupIndex)}
+                    {#if groupIndex > 0}
+                      <span
+                        class={css({
+                          fontSize: '11px',
+                          color: 'gray.500',
+                          fontWeight: 'medium',
+                          marginX: '6px',
+                        })}
+                      >
+                        또는
+                      </span>
+                    {/if}
+                    <div class={flex({ align: 'center', gap: '4px' })}>
+                      {#each keyGroup as key, index (key)}
+                        {#if index > 0}
+                          <span
+                            class={css({
+                              fontSize: '11px',
+                              color: 'gray.400',
+                              fontWeight: 'medium',
+                            })}
+                          >
+                            +
+                          </span>
+                        {/if}
+                        <kbd
+                          class={css({
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minWidth: '24px',
+                            height: '24px',
+                            paddingX: '6px',
+                            fontSize: '11px',
+                            fontWeight: 'medium',
+                            fontFamily: '[monospace]',
+                            color: 'gray.600',
+                            backgroundColor: 'white',
+                            borderWidth: '1px',
+                            borderColor: 'gray.200',
+                            borderRadius: '3px',
+                            boxShadow: 'small',
+                          })}
+                        >
+                          {key}
+                        </kbd>
+                      {/each}
+                    </div>
+                  {/each}
+                {:else}
+                  {#each shortcut.keys as key, index (key)}
+                    {#if index > 0}
+                      <span
+                        class={css({
+                          fontSize: '11px',
+                          color: 'gray.400',
+                          fontWeight: 'medium',
+                        })}
+                      >
+                        +
+                      </span>
+                    {/if}
+                    <kbd
+                      class={css({
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: '24px',
+                        height: '24px',
+                        paddingX: '6px',
+                        fontSize: '11px',
+                        fontWeight: 'medium',
+                        fontFamily: '[monospace]',
+                        color: 'gray.600',
+                        backgroundColor: 'white',
+                        borderWidth: '1px',
+                        borderColor: 'gray.200',
+                        borderRadius: '3px',
+                        boxShadow: 'small',
+                      })}
+                    >
+                      {key}
+                    </kbd>
+                  {/each}
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/each}
+  </div>
+</div>
