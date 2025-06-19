@@ -80,41 +80,16 @@ export const Behavior = Extension.create({
     return [
       new Plugin({
         props: {
-          handleDOMEvents: {
-            beforeinput(view, e) {
-              if (e.inputType === 'deleteContentBackward' && !e.data) {
-                const { tr } = view.state;
-                tr.deleteSelection();
-                view.dispatch(tr);
-                return true;
-              }
+          handleTextInput(view, from, to, text) {
+            if (window.__webview__ && view.composing) {
+              const { tr } = view.state;
+              tr.insertText(text, from, to);
+              view.dispatch(tr);
 
-              return false;
-            },
-            compositionstart(view) {
-              if (window.__webview__) {
-                // @ts-expect-error ProseMirror internal
-                view.domObserver.stop();
-              }
+              return true;
+            }
 
-              return false;
-            },
-            compositionend(view) {
-              if (window.__webview__) {
-                // @ts-expect-error ProseMirror internal
-                setTimeout(() => view.domObserver.start(), 50);
-                return true;
-              }
-
-              return false;
-            },
-            input(view, event) {
-              if (view.composing && event.type === 'insertCompositionText') {
-                return true;
-              }
-
-              return false;
-            },
+            return false;
           },
         },
       }),
