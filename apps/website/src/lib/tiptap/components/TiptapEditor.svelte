@@ -45,19 +45,6 @@
 
         handleKeyDown: onkeydown,
 
-        handleTextInput: (view, from, to, text) => {
-          if (window.__webview__ && /[\u3131-\u318E\uAC00-\uD7A3]/.test(text)) {
-            setTimeout(() => {
-              const tr = view.state.tr.insertText(text, from, to);
-              view.dispatch(tr);
-            }, 0);
-
-            return true;
-          }
-
-          return false;
-        },
-
         handleDrop: (view, event) => {
           if (event.dataTransfer?.files?.length) {
             const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.anchor;
