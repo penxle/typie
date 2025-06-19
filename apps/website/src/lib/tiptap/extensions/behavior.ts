@@ -91,10 +91,26 @@ export const Behavior = Extension.create({
 
               return false;
             },
-            compositionupdate(_, e) {
-              if (e.data && /[\u3131-\u318E\uAC00-\uD7A3]/.test(e.data)) {
-                e.preventDefault();
-                return false;
+            compositionstart(view) {
+              if (window.__webview__) {
+                // @ts-expect-error ProseMirror internal
+                view.domObserver.stop();
+              }
+
+              return false;
+            },
+            compositionend(view) {
+              if (window.__webview__) {
+                // @ts-expect-error ProseMirror internal
+                setTimeout(() => view.domObserver.start(), 50);
+                return true;
+              }
+
+              return false;
+            },
+            input(view, event) {
+              if (view.composing && event.type === 'insertCompositionText') {
+                return true;
               }
 
               return false;
