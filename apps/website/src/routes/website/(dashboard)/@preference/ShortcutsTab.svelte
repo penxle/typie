@@ -140,7 +140,7 @@
                       <span
                         class={css({
                           fontSize: '11px',
-                          color: 'gray.500',
+                          color: 'gray.700',
                           fontWeight: 'medium',
                           marginX: '6px',
                         })}
@@ -155,7 +155,7 @@
                             class={css({
                               fontSize: '11px',
                               color: 'gray.400',
-                              fontWeight: 'medium',
+                              fontWeight: 'normal',
                             })}
                           >
                             +
@@ -166,17 +166,18 @@
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            minWidth: '20px',
-                            height: '20px',
+                            minWidth: '24px',
+                            height: '24px',
                             paddingX: '6px',
                             fontSize: '11px',
-                            fontWeight: 'medium',
+                            fontWeight: 'normal',
                             fontFamily: 'mono',
-                            color: 'gray.600',
-                            backgroundColor: 'gray.50',
+                            color: 'gray.700',
+                            backgroundColor: 'white',
                             borderWidth: '1px',
                             borderColor: 'gray.200',
-                            borderRadius: '4px',
+                            borderRadius: '3px',
+                            boxShadow: 'small',
                           })}
                         >
                           {key}
@@ -206,9 +207,9 @@
                         height: '24px',
                         paddingX: '6px',
                         fontSize: '11px',
-                        fontWeight: 'medium',
-                        fontFamily: '[monospace]',
-                        color: 'gray.600',
+                        fontWeight: 'normal',
+                        fontFamily: 'mono',
+                        color: 'gray.700',
                         backgroundColor: 'white',
                         borderWidth: '1px',
                         borderColor: 'gray.200',
