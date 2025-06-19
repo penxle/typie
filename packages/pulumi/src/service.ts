@@ -59,11 +59,10 @@ export class Service extends pulumi.ComponentResource {
       new aws.iam.RolePolicy(`${name}@ecs-tasks`, { role: role.name, policy: args.iam.policy }, { parent: this });
     }
 
-    // Blue Target Group
-    const targetGroupBlue = new aws.lb.TargetGroup(
-      `${name}-blue@ecs-tasks`,
+    const targetGroup1 = new aws.lb.TargetGroup(
+      `${name}-1@ecs-tasks`,
       {
-        name: pulumi.interpolate`ecs-tasks-${serviceName}-blue`,
+        name: pulumi.interpolate`ecs-tasks-${serviceName}-1`,
 
         vpcId: ref.requireOutput('AWS_VPC_ID'),
         targetType: 'ip',
@@ -83,11 +82,10 @@ export class Service extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    // Green Target Group
-    const targetGroupGreen = new aws.lb.TargetGroup(
-      `${name}-green@ecs-tasks`,
+    const targetGroup2 = new aws.lb.TargetGroup(
+      `${name}-2@ecs-tasks`,
       {
-        name: pulumi.interpolate`ecs-tasks-${serviceName}-green`,
+        name: pulumi.interpolate`ecs-tasks-${serviceName}-2`,
 
         vpcId: ref.requireOutput('AWS_VPC_ID'),
         targetType: 'ip',
@@ -112,9 +110,9 @@ export class Service extends pulumi.ComponentResource {
       {
         listenerArn: ref.requireOutput('AWS_ELB_PUBLIC_LISTENER_ARN'),
         conditions: [{ hostHeader: { values: args.domains } }],
-        actions: [{ type: 'forward', forward: { targetGroups: [{ arn: targetGroupBlue.arn }] } }],
+        actions: [{ type: 'forward', forward: { targetGroups: [{ arn: targetGroup1.arn }] } }],
       },
-      { parent: this },
+      { parent: this, ignoreChanges: ['actions'] },
     );
 
     const definition = new aws.ecs.TaskDefinition(
@@ -225,11 +223,11 @@ export class Service extends pulumi.ComponentResource {
           {
             containerName: 'app',
             containerPort: 3000,
-            targetGroupArn: targetGroupBlue.arn,
+            targetGroupArn: targetGroup1.arn,
           },
         ],
       },
-      { parent: this, dependsOn: [rule], ignoreChanges: ['desiredCount', 'taskDefinition', 'loadBalancers'] },
+      { parent: this, dependsOn: [rule], ignoreChanges: ['desiredCount', 'loadBalancers', 'taskDefinition'] },
     );
 
     const app = new aws.codedeploy.Application(
@@ -277,14 +275,7 @@ export class Service extends pulumi.ComponentResource {
               listenerArns: [ref.requireOutput('AWS_ELB_PUBLIC_LISTENER_ARN')],
             },
 
-            targetGroups: [
-              {
-                name: targetGroupBlue.name,
-              },
-              {
-                name: targetGroupGreen.name,
-              },
-            ],
+            targetGroups: [{ name: targetGroup1.name }, { name: targetGroup2.name }],
           },
         },
 
