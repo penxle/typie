@@ -9,21 +9,7 @@ export const Behavior = Extension.create({
     return {
       Backspace: ({ editor }) => {
         const { selection, storedMarks } = editor.state;
-        const { $anchor, empty } = selection;
-
-        const pos = $anchor.before(2);
-        const block = $anchor.node(2);
-
-        if (
-          empty &&
-          $anchor.parent.isTextblock &&
-          $anchor.parent.childCount === 0 &&
-          $anchor.parentOffset === 0 &&
-          !['paragraph', 'bullet_list', 'ordered_list'].includes(block.type.name) &&
-          block.childCount === 0
-        ) {
-          return editor.chain().setNodeSelection(pos).deleteSelection().insertContentAt(pos, { type: 'paragraph' }).run();
-        }
+        const { $anchor } = selection;
 
         const marks =
           arrayOrNull(storedMarks) || arrayOrNull($anchor.marks()) || arrayOrNull($anchor.parent.firstChild?.firstChild?.marks) || null;
@@ -38,27 +24,6 @@ export const Behavior = Extension.create({
           })
           .run();
       },
-
-      // Enter: ({ editor }) => {
-      //   const { selection } = editor.state;
-      //   const { $anchor, empty } = selection;
-
-      //   const pos = $anchor.before(2);
-      //   const block = $anchor.node(2);
-
-      //   if (
-      //     empty &&
-      //     $anchor.parent.isTextblock &&
-      //     $anchor.parent.childCount === 0 &&
-      //     $anchor.parentOffset === 0 &&
-      //     block.type.name !== 'paragraph' &&
-      //     block.childCount === 0
-      //   ) {
-      //     return editor.chain().setNodeSelection(pos).deleteSelection().insertContentAt(pos, { type: 'paragraph' }).run();
-      //   }
-
-      //   return false;
-      // },
 
       Tab: ({ editor }) => {
         const { selection } = editor.state;
