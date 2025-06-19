@@ -498,10 +498,6 @@ class _EntityList extends HookWidget {
                                                 properties: {'via': 'entity_folder_menu'},
                                               ),
                                             );
-
-                                            if (context.mounted) {
-                                              await context.router.maybePop();
-                                            }
                                           },
                                         ),
                                       );
