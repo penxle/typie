@@ -136,6 +136,7 @@
   const subtitle = new YState<string>(doc, 'subtitle', '');
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
+  const note = new YState(doc, 'note', '');
 
   const fontFaces = $derived(
     $query.post.entity.site.fonts
@@ -193,6 +194,7 @@
   const setYJSState = () => {
     window.__webview__?.emitEvent('setYJSState', {
       maxWidth: maxWidth.current,
+      note: note.current,
     });
   };
 
@@ -373,6 +375,8 @@
         if (attrs.blockGap !== undefined) {
           editor?.current.chain().focus().setBodyBlockGap(attrs.blockGap).run();
         }
+      } else if (name === 'note') {
+        note.current = attrs.note;
       }
     });
 

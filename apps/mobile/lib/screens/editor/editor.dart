@@ -56,6 +56,7 @@ class Editor extends HookWidget {
 
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
+    useAutomaticKeepAlive();
 
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((height) {
