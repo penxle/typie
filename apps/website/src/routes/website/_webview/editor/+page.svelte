@@ -190,6 +190,12 @@
     );
   };
 
+  const setYJSState = () => {
+    window.__webview__?.emitEvent('setYJSState', {
+      maxWidth: maxWidth.current,
+    });
+  };
+
   onMount(() => {
     const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
       if (payload.type === PostSyncType.UPDATE) {
@@ -285,13 +291,7 @@
 
     editor?.current.on('transaction', handler);
 
-    const handler2 = () => {
-      window.__webview__?.emitEvent('setYJSState', {
-        maxWidth: maxWidth.current,
-      });
-    };
-
-    doc.getMap('attrs').observe(handler2);
+    doc.getMap('attrs').observe(setYJSState);
 
     window.__webview__?.addEventListener('appReady', (data) => {
       featureFlags = data.featureFlags;
@@ -432,7 +432,7 @@
       unsubscribe2();
 
       editor?.current.off('transaction', handler);
-      doc.getMap('attrs').unobserve(handler2);
+      doc.getMap('attrs').unobserve(setYJSState);
 
       persistence.destroy();
       awareness.destroy();
@@ -554,6 +554,7 @@
       {doc}
       oncreate={() => {
         window.__webview__?.emitEvent('webviewReady');
+        setYJSState();
       }}
       bind:editor
     />
