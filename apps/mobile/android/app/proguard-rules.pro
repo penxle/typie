@@ -10,3 +10,13 @@
 -dontwarn org.bouncycastle.jsse.**
 -dontwarn org.conscrypt.*
 -dontwarn org.openjsse.**
+
+# GeckoView ProGuard rules
+-keep class org.mozilla.geckoview.** { *; }
+-keep class org.mozilla.gecko.** { *; }
+-keepattributes *Annotation*
+
+# Fix for missing java.beans classes
+-dontwarn java.beans.**
+-dontwarn org.yaml.snakeyaml.**
+-keep class org.yaml.snakeyaml.** { *; }

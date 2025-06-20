@@ -2,11 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/logger.dart';
+import 'package:typie/services/preference.dart';
 
-class WebView extends StatefulWidget {
+class WebView extends StatefulHookWidget {
   const WebView({required this.initialUrl, this.initialCookies, this.userAgent, this.onWebViewCreated, super.key});
 
   final String initialUrl;
@@ -21,12 +27,20 @@ class WebView extends StatefulWidget {
 }
 
 class _WebViewState extends State<WebView> {
-  final viewType = 'co.typie.webview';
   late final WebViewController _controller;
 
   @override
   Widget build(BuildContext context) {
+    final pref = useService<Pref>();
     final initialUri = Uri.parse(widget.initialUrl);
+
+    final viewType = useMemoized(() {
+      if (Platform.isAndroid && pref.androidGeckoView) {
+        return 'co.typie.webview.gecko';
+      }
+
+      return 'co.typie.webview';
+    }, [pref.androidGeckoView]);
 
     final creationParams = <String, dynamic>{
       'userAgent': widget.userAgent ?? 'Typie/1.0.0',
@@ -37,17 +51,39 @@ class _WebViewState extends State<WebView> {
     };
 
     final child = switch (Platform.operatingSystem) {
-      'android' => AndroidView(
+      'android' => PlatformViewLink(
         viewType: viewType,
-        creationParams: creationParams,
-        creationParamsCodec: const StandardMessageCodec(),
-        onPlatformViewCreated: _onPlatformViewCreated,
+        surfaceFactory: (context, controller) {
+          return AndroidViewSurface(
+            controller: controller as AndroidViewController,
+            gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+            hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+          );
+        },
+        onCreatePlatformView: (params) {
+          return PlatformViewsService.initSurfaceAndroidView(
+              id: params.id,
+              viewType: viewType,
+              layoutDirection: TextDirection.ltr,
+              creationParams: creationParams,
+              creationParamsCodec: const StandardMessageCodec(),
+              onFocus: () {
+                params.onFocusChanged(true);
+              },
+            )
+            ..addOnPlatformViewCreatedListener((id) {
+              params.onPlatformViewCreated(id);
+              _onPlatformViewCreated(viewType, id);
+            })
+            // ignore: discarded_futures for ease of use
+            ..create();
+        },
       ),
       'ios' => UiKitView(
         viewType: viewType,
         creationParams: creationParams,
         creationParamsCodec: const StandardMessageCodec(),
-        onPlatformViewCreated: _onPlatformViewCreated,
+        onPlatformViewCreated: (id) => _onPlatformViewCreated(viewType, id),
       ),
       _ => throw UnimplementedError('WebView is not supported on ${Platform.operatingSystem}'),
     };
@@ -70,8 +106,8 @@ class _WebViewState extends State<WebView> {
     super.dispose();
   }
 
-  void _onPlatformViewCreated(int id) {
-    final channel = MethodChannel('co.typie.webview.$id')
+  void _onPlatformViewCreated(String viewType, int id) {
+    final channel = MethodChannel('$viewType.$id')
       ..setMethodCallHandler((call) async {
         try {
           final args = call.arguments as Map<dynamic, dynamic>;
@@ -120,14 +156,7 @@ class WebViewController {
   }
 
   Future<void> emitEvent(String name, [dynamic data]) async {
-    final jsonData = jsonEncode(data)
-        .replaceAll(r'\', r'\\')
-        .replaceAll('"', r'\"')
-        .replaceAll('\n', r'\n')
-        .replaceAll('\r', r'\r')
-        .replaceAll('\t', r'\t');
-
-    await _channel.invokeMethod('emitEvent', {'name': name, 'data': jsonData});
+    await _channel.invokeMethod('emitEvent', {'name': name, 'data': jsonEncode(data)});
   }
 }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
@@ -10,6 +11,7 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/toast.dart';
+import 'package:typie/extensions/iterable.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
@@ -64,7 +66,6 @@ class SettingsScreen extends HookWidget {
                         await context.router.push(const UpdateEmailRoute());
                       },
                     ),
-                    const _Divider(),
                     _Item(
                       label: '프로필 변경',
                       onTap: () async {
@@ -120,7 +121,6 @@ class SettingsScreen extends HookWidget {
                           await context.router.push(const UpdateSiteSlugRoute());
                         },
                       ),
-                      const _Divider(),
                       _Item(
                         label: '타이피 커뮤니티 참여하기',
                         onTap: () async {
@@ -140,7 +140,6 @@ class SettingsScreen extends HookWidget {
                         await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                       },
                     ),
-                    const _Divider(),
                     _Item(
                       label: '개인정보처리방침',
                       onTap: () async {
@@ -148,7 +147,6 @@ class SettingsScreen extends HookWidget {
                         await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                       },
                     ),
-                    const _Divider(),
                     _Item(
                       label: '사업자 정보',
                       onTap: () async {
@@ -156,14 +154,12 @@ class SettingsScreen extends HookWidget {
                         await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                       },
                     ),
-                    const _Divider(),
                     _Item(
                       label: '오픈소스 라이센스',
                       onTap: () async {
                         await context.router.push(const OssLicensesRoute());
                       },
                     ),
-                    const _Divider(),
                     _Item(
                       label: '버전 정보',
                       trailing: packageInfo.hasData
@@ -195,22 +191,29 @@ class SettingsScreen extends HookWidget {
                   ],
                 ),
                 if (pref.devMode)
-                  _Section(
-                    title: '개발자',
-                    children: [
-                      _Item(
-                        label: '개발자 모드',
-                        trailing: HookForm(
-                          submitMode: HookFormSubmitMode.onChange,
-                          onSubmit: (form) async {
-                            pref.devMode = form.data['devMode'] as bool;
-                          },
-                          builder: (context, form) {
-                            return HookFormSwitch(name: 'devMode', initialValue: pref.devMode);
-                          },
-                        ),
-                      ),
-                    ],
+                  HookForm(
+                    submitMode: HookFormSubmitMode.onChange,
+                    onSubmit: (form) async {
+                      pref
+                        ..devMode = form.data['devMode'] as bool
+                        ..androidGeckoView = form.data['androidGeckoView'] as bool;
+                    },
+                    builder: (context, form) {
+                      return _Section(
+                        title: '개발자',
+                        children: [
+                          _Item(
+                            label: '개발자 모드',
+                            trailing: HookFormSwitch(name: 'devMode', initialValue: pref.devMode),
+                          ),
+                          if (Platform.isAndroid)
+                            _Item(
+                              label: 'Android GeckoView 사용',
+                              trailing: HookFormSwitch(name: 'androidGeckoView', initialValue: pref.androidGeckoView),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 _Section(
                   title: '기타',
@@ -231,7 +234,6 @@ class SettingsScreen extends HookWidget {
                         );
                       },
                     ),
-                    const _Divider(),
                     _Item(
                       label: '회원 탈퇴',
                       onTap: () async {
@@ -271,7 +273,10 @@ class _Section extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             color: AppColors.white,
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children.intersperseWith(const _Divider()).toList(),
+          ),
         ),
       ],
     );

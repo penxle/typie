@@ -19,4 +19,7 @@ class Pref {
 
   bool get devMode => _box.get('dev_mode', defaultValue: false) as bool;
   set devMode(bool value) => _box.put('dev_mode', value);
+
+  bool get androidGeckoView => _box.get('android_gecko_view', defaultValue: false) as bool;
+  set androidGeckoView(bool value) => _box.put('android_gecko_view', value);
 }

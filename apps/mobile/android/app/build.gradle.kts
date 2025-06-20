@@ -59,8 +59,7 @@ android {
       isShrinkResources = true
 
       proguardFiles(
-        getDefaultProguardFile("proguard-android-optimize.txt"),
-        "proguard-rules.pro"
+        getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
       )
     }
   }
@@ -74,5 +73,6 @@ dependencies {
   implementation("androidx.window:window:1.4.0")
   implementation("androidx.window:window-java:1.4.0")
   implementation("com.squareup.moshi:moshi:1.15.2")
+  implementation("org.mozilla.geckoview:geckoview:139.0.20250609112858")
   coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
