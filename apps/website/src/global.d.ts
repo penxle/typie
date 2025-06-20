@@ -13,10 +13,10 @@ type NodeView = {
 };
 
 declare global {
-  import { Window } from 'happy-dom';
+  import { GlobalWindow } from 'happy-dom';
 
   var __happydom__: {
-    Window: Window;
+    window: GlobalWindow;
   };
 
   interface Window {
