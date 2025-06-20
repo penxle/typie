@@ -2,10 +2,10 @@ import './common';
 
 import { sequence } from '@sveltejs/kit/hooks';
 import { logger, logging } from '@typie/lib/svelte';
-import { Window } from 'happy-dom';
+import { GlobalWindow } from 'happy-dom';
 import type { HandleServerError } from '@sveltejs/kit';
 
-globalThis.__happydom__ = { Window };
+globalThis.__happydom__ = { window: new GlobalWindow() };
 
 const log = logger.getChild('http');
 

@@ -9,7 +9,7 @@ function generateHTML(doc: JSONContent, extensions: Extensions): string {
   const schema = getSchema(extensions);
   const node = ProseMirrorNode.fromJSON(schema, doc);
 
-  const w: Window = typeof window === 'undefined' ? new __happydom__.Window() : globalThis.window;
+  const w: Window = typeof window === 'undefined' ? __happydom__.window : globalThis.window;
 
   const fragment = DOMSerializer.fromSchema(schema).serializeFragment(node.content, {
     document: w.document as unknown as Document,
