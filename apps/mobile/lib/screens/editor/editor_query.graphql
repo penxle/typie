@@ -18,6 +18,11 @@ query EditorScreen_Query($slug: String!, $siteId: ID!) {
         }
       }
     }
+
+    characterCountChange {
+      additions
+      deletions
+    }
   }
 
   site(siteId: $siteId) {
