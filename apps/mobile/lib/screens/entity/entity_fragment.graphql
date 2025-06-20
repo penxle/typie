@@ -18,6 +18,11 @@ fragment EntityScreen_Entity_entity on Entity {
       type
       excerpt
       updatedAt
+
+      characterCountChange {
+        additions
+        deletions
+      }
     }
   }
 

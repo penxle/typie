@@ -20,6 +20,7 @@ import 'package:typie/modals/share.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/editor/__generated__/delete_post_mutation.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/duplicate_post_mutation.req.gql.dart';
+import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/update_post_type_mutation.req.gql.dart';
 import 'package:typie/screens/editor/schema.dart';
@@ -143,7 +144,10 @@ class Editor extends HookWidget {
 
                             await context.showBottomSheet(
                               intercept: true,
-                              child: _EditorInfoBottomSheet(characterCountState: scope.characterCountState),
+                              child: _EditorInfoBottomSheet(
+                                characterCountState: scope.characterCountState,
+                                post: data.post,
+                              ),
                             );
                           },
                         ),
@@ -557,13 +561,15 @@ class _FeatureItem extends StatelessWidget {
 }
 
 class _EditorInfoBottomSheet extends HookWidget {
-  const _EditorInfoBottomSheet({required this.characterCountState});
+  const _EditorInfoBottomSheet({required this.characterCountState, required this.post});
 
   final ValueNotifier<CharacterCountState?> characterCountState;
+  final GEditorScreen_QueryData_post post;
 
   @override
   Widget build(BuildContext context) {
     final characterCountValue = useValueListenable(characterCountState);
+    final difference = post.characterCountChange.additions - post.characterCountChange.deletions;
 
     return AppBottomSheet(
       padding: const Pad(horizontal: 20),
@@ -572,12 +578,18 @@ class _EditorInfoBottomSheet extends HookWidget {
         children: [
           const Text(
             '본문 정보',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray_700),
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.gray_700),
           ),
-          const Gap(12),
-          const Text(
-            '글자 수',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+          const Gap(16),
+          const Row(
+            spacing: 4,
+            children: [
+              Icon(LucideLightIcons.type_, size: 15, color: AppColors.gray_700),
+              Text(
+                '글자 수',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+              ),
+            ],
           ),
           const Gap(8),
           Row(
@@ -606,6 +618,59 @@ class _EditorInfoBottomSheet extends HookWidget {
               const Text('공백/부호 미포함', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
               Text(
                 '${characterCountValue?.countWithoutWhitespaceAndPunctuation.comma ?? '0'}자',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+              ),
+            ],
+          ),
+          const Gap(16),
+          const Row(
+            spacing: 4,
+            children: [
+              Icon(LucideLightIcons.goal, size: 15, color: AppColors.gray_700),
+              Text(
+                '오늘의 기록',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+              ),
+            ],
+          ),
+          const Gap(8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Text('변화량', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              ),
+              if (difference == 0)
+                const Text(
+                  '없음',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                )
+              else ...[
+                Icon(difference >= 0 ? LucideLightIcons.trending_up : LucideLightIcons.trending_down, size: 14),
+                const Gap(4),
+                Text(
+                  '${difference >= 0 ? '+' : '-'}${difference.abs().comma}자',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                ),
+              ],
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('입력한 글자', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text(
+                '${post.characterCountChange.additions}자',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('지운 글자', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text(
+                '${post.characterCountChange.deletions}자',
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
               ),
             ],
