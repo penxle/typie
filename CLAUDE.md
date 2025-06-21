@@ -206,7 +206,7 @@ JWT-based auth with social login support (Google, Apple, Kakao, Naver). Tokens a
   - For non-standard CSS values, use bracket notation: `fontSize: '[48px]'`, `width: '[100dvw]'`
   - Break compound values into individual properties: `margin: '0 auto'` → `marginX: 'auto'`, `padding: '40px 20px'` → `paddingY: '40px', paddingX: '20px'`
   - Use TypeScript checking: `pnpm lint:svelte` for Svelte files, `pnpm lint:typecheck` for full project
-- **ALWAYS run linting and formatting after modifying files**:
+- **ALWAYS run linting and formatting, and typechecking after modifying files**:
 
   ```bash
   # For TypeScript/JavaScript/Svelte files
