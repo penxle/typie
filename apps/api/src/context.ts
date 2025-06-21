@@ -7,6 +7,7 @@ import { HTTPException } from 'hono/http-exception';
 import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import * as R from 'remeda';
+import { redis } from '@/cache';
 import { db, firstOrThrow, UserSessions } from '@/db';
 import { publicKey } from '@/utils';
 import type { Context as HonoContext } from 'hono';
@@ -120,9 +121,11 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
         .where(and(eq(UserSessions.id, sid as string), eq(UserSessions.userId, sub)))
         .then(firstOrThrow);
 
+      const impersonatedUserId = await redis.get(`admin:impersonate:${session.id}`);
+
       ctx.session = {
         id: session.id,
-        userId: session.userId,
+        userId: impersonatedUserId ?? session.userId,
       };
     } catch {
       throw new HTTPException(401);

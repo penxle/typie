@@ -1,5 +1,6 @@
 import './enums';
 import './objects';
+import './resolvers/admin';
 import './resolvers/auth';
 import './resolvers/blob';
 import './resolvers/comment';

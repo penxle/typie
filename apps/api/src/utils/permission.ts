@@ -3,6 +3,21 @@ import { db, firstOrThrow, Sites, Users } from '@/db';
 import { UserRole } from '@/enums';
 import { TypieError } from '@/errors';
 
+type AssertAdminPermissionParams = {
+  userId: string | undefined;
+};
+export const assertAdminPermission = async ({ userId }: AssertAdminPermissionParams) => {
+  if (!userId) {
+    throw new TypieError({ code: 'permission_denied' });
+  }
+
+  const user = await db.select({ role: Users.role }).from(Users).where(eq(Users.id, userId)).then(firstOrThrow);
+
+  if (user.role !== UserRole.ADMIN) {
+    throw new TypieError({ code: 'permission_denied' });
+  }
+};
+
 type AssertSitePermissionParams = {
   userId: string | undefined;
   siteId: string;

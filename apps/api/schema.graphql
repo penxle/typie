@@ -3,6 +3,10 @@ input AddSiteFontInput {
   siteId: ID!
 }
 
+input AdminImpersonateInput {
+  userId: String!
+}
+
 input AuthorizeSignUpEmailInput {
   code: String!
 }
@@ -255,6 +259,11 @@ type Image implements Blob {
   url: String!
 }
 
+type Impersonation {
+  admin: User!
+  user: User!
+}
+
 enum InAppPurchaseStore {
   APP_STORE
   GOOGLE_PLAY
@@ -293,6 +302,8 @@ input MoveEntityInput {
 
 type Mutation {
   addSiteFont(input: AddSiteFontInput!): Site!
+  adminImpersonate(input: AdminImpersonateInput!): Boolean!
+  adminStopImpersonation: Boolean!
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): String!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlanChange: Subscription_!
@@ -557,6 +568,7 @@ type Query {
   entity(entityId: ID!): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   image(imageId: ID!): Image!
+  impersonation: Impersonation
   me: User
   permalink(permalink: String!): Permalink!
   post(slug: String!): Post!
