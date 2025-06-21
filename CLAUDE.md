@@ -246,6 +246,267 @@ JWT-based auth with social login support (Google, Apple, Kakao, Naver). Tokens a
   doppler run -- pnpm tsx scripts/test-script.ts
   ```
 
+## GraphQL Usage Patterns in Website
+
+### 1. Query Patterns
+
+#### Query Declaration
+
+```typescript
+const query = graphql(`
+  query DashboardLayout_Query {
+    me @required {
+      id
+      name
+      email
+      ...DashboardLayout_Sidebar_user
+    }
+  }
+`);
+```
+
+#### Query Variables
+
+Export `_[QueryName]_Variables` function from `+page.ts` or `+layout.ts`:
+
+```typescript
+import type { DashboardSlugPage_Query_Variables } from './$graphql';
+
+export const _DashboardSlugPage_Query_Variables: DashboardSlugPage_Query_Variables = ({ params }) => ({
+  slug: params.slug,
+});
+```
+
+#### Reactive Data Access
+
+- Use `$` prefix for reactive access in Svelte components
+- Queries behave like Svelte stores
+
+```svelte
+{#if $query.me}
+  <h1>{$query.me.name}</h1>
+{/if}
+```
+
+### 2. Mutation Patterns
+
+#### Declaration
+
+```typescript
+const createPost = graphql(`
+  mutation HomePage_CreatePost_Mutation($input: CreatePostInput!) {
+    createPost(input: $input) {
+      id
+      entity {
+        id
+        slug
+      }
+    }
+  }
+`);
+```
+
+#### Direct Function Call
+
+- **Important**: Mutations are called directly, NOT with `.mutate()` or `.load()`
+
+```typescript
+// ✅ Correct
+const resp = await createPost({
+  siteId: $query.me.sites[0].id,
+});
+
+// ❌ Incorrect
+await createPost.mutate({ ... });
+await createPost.load({ ... });
+```
+
+### 3. Subscription Patterns
+
+#### Declaration
+
+```typescript
+const siteUpdateStream = graphql(`
+  subscription DashboardLayout_SiteUpdateStream($siteId: ID!) {
+    siteUpdateStream(siteId: $siteId) {
+      ... on Site {
+        id
+      }
+      ... on Entity {
+        id
+        state
+      }
+    }
+  }
+`);
+```
+
+#### Subscription Management
+
+Use `$effect` with `untrack` to prevent reactive dependencies:
+
+```typescript
+$effect(() => {
+  return untrack(() => {
+    const unsubscribe = siteUpdateStream.subscribe({
+      siteId: $query.me.sites[0].id,
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  });
+});
+```
+
+### 4. Fragment Patterns
+
+#### Fragment Declaration
+
+```typescript
+graphql(`
+  fragment DashboardLayout_Sidebar_user on User {
+    id
+    role
+  }
+`);
+```
+
+#### Fragment Usage with Props
+
+Use `fragment()` function to unwrap fragment data from props:
+
+```typescript
+import type { ComponentName_user } from '$graphql';
+
+type Props = {
+  user: ComponentName_user; // Fragment type from parent
+};
+
+let { user: _user }: Props = $props();
+
+const user = fragment(
+  _user,
+  graphql(`
+    fragment ComponentName_user on User {
+      id
+      name
+      ...NestedFragment
+    }
+  `),
+);
+```
+
+### 5. AfterLoad Pattern
+
+#### Route-Level Checks
+
+Export `_[QueryName]_AfterLoad` function from `+layout.ts` or `+page.ts`:
+
+```typescript
+import type { AdminLayout_Query_AfterLoad } from './$graphql';
+
+export const _AdminLayout_Query_AfterLoad: AdminLayout_Query_AfterLoad = ({ query, event }) => {
+  if (!query.me || query.me.role !== 'ADMIN') {
+    redirect(302, '/home');
+  }
+};
+```
+
+#### Key Points
+
+- Function name MUST match pattern: `_[QueryName]_AfterLoad`
+- Runs server-side before component renders
+- Access to `query` data and `event` object
+- Used for auth checks, redirects, data validation
+
+### 6. Import Patterns
+
+#### Module Distinction
+
+```typescript
+// Global graphql function and fragment helper
+import { graphql, fragment } from '$graphql';
+
+// Route-specific generated types
+import type { PageName_Query_AfterLoad } from './$graphql';
+```
+
+### 7. GraphQL Directives
+
+#### @required Directive
+
+Converts nullable fields to non-nullable:
+
+```typescript
+query {
+  me @required {  // User! instead of User
+    id
+    name
+  }
+}
+```
+
+### 8. Type Generation
+
+**Always run after GraphQL changes:**
+
+```bash
+pnpm codegen
+```
+
+Required when:
+
+- Adding/modifying queries, mutations, subscriptions
+- Adding/modifying fragments
+- Changing GraphQL operation variables
+- Adding new GraphQL operations
+
+### 9. Common Patterns
+
+1. **Naming Convention**: `[ComponentOrRouteName]_[OperationType]`
+
+   - `DashboardLayout_Query`
+   - `HomePage_CreatePost_Mutation`
+   - `Sidebar_user` (for fragments)
+
+2. **Data Loading Flow**:
+
+   - Query defined in `.svelte` file
+   - Variables provided via `_Variables` export
+   - AfterLoad runs server-side
+   - Component renders with reactive data
+
+3. **Fragment Composition**: Pass fragments through component props
+
+   ```svelte
+   <!-- Parent component -->
+   <Sidebar $user={$query.me} />
+   ```
+
+   ```typescript
+   // Child component (Sidebar.svelte)
+   import type { DashboardLayout_Sidebar_user } from '$graphql';
+
+   type Props = {
+     $user: DashboardLayout_Sidebar_user;
+   };
+   ```
+
+4. **Error Handling**:
+   - GraphQL errors handled by framework
+   - Use try-catch for mutation error handling
+   - TypeScript ensures type safety
+
+### 10. Best Practices
+
+- Use fragments for reusable data requirements
+- Keep queries close to components that use them
+- Use descriptive operation names
+- Leverage TypeScript for type safety
+- Always clean up subscriptions in effects
+- Use `untrack()` to prevent unnecessary re-subscriptions
+
 ## Performance Optimization
 
 - **Parallel Tool Usage**: Always use parallel tasks whenever possible. When multiple independent pieces of information are needed or multiple operations must be performed, batch tool calls together in a single message to optimize performance.
