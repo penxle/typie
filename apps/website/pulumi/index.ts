@@ -15,12 +15,12 @@ new typie.Service('website', {
   },
 
   resources: {
-    cpu: '256',
-    memory: '512',
+    cpu: '1024',
+    memory: '2048',
   },
 
   autoscale: {
-    minCount: 2,
+    minCount: 4,
     maxCount: 20,
     averageCpuUtilization: 80,
   },
