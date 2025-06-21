@@ -38,7 +38,7 @@ platform :ios do
       distribute_external: true,
       notify_external_testers: true,
       reject_build_waiting_for_review: true,
-      groups: "Community",
+      groups: "Beta",
     )
   end
 

@@ -28,7 +28,7 @@ platform :android do
 
     upload_to_play_store(
       track: "internal",
-      track_promote_to: "alpha",
+      track_promote_to: "beta",
       version_code: latest_build_number,
     )
   end
