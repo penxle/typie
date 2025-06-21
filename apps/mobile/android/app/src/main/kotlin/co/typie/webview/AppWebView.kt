@@ -161,12 +161,15 @@ class AppWebView(
         val data = args["data"] as? String
 
         if (name != null && data != null) {
+          val escapedData = data.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+            .replace("\r", "\\r").replace("\t", "\\t")
+
           webView.evaluateJavascript(
             """
               window.dispatchEvent(new CustomEvent('__webview__', { 
                 detail: { 
                   name: "$name", 
-                  data: JSON.parse("$data") 
+                  data: JSON.parse("$escapedData") 
                 } 
               }));
             """,
