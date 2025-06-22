@@ -3,9 +3,14 @@
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
+  import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
+  import { Button, Img, Menu, MenuItem } from '$lib/components';
+  import { AdminImpersonateBanner } from '$lib/components/admin';
   import { serializeOAuthState } from '$lib/utils';
+  import { css } from '$styled-system/css';
+  import { flex } from '$styled-system/patterns';
   import type { Snippet } from 'svelte';
 
   type Props = {
@@ -24,8 +29,12 @@
         avatar {
           id
           url
+
+          ...Img_image
         }
       }
+
+      ...AdminImpersonateBanner_query
     }
   `);
 
@@ -55,6 +64,93 @@
       });
     }
   });
+
+  const authorizeUrl = $derived(
+    qs.stringifyUrl({
+      url: `${env.PUBLIC_AUTH_URL}/authorize`,
+      query: {
+        client_id: env.PUBLIC_OIDC_CLIENT_ID,
+        response_type: 'code',
+        redirect_uri: `${page.url.origin}/authorize`,
+        state: serializeOAuthState({ redirect_uri: page.url.href }),
+      },
+    }),
+  );
 </script>
 
-{@render children()}
+<div class={flex({ flexDirection: 'column', minHeight: '[100dvh]' })}>
+  <header
+    class={flex({
+      flexDirection: 'column',
+      position: 'sticky',
+      top: '0',
+      zIndex: '50',
+      backgroundColor: 'white',
+    })}
+  >
+    <AdminImpersonateBanner {$query} />
+
+    <div
+      class={flex({
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottomWidth: '1px',
+        borderBottomColor: 'gray.200',
+        paddingX: '20px',
+        height: '52px',
+        backgroundColor: 'white',
+      })}
+    >
+      <a class={css({ flexShrink: '0', height: '20px' })} href={env.PUBLIC_WEBSITE_URL} rel="noopener noreferrer" target="_blank">
+        <Logo class={css({ height: 'full' })} />
+      </a>
+
+      {#if $query.me}
+        <Menu>
+          {#snippet button()}
+            {#if $query.me?.avatar}
+              <Img
+                style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'gray.100', borderRadius: 'full' })}
+                $image={$query.me.avatar}
+                alt={`${$query.me.name}의 아바타`}
+                size={32}
+              />
+            {:else}
+              <div
+                class={css({
+                  size: '32px',
+                  borderWidth: '1px',
+                  borderColor: 'gray.100',
+                  borderRadius: 'full',
+                  backgroundColor: 'gray.200',
+                })}
+              ></div>
+            {/if}
+          {/snippet}
+
+          <MenuItem href={`${env.PUBLIC_WEBSITE_URL}/home`} type="link">내 홈으로</MenuItem>
+          <MenuItem
+            onclick={() => {
+              mixpanel.track('logout', { via: 'header' });
+
+              location.href = qs.stringifyUrl({
+                url: `${env.PUBLIC_AUTH_URL}/logout`,
+                query: {
+                  redirect_uri: page.url.href,
+                },
+              });
+            }}
+          >
+            로그아웃
+          </MenuItem>
+        </Menu>
+      {:else}
+        <Button external href={authorizeUrl} size="sm" type="link" variant="primary">시작하기</Button>
+      {/if}
+    </div>
+  </header>
+
+  <main class={flex({ flexDirection: 'column', flex: '1' })}>
+    {@render children()}
+  </main>
+</div>

@@ -5,6 +5,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
   import { Button, HorizontalDivider } from '$lib/components';
+  import { AdminImpersonateBanner } from '$lib/components/admin';
   import { setupAppContext } from '$lib/context';
   import { isMobileDevice } from '$lib/utils';
   import { css } from '$styled-system/css';
@@ -38,6 +39,7 @@
       }
 
       ...DashboardLayout_Sidebar_query
+      ...AdminImpersonateBanner_query
     }
   `);
 
@@ -177,29 +179,34 @@
     </div>
   </div>
 {:else}
-  <div
-    class={flex({
-      position: 'relative',
-      alignItems: 'stretch',
-      height: '[100dvh]',
-      backgroundColor: 'gray.100',
-    })}
-  >
-    <Sidebar {$query} $user={$query.me} />
+  <div class={flex({ flexDirection: 'column', height: '[100dvh]' })}>
+    <AdminImpersonateBanner {$query} />
 
     <div
-      class={css({
+      class={flex({
+        position: 'relative',
         flexGrow: '1',
-        borderWidth: '[0.5px]',
-        borderRadius: '4px',
-        marginY: '8px',
-        marginRight: '8px',
-        backgroundColor: 'white',
-        boxShadow: '[0 3px 6px -2px {colors.gray.950/3}, 0 1px 1px {colors.gray.950/5}]',
-        overflowY: 'auto',
+        alignItems: 'stretch',
+        backgroundColor: 'gray.100',
+        overflow: 'hidden',
       })}
     >
-      {@render children()}
+      <Sidebar {$query} $user={$query.me} />
+
+      <div
+        class={css({
+          flexGrow: '1',
+          borderWidth: '[0.5px]',
+          borderRadius: '4px',
+          marginY: '8px',
+          marginRight: '8px',
+          backgroundColor: 'white',
+          boxShadow: '[0 3px 6px -2px {colors.gray.950/3}, 0 1px 1px {colors.gray.950/5}]',
+          overflowY: 'auto',
+        })}
+      >
+        {@render children()}
+      </div>
     </div>
   </div>
 {/if}
