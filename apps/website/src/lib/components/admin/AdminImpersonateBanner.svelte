@@ -2,7 +2,7 @@
   import AlertTriangleIcon from '~icons/lucide/alert-triangle';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import { fragment, graphql } from '$graphql';
-  import { AdminIcon } from '$lib/components/admin';
+  import { AdminIcon, AdminModal } from '$lib/components/admin';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import type { AdminImpersonateBanner_query } from '$graphql';
@@ -12,6 +12,8 @@
   };
 
   let { $query: _query }: Props = $props();
+
+  let confirmModalOpen = $state(false);
 
   const query = fragment(
     _query,
@@ -40,14 +42,8 @@
   `);
 
   const handleStop = async () => {
-    if (confirm('정말로 impersonate를 중지하시겠습니까?')) {
-      try {
-        await adminStopImpersonation();
-        window.location.href = '/admin';
-      } catch {
-        alert('Failed to stop impersonation');
-      }
-    }
+    await adminStopImpersonation();
+    location.href = '/admin';
   };
 </script>
 
@@ -115,11 +111,31 @@
             borderColor: 'gray.900',
           },
         })}
-        onclick={handleStop}
+        onclick={() => (confirmModalOpen = true)}
         type="button"
       >
         STOP IMPERSONATION
       </button>
     </div>
   </div>
+
+  <AdminModal
+    actions={{
+      cancel: {},
+      confirm: {
+        label: 'CONFIRM STOP',
+        onclick: handleStop,
+        variant: 'danger',
+      },
+    }}
+    title="CONFIRM ACTION"
+    bind:open={confirmModalOpen}
+  >
+    <div class={css({ marginBottom: '16px' })}>
+      <p class={css({ marginBottom: '8px' })}>ARE YOU SURE YOU WANT TO STOP IMPERSONATING?</p>
+      <p class={css({ color: 'amber.400' })}>
+        CURRENT USER: {$query.impersonation?.user.name.toUpperCase()} ({$query.impersonation?.user.email})
+      </p>
+    </div>
+  </AdminModal>
 {/if}
