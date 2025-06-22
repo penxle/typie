@@ -1,6 +1,7 @@
 <script lang="ts">
   import dayjs from 'dayjs';
   import ArrowLeftIcon from '~icons/lucide/arrow-left';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EditIcon from '~icons/lucide/edit';
   import EyeIcon from '~icons/lucide/eye';
   import { graphql } from '$graphql';
@@ -33,6 +34,19 @@
           slug
           url
           visibility
+          state
+          ancestors {
+            id
+            node {
+              __typename
+              ... on Folder {
+                name
+              }
+              ... on Post {
+                title
+              }
+            }
+          }
           user {
             id
             name
@@ -59,7 +73,7 @@
   <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
       <div class={flex({ alignItems: 'center', gap: '12px' })}>
-        <a
+        <button
           class={css({
             borderWidth: '2px',
             borderColor: 'amber.500',
@@ -70,17 +84,18 @@
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            textDecoration: 'none',
+            backgroundColor: 'transparent',
             _hover: {
               backgroundColor: 'amber.500',
               color: 'gray.900',
             },
           })}
-          href="/admin/posts"
+          onclick={() => history.back()}
+          type="button"
         >
           <AdminIcon icon={ArrowLeftIcon} size={16} />
           BACK TO LIST
-        </a>
+        </button>
         <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>POST DETAILS</h2>
       </div>
       <div class={flex({ gap: '8px' })}>
@@ -234,8 +249,20 @@
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>TYPE</span>
-              <span class={css({ fontSize: '12px', color: $query.adminPost.type === 'NORMAL' ? 'amber.500' : 'gray.400' })}>
+              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
                 [{$query.adminPost.type}]
+              </span>
+            </div>
+
+            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+              <span class={css({ fontSize: '11px', color: 'amber.400' })}>STATE</span>
+              <span
+                class={css({
+                  fontSize: '12px',
+                  color: $query.adminPost.entity.state === 'ACTIVE' ? 'green.400' : 'red.400',
+                })}
+              >
+                [{$query.adminPost.entity.state}]
               </span>
             </div>
 
@@ -252,6 +279,31 @@
                 {dayjs($query.adminPost.updatedAt).formatAsDateTime()}
               </span>
             </div>
+          </div>
+        </div>
+
+        <!-- PATH -->
+        <div
+          class={css({
+            borderWidth: '2px',
+            borderColor: 'amber.500',
+            padding: '24px',
+            backgroundColor: 'gray.900',
+          })}
+        >
+          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PATH</h3>
+
+          <div class={flex({ fontSize: '12px', color: 'amber.400', alignItems: 'center', gap: '4px' })}>
+            {#if $query.adminPost.entity.ancestors.length > 0}
+              {#each $query.adminPost.entity.ancestors as ancestor, i (ancestor.id)}
+                <span>{ancestor.node.__typename === 'Folder' ? ancestor.node.name : ancestor.node.title}</span>
+                {#if i < $query.adminPost.entity.ancestors.length - 1}
+                  <AdminIcon icon={ChevronRightIcon} size={12} />
+                {/if}
+              {/each}
+            {:else}
+              <span class={css({ color: 'gray.500' })}>-</span>
+            {/if}
           </div>
         </div>
 
@@ -317,7 +369,7 @@
               <span
                 class={css({
                   fontSize: '12px',
-                  color: $query.adminPost.entity.visibility === 'UNLISTED' ? 'amber.400' : 'gray.400',
+                  color: $query.adminPost.entity.visibility === 'UNLISTED' ? 'green.400' : 'gray.400',
                 })}
               >
                 [{$query.adminPost.entity.visibility}]

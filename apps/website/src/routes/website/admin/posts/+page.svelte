@@ -1,10 +1,11 @@
 <script lang="ts">
   import dayjs from 'dayjs';
-  import { untrack } from 'svelte';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import SearchIcon from '~icons/lucide/search';
   import { graphql } from '$graphql';
   import { AdminIcon, AdminPagination, AdminTable } from '$lib/components/admin';
   import { QueryString, QueryStringNumber } from '$lib/state';
+  import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
@@ -25,6 +26,35 @@
           updatedAt
           contentRating
           excerpt
+          reactionCount
+          characterCount
+          entity {
+            id
+            slug
+            visibility
+            state
+            ancestors {
+              id
+              node {
+                __typename
+                ... on Folder {
+                  name
+                }
+                ... on Post {
+                  title
+                }
+              }
+            }
+            user {
+              id
+              name
+              email
+              avatar {
+                id
+                url
+              }
+            }
+          }
 
           coverImage {
             id
@@ -34,17 +64,12 @@
       }
     }
   `);
-
-  $effect(() => {
-    void searchQuery.current;
-    untrack(() => (pageNumber.current = 1));
-  });
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
   <div>
     <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>POST MANAGEMENT</h2>
-    <p class={css({ marginTop: '8px', fontSize: '13px', fontFamily: 'mono', color: 'amber.400' })}>
+    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>
       TOTAL POSTS: {$query.adminPosts.totalCount}
     </p>
   </div>
@@ -57,7 +82,7 @@
     })}
   >
     <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'amber.500' })}>
-      <div class={css({ position: 'relative', maxWidth: '320px' })}>
+      <div class={css({ position: 'relative', maxWidth: '480px' })}>
         <AdminIcon
           style={css.raw({
             position: 'absolute',
@@ -90,19 +115,28 @@
               borderColor: 'amber.400',
             },
           })}
-          placeholder="SEARCH TITLE OR SUBTITLE..."
+          placeholder="SEARCH ID, SLUG, PERMALINK OR TITLE..."
           type="text"
-          bind:value={searchQuery.current}
+          bind:value={
+            () => searchQuery.current,
+            (value) => {
+              searchQuery.current = value;
+              pageNumber.current = 1;
+            }
+          }
         />
       </div>
     </div>
 
     <AdminTable
       columns={[
-        { key: '$post', label: '포스트', width: '45%' },
-        { key: '$type', label: '타입', width: '15%' },
-        { key: '$contentRating', label: '등급', width: '15%' },
-        { key: '$updatedAt', label: '수정일', width: '25%' },
+        { key: '$post', label: 'POST', width: '25%' },
+        { key: '$id', label: 'ID', width: '10%' },
+        { key: '$user', label: 'USER', width: '15%' },
+        { key: '$path', label: 'PATH', width: '20%' },
+        { key: '$characters', label: 'CHARACTERS', width: '10%' },
+        { key: '$state', label: 'STATE', width: '10%' },
+        { key: '$updatedAt', label: 'UPDATED', width: '10%' },
       ]}
       data={$query.adminPosts.posts}
       dataKey="id"
@@ -133,7 +167,7 @@
               {post.title}
             </a>
             {#if post.subtitle}
-              <div class={css({ fontSize: '11px', fontFamily: 'mono', color: 'amber.400' })}>
+              <div class={css({ fontSize: '11px', color: 'amber.400' })}>
                 {post.subtitle}
               </div>
             {/if}
@@ -141,32 +175,87 @@
         </div>
       {/snippet}
 
-      {#snippet $type(post)}
-        <span class={css({ fontSize: '12px', color: post.type === 'NORMAL' ? 'amber.500' : 'gray.400' })}>
-          [{post.type}]
+      {#snippet $id(post)}
+        <div class={flex({ flexDirection: 'column', gap: '2px' })}>
+          <span class={css({ fontSize: '11px', color: 'gray.400' })}>
+            {post.id}
+          </span>
+          <span class={css({ fontSize: '11px', color: 'gray.400' })}>
+            {post.entity.id}
+          </span>
+        </div>
+      {/snippet}
+
+      {#snippet $user(post)}
+        {#if post.entity?.user}
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <div
+              class={css({
+                size: '24px',
+                borderRadius: 'full',
+                backgroundColor: 'amber.500',
+                overflow: 'hidden',
+                flexShrink: '0',
+              })}
+            >
+              {#if post.entity.user.avatar?.url}
+                <img alt={post.entity.user.name} src={post.entity.user.avatar.url} />
+              {/if}
+            </div>
+            <div>
+              <a
+                class={css({
+                  fontSize: '12px',
+                  color: 'amber.500',
+                  _hover: { textDecoration: 'underline' },
+                })}
+                href="/admin/users/{post.entity.user.id}"
+              >
+                {post.entity.user.name}
+              </a>
+            </div>
+          </div>
+        {:else}
+          <span class={css({ fontSize: '12px', color: 'gray.400' })}>-</span>
+        {/if}
+      {/snippet}
+
+      {#snippet $path(post)}
+        <div class={flex({ fontSize: '12px', color: 'amber.400', alignItems: 'center', gap: '4px' })}>
+          {#if post.entity.ancestors.length > 0}
+            {#each post.entity.ancestors as ancestor, i (ancestor.id)}
+              <span>{ancestor.node.__typename === 'Folder' ? ancestor.node.name : ancestor.node.title}</span>
+              {#if i < post.entity.ancestors.length - 1}
+                <AdminIcon icon={ChevronRightIcon} size={12} />
+              {/if}
+            {/each}
+          {:else}
+            <span class={css({ color: 'gray.500' })}>-</span>
+          {/if}
+        </div>
+      {/snippet}
+
+      {#snippet $characters(post)}
+        <span class={css({ fontSize: '12px', color: 'amber.400' })}>
+          {comma(post.characterCount)} CHARS
         </span>
       {/snippet}
 
-      {#snippet $contentRating(post)}
+      {#snippet $state(post)}
         <span
           class={css({
             fontSize: '12px',
-            color:
-              post.contentRating === 'ALL'
-                ? 'green.400'
-                : post.contentRating === 'R15'
-                  ? 'blue.400'
-                  : post.contentRating === 'R19'
-                    ? 'red.400'
-                    : 'gray.400',
+            color: post.entity.state === 'ACTIVE' ? 'green.400' : 'red.400',
           })}
         >
-          [{post.contentRating}]
+          {post.entity.state}
         </span>
       {/snippet}
 
       {#snippet $updatedAt(post)}
-        {dayjs(post.updatedAt).formatAsDateTime()}
+        <span class={css({ fontSize: '12px', color: 'amber.400' })}>
+          {dayjs(post.updatedAt).formatAsDateTime()}
+        </span>
       {/snippet}
     </AdminTable>
 
