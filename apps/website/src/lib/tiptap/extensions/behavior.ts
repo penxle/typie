@@ -80,16 +80,36 @@ export const Behavior = Extension.create({
     return [
       new Plugin({
         props: {
-          handleTextInput(view, from, to, text) {
-            if (window.__webview__ && view.composing) {
+          handleDOMEvents: {
+            cut: (view, event) => {
+              event.preventDefault();
+
+              const slice = view.state.selection.content();
+              const { dom, text } = view.serializeForClipboard(slice);
+
+              event.clipboardData?.clearData();
+              event.clipboardData?.setData('text/html', dom.innerHTML);
+              event.clipboardData?.setData('text/plain', text);
+
               const { tr } = view.state;
-              tr.insertText(text, from, to);
+              tr.deleteSelection();
               view.dispatch(tr);
 
               return true;
-            }
+            },
 
-            return false;
+            copy: (view, event) => {
+              event.preventDefault();
+
+              const slice = view.state.selection.content();
+              const { dom, text } = view.serializeForClipboard(slice);
+
+              event.clipboardData?.clearData();
+              event.clipboardData?.setData('text/html', dom.innerHTML);
+              event.clipboardData?.setData('text/plain', text);
+
+              return true;
+            },
           },
         },
       }),
