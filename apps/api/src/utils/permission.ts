@@ -1,17 +1,18 @@
 import { eq } from 'drizzle-orm';
-import { db, firstOrThrow, Sites, Users } from '@/db';
+import { db, firstOrThrow, Sites, Users, UserSessions } from '@/db';
 import { UserRole } from '@/enums';
 import { TypieError } from '@/errors';
 
 type AssertAdminPermissionParams = {
-  userId: string | undefined;
+  sessionId: string;
 };
-export const assertAdminPermission = async ({ userId }: AssertAdminPermissionParams) => {
-  if (!userId) {
-    throw new TypieError({ code: 'permission_denied' });
-  }
-
-  const user = await db.select({ role: Users.role }).from(Users).where(eq(Users.id, userId)).then(firstOrThrow);
+export const assertAdminPermission = async ({ sessionId }: AssertAdminPermissionParams) => {
+  const user = await db
+    .select({ role: Users.role })
+    .from(UserSessions)
+    .innerJoin(Users, eq(UserSessions.userId, Users.id))
+    .where(eq(UserSessions.id, sessionId))
+    .then(firstOrThrow);
 
   if (user.role !== UserRole.ADMIN) {
     throw new TypieError({ code: 'permission_denied' });

@@ -7,6 +7,7 @@
   import FolderIcon from '~icons/lucide/folder';
   import PlusIcon from '~icons/lucide/plus';
   import SearchIcon from '~icons/lucide/search';
+  import ShieldUserIcon from '~icons/lucide/shield-user';
   import { goto, pushState } from '$app/navigation';
   import { updated } from '$app/state';
   import Favicon from '$assets/logos/favicon.svg?component';
@@ -51,6 +52,7 @@
     graphql(`
       fragment DashboardLayout_Sidebar_user on User {
         id
+        role
 
         sites {
           id
@@ -189,6 +191,10 @@
   {/if}
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+    {#if $user.role === 'ADMIN'}
+      <SidebarButton as="a" href="/admin" icon={ShieldUserIcon} label="어드민" />
+    {/if}
+
     <Announcements $posts={$query.announcements} />
 
     <!-- <SidebarButton as="a" href="https://help.typie.co" icon={CircleHelpIcon} label="도움말" rel="noopener noreferrer" target="_blank" /> -->
