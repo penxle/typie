@@ -1,6 +1,6 @@
 import { Node } from '@tiptap/pm/model';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { base64 } from 'rfc4648';
 import { match } from 'ts-pattern';
@@ -209,6 +209,13 @@ Post.implement({
           additions: change.additions ?? 0,
           deletions: change.deletions ?? 0,
         };
+      },
+    }),
+
+    reactionCount: t.int({
+      resolve: async (self) => {
+        const r = await db.select({ count: count() }).from(PostReactions).where(eq(PostReactions.postId, self.id)).then(firstOrThrow);
+        return r.count;
       },
     }),
   }),

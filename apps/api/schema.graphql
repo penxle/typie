@@ -7,6 +7,16 @@ input AdminImpersonateInput {
   userId: String!
 }
 
+type AdminPostsResult {
+  posts: [Post!]!
+  totalCount: Int!
+}
+
+type AdminUsersResult {
+  totalCount: Int!
+  users: [User!]!
+}
+
 input AuthorizeSignUpEmailInput {
   code: String!
 }
@@ -123,6 +133,7 @@ type Entity implements IEntity {
   state: EntityState!
   type: EntityType!
   url: String!
+  user: User!
   view: EntityView!
   visibility: EntityVisibility!
 }
@@ -464,6 +475,7 @@ type Post implements IPost {
   maxWidth: Int!
   password: String
   protectContent: Boolean!
+  reactionCount: Int!
   storedMarks: JSON!
   subtitle: String
   title: String!
@@ -562,6 +574,10 @@ type PreorderUser {
 }
 
 type Query {
+  adminPost(postId: String!): Post!
+  adminPosts(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: PostType): AdminPostsResult!
+  adminUser(userId: String!): User!
+  adminUsers(limit: Int! = 20, offset: Int! = 0, role: UserRole, search: String, state: UserState): AdminUsersResult!
   announcements: [PostView!]!
   creditCode(code: String!): CreditCode!
   defaultPlanRule: PlanRule!
@@ -793,6 +809,7 @@ type User {
   avatar: Image!
   billingKey: UserBillingKey
   characterCountChanges: [CharacterCountChange!]!
+  createdAt: DateTime!
   credit: Int!
   email: String!
   id: ID!
@@ -800,11 +817,14 @@ type User {
   name: String!
   notifications: [Notification!]!
   personalIdentity: UserPersonalIdentity
+  postCount: Int!
   recentPosts: [Post!]!
   role: UserRole!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
+  state: UserState!
   subscription: Subscription_
+  totalCharacterCount: Int!
   uuid: String!
 }
 
@@ -817,7 +837,10 @@ type UserBillingKey {
 type UserPersonalIdentity {
   birthDate: DateTime!
   expiresAt: DateTime!
+  gender: String!
   id: ID!
+  name: String!
+  phoneNumber: String
 }
 
 enum UserRole {

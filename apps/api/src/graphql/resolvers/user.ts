@@ -72,6 +72,8 @@ User.implement({
     email: t.exposeString('email'),
     avatar: t.expose('avatarId', { type: Image }),
     role: t.expose('role', { type: UserRole }),
+    state: t.expose('state', { type: UserState }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
 
     uuid: t.string({
       // just a randomly-picked uuid for namespace
@@ -206,6 +208,33 @@ User.implement({
         return credit?.amount ?? 0;
       },
     }),
+
+    postCount: t.int({
+      resolve: async (user) => {
+        const result = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(Posts)
+          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+          .where(and(eq(Entities.userId, user.id), eq(Entities.state, EntityState.ACTIVE)))
+          .then(firstOrThrow);
+
+        return Number(result.count);
+      },
+    }),
+
+    totalCharacterCount: t.int({
+      resolve: async (user) => {
+        const result = await db
+          .select({
+            total: sql<number>`COALESCE(SUM(${PostCharacterCountChanges.additions}), 0) - COALESCE(SUM(${PostCharacterCountChanges.deletions}), 0)`,
+          })
+          .from(PostCharacterCountChanges)
+          .where(eq(PostCharacterCountChanges.userId, user.id))
+          .then(firstOrThrow);
+
+        return Math.max(0, Number(result.total));
+      },
+    }),
   }),
 });
 
@@ -222,7 +251,10 @@ UserPersonalIdentity.implement({
   isTypeOf: isTypeOf(TableCode.USER_PERSONAL_IDENTITIES),
   fields: (t) => ({
     id: t.exposeID('id'),
+    name: t.exposeString('name'),
     birthDate: t.expose('birthDate', { type: 'DateTime' }),
+    gender: t.exposeString('gender'),
+    phoneNumber: t.exposeString('phoneNumber', { nullable: true }),
     expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
   }),
 });

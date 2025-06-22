@@ -9,7 +9,7 @@ import { pubsub } from '@/pubsub';
 import { generateEntityOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site, SiteView } from '../objects';
+import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -38,6 +38,7 @@ Entity.implement({
 
     site: t.expose('siteId', { type: Site }),
     parent: t.expose('parentId', { type: Entity, nullable: true }),
+    user: t.expose('userId', { type: User }),
 
     node: t.field({
       type: EntityNode,
