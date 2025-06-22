@@ -1,8 +1,6 @@
 <script lang="ts">
   import { graphql } from '$graphql';
-  import { flex } from '$styled-system/patterns';
   import FolderView from './FolderView.svelte';
-  import Header from './Header.svelte';
   import PostView from './PostView.svelte';
 
   const query = graphql(`
@@ -10,7 +8,6 @@
       me {
         id
 
-        ...UsersiteWildcardSlugPage_Header_user
         ...UsersiteWildcardSlugPage_PostView_user
       }
 
@@ -28,12 +25,8 @@
   `);
 </script>
 
-<div class={flex({ flexDirection: 'column', width: '[100dvw]', minHeight: '[100dvh]', height: 'full', paddingTop: '52px' })}>
-  <Header $user={$query.me} />
-
-  {#if $query.entityView.node.__typename === 'PostView'}
-    <PostView $entityView={$query.entityView} $user={$query.me} />
-  {:else}
-    <FolderView $entityView={$query.entityView} />
-  {/if}
-</div>
+{#if $query.entityView.node.__typename === 'PostView'}
+  <PostView $entityView={$query.entityView} $user={$query.me} />
+{:else}
+  <FolderView $entityView={$query.entityView} />
+{/if}
