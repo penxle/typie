@@ -39,7 +39,7 @@ builder.queryFields((t) => ({
       }
 
       if (args.search) {
-        conditions.push(or(ilike(Users.name, `%${args.search}%`), ilike(Users.email, `%${args.search}%`)));
+        conditions.push(or(ilike(Users.name, `%${args.search}%`), ilike(Users.email, `%${args.search}%`), eq(Users.id, args.search)));
       }
 
       if (conditions.length > 0) {
@@ -96,7 +96,15 @@ builder.queryFields((t) => ({
       }
 
       if (args.search) {
-        conditions.push(or(ilike(Posts.title, `%${args.search}%`), ilike(Posts.subtitle, `%${args.search}%`)));
+        conditions.push(
+          or(
+            ilike(Posts.title, `%${args.search}%`),
+            ilike(Posts.subtitle, `%${args.search}%`),
+            eq(Posts.id, args.search),
+            eq(Entities.slug, args.search),
+            eq(Entities.permalink, args.search),
+          ),
+        );
       }
 
       if (conditions.length > 0) {

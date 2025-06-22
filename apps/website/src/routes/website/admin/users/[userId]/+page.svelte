@@ -1,7 +1,6 @@
 <script lang="ts">
   import dayjs from 'dayjs';
   import ArrowLeftIcon from '~icons/lucide/arrow-left';
-  import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { AdminIcon, AdminModal } from '$lib/components/admin';
   import { comma } from '$lib/utils';
@@ -100,7 +99,7 @@
           color: 'gray.900',
         },
       })}
-      onclick={() => goto('/admin/users')}
+      onclick={() => history.back()}
       type="button"
     >
       <AdminIcon icon={ArrowLeftIcon} size={16} />
@@ -297,7 +296,12 @@
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>STATE</span>
-              <span class={css({ fontSize: '12px', color: $query.adminUser.state === 'ACTIVE' ? 'green.400' : 'gray.400' })}>
+              <span
+                class={css({
+                  fontSize: '12px',
+                  color: $query.adminUser.state === 'ACTIVE' ? 'green.400' : 'red.400',
+                })}
+              >
                 [{$query.adminUser.state}]
               </span>
             </div>

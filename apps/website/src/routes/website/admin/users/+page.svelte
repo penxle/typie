@@ -1,10 +1,10 @@
 <script lang="ts">
   import dayjs from 'dayjs';
-  import { untrack } from 'svelte';
   import SearchIcon from '~icons/lucide/search';
   import { graphql } from '$graphql';
   import { AdminIcon, AdminPagination, AdminTable } from '$lib/components/admin';
   import { QueryString, QueryStringNumber } from '$lib/state';
+  import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
@@ -35,20 +35,28 @@
           subscription {
             id
             state
+            plan {
+              id
+              name
+            }
           }
           credit
           sites {
+            id
+          }
+          postCount
+          totalCharacterCount
+          marketingConsent
+          personalIdentity {
+            id
+          }
+          billingKey {
             id
           }
         }
       }
     }
   `);
-
-  $effect(() => {
-    void searchQuery.current;
-    untrack(() => (pageNumber.current = 1));
-  });
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
@@ -67,7 +75,7 @@
     })}
   >
     <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'amber.500' })}>
-      <div class={css({ position: 'relative', maxWidth: '320px' })}>
+      <div class={css({ position: 'relative', maxWidth: '480px' })}>
         <AdminIcon
           style={css.raw({
             position: 'absolute',
@@ -100,19 +108,27 @@
               borderColor: 'amber.400',
             },
           })}
-          placeholder="SEARCH NAME OR EMAIL..."
+          placeholder="SEARCH ID, NAME OR EMAIL..."
           type="text"
-          bind:value={searchQuery.current}
+          bind:value={
+            () => searchQuery.current,
+            (value) => {
+              searchQuery.current = value;
+              pageNumber.current = 1;
+            }
+          }
         />
       </div>
     </div>
 
     <AdminTable
       columns={[
-        { key: '$user', label: '사용자', width: '40%' },
-        { key: '$role', label: '역할', width: '15%' },
-        { key: '$state', label: '상태', width: '15%' },
-        { key: '$createdAt', label: '가입일', width: '30%' },
+        { key: '$user', label: 'USER', width: '25%' },
+        { key: '$id', label: 'ID', width: '15%' },
+        { key: '$subscription', label: 'SUBSCRIPTION', width: '15%' },
+        { key: '$activity', label: 'ACTIVITY', width: '15%' },
+        { key: '$state', label: 'STATE', width: '10%' },
+        { key: '$createdAt', label: 'JOINED', width: '20%' },
       ]}
       data={$query.adminUsers.users}
       dataKey="id"
@@ -142,27 +158,55 @@
             >
               {user.name}
             </a>
-            <div class={css({ fontSize: '11px', fontFamily: 'mono', color: 'amber.400' })}>
+            <div class={css({ fontSize: '11px', color: 'amber.400' })}>
               {user.email}
             </div>
           </div>
         </div>
       {/snippet}
 
-      {#snippet $role(user)}
-        <span class={css({ fontSize: '12px', color: user.role === 'ADMIN' ? 'amber.500' : 'gray.400' })}>
-          [{user.role}]
+      {#snippet $id(user)}
+        <span class={css({ fontSize: '12px', color: 'gray.400' })}>
+          {user.id}
         </span>
       {/snippet}
 
+      {#snippet $subscription(user)}
+        {#if user.subscription}
+          <span class={css({ fontSize: '12px', color: user.subscription.state === 'ACTIVE' ? 'green.400' : 'amber.400' })}>
+            {user.subscription.plan.name}
+          </span>
+        {:else}
+          <span class={css({ fontSize: '12px', color: 'gray.400' })}>FREE</span>
+        {/if}
+      {/snippet}
+
+      {#snippet $activity(user)}
+        <div class={css({ fontSize: '12px' })}>
+          <div class={css({ color: 'amber.500' })}>
+            {user.postCount} POSTS
+          </div>
+          <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+            {comma(user.totalCharacterCount)} CHARS
+          </div>
+        </div>
+      {/snippet}
+
       {#snippet $state(user)}
-        <span class={css({ fontSize: '12px', color: user.state === 'ACTIVE' ? 'green.400' : 'gray.400' })}>
-          [{user.state}]
+        <span
+          class={css({
+            fontSize: '12px',
+            color: user.state === 'ACTIVE' ? 'green.400' : 'red.400',
+          })}
+        >
+          {user.state}
         </span>
       {/snippet}
 
       {#snippet $createdAt(user)}
-        {dayjs(user.createdAt).formatAsDateTime()}
+        <span class={css({ fontSize: '12px', color: 'amber.400' })}>
+          {dayjs(user.createdAt).formatAsDateTime()}
+        </span>
       {/snippet}
     </AdminTable>
 

@@ -5,44 +5,35 @@ import { page } from '$app/state';
 import { debounce } from '$lib/utils';
 
 const pendingUpdates = new SvelteMap<string, string | null>();
-let cleanupEffect: (() => void) | null = null;
 
-const setupEffect = () => {
-  if (!cleanupEffect) {
-    cleanupEffect = $effect.root(() => {
-      $effect(() => {
-        if (pendingUpdates.size > 0) {
-          untrack(() => {
-            const params = new URLSearchParams(page.url.searchParams);
+$effect.root(() => {
+  $effect(() => {
+    if (pendingUpdates.size > 0) {
+      untrack(() => {
+        const params = new URLSearchParams(page.url.searchParams);
 
-            for (const [key, value] of pendingUpdates) {
-              if (value === null) {
-                params.delete(key);
-              } else {
-                params.set(key, value);
-              }
-            }
+        for (const [key, value] of pendingUpdates) {
+          if (value === null) {
+            params.delete(key);
+          } else {
+            params.set(key, value);
+          }
+        }
 
-            const queryString = params.toString();
-            const newUrl = `${page.url.pathname}${queryString ? `?${queryString}` : ''}`;
+        const queryString = params.toString();
+        const newUrl = `${page.url.pathname}${queryString ? `?${queryString}` : ''}`;
 
-            if (newUrl === page.url.pathname + page.url.search) {
-              pendingUpdates.clear();
-            } else {
-              goto(newUrl, { replaceState: true, keepFocus: true }).then(() => {
-                pendingUpdates.clear();
-              });
-            }
+        if (newUrl === page.url.pathname + page.url.search) {
+          pendingUpdates.clear();
+        } else {
+          goto(newUrl, { replaceState: true, keepFocus: true }).then(() => {
+            pendingUpdates.clear();
           });
         }
       });
-
-      return () => {
-        cleanupEffect = null;
-      };
-    });
-  }
-};
+    }
+  });
+});
 
 type QueryStringOptions = {
   debounce?: number;
@@ -66,7 +57,7 @@ export class QueryString<T = string> {
       stringify?: (value: T) => string | null;
     } = {},
   ) {
-    setupEffect();
+    // setupEffect();
 
     this.#key = key;
     this.#debounce = options.debounce ?? 0;
