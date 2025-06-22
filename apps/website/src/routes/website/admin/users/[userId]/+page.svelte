@@ -3,10 +3,12 @@
   import ArrowLeftIcon from '~icons/lucide/arrow-left';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
-  import { AdminIcon } from '$lib/components/admin';
+  import { AdminIcon, AdminModal } from '$lib/components/admin';
   import { comma } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex, grid } from '$styled-system/patterns';
+
+  let impersonateModalOpen = $state(false);
 
   const query = graphql(`
     query AdminUserDetail_Query($userId: String!) {
@@ -74,14 +76,8 @@
   `);
 
   const handleImpersonate = async () => {
-    if (confirm(`Are you sure you want to impersonate ${$query.adminUser.name}?`)) {
-      try {
-        await adminImpersonate({ userId: $query.adminUser.id });
-        window.location.href = '/home';
-      } catch {
-        alert('Failed to impersonate user');
-      }
-    }
+    await adminImpersonate({ userId: $query.adminUser.id });
+    location.href = '/home';
   };
 </script>
 
@@ -542,7 +538,7 @@
                 color: 'gray.900',
               },
             })}
-            onclick={() => handleImpersonate()}
+            onclick={() => (impersonateModalOpen = true)}
             type="button"
           >
             IMPERSONATE USER
@@ -550,5 +546,25 @@
         </div>
       </div>
     </div>
+
+    <AdminModal
+      actions={{
+        cancel: {},
+        confirm: {
+          label: 'CONFIRM IMPERSONATE',
+          onclick: handleImpersonate,
+          variant: 'primary',
+        },
+      }}
+      title="CONFIRM IMPERSONATION"
+      bind:open={impersonateModalOpen}
+    >
+      <div class={css({ marginBottom: '16px' })}>
+        <p class={css({ marginBottom: '8px' })}>ARE YOU SURE YOU WANT TO IMPERSONATE THIS USER?</p>
+        <p class={css({ color: 'amber.400' })}>
+          USER: {$query.adminUser.name.toUpperCase()} ({$query.adminUser.email})
+        </p>
+      </div>
+    </AdminModal>
   {/if}
 </div>
