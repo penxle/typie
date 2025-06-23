@@ -348,7 +348,7 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         if (index === 0) {
           Y.applyUpdateV2(newDoc, Y.encodeStateAsUpdateV2(snapshotDoc));
         } else {
-          const currentStateVector = Y.encodeStateVector(newDoc);
+          const newStateVector = Y.encodeStateVector(newDoc);
           const snapshotStateVector = Y.encodeStateVector(snapshotDoc);
 
           const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, snapshotStateVector);
@@ -357,7 +357,7 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
           Y.applyUpdateV2(snapshotDoc, missingUpdate, 'snapshot');
           undoManager.undo();
 
-          const revertUpdate = Y.encodeStateAsUpdateV2(snapshotDoc, currentStateVector);
+          const revertUpdate = Y.encodeStateAsUpdateV2(snapshotDoc, newStateVector);
           Y.applyUpdateV2(newDoc, revertUpdate);
         }
 
@@ -381,6 +381,18 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
           );
         }
       }
+
+      const newStateVector = Y.encodeStateVector(newDoc);
+      const oldStateVector = Y.encodeStateVector(oldDoc);
+
+      const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, oldStateVector);
+
+      const undoManager = new Y.UndoManager(oldDoc, { trackedOrigins: new Set(['snapshot']) });
+      Y.applyUpdateV2(oldDoc, missingUpdate, 'snapshot');
+      undoManager.undo();
+
+      const revertUpdate = Y.encodeStateAsUpdateV2(oldDoc, newStateVector);
+      Y.applyUpdateV2(newDoc, revertUpdate);
 
       signal.throwIfAborted();
 
