@@ -191,7 +191,11 @@
     );
   };
 
-  const setYJSState = () => {
+  const setYJSState = (_?: Y.YMapEvent<unknown>, transaction?: Y.Transaction) => {
+    if (transaction && transaction.origin !== 'remote') {
+      return;
+    }
+
     window.__webview__?.emitEvent('setYJSState', {
       maxWidth: maxWidth.current,
       note: note.current,
