@@ -32,6 +32,7 @@ class EditorScreen extends HookWidget {
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
 
     final pageController = usePageController();
+    final shouldInitialize = useState(false);
 
     return EditorStateScope(
       data: data,
@@ -51,8 +52,11 @@ class EditorScreen extends HookWidget {
             physics: const NeverScrollableScrollPhysics(),
             children: [
               Editor(slug: slug),
-              const Note(),
+              Note(shouldInitialize: shouldInitialize.value),
             ],
+            onPageChanged: (value) {
+              shouldInitialize.value = value == 1;
+            },
           ),
           Positioned(
             top: 0,

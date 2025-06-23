@@ -8,16 +8,26 @@ import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 
 class Note extends HookWidget {
-  const Note({super.key});
+  const Note({super.key, required this.shouldInitialize});
+
+  final bool shouldInitialize;
 
   @override
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
     final controller = useTextEditingController();
     final yjsState = useValueListenable(scope.yjsState);
+    final isInitialized = useState(false);
 
     useEffect(() {
-      controller.text = yjsState?.note ?? '';
+      if (shouldInitialize) {
+        if (!isInitialized.value) {
+          controller.text = yjsState?.note ?? '';
+          isInitialized.value = true;
+        }
+      } else {
+        isInitialized.value = false;
+      }
       return null;
     }, [yjsState?.note]);
 
