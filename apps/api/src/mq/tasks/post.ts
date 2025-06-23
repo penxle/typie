@@ -274,38 +274,35 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         contributorsBySnapshotId.set(contributor.snapshotId, userIds);
       }
 
-      const threshold = dayjs().subtract(24, 'hours');
-      const retainedSnapshots: Snapshot[] = [];
+      const threshold24h = dayjs().subtract(24, 'hours');
+      const threshold2w = dayjs().subtract(2, 'weeks');
       const windowedSnapshots = new Map<string, Snapshot>();
 
       for (const snapshot of snapshots) {
         const userIds = [...(contributorsBySnapshotId.get(snapshot.id) ?? [])];
 
-        if (snapshot.createdAt.isAfter(threshold)) {
-          retainedSnapshots.push({
+        const window = snapshot.createdAt.isAfter(threshold24h)
+          ? snapshot.createdAt.toISOString()
+          : snapshot.createdAt.isAfter(threshold2w)
+            ? snapshot.createdAt.startOf('minute').toISOString()
+            : snapshot.createdAt.startOf('hour').toISOString();
+
+        const windowedSnapshot = windowedSnapshots.get(window);
+
+        if (windowedSnapshot) {
+          for (const userId of userIds) {
+            windowedSnapshot.userIds.add(userId);
+          }
+        } else {
+          windowedSnapshots.set(window, {
             id: snapshot.id,
             createdAt: snapshot.createdAt,
             userIds: new Set(userIds),
           });
-        } else {
-          const window = snapshot.createdAt.startOf('hour').toISOString();
-          const windowedSnapshot = windowedSnapshots.get(window);
-
-          if (windowedSnapshot) {
-            for (const userId of userIds) {
-              windowedSnapshot.userIds.add(userId);
-            }
-          } else {
-            windowedSnapshots.set(window, {
-              id: snapshot.id,
-              createdAt: snapshot.createdAt,
-              userIds: new Set(userIds),
-            });
-          }
         }
       }
 
-      retainedSnapshots.push(...windowedSnapshots.values());
+      const retainedSnapshots = [...windowedSnapshots.values()].sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
 
       signal.throwIfAborted();
 
@@ -336,9 +333,8 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
       );
 
       const newDoc = new Y.Doc({ gc: false });
-      const sortedSnapshots = retainedSnapshots.sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
 
-      for (const [index, snapshot] of sortedSnapshots.entries()) {
+      for (const [index, snapshot] of retainedSnapshots.entries()) {
         signal.throwIfAborted();
 
         const { snapshot: snapshotData } = await tx
