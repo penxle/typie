@@ -54,6 +54,8 @@ class AppWebView(
       setSupportZoom(false)
 
       cacheMode = WebSettings.LOAD_DEFAULT
+
+      mediaPlaybackRequiresUserGesture = false
     }
 
     webView.apply {
