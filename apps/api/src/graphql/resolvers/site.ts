@@ -27,11 +27,12 @@ ISite.implement({
     fonts: t.field({
       type: [Font],
       resolve: async (self) => {
-        return await db
+        const fonts = await db
           .select()
           .from(Fonts)
-          .where(and(eq(Fonts.siteId, self.id), eq(Fonts.state, FontState.ACTIVE)))
-          .orderBy(asc(Fonts.name));
+          .where(and(eq(Fonts.siteId, self.id), eq(Fonts.state, FontState.ACTIVE)));
+
+        return fonts.sort((a, b) => a.name.localeCompare(b.name));
       },
     }),
   }),
