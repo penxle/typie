@@ -246,8 +246,6 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
 type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
-  return;
-
   await redlock.using([`{lock}:post:${postId}`], 60_000, { retryCount: 5 }, async (signal) => {
     await db.transaction(async (tx) => {
       const snapshots = await tx
@@ -338,8 +336,6 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
       );
 
       const newDoc = new Y.Doc({ gc: false });
-      let prevSnapshotDoc: Y.Doc | null = null;
-
       const sortedSnapshots = retainedSnapshots.sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
 
       for (const [index, snapshot] of sortedSnapshots.entries()) {
@@ -355,8 +351,18 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 
         if (index === 0) {
           Y.applyUpdateV2(newDoc, Y.encodeStateAsUpdateV2(snapshotDoc));
-        } else if (prevSnapshotDoc) {
-          Y.applyUpdateV2(newDoc, Y.diffUpdateV2(Y.encodeStateAsUpdateV2(prevSnapshotDoc), Y.encodeStateAsUpdateV2(snapshotDoc)));
+        } else {
+          const currentStateVector = Y.encodeStateVector(newDoc);
+          const snapshotStateVector = Y.encodeStateVector(snapshotDoc);
+
+          const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, snapshotStateVector);
+
+          const undoManager = new Y.UndoManager(snapshotDoc, { trackedOrigins: new Set(['snapshot']) });
+          Y.applyUpdateV2(snapshotDoc, missingUpdate, 'snapshot');
+          undoManager.undo();
+
+          const revertUpdate = Y.encodeStateAsUpdateV2(snapshotDoc, currentStateVector);
+          Y.applyUpdateV2(newDoc, revertUpdate);
         }
 
         const postSnapshot = await tx
@@ -378,8 +384,6 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
             })),
           );
         }
-
-        prevSnapshotDoc = snapshotDoc;
       }
 
       signal.throwIfAborted();
