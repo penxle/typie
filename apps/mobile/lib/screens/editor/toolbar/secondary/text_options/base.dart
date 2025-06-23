@@ -25,16 +25,33 @@ class TextOptionsToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final keys = useMemoized(() => List.generate(items.length, (_) => GlobalKey()), [items]);
     final scope = EditorStateScope.of(context);
+    final scrollController = useScrollController();
+    final scrollViewKey = useMemoized(GlobalKey.new, []);
 
     useAsyncEffect(() async {
       final index = items.indexWhere((e) => e[valueKey] == activeValue);
-      if (index != -1 && keys[index].currentContext != null) {
-        await Scrollable.ensureVisible(
-          keys[index].currentContext!,
-          alignment: 0.45,
-          duration: const Duration(milliseconds: 150),
-        );
+      if (index == -1) {
+        return null;
       }
+
+      final itemBox = keys[index].currentContext?.findRenderObject() as RenderBox?;
+      final listBox = scrollViewKey.currentContext?.findRenderObject() as RenderBox?;
+
+      if (itemBox == null || listBox == null) {
+        return null;
+      }
+
+      final itemOffset = itemBox.localToGlobal(Offset.zero, ancestor: listBox).dx;
+      final targetOffset = (scrollController.offset + itemOffset - listBox.size.width * 0.45).clamp(
+        scrollController.position.minScrollExtent,
+        scrollController.position.maxScrollExtent,
+      );
+
+      await scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
 
       return null;
     }, [activeValue]);
@@ -51,7 +68,9 @@ class TextOptionsToolbar extends HookWidget {
         const Gap(12),
         Expanded(
           child: SingleChildScrollView(
+            key: scrollViewKey,
             scrollDirection: Axis.horizontal,
+            controller: scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const Pad(right: 16),
             child: Row(
