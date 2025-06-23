@@ -1,5 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/hooks/async_effect.dart';
@@ -23,10 +24,11 @@ class TextOptionsToolbar extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final keys = useMemoized(() => List.generate(items.length, (_) => GlobalKey()), [items]);
     final scope = EditorStateScope.of(context);
-    final scrollController = useScrollController();
-    final scrollViewKey = useMemoized(GlobalKey.new, []);
+
+    final controller = useScrollController();
+    final key = useMemoized(GlobalKey.new);
+    final keys = useMemoized(() => List.generate(items.length, (_) => GlobalKey()), [items]);
 
     useAsyncEffect(() async {
       final index = items.indexWhere((e) => e[valueKey] == activeValue);
@@ -34,24 +36,38 @@ class TextOptionsToolbar extends HookWidget {
         return null;
       }
 
+      final listBox = key.currentContext?.findRenderObject() as RenderBox?;
       final itemBox = keys[index].currentContext?.findRenderObject() as RenderBox?;
-      final listBox = scrollViewKey.currentContext?.findRenderObject() as RenderBox?;
-
-      if (itemBox == null || listBox == null) {
+      if (listBox == null || itemBox == null) {
         return null;
       }
 
+      var currentOffset = 0.0;
+      var parent = listBox.parent;
+
+      while (parent != null) {
+        if (parent is RenderBox && parent.parentData is StackParentData) {
+          final left = (parent.parentData! as StackParentData).left;
+          if (left != null) {
+            currentOffset = left;
+            break;
+          }
+        }
+
+        parent = parent.parent;
+      }
+
+      final listOffset = listBox.localToGlobal(Offset.zero).dx - currentOffset;
       final itemOffset = itemBox.localToGlobal(Offset.zero, ancestor: listBox).dx;
-      final targetOffset = (scrollController.offset + itemOffset - listBox.size.width * 0.45).clamp(
-        scrollController.position.minScrollExtent,
-        scrollController.position.maxScrollExtent,
+      final itemCenter = itemBox.size.width / 2;
+      final screenCenter = MediaQuery.sizeOf(context).width / 2;
+
+      final targetOffset = (controller.offset + listOffset + itemOffset + itemCenter - screenCenter).clamp(
+        controller.position.minScrollExtent,
+        controller.position.maxScrollExtent,
       );
 
-      await scrollController.animateTo(
-        targetOffset,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-      );
+      await controller.animateTo(targetOffset, duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
 
       return null;
     }, [activeValue]);
@@ -68,9 +84,9 @@ class TextOptionsToolbar extends HookWidget {
         const Gap(12),
         Expanded(
           child: SingleChildScrollView(
-            key: scrollViewKey,
+            key: key,
+            controller: controller,
             scrollDirection: Axis.horizontal,
-            controller: scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const Pad(right: 16),
             child: Row(
