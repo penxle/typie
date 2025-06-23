@@ -12,7 +12,7 @@
   "devDependencies": {
     "@pulumi/aws": "^6.83.0",
     "@pulumi/command": "^1.1.0",
-    "@pulumi/pulumi": "^3.177.0",
+    "@pulumi/pulumi": "^3.178.0",
     "@typie/tsconfig": "workspace:*",
     "ts-pattern": "^5.7.1",
     "typescript": "^5.8.3"

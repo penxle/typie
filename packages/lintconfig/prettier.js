@@ -9,4 +9,13 @@ export default {
   xmlQuoteAttributes: 'double',
 
   plugins: ['prettier-plugin-packagejson', 'prettier-plugin-sh', 'prettier-plugin-svelte', '@prettier/plugin-xml'],
+
+  overrides: [
+    {
+      files: '**/*.{ts,tsx}',
+      options: {
+        parser: 'typescript',
+      },
+    },
+  ],
 };
