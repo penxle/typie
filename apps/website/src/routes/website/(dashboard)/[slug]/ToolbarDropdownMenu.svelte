@@ -16,6 +16,8 @@
     {
       display: 'flex',
       flexDirection: 'column',
+      maxHeight: '400px',
+      overflowY: 'auto',
       '& > button:not(:first-of-type)': { borderTopWidth: '1px', borderTopColor: 'gray.100' },
     },
     style,
