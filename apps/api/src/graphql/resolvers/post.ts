@@ -2,6 +2,7 @@ import { Node } from '@tiptap/pm/model';
 import dayjs from 'dayjs';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
+import { nanoid } from 'nanoid';
 import { base64 } from 'rfc4648';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
@@ -44,7 +45,19 @@ import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { CharacterCountChange, Comment, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostView } from '../objects';
+import {
+  CharacterCountChange,
+  Comment,
+  Entity,
+  EntityView,
+  Image,
+  IPost,
+  isTypeOf,
+  Post,
+  PostReaction,
+  PostSnapshot,
+  PostView,
+} from '../objects';
 
 /**
  * * Types
@@ -134,6 +147,13 @@ Post.implement({
           .then(firstOrThrow);
 
         return content.update;
+      },
+    }),
+
+    snapshots: t.field({
+      type: [PostSnapshot],
+      resolve: async (self) => {
+        return await db.select().from(PostSnapshots).where(eq(PostSnapshots.postId, self.id)).orderBy(asc(PostSnapshots.createdAt));
       },
     }),
 
@@ -364,6 +384,15 @@ PostReaction.implement({
   }),
 });
 
+PostSnapshot.implement({
+  isTypeOf: isTypeOf(TableCode.POST_SNAPSHOTS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    snapshot: t.expose('snapshot', { type: 'Binary' }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+  }),
+});
+
 /**
  * * Queries
  */
@@ -411,8 +440,15 @@ builder.mutationFields((t) => ({
 
       const title = null;
       const subtitle = null;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const node = schema.topNodeType.createAndFill()!;
+
+      const node = schema.nodes.doc.createChecked(
+        null,
+        schema.nodes.body.createChecked(
+          { nodeId: nanoid(32), paragraphIndent: 1, blockGap: 1 },
+          schema.nodes.paragraph.createChecked({ nodeId: nanoid(32), textAlign: 'left', lineHeight: 1.6, letterSpacing: 0 }),
+        ),
+      );
+
       const body = node.toJSON();
       const text = makeText(body);
 

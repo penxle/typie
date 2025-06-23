@@ -476,6 +476,7 @@ type Post implements IPost {
   password: String
   protectContent: Boolean!
   reactionCount: Int!
+  snapshots: [PostSnapshot!]!
   storedMarks: JSON!
   subtitle: String
   title: String!
@@ -499,6 +500,12 @@ type PostReaction {
   emoji: String!
   id: ID!
   post: PostView!
+}
+
+type PostSnapshot {
+  createdAt: DateTime!
+  id: ID!
+  snapshot: Binary!
 }
 
 type PostSyncStreamPayload {

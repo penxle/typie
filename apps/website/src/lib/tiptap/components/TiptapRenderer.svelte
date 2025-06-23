@@ -4,7 +4,7 @@
   import { Ref } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { renderHTML } from '../lib/html';
-  import { extensions as defaultExtensions } from '../schema';
+  import { baseExtensions } from '../schema';
   import type { JSONContent } from '@tiptap/core';
   import type { SystemStyleObject } from '$styled-system/types';
 
@@ -18,13 +18,13 @@
   let { style, content, editor = $bindable(), extensions }: Props = $props();
 
   let element = $state<HTMLElement>();
-  const html = $derived(renderHTML(content, [...defaultExtensions, ...(extensions ?? [])]));
+  const html = $derived(renderHTML(content, [...baseExtensions, ...(extensions ?? [])]));
 
   onMount(() => {
     const e = new Editor({
       editable: false,
       content,
-      extensions: [...defaultExtensions, ...(extensions ?? [])],
+      extensions: [...baseExtensions, ...(extensions ?? [])],
       injectCSS: false,
 
       editorProps: {

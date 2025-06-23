@@ -18,7 +18,7 @@ import {
 import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
 import { FontFamily, FontSize, TextColor } from './text-styles';
 
-export const extensions = [
+export const baseExtensions = [
   // special nodes
   Doc,
   Body,
@@ -60,14 +60,18 @@ export const extensions = [
   TableRow,
 
   // extensions
+  NodeId,
+  SyntaxHighlight,
+  TrailingNode,
+];
+
+export const editorExtensions = [
+  // extensions
   Behavior,
   Command,
   DropCursor,
-  NodeId,
   Placeholder,
   Selection,
-  SyntaxHighlight,
-  TrailingNode,
   Typography,
 
   // menus
