@@ -290,9 +290,11 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         const windowedSnapshot = windowedSnapshots.get(window);
 
         if (windowedSnapshot) {
-          for (const userId of userIds) {
-            windowedSnapshot.userIds.add(userId);
-          }
+          windowedSnapshots.set(window, {
+            id: snapshot.id,
+            createdAt: snapshot.createdAt,
+            userIds: new Set([...windowedSnapshot.userIds, ...userIds]),
+          });
         } else {
           windowedSnapshots.set(window, {
             id: snapshot.id,
@@ -382,6 +384,10 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         }
       }
 
+      signal.throwIfAborted();
+
+      const beforeSnapshot = Y.snapshot(newDoc);
+
       const newStateVector = Y.encodeStateVector(newDoc);
       const oldStateVector = Y.encodeStateVector(oldDoc);
 
@@ -393,6 +399,16 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 
       const revertUpdate = Y.encodeStateAsUpdateV2(oldDoc, newStateVector);
       Y.applyUpdateV2(newDoc, revertUpdate);
+
+      const afterSnapshot = Y.snapshot(newDoc);
+
+      if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
+        await tx.insert(PostSnapshots).values({
+          postId,
+          snapshot: Y.encodeSnapshotV2(afterSnapshot),
+          order: 0,
+        });
+      }
 
       signal.throwIfAborted();
 
