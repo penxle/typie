@@ -66,6 +66,8 @@ class SecondaryToolbar extends HookWidget {
                   secondaryToolbarMode != SecondaryToolbarMode.hidden &&
                   secondaryToolbarMode != SecondaryToolbarMode.text;
 
+              final optionsToolbarMode = useState(secondaryToolbarMode);
+
               useEffect(() {
                 if (isOptions) {
                   switchController.forward();
@@ -75,6 +77,14 @@ class SecondaryToolbar extends HookWidget {
 
                 return null;
               }, [isOptions]);
+
+              useEffect(() {
+                if (isOptions) {
+                  optionsToolbarMode.value = secondaryToolbarMode;
+                }
+
+                return null;
+              }, [secondaryToolbarMode, isOptions]);
 
               return AnimatedBuilder(
                 animation: switchController,
@@ -91,15 +101,18 @@ class SecondaryToolbar extends HookWidget {
                           left: optionsPositionLeftTween.evaluate(switchCurve),
                           child: Opacity(
                             opacity: optionsOpacityTween.evaluate(switchCurve),
-                            child: switch (secondaryToolbarMode) {
-                              SecondaryToolbarMode.textColor => const TextColorTextOptionsToolbar(),
-                              SecondaryToolbarMode.fontFamily => const FontFamilyTextOptionsToolbar(),
-                              SecondaryToolbarMode.fontSize => const FontSizeTextOptionsToolbar(),
-                              SecondaryToolbarMode.textAlign => const TextAlignTextOptionsToolbar(),
-                              SecondaryToolbarMode.lineHeight => const LineHeightTextOptionsToolbar(),
-                              SecondaryToolbarMode.letterSpacing => const LetterSpacingTextOptionsToolbar(),
-                              _ => const SizedBox.shrink(),
-                            },
+                            child: DecoratedBox(
+                              decoration: const BoxDecoration(color: AppColors.white),
+                              child: switch (optionsToolbarMode.value) {
+                                SecondaryToolbarMode.textColor => const TextColorTextOptionsToolbar(),
+                                SecondaryToolbarMode.fontFamily => const FontFamilyTextOptionsToolbar(),
+                                SecondaryToolbarMode.fontSize => const FontSizeTextOptionsToolbar(),
+                                SecondaryToolbarMode.textAlign => const TextAlignTextOptionsToolbar(),
+                                SecondaryToolbarMode.lineHeight => const LineHeightTextOptionsToolbar(),
+                                SecondaryToolbarMode.letterSpacing => const LetterSpacingTextOptionsToolbar(),
+                                _ => const SizedBox.shrink(),
+                              },
+                            ),
                           ),
                         ),
                     ],
