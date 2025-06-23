@@ -13,9 +13,10 @@
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostSyncType, PostType } from '@/enums';
+  import { PostSyncType, PostType, UserRole } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import IconClockFading from '~icons/lucide/clock-fading';
   import CopyIcon from '~icons/lucide/copy';
   import ElipsisIcon from '~icons/lucide/ellipsis';
   import ExternalLinkIcon from '~icons/lucide/external-link';
@@ -40,6 +41,7 @@
   import PanelNote from './PanelNote.svelte';
   import Placeholder from './Placeholder.svelte';
   import { YState } from './state.svelte';
+  import Timeline from './Timeline.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Editor_query } from '$graphql';
@@ -58,6 +60,7 @@
         me @required {
           id
           name
+          role
         }
 
         post(slug: $slug) {
@@ -101,6 +104,7 @@
           }
 
           ...Editor_Panel_post
+          ...Editor_Timeline_post
         }
       }
     `),
@@ -174,6 +178,8 @@
 
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
   let lastHeartbeatAt = $state(dayjs());
+
+  let showTimeline = $state(false);
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -488,6 +494,23 @@
 
           <HorizontalDivider color="secondary" />
 
+          {#if $query.me.role === UserRole.ADMIN}
+            <MenuItem
+              icon={IconClockFading}
+              onclick={() => {
+                showTimeline = !showTimeline;
+              }}
+            >
+              {#if showTimeline}
+                타임라인 닫기
+              {:else}
+                타임라인
+              {/if}
+            </MenuItem>
+          {/if}
+
+          <HorizontalDivider color="secondary" />
+
           <MenuItem
             icon={TrashIcon}
             onclick={() => {
@@ -677,6 +700,12 @@
             {/if}
           </div>
         </div>
+
+        {#if showTimeline}
+          <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'white', zIndex: '1' })}>
+            <Timeline $post={$query.post} {doc} />
+          </div>
+        {/if}
       </div>
 
       {#if app.preference.current.noteExpanded}

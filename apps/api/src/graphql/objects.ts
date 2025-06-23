@@ -61,6 +61,7 @@ export const PaymentInvoice = createObjectRef('PaymentInvoice', T.PaymentInvoice
 export const Plan = createObjectRef('Plan', T.Plans);
 export const Post = createObjectRef('Post', T.Posts);
 export const PostReaction = createObjectRef('PostReaction', T.PostReactions);
+export const PostSnapshot = createObjectRef('PostSnapshot', T.PostSnapshots);
 export const PreorderPayment = createObjectRef('PreorderPayment', T.PreorderPayments);
 export const PreorderUser = createObjectRef('PreorderUser', T.PreorderUsers);
 export const Site = createObjectRef('Site', T.Sites);

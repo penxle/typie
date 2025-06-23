@@ -17,7 +17,7 @@ declare module '@tiptap/core' {
 
 type CollaborationOptions = {
   doc: Y.Doc;
-  awareness: YAwareness.Awareness;
+  awareness?: YAwareness.Awareness;
 };
 
 export const Collaboration = Extension.create<CollaborationOptions>({
@@ -150,7 +150,12 @@ export const Collaboration = Extension.create<CollaborationOptions>({
       };
     };
 
-    return [ySyncPlugin(fragment), yUndoPluginInstance, yCursorPlugin(this.options.awareness, { cursorBuilder, selectionBuilder })];
+    const plugins = [ySyncPlugin(fragment), yUndoPluginInstance];
+    if (this.options.awareness) {
+      plugins.push(yCursorPlugin(this.options.awareness, { cursorBuilder, selectionBuilder }));
+    }
+
+    return plugins;
   },
 
   addKeyboardShortcuts() {

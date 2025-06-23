@@ -47,6 +47,10 @@ export const NodeId = Extension.create({
   },
 
   onCreate() {
+    if (!this.editor.isEditable) {
+      return;
+    }
+
     const { view, state } = this.editor;
     const { tr, doc } = state;
 
@@ -64,6 +68,10 @@ export const NodeId = Extension.create({
   },
 
   addProseMirrorPlugins() {
+    if (!this.editor.isEditable) {
+      return [];
+    }
+
     let dragSourceEl: HTMLElement | null = null;
     let pastedFromOutside = false;
 

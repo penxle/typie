@@ -3,8 +3,8 @@
   import { onMount } from 'svelte';
   import { Ref } from '$lib/utils';
   import { css } from '$styled-system/css';
-  import { Collaboration } from '../extensions/collaboration';
-  import { extensions as defaultExtensions } from '../schema';
+  import { Collaboration } from '../extensions';
+  import { baseExtensions, editorExtensions } from '../schema';
   import type { EditorView } from '@tiptap/pm/view';
   import type * as YAwareness from 'y-protocols/awareness';
   import type * as Y from 'yjs';
@@ -16,21 +16,28 @@
     doc?: Y.Doc;
     awareness?: YAwareness.Awareness;
     extensions?: Extension[];
+    editable?: boolean;
     onkeydown?: (view: EditorView, event: KeyboardEvent) => void;
     oncreate?: () => void;
     onfile?: (event: { pos: number; file: File }) => void;
   };
 
-  let { style, editor = $bindable(), doc, awareness, extensions, onkeydown, oncreate, onfile }: Props = $props();
+  let { style, editor = $bindable(), doc, awareness, extensions, editable = true, onkeydown, oncreate, onfile }: Props = $props();
 
   let element = $state<HTMLDivElement>();
 
   onMount(() => {
     const e = new Editor({
       element,
-      extensions: [...defaultExtensions, ...(extensions ?? []), ...(doc && awareness ? [Collaboration.configure({ doc, awareness })] : [])],
+      extensions: [
+        ...baseExtensions,
+        ...(editable ? editorExtensions : []),
+        ...(extensions ?? []),
+        ...(doc ? [Collaboration.configure({ doc, awareness })] : []),
+      ],
       injectCSS: false,
       autofocus: false,
+      editable,
 
       editorProps: {
         attributes: {
