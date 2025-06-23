@@ -246,6 +246,8 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
 type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
+  return;
+
   await redlock.using([`{lock}:post:${postId}`], 30 * 60 * 1000, { retryCount: 5 }, async (signal) => {
     await db.transaction(async (tx) => {
       const snapshots = await tx
