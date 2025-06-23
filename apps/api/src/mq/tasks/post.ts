@@ -424,8 +424,6 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 });
 
 export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', async () => {
-  return;
-
   const threshold = dayjs().subtract(24, 'hours');
 
   const posts = await db
