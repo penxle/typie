@@ -11,9 +11,7 @@ export const pg = postgres(env.DATABASE_URL, {
   max: 100,
   max_lifetime: 5 * 60,
   connection: {
-    idle_in_transaction_session_timeout: 30_000,
-    lock_timeout: 30_000,
-    statement_timeout: 30_000,
+    lock_timeout: 60_000,
   },
 });
 
