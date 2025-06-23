@@ -156,7 +156,6 @@ flutter build apk
 1. **Environment Variables**: Managed via Doppler. Run `pnpm bootstrap` to set up.
 
 2. **Code Generation**: Many parts of the codebase rely on code generation:
-
    - GraphQL types (via sark)
    - PandaCSS styles
    - Flutter/Dart models
@@ -465,13 +464,11 @@ Required when:
 ### 9. Common Patterns
 
 1. **Naming Convention**: `[ComponentOrRouteName]_[OperationType]`
-
    - `DashboardLayout_Query`
    - `HomePage_CreatePost_Mutation`
    - `Sidebar_user` (for fragments)
 
 2. **Data Loading Flow**:
-
    - Query defined in `.svelte` file
    - Variables provided via `_Variables` export
    - AfterLoad runs server-side

@@ -14,10 +14,10 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.14.4",
-    "@sveltejs/kit": "^2.21.5",
+    "@sveltejs/kit": "^2.22.0",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
-    "hono": "^4.8.0",
+    "hono": "^4.8.2",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3"
   }
