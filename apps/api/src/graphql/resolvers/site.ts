@@ -31,7 +31,7 @@ ISite.implement({
           .select()
           .from(Fonts)
           .where(and(eq(Fonts.siteId, self.id), eq(Fonts.state, FontState.ACTIVE)))
-          .orderBy(asc(Fonts.createdAt));
+          .orderBy(asc(Fonts.name));
       },
     }),
   }),
