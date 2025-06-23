@@ -88,7 +88,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
             .returning({ id: PostSnapshots.id })
             .then(firstOrThrow);
 
-          // 기여자 정보 저장
           await tx.insert(PostSnapshotContributors).values({
             snapshotId: postSnapshot.id,
             userId,
@@ -246,8 +245,6 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
 type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
-  return;
-
   await redlock.using([`{lock}:post:${postId}`], 30 * 60 * 1000, { retryCount: 5 }, async (signal) => {
     await db.transaction(async (tx) => {
       const snapshots = await tx
@@ -427,6 +424,8 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 });
 
 export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', async () => {
+  return;
+
   const threshold = dayjs().subtract(24, 'hours');
 
   const posts = await db
@@ -434,5 +433,12 @@ export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', 
     .from(PostContents)
     .where(and(lt(PostContents.updatedAt, threshold), lt(PostContents.compactedAt, PostContents.updatedAt)));
 
-  await Promise.all(posts.map(({ postId }) => enqueueJob('post:compact', postId, { delay: Math.random() * 10 * 60 * 1000 })));
+  await Promise.all(
+    posts.map(({ postId }) =>
+      enqueueJob('post:compact', postId, {
+        delay: Math.random() * 10 * 60 * 1000,
+        priority: 1,
+      }),
+    ),
+  );
 });
