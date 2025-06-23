@@ -24,7 +24,8 @@ for (let i = 0; i < posts.length; i += batchSize) {
 
   const promises = batch.map((post) =>
     enqueueJob('post:compact', post.postId, {
-      delay: Math.random() * 30 * 60 * 1000,
+      delay: Math.random() * 60 * 60 * 1000,
+      priority: 1,
     }),
   );
 
