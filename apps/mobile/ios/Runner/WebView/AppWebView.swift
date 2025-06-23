@@ -16,9 +16,13 @@ class AppWebView: NSObject, FlutterPlatformView {
 
     let configuration = WKWebViewConfiguration()
 
-    configuration.suppressesIncrementalRendering = true
     configuration.selectionGranularity = .character
     configuration.websiteDataStore = WKWebsiteDataStore.default()
+    
+    configuration.allowsInlineMediaPlayback = true
+    configuration.mediaTypesRequiringUserActionForPlayback = []
+    
+    configuration.defaultWebpagePreferences.preferredContentMode = .mobile
 
     configuration.setURLSchemeHandler(AppWebViewSchemeHandler(), forURLScheme: "picker")
 
@@ -39,6 +43,7 @@ class AppWebView: NSObject, FlutterPlatformView {
     }
 
     webView = AppWKWebView(frame: frame, configuration: configuration)
+    
 
     NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardWillShowNotification, object: nil)
     NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardWillHideNotification, object: nil)
@@ -54,6 +59,7 @@ class AppWebView: NSObject, FlutterPlatformView {
     }
 
     webView.setKeyboardRequiresUserInteraction(false)
+    webView.layer.drawsAsynchronously = true
     webView.scrollView.contentInsetAdjustmentBehavior = .never
     webView.configuration.userContentController.add(self, name: "handler")
 
