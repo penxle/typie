@@ -100,7 +100,7 @@ class Editor extends HookWidget {
             isReady.value = true;
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
-              'featureFlags': ['template'],
+              'features': ['template'],
             });
           case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
