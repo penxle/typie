@@ -1044,7 +1044,8 @@ class _MoveEntityModal extends HookWidget {
                                 ..vars.input.parentEntityId = currentEntity.value?.id
                                 ..vars.input.lowerOrder = entities.value!.isNotEmpty
                                     ? entities.value![entities.value!.length - 1].order
-                                    : null,
+                                    : null
+                                ..vars.input.treatEmptyParentIdAsRoot = true,
                             ),
                           );
 
