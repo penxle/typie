@@ -1,4 +1,4 @@
-import { Extension } from '@tiptap/core';
+import { Extension, isiOS } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, Selection as ProseMirrorSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -52,7 +52,7 @@ export const Selection = Extension.create({
             const { from, to, empty } = selection;
             const decorations: Decoration[] = [];
 
-            if (!empty && window.__webview__) {
+            if (!empty && (isiOS() || window.__webview__?.platform === 'ios')) {
               decorations.push(Decoration.inline(from, to, { class: cx('selected-text', css({ display: 'contents' })) }));
             }
 

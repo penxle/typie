@@ -199,6 +199,7 @@ class AppWebView: NSObject, FlutterPlatformView {
       (() => {
         const handlers = new WeakMap();
         window.__webview__ = {
+          platform: 'ios',
           emitEvent: (name, data) => window.webkit.messageHandlers.handler.postMessage({
             name: 'emitEvent',
             attrs: { name, data: JSON.stringify(data ?? null) },

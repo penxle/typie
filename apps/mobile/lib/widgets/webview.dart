@@ -7,11 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:typie/logger.dart';
 
 class WebView extends StatefulWidget {
-  const WebView({required this.initialUrl, this.initialCookies, this.userAgent, this.onWebViewCreated, super.key});
+  const WebView({required this.initialUrl, this.initialCookies, this.onWebViewCreated, super.key});
 
   final String initialUrl;
   final List<Cookie>? initialCookies;
-  final String? userAgent;
   final void Function(WebViewController controller)? onWebViewCreated;
 
   @override
@@ -28,8 +27,16 @@ class _WebViewState extends State<WebView> {
   Widget build(BuildContext context) {
     final initialUri = Uri.parse(widget.initialUrl);
 
+    final userAgent = switch (Platform.operatingSystem) {
+      'android' =>
+        'Mozilla/5.0 (Linux; Android 16) AppleWebKit/600.0.00 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/600.0 Typie/1.0.0',
+      'ios' =>
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0_0 like Mac OS X) AppleWebKit/600.0.00 (KHTML, like Gecko) Version/18.0 Mobile/10A000 Safari/600.0 Typie/1.0.0',
+      _ => throw UnimplementedError('WebView is not supported on ${Platform.operatingSystem}'),
+    };
+
     final creationParams = <String, dynamic>{
-      'userAgent': widget.userAgent ?? 'Typie/1.0.0',
+      'userAgent': userAgent,
       'initialUrl': widget.initialUrl,
       'initialCookies': widget.initialCookies
           ?.map((cookie) => {'name': cookie.name, 'value': cookie.value, 'domain': initialUri.host})
