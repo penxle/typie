@@ -58,7 +58,7 @@ class Note extends HookWidget {
 
     useAsyncEffect(() async {
       if (mode == EditorMode.note && scope.isKeyboardVisible.value) {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await Future<void>.delayed(const Duration(milliseconds: 500));
         focusNode.requestFocus();
       }
 
