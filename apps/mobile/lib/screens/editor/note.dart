@@ -12,6 +12,8 @@ class Note extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    useAutomaticKeepAlive();
+
     final scope = EditorStateScope.of(context);
     final controller = useTextEditingController();
     final yjsState = useValueListenable(scope.yjsState);
