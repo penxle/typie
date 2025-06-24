@@ -198,6 +198,7 @@ class AppWebView(
         (() => {
           const handlers = new WeakMap();
           window.__webview__ = {
+            platform: 'android',
             emitEvent: (name, data) => window.webViewHandlers.postMessage(JSON.stringify({
               name: 'emitEvent',
               attrs: { name, data: JSON.stringify(data ?? null) },

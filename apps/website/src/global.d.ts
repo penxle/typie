@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type WebView = {
+  platform: 'android' | 'ios';
   emitEvent: (name: string, data?: unknown) => void;
   addEventListener: (name: string, listener: (data: any) => void) => void;
   removeEventListener: (name: string, listener: (data: any) => void) => void;

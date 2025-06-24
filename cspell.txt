@@ -27,6 +27,7 @@ ilike
 indexeddb
 ipaddr
 kakao
+khtml
 lucide
 luthor
 meilisearch
