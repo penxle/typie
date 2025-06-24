@@ -19,19 +19,32 @@ class Note extends HookWidget {
     useAutomaticKeepAlive();
 
     final controller = useTextEditingController();
+    final focusNode = useFocusNode();
 
     final scope = EditorStateScope.of(context);
     final yjsState = useValueListenable(scope.yjsState);
     final mode = useValueListenable(scope.mode);
 
     useEffect(() {
-      controller.text = yjsState?.note ?? '';
+      if (controller.text.isEmpty) {
+        controller.value = TextEditingValue(
+          text: yjsState?.note ?? '',
+          selection: const TextSelection.collapsed(offset: 0),
+        );
+      } else {
+        controller.text = yjsState?.note ?? '';
+      }
+
       return null;
     }, [yjsState?.note]);
 
     useEffect(() {
       if (mode != EditorMode.note) {
         return null;
+      }
+
+      if (scope.isKeyboardVisible.value) {
+        focusNode.requestFocus();
       }
 
       bool handler(bool stopDefaultButtonEvent, RouteInfo routeInfo) {
@@ -48,7 +61,6 @@ class Note extends HookWidget {
 
     return Screen(
       resizeToAvoidBottomInset: true,
-      padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
       heading: Heading(
         leadingWidget: Tappable(
           onTap: onBack,
@@ -60,22 +72,25 @@ class Note extends HookWidget {
         backgroundColor: AppColors.white,
       ),
       backgroundColor: AppColors.white,
-      child: TextField(
-        controller: controller,
-        smartDashesType: SmartDashesType.disabled,
-        smartQuotesType: SmartQuotesType.disabled,
-        autocorrect: false,
-        keyboardType: TextInputType.multiline,
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        decoration: const InputDecoration.collapsed(
-          hintText: '포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요',
-          hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: TextField(
+          controller: controller,
+          focusNode: focusNode,
+          smartDashesType: SmartDashesType.disabled,
+          smartQuotesType: SmartQuotesType.disabled,
+          autocorrect: false,
+          keyboardType: TextInputType.multiline,
+          maxLines: null,
+          textAlignVertical: TextAlignVertical.top,
+          decoration: const InputDecoration.collapsed(
+            hintText: '포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요',
+            hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
+          ),
+          onChanged: (value) async {
+            await scope.command('note', attrs: {'note': value});
+          },
         ),
-        onChanged: (value) async {
-          await scope.command('note', attrs: {'note': value});
-        },
       ),
     );
   }
