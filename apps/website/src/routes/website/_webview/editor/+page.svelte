@@ -301,6 +301,7 @@
 
     window.__webview__?.addEventListener('appReady', (data) => {
       featureFlags = data.featureFlags;
+      titleEl?.focus();
     });
 
     window.__webview__?.addEventListener('command', (data) => {
