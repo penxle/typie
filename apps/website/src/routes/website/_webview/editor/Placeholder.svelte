@@ -1,6 +1,7 @@
 <script lang="ts">
   import ShapesIcon from '~icons/lucide/shapes';
   import { Icon } from '$lib/components';
+  import { isBodyEmpty } from '$lib/tiptap';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
@@ -13,20 +14,7 @@
 
   let { editor, isTemplateActive }: Props = $props();
 
-  const isBodyEmpty = $derived.by(() => {
-    const { doc, selection } = editor.current.state;
-    const { empty } = selection;
-
-    const body = doc.child(0);
-
-    return (
-      empty &&
-      body.childCount === 1 &&
-      body.child(0).type.name === 'paragraph' &&
-      (body.child(0).attrs.textAlign === 'left' || body.child(0).attrs.textAlign === 'justify') &&
-      body.child(0).childCount === 0
-    );
-  });
+  const emptyBody = $derived(isBodyEmpty(editor.current.state));
 
   const paragraphIndent = $derived.by(() => {
     const { doc } = editor.current.state;
@@ -35,7 +23,7 @@
   });
 </script>
 
-{#if isBodyEmpty}
+{#if emptyBody}
   <div class={center({ position: 'absolute', top: '0', insetX: '0', flexGrow: '1', pointerEvents: 'none' })}>
     <div
       style:padding-left={`${paragraphIndent}em`}

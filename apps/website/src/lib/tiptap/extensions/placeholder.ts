@@ -3,6 +3,7 @@ import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { match } from 'ts-pattern';
 import { css } from '$styled-system/css';
+import { isBodyEmpty } from '../lib';
 
 export const Placeholder = Extension.create({
   name: 'placeholder',
@@ -21,14 +22,6 @@ export const Placeholder = Extension.create({
             const { doc, selection } = state;
             const { $anchor, empty } = selection;
 
-            const body = doc.child(0);
-            const currentBodyEmpty =
-              empty &&
-              body.childCount === 1 &&
-              body.child(0).type.name === 'paragraph' &&
-              (body.child(0).attrs.textAlign === 'left' || body.child(0).attrs.textAlign === 'justify') &&
-              body.child(0).childCount === 0;
-
             const currentParagraphEmpty =
               this.editor.isFocused &&
               empty &&
@@ -37,7 +30,7 @@ export const Placeholder = Extension.create({
               ($anchor.parent.attrs.textAlign === 'left' || $anchor.parent.attrs.textAlign === 'justify') &&
               $anchor.parent.childCount === 0;
 
-            if (!currentBodyEmpty && currentParagraphEmpty) {
+            if (!isBodyEmpty(state) && currentParagraphEmpty) {
               decorations.push(
                 createDecoration(
                   $anchor.pos <= 2 ? 1 : $anchor.before(),
