@@ -2,6 +2,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/styles/colors.dart';
@@ -43,10 +44,6 @@ class Note extends HookWidget {
         return null;
       }
 
-      if (scope.isKeyboardVisible.value) {
-        focusNode.requestFocus();
-      }
-
       bool handler(bool stopDefaultButtonEvent, RouteInfo routeInfo) {
         onBack();
         return true;
@@ -57,6 +54,15 @@ class Note extends HookWidget {
       return () {
         BackButtonInterceptor.remove(handler);
       };
+    }, [mode]);
+
+    useAsyncEffect(() async {
+      if (mode == EditorMode.note && scope.isKeyboardVisible.value) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        focusNode.requestFocus();
+      }
+
+      return null;
     }, [mode]);
 
     return Screen(

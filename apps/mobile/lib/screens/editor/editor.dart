@@ -13,6 +13,7 @@ import 'package:typie/env.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_lab.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -81,9 +82,10 @@ class Editor extends HookWidget {
       return subscription.cancel;
     }, []);
 
-    useEffect(() {
+    useAsyncEffect(() async {
       if (mode == EditorMode.editor && scope.isKeyboardVisible.value) {
-        unawaited(webViewController?.requestFocus());
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await webViewController?.requestFocus();
       }
 
       return null;
