@@ -72,25 +72,34 @@ class Note extends HookWidget {
         backgroundColor: AppColors.white,
       ),
       backgroundColor: AppColors.white,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: TextField(
-          controller: controller,
-          focusNode: focusNode,
-          smartDashesType: SmartDashesType.disabled,
-          smartQuotesType: SmartQuotesType.disabled,
-          autocorrect: false,
-          keyboardType: TextInputType.multiline,
-          maxLines: null,
-          textAlignVertical: TextAlignVertical.top,
-          decoration: const InputDecoration.collapsed(
-            hintText: '포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요',
-            hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
-          ),
-          onChanged: (value) async {
-            await scope.command('note', attrs: {'note': value});
-          },
-        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: Pad(all: 20, bottom: MediaQuery.viewPaddingOf(context).bottom),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight - 40),
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                smartDashesType: SmartDashesType.disabled,
+                smartQuotesType: SmartQuotesType.disabled,
+                autocorrect: false,
+                keyboardType: TextInputType.multiline,
+                maxLines: null,
+                textAlignVertical: TextAlignVertical.top,
+                scrollPadding: const Pad(bottom: 100),
+                decoration: const InputDecoration.collapsed(
+                  hintText: '포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요',
+                  hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
+                ),
+                onChanged: (value) async {
+                  await scope.command('note', attrs: {'note': value});
+                },
+              ),
+            ),
+          );
+        },
       ),
     );
   }
