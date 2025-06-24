@@ -61,6 +61,7 @@ export const baseExtensions = [
 
   // extensions
   NodeId,
+  Selection,
   SyntaxHighlight,
   TrailingNode,
 ];
@@ -71,7 +72,6 @@ export const editorExtensions = [
   Command,
   DropCursor,
   Placeholder,
-  Selection,
   Typography,
 
   // menus

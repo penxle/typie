@@ -1,5 +1,6 @@
 import { TinyColor } from '@ctrl/tinycolor';
 import { Extension } from '@tiptap/core';
+import { css } from '$styled-system/css';
 import { defaultValues, values } from '../values';
 
 const hexes = Object.fromEntries(values.textColor.map(({ value, hex }) => [value, hex]));
@@ -39,7 +40,12 @@ export const TextColor = Extension.create({
 
               if (textColor === 'white') {
                 return {
-                  style: `color: ${hexes[textColor]}; text-shadow: none;`,
+                  style: `color: ${hexes[textColor]};`,
+                  class: css({
+                    '& .selected-text': {
+                      color: 'gray.500',
+                    },
+                  }),
                 };
               } else {
                 return {

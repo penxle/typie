@@ -3,7 +3,7 @@ import { Node } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, Selection as ProseMirrorSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Tip } from '$lib/notification';
-import { css } from '$styled-system/css';
+import { css, cx } from '$styled-system/css';
 import type { Mappable } from '@tiptap/pm/transform';
 
 export const Selection = Extension.create({
@@ -12,6 +12,10 @@ export const Selection = Extension.create({
   addKeyboardShortcuts() {
     return {
       'Mod-a': ({ editor }) => {
+        if (!this.editor.isEditable) {
+          return false;
+        }
+
         const { selection } = editor.state;
 
         if (selection instanceof NodeSelection || selection instanceof MultiNodeSelection) {
@@ -44,47 +48,49 @@ export const Selection = Extension.create({
           decorations: (state) => {
             const { doc, selection } = state;
 
-            if (!this.editor.isEditable || (!(selection instanceof NodeSelection) && !(selection instanceof MultiNodeSelection))) {
-              return DecorationSet.empty;
-            }
-
             const body = doc.child(0);
-            const { from, to } = selection;
+            const { from, to, empty } = selection;
             const decorations: Decoration[] = [];
 
-            body.descendants((node, offset) => {
-              if (!node.isBlock) {
-                return false;
-              }
+            if (!empty && window.__webview__) {
+              decorations.push(Decoration.inline(from, to, { class: cx('selected-text', css({ display: 'contents' })) }));
+            }
 
-              const pos = offset + 1;
-              const selected = from <= pos && to >= pos + node.nodeSize;
+            if (this.editor.isEditable && (selection instanceof NodeSelection || selection instanceof MultiNodeSelection)) {
+              body.descendants((node, offset) => {
+                if (!node.isBlock) {
+                  return false;
+                }
 
-              if (!selected) {
-                return true;
-              }
+                const pos = offset + 1;
+                const selected = from <= pos && to >= pos + node.nodeSize;
 
-              decorations.push(
-                Decoration.node(pos, pos + node.nodeSize, {
-                  nodeName: 'div',
-                  class: css({
-                    '& > *': {
-                      position: 'relative',
-                      _after: {
-                        content: '""',
-                        position: 'absolute',
-                        inset: '0',
-                        borderRadius: '4px',
-                        backgroundColor: '[var(--prosemirror-color-selection)/20]',
-                        pointerEvents: 'none',
+                if (!selected) {
+                  return true;
+                }
+
+                decorations.push(
+                  Decoration.node(pos, pos + node.nodeSize, {
+                    nodeName: 'div',
+                    class: css({
+                      '& > *': {
+                        position: 'relative',
+                        _after: {
+                          content: '""',
+                          position: 'absolute',
+                          inset: '0',
+                          borderRadius: '4px',
+                          backgroundColor: '[var(--prosemirror-color-selection)/20]',
+                          pointerEvents: 'none',
+                        },
                       },
-                    },
+                    }),
                   }),
-                }),
-              );
+                );
 
-              return false;
-            });
+                return false;
+              });
+            }
 
             return DecorationSet.create(doc, decorations);
           },
