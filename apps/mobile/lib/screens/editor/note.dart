@@ -24,6 +24,7 @@ class Note extends HookWidget {
     }, [yjsState?.note]);
 
     return Screen(
+      resizeToAvoidBottomInset: true,
       padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
       heading: const Heading(
         titleIcon: LucideLightIcons.notebook_tabs,
