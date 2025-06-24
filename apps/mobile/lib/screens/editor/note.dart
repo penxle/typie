@@ -24,7 +24,7 @@ class Note extends HookWidget {
     }, [yjsState?.note]);
 
     return Screen(
-      padding: const Pad(all: 20),
+      padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
       heading: const Heading(
         titleIcon: LucideLightIcons.notebook_tabs,
         title: '작성 노트',
@@ -40,7 +40,7 @@ class Note extends HookWidget {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
-        decoration: const InputDecoration(
+        decoration: const InputDecoration.collapsed(
           hintText: '포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요',
           hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
         ),
