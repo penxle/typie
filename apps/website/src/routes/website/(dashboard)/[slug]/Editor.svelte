@@ -2,6 +2,7 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import { Mark } from '@tiptap/pm/model';
+  import { TextSelection } from '@tiptap/pm/state';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
@@ -291,6 +292,7 @@
 
     if (editor) {
       const { tr, schema } = editor.current.state;
+      tr.setSelection(TextSelection.create(tr.doc, 2));
       tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
       editor.current.view.dispatch(tr);
     }

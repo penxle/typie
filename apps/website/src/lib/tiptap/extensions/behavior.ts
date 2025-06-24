@@ -79,6 +79,19 @@ export const Behavior = Extension.create({
   addProseMirrorPlugins() {
     return [
       new Plugin({
+        appendTransaction: (transactions, oldState, newState) => {
+          if (transactions.some((tr) => tr.storedMarksSet)) {
+            return null;
+          }
+
+          const { tr } = newState;
+          if (oldState.storedMarks?.length) {
+            tr.ensureMarks(oldState.storedMarks);
+            return tr;
+          }
+
+          return null;
+        },
         props: {
           handleDOMEvents: {
             cut: (view, event) => {
