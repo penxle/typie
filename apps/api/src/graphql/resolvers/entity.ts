@@ -308,6 +308,7 @@ builder.mutationFields((t) => ({
       parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
       lowerOrder: t.input.string({ required: false }),
       upperOrder: t.input.string({ required: false }),
+      treatEmptyParentIdAsRoot: t.input.boolean({ required: false, defaultValue: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
@@ -323,13 +324,7 @@ builder.mutationFields((t) => ({
 
       let parentId, depth;
 
-      if (input.parentEntityId === null) {
-        parentId = null;
-        depth = 0;
-      } else if (input.parentEntityId === undefined) {
-        parentId = entity.parentId;
-        depth = entity.depth;
-      } else {
+      if (input.parentEntityId) {
         const parentEntity = await db
           .select({ id: Entities.id, depth: Entities.depth })
           .from(Entities)
@@ -361,6 +356,19 @@ builder.mutationFields((t) => ({
 
         parentId = parentEntity.id;
         depth = parentEntity.depth + 1;
+      } else {
+        if (input.treatEmptyParentIdAsRoot) {
+          parentId = null;
+          depth = 0;
+        } else {
+          if (input.parentEntityId === null) {
+            parentId = null;
+            depth = 0;
+          } else {
+            parentId = entity.parentId;
+            depth = entity.depth;
+          }
+        }
       }
 
       const depthDelta = depth - entity.depth;
