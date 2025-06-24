@@ -1,4 +1,5 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
+import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -6,27 +7,54 @@ import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/tappable.dart';
 
 class Note extends HookWidget {
-  const Note({super.key});
+  const Note({super.key, required this.onBack});
+
+  final void Function() onBack;
 
   @override
   Widget build(BuildContext context) {
     useAutomaticKeepAlive();
 
-    final scope = EditorStateScope.of(context);
     final controller = useTextEditingController();
+
+    final scope = EditorStateScope.of(context);
     final yjsState = useValueListenable(scope.yjsState);
+    final mode = useValueListenable(scope.mode);
 
     useEffect(() {
       controller.text = yjsState?.note ?? '';
       return null;
     }, [yjsState?.note]);
 
+    useEffect(() {
+      if (mode != EditorMode.note) {
+        return null;
+      }
+
+      bool handler(bool stopDefaultButtonEvent, RouteInfo routeInfo) {
+        onBack();
+        return true;
+      }
+
+      BackButtonInterceptor.add(handler);
+
+      return () {
+        BackButtonInterceptor.remove(handler);
+      };
+    }, [mode]);
+
     return Screen(
       resizeToAvoidBottomInset: true,
       padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
-      heading: const Heading(
+      heading: Heading(
+        leadingWidget: Tappable(
+          onTap: onBack,
+          padding: const Pad(vertical: 4),
+          child: const SizedBox(width: 52, child: Icon(LucideLightIcons.chevron_left, color: AppColors.gray_950)),
+        ),
         titleIcon: LucideLightIcons.notebook_tabs,
         title: '작성 노트',
         backgroundColor: AppColors.white,

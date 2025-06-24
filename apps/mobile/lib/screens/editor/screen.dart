@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +29,7 @@ class EditorScreen extends HookWidget {
     final keyboardHeight = useValueNotifier<double>(0);
     final isKeyboardVisible = useValueNotifier<bool>(false);
     final keyboardType = useValueNotifier<KeyboardType>(KeyboardType.software);
+    final mode = useValueNotifier<EditorMode>(EditorMode.editor);
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
 
@@ -42,6 +45,7 @@ class EditorScreen extends HookWidget {
       keyboardHeight: keyboardHeight,
       isKeyboardVisible: isKeyboardVisible,
       keyboardType: keyboardType,
+      mode: mode,
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
       child: Material(
@@ -51,9 +55,50 @@ class EditorScreen extends HookWidget {
             PageView(
               controller: pageController,
               physics: const NeverScrollableScrollPhysics(),
+              onPageChanged: (value) {
+                mode.value = switch (value) {
+                  0 => EditorMode.editor,
+                  1 => EditorMode.note,
+                  _ => throw UnimplementedError(),
+                };
+              },
               children: [
                 Editor(slug: slug),
-                const Note(),
+                Note(
+                  onBack: () async {
+                    drag.value?.cancel();
+                    drag.value = null;
+
+                    final details = DragStartDetails(localPosition: Offset.zero);
+                    drag.value = pageController.position.drag(details, () {});
+
+                    const duration = Duration(milliseconds: 150);
+                    const steps = 30;
+                    final stepDuration = duration.inMicroseconds ~/ steps;
+                    final screenWidth = MediaQuery.of(context).size.width;
+
+                    for (var i = 0; i < steps; i++) {
+                      final progress = (i + 1) / steps;
+                      final easeOutProgress = 1 - pow(1 - progress, 3);
+                      final dx = screenWidth * easeOutProgress;
+
+                      drag.value?.update(
+                        DragUpdateDetails(
+                          globalPosition: Offset(dx, 0),
+                          localPosition: Offset(dx, 0),
+                          delta: Offset(dx / steps, 0),
+                          primaryDelta: dx / steps,
+                        ),
+                      );
+
+                      await Future<void>.delayed(Duration(microseconds: stepDuration));
+                    }
+
+                    drag.value?.end(
+                      DragEndDetails(velocity: const Velocity(pixelsPerSecond: Offset(600, 0)), primaryVelocity: 600),
+                    );
+                  },
+                ),
               ],
             ),
             Positioned(
