@@ -43,7 +43,7 @@ export const TextColor = Extension.create({
                   style: `color: ${hexes[textColor]};`,
                   class: css({
                     '& .selected-text': {
-                      color: 'gray.500',
+                      color: 'gray.950',
                     },
                   }),
                 };
