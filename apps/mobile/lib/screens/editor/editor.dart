@@ -58,6 +58,7 @@ class Editor extends HookWidget {
 
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
+    final mode = useValueListenable(scope.mode);
 
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((height) {
@@ -79,6 +80,14 @@ class Editor extends HookWidget {
 
       return subscription.cancel;
     }, []);
+
+    useEffect(() {
+      if (mode == EditorMode.editor && scope.isKeyboardVisible.value) {
+        unawaited(webViewController?.requestFocus());
+      }
+
+      return null;
+    }, [mode]);
 
     useEffect(() {
       if (webViewController == null) {
