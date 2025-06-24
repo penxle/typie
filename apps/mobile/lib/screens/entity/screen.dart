@@ -675,8 +675,10 @@ class _EntityList extends HookWidget {
                       GEntityScreen_MoveEntity_MutationReq(
                         (b) => b
                           ..vars.input.entityId = dragging.id
+                          ..vars.input.parentEntityId = entity?.id
                           ..vars.input.lowerOrder = lowerOrder
-                          ..vars.input.upperOrder = upperOrder,
+                          ..vars.input.upperOrder = upperOrder
+                          ..vars.input.treatEmptyParentIdAsRoot = true,
                       ),
                     );
 

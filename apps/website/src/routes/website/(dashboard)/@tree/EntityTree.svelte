@@ -251,6 +251,7 @@
         parentEntityId: parentId ?? null,
         lowerOrder,
         upperOrder,
+        treatEmptyParentIdAsRoot: true,
       });
 
       mixpanel.track('move_entity', { parentEntityId: parentId ?? null, lowerOrder, upperOrder });

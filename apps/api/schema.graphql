@@ -308,6 +308,7 @@ input MoveEntityInput {
   entityId: ID!
   lowerOrder: String
   parentEntityId: ID
+  treatEmptyParentIdAsRoot: Boolean = false
   upperOrder: String
 }
 
