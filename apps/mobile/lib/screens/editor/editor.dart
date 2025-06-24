@@ -84,7 +84,7 @@ class Editor extends HookWidget {
 
     useAsyncEffect(() async {
       if (mode == EditorMode.editor && scope.isKeyboardVisible.value) {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await Future<void>.delayed(const Duration(milliseconds: 500));
         await webViewController?.requestFocus();
       }
 
