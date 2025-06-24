@@ -349,6 +349,7 @@ type Mutation {
   renameFolder(input: RenameFolderInput!): Folder!
   reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
+  restoreDeletedPost(input: RestoreDeletedPostInput!): Post!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
   scheduleSubscriptionCancellation: Subscription_!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
@@ -632,6 +633,10 @@ input ResetPasswordInput {
   password: String!
 }
 
+input RestoreDeletedPostInput {
+  postId: ID!
+}
+
 input SchedulePlanChangeInput {
   planId: ID!
 }
@@ -679,6 +684,7 @@ enum SingleSignOnProvider {
 }
 
 type Site implements ISite {
+  deletedPosts: [Post!]!
   entities: [Entity!]!
   firstEntity(type: EntityType!): Entity
   fonts: [Font!]!
