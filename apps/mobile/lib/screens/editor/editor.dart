@@ -47,6 +47,8 @@ class Editor extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    useAutomaticKeepAlive();
+
     final auth = useService<Auth>();
     final keyboard = useService<Keyboard>();
     final pref = useService<Pref>();
@@ -56,7 +58,6 @@ class Editor extends HookWidget {
 
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
-    useAutomaticKeepAlive();
 
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((height) {
