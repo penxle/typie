@@ -4,6 +4,8 @@ import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/widgets/webview.dart';
 
+enum EditorMode { editor, note }
+
 enum SecondaryToolbarMode { hidden, text, textColor, fontFamily, fontSize, textAlign, lineHeight, letterSpacing }
 
 enum BottomToolbarMode { hidden, insert, horizontalRule, blockquote }
@@ -19,6 +21,7 @@ class EditorStateScope extends InheritedWidget {
     required this.keyboardHeight,
     required this.isKeyboardVisible,
     required this.keyboardType,
+    required this.mode,
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
     super.key,
@@ -32,6 +35,7 @@ class EditorStateScope extends InheritedWidget {
   final ValueNotifier<double> keyboardHeight;
   final ValueNotifier<bool> isKeyboardVisible;
   final ValueNotifier<KeyboardType> keyboardType;
+  final ValueNotifier<EditorMode> mode;
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
 
