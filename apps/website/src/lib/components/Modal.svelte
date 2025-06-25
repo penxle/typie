@@ -52,7 +52,7 @@
     ></div>
 
     {#if loading}
-      <RingSpinner style={css.raw({ size: '40px', color: 'gray.500' })} />
+      <RingSpinner style={css.raw({ size: '40px', color: 'text.faint' })} />
     {:else}
       <div
         class={css(
@@ -66,7 +66,7 @@
             maxWidth: '720px',
             height: 'fit',
             maxHeight: 'full',
-            backgroundColor: 'white',
+            backgroundColor: 'surface.default',
             boxShadow: 'large',
             overflowY: 'auto',
             userSelect: 'text',

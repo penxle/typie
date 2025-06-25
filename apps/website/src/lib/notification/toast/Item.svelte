@@ -36,7 +36,7 @@
     minWidth: '44px',
     maxWidth: '402px',
     height: '38px',
-    backgroundColor: 'gray.50',
+    backgroundColor: 'surface.subtle',
     boxShadow: 'small',
     overflow: 'hidden',
     pointerEvents: 'auto',
@@ -57,13 +57,13 @@
       class={css(
         { borderRadius: 'full', padding: '3px', size: '18px' },
         toast.type === 'success' && { backgroundColor: { base: '[#0CBB7A]', _dark: '[#19C283]' } },
-        toast.type === 'error' && { backgroundColor: { base: 'red.600', _dark: 'red.500' } },
+        toast.type === 'error' && { backgroundColor: 'accent.danger.subtle' },
       )}
     >
       {#if toast.type === 'success'}
-        <Icon style={css.raw({ color: 'white' })} icon={CheckIcon} size={12} />
+        <Icon style={css.raw({ color: 'text.inverse' })} icon={CheckIcon} size={12} />
       {:else if toast.type === 'error'}
-        <Icon style={css.raw({ color: 'white' })} icon={ExclamationIcon} size={12} />
+        <Icon style={css.raw({ color: 'text.inverse' })} icon={ExclamationIcon} size={12} />
       {/if}
     </div>
   </div>
@@ -81,7 +81,7 @@
       <div class={flex({ direction: 'column', paddingY: '9px', paddingRight: '40px' })}>
         <span class={css({ fontSize: '14px', fontWeight: 'medium' })}>{toast.title}</span>
         {#if toast.message}
-          <span class={css({ fontSize: '12px', color: 'gray.700' })}>
+          <span class={css({ fontSize: '12px', color: 'text.subtle' })}>
             {toast.message}
           </span>
         {/if}
@@ -91,7 +91,7 @@
           borderLeftWidth: '1px',
           padding: '10px',
           paddingRight: '6px',
-          color: 'gray.700',
+          color: 'text.subtle',
         })}
       >
         <button onclick={dismiss} type="button">

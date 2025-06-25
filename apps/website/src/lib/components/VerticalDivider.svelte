@@ -20,8 +20,8 @@
     },
     variants: {
       color: {
-        primary: { backgroundColor: 'gray.200' },
-        secondary: { backgroundColor: 'gray.300' },
+        primary: { backgroundColor: 'border.default' },
+        secondary: { backgroundColor: 'border.strong' },
       },
     },
   });

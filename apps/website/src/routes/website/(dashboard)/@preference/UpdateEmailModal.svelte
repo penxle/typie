@@ -50,7 +50,7 @@
   <div class={flex({ direction: 'column', gap: '36px' })}>
     <div>
       <p class={css({ marginBottom: '4px', fontSize: '15px', fontWeight: 'medium' })}>현재 이메일</p>
-      <p class={css({ fontSize: '14px', color: 'gray.600' })}>{email}</p>
+      <p class={css({ fontSize: '14px', color: 'text.muted' })}>{email}</p>
     </div>
 
     <form onsubmit={form.handleSubmit}>
@@ -60,7 +60,7 @@
       <TextInput id="email" autofocus placeholder="new@example.com" type="email" bind:value={form.fields.email} />
 
       {#if form.errors.email}
-        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.email}</div>
+        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.email}</div>
       {/if}
 
       <Button style={css.raw({ marginTop: '12px', width: 'full' })} type="submit">변경</Button>

@@ -1,4 +1,4 @@
-import { defineTokens } from '@pandacss/dev';
+import { defineSemanticTokens, defineTokens } from '@pandacss/dev';
 
 export const colors = defineTokens.colors({
   current: { value: 'currentColor' },
@@ -90,4 +90,122 @@ export const colors = defineTokens.colors({
     '900': { value: 'oklch(0.375 0.155 259.137)' }, // #1e3a8a
     '950': { value: 'oklch(0.258 0.102 260.256)' }, // #172554
   },
+
+  dark: {
+    gray: {
+      '50': { value: 'oklch(0.92 0.002 266)' }, // #eaebeb
+      '100': { value: 'oklch(0.87 0.002 266)' }, // #dbdcdc
+      '200': { value: 'oklch(0.78 0.003 266)' }, // #c2c3c3
+      '300': { value: 'oklch(0.67 0.003 266)' }, // #a4a5a5
+      '400': { value: 'oklch(0.55 0.004 266)' }, // #838485
+      '500': { value: 'oklch(0.45 0.004 266)' }, // #6a6b6c
+      '600': { value: 'oklch(0.37 0.004 266)' }, // #565758
+      '700': { value: 'oklch(0.31 0.004 266)' }, // #474849
+      '800': { value: 'oklch(0.27 0.004 266)' }, // #3e3f40
+      '900': { value: 'oklch(0.23 0.004 266)' }, // #353637
+      '950': { value: 'oklch(0.19 0.004 266)' }, // #2c2d2e
+    },
+
+    brand: {
+      '50': { value: 'oklch(0.85 0.08 276)' }, // #d2d4f0
+      '100': { value: 'oklch(0.78 0.10 276)' }, // #bdc1ea
+      '200': { value: 'oklch(0.70 0.13 276)' }, // #a1a8e1
+      '300': { value: 'oklch(0.62 0.16 276)' }, // #828dd6
+      '400': { value: 'oklch(0.55 0.18 276)' }, // #6270c9
+      '500': { value: 'oklch(0.48 0.19 276)' }, // #4553ba
+      '600': { value: 'oklch(0.42 0.18 276)' }, // #3a48a8
+      '700': { value: 'oklch(0.36 0.16 276)' }, // #323d93
+      '800': { value: 'oklch(0.30 0.12 276)' }, // #2a337b
+      '900': { value: 'oklch(0.24 0.08 276)' }, // #232962
+      '950': { value: 'oklch(0.19 0.06 276)' }, // #1c204a
+    },
+
+    red: {
+      '50': { value: 'oklch(0.85 0.08 27)' }, // #f0d4d4
+      '100': { value: 'oklch(0.78 0.10 27)' }, // #eac1c1
+      '200': { value: 'oklch(0.70 0.13 27)' }, // #e1a8a8
+      '300': { value: 'oklch(0.62 0.16 27)' }, // #d68d8d
+      '400': { value: 'oklch(0.55 0.18 27)' }, // #c97070
+      '500': { value: 'oklch(0.48 0.20 27)' }, // #ba5353
+      '600': { value: 'oklch(0.42 0.19 27)' }, // #a84848
+      '700': { value: 'oklch(0.36 0.17 27)' }, // #933d3d
+      '800': { value: 'oklch(0.30 0.13 27)' }, // #7b3333
+      '900': { value: 'oklch(0.24 0.09 27)' }, // #622929
+      '950': { value: 'oklch(0.19 0.06 27)' }, // #4a2020
+    },
+
+    green: {
+      '50': { value: 'oklch(0.85 0.08 152)' }, // #d4f0d4
+      '100': { value: 'oklch(0.78 0.10 152)' }, // #c1eac1
+      '200': { value: 'oklch(0.70 0.13 152)' }, // #a8e1a8
+      '300': { value: 'oklch(0.62 0.16 152)' }, // #8dd68d
+      '400': { value: 'oklch(0.55 0.18 152)' }, // #70c970
+      '500': { value: 'oklch(0.48 0.19 152)' }, // #53ba53
+      '600': { value: 'oklch(0.42 0.18 152)' }, // #48a848
+      '700': { value: 'oklch(0.36 0.16 152)' }, // #3d933d
+      '800': { value: 'oklch(0.30 0.12 152)' }, // #337b33
+      '900': { value: 'oklch(0.24 0.08 152)' }, // #296229
+      '950': { value: 'oklch(0.19 0.06 152)' }, // #204a20
+    },
+
+    blue: {
+      '50': { value: 'oklch(0.85 0.08 256)' }, // #d4d8f0
+      '100': { value: 'oklch(0.78 0.10 256)' }, // #c1c7ea
+      '200': { value: 'oklch(0.70 0.13 256)' }, // #a8b0e1
+      '300': { value: 'oklch(0.62 0.16 256)' }, // #8d96d6
+      '400': { value: 'oklch(0.55 0.18 256)' }, // #707ac9
+      '500': { value: 'oklch(0.48 0.19 256)' }, // #535eba
+      '600': { value: 'oklch(0.42 0.18 256)' }, // #4850a8
+      '700': { value: 'oklch(0.36 0.16 256)' }, // #3d4393
+      '800': { value: 'oklch(0.30 0.12 256)' }, // #33377b
+      '900': { value: 'oklch(0.24 0.08 256)' }, // #292c62
+      '950': { value: 'oklch(0.19 0.06 256)' }, // #20224a
+    },
+  },
+});
+
+export const semanticColors = defineSemanticTokens.colors({
+  'text.default': { value: { base: '{colors.gray.900}', _dark: '{colors.dark.gray.50}' } },
+  'text.subtle': { value: { base: '{colors.gray.700}', _dark: '{colors.dark.gray.100}' } },
+  'text.muted': { value: { base: '{colors.gray.600}', _dark: '{colors.dark.gray.200}' } },
+  'text.faint': { value: { base: '{colors.gray.500}', _dark: '{colors.dark.gray.300}' } },
+  'text.disabled': { value: { base: '{colors.gray.400}', _dark: '{colors.dark.gray.400}' } },
+  'text.inverse': { value: { base: '{colors.white}', _dark: '{colors.dark.gray.900}' } },
+  'text.danger': { value: { base: '{colors.red.500}', _dark: '{colors.dark.red.300}' } },
+  'text.success': { value: { base: '{colors.green.500}', _dark: '{colors.dark.green.300}' } },
+  'text.link': { value: { base: '{colors.blue.600}', _dark: '{colors.dark.blue.300}' } },
+  'text.brand': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.300}' } },
+
+  'surface.default': { value: { base: '{colors.white}', _dark: '{colors.dark.gray.900}' } },
+  'surface.subtle': { value: { base: '{colors.gray.50}', _dark: '{colors.dark.gray.800}' } },
+  'surface.muted': { value: { base: '{colors.gray.100}', _dark: '{colors.dark.gray.700}' } },
+  'surface.overlay': { value: { base: '{colors.gray.700}', _dark: '{colors.dark.gray.700}' } },
+  'surface.inverse': { value: { base: '{colors.gray.950}', _dark: '{colors.dark.gray.50}' } },
+
+  'interactive.hover': { value: { base: '{colors.gray.200}', _dark: '{colors.dark.gray.600}' } },
+  'interactive.disabled': { value: { base: '{colors.gray.200}', _dark: '{colors.dark.gray.800}' } },
+
+  'accent.brand.default': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.400}' } },
+  'accent.brand.hover': { value: { base: '{colors.brand.600}', _dark: '{colors.dark.brand.500}' } },
+  'accent.brand.active': { value: { base: '{colors.brand.700}', _dark: '{colors.dark.brand.600}' } },
+  'accent.brand.subtle': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.brand.900}' } },
+  'accent.danger.default': { value: { base: '{colors.red.600}', _dark: '{colors.dark.red.400}' } },
+  'accent.danger.hover': { value: { base: '{colors.red.500}', _dark: '{colors.dark.red.500}' } },
+  'accent.danger.active': { value: { base: '{colors.red.700}', _dark: '{colors.dark.red.600}' } },
+  'accent.danger.subtle': { value: { base: '{colors.red.50}', _dark: '{colors.dark.red.900}' } },
+  'accent.success.subtle': { value: { base: '{colors.green.50}', _dark: '{colors.dark.green.900}' } },
+
+  'border.default': { value: { base: '{colors.gray.200}', _dark: '{colors.dark.gray.700}' } },
+  'border.strong': { value: { base: '{colors.gray.300}', _dark: '{colors.dark.gray.600}' } },
+  'border.subtle': { value: { base: '{colors.gray.100}', _dark: '{colors.dark.gray.800}' } },
+
+  'shadow.default': { value: { base: '{colors.gray.950}', _dark: 'oklch(0 0 0 / 0.5)' } },
+
+  'control.scrollbar.default': { value: { base: '{colors.gray.200}', _dark: '{colors.dark.gray.600}' } },
+  'control.scrollbar.hover': { value: { base: '{colors.gray.300}', _dark: '{colors.dark.gray.500}' } },
+
+  'decoration.grid.default': { value: { base: '{colors.gray.100}', _dark: '{colors.dark.gray.800}' } },
+  'decoration.grid.subtle': { value: { base: '{colors.gray.50}', _dark: '{colors.dark.gray.900}' } },
+  'decoration.grid.brand': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.brand.900}' } },
+  'decoration.grid.brand.subtle': { value: { base: '{colors.brand.50}', _dark: '{colors.dark.brand.950}' } },
 });

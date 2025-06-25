@@ -51,7 +51,7 @@
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>
       <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>비밀번호 재설정하기</h1>
 
-      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500', wordBreak: 'keep-all' })}>
+      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint', wordBreak: 'keep-all' })}>
         가입한 이메일을 입력하시면 비밀번호 재설정 링크를 보내드려요.
       </div>
     </div>
@@ -59,12 +59,12 @@
     <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
       <div class={flex({ direction: 'column', gap: '12px' })}>
         <div class={flex({ direction: 'column', gap: '4px' })}>
-          <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="email">이메일</label>
+          <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="email">이메일</label>
 
           <TextInput id="email" aria-invalid={!!form.errors.email} placeholder="me@example.com" bind:value={form.fields.email} />
 
           {#if form.errors.email}
-            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.email}</div>
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.email}</div>
           {/if}
         </div>
       </div>
@@ -76,7 +76,7 @@
 
         <div class={flex({ justifyContent: 'center' })}>
           <a
-            class={css({ fontSize: '13px', color: 'gray.700', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
+            class={css({ fontSize: '13px', color: 'text.subtle', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
             href={`/login${page.url.search}`}
           >
             로그인 페이지로 돌아가기
@@ -88,7 +88,7 @@
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>
       <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>비밀번호 재설정하기</h1>
 
-      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500', wordBreak: 'keep-all' })}>
+      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint', wordBreak: 'keep-all' })}>
         {form.fields.email} 으로 비밀번호 재설정 링크를 보냈어요.
       </div>
     </div>
@@ -114,7 +114,7 @@
 
     <div class={flex({ justifyContent: 'center' })}>
       <a
-        class={css({ fontSize: '13px', color: 'gray.700', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
+        class={css({ fontSize: '13px', color: 'text.subtle', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
         href={`/login${page.url.search}`}
       >
         로그인 페이지로 돌아가기

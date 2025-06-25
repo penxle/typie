@@ -175,7 +175,7 @@
           value={subtitle.current}
         ></textarea>
 
-        <div class={css({ marginTop: '10px', marginBottom: '20px', borderBottomWidth: '1px', borderBottomColor: 'gray.200' })}></div>
+        <div class={css({ marginTop: '10px', marginBottom: '20px', borderBottomWidth: '1px', borderColor: 'gray.200' })}></div>
       </div>
 
       <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
@@ -248,7 +248,7 @@
             size: '16px',
             backgroundColor: 'white',
             border: '2px solid',
-            borderColor: 'gray.900',
+            borderColor: 'gray.300',
             translate: 'auto',
             translateX: '-1/2',
             translateY: '-1/2',
@@ -350,7 +350,7 @@
           transform: 'translateY(-1px)',
         },
         _active: {
-          backgroundColor: 'gray.950',
+          backgroundColor: 'black',
           transform: 'translateY(0)',
         },
       })}

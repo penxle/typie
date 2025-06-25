@@ -40,8 +40,8 @@
             paddingX: '8px',
             paddingY: '4px',
             transition: 'common',
-            _hover: { backgroundColor: 'gray.100' },
-            _expanded: { backgroundColor: 'gray.100' },
+            _hover: { backgroundColor: 'surface.muted' },
+            _expanded: { backgroundColor: 'surface.muted' },
           },
           style,
         ),
@@ -52,17 +52,17 @@
       {#if item}
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
           {#if item.icon}
-            <Icon style={css.raw({ color: 'gray.500' })} icon={item.icon} size={14} />
+            <Icon style={css.raw({ color: 'text.faint' })} icon={item.icon} size={14} />
           {/if}
 
-          <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>
+          <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
             {item.label}
           </span>
         </div>
 
         {#if chevron}
           <Icon
-            style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5px]' } })}
+            style={css.raw({ color: 'text.faint', '& *': { strokeWidth: '[1.5px]' } })}
             icon={open ? ChevronUpIcon : ChevronDownIcon}
             size={14}
           />
@@ -82,24 +82,24 @@
         <div class={flex({ alignItems: 'flex-start', gap: '8px' })}>
           {#if item.icon}
             <div class={center({ height: '[1lh]' })}>
-              <Icon style={css.raw({ color: 'gray.500' })} icon={item.icon} size={14} />
+              <Icon style={css.raw({ color: 'text.faint' })} icon={item.icon} size={14} />
             </div>
           {/if}
 
           <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>
+            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
               {item.label}
             </span>
 
             {#if item.description}
-              <span class={css({ fontSize: '11px', color: 'gray.500', wordBreak: 'keep-all' })}>{item.description}</span>
+              <span class={css({ fontSize: '11px', color: 'text.faint', wordBreak: 'keep-all' })}>{item.description}</span>
             {/if}
           </div>
         </div>
 
         <Icon
           style={css.raw({
-            color: 'gray.700',
+            color: 'text.subtle',
             visibility: item.value === value ? 'visible' : 'hidden',
           })}
           icon={CheckIcon}

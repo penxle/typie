@@ -76,16 +76,16 @@
 </script>
 
 <div class={flex({ direction: 'column', gap: '32px' })}>
-  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'gray.900' })}>단축키</h1>
+  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>단축키</h1>
 
   <div class={flex({ direction: 'column', gap: '16px' })}>
     {#each shortcutCategories as category (category.title)}
       <div
         class={css({
           borderWidth: '1px',
-          borderColor: 'gray.200',
+          borderColor: 'border.default',
           borderRadius: '8px',
-          backgroundColor: 'white',
+          backgroundColor: 'surface.default',
           overflow: 'hidden',
         })}
       >
@@ -93,16 +93,16 @@
           class={css({
             paddingX: '16px',
             paddingY: '12px',
-            backgroundColor: 'gray.50',
+            backgroundColor: 'surface.subtle',
             borderBottomWidth: '1px',
-            borderBottomColor: 'gray.100',
+            borderColor: 'border.subtle',
           })}
         >
           <h3
             class={css({
               fontSize: '13px',
               fontWeight: 'medium',
-              color: 'gray.700',
+              color: 'text.subtle',
             })}
           >
             {category.title}
@@ -122,7 +122,7 @@
               <span
                 class={css({
                   fontSize: '13px',
-                  color: 'gray.700',
+                  color: 'text.subtle',
                 })}
               >
                 {shortcut.description}
@@ -140,7 +140,7 @@
                       <span
                         class={css({
                           fontSize: '11px',
-                          color: 'gray.700',
+                          color: 'text.subtle',
                           fontWeight: 'medium',
                           marginX: '6px',
                         })}
@@ -154,7 +154,7 @@
                           <span
                             class={css({
                               fontSize: '11px',
-                              color: 'gray.400',
+                              color: 'text.disabled',
                               fontWeight: 'normal',
                             })}
                           >
@@ -172,10 +172,10 @@
                             fontSize: '11px',
                             fontWeight: 'normal',
                             fontFamily: 'mono',
-                            color: 'gray.700',
-                            backgroundColor: 'white',
+                            color: 'text.subtle',
+                            backgroundColor: 'surface.default',
                             borderWidth: '1px',
-                            borderColor: 'gray.200',
+                            borderColor: 'border.default',
                             borderRadius: '3px',
                             boxShadow: 'small',
                           })}
@@ -191,7 +191,7 @@
                       <span
                         class={css({
                           fontSize: '11px',
-                          color: 'gray.400',
+                          color: 'text.disabled',
                           fontWeight: 'medium',
                         })}
                       >
@@ -209,10 +209,10 @@
                         fontSize: '11px',
                         fontWeight: 'normal',
                         fontFamily: 'mono',
-                        color: 'gray.700',
-                        backgroundColor: 'white',
+                        color: 'text.subtle',
+                        backgroundColor: 'surface.default',
                         borderWidth: '1px',
-                        borderColor: 'gray.200',
+                        borderColor: 'border.default',
                         borderRadius: '3px',
                         boxShadow: 'small',
                       })}

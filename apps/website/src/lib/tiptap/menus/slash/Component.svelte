@@ -60,10 +60,10 @@
     direction: 'column',
     gap: '1px',
     borderWidth: '1px',
-    borderColor: 'gray.200',
+    borderColor: 'border.default',
     borderRadius: '12px',
     paddingY: '4px',
-    backgroundColor: 'white',
+    backgroundColor: 'surface.default',
     width: '210px',
     maxHeight: '340px',
     overflowY: 'auto',
@@ -86,7 +86,7 @@
         marginX: '4px',
         borderRadius: '6px',
         padding: '4px',
-        backgroundColor: selectedIdx === idx ? 'gray.100' : undefined,
+        backgroundColor: selectedIdx === idx ? 'surface.muted' : undefined,
       })}
       onclick={() => onexecute(item)}
       onkeydown={handleKeyDown}
@@ -107,6 +107,6 @@
       <div class={css({ fontSize: '14px', fontWeight: 'medium' })}>{item.name}</div>
     </div>
   {:else}
-    <div class={css({ paddingX: '8px', color: 'gray.400', fontSize: '14px', fontWeight: 'semibold' })}>결과 없음</div>
+    <div class={css({ paddingX: '8px', color: 'text.disabled', fontSize: '14px', fontWeight: 'semibold' })}>결과 없음</div>
   {/each}
 </div>

@@ -76,7 +76,7 @@
         borderBottomRadius: '12px',
         width: 'full',
         maxWidth: '1000px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         boxShadow: 'small',
         overflow: 'hidden',
         pointerEvents: 'auto',
@@ -86,9 +86,9 @@
         <Logo class={css({ height: '20px' })} />
 
         <a
-          style:--background-color={token('colors.brand.500')}
-          style:--border-color={token('colors.brand.500')}
-          style:--border-accent-color={token('colors.white')}
+          style:--background-color={token('colors.accent.brand.default')}
+          style:--border-color={token('colors.accent.brand.default')}
+          style:--border-accent-color={token('colors.surface.default')}
           class={css({
             borderWidth: '2px',
             borderColor: 'transparent',
@@ -97,7 +97,7 @@
             paddingY: '6px',
             fontSize: '14px',
             fontWeight: 'bold',
-            color: 'white',
+            color: 'text.inverse',
             background:
               '[linear-gradient(var(--background-color), var(--background-color)) padding-box, conic-gradient(from var(--angle), var(--border-color), var(--border-accent-color) 10%, var(--border-color) 20%) border-box]',
             animationName: '[rotate]',
@@ -112,7 +112,7 @@
         </a>
       </div>
 
-      <div class={css({ height: '1px', backgroundColor: 'gray.200' })}></div>
+      <div class={css({ height: '1px', backgroundColor: 'interactive.hover' })}></div>
 
       <Toolbar style={css.raw({ hideBelow: 'md' })} {doc} {editor} />
     </div>
@@ -120,8 +120,8 @@
 {/if}
 
 <div
-  style:--grid-line-color={token('colors.gray.100')}
-  style:--cross-line-color={token('colors.gray.50')}
+  style:--grid-line-color={token('colors.decoration.grid.default')}
+  style:--cross-line-color={token('colors.decoration.grid.subtle')}
   style:--grid-size="30px"
   style:--line-thickness="1px"
   class={flex({
@@ -129,7 +129,7 @@
     alignItems: 'center',
     width: '[100dvw]',
     height: '[100dvh]',
-    backgroundColor: 'white',
+    backgroundColor: 'surface.default',
     backgroundImage:
       '[repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size))]',
     backgroundSize: 'var(--grid-size) var(--grid-size)',

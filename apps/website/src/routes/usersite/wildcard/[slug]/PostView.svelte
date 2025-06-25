@@ -259,7 +259,7 @@
         paddingBottom: '80px',
         width: 'full',
         maxWidth: '1200px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
       })}
     >
       {#if $entityView.node.coverImage}
@@ -286,8 +286,8 @@
           <div class={flex({ alignItems: 'center', gap: '6px' })}>
             {#each $entityView.ancestors as ancestor (ancestor.id)}
               {#if ancestor.node.__typename === 'FolderView'}
-                <a class={css({ fontSize: '14px', color: 'gray.400' })} href={ancestor.url}>{ancestor.node.name}</a>
-                <div class={css({ fontSize: '14px', color: 'gray.300' })}>/</div>
+                <a class={css({ fontSize: '14px', color: 'text.disabled' })} href={ancestor.url}>{ancestor.node.name}</a>
+                <div class={css({ fontSize: '14px', color: 'text.disabled' })}>/</div>
               {/if}
             {/each}
 
@@ -307,7 +307,7 @@
           {/if}
 
           <div class={flex({ align: 'center', justify: 'space-between', marginTop: '20px', paddingBottom: '10px' })}>
-            <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'gray.400' })}>
+            <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.disabled' })}>
               {#if $entityView.node.allowReaction && $entityView.node.reactions.length > 0}
                 <div class={flex({ align: 'center', gap: '3px' })}>
                   <Icon icon={SmileIcon} />
@@ -323,7 +323,7 @@
               {/if}
             </div>
 
-            <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'gray.600' })}>
+            <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
               <ShareLinkPopover href={$entityView.url} />
 
               <PostActionMenu {$entityView} />
@@ -355,7 +355,7 @@
           >
             <EmojiReaction $postView={$entityView.node} />
 
-            <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'gray.600' })}>
+            <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
               <ShareLinkPopover href={$entityView.url} />
 
               <PostActionMenu {$entityView} />
@@ -365,11 +365,11 @@
           <div class={css({ marginTop: '42px', fontSize: '16px', fontWeight: 'medium' })}>
             {#if $entityView.node.body.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
               <div class={flex({ direction: 'column', align: 'center' })}>
-                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'gray.100', color: 'gray.700' })}>
+                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'surface.muted', color: 'text.subtle' })}>
                   <Icon icon={ShieldAlertIcon} size={20} />
                 </div>
                 <p class={css({ marginTop: '10px', marginBottom: '2px', fontSize: '18px', fontWeight: 'semibold' })}>연령제한글</p>
-                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'gray.600' })}>본인 인증이 필요한 글이에요</p>
+                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'text.muted' })}>본인 인증이 필요한 글이에요</p>
 
                 {#if $user}
                   <Button
@@ -391,22 +391,22 @@
               </div>
             {:else if $entityView.node.body.reason === 'REQUIRE_MINIMUM_AGE'}
               <div class={flex({ direction: 'column', align: 'center' })}>
-                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'gray.100', color: 'gray.700' })}>
+                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'surface.muted', color: 'text.subtle' })}>
                   <Icon icon={ShieldAlertIcon} size={20} />
                 </div>
 
                 <p class={css({ marginTop: '10px', marginBottom: '2px', fontSize: '18px', fontWeight: 'semibold' })}>연령제한글</p>
-                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'gray.600', textAlign: 'center' })}>
+                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'text.muted', textAlign: 'center' })}>
                   이 글은 연령 기준에 따라 현재 계정으로는 열람이 제한되어 있어요
                 </p>
               </div>
             {:else if $entityView.node.body.reason === 'REQUIRE_PASSWORD'}
               <form class={flex({ direction: 'column', align: 'center' })} onsubmit={form.handleSubmit}>
-                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'gray.100', color: 'gray.700' })}>
+                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'surface.muted', color: 'text.subtle' })}>
                   <Icon icon={LockIcon} size={20} />
                 </div>
                 <p class={css({ marginTop: '10px', marginBottom: '2px', fontSize: '18px', fontWeight: 'semibold' })}>비밀글</p>
-                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'gray.600' })}>해당 내용은 비밀번호 입력이 필요해요</p>
+                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'text.muted' })}>해당 내용은 비밀번호 입력이 필요해요</p>
 
                 <div class={flex({ direction: 'column', align: 'center', gap: '12px', width: 'full', maxWidth: '280px' })}>
                   <TextInput
@@ -416,7 +416,7 @@
                     bind:value={form.fields.password}
                   />
                   {#if form.errors.password}
-                    <p class={css({ color: 'red.500', fontSize: '14px' })}>{form.errors.password}</p>
+                    <p class={css({ color: 'text.danger', fontSize: '14px' })}>{form.errors.password}</p>
                   {/if}
 
                   <Button style={css.raw({ width: 'full', height: '38px', borderRadius: '6px' })} size="lg" type="submit">확인</Button>

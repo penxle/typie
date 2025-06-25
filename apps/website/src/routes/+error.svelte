@@ -23,7 +23,7 @@
       padding: { base: '24px', lg: '48px' },
       width: 'full',
       maxWidth: '400px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       textAlign: 'center',
       boxShadow: 'medium',
       zIndex: '1',
@@ -38,7 +38,7 @@
         앗! 문제가 발생했어요
       {/if}
     </h1>
-    <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+    <div class={css({ fontSize: '14px', color: 'text.faint' })}>
       {#if page.status === 404}
         입력한 주소를 다시 한 번 확인해주세요.
       {:else if error?.code === 'unexpected_error'}
@@ -51,7 +51,7 @@
     <Button style={css.raw({ width: 'full', height: '40px' })} href="/" size="lg" type="link">홈으로 돌아가기</Button>
 
     {#if error?.eventId}
-      <p class={css({ fontFamily: 'mono', fontSize: '12px', color: 'gray.300' })}>코드: {error.eventId}</p>
+      <p class={css({ fontFamily: 'mono', fontSize: '12px', color: 'text.disabled' })}>코드: {error.eventId}</p>
     {/if}
   </div>
 </div>

@@ -32,7 +32,7 @@
         gap: '4px',
         width: 'full',
         maxWidth: 'var(--prosemirror-max-width)',
-        color: 'gray.300',
+        color: 'text.disabled',
         lineHeight: '[1.6]',
       })}
     >

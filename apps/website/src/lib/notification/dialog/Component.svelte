@@ -30,7 +30,7 @@
       {dialog.title}
     </div>
 
-    <div class={css({ fontSize: '15px', color: 'gray.700', whiteSpace: 'pre-wrap' })}>
+    <div class={css({ fontSize: '15px', color: 'text.subtle', whiteSpace: 'pre-wrap' })}>
       {dialog.message}
     </div>
 
@@ -46,7 +46,7 @@
       gap: '8px',
       borderTopWidth: '1px',
       padding: '16px',
-      backgroundColor: 'gray.100',
+      backgroundColor: 'surface.muted',
     })}
   >
     <Button
@@ -63,7 +63,7 @@
 
     {#if dialog.type === 'confirm'}
       <Button
-        style={css.raw({ borderColor: 'gray.200' })}
+        style={css.raw({ borderColor: 'border.default' })}
         onclick={() => {
           dialog.cancelHandler?.();
           dismiss();

@@ -122,8 +122,8 @@
         borderRadius: 'full',
         marginRight: '-8px',
         size: '32px',
-        color: 'white',
-        backgroundColor: 'gray.950',
+        color: 'text.inverse',
+        backgroundColor: 'surface.inverse',
       },
     })}
   >
@@ -151,7 +151,7 @@
   <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
     <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>플랜 업그레이드가 필요해요</div>
 
-    <div class={css({ fontSize: '13px', color: 'gray.500' })}>
+    <div class={css({ fontSize: '13px', color: 'text.faint' })}>
       현재 플랜의 최대 사용량을 초과했어요.
       <br />
       이어서 작성하려면 플랜을 업그레이드 해주세요.
@@ -168,13 +168,13 @@
       paddingTop: '16px',
       paddingBottom: '32px',
       width: 'full',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
     })}
   >
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '8px' })}>
-      <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'gray.950' })}>타이피 FULL ACCESS</div>
+      <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>타이피 FULL ACCESS</div>
 
-      <div class={css({ color: 'brand.500' })}>
+      <div class={css({ color: 'text.brand' })}>
         <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>4,900</span>
         <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>원</span>
         <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>/ 월</span>
@@ -183,44 +183,44 @@
 
     <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
 
-    <ul class={flex({ flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 'medium', color: 'gray.700' })}>
+    <ul class={flex({ flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={TypeIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} size={14} />
         <span>무제한 글자 수</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={ImagesIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={ImagesIcon} size={14} />
         <span>무제한 파일 업로드</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={SearchIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={SearchIcon} size={14} />
         <span>고급 검색</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={LinkIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={LinkIcon} size={14} />
         <span>커스텀 공유 주소</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={FlaskConicalIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={FlaskConicalIcon} size={14} />
         <span>베타 기능 우선 접근</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={HeadsetIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={HeadsetIcon} size={14} />
         <span>문제 발생시 우선 지원</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={SproutIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={SproutIcon} size={14} />
         <span>디스코드 커뮤니티 참여</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={EllipsisIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={EllipsisIcon} size={14} />
         <span>그리고 더 많은 혜택</span>
       </li>
     </ul>

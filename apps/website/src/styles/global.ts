@@ -17,8 +17,8 @@ export const globalCss = defineGlobalStyles({
 
   '*, *::before, *::after': {
     boxSizing: 'border-box',
-    border: '0 solid {colors.gray.200}',
-    outline: '0 solid {colors.gray.200}',
+    border: '0 solid {colors.border.default}',
+    outline: '0 solid {colors.border.default}',
   },
 
   html: {
@@ -26,9 +26,9 @@ export const globalCss = defineGlobalStyles({
     fontFeatureSettings: '"ss05" 1, "cv12" 1, "ss18" 1',
     textSizeAdjust: '100%',
 
-    color: 'gray.950',
-    caretColor: 'gray.950',
-    backgroundColor: 'white',
+    color: 'text.default',
+    caretColor: 'text.default',
+    backgroundColor: 'surface.default',
 
     lineHeight: '1.4',
     letterSpacing: '-0.015em',
@@ -40,7 +40,7 @@ export const globalCss = defineGlobalStyles({
     textRendering: 'optimizeLegibility',
 
     scrollbarWidth: 'thin',
-    scrollbarColor: '{colors.gray.200} {colors.transparent}',
+    scrollbarColor: '{colors.control.scrollbar.default} {colors.transparent}',
 
     WebkitTapHighlightColor: 'transparent',
   },
@@ -88,7 +88,7 @@ export const globalCss = defineGlobalStyles({
   },
 
   '::placeholder': {
-    color: 'gray.300',
+    color: 'text.disabled',
   },
 
   '::-webkit-search-cancel-button': {
@@ -117,12 +117,12 @@ export const globalCss = defineGlobalStyles({
     borderStyle: 'solid',
     borderColor: '{colors.transparent}',
     borderRadius: 'full',
-    backgroundColor: '{colors.gray.200}',
+    backgroundColor: '{colors.control.scrollbar.default}',
     backgroundClip: 'content-box',
   },
 
   '::-webkit-scrollbar-thumb:hover': {
-    backgroundColor: '{colors.gray.300}',
+    backgroundColor: '{colors.control.scrollbar.hover}',
   },
 });
 

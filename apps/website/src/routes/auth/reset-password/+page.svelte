@@ -58,13 +58,13 @@
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
     <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>비밀번호를 변경하세요</h1>
 
-    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>새로운 비밀번호를 입력해주세요.</div>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint' })}>새로운 비밀번호를 입력해주세요.</div>
   </div>
 
   <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
     <div class={flex({ direction: 'column', gap: '12px' })}>
       <div class={flex({ direction: 'column', gap: '4px' })}>
-        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="password">새 비밀번호</label>
+        <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="password">새 비밀번호</label>
         <TextInput
           id="password"
           aria-invalid={!!form.errors.password}
@@ -74,12 +74,12 @@
         />
 
         {#if form.errors.password}
-          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.password}</div>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.password}</div>
         {/if}
       </div>
 
       <div class={flex({ direction: 'column', gap: '4px' })}>
-        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="confirmPassword">비밀번호 확인</label>
+        <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="confirmPassword">비밀번호 확인</label>
         <TextInput
           id="confirmPassword"
           aria-invalid={!!form.errors.confirmPassword}
@@ -89,7 +89,7 @@
         />
 
         {#if form.errors.confirmPassword}
-          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.confirmPassword}</div>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.confirmPassword}</div>
         {/if}
       </div>
     </div>

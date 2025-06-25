@@ -62,7 +62,7 @@
 
 <div class={flex({ align: 'center' })} transition:fade={{ duration: 100 }}>
   <button
-    class={css({ borderRadius: '6px', padding: '2px', color: 'gray.500', _hover: { backgroundColor: 'gray.200' } })}
+    class={css({ borderRadius: '6px', padding: '2px', color: 'text.faint', _hover: { backgroundColor: 'interactive.hover' } })}
     onclick={handlePlusClick}
     type="button"
   >
@@ -70,7 +70,7 @@
   </button>
 
   <button
-    class={css({ borderRadius: '6px', padding: '2px', color: 'gray.500', _hover: { backgroundColor: 'gray.200' } })}
+    class={css({ borderRadius: '6px', padding: '2px', color: 'text.faint', _hover: { backgroundColor: 'interactive.hover' } })}
     draggable="true"
     onclick={handleGripClick}
     ondragstart={handleDragStart}

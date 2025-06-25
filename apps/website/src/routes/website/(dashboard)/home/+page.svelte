@@ -41,11 +41,11 @@
 <Helmet title="홈" />
 
 <div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>
-  <Icon style={css.raw({ size: '56px', color: 'gray.700', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
+  <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-    <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'gray.700' })}>첫 포스트를 만들어보세요</h1>
-    <p class={css({ fontSize: '14px', color: 'gray.500' })}>아래 버튼을 눌러 포스트를 만들 수 있어요</p>
+    <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>첫 포스트를 만들어보세요</h1>
+    <p class={css({ fontSize: '14px', color: 'text.faint' })}>아래 버튼을 눌러 포스트를 만들 수 있어요</p>
   </div>
 
   <Button

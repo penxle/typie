@@ -122,7 +122,7 @@
       paddingY: '1px',
       fontSize: '13px',
       fontWeight: 'medium',
-      color: 'gray.600',
+      color: 'text.muted',
       pointerEvents: 'auto',
       userSelect: 'none',
       appearance: 'none',
@@ -148,14 +148,14 @@
       paddingY: '1px',
       fontSize: '13px',
       fontWeight: 'medium',
-      color: 'gray.600',
+      color: 'text.muted',
       pointerEvents: 'auto',
       userSelect: 'none',
       _hover: {
-        backgroundColor: 'gray.200',
+        backgroundColor: 'interactive.hover',
       },
       _expanded: {
-        backgroundColor: 'gray.200',
+        backgroundColor: 'interactive.hover',
       },
     })}
     aria-expanded={open}
@@ -166,9 +166,9 @@
     {languages.find((language) => language.id === attrs.language)?.name ?? '?'}
 
     {#if open}
-      <Icon style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronUp} size={14} />
+      <Icon style={css.raw({ color: 'text.faint', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronUp} size={14} />
     {:else}
-      <Icon style={css.raw({ color: 'gray.500', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronDown} size={14} />
+      <Icon style={css.raw({ color: 'text.faint', '& *': { strokeWidth: '[1.5]' } })} icon={IconChevronDown} size={14} />
     {/if}
   </button>
 {/if}
@@ -178,7 +178,7 @@
     class={flex({
       direction: 'column',
       position: 'relative',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       borderWidth: '1px',
       borderRadius: '12px',
       maxHeight: '360px',
@@ -193,10 +193,10 @@
     <div
       class={css({
         padding: '8px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         borderTopRadius: '12px',
         borderBottom: '1px solid',
-        borderColor: 'gray.100',
+        borderColor: 'border.subtle',
       })}
     >
       <label
@@ -207,22 +207,22 @@
           paddingX: '10px',
           borderRadius: '6px',
           borderWidth: '1px',
-          borderColor: 'gray.200',
-          backgroundColor: 'gray.50',
+          borderColor: 'border.default',
+          backgroundColor: 'surface.subtle',
           _focusWithin: {
-            borderColor: 'gray.300',
-            backgroundColor: 'white',
+            borderColor: 'border.strong',
+            backgroundColor: 'surface.default',
           },
         })}
       >
-        <Icon style={css.raw({ color: 'gray.400' })} icon={IconSearch} size={14} />
+        <Icon style={css.raw({ color: 'text.disabled' })} icon={IconSearch} size={14} />
         <input
           bind:this={inputElem}
           class={css({
             fontSize: '13px',
             width: 'full',
             backgroundColor: 'transparent',
-            _placeholder: { color: 'gray.400' },
+            _placeholder: { color: 'text.disabled' },
           })}
           placeholder="언어를 검색하세요"
           type="text"
@@ -245,12 +245,12 @@
                 width: 'full',
                 borderRadius: '6px',
                 backgroundColor: {
-                  base: selectedIndex === index ? 'gray.100' : 'transparent',
-                  _hover: 'gray.100',
-                  _focus: 'gray.100',
-                  _selected: 'gray.100',
+                  base: selectedIndex === index ? 'surface.muted' : 'transparent',
+                  _hover: 'surface.muted',
+                  _focus: 'surface.muted',
+                  _selected: 'surface.muted',
                 },
-                color: attrs.language === language.id ? 'brand.500' : 'gray.700',
+                color: attrs.language === language.id ? 'text.brand' : 'text.default',
                 fontWeight: attrs.language === language.id ? 'medium' : 'normal',
               })}
               aria-pressed={attrs.language === language.id}
@@ -265,14 +265,14 @@
               {language.name}
 
               {#if attrs.language === language.id}
-                <Icon style={css.raw({ color: 'brand.500', '& *': { strokeWidth: '[2]' } })} icon={IconCheck} size={14} />
+                <Icon style={css.raw({ color: 'text.brand', '& *': { strokeWidth: '[2]' } })} icon={IconCheck} size={14} />
               {/if}
             </button>
           </li>
         {/each}
       {:else}
         <li>
-          <div class={css({ padding: '8px', fontSize: '13px', color: 'gray.400', textAlign: 'center' })}>검색 결과가 없습니다</div>
+          <div class={css({ padding: '8px', fontSize: '13px', color: 'text.disabled', textAlign: 'center' })}>검색 결과가 없습니다</div>
         </li>
       {/if}
     </ul>

@@ -147,7 +147,7 @@
           src={inflightUrl}
         />
         <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50', zIndex: '1' })}>
-          <RingSpinner style={css.raw({ size: '24px', color: 'gray.400' })} />
+          <RingSpinner style={css.raw({ size: '24px', color: 'text.disabled' })} />
         </div>
       {/if}
 
@@ -162,7 +162,7 @@
             justifyContent: 'center',
             borderRadius: '4px',
             size: '28px',
-            color: 'white',
+            color: 'text.inverse',
             backgroundColor: '[#363839/70]',
             opacity: '0',
             transition: 'opacity',
@@ -254,7 +254,7 @@
           justifyContent: 'space-between',
           alignItems: 'center',
           borderRadius: '4px',
-          backgroundColor: 'gray.100',
+          backgroundColor: 'surface.muted',
         })}
         use:anchor
       >
@@ -265,7 +265,7 @@
             paddingX: '14px',
             paddingY: '12px',
             fontSize: '14px',
-            color: 'gray.400',
+            color: 'text.disabled',
           })}
         >
           <Icon icon={ImageIcon} size={20} />
@@ -281,10 +281,10 @@
                     marginRight: '12px',
                     borderRadius: '4px',
                     padding: '2px',
-                    color: 'gray.400',
+                    color: 'text.disabled',
                     opacity: '0',
                     transition: 'common',
-                    _hover: { backgroundColor: 'gray.200' },
+                    _hover: { backgroundColor: 'interactive.hover' },
                     _groupHover: { opacity: '100' },
                   },
                   open && { opacity: '100' },
@@ -314,13 +314,13 @@
       borderRadius: '12px',
       padding: '12px',
       width: '380px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       boxShadow: 'small',
       zIndex: '1',
     })}
     use:floating
   >
-    <span class={css({ fontSize: '13px', color: 'gray.600' })}>아래 버튼을 클릭해 이미지를 선택하세요</span>
+    <span class={css({ fontSize: '13px', color: 'text.muted' })}>아래 버튼을 클릭해 이미지를 선택하세요</span>
 
     <Button style={css.raw({ width: 'full' })} onclick={handleUpload} size="sm" variant="secondary">이미지 선택</Button>
   </div>

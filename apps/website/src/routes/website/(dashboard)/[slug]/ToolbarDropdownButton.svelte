@@ -54,11 +54,11 @@
         gap: '4px',
         borderRadius: '4px',
         size: '48px',
-        color: active ? 'brand.400' : 'gray.700',
+        color: active ? 'text.brand' : 'text.subtle',
         transition: 'common',
         _enabled: {
-          _hover: { color: 'brand.400' },
-          _pressed: { color: 'brand.400' },
+          _hover: { color: 'text.brand' },
+          _pressed: { color: 'text.brand' },
         },
         _disabled: { opacity: '50' },
       },
@@ -86,11 +86,11 @@
           width: chevron ? 'fit' : '24px',
           height: '24px',
           textAlign: 'left',
-          color: active ? 'brand.400' : 'gray.700',
+          color: active ? 'text.brand' : 'text.subtle',
           transition: 'common',
           _enabled: {
-            _hover: { color: 'brand.400' },
-            _pressed: { color: 'brand.400' },
+            _hover: { color: 'text.brand' },
+            _pressed: { color: 'text.brand' },
           },
           _disabled: { opacity: '50' },
         },
@@ -107,7 +107,7 @@
       {#if chevron}
         <Icon
           style={css.raw({
-            color: 'gray.500',
+            color: 'text.faint',
             transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
             transitionDuration: '150ms',
           })}
@@ -123,9 +123,9 @@
   <div
     class={css({
       borderWidth: '1px',
-      borderColor: 'gray.100',
+      borderColor: 'border.subtle',
       borderBottomRadius: '4px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       zIndex: '50',
       boxShadow: 'small',
       overflow: 'hidden',

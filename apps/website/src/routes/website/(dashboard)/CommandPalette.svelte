@@ -298,7 +298,7 @@
 <svelte:window onkeydown={handleKeyDown} />
 
 <Modal
-  style={css.raw({ maxWidth: '600px', height: '600px', backgroundColor: 'gray.50' })}
+  style={css.raw({ maxWidth: '600px', height: '600px', backgroundColor: 'surface.subtle' })}
   onclose={close}
   open={app.state.commandPaletteOpen}
 >
@@ -334,7 +334,7 @@
     />
 
     <div class={center({ position: 'absolute', left: '8px', top: '1/2', translate: 'auto', translateY: '-1/2', pointerEvents: 'none' })}>
-      <Icon style={css.raw({ color: 'gray.400' })} icon={SearchIcon} size={18} />
+      <Icon style={css.raw({ color: 'text.disabled' })} icon={SearchIcon} size={18} />
     </div>
 
     <div
@@ -350,7 +350,13 @@
     >
       {#if query}
         <button
-          class={center({ borderRadius: 'full', size: '16px', color: 'gray.500', backgroundColor: 'gray.100', pointerEvents: 'auto' })}
+          class={center({
+            borderRadius: 'full',
+            size: '16px',
+            color: 'text.faint',
+            backgroundColor: 'surface.muted',
+            pointerEvents: 'auto',
+          })}
           onclick={() => {
             query = '';
             selectedResultIndex = null;
@@ -371,8 +377,8 @@
           fontFamily: 'mono',
           fontSize: '13px',
           fontWeight: 'medium',
-          color: 'gray.500',
-          backgroundColor: 'gray.100',
+          color: 'text.faint',
+          backgroundColor: 'surface.muted',
         })}
       >
         <span>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</span>
@@ -384,7 +390,7 @@
     </div>
   </div>
 
-  <div class={css({ height: '1px', backgroundColor: 'gray.200' })}></div>
+  <div class={css({ height: '1px', backgroundColor: 'interactive.hover' })}></div>
 
   <div bind:this={listEl} class={flex({ flexDirection: 'column', flexGrow: '1', paddingX: '12px', overflowY: 'auto' })}>
     {#each searchHitsByType.entries() as [type, hits], index (index)}
@@ -395,7 +401,7 @@
           paddingX: '8px',
           fontSize: '13px',
           fontWeight: 'medium',
-          color: 'gray.500',
+          color: 'text.faint',
         })}
       >
         {match(type)
@@ -412,10 +418,10 @@
             borderRadius: '6px',
             paddingX: '8px',
             paddingY: '6px',
-            _hover: { backgroundColor: 'gray.100' },
-            _selected: { backgroundColor: 'gray.100' },
-            _focus: { backgroundColor: 'gray.100' },
-            '& em': { color: 'brand.500' },
+            _hover: { backgroundColor: 'surface.muted' },
+            _selected: { backgroundColor: 'surface.muted' },
+            _focus: { backgroundColor: 'surface.muted' },
+            '& em': { color: 'text.brand' },
           })}
           aria-selected={selectedResultIndex === hit.idx}
           onclick={() => {
@@ -433,13 +439,17 @@
           type="button"
         >
           {#if hit.__typename === 'SearchHitCommand'}
-            <div class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'gray.500', backgroundColor: 'gray.100' })}>
+            <div
+              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+            >
               <Icon icon={hit.icon} size={16} />
             </div>
 
             <span class={css({ fontSize: '14px', fontWeight: 'medium' })}>{hit.name}</span>
           {:else if hit.__typename === 'SearchHitPost'}
-            <div class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'gray.500', backgroundColor: 'gray.100' })}>
+            <div
+              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+            >
               <Icon icon={FileIcon} size={16} />
             </div>
 
@@ -453,7 +463,7 @@
             </div>
 
             {#if hit.text}
-              <div class={css({ color: 'gray.600', fontSize: '12px', truncate: true })}>
+              <div class={css({ color: 'text.muted', fontSize: '12px', truncate: true })}>
                 <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                 {@html hit.text}
               </div>
@@ -467,7 +477,7 @@
           flexDirection: 'column',
           flexGrow: '1',
           width: 'full',
-          color: 'gray.600',
+          color: 'text.muted',
           gap: '2px',
         })}
       >
@@ -477,7 +487,7 @@
     {/each}
   </div>
 
-  <div class={css({ height: '1px', backgroundColor: 'gray.200' })}></div>
+  <div class={css({ height: '1px', backgroundColor: 'interactive.hover' })}></div>
 
   <div
     class={flex({
@@ -485,8 +495,8 @@
       gap: '16px',
       paddingX: '12px',
       paddingY: '12px',
-      color: 'gray.500',
-      backgroundColor: 'gray.100',
+      color: 'text.faint',
+      backgroundColor: 'surface.muted',
     })}
   >
     <div class={flex({ alignItems: 'center', gap: '8px' })}>

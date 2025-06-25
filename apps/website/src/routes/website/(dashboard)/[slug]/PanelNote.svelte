@@ -23,12 +23,12 @@
 <div class={flex({ flexDirection: 'column', gap: '16px', flexGrow: '1' })}>
   <div class={flex({ justifyContent: 'space-between', alignItems: 'center', paddingX: '20px' })}>
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <Icon style={css.raw({ color: 'gray.500' })} icon={NotebookTabsIcon} size={12} />
-      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>작성 노트</div>
+      <Icon style={css.raw({ color: 'text.faint' })} icon={NotebookTabsIcon} size={12} />
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>작성 노트</div>
     </div>
 
     <button
-      class={center({ size: '20px', color: 'gray.500', transition: 'common', _hover: { color: 'gray.700' } })}
+      class={center({ size: '20px', color: 'text.faint', transition: 'common', _hover: { color: 'text.subtle' } })}
       onclick={() => (app.preference.current.noteExpanded = !app.preference.current.noteExpanded)}
       type="button"
       use:tooltip={{ message: app.preference.current.noteExpanded ? '작게 보기' : '크게 보기' }}
@@ -44,7 +44,7 @@
       paddingX: '20px',
       paddingBottom: '20px',
       fontSize: '13px',
-      color: 'gray.700',
+      color: 'text.subtle',
       wordBreak: 'break-all',
       resize: 'none',
     })}

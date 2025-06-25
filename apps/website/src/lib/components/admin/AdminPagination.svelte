@@ -37,7 +37,7 @@
         borderColor: 'amber.500',
         padding: '6px',
         backgroundColor: 'transparent',
-        color: pageNumber === 1 ? 'gray.600' : 'amber.500',
+        color: pageNumber === 1 ? 'gray.400' : 'amber.500',
         cursor: pageNumber === 1 ? 'not-allowed' : 'pointer',
         _hover:
           pageNumber === 1
@@ -59,7 +59,7 @@
         borderColor: 'amber.500',
         padding: '6px',
         backgroundColor: 'transparent',
-        color: pageNumber === totalPages ? 'gray.600' : 'amber.500',
+        color: pageNumber === totalPages ? 'gray.400' : 'amber.500',
         cursor: pageNumber === totalPages ? 'not-allowed' : 'pointer',
         _hover:
           pageNumber === totalPages

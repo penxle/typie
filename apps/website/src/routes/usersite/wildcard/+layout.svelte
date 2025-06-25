@@ -85,7 +85,7 @@
       position: 'sticky',
       top: '0',
       zIndex: '50',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
     })}
   >
     <AdminImpersonateBanner {$query} />
@@ -95,10 +95,10 @@
         justifyContent: 'space-between',
         alignItems: 'center',
         borderBottomWidth: '1px',
-        borderBottomColor: 'gray.200',
+        borderColor: 'border.default',
         paddingX: '20px',
         height: '52px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
       })}
     >
       <a class={css({ flexShrink: '0', height: '20px' })} href={env.PUBLIC_WEBSITE_URL} rel="noopener noreferrer" target="_blank">
@@ -110,7 +110,7 @@
           {#snippet button()}
             {#if $query.me?.avatar}
               <Img
-                style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'gray.100', borderRadius: 'full' })}
+                style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'border.subtle', borderRadius: 'full' })}
                 $image={$query.me.avatar}
                 alt={`${$query.me.name}의 아바타`}
                 size={32}
@@ -120,9 +120,9 @@
                 class={css({
                   size: '32px',
                   borderWidth: '1px',
-                  borderColor: 'gray.100',
+                  borderColor: 'border.subtle',
                   borderRadius: 'full',
-                  backgroundColor: 'gray.200',
+                  backgroundColor: 'interactive.hover',
                 })}
               ></div>
             {/if}

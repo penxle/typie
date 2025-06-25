@@ -139,7 +139,7 @@
                     const decoration = Decoration.inline(error.from, error.to, {
                       class: css({
                         textDecoration: 'underline',
-                        textDecorationColor: 'red.500',
+                        textDecorationColor: 'text.danger',
                         textDecorationStyle: 'wavy',
                         textUnderlineOffset: '2px',
                       }),
@@ -239,7 +239,7 @@
 
 {#if inflight}
   <div class={center({ size: '48px' })}>
-    <RingSpinner style={css.raw({ size: '24px', color: 'gray.500' })} />
+    <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
   </div>
 {:else}
   <ToolbarButton icon={SpellCheckIcon} label="맞춤법" onclick={spellcheck} size="large" />
@@ -249,7 +249,7 @@
   {@const error = errors.find((error) => error.id === activeId)}
 
   {#if error}
-    <div class={flex({ alignItems: 'center', gap: '4px', backgroundColor: 'white' })} use:floating>
+    <div class={flex({ alignItems: 'center', gap: '4px', backgroundColor: 'surface.default' })} use:floating>
       {#each error.corrections as correction, index (index)}
         <button
           class={flex({
@@ -257,14 +257,14 @@
             alignItems: 'center',
             gap: '4px',
             borderWidth: '1px',
-            borderColor: 'red.200',
+            borderColor: 'red.600',
             borderRadius: '4px',
             paddingX: '4px',
             paddingY: '4px',
             fontSize: '13px',
             fontWeight: 'semibold',
-            color: 'red.500',
-            backgroundColor: 'red.50',
+            color: 'text.danger',
+            backgroundColor: 'accent.danger.subtle',
             transition: 'common',
             boxShadow: 'small',
             _hover: {
@@ -299,7 +299,7 @@
           {@html error.explanation}
         {/snippet}
 
-        <Icon style={css.raw({ color: 'red.500' })} icon={CircleHelpIcon} size={16} />
+        <Icon style={css.raw({ color: 'text.danger' })} icon={CircleHelpIcon} size={16} />
       </Tooltip>
     </div>
   {/if}

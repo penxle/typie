@@ -152,15 +152,15 @@
           borderRadius: '6px',
           transition: 'common',
           cursor: 'pointer',
-          _supportHover: { backgroundColor: 'gray.100' },
-          '&:has([aria-pressed="true"])': { backgroundColor: 'gray.100' },
+          _supportHover: { backgroundColor: 'surface.muted' },
+          '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
         },
         $folder.entity.depth > 0 && {
           borderLeftWidth: '1px',
           borderLeftRadius: '0',
           marginLeft: '-1px',
           paddingLeft: '14px',
-          _supportHover: { borderLeftColor: 'gray.300' },
+          _supportHover: { borderColor: 'border.strong' },
         },
       ),
     )}
@@ -175,12 +175,12 @@
   >
     <div
       class={css(
-        { flex: 'none', borderRadius: 'full', backgroundColor: 'gray.200', size: '4px' },
-        $folder.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'brand.500' },
+        { flex: 'none', borderRadius: 'full', backgroundColor: 'interactive.hover', size: '4px' },
+        $folder.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
       )}
     ></div>
 
-    <Icon style={css.raw({ color: 'gray.500' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
+    <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
 
     {#if editing}
       <form
@@ -207,7 +207,7 @@
             flexGrow: '1',
             fontSize: '14px',
             fontWeight: 'medium',
-            color: 'gray.600',
+            color: 'text.muted',
             minWidth: '0',
           })}
           defaultValue={$folder.name}
@@ -227,7 +227,7 @@
           flexGrow: '1',
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'gray.600',
+          color: 'text.muted',
           wordBreak: 'break-all',
           lineClamp: '1',
         })}
@@ -241,12 +241,12 @@
             class={center({
               borderRadius: '4px',
               size: '16px',
-              color: 'gray.400',
+              color: 'text.disabled',
               opacity: '0',
               transition: 'common',
-              _hover: { backgroundColor: 'gray.200' },
+              _hover: { backgroundColor: 'interactive.hover' },
               _groupHover: { opacity: '100' },
-              _pressed: { backgroundColor: 'gray.200', opacity: '100' },
+              _pressed: { backgroundColor: 'interactive.hover', opacity: '100' },
             })}
             aria-pressed={open}
           >
@@ -343,7 +343,7 @@
     {#each $entities as entity (entity.id)}
       <Entity $entity={entity} />
     {:else}
-      <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'gray.400' })}>
+      <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
         폴더가 비어있어요
       </div>
     {/each}
@@ -353,10 +353,17 @@
 {#snippet descendantsView()}
   {#if !$descendants || loadingDescendants}
     <div
-      class={flex({ alignItems: 'center', gap: '6px', borderRadius: '8px', paddingX: '12px', paddingY: '8px', backgroundColor: 'gray.50' })}
+      class={flex({
+        alignItems: 'center',
+        gap: '6px',
+        borderRadius: '8px',
+        paddingX: '12px',
+        paddingY: '8px',
+        backgroundColor: 'surface.subtle',
+      })}
     >
-      <RingSpinner style={css.raw({ size: '13px', color: 'gray.500' })} />
-      <span class={css({ fontSize: '13px', color: 'gray.500' })}>함께 삭제될 폴더와 포스트 계산중...</span>
+      <RingSpinner style={css.raw({ size: '13px', color: 'text.faint' })} />
+      <span class={css({ fontSize: '13px', color: 'text.faint' })}>함께 삭제될 폴더와 포스트 계산중...</span>
     </div>
   {:else}
     {@const folders = $descendants.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
@@ -370,11 +377,11 @@
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '8px',
-          backgroundColor: 'red.50',
+          backgroundColor: 'accent.danger.subtle',
         })}
       >
-        <Icon style={css.raw({ color: 'red.600' })} icon={TriangleAlertIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'red.600' })}>
+        <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
           {#if folders > 0 && posts > 0}
             {folders}개의 하위 폴더와 {posts}개의 하위 포스트가 함께 삭제돼요
           {:else if folders > 0}
@@ -392,11 +399,11 @@
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '8px',
-          backgroundColor: 'green.50',
+          backgroundColor: 'accent.success.subtle',
         })}
       >
-        <Icon style={css.raw({ color: 'green.600' })} icon={CheckIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'green.600' })}>비어있는 폴더에요</span>
+        <Icon style={css.raw({ color: 'text.success' })} icon={CheckIcon} size={14} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.success' })}>비어있는 폴더에요</span>
       </div>
     {/if}
   {/if}

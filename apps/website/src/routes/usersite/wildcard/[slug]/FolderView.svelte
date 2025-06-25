@@ -97,14 +97,14 @@
         paddingBottom: '80px',
         width: 'full',
         maxWidth: '860px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
       })}
     >
       <div class={flex({ alignItems: 'center', gap: '6px' })}>
         {#each $entityView.ancestors as ancestor (ancestor.id)}
           {#if ancestor.node.__typename === 'FolderView'}
-            <a class={css({ fontSize: '14px', color: 'gray.400' })} href={ancestor.url}>{ancestor.node.name}</a>
-            <div class={css({ fontSize: '14px', color: 'gray.300' })}>/</div>
+            <a class={css({ fontSize: '14px', color: 'text.disabled' })} href={ancestor.url}>{ancestor.node.name}</a>
+            <div class={css({ fontSize: '14px', color: 'text.disabled' })}>/</div>
           {/if}
         {/each}
 
@@ -122,16 +122,16 @@
           marginTop: { base: '12px', lg: '16px' },
           fontSize: '15px',
           fontWeight: 'medium',
-          color: 'gray.600',
+          color: 'text.muted',
           lgDown: { fontSize: '14px' },
         })}
       >
         {#if folders.length > 0}
-          <span class={css({ color: 'gray.400' })}>폴더 {folders.length}개</span>
+          <span class={css({ color: 'text.disabled' })}>폴더 {folders.length}개</span>
         {/if}
 
         {#if posts.length > 0}
-          <span class={css({ color: 'gray.400' })}>포스트 {posts.length}개</span>
+          <span class={css({ color: 'text.disabled' })}>포스트 {posts.length}개</span>
         {/if}
 
         <ShareLinkPopover href={$entityView.url} />
@@ -150,19 +150,19 @@
                       align: 'center',
                       gap: '8px',
                       borderWidth: '1px',
-                      borderColor: 'gray.100',
+                      borderColor: 'border.subtle',
                       borderRadius: '8px',
                       paddingY: '12px',
                       paddingX: '16px',
                       fontSize: '15px',
-                      color: 'gray.800',
-                      backgroundColor: 'gray.50',
+                      color: 'text.subtle',
+                      backgroundColor: 'surface.subtle',
                       boxShadow: 'small',
-                      _hover: { backgroundColor: 'gray.200' },
+                      _hover: { backgroundColor: 'interactive.hover' },
                     })}
                     href={folder.url}
                   >
-                    <Icon style={css.raw({ color: 'gray.500' })} icon={FolderIcon} />
+                    <Icon style={css.raw({ color: 'text.faint' })} icon={FolderIcon} />
                     <p class={css({ fontWeight: 'semibold', truncate: true })}>{folder.node.name}</p>
                   </a>
                 {/if}
@@ -180,7 +180,7 @@
                 direction: 'column',
                 gap: '2px',
                 borderWidth: '1px',
-                borderColor: 'gray.100',
+                borderColor: 'border.subtle',
                 borderRadius: '8px',
                 padding: '2px',
                 boxShadow: 'small',
@@ -201,19 +201,25 @@
                       paddingY: '4px',
                       height: { base: '64px', lg: '64px' },
                       _last: { borderBottomRadius: '12px' },
-                      _hover: { backgroundColor: 'gray.100' },
+                      _hover: { backgroundColor: 'surface.muted' },
                     })}
                     href={post.url}
                   >
-                    <Icon style={css.raw({ color: 'gray.500' })} icon={FileIcon} />
+                    <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
 
                     <div class={css({ flexGrow: '1' })}>
-                      <p class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'gray.700', lineClamp: '2' })}>{post.node.title}</p>
-                      <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.600', lineClamp: '1' })}>{post.node.subtitle}</p>
+                      <p class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.subtle', lineClamp: '2' })}>
+                        {post.node.title}
+                      </p>
+                      <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted', lineClamp: '1' })}>
+                        {post.node.subtitle}
+                      </p>
                     </div>
 
                     {#if post.node.coverImage}
-                      <div class={css({ borderRadius: '6px', height: 'full', aspectRatio: '[5 / 2]', backgroundColor: 'gray.300' })}>
+                      <div
+                        class={css({ borderRadius: '6px', height: 'full', aspectRatio: '[5 / 2]', backgroundColor: 'interactive.hover' })}
+                      >
                         <Img
                           style={css.raw({ borderRadius: '6px' })}
                           $image={post.node.coverImage}
@@ -238,7 +244,7 @@
               paddingY: '36px',
               textAlign: 'center',
               fontSize: '14px',
-              color: 'gray.400',
+              color: 'text.disabled',
             })}
           >
             포스트가 없어요

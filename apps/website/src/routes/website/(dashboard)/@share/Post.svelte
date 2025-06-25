@@ -149,11 +149,11 @@
     }}
   >
     {#if copied}
-      <Icon style={css.raw({ color: 'blue.600' })} icon={CheckIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'blue.600' })}>복사되었어요</div>
+      <Icon style={css.raw({ color: 'text.link' })} icon={CheckIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.link' })}>복사되었어요</div>
     {:else}
-      <Icon style={css.raw({ color: 'blue.600' })} icon={LinkIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'blue.600' })}>링크 복사</div>
+      <Icon style={css.raw({ color: 'text.link' })} icon={LinkIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.link' })}>링크 복사</div>
     {/if}
   </button>
 </div>
@@ -162,12 +162,12 @@
 
 <div class={flex({ flexDirection: 'column', gap: '16px', paddingX: '16px', paddingTop: '16px', paddingBottom: '24px' })}>
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500' })}>포스트 조회 권한</div>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>포스트 조회 권한</div>
 
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={BlendIcon} size={14} />
-        <div class={css({ fontSize: '12px', color: 'gray.700' })}>공개 범위</div>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={BlendIcon} size={14} />
+        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>공개 범위</div>
       </div>
 
       <Select
@@ -192,8 +192,8 @@
     <div class={flex({ flexDirection: 'column', gap: '8px' })}>
       <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'gray.500' })} icon={LockKeyholeIcon} />
-          <div class={css({ fontSize: '12px', color: 'gray.700' })}>비밀번호 보호</div>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={LockKeyholeIcon} />
+          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>비밀번호 보호</div>
         </div>
 
         <Switch bind:checked={form.fields.hasPassword} />
@@ -211,7 +211,7 @@
               height: '32px',
               fontFamily: 'mono',
               fontSize: '12px',
-              color: 'gray.700',
+              color: 'text.subtle',
             })}
             autocomplete="off"
             data-1p-ignore
@@ -226,10 +226,10 @@
               top: '1/2',
               right: '8px',
               size: '20px',
-              color: 'gray.300',
+              color: 'text.disabled',
               translate: 'auto',
               translateY: '-1/2',
-              _hover: { color: 'gray.400' },
+              _hover: { color: 'text.disabled' },
             })}
             onclick={() => (showPassword = !showPassword)}
             type="button"
@@ -242,8 +242,8 @@
 
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={IdCardIcon} />
-        <div class={css({ fontSize: '12px', color: 'gray.700' })}>연령 제한</div>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={IdCardIcon} />
+        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>연령 제한</div>
       </div>
 
       <Select
@@ -258,12 +258,12 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500' })}>포스트 상호작용</div>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>포스트 상호작용</div>
 
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={MessageSquareIcon} />
-        <div class={css({ fontSize: '12px', color: 'gray.700' })}>댓글</div>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={MessageSquareIcon} />
+        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>댓글</div>
       </div>
 
       <Select
@@ -277,8 +277,8 @@
 
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={SmileIcon} />
-        <div class={css({ fontSize: '12px', color: 'gray.700' })}>이모지 반응</div>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={SmileIcon} />
+        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>이모지 반응</div>
       </div>
 
       <Select
@@ -292,14 +292,14 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500' })}>포스트 보호</div>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>포스트 보호</div>
 
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={ShieldIcon} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={ShieldIcon} />
         <div class={flex({ flexDirection: 'column' })}>
-          <div class={css({ fontSize: '12px', color: 'gray.700' })}>내용 보호</div>
-          <p class={css({ fontSize: '10px', color: 'gray.500' })}>우클릭, 복사 및 다운로드 제한</p>
+          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>내용 보호</div>
+          <p class={css({ fontSize: '10px', color: 'text.faint' })}>우클릭, 복사 및 다운로드 제한</p>
         </div>
       </div>
 

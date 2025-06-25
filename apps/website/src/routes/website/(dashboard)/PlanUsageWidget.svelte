@@ -87,15 +87,15 @@
       bottom: '0',
       zIndex: '50',
       borderTopWidth: '1px',
-      borderColor: 'gray.100',
+      borderColor: 'border.subtle',
       paddingX: '12px',
       paddingTop: '12px',
       paddingBottom: '20px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       transitionProperty: 'background-color',
       transitionDuration: '250ms',
       transitionTimingFunction: 'ease',
-      _hover: { backgroundColor: 'gray.50' },
+      _hover: { backgroundColor: 'surface.subtle' },
     })}
     onclick={() => {
       pushState('', { shallowRoute: '/preference/billing' });
@@ -105,9 +105,9 @@
   >
     <div class={flex({ flexDirection: 'column', gap: '2px', width: 'full' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '2px' })}>
-        <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500' })}>글자 수</div>
+        <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>글자 수</div>
 
-        <div class={css({ fontSize: '12px', color: 'gray.500' })}>
+        <div class={css({ fontSize: '12px', color: 'text.faint' })}>
           {comma($site.usage.totalCharacterCount)}자 / {comma(planRule.maxTotalCharacterCount)}자
         </div>
       </div>
@@ -120,7 +120,7 @@
             left: '0',
             insetY: '0',
             borderRightRadius: 'full',
-            backgroundColor: 'brand.400',
+            backgroundColor: 'accent.brand.default',
             maxWidth: 'full',
             transitionProperty: 'width',
             transitionDuration: '150ms',
@@ -128,15 +128,15 @@
           })}
         ></div>
 
-        <div class={css({ backgroundColor: 'gray.200', height: 'full' })}></div>
+        <div class={css({ backgroundColor: 'interactive.hover', height: 'full' })}></div>
       </div>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '2px', width: 'full' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '4px' })}>
-        <div class={css({ fontSize: '12px', color: 'gray.700' })}>파일 업로드</div>
+        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>파일 업로드</div>
 
-        <div class={css({ fontSize: '12px', color: 'gray.500' })}>
+        <div class={css({ fontSize: '12px', color: 'text.faint' })}>
           {formatBytes($site.usage.totalBlobSize)} / {formatBytes(planRule.maxTotalBlobSize)}
         </div>
       </div>
@@ -149,7 +149,7 @@
             left: '0',
             insetY: '0',
             borderRightRadius: 'full',
-            backgroundColor: 'brand.400',
+            backgroundColor: 'accent.brand.default',
             maxWidth: 'full',
             transitionProperty: 'width',
             transitionDuration: '150ms',
@@ -157,7 +157,7 @@
           })}
         ></div>
 
-        <div class={css({ backgroundColor: 'gray.200', height: 'full' })}></div>
+        <div class={css({ backgroundColor: 'interactive.hover', height: 'full' })}></div>
       </div>
     </div>
   </button>

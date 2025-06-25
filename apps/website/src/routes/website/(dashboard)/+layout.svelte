@@ -123,15 +123,15 @@
 
 {#if isMobileDevice()}
   <div
-    style:--grid-line-color={token('colors.brand.100')}
-    style:--cross-line-color={token('colors.brand.50')}
+    style:--grid-line-color={token('colors.decoration.grid.brand')}
+    style:--cross-line-color={token('colors.decoration.grid.brand.subtle')}
     style:--grid-size="30px"
     style:--line-thickness="1px"
     class={center({
       width: '[100dvw]',
       height: '[100dvh]',
       overflowY: 'auto',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       backgroundImage:
         '[repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size))]',
       backgroundSize: 'var(--grid-size) var(--grid-size)',
@@ -146,7 +146,7 @@
         padding: { base: '24px', lg: '48px' },
         width: 'full',
         maxWidth: '400px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         boxShadow: 'medium',
       })}
     >
@@ -161,13 +161,13 @@
           글쓰기를 이어가 보세요
         </h1>
 
-        <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>
+        <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint' })}>
           모바일에서도 타이피의 몰입감 있는 글쓰기 환경을 그대로 이용하실 수 있어요.
         </div>
       </div>
 
-      <div class={css({ borderRadius: '8px', paddingY: '8px', textAlign: 'center', backgroundColor: 'gray.50' })}>
-        <p class={css({ fontSize: '13px', color: 'gray.500' })}>현재 로그인 정보</p>
+      <div class={css({ borderRadius: '8px', paddingY: '8px', textAlign: 'center', backgroundColor: 'surface.subtle' })}>
+        <p class={css({ fontSize: '13px', color: 'text.faint' })}>현재 로그인 정보</p>
         <p class={css({ marginTop: '2px', fontSize: '14px' })}>{$query.me.email}</p>
       </div>
 
@@ -187,7 +187,7 @@
         position: 'relative',
         flexGrow: '1',
         alignItems: 'stretch',
-        backgroundColor: 'gray.100',
+        backgroundColor: 'surface.muted',
         overflow: 'hidden',
       })}
     >
@@ -200,8 +200,8 @@
           borderRadius: '4px',
           marginY: '8px',
           marginRight: '8px',
-          backgroundColor: 'white',
-          boxShadow: '[0 3px 6px -2px {colors.gray.950/3}, 0 1px 1px {colors.gray.950/5}]',
+          backgroundColor: 'surface.default',
+          boxShadow: '[0 3px 6px -2px {colors.shadow.default/3}, 0 1px 1px {colors.shadow.default/5}]',
           overflowY: 'auto',
         })}
       >

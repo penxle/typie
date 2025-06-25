@@ -131,10 +131,10 @@
       class={center({
         display: open || hoveredColumnIndex === i || focusedColumnIndex === i ? 'flex' : 'none',
         _hover: {
-          backgroundColor: 'gray.200',
+          backgroundColor: 'interactive.hover',
         },
         _pressed: {
-          color: 'white',
+          color: 'text.inverse',
           backgroundColor: '[var(--prosemirror-color-selection)]',
           borderWidth: '0',
           _hover: {
@@ -143,11 +143,11 @@
         },
         width: '24px',
         height: '18px',
-        color: 'gray.500',
+        color: 'text.faint',
         borderRadius: '4px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         borderWidth: '1px',
-        borderColor: 'gray.300',
+        borderColor: 'border.strong',
         boxShadow: 'medium',
       })}
       aria-pressed={open}

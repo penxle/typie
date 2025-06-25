@@ -42,7 +42,7 @@
 
 <div
   class={css({
-    background: 'white',
+    backgroundColor: 'white',
     border: '1px solid',
     borderColor: 'gray.200',
     borderRadius: '[16px]',

@@ -140,7 +140,7 @@
             insetY: '0',
             fontSize: '13px',
             fontWeight: 'medium',
-            color: 'gray.500',
+            color: 'text.faint',
           })}
         >
           {weekday}
@@ -158,7 +158,7 @@
           paddingY: '1px',
           fontSize: '13px',
           fontWeight: 'medium',
-          color: 'gray.500',
+          color: 'text.faint',
         })}
       >
         {month.month}월
@@ -187,8 +187,8 @@
       borderRadius: '6px',
       paddingX: '10px',
       paddingY: '6px',
-      color: 'white',
-      backgroundColor: 'gray.600',
+      color: 'text.inverse',
+      backgroundColor: 'surface.overlay',
       zIndex: '50',
     })}
     use:floating

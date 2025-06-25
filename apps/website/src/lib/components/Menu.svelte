@@ -158,7 +158,7 @@
         borderRadius: '8px',
         paddingY: '2px',
         minWidth: '160px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         boxShadow: 'small',
         overflowY: 'auto',
         zIndex: '50',
@@ -182,7 +182,7 @@
     {/if}
 
     {#if action}
-      <li class={css({ position: 'sticky', bottom: '0', paddingBottom: '12px', backgroundColor: 'white' })}>
+      <li class={css({ position: 'sticky', bottom: '0', paddingBottom: '12px', backgroundColor: 'surface.default' })}>
         {@render action?.()}
       </li>
     {/if}

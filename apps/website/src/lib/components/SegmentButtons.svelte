@@ -20,16 +20,16 @@
       activeIndicator: {
         position: 'absolute',
         borderRadius: '4px',
-        background: 'white',
+        backgroundColor: 'surface.default',
         boxShadow: 'small',
         transition: '[left 100ms cubic-bezier(0.3, 0, 0, 1)]',
       },
       button: {
         flex: '1',
         zIndex: '1',
-        color: 'gray.600',
+        color: 'text.muted',
         _selected: {
-          color: 'gray.950',
+          color: 'text.default',
         },
       },
     },
@@ -73,7 +73,7 @@
       flexShrink: '0',
       padding: '4px',
       borderRadius: '8px',
-      backgroundColor: 'gray.100',
+      backgroundColor: 'surface.muted',
     },
     style,
   )}
