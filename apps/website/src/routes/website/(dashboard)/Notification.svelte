@@ -95,7 +95,7 @@
     left: open ? '64px' : '59px',
     insetY: '0',
     width: '0',
-    backgroundColor: 'white',
+    backgroundColor: 'surface.default',
     boxShadow: 'small',
     opacity: open ? '100' : '0',
     zIndex: '50',
@@ -120,7 +120,7 @@
     class={flex({
       flexDirection: 'column',
       borderRightWidth: '1px',
-      borderRightColor: 'gray.100',
+      borderColor: 'border.subtle',
       borderRightRadius: '4px',
       size: 'full',
     })}
@@ -133,7 +133,7 @@
         gap: '4px',
         paddingX: '12px',
         paddingY: '8px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
       })}
     >
       <p class={css({ fontSize: '14px', fontWeight: 'bold' })}>알림</p>
@@ -142,9 +142,9 @@
         class={center({
           borderRadius: '4px',
           size: '24px',
-          color: 'gray.500',
+          color: 'text.faint',
           transition: 'common',
-          _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+          _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
         })}
         onclick={async () => {
           await markAllNotificationsAsRead();
@@ -164,8 +164,8 @@
             borderRadius: '6px',
             fontSize: '14px',
             fontWeight: 'medium',
-            color: 'gray.700',
-            _hover: { backgroundColor: 'gray.100' },
+            color: 'text.subtle',
+            _hover: { backgroundColor: 'surface.muted' },
           })}
         >
           <button
@@ -203,7 +203,7 @@
                   left: '6px',
                   borderRadius: 'full',
                   size: '4px',
-                  backgroundColor: 'brand.500',
+                  backgroundColor: 'accent.brand.default',
                 })}
               ></div>
             {/if}
@@ -221,7 +221,7 @@
               </p>
 
               <date
-                class={css({ display: 'block', flex: 'none', marginTop: '2px', fontSize: '12px', color: 'gray.400' })}
+                class={css({ display: 'block', flex: 'none', marginTop: '2px', fontSize: '12px', color: 'text.disabled' })}
                 datetime={notification.data.comment.createdAt}
               >
                 {dayjs(notification.data.comment.createdAt).formatAsDateTime()}
@@ -237,7 +237,7 @@
             fontSize: '14px',
             textAlign: 'center',
             fontWeight: 'medium',
-            color: 'gray.400',
+            color: 'text.disabled',
           })}
         >
           알림이 없어요

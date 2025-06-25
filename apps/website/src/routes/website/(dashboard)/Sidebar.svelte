@@ -100,16 +100,16 @@
   <button
     class={center({
       borderWidth: '1px',
-      borderColor: 'gray.300',
+      borderColor: 'border.strong',
       borderRadius: '8px',
       size: '32px',
-      color: 'gray.500',
-      backgroundColor: 'gray.50',
+      color: 'text.faint',
+      backgroundColor: 'surface.subtle',
       boxShadow: 'small',
       transition: 'common',
       _hover: {
-        color: 'gray.700',
-        backgroundColor: 'gray.100',
+        color: 'text.subtle',
+        backgroundColor: 'surface.muted',
         boxShadow: 'medium',
       },
     })}
@@ -164,7 +164,7 @@
         <SidebarButton
           icon={CircleFadingArrowUpIcon}
           iconStyle={css.raw({
-            color: 'brand.500',
+            color: 'text.brand',
             animationName: 'alarm',
             animationDuration: '2s',
             animationDelay: '500ms',

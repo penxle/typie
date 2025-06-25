@@ -103,7 +103,7 @@
         paddingX: '12px',
         width: '200px',
         borderRightWidth: '1px',
-        borderRightColor: 'gray.100',
+        borderColor: 'border.subtle',
       })}
     >
       <nav class={flex({ direction: 'column', gap: '1px' })}>
@@ -116,13 +116,13 @@
               paddingX: '10px',
               paddingY: '8px',
               fontSize: '13px',
-              color: 'gray.600',
+              color: 'text.muted',
               transition: 'common',
-              _hover: { backgroundColor: 'gray.50' },
+              _hover: { backgroundColor: 'surface.subtle' },
               _selected: {
-                color: 'gray.900',
+                color: 'text.default',
                 fontWeight: 'medium',
-                backgroundColor: 'gray.100',
+                backgroundColor: 'surface.muted',
               },
             })}
             aria-selected={currentTab?.path === path}
@@ -132,7 +132,7 @@
             role="tab"
             type="button"
           >
-            <Icon style={css.raw({ color: currentTab?.path === path ? 'gray.700' : 'gray.400' })} {icon} size={16} />
+            <Icon {icon} size={16} />
             <span>{label}</span>
           </button>
         {/each}

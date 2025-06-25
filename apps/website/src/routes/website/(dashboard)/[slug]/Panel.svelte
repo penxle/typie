@@ -70,7 +70,7 @@
       flexDirection: 'column',
       gap: '16px',
       borderLeftWidth: '1px',
-      borderLeftColor: 'gray.100',
+      borderColor: 'border.subtle',
       paddingTop: '16px',
       minWidth: 'var(--min-width)',
       width: 'var(--width)',
@@ -80,7 +80,7 @@
   >
     <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>
           {#if $post.type === PostType.NORMAL}
             포스트
           {:else if $post.type === PostType.TEMPLATE}
@@ -95,7 +95,7 @@
           target="_blank"
           use:tooltip={{ message: '사이트에서 열기' }}
         >
-          <Icon style={css.raw({ color: 'gray.500', _groupHover: { color: 'gray.700' } })} icon={ExternalLinkIcon} size={14} />
+          <Icon style={css.raw({ color: 'text.faint', _groupHover: { color: 'text.subtle' } })} icon={ExternalLinkIcon} size={14} />
         </a>
       </div>
     </div>
@@ -105,10 +105,16 @@
     <div class={flex({ flexDirection: 'column', gap: '20px', paddingX: '20px' })}>
       <div class={flex({ flexDirection: 'column', gap: '6px' })}>
         <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>공유</div>
+          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>공유</div>
 
           <button
-            class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.500', transition: 'common', _hover: { color: 'gray.700' } })}
+            class={css({
+              fontSize: '13px',
+              fontWeight: 'medium',
+              color: 'text.faint',
+              transition: 'common',
+              _hover: { color: 'text.subtle' },
+            })}
             onclick={() => {
               app.state.shareOpen = $post.entity.id;
               mixpanel.track('open_post_share_modal', { via: 'panel' });
@@ -128,8 +134,8 @@
               width: 'fit',
               fontSize: '12px',
               fontWeight: 'semibold',
-              color: 'blue.500',
-              backgroundColor: 'blue.100',
+              color: 'text.link',
+              backgroundColor: { base: 'blue.100', _dark: 'blue.950' },
               userSelect: 'none',
             })}
           >
@@ -144,8 +150,8 @@
               width: 'fit',
               fontSize: '12px',
               fontWeight: 'semibold',
-              color: 'gray.600',
-              backgroundColor: 'gray.200',
+              color: 'text.muted',
+              backgroundColor: 'interactive.hover',
               userSelect: 'none',
             })}
           >
@@ -155,17 +161,17 @@
       </div>
 
       <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>최초 생성 시각</div>
-        <div class={css({ fontSize: '13px', color: 'gray.700' })}>{dayjs($post.createdAt).formatAsDateTime()}</div>
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>최초 생성 시각</div>
+        <div class={css({ fontSize: '13px', color: 'text.subtle' })}>{dayjs($post.createdAt).formatAsDateTime()}</div>
       </div>
 
       <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>마지막 수정 시각</div>
-        <div class={css({ fontSize: '13px', color: 'gray.700' })}>{dayjs($post.updatedAt).formatAsDateTime()}</div>
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>마지막 수정 시각</div>
+        <div class={css({ fontSize: '13px', color: 'text.subtle' })}>{dayjs($post.updatedAt).formatAsDateTime()}</div>
       </div>
 
       <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'gray.700' })}>본문 정보</div>
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>본문 정보</div>
 
         <div class={flex({ flexDirection: 'column' })}>
           <PanelCharacterCountWidget {editor} />

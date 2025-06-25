@@ -20,19 +20,19 @@
         paddingY: '2px',
         borderWidth: '1px',
         borderRadius: '4px',
-        borderColor: 'gray.200',
+        borderColor: 'border.default',
         fontFamily: 'mono',
         fontSize: '12px',
         fontWeight: 'medium',
-        color: 'gray.800',
-        backgroundColor: 'gray.100',
+        color: 'text.subtle',
+        backgroundColor: 'surface.muted',
       })}
     >
       {key}
     </kbd>
 
     {#if index < keys.length - 1}
-      <span class={css({ color: 'gray.500', marginX: '1px' })}>+</span>
+      <span class={css({ color: 'text.faint', marginX: '1px' })}>+</span>
     {/if}
   {/each}
 </span>

@@ -59,7 +59,7 @@
       alignItems: 'center',
       flexShrink: '0',
       borderBottomWidth: '1px',
-      borderBottomColor: 'gray.200',
+      borderColor: 'gray.200',
       paddingX: '20px',
       height: '52px',
       backgroundColor: 'white',
@@ -114,7 +114,7 @@
             fontSize: { base: '[40px]', md: '[52px]', lg: '[64px]' },
             fontWeight: 'extrabold',
             marginBottom: '24px',
-            color: 'gray.950',
+            color: 'gray.900',
             letterSpacing: '[-.04em]',
             lineHeight: '[1.2]',
           })}
@@ -163,7 +163,7 @@
             fontSize: { base: '[28px]', md: '[32px]' },
             fontWeight: 'bold',
             marginBottom: '12px',
-            color: 'gray.950',
+            color: 'gray.900',
             letterSpacing: '[-.01em]',
           })}
         >
@@ -232,7 +232,7 @@
             fontSize: { base: '[28px]', md: '[32px]' },
             fontWeight: 'bold',
             marginBottom: '12px',
-            color: 'gray.950',
+            color: 'gray.900',
             letterSpacing: '[-.01em]',
           })}
         >
@@ -370,7 +370,7 @@
             fontSize: { base: '[28px]', md: '[32px]' },
             fontWeight: 'bold',
             marginBottom: '12px',
-            color: 'gray.950',
+            color: 'gray.900',
             letterSpacing: '[-.01em]',
           })}
         >
@@ -466,7 +466,7 @@
             >
               {formatWithUnit($query.stats.systemServiceDays.current, '일')}
             </p>
-            <p class={css({ fontSize: '16px', color: 'gray.300' })}>서비스 운영 일수</p>
+            <p class={css({ fontSize: '16px', color: 'gray.400' })}>서비스 운영 일수</p>
             <p class={css({ fontSize: '13px', color: 'gray.500', marginTop: '4px' })}>서비스 출시 이후 현재까지의 운영 기간</p>
           </div>
 
@@ -489,7 +489,7 @@
             >
               {formatWithUnit($query.stats.postsTotal.current, '개')}
             </p>
-            <p class={css({ fontSize: '16px', color: 'gray.300' })}>누적 포스트 수</p>
+            <p class={css({ fontSize: '16px', color: 'gray.400' })}>누적 포스트 수</p>
             <p class={css({ fontSize: '13px', color: 'gray.500', marginTop: '4px' })}>서비스 전체 기간 동안 작성된 모든 포스트</p>
           </div>
 
@@ -512,7 +512,7 @@
             >
               {formatWithUnit($query.stats.usersTotal.current, '명')}
             </p>
-            <p class={css({ fontSize: '16px', color: 'gray.300' })}>누적 가입자 수</p>
+            <p class={css({ fontSize: '16px', color: 'gray.400' })}>누적 가입자 수</p>
             <p class={css({ fontSize: '13px', color: 'gray.500', marginTop: '4px' })}>서비스 전체 기간 동안 가입한 모든 사용자</p>
           </div>
 
@@ -535,7 +535,7 @@
             >
               {formatWithUnit($query.stats.charactersInput.current, '자')}
             </p>
-            <p class={css({ fontSize: '16px', color: 'gray.300' })}>누적 입력 글자 수</p>
+            <p class={css({ fontSize: '16px', color: 'gray.400' })}>누적 입력 글자 수</p>
             <p class={css({ fontSize: '13px', color: 'gray.500', marginTop: '4px' })}>서비스 전체 기간 동안 입력된 모든 글자</p>
           </div>
         </div>
@@ -547,7 +547,7 @@
             textAlign: 'center',
             fontSize: '18px',
             lineHeight: '[1.7]',
-            color: 'gray.300',
+            color: 'gray.400',
           })}
         >
           <p class={css({ marginBottom: '24px', fontSize: '20px', fontWeight: 'medium', color: 'white' })}>
@@ -582,7 +582,7 @@
           fontSize: { base: '[28px]', md: '[32px]' },
           fontWeight: 'bold',
           marginBottom: '48px',
-          color: 'gray.950',
+          color: 'gray.900',
           letterSpacing: '[-.01em]',
         })}
       >

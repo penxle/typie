@@ -24,14 +24,14 @@
       justifyContent: 'center',
       flexShrink: 0,
       borderWidth: '1px',
-      borderColor: 'gray.300',
+      borderColor: 'border.strong',
       borderRadius: '4px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       transition: 'common',
       cursor: 'pointer',
       outline: 'none',
       _disabled: {
-        backgroundColor: 'gray.100!',
+        backgroundColor: 'surface.muted!',
         borderColor: 'gray.300!',
         cursor: 'not-allowed',
         _after: {
@@ -40,7 +40,7 @@
       },
       _checked: {
         borderColor: 'brand.500',
-        backgroundColor: 'brand.500',
+        backgroundColor: 'accent.brand.default',
         _after: {
           opacity: '100',
         },
@@ -79,7 +79,7 @@
 
   const labelRecipe = cva({
     base: {
-      color: 'gray.700',
+      color: 'text.subtle',
       userSelect: 'none',
     },
     variants: {

@@ -173,7 +173,12 @@
 
       {#snippet $subscription(user)}
         {#if user.subscription}
-          <span class={css({ fontSize: '12px', color: user.subscription.state === 'ACTIVE' ? 'green.400' : 'amber.400' })}>
+          <span
+            class={css({
+              fontSize: '12px',
+              color: user.subscription.state === 'ACTIVE' ? 'green.400' : 'amber.400',
+            })}
+          >
             {user.subscription.plan.name}
           </span>
         {:else}

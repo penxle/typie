@@ -506,7 +506,12 @@
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>MARKETING</span>
-              <span class={css({ fontSize: '12px', color: $query.adminUser.marketingConsent ? 'green.400' : 'gray.400' })}>
+              <span
+                class={css({
+                  fontSize: '12px',
+                  color: $query.adminUser.marketingConsent ? 'green.400' : 'gray.400',
+                })}
+              >
                 {$query.adminUser.marketingConsent ? 'CONSENTED' : 'NOT CONSENTED'}
               </span>
             </div>

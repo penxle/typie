@@ -86,9 +86,9 @@
 
   <div class={css({ fontSize: '15px', fontWeight: 'semibold', lineClamp: '1' })}>{$user.name}</div>
 
-  <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.500', letterSpacing: '[0]' })}>{$user.email}</div>
+  <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.faint', letterSpacing: '[0]' })}>{$user.email}</div>
 
-  <div class={css({ marginTop: '16px', width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+  <div class={css({ marginTop: '16px', width: 'full', height: '1px', backgroundColor: 'interactive.hover' })}></div>
 
   <button
     class={css({
@@ -97,9 +97,9 @@
       width: 'full',
       fontSize: '14px',
       fontWeight: 'medium',
-      color: 'gray.700',
+      color: 'text.subtle',
       transition: 'common',
-      _hover: { backgroundColor: 'gray.100' },
+      _hover: { backgroundColor: 'surface.muted' },
     })}
     onclick={() => {
       pushState('', { shallowRoute: '/preference/account' });
@@ -112,7 +112,7 @@
     설정
   </button>
 
-  <div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+  <div class={css({ width: 'full', height: '1px', backgroundColor: 'interactive.hover' })}></div>
 
   {#if $user.subscription}
     <a
@@ -123,9 +123,9 @@
         fontSize: '14px',
         fontWeight: 'medium',
         textAlign: 'center',
-        color: 'gray.700',
+        color: 'text.subtle',
         transition: 'common',
-        _hover: { backgroundColor: 'gray.100' },
+        _hover: { backgroundColor: 'surface.muted' },
       })}
       href="https://typie.link/community"
       rel="noopener noreferrer"
@@ -134,7 +134,7 @@
       타이피 커뮤니티
     </a>
 
-    <div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+    <div class={css({ width: 'full', height: '1px', backgroundColor: 'interactive.hover' })}></div>
   {/if}
 
   <a
@@ -145,9 +145,9 @@
       fontSize: '14px',
       fontWeight: 'medium',
       textAlign: 'center',
-      color: 'gray.700',
+      color: 'text.subtle',
       transition: 'common',
-      _hover: { backgroundColor: 'gray.100' },
+      _hover: { backgroundColor: 'surface.muted' },
     })}
     href="https://penxle.channel.io/home"
     rel="noopener noreferrer"
@@ -156,7 +156,7 @@
     고객센터
   </a>
 
-  <div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+  <div class={css({ width: 'full', height: '1px', backgroundColor: 'interactive.hover' })}></div>
 
   <button
     class={css({
@@ -165,9 +165,9 @@
       width: 'full',
       fontSize: '14px',
       fontWeight: 'medium',
-      color: 'red.500',
+      color: 'text.danger',
       transition: 'common',
-      _hover: { backgroundColor: 'red.50' },
+      _hover: { backgroundColor: 'accent.danger.subtle' },
     })}
     onclick={() => {
       mixpanel.track('logout', { via: 'user_menu' });

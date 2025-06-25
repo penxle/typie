@@ -58,10 +58,10 @@
         textAlign: 'left',
         transition: 'common',
         _enabled: {
-          _hover: { backgroundColor: 'gray.100' },
+          _hover: { backgroundColor: 'surface.muted' },
         },
         _disabled: {
-          color: 'gray.300',
+          color: 'text.disabled',
         },
       },
     },
@@ -69,21 +69,21 @@
       variant: {
         default: {
           root: {
-            color: 'gray.700',
+            color: 'text.subtle',
           },
           icon: {
-            color: 'gray.500',
-            _groupHover: { color: 'gray.700' },
+            color: 'text.faint',
+            _groupHover: { color: 'text.subtle' },
           },
         },
         danger: {
           root: {
-            color: 'gray.700',
-            _hover: { color: 'red.600' },
+            color: 'text.subtle',
+            _hover: { color: 'text.danger' },
           },
           icon: {
-            color: 'gray.500',
-            _groupHover: { color: 'red.600' },
+            color: 'text.faint',
+            _groupHover: { color: 'text.danger' },
           },
         },
       },

@@ -45,10 +45,10 @@
   open={app.state.statsOpen}
 >
   {#if loaded && $query}
-    <div class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.700' })}>나의 글쓰기 통계</div>
+    <div class={css({ fontSize: '20px', fontWeight: 'bold', color: 'text.subtle' })}>나의 글쓰기 통계</div>
 
     <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-      <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'gray.500' })}>지난 1년간의 기록</div>
+      <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.faint' })}>지난 1년간의 기록</div>
 
       <ActivityGrid $user={$query.me} />
     </div>

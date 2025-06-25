@@ -53,7 +53,14 @@
 
     {#if hasUnread}
       <div
-        class={css({ position: 'absolute', top: '4px', right: '4px', borderRadius: 'full', size: '4px', backgroundColor: 'red.500' })}
+        class={css({
+          position: 'absolute',
+          top: '4px',
+          right: '4px',
+          borderRadius: 'full',
+          size: '4px',
+          backgroundColor: 'red.500',
+        })}
       ></div>
     {/if}
   </div>
@@ -61,8 +68,8 @@
 
 <Modal style={css.raw({ maxWidth: '600px' })} bind:open>
   <div class={center({ gap: '4px', padding: '12px' })}>
-    <Icon style={css.raw({ color: 'gray.500' })} icon={GiftIcon} size={14} />
-    <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.500' })}>타이피 새소식</span>
+    <Icon style={css.raw({ color: 'text.faint' })} icon={GiftIcon} size={14} />
+    <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>타이피 새소식</span>
   </div>
 
   <HorizontalDivider />
@@ -71,7 +78,7 @@
     {#each $postViews as postView, idx (postView.id)}
       <div class={flex({ flexDirection: 'column', gap: '16px' })}>
         <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-          <div class={css({ fontSize: '14px', color: 'gray.500' })}>{dayjs(postView.createdAt).formatAsDate()}</div>
+          <div class={css({ fontSize: '14px', color: 'text.faint' })}>{dayjs(postView.createdAt).formatAsDate()}</div>
           <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>
             {postView.title}
           </div>

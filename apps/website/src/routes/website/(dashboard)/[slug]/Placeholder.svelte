@@ -92,7 +92,7 @@
         gap: '4px',
         width: 'full',
         maxWidth: 'var(--prosemirror-max-width)',
-        color: 'gray.300',
+        color: 'text.disabled',
         lineHeight: '[1.6]',
       })}
     >
@@ -106,7 +106,7 @@
             gap: '4px',
             transition: 'common',
             pointerEvents: 'auto',
-            _hover: { color: 'gray.500' },
+            _hover: { color: 'text.faint' },
           })}
           onclick={() => (open = true)}
           type="button"
@@ -122,8 +122,8 @@
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>
   <div class={center({ gap: '8px', padding: '12px' })}>
     <div class={center({ gap: '4px' })}>
-      <Icon style={css.raw({ color: 'gray.500' })} icon={ShapesIcon} size={14} />
-      <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.500' })}>템플릿 사용하기</span>
+      <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
+      <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>템플릿 사용하기</span>
     </div>
   </div>
 
@@ -142,20 +142,20 @@
             padding: '12px',
             textAlign: 'left',
             transition: 'common',
-            _hover: { backgroundColor: 'gray.100' },
+            _hover: { backgroundColor: 'surface.muted' },
           }),
         )}
         onclick={() => loadTemplate(template.entity.slug)}
         type="button"
       >
-        <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.700' })}>{template.title}</div>
+        <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.subtle' })}>{template.title}</div>
         <div class={flex({ alignItems: 'center', gap: '4px', opacity: '0', transition: 'common', _groupHover: { opacity: '100' } })}>
-          <div class={css({ fontSize: '13px', color: 'gray.500' })}>사용하기</div>
-          <Icon style={css.raw({ color: 'gray.500' })} icon={ChevronRightIcon} size={16} />
+          <div class={css({ fontSize: '13px', color: 'text.faint' })}>사용하기</div>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={ChevronRightIcon} size={16} />
         </div>
       </button>
     {:else}
-      <div class={center({ fontSize: '13px', color: 'gray.500', textAlign: 'center' })}>
+      <div class={center({ fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
         아직 템플릿이 없어요.
         <br />
         <br />

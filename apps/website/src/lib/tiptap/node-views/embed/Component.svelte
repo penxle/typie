@@ -119,7 +119,7 @@
       {:else}
         <svelte:element
           this={editor?.current.isEditable ? 'div' : 'a'}
-          class={flex({ borderWidth: '1px', borderColor: 'gray.100', borderRadius: '6px' })}
+          class={flex({ borderWidth: '1px', borderColor: 'border.subtle', borderRadius: '6px' })}
           {...!editor?.current.isEditable && { href: attrs.url, target: '_blank', rel: 'noopener noreferrer' }}
         >
           <div class={flex({ direction: 'column', grow: '1', paddingX: '16px', paddingY: '15px' })}>
@@ -127,7 +127,7 @@
               {attrs.title ?? '(제목 없음)'}
             </p>
 
-            <p class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500', lineClamp: 2, whiteSpace: 'pre-line' })}>
+            <p class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', lineClamp: 2, whiteSpace: 'pre-line' })}>
               {attrs.description ?? ''}
             </p>
 
@@ -160,7 +160,7 @@
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '4px',
-            color: 'white',
+            color: 'text.inverse',
             backgroundColor: '[#363839/70]',
             size: '28px',
             opacity: '0',
@@ -180,7 +180,7 @@
           justifyContent: 'space-between',
           alignItems: 'center',
           borderRadius: '4px',
-          backgroundColor: 'gray.100',
+          backgroundColor: 'surface.muted',
         })}
         use:anchor
       >
@@ -191,7 +191,7 @@
             paddingX: '14px',
             paddingY: '12px',
             fontSize: '14px',
-            color: 'gray.400',
+            color: 'text.disabled',
           })}
         >
           {#if inflight}
@@ -216,10 +216,10 @@
                     marginRight: '12px',
                     borderRadius: '4px',
                     padding: '2px',
-                    color: 'gray.400',
+                    color: 'text.disabled',
                     opacity: '0',
                     transition: 'common',
-                    _hover: { backgroundColor: 'gray.200' },
+                    _hover: { backgroundColor: 'interactive.hover' },
                     _groupHover: { opacity: '100' },
                   },
                   open && { opacity: '100' },
@@ -249,7 +249,7 @@
       borderRadius: '12px',
       padding: '12px',
       width: '380px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       boxShadow: 'small',
       zIndex: '1',
     })}
@@ -259,7 +259,7 @@
     }}
     use:floating
   >
-    <span class={css({ fontSize: '13px', color: 'gray.600', textAlign: 'center' })}>
+    <span class={css({ fontSize: '13px', color: 'text.muted', textAlign: 'center' })}>
       Youtube, Google Drive, 일반 링크 등
       <br />
       다양한 콘텐츠를 임베드할 수 있어요

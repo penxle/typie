@@ -54,7 +54,7 @@
       <TextInput id="code" style={css.raw({ width: 'full' })} placeholder="할인 코드 입력하기" size="sm" bind:value={form.fields.code} />
 
       {#if form.errors.code}
-        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.code}</div>
+        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.code}</div>
       {/if}
     </div>
 

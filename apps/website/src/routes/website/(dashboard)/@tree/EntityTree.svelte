@@ -311,7 +311,7 @@
     <Entity $entity={entity} />
   {:else}
     <div class={center({ flexGrow: '1' })}>
-      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.400' })}>아직 포스트가 없어요</p>
+      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 포스트가 없어요</p>
     </div>
   {/each}
 </div>
@@ -328,7 +328,7 @@
       class={css({
         position: 'fixed',
         borderRadius: '2px',
-        backgroundColor: 'brand.200',
+        backgroundColor: 'accent.brand.subtle',
         pointerEvents: 'none',
         zIndex: '50',
       })}

@@ -47,8 +47,8 @@
       display: 'flex',
       alignItems: 'center',
       borderWidth: '1px',
-      color: 'gray.500',
-      backgroundColor: 'white',
+      color: 'text.faint',
+      backgroundColor: 'surface.default',
       transition: 'common',
       _hover: {
         borderColor: 'brand.400',
@@ -57,17 +57,17 @@
         borderColor: 'brand.600',
       },
       '&:has(input:not(:placeholder-shown)), &:has(input[aria-live="polite"])': {
-        color: 'gray.950',
-        borderColor: 'gray.300',
+        color: 'text.default',
+        borderColor: 'border.strong',
       },
       '&:has(input:disabled)': {
-        color: 'gray.500',
-        backgroundColor: 'gray.200',
+        color: 'text.disabled',
+        backgroundColor: 'interactive.disabled',
         borderColor: 'gray.200',
       },
       '&:has(input:read-only)': {
-        color: 'gray.400',
-        backgroundColor: 'gray.50',
+        color: 'text.disabled',
+        backgroundColor: 'surface.subtle',
         borderColor: 'gray.100',
       },
       '&:has(input[aria-invalid="true"])': {
@@ -76,8 +76,8 @@
           borderColor: 'red.600',
         },
         '&:has(input:not(:placeholder-shown)), &:has(input[aria-live="polite"])': {
-          color: 'gray.950',
-          backgroundColor: 'white',
+          color: 'text.default',
+          backgroundColor: 'surface.default',
         },
       },
     },

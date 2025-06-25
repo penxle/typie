@@ -221,8 +221,8 @@
           paddingX: '8px',
           paddingY: '2px',
           fontSize: '12px',
-          color: 'white',
-          backgroundColor: 'brand.500',
+          color: 'text.inverse',
+          backgroundColor: 'accent.brand.default',
           pointerEvents: 'none',
         })}
       >
@@ -237,7 +237,7 @@
           padding: '12px',
           fontSize: '15px',
           fontWeight: 'medium',
-          backgroundColor: 'gray.100',
+          backgroundColor: 'surface.muted',
         })}
       >
         <div class={flex({ align: 'center', justify: 'space-between' })}>
@@ -248,7 +248,7 @@
 
         {#if paymentAmount !== planFee || $user.credit > 0 || redeemCode}
           <HorizontalDivider style={css.raw({ marginY: '4px' })} />
-          <div class={flex({ direction: 'column', gap: '1px', fontSize: '12px', color: 'gray.700' })}>
+          <div class={flex({ direction: 'column', gap: '1px', fontSize: '12px', color: 'text.subtle' })}>
             {#if paymentAmount !== planFee}
               <div>
                 플랜 금액: {comma(planFee)}원
@@ -270,7 +270,7 @@
 
       <div class={flex({ direction: 'column', gap: '4px' })}>
         <button
-          class={flex({ align: 'center', justify: 'space-between', color: 'gray.400' })}
+          class={flex({ align: 'center', justify: 'space-between', color: 'text.disabled' })}
           onclick={() => (redeemInputOpen = !redeemInputOpen)}
           type="button"
         >
@@ -295,7 +295,7 @@
               />
 
               {#if redeemCodeForm.errors.code}
-                <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>
+                <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>
                   {redeemCodeForm.errors.code}
                 </div>
               {/if}
@@ -311,14 +311,14 @@
               align: 'center',
               justify: 'space-between',
               borderWidth: '1px',
-              borderColor: 'gray.100',
+              borderColor: 'border.subtle',
               borderRadius: '4px',
               paddingX: '8px',
               paddingY: '6px',
             })}
           >
             <p class={css({ fontSize: '13px' })}>사전등록 할인</p>
-            <p class={css({ fontSize: '13px', color: 'gray.600' })}>{comma(redeemCode.amount)}원</p>
+            <p class={css({ fontSize: '13px', color: 'text.muted' })}>{comma(redeemCode.amount)}원</p>
           </div>
         {/if}
       </div>
@@ -327,7 +327,7 @@
 
   <form class={flex({ direction: 'column', gap: '16px' })} onsubmit={form.handleSubmit}>
     <div>
-      <label class={flex({ direction: 'column', gap: '4px', fontSize: '14px', color: 'gray.700', fontWeight: 'medium' })}>
+      <label class={flex({ direction: 'column', gap: '4px', fontSize: '14px', color: 'text.subtle', fontWeight: 'medium' })}>
         카드 번호
         <TextInput
           id="cardNumber"
@@ -341,13 +341,13 @@
       </label>
 
       {#if form.errors.cardNumber}
-        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.cardNumber}</div>
+        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.cardNumber}</div>
       {/if}
     </div>
 
     <div class={css({ display: 'flex', gap: '8px', width: 'full' })}>
       <div class={css({ flexGrow: '1' })}>
-        <label class={flex({ direction: 'column', gap: '4px', fontSize: '14px', color: 'gray.700', fontWeight: 'medium' })}>
+        <label class={flex({ direction: 'column', gap: '4px', fontSize: '14px', color: 'text.subtle', fontWeight: 'medium' })}>
           유효 기간(MM/YY)
           <TextInput
             id="expiryDate"
@@ -361,12 +361,12 @@
         </label>
 
         {#if form.errors.expiryDate}
-          <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.expiryDate}</div>
+          <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.expiryDate}</div>
         {/if}
       </div>
 
       <div class={css({ flexGrow: '1' })}>
-        <label class={flex({ direction: 'column', gap: '4px', fontSize: '14px', color: 'gray.700', fontWeight: 'medium' })}>
+        <label class={flex({ direction: 'column', gap: '4px', fontSize: '14px', color: 'text.subtle', fontWeight: 'medium' })}>
           비밀번호 앞 두자리
 
           <TextInput
@@ -382,7 +382,7 @@
         </label>
 
         {#if form.errors.passwordTwoDigits}
-          <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>
+          <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>
             {form.errors.passwordTwoDigits}
           </div>
         {/if}
@@ -390,7 +390,7 @@
     </div>
 
     <div>
-      <label class={flex({ direction: 'column', gap: '4px', fontSize: '14px', color: 'gray.700', fontWeight: 'medium' })}>
+      <label class={flex({ direction: 'column', gap: '4px', fontSize: '14px', color: 'text.subtle', fontWeight: 'medium' })}>
         생년월일 6자리(개인) / 사업자등록번호 10자리(법인)
 
         <TextInput
@@ -404,7 +404,7 @@
       </label>
 
       {#if form.errors.birthOrBusinessRegistrationNumber}
-        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>
+        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>
           {form.errors.birthOrBusinessRegistrationNumber}
         </div>
       {/if}
@@ -412,16 +412,16 @@
 
     <div class={flex({ direction: 'column', gap: '6px', marginY: '12px' })}>
       <Checkbox checked={allChecked} onchange={handleAllCheck} size="sm">
-        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.700' })}>모두 확인하고 동의해요</span>
+        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.subtle' })}>모두 확인하고 동의해요</span>
       </Checkbox>
 
       <HorizontalDivider color="secondary" />
 
       {#each agreements as agreement (agreement.name)}
         <Checkbox size="sm" bind:checked={agreementChecks[agreements.indexOf(agreement)]}>
-          <span class={flex({ fontSize: '13px', color: 'gray.700' })}>
+          <span class={flex({ fontSize: '13px', color: 'text.subtle' })}>
             <a
-              class={css({ textDecoration: 'underline', color: 'gray.900' })}
+              class={css({ textDecoration: 'underline', color: 'text.default' })}
               href={agreement.url}
               rel="noopener noreferrer"
               target="_blank"

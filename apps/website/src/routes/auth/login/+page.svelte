@@ -92,14 +92,14 @@
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
     <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>타이피에 오신 것을 환영해요!</h1>
 
-    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint' })}>
       아직 계정이 없으신가요?
       <a
         class={css({
           display: 'inline-flex',
           alignItems: 'center',
           fontWeight: 'medium',
-          color: 'gray.950',
+          color: 'text.default',
           _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' },
         })}
         href={`/signup${page.url.search}`}
@@ -112,17 +112,17 @@
   <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
     <div class={flex({ direction: 'column', gap: '12px' })}>
       <div class={flex({ direction: 'column', gap: '4px' })}>
-        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="email">이메일</label>
+        <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="email">이메일</label>
 
         <TextInput id="email" aria-invalid={!!form.errors.email} placeholder="me@example.com" bind:value={form.fields.email} />
 
         {#if form.errors.email}
-          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.email}</div>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.email}</div>
         {/if}
       </div>
 
       <div class={flex({ direction: 'column', gap: '4px' })}>
-        <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="password">비밀번호</label>
+        <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="password">비밀번호</label>
 
         <TextInput
           id="password"
@@ -133,7 +133,7 @@
         />
 
         {#if form.errors.password}
-          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.password}</div>
+          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.password}</div>
         {/if}
       </div>
     </div>
@@ -143,7 +143,7 @@
 
       <div class={center()}>
         <a
-          class={css({ fontSize: '13px', color: 'gray.700', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
+          class={css({ fontSize: '13px', color: 'text.subtle', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
           href={`/forgot-password${page.url.search}`}
         >
           비밀번호를 잊으셨나요?
@@ -153,9 +153,9 @@
   </form>
 
   <div class={flex({ alignItems: 'center', gap: '16px', userSelect: 'none' })}>
-    <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
-    <span class={css({ fontSize: '14px', color: 'gray.500' })}>간편 로그인</span>
-    <div class={css({ flex: '1', height: '1px', backgroundColor: 'gray.200' })}></div>
+    <div class={css({ flex: '1', height: '1px', backgroundColor: 'interactive.hover' })}></div>
+    <span class={css({ fontSize: '14px', color: 'text.faint' })}>간편 로그인</span>
+    <div class={css({ flex: '1', height: '1px', backgroundColor: 'interactive.hover' })}></div>
   </div>
 
   <div class={flex({ justifyContent: 'space-between', gap: '16px', height: { base: '36px', lg: '40px' } })}>
@@ -164,7 +164,7 @@
         flex: '1',
         borderWidth: '1px',
         borderRadius: '8px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
       })}
       onclick={() => singleSignOn(SingleSignOnProvider.GOOGLE)}
       type="button"
@@ -178,7 +178,7 @@
         borderWidth: '1px',
         borderColor: '[#FEE500]',
         borderRadius: '8px',
-        color: 'black',
+        color: '[#000000]',
         backgroundColor: '[#FEE500]',
       })}
       onclick={() => singleSignOn(SingleSignOnProvider.KAKAO)}
@@ -193,7 +193,7 @@
         borderWidth: '1px',
         borderColor: '[#03C75A]',
         borderRadius: '8px',
-        color: 'white',
+        color: 'text.inverse',
         backgroundColor: '[#03C75A]',
       })}
       onclick={() => singleSignOn(SingleSignOnProvider.NAVER)}

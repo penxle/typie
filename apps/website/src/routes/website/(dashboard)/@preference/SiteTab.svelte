@@ -80,17 +80,17 @@
 </script>
 
 <div class={flex({ direction: 'column', gap: '32px' })}>
-  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'gray.900' })}>사이트</h1>
+  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>사이트</h1>
 
   <div class={flex({ direction: 'column', gap: '16px' })}>
-    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>주소</h3>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>주소</h3>
 
     <form class={flex({ gap: '12px' })} onsubmit={form.handleSubmit}>
       <div class={css({ width: 'full', maxWidth: '380px' })}>
         <TextInput id="slug" style={css.raw({ width: 'full' })} bind:value={form.fields.slug} />
 
         {#if form.errors.slug}
-          <p class={css({ marginTop: '4px', color: 'red.500', fontSize: '14px' })}>{form.errors.slug}</p>
+          <p class={css({ marginTop: '4px', color: 'text.danger', fontSize: '14px' })}>{form.errors.slug}</p>
         {/if}
       </div>
 
@@ -101,14 +101,14 @@
   </div>
 
   <div class={flex({ direction: 'column', gap: '16px' })}>
-    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>폰트</h3>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>폰트</h3>
 
     {#each $user.sites[0].fonts as { id, name, fullName } (id)}
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
         <p class={css({ fontWeight: 'medium' })}>
           {name}
           {#if fullName}
-            <span class={css({ fontSize: '12px', color: 'gray.500' })}>({fullName})</span>
+            <span class={css({ fontSize: '12px', color: 'text.faint' })}>({fullName})</span>
           {/if}
         </p>
 
@@ -131,7 +131,7 @@
         </Button>
       </div>
     {:else}
-      <p class={css({ fontSize: '14px', color: 'gray.500' })}>에디터에서 업로드한 폰트가 여기 나타나요</p>
+      <p class={css({ fontSize: '14px', color: 'text.faint' })}>에디터에서 업로드한 폰트가 여기 나타나요</p>
     {/each}
   </div>
 </div>

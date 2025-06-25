@@ -85,7 +85,7 @@
       flexDirection: 'column',
       gap: '8px',
       borderBottomWidth: '1px',
-      borderBottomColor: 'gray.100',
+      borderColor: 'border.subtle',
       paddingY: '8px',
       zIndex: '10',
     },
@@ -327,7 +327,7 @@
             {#each values.textColor as { label, value, hex } (value)}
               <button
                 style:background-color={hex}
-                style:outline-color={hex === '#ffffff' ? token('colors.gray.200') : hex}
+                style:outline-color={hex === '#ffffff' ? token('colors.border.default') : hex}
                 class={center({
                   borderWidth: '1px',
                   borderRadius: 'full',
@@ -357,7 +357,7 @@
         size="small"
       >
         {#snippet anchor()}
-          <div class={css({ flexGrow: '1', fontSize: '14px', color: 'gray.700' })}>
+          <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle' })}>
             {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontSize ?? defaultValues.fontSize))
               ?.label}
           </div>
@@ -574,8 +574,8 @@
         >
           <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'gray.500' })} icon={RulerDimensionLineIcon} />
-              <div class={css({ fontSize: '13px', color: 'gray.700' })}>본문 폭</div>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>본문 폭</div>
             </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons
@@ -595,8 +595,8 @@
 
           <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'gray.500' })} icon={ArrowRightToLineIcon} />
-              <div class={css({ fontSize: '13px', color: 'gray.700' })}>첫 줄 들여쓰기</div>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={ArrowRightToLineIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>첫 줄 들여쓰기</div>
             </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons
@@ -617,8 +617,8 @@
 
           <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'gray.500' })} icon={AlignVerticalSpaceAroundIcon} />
-              <div class={css({ fontSize: '13px', color: 'gray.700' })}>문단 사이 간격</div>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={AlignVerticalSpaceAroundIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>문단 사이 간격</div>
             </div>
             <div class={css({ width: '200px' })}>
               <SegmentButtons

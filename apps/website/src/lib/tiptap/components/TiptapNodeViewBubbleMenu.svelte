@@ -60,8 +60,8 @@
     class={css({
       borderWidth: '1px',
       borderRadius: '4px',
-      borderColor: 'gray.300',
-      backgroundColor: 'white',
+      borderColor: 'border.strong',
+      backgroundColor: 'surface.default',
       cursor: 'pointer',
       boxShadow: 'small',
     })}
@@ -74,7 +74,7 @@
         borderRadius: '4px',
         paddingX: '14px',
         paddingY: '8px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         zIndex: '2',
       })}
     >

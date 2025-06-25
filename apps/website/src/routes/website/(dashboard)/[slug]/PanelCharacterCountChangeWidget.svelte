@@ -37,19 +37,19 @@
 
 <details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '0' })} bind:open>
   <summary class={flex({ alignItems: 'center', gap: '4px', cursor: 'pointer', marginBottom: open ? '8px' : '0', userSelect: 'none' })}>
-    <Icon style={{ color: 'gray.500' }} icon={GoalIcon} size={12} />
-    <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.700' })}>오늘의 기록</div>
-    <Icon style={css.raw({ color: 'gray.500', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={IconChevronRight} size={14} />
+    <Icon style={{ color: 'text.faint' }} icon={GoalIcon} size={12} />
+    <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>오늘의 기록</div>
+    <Icon style={css.raw({ color: 'text.faint', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={IconChevronRight} size={14} />
     <div class={css({ flexGrow: '1' })}></div>
     {#if !open}
       <div
-        class={flex({ alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 'medium', color: 'gray.700' })}
+        class={flex({ alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}
         in:fly={{ y: 2, duration: 150 }}
       >
         {#if difference === 0}
           없음
         {:else}
-          <Icon style={css.raw({ color: 'gray.500' })} icon={difference >= 0 ? TrendingUpIcon : TrendingDownIcon} size={14} />
+          <Icon style={css.raw({ color: 'text.faint' })} icon={difference >= 0 ? TrendingUpIcon : TrendingDownIcon} size={14} />
           <span>{difference >= 0 ? '+' : '-'}{comma(Math.abs(difference))}자</span>
         {/if}
       </div>
@@ -59,25 +59,25 @@
   {#if open}
     <div class={flex({ flexDirection: 'column', gap: '2px' })} in:fly={{ y: -2, duration: 150 }}>
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-        <dt class={css({ color: 'gray.500' })}>변화량</dt>
-        <dd class={flex({ alignItems: 'center', gap: '4px', fontWeight: 'medium', color: 'gray.700' })}>
+        <dt class={css({ color: 'text.faint' })}>변화량</dt>
+        <dd class={flex({ alignItems: 'center', gap: '4px', fontWeight: 'medium', color: 'text.subtle' })}>
           {#if difference === 0}
             없음
           {:else}
-            <Icon style={css.raw({ color: 'gray.500' })} icon={difference >= 0 ? TrendingUpIcon : TrendingDownIcon} size={14} />
+            <Icon style={css.raw({ color: 'text.faint' })} icon={difference >= 0 ? TrendingUpIcon : TrendingDownIcon} size={14} />
             <span>{difference >= 0 ? '+' : '-'}{comma(Math.abs(difference))}자</span>
           {/if}
         </dd>
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-        <dt class={css({ color: 'gray.500' })}>입력한 글자</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'gray.700' })}>{comma($post.characterCountChange.additions)}자</dd>
+        <dt class={css({ color: 'text.faint' })}>입력한 글자</dt>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma($post.characterCountChange.additions)}자</dd>
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-        <dt class={css({ color: 'gray.500' })}>지운 글자</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'gray.700' })}>{comma($post.characterCountChange.deletions)}자</dd>
+        <dt class={css({ color: 'text.faint' })}>지운 글자</dt>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma($post.characterCountChange.deletions)}자</dd>
       </dl>
     </div>
   {/if}
@@ -95,5 +95,5 @@
   type="button"
   use:anchor
 >
-  <Icon style={{ color: 'gray.500' }} icon={IconTarget} size={14} />
+  <Icon style={{ color: 'text.faint' }} icon={IconTarget} size={14} />
 </button> -->

@@ -49,7 +49,7 @@
   style={css.raw({
     borderWidth: '1px',
     borderRadius: '8px',
-    backgroundColor: 'gray.50',
+    backgroundColor: 'surface.subtle',
     overflow: 'hidden',
   })}
   {...HTMLAttributes}
@@ -62,7 +62,7 @@
       borderBottomWidth: '1px',
       paddingX: '12px',
       paddingY: '8px',
-      backgroundColor: 'gray.100',
+      backgroundColor: 'surface.muted',
     })}
     contentEditable={false}
   >
@@ -80,11 +80,11 @@
         paddingX: '10px',
         paddingY: '4px',
         maxWidth: '550px',
-        backgroundColor: 'gray.200',
+        backgroundColor: 'interactive.hover',
       })}
     >
-      <Icon style={css.raw({ color: 'gray.500' })} icon={IconGlobe} size={14} />
-      <div class={css({ fontSize: '13px', color: 'gray.500', userSelect: 'none' })}>HTML</div>
+      <Icon style={css.raw({ color: 'text.faint' })} icon={IconGlobe} size={14} />
+      <div class={css({ fontSize: '13px', color: 'text.faint', userSelect: 'none' })}>HTML</div>
     </div>
 
     <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
@@ -92,9 +92,9 @@
         class={center({
           size: '28px',
           borderRadius: '4px',
-          color: 'gray.500',
+          color: 'text.faint',
           _enabled: {
-            _hover: { backgroundColor: 'gray.200' },
+            _hover: { backgroundColor: 'interactive.hover' },
           },
           _disabled: { opacity: '50' },
         })}
@@ -109,8 +109,8 @@
         class={center({
           size: '28px',
           borderRadius: '4px',
-          color: 'gray.500',
-          _hover: { backgroundColor: 'gray.200' },
+          color: 'text.faint',
+          _hover: { backgroundColor: 'interactive.hover' },
         })}
         onclick={handleModeSwitch}
         type="button"
@@ -128,7 +128,7 @@
         minHeight: '80px',
         fontFamily: 'mono',
         fontSize: '14px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         overflowX: 'auto',
         whiteSpace: 'pre',
         tabSize: '4',
@@ -144,10 +144,10 @@
   />
 
   {#if mode === 'preview'}
-    <div class={css({ position: 'relative', backgroundColor: 'white', minHeight: '200px' })} contentEditable={false}>
+    <div class={css({ position: 'relative', backgroundColor: 'surface.default', minHeight: '200px' })} contentEditable={false}>
       {#if height === 0}
-        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white' })}>
-          <RingSpinner style={css.raw({ size: '24px', color: 'gray.500' })} />
+        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'surface.default' })}>
+          <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
         </div>
       {/if}
 

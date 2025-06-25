@@ -76,31 +76,31 @@
 </script>
 
 <div class={flex({ direction: 'column', gap: '32px' })}>
-  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'gray.900' })}>인증</h1>
+  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>인증</h1>
 
   <div class={flex({ direction: 'column', gap: '16px' })}>
-    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>본인 인증</h3>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>본인 인증</h3>
 
     <div>
       {#if $user.personalIdentity}
-        <div class={css({ borderWidth: '1px', borderColor: 'gray.200', borderRadius: '8px' })}>
+        <div class={css({ borderWidth: '1px', borderColor: 'border.default', borderRadius: '8px' })}>
           <div
             class={css({
               display: 'flex',
               borderTopRadius: '8px',
               borderBottomWidth: '1px',
-              borderBottomColor: 'gray.200',
+              borderColor: 'border.default',
               fontSize: '14px',
               fontWeight: 'medium',
-              color: 'gray.700',
-              backgroundColor: 'gray.50',
+              color: 'text.subtle',
+              backgroundColor: 'surface.subtle',
             })}
           >
             <div
               class={css({
                 flex: 'none',
                 borderRightWidth: '1px',
-                borderRightColor: 'gray.100',
+                borderColor: 'border.subtle',
                 paddingY: '8px',
                 paddingX: '12px',
                 textAlign: 'center',
@@ -119,7 +119,7 @@
                 display: 'flex',
                 justifyContent: 'center',
                 borderRightWidth: '1px',
-                borderRightColor: 'gray.100',
+                borderColor: 'border.subtle',
                 paddingY: '8px',
                 paddingX: '10px',
                 width: '92px',
@@ -133,15 +133,22 @@
                   paddingX: '6px',
                   fontSize: '12px',
                   fontWeight: 'medium',
-                  backgroundColor: 'green.50',
-                  color: 'green.800',
+                  backgroundColor: 'accent.success.subtle',
+                  color: 'text.success',
                 })}
               >
                 인증 완료
               </span>
             </div>
             <date
-              class={css({ display: 'flex', alignItems: 'center', paddingY: '4px', paddingX: '16px', fontSize: '13px', color: 'gray.600' })}
+              class={css({
+                display: 'flex',
+                alignItems: 'center',
+                paddingY: '4px',
+                paddingX: '16px',
+                fontSize: '13px',
+                color: 'text.muted',
+              })}
               datetime={$user.personalIdentity.expiresAt}
             >
               {dayjs($user.personalIdentity.expiresAt).formatAsDate()}

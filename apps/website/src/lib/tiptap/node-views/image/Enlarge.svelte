@@ -81,22 +81,22 @@
       <div bind:this={targetEl} class={css({ size: 'full' })}></div>
     </div>
 
-    <div style:opacity class={css({ position: 'fixed', inset: '0', size: 'full', backgroundColor: 'white' })}>
+    <div style:opacity class={css({ position: 'fixed', inset: '0', size: 'full', backgroundColor: 'surface.default' })}>
       <div class={css({ position: 'absolute', top: '20px', right: '20px' })}>
         <button
           class={center({
             borderWidth: '[1.5px]',
-            borderColor: 'gray.300',
+            borderColor: 'border.strong',
             borderRadius: 'full',
             marginBottom: '4px',
-            color: 'gray.500',
+            color: 'text.faint',
             size: '40px',
-            backgroundColor: 'white',
+            backgroundColor: 'surface.default',
             boxShadow: 'small',
             zIndex: '30',
             _hover: {
               borderColor: 'gray.500',
-              color: 'gray.700',
+              color: 'text.subtle',
             },
           })}
           aria-label="닫기"
@@ -105,7 +105,9 @@
         >
           <Icon icon={XIcon} />
         </button>
-        <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'semibold', color: 'gray.400', textAlign: 'center' })}>ESC</span>
+        <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'semibold', color: 'text.disabled', textAlign: 'center' })}>
+          ESC
+        </span>
       </div>
     </div>
 

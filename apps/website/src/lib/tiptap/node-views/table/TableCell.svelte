@@ -13,7 +13,7 @@
   style={css.raw({
     borderWidth: '1px',
     borderTopWidth: '0',
-    borderColor: 'gray.300',
+    borderColor: 'border.strong',
     paddingX: '14px',
     paddingY: '10px',
   })}

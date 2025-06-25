@@ -33,7 +33,7 @@ export const Link = Mark.create({
     return [
       'a',
       mergeAttributes(HTMLAttributes, {
-        class: css({ color: 'gray.500', textDecorationLine: 'underline' }),
+        class: css({ color: 'text.faint', textDecorationLine: 'underline' }),
         target: '_blank',
         rel: 'noreferrer nofollow',
       }),

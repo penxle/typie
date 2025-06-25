@@ -42,7 +42,7 @@
   style={css.raw({
     borderWidth: '1px',
     borderRadius: '8px',
-    backgroundColor: 'gray.50',
+    backgroundColor: 'surface.subtle',
     overflow: 'hidden',
   })}
   {...HTMLAttributes}
@@ -55,7 +55,7 @@
       borderBottomWidth: '1px',
       paddingX: '12px',
       paddingY: '8px',
-      backgroundColor: 'gray.100',
+      backgroundColor: 'surface.muted',
     })}
     contentEditable={false}
   >
@@ -69,7 +69,7 @@
       {#if editor?.current.isEditable}
         <Menu {node} {updateAttributes} />
       {:else}
-        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.600', userSelect: 'none' })}>
+        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted', userSelect: 'none' })}>
           {languages[attrs.language]}
         </div>
       {/if}
@@ -80,8 +80,8 @@
         flexShrink: '0',
         size: '28px',
         borderRadius: '4px',
-        color: copied ? 'green.500' : 'gray.500',
-        _supportHover: { backgroundColor: 'gray.200' },
+        color: copied ? 'text.success' : 'text.faint',
+        _supportHover: { backgroundColor: 'interactive.hover' },
       })}
       onclick={handleCopy}
       type="button"
@@ -97,7 +97,7 @@
       minHeight: '80px',
       fontFamily: 'mono',
       fontSize: '14px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       overflowX: 'auto',
       whiteSpace: 'pre',
       tabSize: '4',

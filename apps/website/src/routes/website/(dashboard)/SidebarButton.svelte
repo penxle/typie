@@ -22,15 +22,15 @@
   class={center({
     borderRadius: '8px',
     size: '32px',
-    color: 'gray.500',
+    color: 'text.faint',
     transition: 'common',
     _hover: {
-      color: 'gray.700',
-      backgroundColor: 'gray.200',
+      color: 'text.subtle',
+      backgroundColor: 'interactive.hover',
     },
     _pressed: {
-      color: 'gray.700',
-      backgroundColor: 'gray.200',
+      color: 'text.subtle',
+      backgroundColor: 'interactive.hover',
     },
   })}
   aria-pressed={active}

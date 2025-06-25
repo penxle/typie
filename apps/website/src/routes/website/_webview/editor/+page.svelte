@@ -465,7 +465,7 @@
 <div
   bind:this={containerEl}
   style:--prosemirror-max-width={`${maxWidth.current}px`}
-  style:--prosemirror-color-selection={token.var('colors.gray.300')}
+  style:--prosemirror-color-selection={token.var('colors.border.strong')}
   class={flex({
     flexDirection: 'column',
     alignItems: 'center',
@@ -557,7 +557,7 @@
     ></textarea>
 
     <div class={center()}>
-      <div class={css({ marginY: '40px', width: '120px', height: '1px', backgroundColor: 'gray.200' })}></div>
+      <div class={css({ marginY: '40px', width: '120px', height: '1px', backgroundColor: 'interactive.hover' })}></div>
     </div>
   </div>
 

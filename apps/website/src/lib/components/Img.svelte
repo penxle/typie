@@ -112,7 +112,7 @@
       {#if loaded}
         <div
           bind:this={targetEl}
-          class={css({ position: 'absolute', inset: '0', backgroundColor: 'white' })}
+          class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default' })}
           in:fade={{ duration: 200 }}
         ></div>
       {/if}

@@ -92,17 +92,17 @@
 </script>
 
 <div class={flex({ direction: 'column', gap: '32px' })}>
-  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'gray.900' })}>계정</h1>
+  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>계정</h1>
 
   <div class={flex({ direction: 'column', gap: '16px' })}>
-    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>프로필</h3>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>프로필</h3>
 
     <form class={flex({ direction: 'column', gap: '20px', width: 'full' })} onsubmit={form.handleSubmit}>
       <div class={flex({ align: 'center', gap: '24px' })}>
         <label class={cx('group', center({ position: 'relative', size: '64px', cursor: 'pointer' }))}>
           <LoadableImg
             id={form.fields.avatarId}
-            style={css.raw({ size: '64px', borderWidth: '1px', borderColor: 'gray.200', borderRadius: 'full' })}
+            style={css.raw({ size: '64px', borderWidth: '1px', borderColor: 'border.default', borderRadius: 'full' })}
             alt={`${$user.name}의 아바타`}
             size={128}
           />
@@ -118,7 +118,7 @@
                 borderRadius: 'full',
                 size: 'full',
                 backgroundColor: 'gray.900/40',
-                color: 'white',
+                color: 'text.inverse',
               },
             })}
           >
@@ -150,7 +150,7 @@
           <TextInput id="name" style={css.raw({ width: 'full' })} bind:value={form.fields.name} />
 
           {#if form.errors.name}
-            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.name}</div>
           {/if}
         </div>
       </div>
@@ -161,13 +161,13 @@
     </form>
   </div>
 
-  <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
+  <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
 
   <div class={flex({ direction: 'column', gap: '12px' })}>
-    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>이메일 주소</h3>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>이메일 주소</h3>
 
     <div class={flex({ gap: '12px', width: 'full' })}>
-      <TextInput id="email" style={css.raw({ width: 'full', backgroundColor: 'gray.50' })} readonly bind:value={$user.email} />
+      <TextInput id="email" style={css.raw({ width: 'full', backgroundColor: 'surface.subtle' })} readonly bind:value={$user.email} />
 
       <Button style={css.raw({ flex: 'none', height: '36px' })} onclick={() => (updateEmailOpen = true)} size="sm" variant="secondary">
         변경
@@ -176,10 +176,10 @@
   </div>
 
   {#if $user.singleSignOns.length > 0}
-    <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
+    <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
 
     <div class={flex({ direction: 'column', gap: '16px' })}>
-      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>연결된 SNS 계정</h3>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>연결된 SNS 계정</h3>
 
       {#each $user.singleSignOns as singleSignOn (singleSignOn.id)}
         <div class={flex({ align: 'center', gap: '12px' })}>
@@ -191,7 +191,7 @@
                 borderWidth: '1px',
                 borderColor: '[#03C75A]',
                 borderRadius: '6px',
-                color: 'white',
+                color: 'text.inverse',
                 backgroundColor: '[#03C75A]',
                 size: '28px',
               })}
@@ -204,7 +204,7 @@
                 borderWidth: '1px',
                 borderColor: '[#FEE500]',
                 borderRadius: '6px',
-                color: 'black',
+                color: '[#000000]',
                 backgroundColor: '[#FEE500]',
                 size: '28px',
               })}
@@ -215,19 +215,19 @@
 
           <div>
             <p class={css({ fontSize: '15px', textTransform: 'capitalize' })}>{singleSignOn.provider.toLowerCase()}</p>
-            <p class={css({ marginTop: '2px', fontSize: '14px', color: 'gray.500' })}>{singleSignOn.email}</p>
+            <p class={css({ marginTop: '2px', fontSize: '14px', color: 'text.faint' })}>{singleSignOn.email}</p>
           </div>
         </div>
       {/each}
     </div>
   {/if}
 
-  <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
+  <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
 
   <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
     <div>
-      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>마케팅 수신 동의</h3>
-      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'gray.500' })}>타이피의 소식과 이벤트 정보를 받아보세요</p>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>마케팅 수신 동의</h3>
+      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>타이피의 소식과 이벤트 정보를 받아보세요</p>
     </div>
 
     <Switch
@@ -245,17 +245,17 @@
     />
   </div>
 
-  <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
+  <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
 
   <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
-    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.900' })}>계정 ID</h3>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>계정 ID</h3>
 
-    <div class={css({ fontSize: '13px', fontFamily: 'mono', color: 'gray.500', letterSpacing: '[0]' })}>
+    <div class={css({ fontSize: '13px', fontFamily: 'mono', color: 'text.faint', letterSpacing: '[0]' })}>
       {$user.id}
     </div>
   </div>
 
-  <div class={css({ height: '1px', backgroundColor: 'gray.100' })}></div>
+  <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
 
   <button
     class={css({
@@ -263,11 +263,11 @@
       paddingX: '8px',
       paddingY: '4px',
       fontSize: '13px',
-      color: 'gray.500',
+      color: 'text.faint',
       width: 'fit',
       borderRadius: '4px',
       transition: 'common',
-      _hover: { color: 'red.600', backgroundColor: 'red.50' },
+      _hover: { color: 'text.danger', backgroundColor: 'accent.danger.subtle' },
     })}
     onclick={async () => {
       Dialog.confirm({

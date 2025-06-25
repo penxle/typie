@@ -100,18 +100,18 @@
       borderRadius: '4px',
       fontSize: '14px',
       fontWeight: 'medium',
-      color: 'gray.400',
-      backgroundColor: 'gray.100',
+      color: 'text.disabled',
+      backgroundColor: 'surface.muted',
       display: isLastRowHovered ? 'flex' : 'none',
       opacity: '90',
       _groupHover: {
         display: 'flex',
       },
       _hover: {
-        backgroundColor: 'gray.200',
+        backgroundColor: 'interactive.hover',
       },
       _active: {
-        color: 'white',
+        color: 'text.inverse',
         backgroundColor: '[var(--prosemirror-color-selection)]',
       },
     })}
@@ -149,18 +149,18 @@
       borderRadius: '4px',
       fontSize: '14px',
       fontWeight: 'medium',
-      color: 'gray.400',
-      backgroundColor: 'gray.100',
+      color: 'text.disabled',
+      backgroundColor: 'surface.muted',
       display: isLastColumnHovered ? 'flex' : 'none',
       opacity: '90',
       _groupHover: {
         display: 'flex',
       },
       _hover: {
-        backgroundColor: 'gray.200',
+        backgroundColor: 'interactive.hover',
       },
       _active: {
-        color: 'white',
+        color: 'text.inverse',
         backgroundColor: '[var(--prosemirror-color-selection)]',
       },
     })}
@@ -200,18 +200,18 @@
       borderRadius: 'full',
       fontSize: '14px',
       fontWeight: 'medium',
-      color: 'gray.400',
-      backgroundColor: 'gray.100',
+      color: 'text.disabled',
+      backgroundColor: 'surface.muted',
       display: isLastRowHovered && isLastColumnHovered ? 'flex' : 'none',
       opacity: '90',
       _groupHover: {
         display: 'flex',
       },
       _hover: {
-        backgroundColor: 'gray.200',
+        backgroundColor: 'interactive.hover',
       },
       _active: {
-        color: 'white',
+        color: 'text.inverse',
         backgroundColor: '[var(--prosemirror-color-selection)]',
       },
     })}

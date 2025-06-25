@@ -48,7 +48,7 @@
 </script>
 
 <button
-  class={css({ marginLeft: 'auto', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'gray.100' } })}
+  class={css({ marginLeft: 'auto', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'surface.muted' } })}
   onclick={() => (open = true)}
   type="button"
   use:anchor
@@ -81,9 +81,9 @@
       display: 'flex',
       flexDirection: 'column',
       gap: '12px',
-      borderColor: 'gray.200',
+      borderColor: 'border.default',
       paddingX: '18px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       width: 'full',
       boxShadow: 'small',
       zIndex: '50',
@@ -113,7 +113,7 @@
           translateY: '-1/2',
           borderRadius: '4px',
           padding: '2px',
-          _hover: { backgroundColor: 'gray.200' },
+          _hover: { backgroundColor: 'interactive.hover' },
         })}
         onclick={() => (open = false)}
         type="button"
@@ -125,26 +125,36 @@
     <div class={flex({ gap: '32px', marginX: 'auto' })}>
       <div>
         <a
-          class={center({ borderRadius: '12px', backgroundColor: 'gray.100', size: '60px', _hover: { backgroundColor: 'gray.200' } })}
+          class={center({
+            borderRadius: '12px',
+            backgroundColor: 'surface.muted',
+            size: '60px',
+            _hover: { backgroundColor: 'interactive.hover' },
+          })}
           href={`https://x.com/intent/post?text=${href}`}
           rel="noopener noreferrer"
           target="_blank"
         >
           <Icon style={css.raw({ color: '[#1D9BF0]' })} icon={TwitterIcon} size={24} />
         </a>
-        <p class={css({ marginTop: '6px', fontSize: '14px', textAlign: 'center', color: 'gray.700' })}>트위터</p>
+        <p class={css({ marginTop: '6px', fontSize: '14px', textAlign: 'center', color: 'text.subtle' })}>트위터</p>
       </div>
 
       <div>
         <a
-          class={center({ borderRadius: '12px', backgroundColor: 'gray.100', size: '60px', _hover: { backgroundColor: 'gray.200' } })}
+          class={center({
+            borderRadius: '12px',
+            backgroundColor: 'surface.muted',
+            size: '60px',
+            _hover: { backgroundColor: 'interactive.hover' },
+          })}
           href={`https://share.planet.moe/share?text=${href}`}
           rel="noopener noreferrer"
           target="_blank"
         >
           <Icon style={css.raw({ color: '[#6364FF]' })} icon={MastodonIcon} size={24} />
         </a>
-        <p class={css({ marginTop: '6px', fontSize: '14px', textAlign: 'center', color: 'gray.700' })}>마스토돈</p>
+        <p class={css({ marginTop: '6px', fontSize: '14px', textAlign: 'center', color: 'text.subtle' })}>마스토돈</p>
       </div>
     </div>
 
@@ -159,7 +169,7 @@
           marginY: '16px',
           paddingX: '12px',
           height: '36px',
-          backgroundColor: 'gray.50',
+          backgroundColor: 'surface.subtle',
           _hover: {
             borderColor: 'brand.200',
           },
@@ -168,7 +178,7 @@
     >
       <input
         bind:this={linkInputEl}
-        class={css({ flexGrow: '1', color: 'gray.600', fontSize: '12px', _groupHover: { color: 'gray.900' } })}
+        class={css({ flexGrow: '1', color: 'text.muted', fontSize: '12px', _groupHover: { color: 'text.default' } })}
         onclick={() => linkInputEl?.select()}
         readonly
         value={href}
@@ -178,8 +188,8 @@
         class={center({
           borderRadius: '6px',
           size: '20px',
-          color: 'gray.500',
-          _hover: { color: 'gray.700', backgroundColor: 'gray.200' },
+          color: 'text.faint',
+          _hover: { color: 'text.subtle', backgroundColor: 'interactive.hover' },
         })}
         onclick={handleCopyLink}
         type="button"

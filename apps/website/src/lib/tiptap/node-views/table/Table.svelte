@@ -184,7 +184,7 @@
           outlineWidth: '1px',
           outlineStyle: 'var(--table-border-style)',
           outlineOffset: '-1px',
-          outlineColor: 'gray.300',
+          outlineColor: 'border.strong',
         }),
         style: tableWidth ? `width: ${tableWidth}` : `min-width: ${tableMinWidth}`,
       })}

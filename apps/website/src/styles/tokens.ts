@@ -1,8 +1,8 @@
-import { defineTokens } from '@pandacss/dev';
+import { defineSemanticTokens, defineTokens } from '@pandacss/dev';
 import { aspectRatios } from './aspect-ratios';
 import { blurs } from './blurs';
 import { borderWidths } from './border-widths';
-import { colors } from './colors';
+import { colors, semanticColors } from './colors';
 import { fontSizes } from './font-sizes';
 import { fontWeights } from './font-weights';
 import { fonts } from './fonts';
@@ -31,4 +31,8 @@ export const tokens = defineTokens({
   sizes,
   spacing,
   zIndex,
+});
+
+export const semanticTokens = defineSemanticTokens({
+  colors: semanticColors,
 });

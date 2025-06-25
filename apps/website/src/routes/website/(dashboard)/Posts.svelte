@@ -144,7 +144,7 @@
         width: 'var(--width)',
         maxWidth: 'var(--max-width)',
         height: 'full',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         transitionProperty: 'border, border-radius, box-shadow',
         transitionDuration: '150ms',
         transitionTimingFunction: 'ease',
@@ -154,10 +154,10 @@
         ? {
             borderWidth: '[0.5px]',
             borderRadius: '4px',
-            boxShadow: '[0 3px 6px -2px {colors.gray.950/3}, 0 1px 1px {colors.gray.950/5}]',
+            boxShadow: '[0 3px 6px -2px {colors.shadow.default/3}, 0 1px 1px {colors.shadow.default/5}]',
           }
         : {
-            borderColor: 'gray.100',
+            borderColor: 'border.subtle',
             borderRightWidth: '1px',
             borderRightRadius: '4px',
             boxShadow: 'small',
@@ -172,7 +172,7 @@
         gap: '4px',
         paddingX: '12px',
         paddingY: '8px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
       })}
     >
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
@@ -182,9 +182,9 @@
           class={center({
             borderRadius: '4px',
             size: '20px',
-            color: 'gray.500',
+            color: 'text.faint',
             transition: 'common',
-            _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={() => {
             if (app.preference.current.postsExpanded) {
@@ -208,9 +208,9 @@
           class={center({
             borderRadius: '4px',
             size: '24px',
-            color: 'gray.500',
+            color: 'text.faint',
             transition: 'common',
-            _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
             await createFolder({
@@ -229,9 +229,9 @@
           class={center({
             borderRadius: '4px',
             size: '24px',
-            color: 'gray.500',
+            color: 'text.faint',
             transition: 'common',
-            _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
             const resp = await createPost({
@@ -283,7 +283,7 @@
           marginLeft: '4px',
           height: 'full',
           width: '2px',
-          backgroundColor: 'gray.400',
+          backgroundColor: 'border.strong',
           opacity: '50',
         },
       },

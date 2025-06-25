@@ -62,7 +62,7 @@
 
 {#if $postView.allowReaction}
   <button
-    class={css({ marginTop: '2px', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'gray.100' } })}
+    class={css({ marginTop: '2px', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'surface.muted' } })}
     onclick={() => {
       open = true;
       mixpanel.track('open_post_reaction_popover');
@@ -79,11 +79,11 @@
         columns: 5,
         gap: '8px',
         borderWidth: '1px',
-        borderColor: 'gray.100',
+        borderColor: 'border.subtle',
         borderRadius: '8px',
         paddingX: '8px',
         paddingY: '6px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         boxShadow: 'small',
       })}
       use:floating
@@ -92,7 +92,7 @@
       {#each Object.keys(emojis) as emoji (emoji)}
         <li>
           <button
-            class={center({ borderRadius: '4px', padding: '3px', size: 'full', _supportHover: { backgroundColor: 'gray.100' } })}
+            class={center({ borderRadius: '4px', padding: '3px', size: 'full', _supportHover: { backgroundColor: 'surface.muted' } })}
             onclick={async () => {
               await createPostReaction({ postId: $postView.id, emoji });
               mixpanel.track('create_post_reaction', { emoji });

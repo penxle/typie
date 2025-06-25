@@ -42,10 +42,10 @@
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
     <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>이메일 인증 중...</h1>
-    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>잠시만 기다려주세요.</div>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint' })}>잠시만 기다려주세요.</div>
   </div>
 
   <div class={center({ height: '100px' })}>
-    <RingSpinner style={css.raw({ size: '50px', color: 'brand.500' })} />
+    <RingSpinner style={css.raw({ size: '50px', color: 'text.brand' })} />
   </div>
 </div>

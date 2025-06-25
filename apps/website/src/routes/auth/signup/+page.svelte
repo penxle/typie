@@ -96,14 +96,14 @@
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>
       <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>지금 타이피에 가입하세요</h1>
 
-      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500' })}>
+      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint' })}>
         이미 계정이 있으신가요?
         <a
           class={css({
             display: 'inline-flex',
             alignItems: 'center',
             fontWeight: 'medium',
-            color: 'gray.950',
+            color: 'text.default',
             _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' },
           })}
           href={`/login${page.url.search}`}
@@ -116,17 +116,17 @@
     <form class={flex({ flexDirection: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
       <div class={flex({ direction: 'column', gap: '12px' })}>
         <div class={flex({ direction: 'column', gap: '4px' })}>
-          <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="email">이메일</label>
+          <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="email">이메일</label>
 
           <TextInput id="email" aria-invalid={!!form.errors.email} autofocus placeholder="me@example.com" bind:value={form.fields.email} />
 
           {#if form.errors.email}
-            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.email}</div>
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.email}</div>
           {/if}
         </div>
 
         <div class={flex({ direction: 'column', gap: '4px' })}>
-          <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="password">비밀번호</label>
+          <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="password">비밀번호</label>
 
           <TextInput
             id="password"
@@ -137,12 +137,12 @@
           />
 
           {#if form.errors.password}
-            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.password}</div>
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.password}</div>
           {/if}
         </div>
 
         <div class={flex({ direction: 'column', gap: '4px' })}>
-          <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="confirmPassword">비밀번호 확인</label>
+          <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="confirmPassword">비밀번호 확인</label>
 
           <TextInput
             id="confirmPassword"
@@ -153,12 +153,12 @@
           />
 
           {#if form.errors.confirmPassword}
-            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.confirmPassword}</div>
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.confirmPassword}</div>
           {/if}
         </div>
 
         <div class={flex({ direction: 'column', gap: '4px' })}>
-          <label class={css({ fontSize: '13px', color: 'gray.700', userSelect: 'none' })} for="name">닉네임</label>
+          <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="name">닉네임</label>
 
           <TextInput id="name" aria-invalid={!!form.errors.name} placeholder={name} bind:value={form.fields.name}>
             {#snippet rightItem()}
@@ -166,8 +166,8 @@
                 class={center({
                   borderRadius: '6px',
                   size: '24px',
-                  color: 'gray.500',
-                  _hover: { color: 'gray.700', backgroundColor: 'gray.100' },
+                  color: 'text.faint',
+                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
                 })}
                 onclick={async () => {
                   name = await generateRandomName();
@@ -181,7 +181,7 @@
           </TextInput>
 
           {#if form.errors.name}
-            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.name}</div>
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.name}</div>
           {/if}
         </div>
 
@@ -194,9 +194,9 @@
               size="sm"
               bind:checked={form.fields.termsAgreed}
             >
-              <span class={flex({ wrap: 'wrap', fontSize: { base: '13px', lg: '14px' }, color: 'gray.700' })}>
+              <span class={flex({ wrap: 'wrap', fontSize: { base: '13px', lg: '14px' }, color: 'text.subtle' })}>
                 <a
-                  class={css({ textDecoration: 'underline', color: 'gray.900' })}
+                  class={css({ textDecoration: 'underline', color: 'text.default' })}
                   href="https://help.typie.co/legal/terms"
                   rel="noopener noreferrer"
                   target="_blank"
@@ -207,7 +207,7 @@
                 <span>&nbsp;및&nbsp;</span>
 
                 <a
-                  class={css({ textDecoration: 'underline', color: 'gray.900' })}
+                  class={css({ textDecoration: 'underline', color: 'text.default' })}
                   href="https://help.typie.co/legal/privacy"
                   rel="noopener noreferrer"
                   target="_blank"
@@ -222,12 +222,12 @@
             </Checkbox>
 
             {#if form.errors.termsAgreed}
-              <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'red.500' })}>{form.errors.termsAgreed}</div>
+              <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.termsAgreed}</div>
             {/if}
           </div>
 
           <Checkbox id="marketingAgreed" name="marketingAgreed" size="sm" bind:checked={form.fields.marketingAgreed}>
-            <span class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.700' })}>마케팅 정보 수신에 동의해요 (선택)</span>
+            <span class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.subtle' })}>마케팅 정보 수신에 동의해요 (선택)</span>
           </Checkbox>
         </div>
       </div>
@@ -238,7 +238,7 @@
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>
       <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>지금 타이피에 가입하세요</h1>
 
-      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'gray.500', wordBreak: 'keep-all' })}>
+      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint', wordBreak: 'keep-all' })}>
         {form.fields.email} 으로 회원가입 링크를 보냈어요.
       </div>
     </div>
@@ -264,7 +264,7 @@
 
     <div class={flex({ justifyContent: 'center' })}>
       <a
-        class={css({ fontSize: '13px', color: 'gray.700', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
+        class={css({ fontSize: '13px', color: 'text.subtle', _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' } })}
         href={`/login${page.url.search}`}
       >
         로그인 페이지로 돌아가기

@@ -90,7 +90,7 @@
 </script>
 
 <button
-  class={css({ display: 'flex', alignItems: 'center', gap: '6px' }, app.timerState.current.status === 'focus' && { color: 'brand.500' })}
+  class={css({ display: 'flex', alignItems: 'center', gap: '6px' }, app.timerState.current.status === 'focus' && { color: 'blue.600' })}
   aria-expanded={open}
   onclick={() => (open = !open)}
   type="button"
@@ -203,9 +203,9 @@
             flex: '1',
             padding: '8px',
             borderRadius: '8px',
-            backgroundColor: 'brand.500',
+            backgroundColor: 'blue.600',
             color: 'white',
-            _hover: { backgroundColor: 'brand.600' },
+            _hover: { backgroundColor: 'blue.700' },
           })}
           onclick={() => {
             app.timerState.current.status = 'focus';
@@ -249,9 +249,9 @@
             flex: '1',
             padding: '8px',
             borderRadius: '8px',
-            backgroundColor: 'brand.500',
+            backgroundColor: 'blue.600',
             color: 'white',
-            _hover: { backgroundColor: 'brand.600' },
+            _hover: { backgroundColor: 'blue.700' },
           })}
           onclick={() => {
             if (timerInterval) {
@@ -293,7 +293,7 @@
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'gray.900/24',
+      backgroundColor: '[rgba(0,0,0,0.8)]',
       zIndex: '50',
     })}
   >
@@ -314,7 +314,7 @@
       <div class={css({ fontSize: '14px', color: 'gray.600', textAlign: 'center' })}>
         지금은 휴식 시간입니다. 잠시 일을 멈추고 휴식을 취하세요.
       </div>
-      <div class={css({ fontSize: '24px', fontWeight: 'bold', color: 'brand.500' })}>
+      <div class={css({ fontSize: '24px', fontWeight: 'bold', color: 'blue.600' })}>
         {formatTime(app.timerState.current.currentTime)}
       </div>
       <div class={flex({ gap: '8px', width: 'full' })}>
@@ -323,9 +323,9 @@
             flex: '1',
             padding: '12px',
             borderRadius: '8px',
-            backgroundColor: 'brand.500',
+            backgroundColor: 'blue.600',
             color: 'white',
-            _hover: { backgroundColor: 'brand.600' },
+            _hover: { backgroundColor: 'blue.700' },
           })}
           onclick={() => {
             app.timerState.current.keepFocus = true;

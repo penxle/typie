@@ -89,18 +89,18 @@
         paddingY: '6px',
         borderRadius: '6px',
         transition: 'common',
-        _supportHover: { backgroundColor: 'gray.100' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'gray.100' },
+        _supportHover: { backgroundColor: 'surface.muted' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
       },
       $post.entity.depth > 0 && {
         borderLeftWidth: '1px',
         borderLeftRadius: '0',
         marginLeft: '-1px',
         paddingLeft: '14px',
-        _supportHover: { borderLeftColor: 'gray.300' },
+        _supportHover: { borderColor: 'border.strong' },
       },
       active && {
-        backgroundColor: 'gray.100',
+        backgroundColor: 'surface.muted',
       },
     ),
   )}
@@ -115,15 +115,15 @@
 >
   <div
     class={css(
-      { flex: 'none', borderRadius: 'full', backgroundColor: 'gray.200', size: '4px' },
-      $post.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'brand.500' },
+      { flex: 'none', borderRadius: 'full', backgroundColor: 'interactive.hover', size: '4px' },
+      $post.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
     )}
   ></div>
 
   {#if $post.type === PostType.NORMAL}
-    <Icon style={css.raw({ color: 'gray.500' })} icon={FileIcon} size={14} />
+    <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
   {:else if $post.type === PostType.TEMPLATE}
-    <Icon style={css.raw({ color: 'gray.500' })} icon={ShapesIcon} size={14} />
+    <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
   {/if}
 
   <span
@@ -132,11 +132,11 @@
         flexGrow: '1',
         fontSize: '14px',
         fontWeight: 'medium',
-        color: 'gray.600',
+        color: 'text.muted',
         wordBreak: 'break-all',
         lineClamp: '1',
       },
-      active && { fontWeight: 'bold', color: 'gray.950' },
+      active && { fontWeight: 'bold', color: 'text.default' },
     )}
   >
     {$post.title}
@@ -148,12 +148,12 @@
         class={center({
           borderRadius: '4px',
           size: '16px',
-          color: 'gray.400',
+          color: 'text.disabled',
           opacity: '0',
           transition: 'common',
-          _hover: { backgroundColor: 'gray.200' },
+          _hover: { backgroundColor: 'interactive.hover' },
           _groupHover: { opacity: '100' },
-          _pressed: { backgroundColor: 'gray.200', opacity: '100' },
+          _pressed: { backgroundColor: 'interactive.hover', opacity: '100' },
         })}
         aria-pressed={open}
       >

@@ -32,8 +32,8 @@
         borderBottomRadius: open ? '0' : '8px',
         paddingX: '12px',
         paddingY: '8px',
-        color: 'gray.500',
-        backgroundColor: 'gray.100',
+        color: 'text.faint',
+        backgroundColor: 'surface.muted',
         userSelect: 'none',
         cursor: 'pointer',
       })}

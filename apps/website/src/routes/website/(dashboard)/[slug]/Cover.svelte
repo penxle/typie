@@ -77,9 +77,9 @@
       />
     {/key}
   {:else}
-    <div class={center({ aspectRatio: '[10/1]', backgroundColor: 'gray.100' })}>
+    <div class={center({ aspectRatio: '[10/1]', backgroundColor: 'surface.muted' })}>
       {#if inflight}
-        <RingSpinner style={css.raw({ size: '24px', color: 'gray.500' })} />
+        <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
       {/if}
     </div>
   {/if}

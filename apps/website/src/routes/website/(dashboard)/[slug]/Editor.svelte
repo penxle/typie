@@ -374,19 +374,19 @@
       })}
     >
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <Icon style={css.raw({ color: 'gray.400' })} icon={FolderIcon} size={12} />
+        <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
 
-        <div class={css({ flex: 'none', fontSize: '12px', color: 'gray.400' })}>내 포스트</div>
-        <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
+        <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>내 포스트</div>
+        <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
 
         {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
           {#if ancestor.node.__typename === 'Folder'}
-            <div class={css({ fontSize: '12px', color: 'gray.400' })}>{ancestor.node.name}</div>
-            <Icon style={css.raw({ color: 'gray.400' })} icon={ChevronRightIcon} size={12} />
+            <div class={css({ fontSize: '12px', color: 'text.disabled' })}>{ancestor.node.name}</div>
+            <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
           {/if}
         {/each}
 
-        <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'gray.700' })}>{effectiveTitle}</div>
+        <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>{effectiveTitle}</div>
       </div>
 
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
@@ -417,15 +417,15 @@
               class={center({
                 borderRadius: '4px',
                 size: '24px',
-                color: 'gray.500',
+                color: 'text.faint',
                 transition: 'common',
                 _hover: {
-                  color: 'gray.700',
-                  backgroundColor: 'gray.100',
+                  color: 'text.subtle',
+                  backgroundColor: 'surface.muted',
                 },
                 _pressed: {
-                  color: 'gray.700',
-                  backgroundColor: 'gray.100',
+                  color: 'text.subtle',
+                  backgroundColor: 'surface.muted',
                 },
               })}
               aria-pressed={open}
@@ -539,9 +539,9 @@
           class={center({
             borderRadius: '4px',
             size: '24px',
-            color: 'gray.500',
+            color: 'text.faint',
             transition: 'common',
-            _hover: { backgroundColor: 'gray.100' },
+            _hover: { backgroundColor: 'surface.muted' },
           })}
           onclick={() => {
             app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
@@ -551,7 +551,7 @@
           use:tooltip={{ message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기' }}
         >
           <Icon
-            style={css.raw({ color: 'gray.500' })}
+            style={css.raw({ color: 'text.faint' })}
             icon={app.preference.current.panelExpanded ? PanelRightCloseIcon : PanelRightOpenIcon}
             size={16}
           />
@@ -704,7 +704,7 @@
         </div>
 
         {#if showTimeline}
-          <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'white', zIndex: '1' })}>
+          <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default', zIndex: '1' })}>
             <Timeline $post={$query.post} {doc} />
           </div>
         {/if}
@@ -715,7 +715,7 @@
           class={flex({
             flexShrink: '0',
             borderLeftWidth: '1px',
-            borderLeftColor: 'gray.100',
+            borderColor: 'border.subtle',
             paddingTop: '16px',
             width: '1/4',
             height: 'full',

@@ -81,7 +81,7 @@
         justifyContent: 'space-between',
         alignItems: 'center',
         borderRadius: '4px',
-        backgroundColor: 'gray.100',
+        backgroundColor: 'surface.muted',
       }),
     )}
     aria-label={editor?.current.isEditable ? undefined : `${attrs.name} 파일 다운로드`}
@@ -99,13 +99,13 @@
           truncate: true,
         })}
       >
-        <Icon style={css.raw({ color: 'gray.400' })} icon={PaperclipIcon} size={20} />
+        <Icon style={css.raw({ color: 'text.disabled' })} icon={PaperclipIcon} size={20} />
 
         <span class={css({ truncate: true })}>{attrs.name}</span>
 
         <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
 
-        <span class={css({ color: 'gray.400' })}>{formatBytes(attrs.size)}</span>
+        <span class={css({ color: 'text.disabled' })}>{formatBytes(attrs.size)}</span>
       </div>
     {:else}
       <div
@@ -115,7 +115,7 @@
           paddingX: '14px',
           paddingY: '12px',
           fontSize: '14px',
-          color: 'gray.400',
+          color: 'text.disabled',
           truncate: true,
         })}
       >
@@ -126,7 +126,7 @@
 
           <VerticalDivider style={css.raw({ height: '14px' })} color="secondary" />
 
-          <span class={css({ color: 'gray.400' })}>{formatBytes(inflightFile.size)}</span>
+          <span class={css({ color: 'text.disabled' })}>{formatBytes(inflightFile.size)}</span>
         {:else}
           <Icon icon={PaperclipIcon} size={20} />
           파일
@@ -144,10 +144,10 @@
                   marginRight: '12px',
                   borderRadius: '4px',
                   padding: '2px',
-                  color: 'gray.400',
+                  color: 'text.disabled',
                   opacity: '0',
                   transition: 'common',
-                  _hover: { backgroundColor: 'gray.200' },
+                  _hover: { backgroundColor: 'interactive.hover' },
                   _groupHover: { opacity: '100' },
                 },
                 open && { opacity: '100' },
@@ -168,7 +168,7 @@
             marginRight: '12px',
             borderRadius: '4px',
             padding: '2px',
-            color: 'gray.400',
+            color: 'text.disabled',
           })}
         >
           <Icon icon={ArrowDownToLineIcon} size={20} />
@@ -187,13 +187,13 @@
       borderRadius: '12px',
       padding: '12px',
       width: '380px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       boxShadow: 'small',
       zIndex: '1',
     })}
     use:floating
   >
-    <span class={css({ fontSize: '13px', color: 'gray.600' })}>아래 버튼을 클릭해 파일을 선택하세요</span>
+    <span class={css({ fontSize: '13px', color: 'text.muted' })}>아래 버튼을 클릭해 파일을 선택하세요</span>
 
     <Button style={css.raw({ width: 'full' })} onclick={handleUpload} size="sm" variant="secondary">파일 선택</Button>
   </div>

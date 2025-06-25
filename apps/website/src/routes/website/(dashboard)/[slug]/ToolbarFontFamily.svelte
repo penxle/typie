@@ -130,7 +130,7 @@
   size="small"
 >
   {#snippet anchor()}
-    <div class={css({ flexGrow: '1', fontSize: '14px', color: 'gray.700', lineClamp: '1' })}>
+    <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle', lineClamp: '1' })}>
       {values.fontFamily.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily))
         ?.label ??
         $site?.fonts.find(({ id }) => id === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily))?.name}
@@ -176,11 +176,11 @@
         >
           <div class={flex({ alignItems: 'center', gap: '4px' })}>
             <Icon
-              style={css.raw({ color: 'gray.500', transitionProperty: 'none', _groupHover: { color: 'brand.400' } })}
+              style={css.raw({ color: 'text.faint', transitionProperty: 'none', _groupHover: { color: 'text.brand' } })}
               icon={PlusIcon}
               size={14}
             />
-            <span class={css({ color: 'gray.700', _groupHover: { color: 'brand.400' } })}>직접 업로드</span>
+            <span class={css({ color: 'text.subtle', _groupHover: { color: 'text.brand' } })}>직접 업로드</span>
           </div>
         </ToolbarDropdownMenuItem>
       {/if}
@@ -191,8 +191,8 @@
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>
   <div class={center({ gap: '8px', padding: '12px' })}>
     <div class={center({ gap: '4px' })}>
-      <Icon style={css.raw({ color: 'gray.500' })} icon={TypeIcon} size={14} />
-      <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'gray.500' })}>폰트 업로드하기</span>
+      <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} size={14} />
+      <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>폰트 업로드하기</span>
     </div>
 
     <div
@@ -201,13 +201,13 @@
         borderRadius: 'full',
         paddingX: '8px',
         paddingY: '2px',
-        backgroundColor: 'brand.100',
+        backgroundColor: 'accent.brand.subtle',
         userSelect: 'none',
       })}
       use:tooltip={{ message: 'FULL ACCESS 전용 기능이에요', placement: 'top', delay: 0 }}
     >
-      <Icon style={css.raw({ color: 'brand.400' })} icon={GemIcon} size={12} />
-      <span class={css({ fontSize: '11px', fontWeight: 'bold', color: 'brand.500' })}>FULL</span>
+      <Icon style={css.raw({ color: 'text.brand' })} icon={GemIcon} size={12} />
+      <span class={css({ fontSize: '11px', fontWeight: 'bold', color: 'text.brand' })}>FULL</span>
     </div>
   </div>
 
@@ -220,16 +220,16 @@
         gap: '8px',
         borderRadius: '4px',
         fontSize: '14px',
-        backgroundColor: 'gray.100',
+        backgroundColor: 'surface.muted',
         padding: '12px',
       })}
     >
       <div class={center({ gap: '4px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={InfoIcon} size={12} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.500' })}>이용 안내</span>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={InfoIcon} size={12} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.faint' })}>이용 안내</span>
       </div>
 
-      <ul class={css({ listStyle: 'disc', paddingLeft: '20px', fontSize: '13px', color: 'gray.500' })}>
+      <ul class={css({ listStyle: 'disc', paddingLeft: '20px', fontSize: '13px', color: 'text.faint' })}>
         <li>TTF, OTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
         <li>너무 얇거나 너무 두꺼운 폰트, 기울어진 폰트는 업로드할 수 없어요.</li>
         <li>업로드된 폰트는 내 글이라면 어디서나 이용할 수 있어요.</li>

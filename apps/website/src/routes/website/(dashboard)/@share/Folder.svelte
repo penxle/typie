@@ -103,11 +103,11 @@
     }}
   >
     {#if copied}
-      <Icon style={css.raw({ color: 'blue.600' })} icon={CheckIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'blue.600' })}>복사되었어요</div>
+      <Icon style={css.raw({ color: 'text.link' })} icon={CheckIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.link' })}>복사되었어요</div>
     {:else}
-      <Icon style={css.raw({ color: 'blue.600' })} icon={LinkIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'blue.600' })}>링크 복사</div>
+      <Icon style={css.raw({ color: 'text.link' })} icon={LinkIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.link' })}>링크 복사</div>
     {/if}
   </button>
 </div>
@@ -116,12 +116,12 @@
 
 <div class={flex({ flexDirection: 'column', gap: '16px', paddingX: '16px', paddingTop: '16px', paddingBottom: '24px' })}>
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'gray.500' })}>폴더 조회 권한</div>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>폴더 조회 권한</div>
 
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'gray.500' })} icon={BlendIcon} size={14} />
-        <div class={css({ fontSize: '12px', color: 'gray.700' })}>공개 범위</div>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={BlendIcon} size={14} />
+        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>공개 범위</div>
       </div>
 
       <Select
