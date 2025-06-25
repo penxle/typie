@@ -606,6 +606,9 @@ importers:
       '@typie/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      postcss:
+        specifier: ^8.5.6
+        version: 8.5.6
       svelte:
         specifier: ^5.34.7
         version: 5.34.7
@@ -12877,7 +12880,7 @@ snapshots:
       '@vue/shared': 3.4.19
       estree-walker: 2.0.2
       magic-string: 0.30.17
-      postcss: 8.4.49
+      postcss: 8.5.6
       source-map-js: 1.2.1
 
   '@vue/compiler-ssr@3.4.19':

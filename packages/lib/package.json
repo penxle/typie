@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./dayjs": "./src/dayjs/index.ts",
+    "./postcss": "./src/postcss/index.js",
     "./svelte": "./src/svelte/index.ts",
     "./vite": {
       "types": "./src/vite/index.d.ts",
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@sveltejs/kit": "^2.22.0",
     "@typie/tsconfig": "workspace:*",
+    "postcss": "^8.5.6",
     "svelte": "^5.34.7",
     "svgo": "^4.0.0",
     "typescript": "^5.8.3",
