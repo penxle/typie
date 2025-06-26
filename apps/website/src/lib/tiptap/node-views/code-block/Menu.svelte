@@ -195,7 +195,7 @@
         padding: '8px',
         backgroundColor: 'surface.default',
         borderTopRadius: '12px',
-        borderBottom: '1px solid',
+        borderBottomWidth: '1px',
         borderColor: 'border.subtle',
       })}
     >
