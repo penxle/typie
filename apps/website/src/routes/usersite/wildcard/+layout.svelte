@@ -2,22 +2,40 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount } from 'svelte';
+  import CheckIcon from '~icons/lucide/check';
+  import MonitorIcon from '~icons/lucide/monitor';
+  import MoonIcon from '~icons/lucide/moon';
+  import SunIcon from '~icons/lucide/sun';
+  import SunMoonIcon from '~icons/lucide/sun-moon';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Button, Img, Menu, MenuItem } from '$lib/components';
+  import { Button, Icon, Img, Menu, MenuItem } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
+  import { getThemeContext } from '$lib/context';
   import { serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import type { Snippet } from 'svelte';
+  import type { Component, Snippet } from 'svelte';
+  import type { Theme } from '$lib/context';
 
   type Props = {
     children: Snippet;
   };
 
   let { children }: Props = $props();
+
+  const themes: Record<Theme, { icon: Component; label: string }> = {
+    auto: { icon: MonitorIcon, label: '시스템 설정 따르기' },
+    light: { icon: SunIcon, label: '라이트 모드' },
+    dark: { icon: MoonIcon, label: '다크 모드' },
+  };
+
+  const themeNames: Theme[] = ['auto', 'light', 'dark'];
+  const theme = getThemeContext();
+
+  let themeMenuOpen = $state(false);
 
   const query = graphql(`
     query UsersiteWildcard_Layout_Query {
@@ -105,48 +123,93 @@
         <Logo class={css({ height: 'full' })} />
       </a>
 
-      {#if $query.me}
-        <Menu>
+      <div class={flex({ flex: '1' })}></div>
+
+      <div class={flex({ alignItems: 'center', gap: '12px' })}>
+        <Menu
+          style={css.raw({
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            size: '32px',
+            borderWidth: '1px',
+            borderColor: 'border.subtle',
+            borderRadius: 'full',
+            color: 'text.subtle',
+            backgroundColor: 'surface.default',
+            transition: 'common',
+            _hover: {
+              backgroundColor: 'surface.subtle',
+              color: 'text.default',
+            },
+          })}
+          offset={8}
+          placement="bottom-end"
+          bind:open={themeMenuOpen}
+        >
           {#snippet button()}
-            {#if $query.me?.avatar}
-              <Img
-                style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'border.subtle', borderRadius: 'full' })}
-                $image={$query.me.avatar}
-                alt={`${$query.me.name}의 아바타`}
-                size={32}
-              />
-            {:else}
-              <div
-                class={css({
-                  size: '32px',
-                  borderWidth: '1px',
-                  borderColor: 'border.subtle',
-                  borderRadius: 'full',
-                  backgroundColor: 'interactive.hover',
-                })}
-              ></div>
-            {/if}
+            <Icon icon={SunMoonIcon} size={18} />
           {/snippet}
 
-          <MenuItem href={`${env.PUBLIC_WEBSITE_URL}/home`} type="link">내 홈으로</MenuItem>
-          <MenuItem
-            onclick={() => {
-              mixpanel.track('logout', { via: 'header' });
+          {#each themeNames as name (name)}
+            <MenuItem
+              icon={themes[name].icon}
+              onclick={() => {
+                theme.current = name;
+              }}
+            >
+              {themes[name].label}
 
-              location.href = qs.stringifyUrl({
-                url: `${env.PUBLIC_AUTH_URL}/logout`,
-                query: {
-                  redirect_uri: page.url.href,
-                },
-              });
-            }}
-          >
-            로그아웃
-          </MenuItem>
+              {#if theme.current === name}
+                <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
+              {/if}
+            </MenuItem>
+          {/each}
         </Menu>
-      {:else}
-        <Button external href={authorizeUrl} size="sm" type="link" variant="primary">시작하기</Button>
-      {/if}
+
+        {#if $query.me}
+          <Menu>
+            {#snippet button()}
+              {#if $query.me?.avatar}
+                <Img
+                  style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'border.subtle', borderRadius: 'full' })}
+                  $image={$query.me.avatar}
+                  alt={`${$query.me.name}의 아바타`}
+                  size={32}
+                />
+              {:else}
+                <div
+                  class={css({
+                    size: '32px',
+                    borderWidth: '1px',
+                    borderColor: 'border.subtle',
+                    borderRadius: 'full',
+                    backgroundColor: 'interactive.hover',
+                  })}
+                ></div>
+              {/if}
+            {/snippet}
+
+            <MenuItem href={`${env.PUBLIC_WEBSITE_URL}/home`} type="link">내 홈으로</MenuItem>
+            <MenuItem
+              onclick={() => {
+                mixpanel.track('logout', { via: 'header' });
+
+                location.href = qs.stringifyUrl({
+                  url: `${env.PUBLIC_AUTH_URL}/logout`,
+                  query: {
+                    redirect_uri: page.url.href,
+                  },
+                });
+              }}
+            >
+              로그아웃
+            </MenuItem>
+          </Menu>
+        {:else}
+          <Button external href={authorizeUrl} size="sm" type="link" variant="primary">시작하기</Button>
+        {/if}
+      </div>
     </div>
   </header>
 
