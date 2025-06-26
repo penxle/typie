@@ -6,6 +6,7 @@
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import { token } from '$styled-system/tokens';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import { values } from '../../values';
   import type { NodeViewProps } from '../../lib';
@@ -23,10 +24,10 @@
   type Callout = (typeof callouts)[number];
 
   const calloutMap = {
-    info: { icon: InfoIcon, color: '#3b82f6' },
-    success: { icon: CircleCheckIcon, color: '#22c55e' },
-    warning: { icon: CircleAlertIcon, color: '#f97316' },
-    danger: { icon: TriangleAlertIcon, color: '#dc2626' },
+    info: { icon: InfoIcon, color: token('colors.callout.info') },
+    success: { icon: CircleCheckIcon, color: token('colors.callout.success') },
+    warning: { icon: CircleAlertIcon, color: token('colors.callout.warning') },
+    danger: { icon: TriangleAlertIcon, color: token('colors.callout.danger') },
   };
 
   const icon = $derived(calloutMap[attrs.type as Callout].icon);
@@ -36,7 +37,7 @@
 <NodeView {...HTMLAttributes}>
   <div
     style:border-color={color}
-    style:background-color={`color-mix(in srgb, ${color} 2%, transparent)`}
+    style:background-color={`color-mix(in srgb, ${color} 3%, transparent)`}
     class={flex({
       alignItems: 'flex-start',
       gap: '8px',

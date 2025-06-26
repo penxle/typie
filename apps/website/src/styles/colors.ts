@@ -209,4 +209,9 @@ export const semanticColors = defineSemanticTokens.colors({
   'decoration.grid.subtle': { value: { base: '{colors.gray.50}', _dark: '{colors.dark.gray.900}' } },
   'decoration.grid.brand': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.brand.900}' } },
   'decoration.grid.brand.subtle': { value: { base: '{colors.brand.50}', _dark: '{colors.dark.brand.950}' } },
+
+  'callout.info': { value: { base: '#3b82f6', _dark: '#4c6ef5' } },
+  'callout.success': { value: { base: '#22c55e', _dark: '#3fc380' } },
+  'callout.warning': { value: { base: '#f97316', _dark: '#f4a934' } },
+  'callout.danger': { value: { base: '#dc2626', _dark: '#f04444' } },
 });
