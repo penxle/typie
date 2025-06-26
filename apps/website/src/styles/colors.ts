@@ -176,6 +176,7 @@ export const semanticColors = defineSemanticTokens.colors({
   'text.link': { value: { base: '{colors.blue.600}', _dark: '{colors.dark.blue.300}' } },
   'text.brand': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.300}' } },
   'text.overlay': { value: { base: '{colors.white}', _dark: '{colors.dark.gray.50}' } },
+  'text.white': { value: { base: '{colors.white}', _dark: '{colors.white}' } },
 
   'surface.default': { value: { base: '{colors.white}', _dark: '{colors.dark.gray.900}' } },
   'surface.subtle': { value: { base: '{colors.gray.50}', _dark: '{colors.dark.gray.800}' } },
