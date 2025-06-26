@@ -1,5 +1,5 @@
 import { getContext, setContext } from 'svelte';
-import { LocalStore, SessionStore, ThemeState } from '../state';
+import { LocalStore, SessionStore } from '../state';
 
 type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
@@ -40,7 +40,6 @@ type AppContext = {
   preference: LocalStore<AppPreference>;
   state: AppState;
   timerState: SessionStore<AppTimerState>;
-  theme: ThemeState;
 };
 
 const key: unique symbol = Symbol('AppContext');
@@ -81,7 +80,6 @@ export const setupAppContext = (userId: string) => {
       paused: false,
       keepFocus: false,
     }),
-    theme: new ThemeState(),
   };
 
   setContext(key, context);

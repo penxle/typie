@@ -1,3 +1,4 @@
-@layer reset, base, prose, tokens, recipes, utilities;
+@layer reset, base, prose, tokens, recipes, utilities, view-transition;
 
 @import url(./styles/prose.css) layer(prose);
+@import url(./styles/view-transition.css) layer(view-transition);
