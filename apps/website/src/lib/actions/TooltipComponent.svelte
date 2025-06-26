@@ -19,7 +19,7 @@
     paddingY: '4px',
     fontSize: '12px',
     fontWeight: 'semibold',
-    color: 'text.inverse',
+    color: 'text.overlay',
     backgroundColor: 'surface.overlay',
     boxShadow: 'medium',
     zIndex: '50',

@@ -187,7 +187,7 @@
       borderRadius: '6px',
       paddingX: '10px',
       paddingY: '6px',
-      color: 'text.inverse',
+      color: 'text.overlay',
       backgroundColor: 'surface.overlay',
       zIndex: '50',
     })}
