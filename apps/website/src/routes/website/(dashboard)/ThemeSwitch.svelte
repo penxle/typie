@@ -5,11 +5,11 @@
   import SunIcon from '~icons/lucide/sun';
   import SunMoonIcon from '~icons/lucide/sun-moon';
   import { Icon, Menu, MenuItem } from '$lib/components';
-  import { getAppContext } from '$lib/context';
+  import { getThemeContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import SidebarButton from './SidebarButton.svelte';
   import type { Component } from 'svelte';
-  import type { Theme } from '$lib/state/theme.svelte';
+  import type { Theme } from '$lib/context';
 
   const themes: Record<Theme, { icon: Component; label: string }> = {
     auto: { icon: MonitorIcon, label: '시스템 설정 따르기' },
@@ -17,9 +17,9 @@
     dark: { icon: MoonIcon, label: '다크 모드' },
   };
 
-  const themeOptions: Theme[] = ['auto', 'light', 'dark'];
+  const themeNames: Theme[] = ['auto', 'light', 'dark'];
 
-  const app = getAppContext();
+  const theme = getThemeContext();
 
   let open = $state(false);
 </script>
@@ -29,11 +29,16 @@
     <SidebarButton icon={SunMoonIcon} label="테마 설정" />
   {/snippet}
 
-  {#each themeOptions as theme (theme)}
-    <MenuItem icon={themes[theme].icon} onclick={() => (app.theme.current = theme)}>
-      {themes[theme].label}
+  {#each themeNames as name (name)}
+    <MenuItem
+      icon={themes[name].icon}
+      onclick={() => {
+        theme.current = name;
+      }}
+    >
+      {themes[name].label}
 
-      {#if app.theme.current === theme}
+      {#if theme.current === name}
         <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
       {/if}
     </MenuItem>
