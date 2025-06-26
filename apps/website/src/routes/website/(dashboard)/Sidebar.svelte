@@ -24,6 +24,7 @@
   import Notification from './Notification.svelte';
   import Posts from './Posts.svelte';
   import SidebarButton from './SidebarButton.svelte';
+  import ThemeSwitch from './ThemeSwitch.svelte';
   import UserMenu from './UserMenu.svelte';
   import type { DashboardLayout_Sidebar_query, DashboardLayout_Sidebar_user } from '$graphql';
 
@@ -198,6 +199,10 @@
     <Announcements $posts={$query.announcements} />
 
     <!-- <SidebarButton as="a" href="https://help.typie.co" icon={CircleHelpIcon} label="도움말" rel="noopener noreferrer" target="_blank" /> -->
+
+    <div class={center({ width: 'full' })}>
+      <ThemeSwitch />
+    </div>
 
     <SidebarButton
       icon={CogIcon}
