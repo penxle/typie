@@ -10,7 +10,7 @@ const plugin = () => {
       const darkThemeRules = [];
 
       root.walkRules((rule) => {
-        if (rule.selector.includes('[data-theme="dark"]')) {
+        if (/\[data-theme=['"]?dark['"]?\]/.test(rule.selector)) {
           darkThemeRules.push(rule);
         }
       });
@@ -18,10 +18,10 @@ const plugin = () => {
       darkThemeRules.forEach((rule) => {
         let mediaSelector;
 
-        if (rule.selector === '[data-theme="dark"]') {
+        if (/^\[data-theme=['"]?dark['"]?\]$/.test(rule.selector)) {
           mediaSelector = ':root:not([data-theme="light"])';
         } else {
-          const baseSelector = rule.selector.replace(/\[data-theme="dark"\]\s*/, '');
+          const baseSelector = rule.selector.replace(/\[data-theme=["']?dark["']?\]\s*/, '');
           mediaSelector = `${baseSelector}:not([data-theme="light"] *)`;
         }
 
