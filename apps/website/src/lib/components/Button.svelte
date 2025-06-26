@@ -63,10 +63,10 @@
           fontWeight: 'bold',
           color: {
             _enabled: {
-              base: 'text.inverse',
-              _hover: 'text.inverse',
-              _active: 'text.inverse',
-              _pressed: 'text.inverse',
+              base: 'text.white',
+              _hover: 'text.white',
+              _active: 'text.white',
+              _pressed: 'text.white',
             },
             _disabled: 'text.disabled',
           },
@@ -103,7 +103,7 @@
           borderWidth: '1px',
           borderColor: {
             _enabled: 'border.strong',
-            _disabled: 'gray.200',
+            _disabled: 'border.default',
           },
         },
         danger: {
@@ -141,9 +141,9 @@
     },
     variants: {
       color: {
-        primary: { color: 'white' },
-        secondary: { color: 'gray.700' },
-        danger: { color: 'red.700' },
+        primary: { color: 'text.white' },
+        secondary: { color: 'text.subtle' },
+        danger: { color: 'accent.danger.default' },
       },
     },
   });
