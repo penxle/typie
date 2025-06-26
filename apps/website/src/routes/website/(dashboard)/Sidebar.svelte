@@ -10,7 +10,8 @@
   import ShieldUserIcon from '~icons/lucide/shield-user';
   import { goto, pushState } from '$app/navigation';
   import { updated } from '$app/state';
-  import Favicon from '$assets/logos/favicon.svg?component';
+  import FaviconDark from '$assets/logos/favicon-dark.svg?component';
+  import FaviconLight from '$assets/logos/favicon-light.svg?component';
   import { fragment, graphql } from '$graphql';
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
@@ -95,7 +96,8 @@
   })}
 >
   <a class={css({ flexShrink: '0', borderRadius: '8px', size: '32px', overflow: 'hidden' })} href="/home">
-    <Favicon class={css({ size: 'full' })} />
+    <FaviconLight class={css({ size: 'full', _dark: { display: 'none' } })} />
+    <FaviconDark class={css({ display: 'none', size: 'full', _dark: { display: 'block' } })} />
   </a>
 
   <button
