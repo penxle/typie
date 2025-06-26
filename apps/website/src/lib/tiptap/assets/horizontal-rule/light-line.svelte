@@ -2,4 +2,4 @@
   import { css } from '$styled-system/css';
 </script>
 
-<div class={css({ width: 'full', height: '1px', backgroundColor: 'gray.200' })}></div>
+<div class={css({ width: 'full', height: '1px', backgroundColor: 'text.subtle' })}></div>
