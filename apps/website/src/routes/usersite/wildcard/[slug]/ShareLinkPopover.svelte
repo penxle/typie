@@ -171,7 +171,7 @@
           height: '36px',
           backgroundColor: 'surface.subtle',
           _hover: {
-            borderColor: 'brand.200',
+            borderColor: { base: 'brand.200', _dark: 'brand.900' },
           },
         }),
       )}
