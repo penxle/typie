@@ -22,7 +22,7 @@
       alignItems: 'center',
       borderRadius: 'full',
       aspectRatio: '[2/1]',
-      backgroundColor: { base: 'interactive.hover', _checked: 'accent.brand.hover' },
+      backgroundColor: { base: 'interactive.hover', _checked: 'accent.brand.default' },
       transition: 'common',
       appearance: 'none',
       cursor: 'pointer',
