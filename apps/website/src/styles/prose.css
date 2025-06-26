@@ -1,5 +1,9 @@
-:root {
+[data-theme='light'] {
   --prosemirror-color-selection: #93c5fd; /* colors.blue.300 */
+}
+
+[data-theme='dark'] {
+  --prosemirror-color-selection: #60a5fa; /* colors.blue.400 */
 }
 
 .ProseMirror-body {
