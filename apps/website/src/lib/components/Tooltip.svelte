@@ -42,7 +42,7 @@
         paddingY: '4px',
         fontSize: '12px',
         fontWeight: 'medium',
-        color: 'text.inverse',
+        color: 'text.overlay',
         backgroundColor: 'surface.overlay',
         boxShadow: 'medium',
         zIndex: '50',
