@@ -79,13 +79,7 @@ class Screen extends StatelessWidget {
 }
 
 class BottomAction extends StatelessWidget {
-  const BottomAction({
-    required this.text,
-    required this.onTap,
-    super.key,
-    this.color,
-    this.textColor,
-  });
+  const BottomAction({required this.text, required this.onTap, super.key, this.color, this.textColor});
 
   final String text;
   final VoidCallback onTap;
@@ -98,11 +92,11 @@ class BottomAction extends StatelessWidget {
       onTap: onTap,
       child: Container(
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: color ?? context.colors.surfaceToast),
+        decoration: BoxDecoration(color: color ?? context.colors.surfaceDark),
         padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
         child: Text(
           text,
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor ?? context.colors.textOnToast),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor ?? context.colors.textBright),
         ),
       ),
     );

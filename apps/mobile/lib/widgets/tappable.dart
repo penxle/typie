@@ -16,7 +16,7 @@ class Tappable extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: debugTapArea
-          ? Container(color: context.colors.accentDangerDefault, padding: padding, child: child)
+          ? Container(color: context.colors.accentDanger, padding: padding, child: child)
           : padding == null
           ? child
           : Padding(padding: padding!, child: child),

@@ -74,7 +74,7 @@ class AppColors {
 
 class _LightColors {
   const _LightColors();
-  
+
   final gray_50 = const Color(0xFFFAFAFA);
   final gray_100 = const Color(0xFFF4F4F5);
   final gray_150 = const Color(0xFFE9E9E9);
@@ -139,7 +139,7 @@ class _LightColors {
 
 class _DarkColors {
   const _DarkColors();
-  
+
   final gray_50 = const Color(0xFFE4E4E6);
   final gray_100 = const Color(0xFFD3D4D5);
   final gray_150 = const Color(0xFF1C1C1F);

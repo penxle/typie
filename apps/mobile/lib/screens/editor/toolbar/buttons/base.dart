@@ -42,7 +42,7 @@ class ToolbarButton extends HookWidget {
     final repeatTimer = useRef<Timer?>(null);
 
     final textSubtleColor = context.colors.textSubtle;
-    final borderInputColor = context.colors.borderInput;
+    final borderDefaultColor = context.colors.borderDefault;
     final textDefaultColor = context.colors.textDefault;
     final surfaceDefaultColor = context.colors.surfaceDefault;
     final surfaceSubtleColor = context.colors.surfaceSubtle;
@@ -52,7 +52,7 @@ class ToolbarButton extends HookWidget {
         begin: foregroundTween.value?.evaluate(curve) ?? defaultForegroundColor,
         end: switch (effectiveState) {
           _ButtonState.idle => color ?? textSubtleColor,
-          _ButtonState.pressed => borderInputColor,
+          _ButtonState.pressed => borderDefaultColor,
           _ButtonState.active => textDefaultColor,
         },
       );

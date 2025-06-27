@@ -105,7 +105,7 @@ class LoginScreen extends HookWidget {
                 _Button(
                   text: '네이버로 시작하기',
                   icon: const SvgImage('brands/naver', width: 20, color: Color(0xFFFFFFFF)),
-                  foregroundColor: context.colors.textInverse,
+                  foregroundColor: context.colors.textBright,
                   backgroundColor: const Color(0xFF03C75A),
                   onTap: () async {
                     final completer = Completer<bool>();
@@ -138,8 +138,8 @@ class LoginScreen extends HookWidget {
                   _Button(
                     text: '애플로 시작하기',
                     icon: const SvgImage('brands/apple', width: 20, color: Color(0xFFFFFFFF)),
-                    foregroundColor: context.colors.textInverse,
-                    backgroundColor: context.colors.surfaceToast,
+                    foregroundColor: context.colors.textBright,
+                    backgroundColor: context.colors.surfaceDark,
                     onTap: () async {
                       final result = await SignInWithApple.getAppleIDCredential(
                         scopes: [AppleIDAuthorizationScopes.email],

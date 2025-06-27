@@ -43,7 +43,9 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
         statusBarIconBrightness: Theme.of(context).brightness == Brightness.light ? Brightness.dark : Brightness.light,
         systemNavigationBarDividerColor: AppColors.transparent,
         systemNavigationBarColor: AppColors.transparent,
-        systemNavigationBarIconBrightness: Theme.of(context).brightness == Brightness.light ? Brightness.dark : Brightness.light,
+        systemNavigationBarIconBrightness: Theme.of(context).brightness == Brightness.light
+            ? Brightness.dark
+            : Brightness.light,
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
@@ -55,13 +57,13 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
             height: _preferredSize.height,
             margin: const Pad(horizontal: 20),
             decoration: BoxDecoration(
-              border: Border.symmetric(horizontal: BorderSide(color: context.colors.borderModal)),
+              border: Border.symmetric(horizontal: BorderSide(color: context.colors.borderStrong)),
             ),
             child: Row(
               children: [
                 if (leadingWidget != null) ...[
                   leadingWidget!,
-                  AppVerticalDivider(color: context.colors.borderModal),
+                  AppVerticalDivider(color: context.colors.borderStrong),
                   const Gap(20),
                 ] else if (route?.canPop ?? false) ...[
                   Tappable(
@@ -77,7 +79,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                       ),
                     ),
                   ),
-                  AppVerticalDivider(color: context.colors.borderModal),
+                  AppVerticalDivider(color: context.colors.borderStrong),
                   const Gap(20),
                 ],
                 if (titleIcon != null) ...[Icon(titleIcon, size: 20), const Gap(8)],
@@ -92,7 +94,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                 ),
                 if (actions != null) ...[
                   const Gap(20),
-                  AppVerticalDivider(color: context.colors.borderModal),
+                  AppVerticalDivider(color: context.colors.borderStrong),
                   ...actions!,
                 ],
               ],

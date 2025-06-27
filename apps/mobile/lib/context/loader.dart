@@ -102,7 +102,7 @@ class _Widget extends HookWidget {
       opacity: tweenedOpacity,
       child: Stack(
         children: [
-          ModalBarrier(dismissible: false, color: context.colors.shadowOverlay.withValues(alpha: 0.5)),
+          ModalBarrier(dismissible: false, color: context.colors.overlayDefault.withValues(alpha: 0.5)),
           Center(child: CircularProgressIndicator(color: context.colors.textDefault)),
         ],
       ),

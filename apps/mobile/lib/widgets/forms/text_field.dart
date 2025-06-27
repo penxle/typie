@@ -63,7 +63,7 @@ class HookFormTextField extends HookWidget {
     final curve = useMemoized(() => CurvedAnimation(parent: animationController, curve: Curves.ease));
     final colorTween = useRef<ColorTween?>(null);
 
-    final defaultColor = context.colors.borderInput;
+    final defaultColor = context.colors.borderDefault;
 
     useEffect(() {
       if (initialValue != null) {
@@ -147,7 +147,7 @@ class HookFormTextField extends HookWidget {
             autofillHints: autofillHints,
             decoration: InputDecoration.collapsed(
               hintText: placeholder,
-              hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textPlaceholder),
+              hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
             ),
             cursorColor: context.colors.textDefault,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
@@ -223,7 +223,7 @@ class _HookFormCollapsedTextField extends HookFormTextField {
           style: style,
           decoration: InputDecoration.collapsed(
             hintText: placeholder,
-            hintStyle: style.copyWith(color: context.colors.textPlaceholder),
+            hintStyle: style.copyWith(color: context.colors.textDisabled),
           ),
           onChanged: (value) {
             field.value = value;
