@@ -187,8 +187,8 @@
       borderRadius: '6px',
       paddingX: '10px',
       paddingY: '6px',
-      color: 'text.overlay',
-      backgroundColor: 'surface.overlay',
+      color: 'text.bright',
+      backgroundColor: 'surface.dark',
       zIndex: '50',
     })}
     use:floating

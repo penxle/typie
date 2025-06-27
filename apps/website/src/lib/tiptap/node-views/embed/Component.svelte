@@ -160,7 +160,7 @@
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '4px',
-            color: 'text.inverse',
+            color: 'text.bright',
             backgroundColor: '[#363839/70]',
             size: '28px',
             opacity: '0',

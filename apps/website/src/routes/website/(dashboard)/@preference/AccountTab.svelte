@@ -118,7 +118,7 @@
                 borderRadius: 'full',
                 size: 'full',
                 backgroundColor: 'gray.900/40',
-                color: 'text.inverse',
+                color: 'text.bright',
               },
             })}
           >
@@ -191,7 +191,7 @@
                 borderWidth: '1px',
                 borderColor: '[#03C75A]',
                 borderRadius: '6px',
-                color: 'text.inverse',
+                color: 'text.bright',
                 backgroundColor: '[#03C75A]',
                 size: '28px',
               })}

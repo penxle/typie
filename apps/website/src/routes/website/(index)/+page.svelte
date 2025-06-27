@@ -97,7 +97,7 @@
             paddingY: '6px',
             fontSize: '14px',
             fontWeight: 'bold',
-            color: 'text.inverse',
+            color: 'text.bright',
             background:
               '[linear-gradient(var(--background-color), var(--background-color)) padding-box, conic-gradient(from var(--angle), var(--border-color), var(--border-accent-color) 10%, var(--border-color) 20%) border-box]',
             animationName: '[rotate]',

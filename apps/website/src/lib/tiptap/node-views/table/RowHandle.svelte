@@ -127,7 +127,7 @@
           backgroundColor: 'interactive.hover',
         },
         _pressed: {
-          color: 'text.inverse',
+          color: 'text.bright',
           backgroundColor: '[var(--prosemirror-color-selection)]',
           borderWidth: '0',
           _hover: {

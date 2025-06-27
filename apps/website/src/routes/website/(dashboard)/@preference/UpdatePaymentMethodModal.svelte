@@ -221,7 +221,7 @@
           paddingX: '8px',
           paddingY: '2px',
           fontSize: '12px',
-          color: 'text.inverse',
+          color: 'text.bright',
           backgroundColor: 'accent.brand.default',
           pointerEvents: 'none',
         })}

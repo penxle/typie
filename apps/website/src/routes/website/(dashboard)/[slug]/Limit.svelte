@@ -118,12 +118,12 @@
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: '2px',
-        borderColor: 'white',
+        borderColor: 'surface.default',
         borderRadius: 'full',
         marginRight: '-8px',
         size: '32px',
-        color: 'text.inverse',
-        backgroundColor: 'surface.inverse',
+        color: 'text.bright',
+        backgroundColor: 'surface.dark',
       },
     })}
   >
