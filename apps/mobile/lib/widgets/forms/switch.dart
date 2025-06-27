@@ -48,7 +48,7 @@ class HookFormSwitch extends HookWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Container(color: context.colors.accentSuccessDefault)),
+                      Expanded(child: Container(color: context.colors.accentSuccess)),
                       Expanded(child: Container(color: context.colors.surfaceMuted)),
                     ],
                   ),

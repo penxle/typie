@@ -28,5 +28,4 @@ class AppTheme extends ChangeNotifier {
     unawaited(_box.put('mode', mode.name));
     notifyListeners();
   }
-
 }

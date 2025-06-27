@@ -97,11 +97,7 @@ class Note extends HookWidget {
                 scrollPadding: const Pad(bottom: 100),
                 decoration: InputDecoration.collapsed(
                   hintText: '포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요',
-                  hintStyle: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: context.colors.textPlaceholder,
-                  ),
+                  hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
                 ),
                 onChanged: (value) async {
                   await scope.command('note', attrs: {'note': value});

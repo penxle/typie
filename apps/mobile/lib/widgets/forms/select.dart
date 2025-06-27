@@ -40,7 +40,9 @@ class HookFormSelect<T> extends StatelessWidget {
                         child: Container(
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: field.value == item.value ? context.colors.borderStrong : context.colors.borderDefault,
+                              color: field.value == item.value
+                                  ? context.colors.borderInverse
+                                  : context.colors.borderDefault,
                             ),
                             borderRadius: BorderRadius.circular(8),
                           ),

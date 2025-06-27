@@ -131,7 +131,7 @@ class UpdateProfileScreen extends HookWidget {
                               color: context.colors.textDefault.withValues(alpha: 0.15),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(LucideLightIcons.camera, size: 28, color: context.colors.textInverse),
+                            child: Icon(LucideLightIcons.camera, size: 28, color: context.colors.textBright),
                           ),
                         ],
                       ),

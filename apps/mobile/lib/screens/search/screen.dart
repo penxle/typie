@@ -36,7 +36,7 @@ class SearchScreen extends HookWidget {
             textInputAction: TextInputAction.search,
             decoration: InputDecoration.collapsed(
               hintText: '검색어를 입력하세요',
-              hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textPlaceholder),
+              hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
             ),
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),

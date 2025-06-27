@@ -278,7 +278,7 @@ class Editor extends HookWidget {
                                 title: '포스트 삭제',
                                 message: '"${data.post.title}" 포스트를 삭제하시겠어요?',
                                 confirmText: '삭제하기',
-                                confirmColor: context.colors.accentDangerDefault,
+                                confirmColor: context.colors.accentDanger,
                                 onConfirm: () async {
                                   await client.request(
                                     GEditorScreen_DeletePost_MutationReq((b) => b..vars.input.postId = data.post.id),
@@ -476,7 +476,7 @@ class _LimitBottomSheet extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         padding: const Pad(all: 6),
-                        child: Icon(icons[i], size: 16, color: context.colors.textInverse),
+                        child: Icon(icons[i], size: 16, color: context.colors.textBright),
                       ),
                     ),
                 ],
@@ -540,11 +540,11 @@ class _LimitBottomSheet extends StatelessWidget {
               }
             },
             child: Container(
-              decoration: BoxDecoration(color: context.colors.surfaceToast, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: context.colors.surfaceDark, borderRadius: BorderRadius.circular(8)),
               padding: const Pad(vertical: 16),
               child: Text(
                 '업그레이드',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.colors.textOnToast),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.colors.textBright),
                 textAlign: TextAlign.center,
               ),
             ),

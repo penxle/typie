@@ -69,7 +69,10 @@ class _Widget extends HookWidget {
               child: FadeTransition(
                 opacity: tweenedOpacity,
                 child: Container(
-                  decoration: BoxDecoration(color: context.colors.surfaceToast, borderRadius: BorderRadius.circular(999)),
+                  decoration: BoxDecoration(
+                    color: context.colors.surfaceDark,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                   padding: const Pad(all: 12),
                   child: Row(
                     children: [
@@ -79,18 +82,22 @@ class _Widget extends HookWidget {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(999),
                           color: switch (type) {
-                            ToastType.success => context.colors.accentSuccessDefault,
-                            ToastType.error => context.colors.accentDangerDefault,
-                            ToastType.notification => context.colors.accentInfoDefault,
+                            ToastType.success => context.colors.accentSuccess,
+                            ToastType.error => context.colors.accentDanger,
+                            ToastType.notification => context.colors.accentSuccess,
                           },
                         ),
                         child: Center(
                           child: switch (type) {
-                            ToastType.success => Icon(LucideLightIcons.check, color: context.colors.textOnToast, size: 12),
-                            ToastType.error => Icon(TypieIcons.exclamation, color: context.colors.textOnToast, size: 12),
+                            ToastType.success => Icon(
+                              LucideLightIcons.check,
+                              color: context.colors.textBright,
+                              size: 12,
+                            ),
+                            ToastType.error => Icon(TypieIcons.exclamation, color: context.colors.textBright, size: 12),
                             ToastType.notification => Icon(
                               LucideLightIcons.bell,
-                              color: context.colors.textOnToast,
+                              color: context.colors.textBright,
                               size: 12,
                             ),
                           },
@@ -100,7 +107,7 @@ class _Widget extends HookWidget {
                       Expanded(
                         child: Text(
                           message,
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textOnToast),
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textBright),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),

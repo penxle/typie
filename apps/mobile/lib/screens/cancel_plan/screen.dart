@@ -88,12 +88,12 @@ class CancelPlanScreen extends HookWidget {
                   decoration: BoxDecoration(
                     border: Border.all(color: context.colors.borderStrong),
                     borderRadius: BorderRadius.circular(8),
-                    color: context.colors.accentDangerDefault,
+                    color: context.colors.accentDanger,
                   ),
                   padding: const Pad(vertical: 12),
                   child: Text(
                     '스토어로 이동해서 해지하기',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textOnDanger),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textBright),
                   ),
                 ),
               ),

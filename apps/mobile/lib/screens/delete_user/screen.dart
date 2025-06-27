@@ -94,7 +94,7 @@ class DeleteUserScreen extends HookWidget {
                     color: isChecked.value ? context.colors.textDefault : context.colors.surfaceDefault,
                   ),
                   padding: const Pad(all: 1),
-                  child: Icon(LucideLightIcons.check, size: 12, color: context.colors.textInverse),
+                  child: Icon(LucideLightIcons.check, size: 12, color: context.colors.textBright),
                 ),
                 const Text('위 유의사항을 모두 확인했어요', style: TextStyle(fontSize: 14)),
               ],
@@ -119,12 +119,12 @@ class DeleteUserScreen extends HookWidget {
               decoration: BoxDecoration(
                 border: Border.all(color: context.colors.borderStrong),
                 borderRadius: BorderRadius.circular(8),
-                color: context.colors.accentDangerDefault,
+                color: context.colors.accentDanger,
               ),
               padding: const Pad(vertical: 12),
               child: Text(
                 '탈퇴하기',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textOnDanger),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textBright),
               ),
             ),
           ),

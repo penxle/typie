@@ -37,7 +37,7 @@ extension BottomSheetExtension on BuildContext {
                   child: FadeTransition(
                     opacity: tweenedBackdropOpacity,
                     child: SizedBox.expand(
-                      child: ColoredBox(color: context.colors.shadowOverlay.withValues(alpha: 0.5)),
+                      child: ColoredBox(color: context.colors.overlayDefault.withValues(alpha: 0.5)),
                     ),
                   ),
                   onTap: () async {
@@ -112,7 +112,7 @@ class _BottomSheet extends HookWidget {
               key: sheetKey,
               width: double.infinity,
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: context.colors.borderModal)),
+                border: Border(top: BorderSide(color: context.colors.borderStrong)),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: ClipRRect(
@@ -192,7 +192,7 @@ class AppFullBottomSheet extends StatelessWidget {
             Container(
               height: 52,
               decoration: BoxDecoration(
-                color: context.colors.surfaceModal,
+                color: context.colors.surfaceDefault,
                 border: Border(bottom: BorderSide(color: context.colors.borderDefault)),
               ),
               padding: const Pad(horizontal: 8),
@@ -209,7 +209,7 @@ class AppFullBottomSheet extends StatelessWidget {
             ),
             Expanded(
               child: Container(
-                decoration: BoxDecoration(color: context.colors.surfaceModal),
+                decoration: BoxDecoration(color: context.colors.surfaceDefault),
                 padding: padding ?? Pad(top: 20, bottom: bottomPadding + 12, horizontal: 20),
                 child: child,
               ),
