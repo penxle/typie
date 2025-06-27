@@ -59,7 +59,7 @@
           right: '4px',
           borderRadius: 'full',
           size: '4px',
-          backgroundColor: 'red.500',
+          backgroundColor: 'accent.danger.default',
         })}
       ></div>
     {/if}
