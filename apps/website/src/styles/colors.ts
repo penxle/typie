@@ -172,7 +172,7 @@ export const semanticColors = defineSemanticTokens.colors({
   'text.disabled': { value: { base: '{colors.gray.400}', _dark: '{colors.dark.gray.400}' } },
   'text.inverse': { value: { base: '{colors.white}', _dark: '{colors.dark.gray.900}' } },
   'text.danger': { value: { base: '{colors.red.500}', _dark: '{colors.dark.red.300}' } },
-  'text.success': { value: { base: '{colors.green.500}', _dark: '{colors.dark.green.300}' } },
+  'text.success': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.300}' } },
   'text.link': { value: { base: '{colors.blue.600}', _dark: '{colors.dark.blue.400}' } },
   'text.brand': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.300}' } },
   'text.overlay': { value: { base: '{colors.white}', _dark: '{colors.dark.gray.50}' } },
