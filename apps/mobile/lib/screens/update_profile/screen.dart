@@ -9,6 +9,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:transparent_image/transparent_image.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
@@ -17,7 +18,6 @@ import 'package:typie/screens/update_profile/__generated__/persist_blob_as_image
 import 'package:typie/screens/update_profile/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/update_profile/__generated__/update_user_mutation.req.gql.dart';
 import 'package:typie/services/blob.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/heading.dart';
@@ -128,10 +128,10 @@ class UpdateProfileScreen extends HookWidget {
                             width: 80,
                             height: 80,
                             decoration: BoxDecoration(
-                              color: AppColors.gray_950.withValues(alpha: 0.15),
+                              color: context.colors.textDefault.withValues(alpha: 0.15),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(LucideLightIcons.camera, size: 28, color: AppColors.white),
+                            child: Icon(LucideLightIcons.camera, size: 28, color: context.colors.textInverse),
                           ),
                         ],
                       ),

@@ -1,6 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
-import 'package:typie/styles/colors.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -15,7 +15,7 @@ class Screen extends StatelessWidget {
     this.resizeToAvoidBottomInset = false,
     this.keyboardDismiss = true,
     this.padding,
-    this.backgroundColor = AppColors.gray_50,
+    this.backgroundColor,
     this.responsive = true,
     this.maxWidth,
     this.bottomAction,
@@ -28,7 +28,7 @@ class Screen extends StatelessWidget {
   final bool resizeToAvoidBottomInset;
   final bool keyboardDismiss;
   final EdgeInsets? padding;
-  final Color backgroundColor;
+  final Color? backgroundColor;
   final bool responsive;
   final double? maxWidth;
   final BottomAction? bottomAction;
@@ -71,7 +71,7 @@ class Screen extends StatelessWidget {
 
     return Scaffold(
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-      backgroundColor: backgroundColor,
+      backgroundColor: backgroundColor ?? context.colors.surfaceSubtle,
       appBar: heading,
       body: body,
     );
@@ -83,14 +83,14 @@ class BottomAction extends StatelessWidget {
     required this.text,
     required this.onTap,
     super.key,
-    this.color = AppColors.gray_950,
-    this.textColor = AppColors.white,
+    this.color,
+    this.textColor,
   });
 
   final String text;
   final VoidCallback onTap;
-  final Color color;
-  final Color textColor;
+  final Color? color;
+  final Color? textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -98,11 +98,11 @@ class BottomAction extends StatelessWidget {
       onTap: onTap,
       child: Container(
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: color),
+        decoration: BoxDecoration(color: color ?? context.colors.surfaceToast),
         padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
         child: Text(
           text,
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor ?? context.colors.textOnToast),
         ),
       ),
     );

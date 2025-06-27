@@ -7,6 +7,7 @@ import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
@@ -17,7 +18,6 @@ import 'package:typie/modals/__generated__/share_folder_query.req.gql.dart';
 import 'package:typie/modals/__generated__/share_post_query.req.gql.dart';
 import 'package:typie/modals/__generated__/update_folder_option_mutation.req.gql.dart';
 import 'package:typie/modals/__generated__/update_post_option_mutation.req.gql.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/switch.dart';
@@ -207,11 +207,18 @@ class SharePostBottomSheet extends HookWidget {
                           }
                         },
                         child: Container(
-                          decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(8)),
+                          decoration: BoxDecoration(
+                            color: context.colors.surfaceToast,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           padding: const Pad(vertical: 16),
-                          child: const Text(
+                          child: Text(
                             '공유하기',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: context.colors.textOnToast,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -314,11 +321,18 @@ class ShareFolderBottomSheet extends HookWidget {
                         }
                       },
                       child: Container(
-                        decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(
+                          color: context.colors.surfaceToast,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         padding: const Pad(vertical: 16),
-                        child: const Text(
+                        child: Text(
                           '공유하기',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: context.colors.textOnToast,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -348,7 +362,7 @@ class _Section extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
         ),
         ...children,
       ],
@@ -369,10 +383,10 @@ class _Option extends StatelessWidget {
       height: 24,
       child: Row(
         children: [
-          Icon(icon, size: 20, color: AppColors.gray_700),
+          Icon(icon, size: 20, color: context.colors.textSubtle),
           const Gap(8),
           Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 16, color: AppColors.gray_700)),
+            child: Text(label, style: TextStyle(fontSize: 16, color: context.colors.textSubtle)),
           ),
           trailing,
         ],

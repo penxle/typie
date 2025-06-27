@@ -59,7 +59,7 @@ abstract class RegisterModule {
         groupId: 'default',
         importance: Importance.max,
         enableLights: true,
-        ledColor: AppColors.brand_500,
+        ledColor: AppColors.brand_500, // Brand blue for LED
       ),
     );
 }

@@ -2,10 +2,10 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/scope.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -71,13 +71,13 @@ class Note extends HookWidget {
         leadingWidget: Tappable(
           onTap: onBack,
           padding: const Pad(vertical: 4),
-          child: const SizedBox(width: 52, child: Icon(LucideLightIcons.chevron_left, color: AppColors.gray_950)),
+          child: SizedBox(width: 52, child: Icon(LucideLightIcons.chevron_left, color: context.colors.textDefault)),
         ),
         titleIcon: LucideLightIcons.notebook_tabs,
         title: '작성 노트',
-        backgroundColor: AppColors.white,
+        backgroundColor: context.colors.surfaceDefault,
       ),
-      backgroundColor: AppColors.white,
+      backgroundColor: context.colors.surfaceDefault,
       child: LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -95,9 +95,13 @@ class Note extends HookWidget {
                 maxLines: null,
                 textAlignVertical: TextAlignVertical.top,
                 scrollPadding: const Pad(bottom: 100),
-                decoration: const InputDecoration.collapsed(
+                decoration: InputDecoration.collapsed(
                   hintText: '포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요',
-                  hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
+                  hintStyle: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: context.colors.textPlaceholder,
+                  ),
                 ),
                 onChanged: (value) async {
                   await scope.command('note', attrs: {'note': value});

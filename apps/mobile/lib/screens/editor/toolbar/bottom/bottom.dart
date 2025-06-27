@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/bottom/blockquote.dart';
 import 'package:typie/screens/editor/toolbar/bottom/horizontal_rule.dart';
 import 'package:typie/screens/editor/toolbar/bottom/insert.dart';
 import 'package:typie/services/keyboard.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
 
 class BottomToolbar extends HookWidget {
@@ -30,9 +30,9 @@ class BottomToolbar extends HookWidget {
           _ => mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2,
         },
       },
-      decoration: const BoxDecoration(
-        color: AppColors.white,
-        border: Border(top: BorderSide(color: AppColors.gray_100)),
+      decoration: BoxDecoration(
+        color: context.colors.surfaceDefault,
+        border: Border(top: BorderSide(color: context.colors.surfaceSubtle)),
       ),
       child: AnimatedIndexedSwitcher(
         index: switch (bottomToolbarMode) {

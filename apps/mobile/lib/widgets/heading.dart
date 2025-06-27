@@ -3,6 +3,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -15,7 +16,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
     this.title,
     this.titleWidget,
     this.actions,
-    this.backgroundColor = AppColors.gray_50,
+    this.backgroundColor,
     this.fallbackSystemUiOverlayStyle,
     super.key,
   }) : assert(title != null || titleWidget != null, 'title or titleWidget must be provided');
@@ -36,31 +37,31 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
 
     return AnnotatedRegion(
       key: context.router.current.key,
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: AppColors.transparent,
-        statusBarBrightness: Brightness.light,
-        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Theme.of(context).brightness == Brightness.light ? Brightness.light : Brightness.dark,
+        statusBarIconBrightness: Theme.of(context).brightness == Brightness.light ? Brightness.dark : Brightness.light,
         systemNavigationBarDividerColor: AppColors.transparent,
         systemNavigationBarColor: AppColors.transparent,
-        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarIconBrightness: Theme.of(context).brightness == Brightness.light ? Brightness.dark : Brightness.light,
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
       child: DecoratedBox(
-        decoration: BoxDecoration(color: backgroundColor),
+        decoration: BoxDecoration(color: backgroundColor ?? context.colors.surfaceSubtle),
         child: SafeArea(
           bottom: false,
           child: Container(
             height: _preferredSize.height,
             margin: const Pad(horizontal: 20),
-            decoration: const BoxDecoration(
-              border: Border.symmetric(horizontal: BorderSide(color: AppColors.gray_950)),
+            decoration: BoxDecoration(
+              border: Border.symmetric(horizontal: BorderSide(color: context.colors.borderModal)),
             ),
             child: Row(
               children: [
                 if (leadingWidget != null) ...[
                   leadingWidget!,
-                  const AppVerticalDivider(color: AppColors.gray_950),
+                  AppVerticalDivider(color: context.colors.borderModal),
                   const Gap(20),
                 ] else if (route?.canPop ?? false) ...[
                   Tappable(
@@ -72,11 +73,11 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                         route?.settings is AutoRoutePage && (route!.settings as AutoRoutePage).fullscreenDialog
                             ? LucideLightIcons.x
                             : LucideLightIcons.chevron_left,
-                        color: AppColors.gray_950,
+                        color: context.colors.textDefault,
                       ),
                     ),
                   ),
-                  const AppVerticalDivider(color: AppColors.gray_950),
+                  AppVerticalDivider(color: context.colors.borderModal),
                   const Gap(20),
                 ],
                 if (titleIcon != null) ...[Icon(titleIcon, size: 20), const Gap(8)],
@@ -91,7 +92,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                 ),
                 if (actions != null) ...[
                   const Gap(20),
-                  const AppVerticalDivider(color: AppColors.gray_950),
+                  AppVerticalDivider(color: context.colors.borderModal),
                   ...actions!,
                 ],
               ],

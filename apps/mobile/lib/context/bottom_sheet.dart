@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
@@ -35,7 +36,9 @@ extension BottomSheetExtension on BuildContext {
                   behavior: HitTestBehavior.opaque,
                   child: FadeTransition(
                     opacity: tweenedBackdropOpacity,
-                    child: SizedBox.expand(child: ColoredBox(color: AppColors.black.withValues(alpha: 0.5))),
+                    child: SizedBox.expand(
+                      child: ColoredBox(color: context.colors.shadowOverlay.withValues(alpha: 0.5)),
+                    ),
                   ),
                   onTap: () async {
                     await router.root.maybePop();
@@ -108,9 +111,9 @@ class _BottomSheet extends HookWidget {
             child: Container(
               key: sheetKey,
               width: double.infinity,
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.gray_950)),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: context.colors.borderModal)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -139,20 +142,20 @@ class AppBottomSheet extends StatelessWidget {
     return _BottomSheet(
       child: Container(
         constraints: BoxConstraints(maxHeight: maxHeight),
-        decoration: const BoxDecoration(color: AppColors.gray_50),
+        decoration: BoxDecoration(color: context.colors.surfaceSubtle),
         child: Padding(
           padding: Pad(top: 8, bottom: bottomPadding + 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             spacing: 16,
             children: [
-              const SizedBox(
+              SizedBox(
                 width: 60,
                 height: 4,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: AppColors.gray_200,
-                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                    color: context.colors.borderDefault,
+                    borderRadius: const BorderRadius.all(Radius.circular(999)),
                   ),
                 ),
               ),
@@ -188,9 +191,9 @@ class AppFullBottomSheet extends StatelessWidget {
           children: [
             Container(
               height: 52,
-              decoration: const BoxDecoration(
-                color: AppColors.white,
-                border: Border(bottom: BorderSide(color: AppColors.gray_200)),
+              decoration: BoxDecoration(
+                color: context.colors.surfaceModal,
+                border: Border(bottom: BorderSide(color: context.colors.borderDefault)),
               ),
               padding: const Pad(horizontal: 8),
               child: NavigationToolbar(
@@ -199,14 +202,14 @@ class AppFullBottomSheet extends StatelessWidget {
                   onTap: () async {
                     await context.router.maybePop();
                   },
-                  child: const Icon(LucideLightIcons.x, size: 24, color: AppColors.gray_950),
+                  child: Icon(LucideLightIcons.x, size: 24, color: context.colors.textDefault),
                 ),
                 middle: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
               ),
             ),
             Expanded(
               child: Container(
-                decoration: const BoxDecoration(color: AppColors.white),
+                decoration: BoxDecoration(color: context.colors.surfaceModal),
                 padding: padding ?? Pad(top: 20, bottom: bottomPadding + 12, horizontal: 20),
                 child: child,
               ),
@@ -233,7 +236,7 @@ class BottomMenu extends StatelessWidget {
           if (header != null) ...[
             Padding(padding: const Pad(horizontal: 24), child: header),
             const Gap(16),
-            const HorizontalDivider(color: AppColors.gray_200),
+            HorizontalDivider(color: context.colors.borderDefault),
             const Gap(16),
           ],
           ...items,
@@ -248,8 +251,8 @@ class BottomMenuItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.iconColor = AppColors.gray_950,
-    this.labelColor = AppColors.gray_950,
+    this.iconColor,
+    this.labelColor,
     this.trailing,
     super.key,
   });
@@ -258,8 +261,8 @@ class BottomMenuItem extends StatelessWidget {
   final String label;
   final Widget? trailing;
 
-  final Color iconColor;
-  final Color labelColor;
+  final Color? iconColor;
+  final Color? labelColor;
 
   final void Function() onTap;
 
@@ -274,9 +277,9 @@ class BottomMenuItem extends StatelessWidget {
       child: Row(
         spacing: 16,
         children: [
-          Icon(icon, size: 20, color: iconColor),
+          Icon(icon, size: 20, color: iconColor ?? context.colors.textDefault),
           Expanded(
-            child: Text(label, style: TextStyle(fontSize: 17, color: labelColor)),
+            child: Text(label, style: TextStyle(fontSize: 17, color: labelColor ?? context.colors.textDefault)),
           ),
           if (trailing != null) trailing!,
         ],

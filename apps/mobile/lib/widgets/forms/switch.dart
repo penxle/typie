@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/field.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -39,7 +39,7 @@ class HookFormSwitch extends HookWidget {
             width: 44,
             height: 24,
             foregroundDecoration: BoxDecoration(
-              border: Border.all(color: AppColors.gray_950),
+              border: Border.all(color: context.colors.borderStrong),
               borderRadius: BorderRadius.circular(4),
             ),
             child: ClipRRect(
@@ -48,8 +48,8 @@ class HookFormSwitch extends HookWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Container(color: AppColors.green_500)),
-                      Expanded(child: Container(color: AppColors.gray_100)),
+                      Expanded(child: Container(color: context.colors.accentSuccessDefault)),
+                      Expanded(child: Container(color: context.colors.surfaceMuted)),
                     ],
                   ),
                   AnimatedBuilder(
@@ -61,13 +61,13 @@ class HookFormSwitch extends HookWidget {
                           width: 24,
                           height: 24,
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: context.colors.surfaceDefault,
                             border: Border(
                               left: curve.value > 0
-                                  ? BorderSide(color: AppColors.gray_950, width: curve.value)
+                                  ? BorderSide(color: context.colors.borderStrong, width: curve.value)
                                   : BorderSide.none,
                               right: curve.value < 1
-                                  ? BorderSide(color: AppColors.gray_950, width: 1 - curve.value)
+                                  ? BorderSide(color: context.colors.borderStrong, width: 1 - curve.value)
                                   : BorderSide.none,
                             ),
                             borderRadius: BorderRadius.circular(4),

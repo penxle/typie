@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:typie/styles/colors.dart';
+import 'package:typie/context/theme.dart';
 
 enum _ButtonState { idle, pressed, active }
 
@@ -12,13 +12,13 @@ class ToolbarButton extends HookWidget {
     required this.builder,
     this.isActive = false,
     this.isRepeatable = false,
-    this.color = AppColors.gray_700,
+    this.color,
     super.key,
   });
 
   final Widget Function(BuildContext context, Color color, Color? backgroundColor) builder;
 
-  final Color color;
+  final Color? color;
   final bool isActive;
   final bool isRepeatable;
   final void Function() onTap;
@@ -35,28 +35,34 @@ class ToolbarButton extends HookWidget {
     final controller = useAnimationController(duration: const Duration(milliseconds: 150));
     final curve = useMemoized(() => CurvedAnimation(parent: controller, curve: Curves.ease), [controller]);
 
-    final defaultForegroundColor = isActive ? AppColors.gray_950 : color;
+    final defaultForegroundColor = isActive ? context.colors.textDefault : (color ?? context.colors.textSubtle);
     final foregroundTween = useRef<ColorTween?>(null);
     final backgroundTween = useRef<ColorTween?>(null);
 
     final repeatTimer = useRef<Timer?>(null);
 
+    final textSubtleColor = context.colors.textSubtle;
+    final borderInputColor = context.colors.borderInput;
+    final textDefaultColor = context.colors.textDefault;
+    final surfaceDefaultColor = context.colors.surfaceDefault;
+    final surfaceSubtleColor = context.colors.surfaceSubtle;
+
     useEffect(() {
       foregroundTween.value = ColorTween(
         begin: foregroundTween.value?.evaluate(curve) ?? defaultForegroundColor,
         end: switch (effectiveState) {
-          _ButtonState.idle => color,
-          _ButtonState.pressed => AppColors.gray_300,
-          _ButtonState.active => AppColors.gray_950,
+          _ButtonState.idle => color ?? textSubtleColor,
+          _ButtonState.pressed => borderInputColor,
+          _ButtonState.active => textDefaultColor,
         },
       );
 
       backgroundTween.value = ColorTween(
         begin: backgroundTween.value?.evaluate(curve),
         end: switch (effectiveState) {
-          _ButtonState.idle => AppColors.white,
-          _ButtonState.pressed => AppColors.white,
-          _ButtonState.active => AppColors.gray_100,
+          _ButtonState.idle => surfaceDefaultColor,
+          _ButtonState.pressed => surfaceDefaultColor,
+          _ButtonState.active => surfaceSubtleColor,
         },
       );
 

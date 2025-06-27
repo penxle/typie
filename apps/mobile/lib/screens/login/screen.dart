@@ -13,13 +13,13 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:naver_login_sdk/naver_login_sdk.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:typie/context/loader.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/login/__generated__/authorize_single_sign_on_mutation.req.gql.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/svg_image.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -50,7 +50,7 @@ class LoginScreen extends HookWidget {
 
     return Screen(
       safeArea: true,
-      backgroundColor: AppColors.white,
+      backgroundColor: context.colors.surfaceDefault,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -74,9 +74,9 @@ class LoginScreen extends HookWidget {
                 _Button(
                   text: '구글로 시작하기',
                   icon: const SvgImage('brands/google', width: 20),
-                  borderColor: AppColors.gray_200,
-                  foregroundColor: AppColors.gray_950,
-                  backgroundColor: AppColors.white,
+                  borderColor: context.colors.borderDefault,
+                  foregroundColor: context.colors.textDefault,
+                  backgroundColor: context.colors.surfaceDefault,
                   onTap: () async {
                     await googleSignIn.signOut();
                     final result = await googleSignIn.signIn();
@@ -88,8 +88,8 @@ class LoginScreen extends HookWidget {
                 ),
                 _Button(
                   text: '카카오로 시작하기',
-                  icon: const SvgImage('brands/kakao', width: 20, color: AppColors.black),
-                  foregroundColor: AppColors.gray_950,
+                  icon: const SvgImage('brands/kakao', width: 20, color: Color(0xFF000000)),
+                  foregroundColor: context.colors.textDefault,
                   backgroundColor: const Color(0xFFFEE500),
                   onTap: () async {
                     try {
@@ -104,8 +104,8 @@ class LoginScreen extends HookWidget {
                 ),
                 _Button(
                   text: '네이버로 시작하기',
-                  icon: const SvgImage('brands/naver', width: 20, color: AppColors.white),
-                  foregroundColor: AppColors.white,
+                  icon: const SvgImage('brands/naver', width: 20, color: Color(0xFFFFFFFF)),
+                  foregroundColor: context.colors.textInverse,
                   backgroundColor: const Color(0xFF03C75A),
                   onTap: () async {
                     final completer = Completer<bool>();
@@ -137,9 +137,9 @@ class LoginScreen extends HookWidget {
                 if (Platform.isIOS)
                   _Button(
                     text: '애플로 시작하기',
-                    icon: const SvgImage('brands/apple', width: 20, color: AppColors.white),
-                    foregroundColor: AppColors.white,
-                    backgroundColor: AppColors.gray_950,
+                    icon: const SvgImage('brands/apple', width: 20, color: Color(0xFFFFFFFF)),
+                    foregroundColor: context.colors.textInverse,
+                    backgroundColor: context.colors.surfaceToast,
                     onTap: () async {
                       final result = await SignInWithApple.getAppleIDCredential(
                         scopes: [AppleIDAuthorizationScopes.email],
@@ -153,7 +153,7 @@ class LoginScreen extends HookWidget {
                   onTap: () async {
                     await context.router.push(const LoginWithEmailRoute());
                   },
-                  child: const Text('이메일로 가입하셨나요?', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
+                  child: Text('이메일로 가입하셨나요?', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
                 ),
               ],
             ),

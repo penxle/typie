@@ -12,6 +12,7 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/context/loader.dart';
 import 'package:typie/context/modal.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
@@ -21,7 +22,6 @@ import 'package:typie/logger.dart';
 import 'package:typie/screens/enroll_plan/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/enroll_plan/__generated__/subscribe_or_change_plan_with_in_app_purchase_mutation.req.gql.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.req.gql.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
@@ -95,25 +95,25 @@ class EnrollPlanScreen extends HookWidget {
               if (data.me!.subscription == null)
                 Container(
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.gray_950),
+                    border: Border.all(color: context.colors.borderStrong),
                     borderRadius: BorderRadius.circular(8),
-                    color: AppColors.white,
+                    color: context.colors.surfaceDefault,
                   ),
                   padding: const Pad(all: 16),
-                  child: const Column(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
                         children: [
-                          Text('타이피 BASIC ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                          Spacer(),
-                          Text('현재 이용중', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
+                          const Text('타이피 BASIC ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                          const Spacer(),
+                          Text('현재 이용중', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
                         ],
                       ),
-                      Gap(12),
-                      HorizontalDivider(color: AppColors.gray_950),
-                      Gap(12),
-                      Column(
+                      const Gap(12),
+                      HorizontalDivider(color: context.colors.borderStrong),
+                      const Gap(12),
+                      const Column(
                         spacing: 8,
                         children: [
                           _FeatureItem(icon: LucideLightIcons.book_open_text, label: '16,000자까지 작성 가능'),
@@ -125,23 +125,23 @@ class EnrollPlanScreen extends HookWidget {
                 ),
               Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.gray_950),
+                  border: Border.all(color: context.colors.borderStrong),
                   borderRadius: BorderRadius.circular(8),
-                  color: AppColors.white,
+                  color: context.colors.surfaceDefault,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Padding(
-                      padding: Pad(all: 16),
+                    Padding(
+                      padding: const Pad(all: 16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text('타이피 FULL ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                          Gap(12),
-                          HorizontalDivider(color: AppColors.gray_950),
-                          Gap(12),
-                          Column(
+                          const Text('타이피 FULL ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                          const Gap(12),
+                          HorizontalDivider(color: context.colors.borderStrong),
+                          const Gap(12),
+                          const Column(
                             spacing: 8,
                             children: [
                               _FeatureItem(icon: LucideLightIcons.book_open_text, label: '무제한 글자 수'),
@@ -156,7 +156,7 @@ class EnrollPlanScreen extends HookWidget {
                         ],
                       ),
                     ),
-                    const HorizontalDivider(color: AppColors.gray_950),
+                    HorizontalDivider(color: context.colors.borderStrong),
                     Padding(
                       padding: const Pad(all: 16),
                       child: Column(
@@ -238,7 +238,7 @@ class _PurchaseButton extends HookWidget {
       },
       child: Container(
         decoration: BoxDecoration(
-          border: Border.all(color: AppColors.gray_950),
+          border: Border.all(color: context.colors.borderStrong),
           borderRadius: BorderRadius.circular(8),
         ),
         padding: const Pad(all: 12),
@@ -247,7 +247,7 @@ class _PurchaseButton extends HookWidget {
             Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             if (isActive) ...[
               const Gap(4),
-              const Text('(현재 이용중)', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text('(현재 이용중)', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
             ],
             const Spacer(),
             if (product == null)

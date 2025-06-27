@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:typie/styles/colors.dart';
+import 'package:typie/context/theme.dart';
 
 extension LoaderExtension on BuildContext {
   static OverlayEntry? _entry;
@@ -102,8 +102,8 @@ class _Widget extends HookWidget {
       opacity: tweenedOpacity,
       child: Stack(
         children: [
-          ModalBarrier(dismissible: false, color: AppColors.black.withValues(alpha: 0.5)),
-          const Center(child: CircularProgressIndicator(color: AppColors.gray_950)),
+          ModalBarrier(dismissible: false, color: context.colors.shadowOverlay.withValues(alpha: 0.5)),
+          Center(child: CircularProgressIndicator(color: context.colors.textDefault)),
         ],
       ),
     );

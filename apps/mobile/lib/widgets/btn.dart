@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:typie/styles/colors.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/widgets/tappable.dart';
 
 enum BtnVariant { primary, disabled }
@@ -20,8 +20,8 @@ class Btn extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),
           color: switch (variant) {
-            BtnVariant.primary => AppColors.brand_500,
-            BtnVariant.disabled => AppColors.gray_400,
+            BtnVariant.primary => context.colors.accentBrandDefault,
+            BtnVariant.disabled => context.colors.surfaceDisabled,
           },
         ),
         child: Center(
@@ -31,8 +31,8 @@ class Btn extends StatelessWidget {
               fontSize: 15,
               fontWeight: FontWeight.w700,
               color: switch (variant) {
-                BtnVariant.primary => AppColors.white,
-                BtnVariant.disabled => AppColors.white,
+                BtnVariant.primary => context.colors.textOnBrand,
+                BtnVariant.disabled => context.colors.textDisabled,
               },
             ),
           ),

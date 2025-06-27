@@ -11,6 +11,7 @@ import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
@@ -33,7 +34,6 @@ import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.d
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_site_id_query.req.gql.dart';
 import 'package:typie/services/preference.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/heading.dart';
@@ -69,7 +69,7 @@ class _WithSiteId extends HookWidget {
     final pref = useService<Pref>();
 
     return GraphQLOperation(
-      initialBackgroundColor: AppColors.gray_50,
+      initialBackgroundColor: context.colors.surfaceSubtle,
       operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
       builder: (context, client, data) {
         return _EntityList(null, data.site.entities.toList());
@@ -86,7 +86,7 @@ class _WithEntityId extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GraphQLOperation(
-      initialBackgroundColor: AppColors.gray_50,
+      initialBackgroundColor: context.colors.surfaceSubtle,
       operation: GEntityScreen_WithEntityId_QueryReq((b) => b..vars.entityId = entityId),
       builder: (context, client, data) {
         return _EntityList(data.entity, data.entity.children.toList());
@@ -310,7 +310,7 @@ class _EntityList extends HookWidget {
                                     title: '폴더 삭제',
                                     message: '"${folder!.name}" 폴더를 삭제하시겠어요?',
                                     confirmText: '삭제하기',
-                                    confirmColor: AppColors.red_500,
+                                    confirmColor: context.colors.accentDangerDefault,
                                     onConfirm: () async {
                                       await client.request(
                                         GEntityScreen_DeleteFolder_MutationReq(
@@ -348,10 +348,10 @@ class _EntityList extends HookWidget {
             ],
           ),
           child: entities.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     '폴더가 비어있어요',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_500),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
                   ),
                 )
               : ReorderableList(
@@ -484,7 +484,7 @@ class _EntityList extends HookWidget {
                                           title: '폴더 삭제',
                                           message: '"${folder.name}" 폴더를 삭제하시겠어요?',
                                           confirmText: '삭제하기',
-                                          confirmColor: AppColors.red_500,
+                                          confirmColor: context.colors.accentDangerDefault,
                                           onConfirm: () async {
                                             await client.request(
                                               GEntityScreen_DeleteFolder_MutationReq(
@@ -576,7 +576,7 @@ class _EntityList extends HookWidget {
                                           title: '포스트 삭제',
                                           message: '"${post.title}" 포스트를 삭제하시겠어요?',
                                           confirmText: '삭제하기',
-                                          confirmColor: AppColors.red_500,
+                                          confirmColor: context.colors.accentDangerDefault,
                                           onConfirm: () async {
                                             await client.request(
                                               GEntityScreen_DeletePost_MutationReq(
@@ -601,9 +601,9 @@ class _EntityList extends HookWidget {
                         child: IntrinsicHeight(
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              border: Border.all(color: AppColors.gray_950),
+                              border: Border.all(color: context.colors.borderStrong),
                               borderRadius: const BorderRadius.all(Radius.circular(8)),
-                              color: AppColors.white,
+                              color: context.colors.surfaceDefault,
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -619,7 +619,7 @@ class _EntityList extends HookWidget {
                                       ),
                                     ),
                                   ),
-                                  const AppVerticalDivider(color: AppColors.gray_950),
+                                  AppVerticalDivider(color: context.colors.borderStrong),
                                 ],
                                 const Gap(16),
                                 Expanded(
@@ -698,7 +698,7 @@ class _EntityList extends HookWidget {
 }
 
 class _Folder extends StatelessWidget {
-  const _Folder(this.entity, {this.color = AppColors.gray_950});
+  const _Folder(this.entity, {this.color});
 
   final GEntityScreen_Entity_entity entity;
   GEntityScreen_Entity_entity_node__asFolder get folder => entity.node as GEntityScreen_Entity_entity_node__asFolder;
@@ -749,12 +749,12 @@ class _Post extends StatelessWidget {
               ),
             ),
             if (post.type == GPostType.NORMAL)
-              Text(post.updatedAt.fromNow(), style: const TextStyle(fontSize: 14, color: AppColors.gray_700)),
+              Text(post.updatedAt.fromNow(), style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
           ],
         ),
         Text(
           post.excerpt.isEmpty ? '(내용 없음)' : post.excerpt,
-          style: const TextStyle(fontSize: 14, color: AppColors.gray_700),
+          style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
@@ -803,14 +803,14 @@ class _BottomMenuHeader extends StatelessWidget {
           padding: const Pad(left: 36),
           child: Row(
             children: [
-              const Text('내 포스트', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
+              Text('내 포스트', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
               ...?entity?.ancestors
                   .map(
                     (ancestor) => [
                       const Icon(LucideLightIcons.chevron_right, size: 14),
                       Text(
                         ancestor.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
-                        style: const TextStyle(fontSize: 14, color: AppColors.gray_700),
+                        style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                       ),
                     ],
                   )
@@ -936,8 +936,8 @@ class _MoveEntityModal extends HookWidget {
             child: (loading.value && entities.value == null)
                 ? const Center(child: CircularProgressIndicator())
                 : entities.value!.where((element) => element.node.G__typename == 'Folder').isEmpty
-                ? const Center(
-                    child: Text('하위 폴더가 없어요', style: TextStyle(fontSize: 15, color: AppColors.gray_500)),
+                ? Center(
+                    child: Text('하위 폴더가 없어요', style: TextStyle(fontSize: 15, color: context.colors.textFaint)),
                   )
                 : ListView.builder(
                     itemCount: entities.value!.length,
@@ -959,15 +959,17 @@ class _MoveEntityModal extends HookWidget {
                         },
                         title: Container(
                           decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.gray_950),
+                            border: Border.all(color: context.colors.borderStrong),
                             borderRadius: const BorderRadius.all(Radius.circular(8)),
-                            color: entity.id == entities.value![index].id ? AppColors.gray_100 : AppColors.white,
+                            color: entity.id == entities.value![index].id
+                                ? context.colors.surfaceMuted
+                                : context.colors.surfaceDefault,
                           ),
                           padding: const Pad(vertical: 12, horizontal: 16),
                           child: entities.value![index].node.when(
                             folder: (folder) => _Folder(
                               entities.value![index],
-                              color: entity.id == entities.value![index].id ? AppColors.gray_500 : null,
+                              color: entity.id == entities.value![index].id ? context.colors.textFaint : null,
                             ),
                             post: (_) => const SizedBox.shrink(),
                             orElse: () => throw UnimplementedError(),
@@ -982,16 +984,16 @@ class _MoveEntityModal extends HookWidget {
             right: 0,
             bottom: 0,
             child: Container(
-              decoration: const BoxDecoration(color: AppColors.white),
+              decoration: BoxDecoration(color: context.colors.surfaceDefault),
               padding: const Pad(horizontal: 20, vertical: 4),
               child: Row(
                 spacing: 8,
                 children: [
                   Expanded(
                     child: Container(
-                      decoration: const BoxDecoration(
-                        color: AppColors.gray_100,
-                        borderRadius: BorderRadius.all(Radius.circular(999)),
+                      decoration: BoxDecoration(
+                        color: context.colors.surfaceMuted,
+                        borderRadius: const BorderRadius.all(Radius.circular(999)),
                       ),
                       padding: const Pad(vertical: 12),
                       child: Tappable(
@@ -1014,9 +1016,9 @@ class _MoveEntityModal extends HookWidget {
                               (currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
                                       (folder.maxDescendantFoldersDepth - entity.depth) >
                                   (maxDepth - 1)
-                              ? AppColors.gray_400
-                              : AppColors.gray_950,
-                          post: (_) => AppColors.gray_950,
+                              ? context.colors.surfaceDisabled
+                              : context.colors.surfaceToast,
+                          post: (_) => context.colors.surfaceToast,
                           orElse: () => throw UnimplementedError(),
                         ),
                         borderRadius: const BorderRadius.all(Radius.circular(999)),
@@ -1055,10 +1057,10 @@ class _MoveEntityModal extends HookWidget {
                             await context.router.maybePop();
                           }
                         },
-                        child: const Text(
+                        child: Text(
                           '옮기기',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontWeight: FontWeight.w500, color: AppColors.white),
+                          style: TextStyle(fontWeight: FontWeight.w500, color: context.colors.textOnToast),
                         ),
                       ),
                     ),

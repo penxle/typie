@@ -5,6 +5,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -13,7 +14,6 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/create_post.req.gql.dart';
 import 'package:typie/screens/home/__generated__/site_update_stream.req.gql.dart';
 import 'package:typie/services/preference.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -51,24 +51,24 @@ class HomeScreen extends HookWidget {
             Container(
               height: padding.bottom + 52,
               padding: Pad(horizontal: 24, bottom: padding.bottom),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.gray_200)),
-                color: AppColors.white,
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: context.colors.borderDefault)),
+                color: context.colors.surfaceDefault,
               ),
               child: ResponsiveContainer(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const _Button(
+                    _Button(
                       index: 0,
-                      icon: Icon(LucideLightIcons.folder_open, size: 24, color: AppColors.gray_700),
-                      activeIcon: Icon(TypieIcons.folder_open_filled, size: 24, color: AppColors.gray_950),
+                      icon: Icon(LucideLightIcons.folder_open, size: 24, color: context.colors.textSubtle),
+                      activeIcon: Icon(TypieIcons.folder_open_filled, size: 24, color: context.colors.textDefault),
                     ),
-                    const _Button(
+                    _Button(
                       index: 1,
-                      icon: Icon(LucideLightIcons.search, size: 24, color: AppColors.gray_700),
-                      activeIcon: Icon(TypieIcons.search_filled, size: 24, color: AppColors.gray_950),
+                      icon: Icon(LucideLightIcons.search, size: 24, color: context.colors.textSubtle),
+                      activeIcon: Icon(TypieIcons.search_filled, size: 24, color: context.colors.textDefault),
                     ),
                     Tappable(
                       padding: const Pad(horizontal: 16),
@@ -95,17 +95,21 @@ class HomeScreen extends HookWidget {
                           await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
                         }
                       },
-                      child: const Icon(LucideLightIcons.square_plus, size: 24, color: AppColors.gray_700),
+                      child: Icon(LucideLightIcons.square_plus, size: 24, color: context.colors.textSubtle),
                     ),
-                    const _Button(
+                    _Button(
                       index: 2,
-                      icon: Icon(LucideLightIcons.inbox, size: 24, color: AppColors.gray_700),
-                      activeIcon: Icon(TypieIcons.inbox_filled, size: 24, color: AppColors.gray_950),
+                      icon: Icon(LucideLightIcons.inbox, size: 24, color: context.colors.textSubtle),
+                      activeIcon: Icon(TypieIcons.inbox_filled, size: 24, color: context.colors.textDefault),
                     ),
-                    const _Button(
+                    _Button(
                       index: 3,
-                      icon: Icon(LucideLightIcons.circle_user_round, size: 24, color: AppColors.gray_700),
-                      activeIcon: Icon(TypieIcons.circle_user_round_filled, size: 24, color: AppColors.gray_950),
+                      icon: Icon(LucideLightIcons.circle_user_round, size: 24, color: context.colors.textSubtle),
+                      activeIcon: Icon(
+                        TypieIcons.circle_user_round_filled,
+                        size: 24,
+                        color: context.colors.textDefault,
+                      ),
                     ),
                   ],
                 ),

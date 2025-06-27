@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:typie/styles/colors.dart';
+import 'package:typie/context/theme.dart';
 
 class Tappable extends StatelessWidget {
   const Tappable({required this.onTap, required this.child, this.padding, this.debugTapArea = false, super.key});
@@ -16,7 +16,7 @@ class Tappable extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: debugTapArea
-          ? Container(color: AppColors.red_500, padding: padding, child: child)
+          ? Container(color: context.colors.accentDangerDefault, padding: padding, child: child)
           : padding == null
           ? child
           : Padding(padding: padding!, child: child),
