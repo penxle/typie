@@ -2,6 +2,7 @@ import { getContext, setContext } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 import Cookies from 'universal-cookie';
 import { browser } from '$app/environment';
+import { page } from '$app/state';
 import type { CookieChangeOptions } from 'universal-cookie';
 
 export type Theme = 'light' | 'dark' | 'auto';
@@ -21,8 +22,10 @@ export class ThemeState {
   #prefersDark = new MediaQuery('(prefers-color-scheme: dark)');
 
   constructor() {
+    const defaultTheme = page.url.pathname.includes('_webview') ? 'light' : 'auto';
+
     const value = this.#cookies.get(COOKIE);
-    this.#current = value && ['light', 'dark'].includes(value) ? value : 'auto';
+    this.#current = value && ['auto', 'light', 'dark'].includes(value) ? value : defaultTheme;
 
     if (browser) {
       document.documentElement.dataset.theme = this.#effective;
@@ -51,7 +54,7 @@ export class ThemeState {
     $effect(() => {
       const handler = ({ name, value }: CookieChangeOptions) => {
         if (name === COOKIE) {
-          this.#current = value && ['light', 'dark'].includes(value) ? value : 'auto';
+          this.#current = value && ['auto', 'light', 'dark'].includes(value) ? value : defaultTheme;
         }
       };
 

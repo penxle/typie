@@ -32,6 +32,7 @@ import 'package:typie/screens/editor/toolbar/toolbar.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
+import 'package:typie/services/theme.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/heading.dart';
@@ -53,6 +54,7 @@ class Editor extends HookWidget {
     final auth = useService<Auth>();
     final keyboard = useService<Keyboard>();
     final pref = useService<Pref>();
+    final theme = useService<AppTheme>();
     final mixpanel = useService<Mixpanel>();
 
     final isReady = useState(false);
@@ -318,7 +320,14 @@ class Editor extends HookWidget {
                         children: [
                           WebView(
                             initialUrl: '${Env.websiteUrl}/_webview/editor?siteId=${pref.siteId}&slug=$slug',
-                            initialCookies: [Cookie('typie-at', (auth.value as Authenticated).accessToken)],
+                            initialCookies: [
+                              Cookie('typie-at', (auth.value as Authenticated).accessToken),
+                              Cookie('typie-th', switch (theme.mode) {
+                                ThemeMode.system => 'auto',
+                                ThemeMode.light => 'light',
+                                ThemeMode.dark => 'dark',
+                              }),
+                            ],
                             onWebViewCreated: (controller) {
                               scope.webViewController.value = controller;
                             },
