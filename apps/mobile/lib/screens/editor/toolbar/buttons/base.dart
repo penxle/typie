@@ -47,27 +47,33 @@ class ToolbarButton extends HookWidget {
     final surfaceDefaultColor = context.colors.surfaceDefault;
     final surfaceSubtleColor = context.colors.surfaceSubtle;
 
+    useEffect(
+      () {
+        foregroundTween.value = ColorTween(
+          begin: foregroundTween.value?.evaluate(curve) ?? defaultForegroundColor,
+          end: switch (effectiveState) {
+            _ButtonState.idle => color ?? textSubtleColor,
+            _ButtonState.pressed => borderDefaultColor,
+            _ButtonState.active => textDefaultColor,
+          },
+        );
+
+        backgroundTween.value = ColorTween(
+          begin: backgroundTween.value?.evaluate(curve),
+          end: switch (effectiveState) {
+            _ButtonState.idle => surfaceDefaultColor,
+            _ButtonState.pressed => surfaceDefaultColor,
+            _ButtonState.active => surfaceSubtleColor,
+          },
+        );
+
+        return null;
+      },
+      [effectiveState, textSubtleColor, borderDefaultColor, textDefaultColor, surfaceDefaultColor, surfaceSubtleColor],
+    );
+
     useEffect(() {
-      foregroundTween.value = ColorTween(
-        begin: foregroundTween.value?.evaluate(curve) ?? defaultForegroundColor,
-        end: switch (effectiveState) {
-          _ButtonState.idle => color ?? textSubtleColor,
-          _ButtonState.pressed => borderDefaultColor,
-          _ButtonState.active => textDefaultColor,
-        },
-      );
-
-      backgroundTween.value = ColorTween(
-        begin: backgroundTween.value?.evaluate(curve),
-        end: switch (effectiveState) {
-          _ButtonState.idle => surfaceDefaultColor,
-          _ButtonState.pressed => surfaceDefaultColor,
-          _ButtonState.active => surfaceSubtleColor,
-        },
-      );
-
       controller.forward(from: 0);
-
       return null;
     }, [effectiveState]);
 
