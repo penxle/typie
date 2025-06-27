@@ -200,6 +200,8 @@ export const semanticColors = defineSemanticTokens.colors({
   'border.default': { value: { base: '{colors.gray.200}', _dark: '{colors.dark.gray.700}' } },
   'border.strong': { value: { base: '{colors.gray.300}', _dark: '{colors.dark.gray.600}' } },
   'border.subtle': { value: { base: '{colors.gray.100}', _dark: '{colors.dark.gray.800}' } },
+  'border.brand': { value: { base: '{colors.brand.600}', _dark: '{colors.dark.brand.400}' } },
+  'border.danger': { value: { base: '{colors.red.600}', _dark: '{colors.dark.red.400}' } },
 
   'shadow.default': { value: { base: '{colors.gray.950}', _dark: 'oklch(0 0 0 / 0.5)' } },
 
