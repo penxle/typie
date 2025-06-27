@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:typie/styles/colors.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/svg_image.dart';
 import 'package:typie/widgets/vertical_divider.dart';
@@ -84,16 +84,26 @@ final editorValues = <String, List<Map<String, dynamic>>>{
   ],
 
   'blockquote': [
-    {'label': '왼쪽 선', 'type': 'left-line', 'widget': const AppVerticalDivider(color: AppColors.gray_200, width: 4)},
+    {
+      'label': '왼쪽 선',
+      'type': 'left-line',
+      'widget': Builder(builder: (context) => AppVerticalDivider(color: context.colors.textDefault, width: 4)),
+    },
     {
       'label': '왼쪽 따옴표',
       'type': 'left-quote',
-      'widget': const SvgImage('icons/left-quote', height: 16, color: AppColors.gray_900),
+      'widget': Builder(
+        builder: (context) => SvgImage('icons/left-quote', height: 16, color: context.colors.textDefault),
+      ),
     },
   ],
 
   'horizontalRule': [
-    {'label': '옅은 선', 'type': 'light-line', 'widget': const HorizontalDivider(color: AppColors.gray_200)},
+    {
+      'label': '옅은 선',
+      'type': 'light-line',
+      'widget': Builder(builder: (context) => HorizontalDivider(color: context.colors.textSubtle)),
+    },
     {
       'label': '점선',
       'type': 'dashed-line',
@@ -110,7 +120,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
               return Container(
                 width: dashWidth,
                 height: 1,
-                color: AppColors.gray_700,
+                color: context.colors.textSubtle,
                 margin: EdgeInsets.only(right: index < dashCount - 1 ? gapWidth : 0),
               );
             }),
@@ -121,122 +131,134 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '동그라미가 있는 선',
       'type': 'circle-line',
-      'widget': Row(
-        spacing: 10,
-        children: [
-          const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
-          ),
-          const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
-        ],
+      'widget': Builder(
+        builder: (context) => Row(
+          spacing: 10,
+          children: [
+            Expanded(child: HorizontalDivider(color: context.colors.textSubtle)),
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: context.colors.textSubtle, shape: BoxShape.circle),
+            ),
+            Expanded(child: HorizontalDivider(color: context.colors.textSubtle)),
+          ],
+        ),
       ),
     },
     {
       'label': '마름모가 있는 선',
       'type': 'diamond-line',
-      'widget': Row(
-        spacing: 8,
-        children: [
-          const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
-          Transform.rotate(
-            angle: pi / 4,
-            child: Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+      'widget': Builder(
+        builder: (context) => Row(
+          spacing: 8,
+          children: [
+            Expanded(child: HorizontalDivider(color: context.colors.textSubtle)),
+            Transform.rotate(
+              angle: pi / 4,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(border: Border.all(color: context.colors.textSubtle)),
+              ),
             ),
-          ),
-          const Expanded(child: HorizontalDivider(color: AppColors.gray_700)),
-        ],
+            Expanded(child: HorizontalDivider(color: context.colors.textSubtle)),
+          ],
+        ),
       ),
     },
     {
       'label': '동그라미',
       'type': 'circle',
-      'widget': Container(
-        width: 10,
-        height: 10,
-        decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
+      'widget': Builder(
+        builder: (context) => Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: context.colors.textSubtle, shape: BoxShape.circle),
+        ),
       ),
     },
     {
       'label': '마름모',
       'type': 'diamond',
-      'widget': Transform.rotate(
-        angle: pi / 4,
-        child: Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+      'widget': Builder(
+        builder: (context) => Transform.rotate(
+          angle: pi / 4,
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(border: Border.all(color: context.colors.textSubtle)),
+          ),
         ),
       ),
     },
     {
       'label': '세 개의 동그라미',
       'type': 'three-circles',
-      'widget': Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: 8,
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
-          ),
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
-          ),
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(color: AppColors.gray_700, shape: BoxShape.circle),
-          ),
-        ],
+      'widget': Builder(
+        builder: (context) => Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: 8,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: context.colors.textSubtle, shape: BoxShape.circle),
+            ),
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: context.colors.textSubtle, shape: BoxShape.circle),
+            ),
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: context.colors.textSubtle, shape: BoxShape.circle),
+            ),
+          ],
+        ),
       ),
     },
     {
       'label': '세 개의 마름모',
       'type': 'three-diamonds',
-      'widget': Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: 8,
-        children: [
-          Transform.rotate(
-            angle: pi / 4,
-            child: Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+      'widget': Builder(
+        builder: (context) => Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: 8,
+          children: [
+            Transform.rotate(
+              angle: pi / 4,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(border: Border.all(color: context.colors.textSubtle)),
+              ),
             ),
-          ),
-          Transform.rotate(
-            angle: pi / 4,
-            child: Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+            Transform.rotate(
+              angle: pi / 4,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(border: Border.all(color: context.colors.textSubtle)),
+              ),
             ),
-          ),
-          Transform.rotate(
-            angle: pi / 4,
-            child: Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(border: Border.all(color: AppColors.gray_700)),
+            Transform.rotate(
+              angle: pi / 4,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(border: Border.all(color: context.colors.textSubtle)),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     },
     {
       'label': '지그재그',
       'type': 'zigzag',
-      'widget': const SvgImage('icons/zigzag', height: 12, color: AppColors.gray_700),
+      'widget': Builder(builder: (context) => SvgImage('icons/zigzag', height: 12, color: context.colors.textSubtle)),
     },
   ],
 
