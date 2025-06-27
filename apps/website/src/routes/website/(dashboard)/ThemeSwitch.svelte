@@ -12,9 +12,9 @@
   import type { Theme } from '$lib/context';
 
   const themes: Record<Theme, { icon: Component; label: string }> = {
-    auto: { icon: MonitorIcon, label: '시스템 설정 따르기' },
-    light: { icon: SunIcon, label: '라이트 모드' },
-    dark: { icon: MoonIcon, label: '다크 모드' },
+    auto: { icon: MonitorIcon, label: '시스템 설정' },
+    light: { icon: SunIcon, label: '라이트' },
+    dark: { icon: MoonIcon, label: '다크' },
   };
 
   const themeNames: Theme[] = ['auto', 'light', 'dark'];
