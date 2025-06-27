@@ -32,14 +32,14 @@
       outline: 'none',
       _disabled: {
         backgroundColor: 'surface.muted!',
-        borderColor: 'gray.300!',
+        borderColor: 'border.default!',
         cursor: 'not-allowed',
         _after: {
           opacity: '0',
         },
       },
       _checked: {
-        borderColor: 'brand.500',
+        borderColor: 'border.brand',
         backgroundColor: 'accent.brand.default',
         _after: {
           opacity: '100',
