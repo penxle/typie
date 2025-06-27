@@ -51,10 +51,10 @@
       backgroundColor: 'surface.default',
       transition: 'common',
       _hover: {
-        borderColor: 'brand.400',
+        borderColor: 'border.brand',
       },
       '&:has(input:focus)': {
-        borderColor: 'brand.600',
+        borderColor: 'border.brand',
       },
       '&:has(input:not(:placeholder-shown)), &:has(input[aria-live="polite"])': {
         color: 'text.default',
@@ -63,17 +63,17 @@
       '&:has(input:disabled)': {
         color: 'text.disabled',
         backgroundColor: 'interactive.disabled',
-        borderColor: 'gray.200',
+        borderColor: 'border.default',
       },
       '&:has(input:read-only)': {
         color: 'text.disabled',
         backgroundColor: 'surface.subtle',
-        borderColor: 'gray.100',
+        borderColor: 'border.default',
       },
       '&:has(input[aria-invalid="true"])': {
-        borderColor: 'red.600',
+        borderColor: 'border.danger',
         '&:has(input:focus)': {
-          borderColor: 'red.600',
+          borderColor: 'border.danger',
         },
         '&:has(input:not(:placeholder-shown)), &:has(input[aria-live="polite"])': {
           color: 'text.default',
