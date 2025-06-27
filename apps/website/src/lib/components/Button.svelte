@@ -63,10 +63,10 @@
           fontWeight: 'bold',
           color: {
             _enabled: {
-              base: 'text.white',
-              _hover: 'text.white',
-              _active: 'text.white',
-              _pressed: 'text.white',
+              base: 'text.bright',
+              _hover: 'text.bright',
+              _active: 'text.bright',
+              _pressed: 'text.bright',
             },
             _disabled: 'text.disabled',
           },
@@ -109,10 +109,10 @@
         danger: {
           color: {
             _enabled: {
-              base: 'text.white',
-              _hover: 'text.white',
-              _active: 'text.white',
-              _pressed: 'text.white',
+              base: 'text.bright',
+              _hover: 'text.bright',
+              _active: 'text.bright',
+              _pressed: 'text.bright',
             },
             _disabled: 'text.disabled',
           },
@@ -141,7 +141,7 @@
     },
     variants: {
       color: {
-        primary: { color: 'text.white' },
+        primary: { color: 'text.bright' },
         secondary: { color: 'text.subtle' },
         danger: { color: 'text.danger' },
       },

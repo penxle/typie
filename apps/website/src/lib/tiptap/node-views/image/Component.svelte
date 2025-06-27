@@ -162,7 +162,7 @@
             justifyContent: 'center',
             borderRadius: '4px',
             size: '28px',
-            color: 'text.inverse',
+            color: 'text.bright',
             backgroundColor: '[#363839/70]',
             opacity: '0',
             transition: 'opacity',

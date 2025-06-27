@@ -193,7 +193,7 @@
         borderWidth: '1px',
         borderColor: '[#03C75A]',
         borderRadius: '8px',
-        color: 'text.inverse',
+        color: 'text.bright',
         backgroundColor: '[#03C75A]',
       })}
       onclick={() => singleSignOn(SingleSignOnProvider.NAVER)}

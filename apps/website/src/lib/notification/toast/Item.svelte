@@ -61,9 +61,9 @@
       )}
     >
       {#if toast.type === 'success'}
-        <Icon style={css.raw({ color: 'text.inverse' })} icon={CheckIcon} size={12} />
+        <Icon style={css.raw({ color: 'text.bright' })} icon={CheckIcon} size={12} />
       {:else if toast.type === 'error'}
-        <Icon style={css.raw({ color: 'text.inverse' })} icon={ExclamationIcon} size={12} />
+        <Icon style={css.raw({ color: 'text.bright' })} icon={ExclamationIcon} size={12} />
       {/if}
     </div>
   </div>

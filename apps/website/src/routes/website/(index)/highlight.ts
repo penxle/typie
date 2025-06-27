@@ -68,7 +68,7 @@ export const Highlight = Extension.create({
                         fontFamily: 'ui',
                         fontSize: { base: '12px', md: '14px' },
                         fontWeight: 'bold',
-                        color: 'text.inverse',
+                        color: 'text.bright',
                         backgroundColor: 'accent.brand.default',
                         translate: 'auto',
                         translateX: { base: '[calc(100% - 2px)]', md: '[calc(100% - 4px)]' },

@@ -19,8 +19,8 @@
     paddingY: '4px',
     fontSize: '12px',
     fontWeight: 'semibold',
-    color: 'text.overlay',
-    backgroundColor: 'surface.overlay',
+    color: 'text.bright',
+    backgroundColor: 'surface.dark',
     boxShadow: 'medium',
     zIndex: '50',
     pointerEvents: 'none',
@@ -35,7 +35,7 @@
     class={css({
       borderTopLeftRadius: '2px',
       size: '8px',
-      backgroundColor: 'surface.overlay',
+      backgroundColor: 'surface.dark',
     })}
     use:arrow
   ></div>

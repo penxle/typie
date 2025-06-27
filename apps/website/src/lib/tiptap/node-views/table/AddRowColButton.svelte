@@ -111,7 +111,7 @@
         backgroundColor: 'interactive.hover',
       },
       _active: {
-        color: 'text.inverse',
+        color: 'text.bright',
         backgroundColor: '[var(--prosemirror-color-selection)]',
       },
     })}
@@ -160,7 +160,7 @@
         backgroundColor: 'interactive.hover',
       },
       _active: {
-        color: 'text.inverse',
+        color: 'text.bright',
         backgroundColor: '[var(--prosemirror-color-selection)]',
       },
     })}
@@ -211,7 +211,7 @@
         backgroundColor: 'interactive.hover',
       },
       _active: {
-        color: 'text.inverse',
+        color: 'text.bright',
         backgroundColor: '[var(--prosemirror-color-selection)]',
       },
     })}
