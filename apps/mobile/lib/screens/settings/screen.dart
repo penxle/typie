@@ -91,14 +91,13 @@ class SettingsScreen extends HookWidget {
                             name: 'themeMode',
                             initialValue: theme.mode,
                             items: const [
+                              HookFormSelectItem(
+                                label: '시스템 설정',
+                                value: ThemeMode.system,
+                                icon: LucideLightIcons.smartphone,
+                              ),
                               HookFormSelectItem(label: '라이트', value: ThemeMode.light, icon: LucideLightIcons.sun),
                               HookFormSelectItem(label: '다크', value: ThemeMode.dark, icon: LucideLightIcons.moon),
-                              HookFormSelectItem(
-                                label: '자동',
-                                value: ThemeMode.system,
-                                icon: LucideLightIcons.laptop,
-                                description: '시스템 설정을 따릅니다',
-                              ),
                             ],
                           ),
                         );
