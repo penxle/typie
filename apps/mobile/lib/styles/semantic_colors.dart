@@ -84,10 +84,10 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     surfaceDefault: AppColors.dark.gray_900,
     surfaceSubtle: AppColors.dark.gray_800,
     surfaceMuted: AppColors.dark.gray_700,
-    surfaceDark: AppColors.dark.gray_700,
+    surfaceDark: AppColors.dark.gray_500,
 
     borderDefault: AppColors.dark.gray_700,
-    borderStrong: AppColors.dark.gray_600,
+    borderStrong: AppColors.dark.gray_700,
     borderInverse: AppColors.dark.gray_50,
 
     accentDanger: AppColors.dark.red_400,

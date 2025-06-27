@@ -75,8 +75,8 @@ class LoginScreen extends HookWidget {
                   text: '구글로 시작하기',
                   icon: const SvgImage('brands/google', width: 20),
                   borderColor: context.colors.borderDefault,
-                  foregroundColor: context.colors.textDefault,
-                  backgroundColor: context.colors.surfaceDefault,
+                  foregroundColor: const Color(0xFF000000),
+                  backgroundColor: const Color(0xFFFFFFFF),
                   onTap: () async {
                     await googleSignIn.signOut();
                     final result = await googleSignIn.signIn();
@@ -89,7 +89,7 @@ class LoginScreen extends HookWidget {
                 _Button(
                   text: '카카오로 시작하기',
                   icon: const SvgImage('brands/kakao', width: 20, color: Color(0xFF000000)),
-                  foregroundColor: context.colors.textDefault,
+                  foregroundColor: const Color(0xFF000000),
                   backgroundColor: const Color(0xFFFEE500),
                   onTap: () async {
                     try {
@@ -105,7 +105,7 @@ class LoginScreen extends HookWidget {
                 _Button(
                   text: '네이버로 시작하기',
                   icon: const SvgImage('brands/naver', width: 20, color: Color(0xFFFFFFFF)),
-                  foregroundColor: context.colors.textBright,
+                  foregroundColor: const Color(0xFFFFFFFF),
                   backgroundColor: const Color(0xFF03C75A),
                   onTap: () async {
                     final completer = Completer<bool>();
@@ -138,8 +138,8 @@ class LoginScreen extends HookWidget {
                   _Button(
                     text: '애플로 시작하기',
                     icon: const SvgImage('brands/apple', width: 20, color: Color(0xFFFFFFFF)),
-                    foregroundColor: context.colors.textBright,
-                    backgroundColor: context.colors.surfaceDark,
+                    foregroundColor: const Color(0xFFFFFFFF),
+                    backgroundColor: const Color(0xFF000000),
                     onTap: () async {
                       final result = await SignInWithApple.getAppleIDCredential(
                         scopes: [AppleIDAuthorizationScopes.email],

@@ -26,6 +26,7 @@ class App extends HookWidget {
         theme: lightTheme,
         darkTheme: darkTheme,
         themeMode: theme.mode,
+        themeAnimationCurve: Curves.easeInOut,
         builder: (context, child) {
           ErrorWidget.builder = (details) {
             return const AppErrorWidget();
