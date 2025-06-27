@@ -257,7 +257,7 @@
             alignItems: 'center',
             gap: '4px',
             borderWidth: '1px',
-            borderColor: 'red.600',
+            borderColor: 'border.danger',
             borderRadius: '4px',
             paddingX: '4px',
             paddingY: '4px',
@@ -268,7 +268,7 @@
             transition: 'common',
             boxShadow: 'small',
             _hover: {
-              backgroundColor: 'red.100',
+              backgroundColor: { base: 'red.100', _dark: 'dark.red.800' },
             },
           })}
           onclick={() => {
