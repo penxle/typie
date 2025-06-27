@@ -7,12 +7,12 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.req.gql.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -37,9 +37,9 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.gray_950),
+                    border: Border.all(color: context.colors.borderStrong),
                     borderRadius: BorderRadius.circular(8),
-                    color: AppColors.white,
+                    color: context.colors.surfaceDefault,
                   ),
                   padding: const Pad(horizontal: 16, vertical: 24),
                   child: Column(
@@ -76,11 +76,11 @@ class ProfileScreen extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Icon(LucideLightIcons.pencil, size: 14, color: AppColors.gray_500),
+                            Icon(LucideLightIcons.pencil, size: 14, color: context.colors.textFaint),
                           ],
                         ),
                       ),
-                      Text(data.me!.email, style: const TextStyle(fontSize: 14, color: AppColors.gray_500)),
+                      Text(data.me!.email, style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
                     ],
                   ),
                 ),
@@ -94,9 +94,9 @@ class ProfileScreen extends StatelessWidget {
                   },
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.gray_950),
+                      border: Border.all(color: context.colors.borderStrong),
                       borderRadius: BorderRadius.circular(8),
-                      color: AppColors.white,
+                      color: context.colors.surfaceDefault,
                     ),
                     padding: const Pad(all: 16),
                     child: Column(
@@ -105,14 +105,14 @@ class ProfileScreen extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            const Text('현재 이용권', style: TextStyle(color: AppColors.gray_500, fontSize: 14)),
+                            Text('현재 이용권', style: TextStyle(color: context.colors.textFaint, fontSize: 14)),
                             const Spacer(),
                             if (data.me!.subscription == null) ...[
-                              const Text('이용권 구매하기', style: TextStyle(fontSize: 14, color: AppColors.gray_700)),
-                              const Icon(LucideLightIcons.chevron_right, size: 14, color: AppColors.gray_700),
+                              Text('이용권 구매하기', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                              Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textSubtle),
                             ] else ...[
-                              const Text('이용권 정보', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
-                              const Icon(LucideLightIcons.chevron_right, size: 14, color: AppColors.gray_500),
+                              Text('이용권 정보', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+                              Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textFaint),
                             ],
                           ],
                         ),
@@ -130,9 +130,9 @@ class ProfileScreen extends StatelessWidget {
                   },
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.gray_950),
+                      border: Border.all(color: context.colors.borderStrong),
                       borderRadius: BorderRadius.circular(8),
-                      color: AppColors.white,
+                      color: context.colors.surfaceDefault,
                     ),
                     padding: const Pad(all: 16),
                     child: const Row(
@@ -154,9 +154,9 @@ class ProfileScreen extends StatelessWidget {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.gray_950),
+                            border: Border.all(color: context.colors.borderStrong),
                             borderRadius: BorderRadius.circular(8),
-                            color: AppColors.white,
+                            color: context.colors.surfaceDefault,
                           ),
                           padding: const Pad(all: 16),
                           child: Tappable(
@@ -179,9 +179,9 @@ class ProfileScreen extends StatelessWidget {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.gray_950),
+                            border: Border.all(color: context.colors.borderStrong),
                             borderRadius: BorderRadius.circular(8),
-                            color: AppColors.white,
+                            color: context.colors.surfaceDefault,
                           ),
                           padding: const Pad(all: 16),
                           child: Tappable(
@@ -243,9 +243,9 @@ class ProfileScreen extends StatelessWidget {
                   },
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.gray_950),
+                      border: Border.all(color: context.colors.borderStrong),
                       borderRadius: BorderRadius.circular(8),
-                      color: AppColors.white,
+                      color: context.colors.surfaceDefault,
                     ),
                     padding: const Pad(all: 16),
                     child: const Row(

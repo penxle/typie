@@ -4,9 +4,9 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/responsive_container.dart';
 
 enum ToastType { success, error, notification }
@@ -69,7 +69,7 @@ class _Widget extends HookWidget {
               child: FadeTransition(
                 opacity: tweenedOpacity,
                 child: Container(
-                  decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(999)),
+                  decoration: BoxDecoration(color: context.colors.surfaceToast, borderRadius: BorderRadius.circular(999)),
                   padding: const Pad(all: 12),
                   child: Row(
                     children: [
@@ -79,18 +79,18 @@ class _Widget extends HookWidget {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(999),
                           color: switch (type) {
-                            ToastType.success => AppColors.green_600,
-                            ToastType.error => AppColors.red_600,
-                            ToastType.notification => AppColors.blue_600,
+                            ToastType.success => context.colors.accentSuccessDefault,
+                            ToastType.error => context.colors.accentDangerDefault,
+                            ToastType.notification => context.colors.accentInfoDefault,
                           },
                         ),
                         child: Center(
                           child: switch (type) {
-                            ToastType.success => const Icon(LucideLightIcons.check, color: AppColors.white, size: 12),
-                            ToastType.error => const Icon(TypieIcons.exclamation, color: AppColors.white, size: 12),
-                            ToastType.notification => const Icon(
+                            ToastType.success => Icon(LucideLightIcons.check, color: context.colors.textOnToast, size: 12),
+                            ToastType.error => Icon(TypieIcons.exclamation, color: context.colors.textOnToast, size: 12),
+                            ToastType.notification => Icon(
                               LucideLightIcons.bell,
-                              color: AppColors.white,
+                              color: context.colors.textOnToast,
                               size: 12,
                             ),
                           },
@@ -100,7 +100,7 @@ class _Widget extends HookWidget {
                       Expanded(
                         child: Text(
                           message,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.white),
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textOnToast),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),

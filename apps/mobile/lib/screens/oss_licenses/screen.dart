@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -63,8 +63,8 @@ class OssLicensesScreen extends HookWidget {
                   },
                   child: Container(
                     decoration: BoxDecoration(
-                      color: AppColors.white,
-                      border: Border.all(color: AppColors.gray_950),
+                      color: context.colors.surfaceDefault,
+                      border: Border.all(color: context.colors.borderStrong),
                       borderRadius: const BorderRadius.all(Radius.circular(8)),
                     ),
                     padding: const Pad(horizontal: 16, vertical: 12),

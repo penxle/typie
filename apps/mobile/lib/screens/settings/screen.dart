@@ -9,6 +9,7 @@ import 'package:jiffy/jiffy.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:typie/context/modal.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
@@ -19,8 +20,9 @@ import 'package:typie/screens/settings/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/settings/__generated__/update_marketing_consent_mutation.req.gql.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/services/preference.dart';
-import 'package:typie/styles/colors.dart';
+import 'package:typie/services/theme.dart';
 import 'package:typie/widgets/forms/form.dart';
+import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/switch.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
@@ -36,6 +38,7 @@ class SettingsScreen extends HookWidget {
   Widget build(BuildContext context) {
     final auth = useService<Auth>();
     final pref = useService<Pref>();
+    final theme = useService<AppTheme>();
     final mixpanel = useService<Mixpanel>();
 
     final packageInfoFuture = useMemoized(PackageInfo.fromPlatform);
@@ -69,6 +72,36 @@ class SettingsScreen extends HookWidget {
                       label: '프로필 변경',
                       onTap: () async {
                         await context.router.push(const UpdateProfileRoute());
+                      },
+                    ),
+                  ],
+                ),
+                _Section(
+                  title: '화면 설정',
+                  children: [
+                    HookForm(
+                      submitMode: HookFormSubmitMode.onChange,
+                      onSubmit: (form) async {
+                        theme.mode = form.data['themeMode'] as ThemeMode;
+                      },
+                      builder: (context, form) {
+                        return _Item(
+                          label: '테마',
+                          trailing: HookFormSelect<ThemeMode>(
+                            name: 'themeMode',
+                            initialValue: theme.mode,
+                            items: const [
+                              HookFormSelectItem(label: '라이트', value: ThemeMode.light, icon: LucideLightIcons.sun),
+                              HookFormSelectItem(label: '다크', value: ThemeMode.dark, icon: LucideLightIcons.moon),
+                              HookFormSelectItem(
+                                label: '자동',
+                                value: ThemeMode.system,
+                                icon: LucideLightIcons.laptop,
+                                description: '시스템 설정을 따릅니다',
+                              ),
+                            ],
+                          ),
+                        );
                       },
                     ),
                   ],
@@ -263,13 +296,13 @@ class _Section extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_500),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textFaint),
         ),
         Container(
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.gray_950),
+            border: Border.all(color: context.colors.borderStrong),
             borderRadius: BorderRadius.circular(8),
-            color: AppColors.white,
+            color: context.colors.surfaceDefault,
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
         ),
@@ -283,7 +316,7 @@ class _Divider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const HorizontalDivider(color: AppColors.gray_200);
+    return HorizontalDivider(color: context.colors.borderDefault);
   }
 }
 

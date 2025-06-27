@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/secondary/text.dart';
 import 'package:typie/screens/editor/toolbar/secondary/text_options/font_family.dart';
@@ -8,7 +9,6 @@ import 'package:typie/screens/editor/toolbar/secondary/text_options/letter_spaci
 import 'package:typie/screens/editor/toolbar/secondary/text_options/line_height.dart';
 import 'package:typie/screens/editor/toolbar/secondary/text_options/text_align.dart';
 import 'package:typie/screens/editor/toolbar/secondary/text_options/text_color.dart';
-import 'package:typie/styles/colors.dart';
 
 class SecondaryToolbar extends HookWidget {
   const SecondaryToolbar({super.key});
@@ -45,9 +45,9 @@ class SecondaryToolbar extends HookWidget {
         child: Container(
           width: double.infinity,
           height: 48,
-          decoration: const BoxDecoration(
-            color: AppColors.white,
-            border: Border(top: BorderSide(color: AppColors.gray_100)),
+          decoration: BoxDecoration(
+            color: context.colors.surfaceDefault,
+            border: Border(top: BorderSide(color: context.colors.surfaceSubtle)),
           ),
           child: HookBuilder(
             builder: (context) {
@@ -102,7 +102,7 @@ class SecondaryToolbar extends HookWidget {
                           child: Opacity(
                             opacity: optionsOpacityTween.evaluate(switchCurve),
                             child: DecoratedBox(
-                              decoration: const BoxDecoration(color: AppColors.white),
+                              decoration: BoxDecoration(color: context.colors.surfaceDefault),
                               child: switch (optionsToolbarMode.value) {
                                 SecondaryToolbarMode.textColor => const TextColorTextOptionsToolbar(),
                                 SecondaryToolbarMode.fontFamily => const FontFamilyTextOptionsToolbar(),

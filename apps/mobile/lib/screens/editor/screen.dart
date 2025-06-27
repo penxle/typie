@@ -4,13 +4,13 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/editor.dart';
 import 'package:typie/screens/editor/note.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/services/keyboard.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/webview.dart';
 
 @RoutePage()
@@ -49,7 +49,7 @@ class EditorScreen extends HookWidget {
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
       child: Material(
-        color: AppColors.white,
+        color: context.colors.surfaceDefault,
         child: Stack(
           children: [
             PageView(

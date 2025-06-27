@@ -3,6 +3,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -10,7 +11,6 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/search/__generated__/search_query.data.gql.dart';
 import 'package:typie/screens/search/__generated__/search_query.req.gql.dart';
 import 'package:typie/services/preference.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -34,9 +34,9 @@ class SearchScreen extends HookWidget {
           child: TextField(
             controller: controller,
             textInputAction: TextInputAction.search,
-            decoration: const InputDecoration.collapsed(
+            decoration: InputDecoration.collapsed(
               hintText: '검색어를 입력하세요',
-              hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.gray_300),
+              hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textPlaceholder),
             ),
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),
@@ -50,14 +50,14 @@ class SearchScreen extends HookWidget {
         ),
         builder: (context, client, data) {
           if (value.text.isEmpty) {
-            return const Center(
-              child: Text('검색어를 입력해주세요', style: TextStyle(fontSize: 15, color: AppColors.gray_500)),
+            return Center(
+              child: Text('검색어를 입력해주세요', style: TextStyle(fontSize: 15, color: context.colors.textFaint)),
             );
           }
 
           if (data.search.hits.isEmpty) {
-            return const Center(
-              child: Text('검색 결과가 없어요', style: TextStyle(fontSize: 15, color: AppColors.gray_500)),
+            return Center(
+              child: Text('검색 결과가 없어요', style: TextStyle(fontSize: 15, color: context.colors.textFaint)),
             );
           }
 
@@ -72,9 +72,9 @@ class SearchScreen extends HookWidget {
                   },
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.gray_950),
+                      border: Border.all(color: context.colors.borderStrong),
                       borderRadius: BorderRadius.circular(8),
-                      color: AppColors.white,
+                      color: context.colors.surfaceDefault,
                     ),
                     padding: const Pad(horizontal: 16, vertical: 12),
                     child: Column(
@@ -92,13 +92,13 @@ class SearchScreen extends HookWidget {
                             ),
                             Text(
                               post.post.updatedAt.fromNow(),
-                              style: const TextStyle(fontSize: 14, color: AppColors.gray_700),
+                              style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                             ),
                           ],
                         ),
                         _HTMLText(
                           post.text ?? '(내용 없음)',
-                          style: const TextStyle(fontSize: 14, color: AppColors.gray_700),
+                          style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                         ),
                       ],
                     ),
@@ -118,25 +118,33 @@ class SearchScreen extends HookWidget {
 }
 
 class _HTMLText extends StatelessWidget {
-  const _HTMLText(this.text, {this.style = const TextStyle(color: AppColors.gray_950)});
+  const _HTMLText(this.text, {this.style});
 
   final String text;
-  final TextStyle style;
+  final TextStyle? style;
 
-  TextSpan _buildTextSpan(String input) {
+  TextSpan _buildTextSpan(BuildContext context, String input) {
     final emRegExp = RegExp('<em>(.*?)</em>');
     final spans = <InlineSpan>[];
     var currentIndex = 0;
 
     for (final match in emRegExp.allMatches(input)) {
       if (match.start > currentIndex) {
-        spans.add(TextSpan(text: input.substring(currentIndex, match.start), style: style));
+        spans.add(
+          TextSpan(
+            text: input.substring(currentIndex, match.start),
+            style: style ?? TextStyle(color: context.colors.textDefault),
+          ),
+        );
       }
 
       spans.add(
         TextSpan(
           text: match.group(1),
-          style: style.copyWith(fontWeight: FontWeight.w700, color: AppColors.gray_950),
+          style: (style ?? TextStyle(color: context.colors.textDefault)).copyWith(
+            fontWeight: FontWeight.w700,
+            color: context.colors.textDefault,
+          ),
         ),
       );
 
@@ -144,7 +152,12 @@ class _HTMLText extends StatelessWidget {
     }
 
     if (currentIndex < input.length) {
-      spans.add(TextSpan(text: input.substring(currentIndex), style: style));
+      spans.add(
+        TextSpan(
+          text: input.substring(currentIndex),
+          style: style ?? TextStyle(color: context.colors.textDefault),
+        ),
+      );
     }
 
     return TextSpan(children: spans);
@@ -152,6 +165,6 @@ class _HTMLText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text.rich(_buildTextSpan(text), maxLines: 1, overflow: TextOverflow.ellipsis);
+    return Text.rich(_buildTextSpan(context, text), maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 }

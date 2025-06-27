@@ -3,8 +3,8 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/field.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -35,12 +35,12 @@ class HookFormSelect<T> extends StatelessWidget {
                       (item) => Tappable(
                         onTap: () async {
                           field.value = item.value;
-                          await context.router.maybePop();
+                          await context.router.root.maybePop();
                         },
                         child: Container(
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: field.value == item.value ? AppColors.gray_950 : AppColors.gray_200,
+                              color: field.value == item.value ? context.colors.borderStrong : context.colors.borderDefault,
                             ),
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -59,7 +59,7 @@ class HookFormSelect<T> extends StatelessWidget {
                                   if (item.description != null)
                                     Text(
                                       item.description!,
-                                      style: const TextStyle(fontSize: 15, color: AppColors.gray_500),
+                                      style: TextStyle(fontSize: 15, color: context.colors.textFaint),
                                     ),
                                 ],
                               ),

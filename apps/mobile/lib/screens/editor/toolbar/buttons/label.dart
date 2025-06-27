@@ -1,19 +1,12 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/screens/editor/toolbar/buttons/base.dart';
-import 'package:typie/styles/colors.dart';
 
 class LabelToolbarButton extends StatelessWidget {
-  const LabelToolbarButton({
-    required this.onTap,
-    required this.text,
-    this.isActive = false,
-    this.color = AppColors.gray_400,
-    super.key,
-  });
+  const LabelToolbarButton({required this.onTap, required this.text, this.isActive = false, this.color, super.key});
 
   final String text;
-  final Color color;
+  final Color? color;
   final bool isActive;
   final void Function() onTap;
 

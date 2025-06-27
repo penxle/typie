@@ -3,6 +3,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -32,7 +33,7 @@ extension ModalExtension on BuildContext {
                   behavior: HitTestBehavior.opaque,
                   child: FadeTransition(
                     opacity: tweenedBackdropOpacity,
-                    child: SizedBox.expand(child: ColoredBox(color: AppColors.black.withValues(alpha: 0.5))),
+                    child: SizedBox.expand(child: ColoredBox(color: context.colors.shadowOverlay.withValues(alpha: 0.5))),
                   ),
                   onTap: () async {
                     await router.root.maybePop();
@@ -66,14 +67,14 @@ class Modal extends StatelessWidget {
       child: Container(
         width: 300,
         decoration: BoxDecoration(
-          color: AppColors.white,
-          border: Border.all(color: AppColors.gray_950),
+          color: context.colors.surfaceModal,
+          border: Border.all(color: context.colors.borderModal),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(offset: const Offset(0, 1), blurRadius: 2, color: AppColors.gray_950.withValues(alpha: 0.07)),
-            BoxShadow(offset: const Offset(0, 2), blurRadius: 4, color: AppColors.gray_950.withValues(alpha: 0.07)),
-            BoxShadow(offset: const Offset(0, 4), blurRadius: 8, color: AppColors.gray_950.withValues(alpha: 0.07)),
-            BoxShadow(offset: const Offset(0, 8), blurRadius: 16, color: AppColors.gray_950.withValues(alpha: 0.07)),
+            BoxShadow(offset: const Offset(0, 1), blurRadius: 2, color: context.colors.shadowDefault.withValues(alpha: 0.07)),
+            BoxShadow(offset: const Offset(0, 2), blurRadius: 4, color: context.colors.shadowDefault.withValues(alpha: 0.07)),
+            BoxShadow(offset: const Offset(0, 4), blurRadius: 8, color: context.colors.shadowDefault.withValues(alpha: 0.07)),
+            BoxShadow(offset: const Offset(0, 8), blurRadius: 16, color: context.colors.shadowDefault.withValues(alpha: 0.07)),
           ],
         ),
         child: Padding(padding: const Pad(all: 20), child: child),
@@ -88,7 +89,7 @@ class AlertModal extends StatelessWidget {
     required this.message,
     this.onConfirm,
     this.confirmText = '확인',
-    this.confirmColor = AppColors.gray_950,
+    this.confirmColor,
     super.key,
   });
 
@@ -117,11 +118,11 @@ class AlertModal extends StatelessWidget {
             },
             child: Container(
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: confirmColor, borderRadius: BorderRadius.circular(999)),
+              decoration: BoxDecoration(color: confirmColor ?? context.colors.surfaceToast, borderRadius: BorderRadius.circular(999)),
               padding: const Pad(vertical: 12),
               child: Text(
                 confirmText,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.white),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textOnToast),
               ),
             ),
           ),
@@ -140,8 +141,8 @@ class ConfirmModal extends StatelessWidget {
     this.onCancel,
     this.confirmText = '확인',
     this.cancelText = '취소',
-    this.confirmColor = AppColors.gray_950,
-    this.cancelColor = AppColors.gray_100,
+    this.confirmColor,
+    this.cancelColor,
     super.key,
   });
 
@@ -182,7 +183,7 @@ class ConfirmModal extends StatelessWidget {
                   },
                   child: Container(
                     alignment: Alignment.center,
-                    decoration: BoxDecoration(color: cancelColor, borderRadius: BorderRadius.circular(999)),
+                    decoration: BoxDecoration(color: cancelColor ?? context.colors.surfaceMuted, borderRadius: BorderRadius.circular(999)),
                     padding: const Pad(vertical: 12),
                     child: Text(cancelText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
@@ -196,11 +197,11 @@ class ConfirmModal extends StatelessWidget {
                   },
                   child: Container(
                     alignment: Alignment.center,
-                    decoration: BoxDecoration(color: confirmColor, borderRadius: BorderRadius.circular(999)),
+                    decoration: BoxDecoration(color: confirmColor ?? context.colors.surfaceToast, borderRadius: BorderRadius.circular(999)),
                     padding: const Pad(vertical: 12),
                     child: Text(
                       confirmText,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.white),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textOnToast),
                     ),
                   ),
                 ),

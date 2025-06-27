@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:typie/styles/colors.dart';
+import 'package:typie/context/theme.dart';
 
 class SvgImage extends StatelessWidget {
   const SvgImage(this.assetName, {this.width, this.height, this.color, super.key});
@@ -16,7 +16,7 @@ class SvgImage extends StatelessWidget {
       'assets/$assetName.svg',
       width: width,
       height: height,
-      theme: SvgTheme(currentColor: color ?? AppColors.gray_950),
+      theme: SvgTheme(currentColor: color ?? context.colors.textDefault),
       clipBehavior: Clip.antiAlias,
     );
   }

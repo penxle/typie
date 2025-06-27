@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/modal.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/screens/editor/scope.dart';
@@ -12,7 +13,6 @@ import 'package:typie/screens/editor/toolbar/buttons/color.dart';
 import 'package:typie/screens/editor/toolbar/buttons/icon.dart';
 import 'package:typie/screens/editor/toolbar/buttons/label.dart';
 import 'package:typie/screens/editor/values.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/vertical_divider.dart';
@@ -47,7 +47,7 @@ class TextToolbar extends HookWidget {
             },
           ),
           LabelToolbarButton(
-            color: AppColors.gray_700,
+            color: context.colors.textSubtle,
             text:
                 editorValues['fontFamily']?.firstWhereOrNull(
                       (e) =>
@@ -67,7 +67,7 @@ class TextToolbar extends HookWidget {
             },
           ),
           LabelToolbarButton(
-            color: AppColors.gray_700,
+            color: context.colors.textSubtle,
             text:
                 editorValues['fontSize']?.firstWhere(
                       (e) =>

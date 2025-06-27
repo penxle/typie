@@ -9,6 +9,7 @@ import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/env.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
@@ -31,7 +32,6 @@ import 'package:typie/screens/editor/toolbar/toolbar.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
-import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/heading.dart';
@@ -126,7 +126,7 @@ class Editor extends HookWidget {
     }, [webViewController]);
 
     return GraphQLOperation(
-      initialBackgroundColor: AppColors.white,
+      initialBackgroundColor: context.colors.surfaceDefault,
       operation: GEditorScreen_QueryReq(
         (b) => b
           ..vars.slug = slug
@@ -187,16 +187,16 @@ class Editor extends HookWidget {
                           trailing: data.post.entity.visibility == GEntityVisibility.UNLISTED
                               ? Container(
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: AppColors.gray_950),
+                                    border: Border.all(color: context.colors.borderStrong),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   padding: const Pad(horizontal: 8, vertical: 4),
-                                  child: const Text(
+                                  child: Text(
                                     '링크 공개 중',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
-                                      color: AppColors.gray_950,
+                                      color: context.colors.textDefault,
                                     ),
                                   ),
                                 )
@@ -278,7 +278,7 @@ class Editor extends HookWidget {
                                 title: '포스트 삭제',
                                 message: '"${data.post.title}" 포스트를 삭제하시겠어요?',
                                 confirmText: '삭제하기',
-                                confirmColor: AppColors.red_500,
+                                confirmColor: context.colors.accentDangerDefault,
                                 onConfirm: () async {
                                   await client.request(
                                     GEditorScreen_DeletePost_MutationReq((b) => b..vars.input.postId = data.post.id),
@@ -300,9 +300,9 @@ class Editor extends HookWidget {
                 },
               ),
             ],
-            backgroundColor: AppColors.white,
+            backgroundColor: context.colors.surfaceDefault,
           ),
-          backgroundColor: AppColors.white,
+          backgroundColor: context.colors.surfaceDefault,
           keyboardDismiss: false,
           responsive: false,
           child: Stack(
@@ -429,10 +429,10 @@ class _Option extends StatelessWidget {
       height: 24,
       child: Row(
         children: [
-          Icon(icon, size: 20, color: AppColors.gray_700),
+          Icon(icon, size: 20, color: context.colors.textSubtle),
           const Gap(8),
           Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 16, color: AppColors.gray_700)),
+            child: Text(label, style: TextStyle(fontSize: 16, color: context.colors.textSubtle)),
           ),
           trailing,
         ],
@@ -471,12 +471,12 @@ class _LimitBottomSheet extends StatelessWidget {
                       left: i * 22,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: AppColors.gray_950,
-                          border: Border.all(color: AppColors.white, width: 2),
+                          color: context.colors.textDefault,
+                          border: Border.all(color: context.colors.surfaceDefault, width: 2),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         padding: const Pad(all: 6),
-                        child: Icon(icons[i], size: 16, color: AppColors.white),
+                        child: Icon(icons[i], size: 16, color: context.colors.textInverse),
                       ),
                     ),
                 ],
@@ -490,32 +490,32 @@ class _LimitBottomSheet extends StatelessWidget {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const Gap(4),
-          const Text(
+          Text(
             '현재 플랜의 최대 사용량을 초과했어요.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: AppColors.gray_500),
+            style: TextStyle(fontSize: 14, color: context.colors.textFaint),
           ),
-          const Text(
+          Text(
             '이어서 작성하려면 플랜을 업그레이드 해주세요.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: AppColors.gray_500),
+            style: TextStyle(fontSize: 14, color: context.colors.textFaint),
           ),
           const Gap(16),
           Container(
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.gray_950),
+              border: Border.all(color: context.colors.borderStrong),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Padding(
-              padding: Pad(all: 16),
+            child: Padding(
+              padding: const Pad(all: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('타이피 FULL ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  Gap(12),
-                  HorizontalDivider(color: AppColors.gray_950),
-                  Gap(12),
-                  Column(
+                  const Text('타이피 FULL ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const Gap(12),
+                  HorizontalDivider(color: context.colors.borderStrong),
+                  const Gap(12),
+                  const Column(
                     spacing: 8,
                     children: [
                       _FeatureItem(icon: LucideLightIcons.book_open_text, label: '무제한 글자 수'),
@@ -540,11 +540,11 @@ class _LimitBottomSheet extends StatelessWidget {
               }
             },
             child: Container(
-              decoration: BoxDecoration(color: AppColors.gray_950, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: context.colors.surfaceToast, borderRadius: BorderRadius.circular(8)),
               padding: const Pad(vertical: 16),
-              child: const Text(
+              child: Text(
                 '업그레이드',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.colors.textOnToast),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -589,18 +589,18 @@ class _EditorInfoBottomSheet extends HookWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             '본문 정보',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.gray_700),
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: context.colors.textSubtle),
           ),
           const Gap(16),
-          const Row(
+          Row(
             spacing: 4,
             children: [
-              Icon(LucideLightIcons.type_, size: 15, color: AppColors.gray_700),
+              Icon(LucideLightIcons.type_, size: 15, color: context.colors.textSubtle),
               Text(
                 '글자 수',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
           ),
@@ -608,41 +608,41 @@ class _EditorInfoBottomSheet extends HookWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('공백 포함', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text('공백 포함', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               Text(
                 '${characterCountValue?.countWithWhitespace.comma ?? '0'}자',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('공백 미포함', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text('공백 미포함', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               Text(
                 '${characterCountValue?.countWithoutWhitespace.comma ?? '0'}자',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('공백/부호 미포함', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text('공백/부호 미포함', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               Text(
                 '${characterCountValue?.countWithoutWhitespaceAndPunctuation.comma ?? '0'}자',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
           ),
           const Gap(16),
-          const Row(
+          Row(
             spacing: 4,
             children: [
-              Icon(LucideLightIcons.goal, size: 15, color: AppColors.gray_700),
+              Icon(LucideLightIcons.goal, size: 15, color: context.colors.textSubtle),
               Text(
                 '오늘의 기록',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
           ),
@@ -650,20 +650,20 @@ class _EditorInfoBottomSheet extends HookWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
-                child: Text('변화량', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Expanded(
+                child: Text('변화량', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               ),
               if (difference == 0)
-                const Text(
+                Text(
                   '없음',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
                 )
               else ...[
                 Icon(difference >= 0 ? LucideLightIcons.trending_up : LucideLightIcons.trending_down, size: 14),
                 const Gap(4),
                 Text(
                   '${difference >= 0 ? '+' : '-'}${difference.abs().comma}자',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
                 ),
               ],
             ],
@@ -671,20 +671,20 @@ class _EditorInfoBottomSheet extends HookWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('입력한 글자', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text('입력한 글자', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               Text(
                 '${post.characterCountChange.additions}자',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('지운 글자', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+              Text('지운 글자', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               Text(
                 '${post.characterCountChange.deletions}자',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.gray_700),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
           ),
@@ -706,12 +706,12 @@ class _TemplateBottomSheet extends HookWidget {
 
     return AppBottomSheet(
       child: templates.isEmpty
-          ? const Padding(
-              padding: Pad(vertical: 20),
+          ? Padding(
+              padding: const Pad(vertical: 20),
               child: Text(
                 '아직 템플릿이 없어요.\n\n에디터 우상단 더보기 메뉴에서\n기존 포스트를 템플릿으로 전환해보세요.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: AppColors.gray_500),
+                style: TextStyle(fontSize: 14, color: context.colors.textFaint),
               ),
             )
           : ListView.separated(
@@ -725,9 +725,9 @@ class _TemplateBottomSheet extends HookWidget {
                     children: [
                       Expanded(child: Text(templates[index].title, overflow: TextOverflow.ellipsis)),
                       const Gap(8),
-                      const Text('사용하기', style: TextStyle(fontSize: 14, color: AppColors.gray_500)),
+                      Text('사용하기', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
                       const Gap(4),
-                      const Icon(LucideLightIcons.chevron_right, size: 14, color: AppColors.gray_500),
+                      Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textFaint),
                     ],
                   ),
                   onTap: () async {
