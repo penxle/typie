@@ -109,10 +109,10 @@
         danger: {
           color: {
             _enabled: {
-              base: 'text.inverse',
-              _hover: 'text.inverse',
-              _active: 'text.inverse',
-              _pressed: 'text.inverse',
+              base: 'text.white',
+              _hover: 'text.white',
+              _active: 'text.white',
+              _pressed: 'text.white',
             },
             _disabled: 'text.disabled',
           },
@@ -143,7 +143,7 @@
       color: {
         primary: { color: 'text.white' },
         secondary: { color: 'text.subtle' },
-        danger: { color: 'accent.danger.default' },
+        danger: { color: 'text.danger' },
       },
     },
   });
