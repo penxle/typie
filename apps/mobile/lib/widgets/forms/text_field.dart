@@ -63,8 +63,6 @@ class HookFormTextField extends HookWidget {
     final curve = useMemoized(() => CurvedAnimation(parent: animationController, curve: Curves.ease));
     final colorTween = useRef<ColorTween?>(null);
 
-    final defaultColor = context.colors.borderDefault;
-
     useEffect(() {
       if (initialValue != null) {
         effectiveController.text = initialValue!;
@@ -89,6 +87,7 @@ class HookFormTextField extends HookWidget {
         final hasFocus = useListenableSelector(effectiveFocusNode, () => effectiveFocusNode.hasFocus);
 
         final focusedColor = context.colors.borderStrong;
+        final defaultColor = context.colors.borderDefault;
 
         useEffect(() {
           final begin = colorTween.value?.evaluate(curve);
