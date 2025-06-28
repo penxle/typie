@@ -16,7 +16,7 @@ import {
   TableRow,
 } from './node-views';
 import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
-import { FontFamily, FontSize, TextColor } from './text-styles';
+import { FontFamily, FontSize, TextBackgroundColor, TextColor } from './text-styles';
 
 export const baseExtensions = [
   // special nodes
@@ -42,6 +42,7 @@ export const baseExtensions = [
 
   // text styles
   TextColor,
+  TextBackgroundColor,
   FontFamily,
   FontSize,
 

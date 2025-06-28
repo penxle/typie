@@ -235,4 +235,12 @@ export const semanticColors = defineSemanticTokens.colors({
   'prosemirror.fuchsia': { value: { base: '#d946ef' } },
   'prosemirror.pink': { value: { base: '#ec4899' } },
   'prosemirror.rose': { value: { base: '#f43f5e' } },
+
+  'prosemirror.bg.gray': { value: { base: '#f1f1f2', _dark: '#38393b' } },
+  'prosemirror.bg.red': { value: { base: '#fdebec', _dark: '#532f2b' } },
+  'prosemirror.bg.orange': { value: { base: '#ffecd5', _dark: '#54341a' } },
+  'prosemirror.bg.yellow': { value: { base: '#fef3c7', _dark: '#4e3e1b' } },
+  'prosemirror.bg.green': { value: { base: '#dff3e3', _dark: '#2c4331' } },
+  'prosemirror.bg.blue': { value: { base: '#e7f3f8', _dark: '#153b4f' } },
+  'prosemirror.bg.purple': { value: { base: '#f0e7fe', _dark: '#3f2e50' } },
 });

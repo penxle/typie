@@ -64,6 +64,17 @@ export const values = {
     { label: '로즈', value: 'rose', hex: '#f43f5e', color: token('colors.prosemirror.rose') },
   ],
 
+  textBackgroundColor: [
+    { label: '배경 없음', value: 'none', hex: null, preview: null, color: null },
+    { label: '그레이', value: 'gray', hex: '#f1f1f2', preview: '#e4e4e7', color: token('colors.prosemirror.bg.gray') },
+    { label: '레드', value: 'red', hex: '#fdebec', preview: '#fbbcbf', color: token('colors.prosemirror.bg.red') },
+    { label: '오렌지', value: 'orange', hex: '#ffecd5', preview: '#ffd4a3', color: token('colors.prosemirror.bg.orange') },
+    { label: '옐로', value: 'yellow', hex: '#fef3c7', preview: '#fde68a', color: token('colors.prosemirror.bg.yellow') },
+    { label: '그린', value: 'green', hex: '#dff3e3', preview: '#a7f3d0', color: token('colors.prosemirror.bg.green') },
+    { label: '블루', value: 'blue', hex: '#e7f3f8', preview: '#bae6fd', color: token('colors.prosemirror.bg.blue') },
+    { label: '퍼플', value: 'purple', hex: '#f0e7fe', preview: '#ddd6fe', color: token('colors.prosemirror.bg.purple') },
+  ],
+
   lineHeight: [
     { label: '80%', value: 0.8 },
     { label: '100%', value: 1 },
@@ -141,6 +152,7 @@ export const defaultValues = {
   fontFamily: 'Pretendard',
   fontSize: 16,
   textColor: 'black',
+  textBackgroundColor: 'none',
   lineHeight: 1.6,
   letterSpacing: 0,
   textAlign: 'left',
