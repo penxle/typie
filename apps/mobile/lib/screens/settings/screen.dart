@@ -82,6 +82,13 @@ class SettingsScreen extends HookWidget {
                     HookForm(
                       submitMode: HookFormSubmitMode.onChange,
                       onSubmit: (form) async {
+                        unawaited(
+                          mixpanel.track(
+                            'switch_theme',
+                            properties: {'old': theme.mode, 'new': form.data['themeMode'], 'via': 'settings'},
+                          ),
+                        );
+
                         theme.mode = form.data['themeMode'] as ThemeMode;
                       },
                       builder: (context, form) {

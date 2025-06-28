@@ -155,6 +155,7 @@
             <MenuItem
               icon={themes[name].icon}
               onclick={() => {
+                mixpanel.track('switch_theme', { old: theme.current, new: name, via: 'header' });
                 theme.current = name;
               }}
             >
