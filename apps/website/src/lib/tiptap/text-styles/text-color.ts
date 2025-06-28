@@ -3,7 +3,8 @@ import { Extension } from '@tiptap/core';
 import { css } from '$styled-system/css';
 import { defaultValues, values } from '../values';
 
-const hexes = Object.fromEntries(values.textColor.map(({ value, hex }) => [value, hex]));
+const colors = Object.fromEntries(values.textColor.map(({ value, color }) => [value, color]));
+const hexColors = Object.fromEntries(values.textColor.map(({ value, hex }) => [value, hex]));
 const textColors = values.textColor.map(({ value }) => value);
 type TextColor = (typeof textColors)[number];
 
@@ -26,7 +27,17 @@ export const TextColor = Extension.create({
         attributes: {
           textColor: {
             parseHTML: (element) => {
-              const color = new TinyColor(element.style.color);
+              const value = element.style.color;
+
+              const match = value.match(/var\(--colors-prosemirror\\?\\.([^)]+)\)/);
+              if (match) {
+                const name = match[1] as TextColor;
+                if (textColors.includes(name)) {
+                  return name;
+                }
+              }
+
+              const color = new TinyColor(value);
               if (!color.isValid) {
                 return null;
               }
@@ -40,7 +51,7 @@ export const TextColor = Extension.create({
 
               if (textColor === 'white') {
                 return {
-                  style: `color: ${hexes[textColor]};`,
+                  style: `color: ${colors[textColor]};`,
                   class: css({
                     '& .selected-text': {
                       color: 'text.default',
@@ -49,7 +60,7 @@ export const TextColor = Extension.create({
                 };
               } else {
                 return {
-                  style: `color: ${hexes[textColor]};`,
+                  style: `color: ${colors[textColor]};`,
                 };
               }
             },
@@ -83,7 +94,7 @@ const normalize = (color: TinyColor) => {
 
   return textColors.reduce(
     (closest, value) => {
-      const target = new TinyColor(hexes[value]).toRgb();
+      const target = new TinyColor(hexColors[value]).toRgb();
       const d = Math.hypot(input.r - target.r, input.g - target.g, input.b - target.b);
       return d < closest.d ? { value, d } : closest;
     },
