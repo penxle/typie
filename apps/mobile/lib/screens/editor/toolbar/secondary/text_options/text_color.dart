@@ -21,7 +21,8 @@ class TextColorTextOptionsToolbar extends HookWidget {
       activeValue: activeValue,
       builder: (context, item, isActive) {
         return ColorToolbarButton(
-          hex: item['hex'] as String,
+          color: (item['color'] as Color Function(BuildContext))(context),
+          value: item['value'] as String,
           isActive: isActive,
           onTap: () async {
             await scope.command('text_style', attrs: {'textColor': item['value']});
