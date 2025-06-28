@@ -34,14 +34,17 @@ class TextToolbar extends HookWidget {
         spacing: 4,
         children: [
           ColorToolbarButton(
-            hex:
-                editorValues['textColor']?.firstWhere(
+            color:
+                (editorValues['textColor']?.firstWhere(
                       (e) =>
                           e['value'] ==
                           (proseMirrorState?.getMarkAttributes('text_style')?['textColor'] as String? ??
                               editorDefaultValues['textColor']),
-                    )['hex']
-                    as String,
+                    )['color']
+                    as Color Function(BuildContext))(context),
+            value:
+                proseMirrorState?.getMarkAttributes('text_style')?['textColor'] as String? ??
+                editorDefaultValues['textColor'] as String,
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.textColor;
             },

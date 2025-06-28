@@ -25,6 +25,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
 
     required this.shadowDefault,
     required this.overlayDefault,
+
+    required this.prosemirrorBlack,
+    required this.prosemirrorWhite,
   });
 
   final Color textDefault;
@@ -49,6 +52,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   final Color shadowDefault;
   final Color overlayDefault;
 
+  final Color prosemirrorBlack;
+  final Color prosemirrorWhite;
+
   static const light = SemanticColors(
     textDefault: AppColors.gray_950,
     textSubtle: AppColors.gray_700,
@@ -71,6 +77,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
 
     shadowDefault: AppColors.black,
     overlayDefault: AppColors.black,
+
+    prosemirrorBlack: AppColors.gray_900,
+    prosemirrorWhite: AppColors.white,
   );
 
   static final dark = SemanticColors(
@@ -95,6 +104,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
 
     shadowDefault: AppColors.black,
     overlayDefault: AppColors.black,
+
+    prosemirrorBlack: AppColors.dark.gray_50,
+    prosemirrorWhite: AppColors.dark.gray_900,
   );
 
   @override
@@ -120,6 +132,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
 
     Color? shadowDefault,
     Color? overlayDefault,
+
+    Color? prosemirrorBlack,
+    Color? prosemirrorWhite,
   }) {
     return SemanticColors(
       textDefault: textDefault ?? this.textDefault,
@@ -143,6 +158,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
 
       shadowDefault: shadowDefault ?? this.shadowDefault,
       overlayDefault: overlayDefault ?? this.overlayDefault,
+
+      prosemirrorBlack: prosemirrorBlack ?? this.prosemirrorBlack,
+      prosemirrorWhite: prosemirrorWhite ?? this.prosemirrorWhite,
     );
   }
 
@@ -173,6 +191,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
 
       shadowDefault: Color.lerp(shadowDefault, other.shadowDefault, t)!,
       overlayDefault: Color.lerp(overlayDefault, other.overlayDefault, t)!,
+
+      prosemirrorBlack: Color.lerp(prosemirrorBlack, other.prosemirrorBlack, t)!,
+      prosemirrorWhite: Color.lerp(prosemirrorWhite, other.prosemirrorWhite, t)!,
     );
   }
 }
