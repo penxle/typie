@@ -55,6 +55,80 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {'label': '로즈', 'value': 'rose', 'color': (BuildContext context) => const Color(0xFFF43F5E)},
   ],
 
+  'textBackgroundColor': [
+    {'label': '배경 없음', 'value': 'none', 'color': null},
+    {
+      'label': '그레이',
+      'value': 'gray',
+      'color': (BuildContext context) {
+        return switch (context.theme.brightness) {
+          Brightness.dark => const Color(0xFF38393B),
+          Brightness.light => const Color(0xFFF1F1F2),
+        };
+      },
+    },
+    {
+      'label': '레드',
+      'value': 'red',
+      'color': (BuildContext context) {
+        return switch (context.theme.brightness) {
+          Brightness.dark => const Color(0xFF532F2B),
+          Brightness.light => const Color(0xFFFDEBEC),
+        };
+      },
+    },
+    {
+      'label': '오렌지',
+      'value': 'orange',
+      'color': (BuildContext context) {
+        return switch (context.theme.brightness) {
+          Brightness.dark => const Color(0xFF54341A),
+          Brightness.light => const Color(0xFFFFECD5),
+        };
+      },
+    },
+    {
+      'label': '옐로',
+      'value': 'yellow',
+      'color': (BuildContext context) {
+        return switch (context.theme.brightness) {
+          Brightness.dark => const Color(0xFF4E3E1B),
+          Brightness.light => const Color(0xFFFEF3C7),
+        };
+      },
+    },
+    {
+      'label': '그린',
+      'value': 'green',
+      'color': (BuildContext context) {
+        return switch (context.theme.brightness) {
+          Brightness.dark => const Color(0xFF2C4331),
+          Brightness.light => const Color(0xFFDFF3E3),
+        };
+      },
+    },
+    {
+      'label': '블루',
+      'value': 'blue',
+      'color': (BuildContext context) {
+        return switch (context.theme.brightness) {
+          Brightness.dark => const Color(0xFF153B4F),
+          Brightness.light => const Color(0xFFE7F3F8),
+        };
+      },
+    },
+    {
+      'label': '퍼플',
+      'value': 'purple',
+      'color': (BuildContext context) {
+        return switch (context.theme.brightness) {
+          Brightness.dark => const Color(0xFF3F2E50),
+          Brightness.light => const Color(0xFFF0E7FE),
+        };
+      },
+    },
+  ],
+
   'lineHeight': [
     {'label': '80%', 'value': 0.8},
     {'label': '100%', 'value': 1.0},
@@ -294,6 +368,7 @@ const editorDefaultValues = <String, dynamic>{
   'fontFamily': 'Pretendard',
   'fontSize': 16,
   'textColor': 'black',
+  'textBackgroundColor': 'none',
   'lineHeight': 1.6,
   'letterSpacing': 0.0,
   'textAlign': 'left',
