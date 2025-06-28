@@ -1,5 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/screens/editor/toolbar/buttons/base.dart';
 
 class LabelToolbarButton extends StatelessWidget {
@@ -15,7 +16,7 @@ class LabelToolbarButton extends StatelessWidget {
     return ToolbarButton(
       isActive: isActive,
       onTap: onTap,
-      color: color,
+      color: color ?? context.colors.textFaint,
       builder: (context, color, _) {
         return Center(
           child: Container(
