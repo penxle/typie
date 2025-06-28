@@ -83,7 +83,7 @@ class TextToolbar extends HookWidget {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.fontSize;
             },
           ),
-          AppVerticalDivider(color: context.colors.borderDefault, height: 20),
+          AppVerticalDivider(color: context.colors.borderSubtle, height: 20),
           IconToolbarButton(
             icon: LucideLightIcons.bold,
             isActive: proseMirrorState?.isMarkActive('bold') ?? false,
@@ -113,7 +113,7 @@ class TextToolbar extends HookWidget {
             },
           ),
           if (Platform.isIOS) ...[
-            AppVerticalDivider(color: context.colors.borderDefault, height: 20),
+            AppVerticalDivider(color: context.colors.borderSubtle, height: 20),
             IconToolbarButton(
               icon: LucideLightIcons.link,
               isActive: proseMirrorState?.isMarkActive('link') ?? false,
@@ -179,7 +179,7 @@ class TextToolbar extends HookWidget {
               },
             ),
           ],
-          AppVerticalDivider(color: context.colors.borderDefault, height: 20),
+          AppVerticalDivider(color: context.colors.borderSubtle, height: 20),
           IconToolbarButton(
             icon: LucideLightIcons.align_left,
             onTap: () {

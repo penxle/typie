@@ -8,6 +8,10 @@ class HorizontalDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Divider(height: height, color: color);
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: ColoredBox(color: color),
+    );
   }
 }

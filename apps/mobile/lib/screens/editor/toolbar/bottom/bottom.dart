@@ -32,7 +32,7 @@ class BottomToolbar extends HookWidget {
       },
       decoration: BoxDecoration(
         color: context.colors.surfaceDefault,
-        border: Border(top: BorderSide(color: context.colors.surfaceSubtle)),
+        border: Border(top: BorderSide(color: context.colors.borderSubtle)),
       ),
       child: AnimatedIndexedSwitcher(
         index: switch (bottomToolbarMode) {

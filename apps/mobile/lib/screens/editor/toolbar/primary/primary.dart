@@ -23,7 +23,7 @@ class PrimaryToolbar extends HookWidget {
       height: 48,
       decoration: BoxDecoration(
         color: context.colors.surfaceDefault,
-        border: Border(top: BorderSide(color: context.colors.surfaceSubtle)),
+        border: Border(top: BorderSide(color: context.colors.borderSubtle)),
       ),
       padding: const Pad(right: 8),
       child: Row(
