@@ -92,11 +92,11 @@ class BottomAction extends StatelessWidget {
       onTap: onTap,
       child: Container(
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: color ?? context.colors.surfaceDark),
+        decoration: BoxDecoration(color: color ?? context.colors.surfaceInverse),
         padding: Pad(vertical: 16, bottom: MediaQuery.paddingOf(context).bottom),
         child: Text(
           text,
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor ?? context.colors.textBright),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor ?? context.colors.textInverse),
         ),
       ),
     );

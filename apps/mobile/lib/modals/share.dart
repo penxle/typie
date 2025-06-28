@@ -208,7 +208,7 @@ class SharePostBottomSheet extends HookWidget {
                         },
                         child: Container(
                           decoration: BoxDecoration(
-                            color: context.colors.surfaceDark,
+                            color: context.colors.surfaceInverse,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           padding: const Pad(vertical: 16),
@@ -217,7 +217,7 @@ class SharePostBottomSheet extends HookWidget {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: context.colors.textBright,
+                              color: context.colors.textInverse,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -322,13 +322,17 @@ class ShareFolderBottomSheet extends HookWidget {
                       },
                       child: Container(
                         decoration: BoxDecoration(
-                          color: context.colors.surfaceDark,
+                          color: context.colors.surfaceInverse,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         padding: const Pad(vertical: 16),
                         child: Text(
                           '공유하기',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.colors.textBright),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: context.colors.textInverse,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),

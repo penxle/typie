@@ -310,7 +310,8 @@ class _EntityList extends HookWidget {
                                     title: '폴더 삭제',
                                     message: '"${folder!.name}" 폴더를 삭제하시겠어요?',
                                     confirmText: '삭제하기',
-                                    confirmColor: context.colors.accentDanger,
+                                    confirmTextColor: context.colors.textBright,
+                                    confirmBackgroundColor: context.colors.accentDanger,
                                     onConfirm: () async {
                                       await client.request(
                                         GEntityScreen_DeleteFolder_MutationReq(
@@ -484,7 +485,8 @@ class _EntityList extends HookWidget {
                                           title: '폴더 삭제',
                                           message: '"${folder.name}" 폴더를 삭제하시겠어요?',
                                           confirmText: '삭제하기',
-                                          confirmColor: context.colors.accentDanger,
+                                          confirmTextColor: context.colors.textBright,
+                                          confirmBackgroundColor: context.colors.accentDanger,
                                           onConfirm: () async {
                                             await client.request(
                                               GEntityScreen_DeleteFolder_MutationReq(
@@ -576,7 +578,8 @@ class _EntityList extends HookWidget {
                                           title: '포스트 삭제',
                                           message: '"${post.title}" 포스트를 삭제하시겠어요?',
                                           confirmText: '삭제하기',
-                                          confirmColor: context.colors.accentDanger,
+                                          confirmTextColor: context.colors.textBright,
+                                          confirmBackgroundColor: context.colors.accentDanger,
                                           onConfirm: () async {
                                             await client.request(
                                               GEntityScreen_DeletePost_MutationReq(
@@ -1017,8 +1020,8 @@ class _MoveEntityModal extends HookWidget {
                                       (folder.maxDescendantFoldersDepth - entity.depth) >
                                   (maxDepth - 1)
                               ? context.colors.surfaceMuted
-                              : context.colors.surfaceDark,
-                          post: (_) => context.colors.surfaceDark,
+                              : context.colors.surfaceInverse,
+                          post: (_) => context.colors.surfaceInverse,
                           orElse: () => throw UnimplementedError(),
                         ),
                         borderRadius: const BorderRadius.all(Radius.circular(999)),
@@ -1060,7 +1063,7 @@ class _MoveEntityModal extends HookWidget {
                         child: Text(
                           '옮기기',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontWeight: FontWeight.w500, color: context.colors.textBright),
+                          style: TextStyle(fontWeight: FontWeight.w500, color: context.colors.textInverse),
                         ),
                       ),
                     ),
