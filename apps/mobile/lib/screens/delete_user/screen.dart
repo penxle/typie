@@ -94,7 +94,7 @@ class DeleteUserScreen extends HookWidget {
                     color: isChecked.value ? context.colors.textDefault : context.colors.surfaceDefault,
                   ),
                   padding: const Pad(all: 1),
-                  child: Icon(LucideLightIcons.check, size: 12, color: context.colors.textBright),
+                  child: Icon(LucideLightIcons.check, size: 12, color: context.colors.surfaceDefault),
                 ),
                 const Text('위 유의사항을 모두 확인했어요', style: TextStyle(fontSize: 14)),
               ],
