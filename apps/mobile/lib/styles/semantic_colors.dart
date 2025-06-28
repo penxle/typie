@@ -19,6 +19,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.surfaceInverse,
 
     required this.borderDefault,
+    required this.borderSubtle,
     required this.borderStrong,
     required this.borderInverse,
 
@@ -47,6 +48,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   final Color surfaceInverse;
 
   final Color borderDefault;
+  final Color borderSubtle;
   final Color borderStrong;
   final Color borderInverse;
 
@@ -75,6 +77,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     surfaceInverse: AppColors.gray_950,
 
     borderDefault: AppColors.gray_200,
+    borderSubtle: AppColors.gray_100,
     borderStrong: AppColors.gray_950,
     borderInverse: AppColors.gray_950,
 
@@ -104,6 +107,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     surfaceInverse: AppColors.dark.gray_50,
 
     borderDefault: AppColors.dark.gray_700,
+    borderSubtle: AppColors.dark.gray_800,
     borderStrong: AppColors.dark.gray_700,
     borderInverse: AppColors.dark.gray_50,
 
@@ -134,6 +138,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     Color? surfaceInverse,
 
     Color? borderDefault,
+    Color? borderSubtle,
     Color? borderStrong,
     Color? borderInverse,
 
@@ -162,6 +167,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       surfaceInverse: surfaceInverse ?? this.surfaceInverse,
 
       borderDefault: borderDefault ?? this.borderDefault,
+      borderSubtle: borderSubtle ?? this.borderSubtle,
       borderStrong: borderStrong ?? this.borderStrong,
       borderInverse: borderInverse ?? this.borderInverse,
 
@@ -197,6 +203,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       surfaceInverse: Color.lerp(surfaceInverse, other.surfaceInverse, t)!,
 
       borderDefault: Color.lerp(borderDefault, other.borderDefault, t)!,
+      borderSubtle: Color.lerp(borderSubtle, other.borderSubtle, t)!,
       borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
       borderInverse: Color.lerp(borderInverse, other.borderInverse, t)!,
 
