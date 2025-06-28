@@ -54,7 +54,7 @@
         siteId: $query.me.sites[0].id,
       });
 
-      mixpanel.track('createPost', { via: 'home' });
+      mixpanel.track('create_post', { via: 'empty_home' });
 
       await goto(`/${resp.entity.slug}`);
     }}

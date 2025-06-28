@@ -186,7 +186,7 @@
               cancelLabel: '나중에',
             });
 
-            mixpanel.track('open_preference_modal', { via: 'sidebar' });
+            mixpanel.track('click_new_update_alert', { via: 'sidebar' });
           }}
         />
       </div>
