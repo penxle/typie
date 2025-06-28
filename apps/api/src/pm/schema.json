@@ -136,15 +136,25 @@
       "content": "block+",
       "isolating": true,
       "attrs": { "nodeId": { "default": null }, "colspan": { "default": 1 }, "rowspan": { "default": 1 }, "colwidth": { "default": null } },
-      "parseDOM": [{ "tag": "td" }]
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=table_cell]" }, { "tag": "td" }]
     },
-    "table_row": { "tableRole": "row", "content": "table_cell+", "attrs": { "nodeId": { "default": null } }, "parseDOM": [{ "tag": "tr" }] }
+    "table_row": {
+      "tableRole": "row",
+      "content": "table_cell+",
+      "attrs": { "nodeId": { "default": null } },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=table_row]" }, { "tag": "tr" }]
+    }
   },
   "marks": {
     "link": { "inclusive": false, "attrs": { "href": { "default": null } }, "parseDOM": [{ "tag": "a[href]" }] },
     "ruby": { "inclusive": false, "attrs": { "text": { "default": null } }, "parseDOM": [{ "tag": "span[data-ruby]" }] },
     "text_style": {
-      "attrs": { "textColor": { "default": null }, "fontFamily": { "default": null }, "fontSize": { "default": null } },
+      "attrs": {
+        "textColor": { "default": null },
+        "textBackgroundColor": { "default": null },
+        "fontFamily": { "default": null },
+        "fontSize": { "default": null }
+      },
       "parseDOM": [{ "tag": "span" }]
     },
     "bold": { "parseDOM": [{ "tag": "b" }, { "tag": "strong" }, { "style": "font-weight", "consuming": false }] },

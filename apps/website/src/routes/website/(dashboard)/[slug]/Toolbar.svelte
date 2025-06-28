@@ -347,6 +347,86 @@
         {/snippet}
       </ToolbarDropdownButton>
 
+      <ToolbarDropdownButton
+        chevron
+        disabled={!editor?.current.can().setTextBackgroundColor('gray')}
+        label="배경색"
+        placement="bottom-start"
+        size="small"
+      >
+        {#snippet anchor()}
+          {@const selectedValue = editor?.current.getAttributes('text_style').textBackgroundColor ?? defaultValues.textBackgroundColor}
+          {@const selectedItem = values.textBackgroundColor.find(({ value }) => value === selectedValue)}
+          <div class={center({ size: '20px' })}>
+            <div
+              style:background-color={selectedValue === 'none' ? 'transparent' : selectedItem?.color}
+              class={css({
+                borderWidth: '1px',
+                borderRadius: '4px',
+                size: '16px',
+                position: 'relative',
+              })}
+            >
+              {#if selectedValue === 'none'}
+                <div
+                  class={css({
+                    position: 'absolute',
+                    inset: '0',
+                    margin: 'auto',
+                    width: '1px',
+                    height: '12px',
+                    backgroundColor: 'text.disabled',
+                    transform: 'rotate(45deg)',
+                  })}
+                ></div>
+              {/if}
+            </div>
+          </div>
+        {/snippet}
+
+        {#snippet floating({ close })}
+          <div class={grid({ columns: 8, gap: '8px', padding: '8px' })}>
+            {#each values.textBackgroundColor as { label, value, color } (value)}
+              <button
+                style:background-color={value === 'none' ? 'transparent' : color}
+                style:outline-color={value === 'none' ? token('colors.border.default') : color}
+                class={center({
+                  borderWidth: '1px',
+                  borderRadius: '4px',
+                  outlineWidth:
+                    (editor?.current.getAttributes('text_style').textBackgroundColor ?? defaultValues.textBackgroundColor) === value
+                      ? '2px'
+                      : '0',
+                  outlineOffset: '1px',
+                  size: '20px',
+                  position: 'relative',
+                })}
+                aria-label={label}
+                onclick={() => {
+                  editor?.current.chain().focus().setTextBackgroundColor(value).run();
+                  close();
+                }}
+                type="button"
+              >
+                {#if value === 'none'}
+                  <div
+                    class={css({
+                      position: 'absolute',
+                      inset: '0',
+                      margin: 'auto',
+                      width: '1px',
+                      height: '14px',
+                      backgroundColor: 'text.disabled',
+                      transform: 'rotate(45deg)',
+                    })}
+                  ></div>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/snippet}
+      </ToolbarDropdownButton>
+
       <ToolbarFontFamily {$site} {editor} />
 
       <ToolbarDropdownButton
