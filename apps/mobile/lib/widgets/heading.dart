@@ -39,13 +39,20 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
       key: context.router.current.key,
       value: SystemUiOverlayStyle(
         statusBarColor: AppColors.transparent,
-        statusBarBrightness: Theme.of(context).brightness == Brightness.light ? Brightness.light : Brightness.dark,
-        statusBarIconBrightness: Theme.of(context).brightness == Brightness.light ? Brightness.dark : Brightness.light,
-        systemNavigationBarDividerColor: AppColors.transparent,
+        statusBarBrightness: switch (context.theme.brightness) {
+          Brightness.light => Brightness.light,
+          Brightness.dark => Brightness.dark,
+        },
+        statusBarIconBrightness: switch (context.theme.brightness) {
+          Brightness.light => Brightness.dark,
+          Brightness.dark => Brightness.light,
+        },
         systemNavigationBarColor: AppColors.transparent,
-        systemNavigationBarIconBrightness: Theme.of(context).brightness == Brightness.light
-            ? Brightness.dark
-            : Brightness.light,
+        systemNavigationBarDividerColor: AppColors.transparent,
+        systemNavigationBarIconBrightness: switch (context.theme.brightness) {
+          Brightness.light => Brightness.dark,
+          Brightness.dark => Brightness.light,
+        },
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
@@ -123,12 +130,22 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
     const child = SafeArea(child: SizedBox.shrink());
 
     return AnnotatedRegion(
-      value: const SystemUiOverlayStyle(
-        statusBarBrightness: Brightness.light,
-        statusBarIconBrightness: Brightness.dark,
-        systemNavigationBarDividerColor: AppColors.transparent,
+      value: SystemUiOverlayStyle(
+        statusBarColor: AppColors.transparent,
+        statusBarBrightness: switch (context.theme.brightness) {
+          Brightness.light => Brightness.light,
+          Brightness.dark => Brightness.dark,
+        },
+        statusBarIconBrightness: switch (context.theme.brightness) {
+          Brightness.light => Brightness.dark,
+          Brightness.dark => Brightness.light,
+        },
         systemNavigationBarColor: AppColors.transparent,
-        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: AppColors.transparent,
+        systemNavigationBarIconBrightness: switch (context.theme.brightness) {
+          Brightness.light => Brightness.dark,
+          Brightness.dark => Brightness.light,
+        },
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
