@@ -94,7 +94,7 @@
           backgroundColor: {
             _enabled: {
               base: 'surface.default',
-              _hover: 'surface.muted',
+              _hover: 'surface.subtle',
               _active: 'interactive.hover',
               _pressed: 'interactive.hover',
             },
