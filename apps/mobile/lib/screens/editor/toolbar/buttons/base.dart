@@ -41,9 +41,9 @@ class ToolbarButton extends HookWidget {
 
     final repeatTimer = useRef<Timer?>(null);
 
+    final textDefaultColor = context.colors.textDefault;
     final textSubtleColor = context.colors.textSubtle;
     final borderDefaultColor = context.colors.borderDefault;
-    final textDefaultColor = context.colors.textDefault;
     final surfaceDefaultColor = context.colors.surfaceDefault;
     final surfaceSubtleColor = context.colors.surfaceSubtle;
 
