@@ -205,10 +205,10 @@ export const semanticColors = defineSemanticTokens.colors({
   'control.scrollbar.default': { value: { base: '{colors.gray.200}', _dark: '{colors.dark.gray.600}' } },
   'control.scrollbar.hover': { value: { base: '{colors.gray.300}', _dark: '{colors.dark.gray.500}' } },
 
-  'decoration.grid.default': { value: { base: '{colors.gray.100}', _dark: '{colors.dark.gray.800}' } },
-  'decoration.grid.subtle': { value: { base: '{colors.gray.50}', _dark: '{colors.dark.gray.900}' } },
-  'decoration.grid.brand': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.brand.900}' } },
-  'decoration.grid.brand.subtle': { value: { base: '{colors.brand.50}', _dark: '{colors.dark.brand.950}' } },
+  'decoration.grid.default': { value: { base: '{colors.gray.100}', _dark: '{colors.dark.gray.700}' } },
+  'decoration.grid.subtle': { value: { base: '{colors.gray.50}', _dark: '{colors.dark.gray.800}' } },
+  'decoration.grid.brand': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.gray.700}' } },
+  'decoration.grid.brand.subtle': { value: { base: '{colors.brand.50}', _dark: '{colors.dark.gray.800}' } },
 
   'callout.info': { value: { base: '#3b82f6', _dark: '#4c6ef5' } },
   'callout.success': { value: { base: '#22c55e', _dark: '#3fc380' } },
