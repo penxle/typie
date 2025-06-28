@@ -4,9 +4,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/logger.dart';
+import 'package:typie/services/theme.dart';
 
-class WebView extends StatefulWidget {
+class WebView extends StatefulHookWidget {
   const WebView({required this.initialUrl, this.initialCookies, this.onWebViewCreated, super.key});
 
   final String initialUrl;
@@ -25,6 +28,7 @@ class _WebViewState extends State<WebView> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = useService<AppTheme>();
     final initialUri = Uri.parse(widget.initialUrl);
 
     final userAgent = switch (Platform.operatingSystem) {
@@ -36,6 +40,7 @@ class _WebViewState extends State<WebView> {
     };
 
     final creationParams = <String, dynamic>{
+      'themeMode': theme.mode.name,
       'userAgent': userAgent,
       'initialUrl': widget.initialUrl,
       'initialCookies': widget.initialCookies

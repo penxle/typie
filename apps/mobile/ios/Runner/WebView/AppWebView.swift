@@ -44,7 +44,6 @@ class AppWebView: NSObject, FlutterPlatformView {
 
     webView = AppWKWebView(frame: frame, configuration: configuration)
     
-
     NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardWillShowNotification, object: nil)
     NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardWillHideNotification, object: nil)
     NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
@@ -68,10 +67,20 @@ class AppWebView: NSObject, FlutterPlatformView {
     setupEventChannel()
 
     if let params = args as? [String: Any] {
+      if let themeMode = params["themeMode"] as? String {
+        let style: UIUserInterfaceStyle = switch (themeMode) {
+          case "light": .light
+          case "dark": .dark
+          default: .unspecified
+        }
+
+        webView.overrideUserInterfaceStyle = style
+      }
+      
       if let userAgent = params["userAgent"] as? String {
         webView.customUserAgent = userAgent
       }
-
+      
       if let initialUrl = params["initialUrl"] as? String,
          let nsUrl = URL(string: initialUrl)
       {
