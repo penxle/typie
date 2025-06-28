@@ -107,7 +107,8 @@ class AlertModal extends StatelessWidget {
     required this.message,
     this.onConfirm,
     this.confirmText = '확인',
-    this.confirmColor,
+    this.confirmTextColor,
+    this.confirmBackgroundColor,
     super.key,
   });
 
@@ -115,7 +116,8 @@ class AlertModal extends StatelessWidget {
   final String message;
 
   final String confirmText;
-  final Color? confirmColor;
+  final Color? confirmTextColor;
+  final Color? confirmBackgroundColor;
   final void Function()? onConfirm;
 
   @override
@@ -137,13 +139,17 @@ class AlertModal extends StatelessWidget {
             child: Container(
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: confirmColor ?? context.colors.surfaceDark,
+                color: confirmBackgroundColor ?? context.colors.surfaceInverse,
                 borderRadius: BorderRadius.circular(999),
               ),
               padding: const Pad(vertical: 12),
               child: Text(
                 confirmText,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textBright),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: confirmTextColor ?? context.colors.textInverse,
+                ),
               ),
             ),
           ),
@@ -162,8 +168,8 @@ class ConfirmModal extends StatelessWidget {
     this.onCancel,
     this.confirmText = '확인',
     this.cancelText = '취소',
-    this.confirmColor,
-    this.cancelColor,
+    this.confirmTextColor,
+    this.confirmBackgroundColor,
     super.key,
   });
 
@@ -174,8 +180,8 @@ class ConfirmModal extends StatelessWidget {
   final String confirmText;
   final String cancelText;
 
-  final Color? confirmColor;
-  final Color? cancelColor;
+  final Color? confirmTextColor;
+  final Color? confirmBackgroundColor;
 
   final void Function() onConfirm;
   final void Function()? onCancel;
@@ -205,7 +211,7 @@ class ConfirmModal extends StatelessWidget {
                   child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: cancelColor ?? context.colors.surfaceMuted,
+                      color: context.colors.surfaceMuted,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     padding: const Pad(vertical: 12),
@@ -222,13 +228,17 @@ class ConfirmModal extends StatelessWidget {
                   child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: confirmColor ?? context.colors.surfaceDark,
+                      color: confirmBackgroundColor ?? context.colors.surfaceInverse,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     padding: const Pad(vertical: 12),
                     child: Text(
                       confirmText,
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textBright),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: confirmTextColor ?? context.colors.textInverse,
+                      ),
                     ),
                   ),
                 ),

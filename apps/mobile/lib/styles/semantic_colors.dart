@@ -10,11 +10,13 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.textDisabled,
     required this.textDanger,
     required this.textBright,
+    required this.textInverse,
 
     required this.surfaceDefault,
     required this.surfaceSubtle,
     required this.surfaceMuted,
     required this.surfaceDark,
+    required this.surfaceInverse,
 
     required this.borderDefault,
     required this.borderStrong,
@@ -36,11 +38,13 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   final Color textDisabled;
   final Color textDanger;
   final Color textBright;
+  final Color textInverse;
 
   final Color surfaceDefault;
   final Color surfaceSubtle;
   final Color surfaceMuted;
   final Color surfaceDark;
+  final Color surfaceInverse;
 
   final Color borderDefault;
   final Color borderStrong;
@@ -62,11 +66,13 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     textDisabled: AppColors.gray_400,
     textDanger: AppColors.red_500,
     textBright: AppColors.white,
+    textInverse: AppColors.white,
 
     surfaceDefault: AppColors.white,
     surfaceSubtle: AppColors.gray_50,
     surfaceMuted: AppColors.gray_100,
     surfaceDark: AppColors.gray_950,
+    surfaceInverse: AppColors.gray_950,
 
     borderDefault: AppColors.gray_200,
     borderStrong: AppColors.gray_950,
@@ -89,11 +95,13 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     textDisabled: AppColors.dark.gray_400,
     textDanger: AppColors.dark.red_400,
     textBright: AppColors.dark.gray_50,
+    textInverse: AppColors.dark.gray_900,
 
     surfaceDefault: AppColors.dark.gray_900,
     surfaceSubtle: AppColors.dark.gray_800,
     surfaceMuted: AppColors.dark.gray_700,
     surfaceDark: AppColors.dark.gray_500,
+    surfaceInverse: AppColors.dark.gray_50,
 
     borderDefault: AppColors.dark.gray_700,
     borderStrong: AppColors.dark.gray_700,
@@ -117,11 +125,13 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     Color? textDisabled,
     Color? textDanger,
     Color? textBright,
+    Color? textInverse,
 
     Color? surfaceDefault,
     Color? surfaceSubtle,
     Color? surfaceMuted,
     Color? surfaceDark,
+    Color? surfaceInverse,
 
     Color? borderDefault,
     Color? borderStrong,
@@ -143,11 +153,13 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       textDisabled: textDisabled ?? this.textDisabled,
       textDanger: textDanger ?? this.textDanger,
       textBright: textBright ?? this.textBright,
+      textInverse: textInverse ?? this.textInverse,
 
       surfaceDefault: surfaceDefault ?? this.surfaceDefault,
       surfaceSubtle: surfaceSubtle ?? this.surfaceSubtle,
       surfaceMuted: surfaceMuted ?? this.surfaceMuted,
       surfaceDark: surfaceDark ?? this.surfaceDark,
+      surfaceInverse: surfaceInverse ?? this.surfaceInverse,
 
       borderDefault: borderDefault ?? this.borderDefault,
       borderStrong: borderStrong ?? this.borderStrong,
@@ -176,11 +188,13 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       textDisabled: Color.lerp(textDisabled, other.textDisabled, t)!,
       textDanger: Color.lerp(textDanger, other.textDanger, t)!,
       textBright: Color.lerp(textBright, other.textBright, t)!,
+      textInverse: Color.lerp(textInverse, other.textInverse, t)!,
 
       surfaceDefault: Color.lerp(surfaceDefault, other.surfaceDefault, t)!,
       surfaceSubtle: Color.lerp(surfaceSubtle, other.surfaceSubtle, t)!,
       surfaceMuted: Color.lerp(surfaceMuted, other.surfaceMuted, t)!,
       surfaceDark: Color.lerp(surfaceDark, other.surfaceDark, t)!,
+      surfaceInverse: Color.lerp(surfaceInverse, other.surfaceInverse, t)!,
 
       borderDefault: Color.lerp(borderDefault, other.borderDefault, t)!,
       borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
