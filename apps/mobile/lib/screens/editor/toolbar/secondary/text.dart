@@ -9,6 +9,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/screens/editor/scope.dart';
+import 'package:typie/screens/editor/toolbar/buttons/background_color.dart';
 import 'package:typie/screens/editor/toolbar/buttons/color.dart';
 import 'package:typie/screens/editor/toolbar/buttons/icon.dart';
 import 'package:typie/screens/editor/toolbar/buttons/label.dart';
@@ -47,6 +48,23 @@ class TextToolbar extends HookWidget {
                 editorDefaultValues['textColor'] as String,
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.textColor;
+            },
+          ),
+          BackgroundColorToolbarButton(
+            color:
+                (editorValues['textBackgroundColor']?.firstWhere(
+                          (e) =>
+                              e['value'] ==
+                              (proseMirrorState?.getMarkAttributes('text_style')?['textBackgroundColor'] as String? ??
+                                  editorDefaultValues['textBackgroundColor']),
+                        )['color']
+                        as Color Function(BuildContext)?)
+                    ?.call(context),
+            value:
+                proseMirrorState?.getMarkAttributes('text_style')?['textBackgroundColor'] as String? ??
+                editorDefaultValues['textBackgroundColor'] as String,
+            onTap: () {
+              scope.secondaryToolbarMode.value = SecondaryToolbarMode.textBackgroundColor;
             },
           ),
           LabelToolbarButton(

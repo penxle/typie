@@ -4,8 +4,8 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/screens/editor/toolbar/buttons/base.dart';
 import 'package:typie/styles/colors.dart';
 
-class ColorToolbarButton extends StatelessWidget {
-  const ColorToolbarButton({
+class BackgroundColorToolbarButton extends StatelessWidget {
+  const BackgroundColorToolbarButton({
     required this.onTap,
     required this.color,
     required this.value,
@@ -13,7 +13,7 @@ class ColorToolbarButton extends StatelessWidget {
     super.key,
   });
 
-  final Color color;
+  final Color? color;
   final String value;
   final bool isActive;
   final void Function() onTap;
@@ -31,17 +31,29 @@ class ColorToolbarButton extends StatelessWidget {
             decoration: BoxDecoration(
               border: Border.all(
                 width: 2,
-                color: isActive ? (value == 'white' ? context.colors.borderDefault : color) : AppColors.transparent,
+                color: isActive
+                    ? (value == 'none' ? context.colors.borderDefault : color ?? context.colors.borderDefault)
+                    : AppColors.transparent,
               ),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Container(
               margin: const Pad(all: 2),
               decoration: BoxDecoration(
-                color: color,
-                border: Border.all(color: value == 'white' ? context.colors.borderDefault : color),
-                borderRadius: BorderRadius.circular(999),
+                color: value == 'none' ? AppColors.transparent : color,
+                border: Border.all(
+                  color: value == 'none' ? context.colors.borderDefault : color ?? context.colors.borderDefault,
+                ),
+                borderRadius: BorderRadius.circular(3),
               ),
+              child: value == 'none'
+                  ? Center(
+                      child: Transform.rotate(
+                        angle: 0.785398,
+                        child: Container(width: 1, height: 14, color: context.colors.textDisabled),
+                      ),
+                    )
+                  : null,
             ),
           ),
         );

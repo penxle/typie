@@ -349,7 +349,7 @@
 
       <ToolbarDropdownButton
         chevron
-        disabled={!editor?.current.can().setTextBackgroundColor('gray')}
+        disabled={!editor?.current.can().setTextBackgroundColor(defaultValues.textBackgroundColor)}
         label="배경색"
         placement="bottom-start"
         size="small"

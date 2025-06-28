@@ -6,7 +6,17 @@ import 'package:typie/widgets/webview.dart';
 
 enum EditorMode { editor, note }
 
-enum SecondaryToolbarMode { hidden, text, textColor, fontFamily, fontSize, textAlign, lineHeight, letterSpacing }
+enum SecondaryToolbarMode {
+  hidden,
+  text,
+  textColor,
+  textBackgroundColor,
+  fontFamily,
+  fontSize,
+  textAlign,
+  lineHeight,
+  letterSpacing,
+}
 
 enum BottomToolbarMode { hidden, insert, horizontalRule, blockquote }
 

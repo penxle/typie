@@ -8,6 +8,7 @@ import 'package:typie/screens/editor/toolbar/secondary/text_options/font_size.da
 import 'package:typie/screens/editor/toolbar/secondary/text_options/letter_spacing.dart';
 import 'package:typie/screens/editor/toolbar/secondary/text_options/line_height.dart';
 import 'package:typie/screens/editor/toolbar/secondary/text_options/text_align.dart';
+import 'package:typie/screens/editor/toolbar/secondary/text_options/text_background_color.dart';
 import 'package:typie/screens/editor/toolbar/secondary/text_options/text_color.dart';
 
 class SecondaryToolbar extends HookWidget {
@@ -105,6 +106,8 @@ class SecondaryToolbar extends HookWidget {
                               decoration: BoxDecoration(color: context.colors.surfaceDefault),
                               child: switch (optionsToolbarMode.value) {
                                 SecondaryToolbarMode.textColor => const TextColorTextOptionsToolbar(),
+                                SecondaryToolbarMode.textBackgroundColor =>
+                                  const TextBackgroundColorTextOptionsToolbar(),
                                 SecondaryToolbarMode.fontFamily => const FontFamilyTextOptionsToolbar(),
                                 SecondaryToolbarMode.fontSize => const FontSizeTextOptionsToolbar(),
                                 SecondaryToolbarMode.textAlign => const TextAlignTextOptionsToolbar(),

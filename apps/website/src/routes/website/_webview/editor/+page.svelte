@@ -329,6 +329,9 @@
         if (attrs.textColor !== undefined) {
           editor?.current.chain().focus().setTextColor(attrs.textColor).run();
         }
+        if (attrs.textBackgroundColor !== undefined) {
+          editor?.current.chain().focus().setTextBackgroundColor(attrs.textBackgroundColor).run();
+        }
       } else if (name === 'link') {
         editor?.current.chain().focus().setLink(attrs.url).run();
       } else if (name === 'ruby') {
