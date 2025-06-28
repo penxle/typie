@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import CheckIcon from '~icons/lucide/check';
   import MonitorIcon from '~icons/lucide/monitor';
   import MoonIcon from '~icons/lucide/moon';
@@ -33,6 +34,7 @@
     <MenuItem
       icon={themes[name].icon}
       onclick={() => {
+        mixpanel.track('switch_theme', { old: theme.current, new: name, via: 'theme_switch' });
         theme.current = name;
       }}
     >
