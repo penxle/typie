@@ -316,7 +316,7 @@
             <div
               style:background-color={values.textColor.find(
                 ({ value }) => value === (editor?.current.getAttributes('text_style').textColor ?? defaultValues.textColor),
-              )?.hex}
+              )?.color}
               class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px' })}
             ></div>
           </div>
@@ -324,10 +324,10 @@
 
         {#snippet floating({ close })}
           <div class={grid({ columns: 10, gap: '8px', padding: '8px' })}>
-            {#each values.textColor as { label, value, hex } (value)}
+            {#each values.textColor as { label, value, color } (value)}
               <button
-                style:background-color={hex}
-                style:outline-color={hex === '#ffffff' ? token('colors.border.default') : hex}
+                style:background-color={color}
+                style:outline-color={value === 'white' ? token('colors.border.default') : color}
                 class={center({
                   borderWidth: '1px',
                   borderRadius: 'full',

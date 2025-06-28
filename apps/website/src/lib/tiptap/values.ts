@@ -2,6 +2,7 @@ import IconAlignCenter from '~icons/lucide/align-center';
 import IconAlignJustify from '~icons/lucide/align-justify';
 import IconAlignLeft from '~icons/lucide/align-left';
 import IconAlignRight from '~icons/lucide/align-right';
+import { token } from '$styled-system/tokens';
 import BlockquoteLeftLine from './assets/blockquote/left-line.svelte';
 import BlockquoteLeftQuote from './assets/blockquote/left-quote.svelte';
 import HorizontalRuleCircle from './assets/horizontal-rule/circle.svelte';
@@ -41,26 +42,26 @@ export const values = {
   ],
 
   textColor: [
-    { label: '블랙', value: 'black', hex: '#09090b' },
-    { label: '그레이', value: 'gray', hex: '#71717a' },
-    { label: '화이트', value: 'white', hex: '#ffffff' },
-    { label: '레드', value: 'red', hex: '#ef4444' },
-    { label: '오렌지', value: 'orange', hex: '#f97316' },
-    { label: '앰버', value: 'amber', hex: '#f59e0b' },
-    { label: '옐로', value: 'yellow', hex: '#eab308' },
-    { label: '라임', value: 'lime', hex: '#84cc16' },
-    { label: '그린', value: 'green', hex: '#22c55e' },
-    { label: '에메랄드', value: 'emerald', hex: '#10b981' },
-    { label: '틸', value: 'teal', hex: '#14b8a6' },
-    { label: '시안', value: 'cyan', hex: '#06b6d4' },
-    { label: '스카이', value: 'sky', hex: '#0ea5e9' },
-    { label: '블루', value: 'blue', hex: '#3b82f6' },
-    { label: '인디고', value: 'indigo', hex: '#6366f1' },
-    { label: '바이올렛', value: 'violet', hex: '#8b5cf6' },
-    { label: '퍼플', value: 'purple', hex: '#a855f7' },
-    { label: '마젠타', value: 'fuchsia', hex: '#d946ef' },
-    { label: '핑크', value: 'pink', hex: '#ec4899' },
-    { label: '로즈', value: 'rose', hex: '#f43f5e' },
+    { label: '블랙', value: 'black', hex: '#18181b', color: token('colors.prosemirror.black') },
+    { label: '그레이', value: 'gray', hex: '#71717a', color: token('colors.prosemirror.gray') },
+    { label: '화이트', value: 'white', hex: '#ffffff', color: token('colors.prosemirror.white') },
+    { label: '레드', value: 'red', hex: '#ef4444', color: token('colors.prosemirror.red') },
+    { label: '오렌지', value: 'orange', hex: '#f97316', color: token('colors.prosemirror.orange') },
+    { label: '앰버', value: 'amber', hex: '#f59e0b', color: token('colors.prosemirror.amber') },
+    { label: '옐로', value: 'yellow', hex: '#eab308', color: token('colors.prosemirror.yellow') },
+    { label: '라임', value: 'lime', hex: '#84cc16', color: token('colors.prosemirror.lime') },
+    { label: '그린', value: 'green', hex: '#22c55e', color: token('colors.prosemirror.green') },
+    { label: '에메랄드', value: 'emerald', hex: '#10b981', color: token('colors.prosemirror.emerald') },
+    { label: '틸', value: 'teal', hex: '#14b8a6', color: token('colors.prosemirror.teal') },
+    { label: '시안', value: 'cyan', hex: '#06b6d4', color: token('colors.prosemirror.cyan') },
+    { label: '스카이', value: 'sky', hex: '#0ea5e9', color: token('colors.prosemirror.sky') },
+    { label: '블루', value: 'blue', hex: '#3b82f6', color: token('colors.prosemirror.blue') },
+    { label: '인디고', value: 'indigo', hex: '#6366f1', color: token('colors.prosemirror.indigo') },
+    { label: '바이올렛', value: 'violet', hex: '#8b5cf6', color: token('colors.prosemirror.violet') },
+    { label: '퍼플', value: 'purple', hex: '#a855f7', color: token('colors.prosemirror.purple') },
+    { label: '마젠타', value: 'fuchsia', hex: '#d946ef', color: token('colors.prosemirror.fuchsia') },
+    { label: '핑크', value: 'pink', hex: '#ec4899', color: token('colors.prosemirror.pink') },
+    { label: '로즈', value: 'rose', hex: '#f43f5e', color: token('colors.prosemirror.rose') },
   ],
 
   lineHeight: [
