@@ -16,6 +16,11 @@
     borderColor: 'border.strong',
     paddingX: '14px',
     paddingY: '10px',
+    fontFamily: 'prose',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'break-word',
+    wordBreak: 'break-all',
+    userSelect: 'text',
   })}
   as="td"
 >
