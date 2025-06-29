@@ -11,6 +11,10 @@
 
   const query = graphql(`
     query DashboardSlugPage_Query($slug: String!) {
+      me @required {
+        id
+      }
+
       post(slug: $slug) {
         id
 
@@ -22,6 +26,10 @@
           site {
             id
           }
+
+          user {
+            id
+          }
         }
       }
 
@@ -30,9 +38,11 @@
   `);
 
   afterNavigate(() => {
-    const lvp = LocalStore.get<Record<string, string>>('typie:lvp') ?? {};
-    lvp[$query.post.entity.site.id] = $query.post.entity.slug;
-    LocalStore.set('typie:lvp', lvp);
+    if ($query.me.id === $query.post.entity.user.id) {
+      const lvp = LocalStore.get<Record<string, string>>('typie:lvp') ?? {};
+      lvp[$query.post.entity.site.id] = $query.post.entity.slug;
+      LocalStore.set('typie:lvp', lvp);
+    }
   });
 </script>
 

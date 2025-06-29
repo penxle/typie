@@ -2,7 +2,7 @@ import { and, asc, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import { db, Entities, firstOrThrow, firstOrThrowWith, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType, EntityVisibility, SiteState } from '@/enums';
+import { EntityAvailability, EntityState, EntityType, EntityVisibility, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -25,6 +25,7 @@ IEntity.implement({
     order: t.exposeString('order'),
     depth: t.exposeInt('depth'),
     visibility: t.expose('visibility', { type: EntityVisibility }),
+    availability: t.expose('availability', { type: EntityAvailability }),
 
     url: t.string({ resolve: (self) => `${env.USERSITE_URL.replace('*.', '')}/${self.permalink}` }),
   }),

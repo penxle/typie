@@ -145,7 +145,7 @@
 
           <li class={flex({ alignItems: 'center', gap: '6px' })}>
             <Icon style={css.raw({ color: 'text.disabled' })} icon={LinkIcon} size={14} />
-            <span>커스텀 공유 주소</span>
+            <span>커스텀 게시 주소</span>
           </li>
 
           <li class={flex({ alignItems: 'center', gap: '6px' })}>

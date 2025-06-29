@@ -10,6 +10,12 @@ export const CreditCodeState = {
   USED: 'USED',
 } as const;
 
+export type EntityAvailability = keyof typeof EntityAvailability;
+export const EntityAvailability = {
+  PRIVATE: 'PRIVATE',
+  UNLISTED: 'UNLISTED',
+} as const;
+
 export type EntityState = keyof typeof EntityState;
 export const EntityState = {
   ACTIVE: 'ACTIVE',

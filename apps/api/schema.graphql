@@ -120,6 +120,7 @@ type Embed {
 
 type Entity implements IEntity {
   ancestors: [Entity!]!
+  availability: EntityAvailability!
   children: [Entity!]!
   depth: Int!
   descendants: [Entity!]!
@@ -138,6 +139,11 @@ type Entity implements IEntity {
   visibility: EntityVisibility!
 }
 
+enum EntityAvailability {
+  PRIVATE
+  UNLISTED
+}
+
 union EntityNode = Folder | Post
 
 enum EntityState {
@@ -152,6 +158,7 @@ enum EntityType {
 
 type EntityView implements IEntity {
   ancestors: [EntityView!]!
+  availability: EntityAvailability!
   children: [EntityView!]!
   depth: Int!
   id: ID!
@@ -221,6 +228,7 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 }
 
 interface IEntity {
+  availability: EntityAvailability!
   depth: Int!
   id: ID!
   order: String!
@@ -791,6 +799,7 @@ input UpdateMarketingConsentInput {
 input UpdatePostOptionInput {
   allowComment: Boolean!
   allowReaction: Boolean!
+  availability: EntityAvailability!
   contentRating: PostContentRating!
   password: String
   postId: ID!

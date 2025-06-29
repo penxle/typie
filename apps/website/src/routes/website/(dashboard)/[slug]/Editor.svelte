@@ -58,10 +58,14 @@
     _query,
     graphql(`
       fragment Editor_query on Query {
+        ...Editor_Limit_query
+
         me @required {
           id
           name
           role
+
+          ...Editor_Panel_user
         }
 
         post(slug: $slug) {
@@ -99,8 +103,13 @@
                 url
               }
 
+              ...Editor_Limit_site
               ...Editor_Placeholder_site
               ...Editor_Toolbar_site
+            }
+
+            user {
+              id
             }
           }
 
@@ -411,129 +420,132 @@
           ></div>
         </div>
 
-        <Menu>
-          {#snippet button({ open })}
-            <button
-              class={center({
-                borderRadius: '4px',
-                size: '24px',
-                color: 'text.faint',
-                transition: 'common',
-                _hover: {
-                  color: 'text.subtle',
-                  backgroundColor: 'surface.muted',
-                },
-                _pressed: {
-                  color: 'text.subtle',
-                  backgroundColor: 'surface.muted',
-                },
-              })}
-              aria-pressed={open}
-              type="button"
-            >
-              <Icon icon={ElipsisIcon} size={16} />
-            </button>
-          {/snippet}
+        {#if $query.me.id === $query.post.entity.user.id}
+          <Menu>
+            {#snippet button({ open })}
+              <button
+                class={center({
+                  borderRadius: '4px',
+                  size: '24px',
+                  color: 'text.faint',
+                  transition: 'common',
+                  _hover: {
+                    color: 'text.subtle',
+                    backgroundColor: 'surface.muted',
+                  },
+                  _pressed: {
+                    color: 'text.subtle',
+                    backgroundColor: 'surface.muted',
+                  },
+                })}
+                aria-pressed={open}
+                type="button"
+              >
+                <Icon icon={ElipsisIcon} size={16} />
+              </button>
+            {/snippet}
 
-          <MenuItem external href={$query.post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+            <MenuItem external href={$query.post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
 
-          <HorizontalDivider color="secondary" />
+            <HorizontalDivider color="secondary" />
 
-          <MenuItem
-            icon={BlendIcon}
-            onclick={() => {
-              app.state.shareOpen = $query.post.entity.id;
-              mixpanel.track('open_post_share_modal', { via: 'editor' });
-            }}
-          >
-            공유
-          </MenuItem>
-
-          <MenuItem
-            icon={CopyIcon}
-            onclick={async () => {
-              const resp = await duplicatePost({ postId: $query.post.id });
-              mixpanel.track('duplicate_post', { via: 'editor' });
-              await goto(`/${resp.entity.slug}`);
-            }}
-          >
-            복제
-          </MenuItem>
-
-          {#if $query.post.type === PostType.NORMAL}
             <MenuItem
-              icon={ShapesIcon}
+              icon={BlendIcon}
+              onclick={() => {
+                app.state.shareOpen = $query.post.entity.id;
+                mixpanel.track('open_post_share_modal', { via: 'editor' });
+              }}
+            >
+              공유 및 게시
+            </MenuItem>
+
+            <MenuItem
+              icon={CopyIcon}
+              onclick={async () => {
+                const resp = await duplicatePost({ postId: $query.post.id });
+                mixpanel.track('duplicate_post', { via: 'editor' });
+                await goto(`/${resp.entity.slug}`);
+              }}
+            >
+              복제
+            </MenuItem>
+
+            {#if $query.post.type === PostType.NORMAL}
+              <MenuItem
+                icon={ShapesIcon}
+                onclick={() => {
+                  Dialog.confirm({
+                    title: '템플릿으로 전환',
+                    message:
+                      '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
+                    actionLabel: '전환',
+                    actionHandler: async () => {
+                      await updatePostType({ postId: $query.post.id, type: PostType.TEMPLATE });
+                    },
+                  });
+                }}
+              >
+                템플릿으로 전환
+              </MenuItem>
+            {:else if $query.post.type === PostType.TEMPLATE}
+              <MenuItem
+                icon={ShapesIcon}
+                onclick={() => {
+                  Dialog.confirm({
+                    title: '포스트로 전환',
+                    message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
+                    actionLabel: '전환',
+                    actionHandler: async () => {
+                      await updatePostType({ postId: $query.post.id, type: PostType.NORMAL });
+                    },
+                  });
+                }}
+              >
+                포스트로 전환
+              </MenuItem>
+            {/if}
+
+            <HorizontalDivider color="secondary" />
+
+            {#if $query.me.role === UserRole.ADMIN}
+              <MenuItem
+                icon={IconClockFading}
+                onclick={() => {
+                  showTimeline = !showTimeline;
+                }}
+              >
+                {#if showTimeline}
+                  타임라인 닫기
+                {:else}
+                  타임라인
+                {/if}
+              </MenuItem>
+            {/if}
+
+            <HorizontalDivider color="secondary" />
+
+            <MenuItem
+              icon={TrashIcon}
               onclick={() => {
                 Dialog.confirm({
-                  title: '템플릿으로 전환',
-                  message: '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
-                  actionLabel: '전환',
+                  title: '포스트 삭제',
+                  message: `정말 "${$query.post.title}" 포스트를 삭제하시겠어요?`,
+                  action: 'danger',
+                  actionLabel: '삭제',
                   actionHandler: async () => {
-                    await updatePostType({ postId: $query.post.id, type: PostType.TEMPLATE });
+                    await deletePost({ postId: $query.post.id });
+                    mixpanel.track('delete_post', { via: 'editor' });
+                    app.state.ancestors = [];
+                    app.state.current = undefined;
                   },
                 });
               }}
+              variant="danger"
             >
-              템플릿으로 전환
+              삭제
             </MenuItem>
-          {:else if $query.post.type === PostType.TEMPLATE}
-            <MenuItem
-              icon={ShapesIcon}
-              onclick={() => {
-                Dialog.confirm({
-                  title: '포스트로 전환',
-                  message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
-                  actionLabel: '전환',
-                  actionHandler: async () => {
-                    await updatePostType({ postId: $query.post.id, type: PostType.NORMAL });
-                  },
-                });
-              }}
-            >
-              포스트로 전환
-            </MenuItem>
-          {/if}
-
-          <HorizontalDivider color="secondary" />
-
-          {#if $query.me.role === UserRole.ADMIN}
-            <MenuItem
-              icon={IconClockFading}
-              onclick={() => {
-                showTimeline = !showTimeline;
-              }}
-            >
-              {#if showTimeline}
-                타임라인 닫기
-              {:else}
-                타임라인
-              {/if}
-            </MenuItem>
-          {/if}
-
-          <HorizontalDivider color="secondary" />
-
-          <MenuItem
-            icon={TrashIcon}
-            onclick={() => {
-              Dialog.confirm({
-                title: '포스트 삭제',
-                message: `정말 "${$query.post.title}" 포스트를 삭제하시겠어요?`,
-                action: 'danger',
-                actionLabel: '삭제',
-                actionHandler: async () => {
-                  await deletePost({ postId: $query.post.id });
-                  mixpanel.track('delete_post', { via: 'editor' });
-                  app.state.ancestors = [];
-                  app.state.current = undefined;
-                },
-              });
-            }}
-            variant="danger"
-          >
-            삭제
-          </MenuItem>
-        </Menu>
+          </Menu>
+        {/if}
 
         <button
           class={center({
@@ -729,7 +741,7 @@
     </div>
   </div>
 
-  <Panel $post={$query.post} {doc} {editor} />
+  <Panel $post={$query.post} $user={$query.me} {doc} {editor} />
 </div>
 
-<Limit {editor} />
+<Limit {$query} $site={$query.post.entity.site} {editor} />

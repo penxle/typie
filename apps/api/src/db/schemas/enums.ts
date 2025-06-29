@@ -7,6 +7,7 @@ function createPgEnum<T extends string>(enumName: string, obj: Record<string, T>
 
 export const _CommentState = createPgEnum('_comment_state', E.CommentState);
 export const _CreditCodeState = createPgEnum('_credit_code_state', E.CreditCodeState);
+export const _EntityAvailability = createPgEnum('_entity_availability', E.EntityAvailability);
 export const _EntityState = createPgEnum('_entity_state', E.EntityState);
 export const _EntityType = createPgEnum('_entity_type', E.EntityType);
 export const _EntityVisibility = createPgEnum('_entity_visibility', E.EntityVisibility);

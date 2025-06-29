@@ -267,10 +267,10 @@ builder.subscriptionFields((t) => ({
     type: Site,
     args: { siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }) },
     subscribe: async (_, args, ctx) => {
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: args.siteId,
-      });
+      // await assertSitePermission({
+      //   userId: ctx.session.userId,
+      //   siteId: args.siteId,
+      // });
 
       const repeater = pubsub.subscribe('site:usage:update', args.siteId);
 
