@@ -165,7 +165,7 @@
 
     <HorizontalDivider color="secondary" />
 
-    <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $post.entity.id)}>공유</MenuItem>
+    <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $post.entity.id)}>공유 및 게시</MenuItem>
 
     <MenuItem
       icon={CopyIcon}

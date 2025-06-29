@@ -269,7 +269,7 @@
             mixpanel.track('open_folder_share_modal');
           }}
         >
-          공유
+          공유 및 게시
         </MenuItem>
 
         <HorizontalDivider color="secondary" />

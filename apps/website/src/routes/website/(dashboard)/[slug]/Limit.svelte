@@ -19,23 +19,101 @@
   import StarIcon from '~icons/lucide/star';
   import TagIcon from '~icons/lucide/tag';
   import { pushState } from '$app/navigation';
+  import { fragment, graphql } from '$graphql';
   import { Button, HorizontalDivider, Icon, Modal } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
+  import type { Editor_Limit_query, Editor_Limit_site } from '$graphql';
   import type { Ref } from '$lib/utils';
 
   type Props = {
     editor?: Ref<Editor>;
+    $site: Editor_Limit_site;
+    $query: Editor_Limit_query;
   };
 
-  let { editor }: Props = $props();
+  let { $query: _query, $site: _site, editor }: Props = $props();
+
+  const query = fragment(
+    _query,
+    graphql(`
+      fragment Editor_Limit_query on Query {
+        defaultPlanRule {
+          maxTotalCharacterCount
+          maxTotalBlobSize
+        }
+      }
+    `),
+  );
+
+  const site = fragment(
+    _site,
+    graphql(`
+      fragment Editor_Limit_site on Site {
+        id
+
+        usage {
+          totalCharacterCount
+          totalBlobSize
+        }
+
+        user {
+          id
+
+          subscription {
+            id
+
+            plan {
+              id
+
+              rule {
+                maxTotalCharacterCount
+                maxTotalBlobSize
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
+
+  const siteUsageUpdateStream = graphql(`
+    subscription Editor_Limit_SiteUsageUpdateStream($siteId: ID!) {
+      siteUsageUpdateStream(siteId: $siteId) {
+        ... on Site {
+          id
+
+          usage {
+            totalCharacterCount
+            totalBlobSize
+          }
+        }
+      }
+    }
+  `);
+
+  const planRule = $derived($site.user.subscription?.plan?.rule ?? $query.defaultPlanRule);
+
+  const totalCharacterCountProgress = $derived.by(() => {
+    if (planRule.maxTotalCharacterCount === -1) {
+      return -1;
+    }
+
+    return Math.min(1, $site.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
+  });
+
+  const totalBlobSizeProgress = $derived.by(() => {
+    if (planRule.maxTotalBlobSize === -1) {
+      return -1;
+    }
+
+    return Math.min(1, $site.usage.totalBlobSize / planRule.maxTotalBlobSize);
+  });
 
   let open = $state(false);
 
-  const app = getAppContext();
   const key = new PluginKey('limit');
 
   const getCharacterCount = (node: Node) => {
@@ -68,7 +146,7 @@
               return true;
             }
 
-            if (app.state.progress.totalCharacterCount >= 1) {
+            if (totalCharacterCountProgress >= 1) {
               const oldCharacterCount = getCharacterCount(state.doc);
               const newCharacterCount = getCharacterCount(tr.doc);
 
@@ -79,7 +157,7 @@
               }
             }
 
-            if (app.state.progress.totalBlobSize >= 1) {
+            if (totalBlobSizeProgress >= 1) {
               const oldBlobSize = getBlobSize(state.doc);
               const newBlobSize = getBlobSize(tr.doc);
 
@@ -97,6 +175,16 @@
 
       return () => {
         editor?.current.unregisterPlugin(key);
+      };
+    });
+  });
+
+  $effect(() => {
+    return untrack(() => {
+      const unsubscribe = siteUsageUpdateStream.subscribe({ siteId: $site.id });
+
+      return () => {
+        unsubscribe();
       };
     });
   });
@@ -201,7 +289,7 @@
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
         <Icon style={css.raw({ color: 'text.faint' })} icon={LinkIcon} size={14} />
-        <span>커스텀 공유 주소</span>
+        <span>커스텀 게시 주소</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>

@@ -26,6 +26,7 @@ import {
   validateDbId,
 } from '@/db';
 import {
+  EntityAvailability,
   EntityState,
   EntityType,
   EntityVisibility,
@@ -403,18 +404,20 @@ builder.queryFields((t) => ({
     args: { slug: t.arg.string() },
     resolve: async (_, args, ctx) => {
       const { post, entity } = await db
-        .select({ post: Posts, entity: { siteId: Entities.siteId } })
+        .select({ post: Posts, entity: { siteId: Entities.siteId, availability: Entities.availability } })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .where(eq(Entities.slug, args.slug))
         .then(firstOrThrowWith(new NotFoundError()));
 
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: entity.siteId,
-      }).catch(() => {
-        throw new NotFoundError();
-      });
+      if (entity.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: entity.siteId,
+        }).catch(() => {
+          throw new NotFoundError();
+        });
+      }
 
       return post;
     },
@@ -720,6 +723,7 @@ builder.mutationFields((t) => ({
     type: Post,
     input: {
       postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+      availability: t.input.field({ type: EntityAvailability }),
       visibility: t.input.field({ type: EntityVisibility }),
       password: t.input.string({ required: false }),
       contentRating: t.input.field({ type: PostContentRating }),
@@ -744,6 +748,7 @@ builder.mutationFields((t) => ({
         await tx
           .update(Entities)
           .set({
+            availability: input.availability,
             visibility: input.visibility,
           })
           .where(eq(Entities.id, post.entityId));
@@ -866,16 +871,18 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const post = await db
-        .select({ siteId: Entities.siteId })
+        .select({ siteId: Entities.siteId, availability: Entities.availability })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .where(eq(Posts.id, input.postId))
         .then(firstOrThrow);
 
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: post.siteId,
-      });
+      if (post.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: post.siteId,
+        });
+      }
 
       if (input.type === PostSyncType.UPDATE) {
         pubsub.publish('post:sync', input.postId, {
@@ -1071,16 +1078,18 @@ builder.subscriptionFields((t) => ({
     },
     subscribe: async (_, args, ctx) => {
       const post = await db
-        .select({ siteId: Entities.siteId })
+        .select({ siteId: Entities.siteId, availability: Entities.availability })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .where(eq(Posts.id, args.postId))
         .then(firstOrThrow);
 
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: post.siteId,
-      });
+      if (post.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: post.siteId,
+        });
+      }
 
       pubsub.publish('post:sync', args.postId, {
         target: `!${args.clientId}`,

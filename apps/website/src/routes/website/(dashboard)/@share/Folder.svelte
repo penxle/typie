@@ -86,7 +86,7 @@
 <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '16px', paddingY: '12px' })}>
   <div class={flex({ gap: '[0.5ch]', fontSize: '12px', fontWeight: 'medium' })}>
     <span class={css({ wordBreak: 'break-all', lineClamp: '1' })}>{$folder.name}</span>
-    <span class={css({ flexShrink: '0' })}>공유하기</span>
+    <span class={css({ flexShrink: '0' })}>공유 및 게시하기</span>
   </div>
 
   <button
@@ -107,7 +107,7 @@
       <div class={css({ fontSize: '12px', color: 'text.link' })}>복사되었어요</div>
     {:else}
       <Icon style={css.raw({ color: 'text.link' })} icon={LinkIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'text.link' })}>링크 복사</div>
+      <div class={css({ fontSize: '12px', color: 'text.link' })}>게시 링크 복사</div>
     {/if}
   </button>
 </div>

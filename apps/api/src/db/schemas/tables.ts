@@ -134,6 +134,7 @@ export const Entities = pgTable(
     depth: integer('depth').notNull().default(0),
     state: E._EntityState('state').notNull().default('ACTIVE'),
     visibility: E._EntityVisibility('visibility').notNull().default('PRIVATE'),
+    availability: E._EntityAvailability('availability').notNull().default('PRIVATE'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
