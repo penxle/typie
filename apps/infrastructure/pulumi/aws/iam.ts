@@ -3,27 +3,6 @@ import * as pulumi from '@pulumi/pulumi';
 import { buckets } from '$aws/s3';
 import { configurationSet, emailIdentity } from '$aws/ses';
 
-const admin = new aws.iam.Role('admin@team', {
-  name: 'admin@team',
-  assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
-    AWS: '886436942314',
-  }),
-});
-
-new aws.iam.RolePolicy('admin@team', {
-  role: admin.name,
-  policy: {
-    Version: '2012-10-17',
-    Statement: [
-      {
-        Effect: 'Allow',
-        Action: '*',
-        Resource: '*',
-      },
-    ],
-  },
-});
-
 const developer = new aws.iam.User('developer@team', {
   name: 'developer@team',
 });
@@ -531,11 +510,6 @@ new aws.iam.RolePolicy('datadog@monitoring', {
   },
 });
 // spell-checker:enable
-
-export const roles = {
-  admin,
-  actions: githubActionsRole,
-};
 
 export const outputs = {
   AWS_IAM_DEVELOPER_ACCESS_KEY_ID: developerAccessKey.id,

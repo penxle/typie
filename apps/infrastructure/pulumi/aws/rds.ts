@@ -18,6 +18,14 @@ const subnetGroup = new aws.rds.SubnetGroup('private', {
   subnetIds: [subnets.private.az1.id, subnets.private.az2.id],
 });
 
+const monitoringRole = new aws.iam.Role('monitoring@rds', {
+  name: 'monitoring@rds',
+  assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+    Service: 'monitoring.rds.amazonaws.com',
+  }),
+  managedPolicyArns: [aws.iam.ManagedPolicy.AmazonRDSEnhancedMonitoringRole],
+});
+
 const parameterGroup = new aws.rds.ClusterParameterGroup('typie-aurora-postgresql17', {
   name: 'typie-aurora-postgresql17',
   family: 'aurora-postgresql17',
@@ -51,6 +59,9 @@ const cluster = new aws.rds.Cluster('typie', {
   backupRetentionPeriod: 7,
   finalSnapshotIdentifier: 'typie-final-snapshot',
 
+  monitoringInterval: 60,
+  monitoringRoleArn: monitoringRole.arn,
+
   preferredBackupWindow: '19:00-20:00',
   preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
 
@@ -70,6 +81,8 @@ const instance = new aws.rds.ClusterInstance('typie-1', {
 
   availabilityZone: subnets.private.az1.availabilityZone,
   caCertIdentifier: 'rds-ca-ecc384-g1',
+
+  monitoringInterval: 60,
 
   preferredMaintenanceWindow: 'sun:20:00-sun:22:00',
 
