@@ -86,10 +86,6 @@ const normalize = (color: TinyColor) => {
 
   return textBackgroundColors.reduce(
     (closest, value) => {
-      if (value === 'none') {
-        return closest;
-      }
-
       const target = new TinyColor(hexColors[value]).toRgb();
       const d = Math.hypot(input.r - target.r, input.g - target.g, input.b - target.b);
       return d < closest.d ? { value, d } : closest;
