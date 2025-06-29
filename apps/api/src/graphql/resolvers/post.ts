@@ -723,7 +723,7 @@ builder.mutationFields((t) => ({
     type: Post,
     input: {
       postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
-      availability: t.input.field({ type: EntityAvailability }),
+      availability: t.input.field({ type: EntityAvailability, required: false }),
       visibility: t.input.field({ type: EntityVisibility }),
       password: t.input.string({ required: false }),
       contentRating: t.input.field({ type: PostContentRating }),
@@ -748,7 +748,7 @@ builder.mutationFields((t) => ({
         await tx
           .update(Entities)
           .set({
-            availability: input.availability,
+            availability: input.availability ?? undefined,
             visibility: input.visibility,
           })
           .where(eq(Entities.id, post.entityId));

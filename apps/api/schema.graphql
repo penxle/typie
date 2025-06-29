@@ -799,7 +799,7 @@ input UpdateMarketingConsentInput {
 input UpdatePostOptionInput {
   allowComment: Boolean!
   allowReaction: Boolean!
-  availability: EntityAvailability!
+  availability: EntityAvailability
   contentRating: PostContentRating!
   password: String
   postId: ID!
