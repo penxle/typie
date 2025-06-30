@@ -67,6 +67,7 @@ new typie.Service('api', {
 
   env: {
     entries: [
+      'ANTHROPIC_API_KEY',
       'APPLE_APP_APPLE_ID',
       'APPLE_APP_BUNDLE_ID',
       'APPLE_IAP_ISSUER_ID',
@@ -96,6 +97,8 @@ new typie.Service('api', {
       'PORTONE_CHANNEL_KEY',
       'REDIS_URL',
       'SENTRY_DSN',
+      'SLACK_BOT_TOKEN',
+      'SLACK_SIGNING_SECRET',
       'SLACK_WEBHOOK_URL',
       'SPELLCHECK_API_KEY',
       'SPELLCHECK_URL',
