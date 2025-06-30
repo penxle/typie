@@ -42,89 +42,84 @@ type CreateFormOptions<T, D extends Partial<T>> = {
   onError?: (error: unknown) => void;
 };
 
-type CreateFormReturn<T, D extends Partial<T>> = {
-  handleSubmit: (event: SubmitEvent) => Promise<void>;
+export class Form<T extends Record<string, unknown>, D extends Partial<T>> {
   fields: FormFields<T, D>;
-  errors: FormFieldErrors<T>;
-  state: FormState;
-};
 
-export const createForm = <T extends Record<string, unknown>, D extends Partial<T>>(
-  options: CreateFormOptions<T, D>,
-): CreateFormReturn<T, D> => {
-  const formState = $state<FormState>({
-    isLoading: false,
-    isDirty: false,
-  });
+  #formState = $state<FormState>({ isLoading: false, isDirty: false });
+  #formData = $state<Partial<T>>({});
+  #errors = $state<FormFieldErrors<T>>({} as FormFieldErrors<T>);
 
-  const formData = $state<Partial<T>>(options.defaultValues ?? {});
-  const errors = $state<FormFieldErrors<T>>({} as FormFieldErrors<T>);
+  #options: CreateFormOptions<T, D>;
 
-  const handleSubmit = async (event?: SubmitEvent) => {
+  get errors() {
+    return this.#errors;
+  }
+
+  get state() {
+    return this.#formState;
+  }
+
+  constructor(options: CreateFormOptions<T, D>) {
+    this.#options = options;
+    this.#formData = options.defaultValues ?? {};
+
+    this.fields = this.#formData as FormFields<T, D>;
+
+    this.fields = new Proxy(this.#formData, {
+      set: (target, prop, value) => {
+        target[prop as keyof T] = value;
+
+        this.#formState.isDirty = true;
+
+        if (this.#options.submitOn === 'change') {
+          this.handleSubmit();
+        }
+
+        return true;
+      },
+    }) as FormFields<T, D>;
+  }
+
+  handleSubmit = async (event?: SubmitEvent) => {
     event?.preventDefault();
 
-    formState.isLoading = true;
+    this.#formState.isLoading = true;
     try {
-      const data = options.schema.parse(formData);
-      for (const key of Object.keys(errors)) {
-        errors[key as keyof T] = undefined;
+      const data = this.#options.schema.parse(this.#formData);
+      for (const key of Object.keys(this.#errors)) {
+        this.#errors[key as keyof T] = undefined;
       }
 
       try {
-        await options.onSubmit(data);
+        await this.#options.onSubmit(data);
       } catch (err) {
-        options.onError?.(err);
+        this.#options.onError?.(err);
         throw err;
       }
     } catch (err) {
-      const erroredFields: string[] = [];
+      const errors = {} as FormFieldErrors<T>;
 
       if (err instanceof FormError) {
         errors[err.field as keyof T] = err.message;
-        erroredFields.push(err.field);
       } else if (err instanceof z.ZodError) {
         const { fieldErrors } = err.flatten();
         for (const [key, value] of Object.entries(fieldErrors)) {
           errors[key as keyof T] = Array.isArray(value) ? value[0] : value;
-          erroredFields.push(key);
         }
       } else {
         throw err;
       }
 
-      for (const key of Object.keys(errors)) {
-        if (!erroredFields.includes(key)) {
-          errors[key as keyof T] = undefined;
-        }
-      }
+      this.#errors = errors;
     } finally {
-      formState.isLoading = false;
-      formState.isDirty = false;
+      this.#formState.isLoading = false;
+      this.#formState.isDirty = false;
     }
   };
+}
 
-  const fields = new Proxy(formData, {
-    set: (target, prop, value) => {
-      target[prop as keyof T] = value;
-
-      formState.isDirty = true;
-
-      if (options.submitOn === 'change') {
-        handleSubmit();
-      }
-
-      return true;
-    },
-  }) as FormFields<T, D>;
-
-  const form = $derived({
-    fields,
-    errors,
-    handleSubmit,
-    state: formState,
-  });
-
-  return form;
+export const createForm = <T extends Record<string, unknown>, D extends Partial<T>>(options: CreateFormOptions<T, D>): Form<T, D> => {
+  return new Form(options);
 };
 
 export class FormError extends Error {

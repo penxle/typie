@@ -126,6 +126,10 @@
     },
   });
 
+  $effect(() => {
+    void form;
+  });
+
   const handleCopyLink = () => {
     navigator.clipboard.writeText(activeTab === 'publish' ? $post.entity.url : `${env.PUBLIC_WEBSITE_URL}/${$post.entity.slug}`);
     mixpanel.track('copy_post_share_url', { tab: activeTab });

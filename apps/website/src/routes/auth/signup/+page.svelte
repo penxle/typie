@@ -77,6 +77,10 @@
     },
   });
 
+  $effect(() => {
+    void form;
+  });
+
   let name = $state($query.randomName);
   let emailSent = $state(false);
 </script>

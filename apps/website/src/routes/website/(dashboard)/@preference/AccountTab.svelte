@@ -88,6 +88,10 @@
     },
   });
 
+  $effect(() => {
+    void form;
+  });
+
   let updateEmailOpen = $state(false);
 </script>
 

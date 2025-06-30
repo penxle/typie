@@ -70,6 +70,10 @@
     },
   });
 
+  $effect(() => {
+    void form;
+  });
+
   const handleCopyLink = () => {
     navigator.clipboard.writeText($folder.entity.url);
     mixpanel.track('copy_folder_share_url');

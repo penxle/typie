@@ -75,6 +75,10 @@
       url: editor.current.getAttributes('link').href,
     },
   });
+
+  $effect(() => {
+    void form;
+  });
 </script>
 
 <form class={flex({ alignItems: 'center', gap: '4px', padding: '4px' })} onsubmit={form.handleSubmit}>

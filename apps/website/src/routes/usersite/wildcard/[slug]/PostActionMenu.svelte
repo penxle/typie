@@ -60,6 +60,10 @@
       reportPostOpen = false;
     },
   });
+
+  $effect(() => {
+    void form;
+  });
 </script>
 
 {#if $entityView.node.__typename === 'PostView'}

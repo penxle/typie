@@ -63,6 +63,10 @@
     },
   });
 
+  $effect(() => {
+    void form;
+  });
+
   const singleSignOn = async (provider: SingleSignOnProvider) => {
     const url = await generateSingleSignOnAuthorizationUrl({
       provider,
