@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getText } from '@tiptap/core';
+  import { getText, getTextBetween } from '@tiptap/core';
   import { fly } from 'svelte/transition';
   import { textSerializers } from '@/pm/serializer';
   import IconChevronRight from '~icons/lucide/chevron-right';
@@ -19,18 +19,35 @@
   let { editor }: Props = $props();
 
   let open = $state(false);
-  let text = $state('');
 
-  const countWithWhitespace = $derived([...text.replaceAll(/\s+/g, ' ').trim()].length);
-  const countWithoutWhitespace = $derived([...text.replaceAll(/\s/g, '').trim()].length);
-  const countWithoutWhitespaceAndPunctuation = $derived([...text.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
+  let doc = $state('');
+  let selection = $state('');
+
+  const docCountWithWhitespace = $derived([...doc.replaceAll(/\s+/g, ' ').trim()].length);
+  const docCountWithoutWhitespace = $derived([...doc.replaceAll(/\s/g, '').trim()].length);
+  const docCountWithoutWhitespaceAndPunctuation = $derived([...doc.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
+
+  const selectionCountWithWhitespace = $derived([...selection.replaceAll(/\s+/g, ' ').trim()].length);
+  const selectionCountWithoutWhitespace = $derived([...selection.replaceAll(/\s/g, '').trim()].length);
+  const selectionCountWithoutWhitespaceAndPunctuation = $derived([...selection.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
 
   const handler = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
     if (transaction.docChanged) {
-      text = getText(editor.state.doc, {
+      doc = getText(editor.state.doc, {
         blockSeparator: '\n',
         textSerializers,
       });
+    }
+
+    if (transaction.selectionSet) {
+      selection = getTextBetween(
+        editor.state.doc,
+        { from: editor.state.selection.from, to: editor.state.selection.to },
+        {
+          blockSeparator: '\n',
+          textSerializers,
+        },
+      );
     }
   };
 
@@ -51,7 +68,10 @@
     <div class={css({ flexGrow: '1' })}></div>
     {#if !open}
       <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })} in:fly={{ y: 2, duration: 150 }}>
-        {comma(countWithWhitespace)}자
+        {#if selection}
+          {comma(selectionCountWithWhitespace)}자 /
+        {/if}
+        {comma(docCountWithWhitespace)}자
       </div>
     {/if}
   </summary>
@@ -60,17 +80,32 @@
     <div class={flex({ flexDirection: 'column', gap: '2px' })} in:fly={{ y: -2, duration: 150 }}>
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>공백 포함</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(countWithWhitespace)}자</dd>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+          {#if selection}
+            {comma(selectionCountWithWhitespace)}자 /
+          {/if}
+          {comma(docCountWithWhitespace)}자
+        </dd>
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>공백 미포함</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(countWithoutWhitespace)}자</dd>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+          {#if selection}
+            {comma(selectionCountWithoutWhitespace)}자 /
+          {/if}
+          {comma(docCountWithoutWhitespace)}자
+        </dd>
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>공백/부호 미포함</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(countWithoutWhitespaceAndPunctuation)}자</dd>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+          {#if selection}
+            {comma(selectionCountWithoutWhitespaceAndPunctuation)}자 /
+          {/if}
+          {comma(docCountWithoutWhitespaceAndPunctuation)}자
+        </dd>
       </dl>
     </div>
   {/if}
