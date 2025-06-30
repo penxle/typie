@@ -2,14 +2,29 @@ import { Editor, Extension, findChildren } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { bundledLanguages, getSingletonHighlighter, getTokenStyleObject, stringifyTokenStyle } from 'shiki';
+import Cookies from 'universal-cookie';
 import type { Node } from '@tiptap/pm/model';
 import type { Highlighter, TokenStyles } from 'shiki';
+
+const THEME_COOKIE_NAME = 'typie-th';
 
 type Storage = {
   highlighter: Highlighter | null;
 };
 
 const key = new PluginKey('syntax_highlight');
+
+const getCurrentTheme = (): 'min-light' | 'min-dark' => {
+  if (typeof window === 'undefined') {
+    return 'min-light';
+  }
+
+  const theme = new Cookies().get(THEME_COOKIE_NAME);
+  if (theme === 'dark') return 'min-dark';
+  if (theme === 'light') return 'min-light';
+
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'min-dark' : 'min-light';
+};
 
 export const SyntaxHighlight = Extension.create<unknown, Storage>({
   name: 'syntax_highlight',
@@ -24,13 +39,16 @@ export const SyntaxHighlight = Extension.create<unknown, Storage>({
     return [
       new Plugin({
         key,
+
         state: {
           init: () => {
             getSingletonHighlighter({
-              themes: ['min-light'],
+              themes: ['min-light', 'min-dark'],
               langs: ['html'],
             }).then((highlighter) => {
               this.storage.highlighter = highlighter;
+
+              if (this.editor.isDestroyed) return;
 
               const { tr } = this.editor.state;
               tr.setMeta(key, true);
@@ -51,6 +69,43 @@ export const SyntaxHighlight = Extension.create<unknown, Storage>({
             return decorationSet.map(tr.mapping, tr.doc);
           },
         },
+
+        view: () => {
+          const cookies = new Cookies();
+
+          const triggerUpdate = () => {
+            if (this.editor.isDestroyed) return;
+
+            const { tr } = this.editor.state;
+            tr.setMeta(key, true);
+            this.editor.view.dispatch(tr);
+          };
+
+          const handleCookieChange = (options: { name: string }) => {
+            if (options.name === THEME_COOKIE_NAME) {
+              triggerUpdate();
+            }
+          };
+
+          const handleSystemThemeChange = () => {
+            const theme = cookies.get(THEME_COOKIE_NAME);
+            if (theme === 'auto' || !theme) {
+              triggerUpdate();
+            }
+          };
+
+          cookies.addChangeListener(handleCookieChange);
+          const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+          mediaQuery.addEventListener('change', handleSystemThemeChange);
+
+          return {
+            destroy: () => {
+              cookies.removeChangeListener(handleCookieChange);
+              mediaQuery.removeEventListener('change', handleSystemThemeChange);
+            },
+          };
+        },
+
         props: {
           decorations: (state) => {
             return key.getState(state);
@@ -68,6 +123,7 @@ const themedTokenToStyle = (token: TokenStyles) => {
 const getDecorations = (editor: Editor, highlighter: Highlighter, doc: Node) => {
   const decorations: Decoration[] = [];
   const languages = new Set(['text', ...highlighter.getLoadedLanguages()]);
+  const currentTheme = getCurrentTheme();
 
   const children = findChildren(doc, (node) => node.type.spec.code === true);
   for (const child of children) {
@@ -87,7 +143,7 @@ const getDecorations = (editor: Editor, highlighter: Highlighter, doc: Node) => 
       continue;
     }
 
-    const result = highlighter.codeToTokens(code, { theme: 'min-light', lang: language });
+    const result = highlighter.codeToTokens(code, { theme: currentTheme, lang: language });
 
     for (const token of result.tokens.flat()) {
       const from = child.pos + token.offset + 1;
