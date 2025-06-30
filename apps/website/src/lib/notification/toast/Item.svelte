@@ -57,7 +57,7 @@
       class={css(
         { borderRadius: 'full', padding: '3px', size: '18px' },
         toast.type === 'success' && { backgroundColor: { base: '[#0CBB7A]', _dark: '[#19C283]' } },
-        toast.type === 'error' && { backgroundColor: 'accent.danger.subtle' },
+        toast.type === 'error' && { backgroundColor: 'accent.danger.default' },
       )}
     >
       {#if toast.type === 'success'}
