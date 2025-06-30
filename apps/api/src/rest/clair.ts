@@ -196,14 +196,14 @@ const handleAppMention = async (event: SlackAppMentionEvent) => {
       주의: Slack은 **굵은** 같은 이중 별표를 지원하지 않음
     `;
 
-    const maxIterations = 10;
+    const maxIterations = 50;
     const accMessages = [...messages];
     let finalResponse = '';
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 10_000,
+        model: 'claude-3-5-haiku-20241022',
+        max_tokens: 4096,
         messages: accMessages,
         system,
         tools,
