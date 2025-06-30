@@ -7,6 +7,6 @@
     flexShrink: '0',
     width: '4px',
     alignSelf: 'stretch',
-    backgroundColor: { base: 'gray.200', _dark: 'gray.700' },
+    backgroundColor: { base: 'gray.200', _dark: 'dark.gray.700' },
   })}
 ></div>
