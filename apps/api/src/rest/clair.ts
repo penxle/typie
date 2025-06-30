@@ -43,7 +43,8 @@ const sql = postgres(env.DATABASE_URL, {
   max: 5,
   max_lifetime: 10 * 60,
   connection: {
-    statement_timeout: 30_000,
+    statement_timeout: 60_000,
+    TimeZone: 'Asia/Seoul',
   },
 });
 
@@ -170,7 +171,8 @@ const handleAppMention = async (event: SlackAppMentionEvent) => {
       - execute_sql_query 도구를 사용하여 PostgreSQL 데이터베이스 쿼리 실행
       - 읽기 전용 트랜잭션으로 안전하게 실행 (INSERT, UPDATE, DELETE 불가)
       - 실시간 데이터 조회 및 분석 가능
-      - 모든 시계열 쿼리는 Asia/Seoul 타임존 기준으로 작성
+      - DB 스키마를 직접 분석해 필요한 테이블과 컬럼을 찾아 쿼리 작성 
+      - 모든 쿼리는 Asia/Seoul 타임존을 지정해 작성
       - 필요시 여러 쿼리를 연속 실행하여 심층 분석 가능
 
       시간 정보:
@@ -180,9 +182,7 @@ const handleAppMention = async (event: SlackAppMentionEvent) => {
       응답 가이드라인:
       - 한국어로 친근하고 전문적으로 소통
       - 데이터를 시각적으로 이해하기 쉽게 표현
-      - 인사이트는 실행 가능한 제안과 함께 제공
-      - 데이터 보안 및 개인정보 보호 준수
-      - 숫자는 천 단위 구분 기호 사용 (예: 1,234)
+      - 요청받지 않은 추가적인 분석 및 제안 금지
 
       Slack mrkdwn 포맷:
       - *굵은 글씨* (별표 하나)
@@ -202,8 +202,8 @@ const handleAppMention = async (event: SlackAppMentionEvent) => {
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       const response = await anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 4096,
+        model: 'claude-opus-4-20250514',
+        max_tokens: 10_000,
         messages: accMessages,
         system,
         tools,
