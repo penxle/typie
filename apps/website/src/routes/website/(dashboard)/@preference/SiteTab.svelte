@@ -77,6 +77,10 @@
       slug: $user.sites[0].slug,
     },
   });
+
+  $effect(() => {
+    void form;
+  });
 </script>
 
 <div class={flex({ direction: 'column', gap: '32px' })}>

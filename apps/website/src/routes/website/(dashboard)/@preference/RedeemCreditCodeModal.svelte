@@ -44,6 +44,10 @@
       }
     },
   });
+
+  $effect(() => {
+    void form;
+  });
 </script>
 
 <Modal style={css.raw({ gap: '24px', padding: '20px', maxWidth: '500px' })} bind:open>

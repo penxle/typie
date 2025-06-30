@@ -91,6 +91,10 @@
     },
   });
 
+  $effect(() => {
+    void redeemCodeForm;
+  });
+
   const form = createForm({
     schema: z.object({
       cardNumber: cardSchema.cardNumber,
@@ -152,6 +156,10 @@
         Toast.error(message);
       }
     },
+  });
+
+  $effect(() => {
+    void form;
   });
 
   const agreements = [

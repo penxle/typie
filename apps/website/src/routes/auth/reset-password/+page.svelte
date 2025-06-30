@@ -46,6 +46,10 @@
       }
     },
   });
+
+  $effect(() => {
+    void form;
+  });
 </script>
 
 <Helmet title="비밀번호 변경" />

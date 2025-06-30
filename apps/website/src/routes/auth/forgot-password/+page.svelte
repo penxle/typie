@@ -37,6 +37,10 @@
     },
   });
 
+  $effect(() => {
+    void form;
+  });
+
   let emailSent = $state(false);
 </script>
 

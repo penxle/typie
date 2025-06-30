@@ -48,6 +48,10 @@
       ruby: editor.current.getAttributes('ruby').text,
     },
   });
+
+  $effect(() => {
+    void form;
+  });
 </script>
 
 <form class={flex({ alignItems: 'center', gap: '4px', padding: '4px' })} onsubmit={form.handleSubmit}>

@@ -177,6 +177,10 @@
     },
   });
 
+  $effect(() => {
+    void form;
+  });
+
   const fontFaces = $derived(
     $entityView.site.fonts
       .map(
