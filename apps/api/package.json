@@ -11,6 +11,7 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "@apple/app-store-server-library": "^1.6.0",
     "@aws-sdk/client-cost-explorer": "^3.830.0",
     "@aws-sdk/client-s3": "^3.832.0",
@@ -36,6 +37,7 @@
     "@sentry/node": "^9.30.0",
     "@sesamecare-oss/redlock": "^1.4.0",
     "@sindresorhus/string-hash": "^2.0.0",
+    "@slack/web-api": "^7.9.3",
     "@tiptap/core": "3.0.0-beta.15",
     "@tiptap/html": "3.0.0-beta.15",
     "@tiptap/pm": "3.0.0-beta.15",
@@ -47,6 +49,7 @@
     "bullmq": "^5.56.0",
     "dataloader": "^2.2.3",
     "dayjs": "^1.11.13",
+    "dedent": "^1.6.0",
     "drizzle-orm": "^0.44.2",
     "escape-string-regexp": "^5.0.0",
     "fast-json-stable-stringify": "^2.1.0",
