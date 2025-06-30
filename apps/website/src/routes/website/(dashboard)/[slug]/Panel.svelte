@@ -154,7 +154,7 @@
               fontSize: '12px',
               fontWeight: 'semibold',
               color: 'text.link',
-              backgroundColor: { base: 'blue.100', _dark: 'blue.950' },
+              backgroundColor: { base: 'blue.100', _dark: 'dark.blue.900' },
               userSelect: 'none',
             })}
           >

@@ -95,7 +95,7 @@
             boxShadow: 'small',
             zIndex: '30',
             _hover: {
-              borderColor: { base: 'gray.500', _dark: 'gray.400' },
+              borderColor: { base: 'gray.500', _dark: 'dark.gray.400' },
               color: 'text.subtle',
             },
           })}
