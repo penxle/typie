@@ -67,6 +67,12 @@
       }
     }
   `);
+
+  const adminEnqueuePostCompact = graphql(`
+    mutation AdminPostDetail_AdminEnqueuePostCompact_Mutation($input: AdminEnqueuePostCompactInput!) {
+      adminEnqueuePostCompact(input: $input)
+    }
+  `);
 </script>
 
 {#if $query.adminPost}
@@ -440,6 +446,50 @@
               {$query.adminPost.reactionCount}
             </span>
           </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div
+          class={css({
+            borderWidth: '2px',
+            borderColor: 'amber.500',
+            padding: '24px',
+            backgroundColor: 'gray.900',
+          })}
+        >
+          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>ACTIONS</h3>
+          <button
+            class={css({
+              borderWidth: '1px',
+              borderColor: 'amber.500',
+              paddingX: '12px',
+              paddingY: '8px',
+              fontSize: '12px',
+              color: 'amber.500',
+              backgroundColor: 'transparent',
+              width: 'full',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              _hover: {
+                backgroundColor: 'amber.500',
+                color: 'gray.900',
+              },
+            })}
+            onclick={() =>
+              adminEnqueuePostCompact({ postId: $query.adminPost.id }).then(
+                () => {
+                  alert('Compact Enqueue OK');
+                },
+                (err) => {
+                  alert(`Compact Enqueue Error: ${err.message}`);
+                },
+              )}
+            type="button"
+          >
+            ENQUEUE COMPACT
+          </button>
         </div>
       </div>
     </div>
