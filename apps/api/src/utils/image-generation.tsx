@@ -1,6 +1,14 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { random } from '@ctrl/tinycolor';
 import { renderAsync } from '@resvg/resvg-js';
+import dayjs from 'dayjs';
+import { and, asc, eq, gte, lt, sql, sum } from 'drizzle-orm';
+import ky from 'ky';
 import { renderToStaticMarkup } from 'react-dom/server';
+import satori from 'satori';
+import twemoji from 'twemoji';
+import { db, first, Images, PostCharacterCountChanges, Users } from '@/db';
 
 const generateRandomGradient = () => {
   const first = random({
@@ -36,3 +44,425 @@ export const generateRandomAvatar = async () => {
 
   return new File([rendered.asPng()], 'avatar.png', { type: 'image/png' });
 };
+
+const loadFonts = async <T extends string>(names: T[]) => {
+  const load = async (name: string) => {
+    const filePath = path.join('/tmp/fonts', `${name}.ttf`);
+
+    try {
+      return await fs.readFile(filePath);
+    } catch {
+      const url = `https://cdn.typie.net/fonts/ttf/${name}.ttf`;
+      const resp = await ky.get(url).arrayBuffer();
+
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, Buffer.from(resp));
+
+      return resp;
+    }
+  };
+
+  return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await load(name)]))) as Record<T, ArrayBuffer>;
+};
+
+const fonts = await loadFonts(['Paperlogy-4Regular', 'Paperlogy-7Bold', 'DeepMindSans-Regular']);
+
+const gray = {
+  100: '#F4F4F5',
+  400: '#A1A1AA',
+  500: '#71717A',
+  700: '#3F3F46',
+  950: '#09090B',
+};
+
+const brand = {
+  100: '#DBEAFE',
+  300: '#BFDBFE',
+  500: '#60A5FA',
+  700: '#2563EB',
+  900: '#1D4ED8',
+};
+
+const levelColors = {
+  0: gray[100],
+  1: brand[100],
+  2: brand[300],
+  3: brand[500],
+  4: brand[700],
+  5: brand[900],
+};
+
+type Level = 0 | 1 | 2 | 3 | 4 | 5;
+
+export async function generateActivityImage(userId: string): Promise<Buffer> {
+  const user = await db
+    .select({
+      id: Users.id,
+      name: Users.name,
+      avatarPath: Images.path,
+      createdAt: Users.createdAt,
+    })
+    .from(Users)
+    .leftJoin(Images, eq(Images.id, Users.avatarId))
+    .where(eq(Users.id, userId))
+    .then(first);
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const endDate = dayjs.kst().startOf('day');
+  const startDate = endDate.subtract(364, 'days');
+  const startOfTomorrow = endDate.add(1, 'day');
+
+  const date = sql<string>`DATE(${PostCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
+  const characterCountChanges = await db
+    .select({
+      date,
+      additions: sum(PostCharacterCountChanges.additions).mapWith(Number),
+      deletions: sum(PostCharacterCountChanges.deletions).mapWith(Number),
+    })
+    .from(PostCharacterCountChanges)
+    .where(
+      and(
+        eq(PostCharacterCountChanges.userId, userId),
+        gte(PostCharacterCountChanges.bucket, startDate),
+        lt(PostCharacterCountChanges.bucket, startOfTomorrow),
+      ),
+    )
+    .groupBy(date)
+    .orderBy(asc(date));
+
+  const activities: { date: dayjs.Dayjs; additions: number; level: Level }[] = [];
+
+  const numbers = characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
+  const min = numbers.length > 0 ? Math.min(...numbers) : 0;
+  const max = numbers.length > 0 ? Math.max(...numbers) : 0;
+  const range = max - min;
+
+  const totalCharacters = characterCountChanges.reduce((sum, change) => sum + change.additions, 0);
+
+  const changes = Object.fromEntries(characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
+
+  let currentDate = startDate;
+  while (!currentDate.isAfter(endDate)) {
+    const change = changes[currentDate.unix()];
+    if (change) {
+      if (change.additions === 0) {
+        activities.push({ date: currentDate, additions: 0, level: 0 });
+      } else if (range === 0) {
+        activities.push({ date: currentDate, additions: change.additions, level: 3 });
+      } else if (change.additions === max) {
+        activities.push({ date: currentDate, additions: change.additions, level: 5 });
+      } else {
+        const value = (change.additions - min) / range;
+        const level = (Math.round(value * 5) + 1) as Level;
+        activities.push({ date: currentDate, additions: change.additions, level });
+      }
+    } else {
+      activities.push({ date: currentDate, additions: 0, level: 0 });
+    }
+
+    currentDate = currentDate.add(1, 'day');
+  }
+
+  const activitiesByMonth: Record<string, typeof activities> = {};
+  const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+
+  for (let i = 0; i < 12; i++) {
+    const monthKey = endDate.subtract(i, 'month').format('YYYY-MM');
+    activitiesByMonth[monthKey] = [];
+  }
+
+  activities.forEach((activity) => {
+    const monthKey = activity.date.format('YYYY-MM');
+    if (activitiesByMonth[monthKey]) {
+      activitiesByMonth[monthKey].push(activity);
+    }
+  });
+
+  const sortedMonths = Object.keys(activitiesByMonth)
+    .sort()
+    .map((monthKey) => ({
+      key: monthKey,
+      name: monthNames[Number.parseInt(monthKey.split('-')[1]) - 1],
+      year: monthKey.split('-')[0],
+      activities: activitiesByMonth[monthKey],
+    }));
+
+  const node = (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        width: '1000px',
+        height: '1000px',
+        backgroundColor: '#FFFFFF',
+        fontFamily: 'Paperlogy',
+        padding: '40px',
+        justifyContent: 'space-between',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: '20px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              width: '80px',
+              height: '80px',
+              borderRadius: '40px',
+              overflow: 'hidden',
+              backgroundColor: gray[100],
+            }}
+          >
+            <img src={`https://typie.net/images/${user.avatarPath}?s=256&f=png`} width={80} height={80} style={{ objectFit: 'cover' }} />
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                fontSize: '36px',
+                fontWeight: 700,
+                color: gray[950],
+              }}
+            >
+              {user.name}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                fontSize: '24px',
+                fontWeight: 400,
+                color: gray[500],
+              }}
+            >
+              나의 글쓰기 발자취
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '40px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              fontSize: '24px',
+              fontWeight: 400,
+              color: gray[500],
+            }}
+          >
+            누적 {totalCharacters.toLocaleString()}자
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontSize: '20px',
+              fontWeight: 400,
+              color: gray[500],
+            }}
+          >
+            <span>적음</span>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {[0, 1, 2, 3, 4, 5].map((level) => (
+                <div
+                  key={level}
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    backgroundColor: levelColors[level as Level],
+                    borderRadius: '4px',
+                  }}
+                />
+              ))}
+            </div>
+            <span>많음</span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            alignItems: 'center',
+          }}
+        >
+          {[0, 1, 2].map((rowIndex) => (
+            <div
+              key={rowIndex}
+              style={{
+                display: 'flex',
+                gap: '14px',
+              }}
+            >
+              {sortedMonths.slice(rowIndex * 4, (rowIndex + 1) * 4).map((month) => {
+                const firstDay = dayjs(month.key + '-01');
+                const firstDayOfWeek = firstDay.day();
+                const daysInMonth = firstDay.daysInMonth();
+
+                const emptyCells = Array.from({ length: firstDayOfWeek }, () => null);
+
+                const activityMap = Object.fromEntries(month.activities.map((a) => [a.date.date(), a]));
+
+                return (
+                  <div
+                    key={month.key}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      width: '217px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: '20px',
+                        fontWeight: 700,
+                        color: gray[700],
+                        marginBottom: '4px',
+                      }}
+                    >
+                      {month.name}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '3px',
+                        width: '217px',
+                      }}
+                    >
+                      {emptyCells.map((_, i) => (
+                        <div
+                          key={`empty-${i}`}
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                          }}
+                        />
+                      ))}
+
+                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                        const activity = activityMap[day] || { level: 0 };
+                        return (
+                          <div
+                            key={day}
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              backgroundColor: levelColors[activity.level],
+                              borderRadius: '4px',
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: '20px',
+          fontSize: '28px',
+          fontWeight: 400,
+          color: gray[400],
+        }}
+      >
+        <span>TYPIE &mdash; 나만의 글쓰기 공간</span>
+        <span style={{ fontFamily: 'DeepMindSans' }}>https://typie.co</span>
+      </div>
+    </div>
+  );
+
+  const scale = 2;
+  const svg = await satori(node, {
+    width: 1000,
+    height: 1000,
+    fonts: [
+      { name: 'Paperlogy', data: fonts['Paperlogy-4Regular'], weight: 400 },
+      { name: 'Paperlogy', data: fonts['Paperlogy-7Bold'], weight: 700 },
+      { name: 'DeepMindSans', data: fonts['DeepMindSans-Regular'], weight: 400 },
+    ],
+    loadAdditionalAsset: async (code, segment) => {
+      const svg = await (async () => {
+        if (code === 'emoji') {
+          const codepoint = twemoji.convert.toCodePoint(segment);
+          try {
+            return await ky(`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codepoint}.svg`).text();
+          } catch {
+            try {
+              return await ky(`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codepoint.split('-')[0]}.svg`).text();
+            } catch {
+              return '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" />';
+            }
+          }
+        }
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" />';
+      })();
+
+      return 'data:image/svg+xml,' + encodeURIComponent(svg);
+    },
+  });
+
+  const img = await renderAsync(svg, {
+    font: { loadSystemFonts: false },
+    imageRendering: 0,
+    shapeRendering: 2,
+    textRendering: 1,
+    fitTo: {
+      mode: 'width',
+      value: 1000 * scale,
+    },
+  });
+
+  return img.asPng();
+}

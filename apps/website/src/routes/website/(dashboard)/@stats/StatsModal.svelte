@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { base64 } from 'rfc4648';
   import { graphql } from '$graphql';
-  import { Modal } from '$lib/components';
+  import { Button, Modal } from '$lib/components';
   import { getAppContext } from '$lib/context';
+  import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import ActivityGrid from './ActivityGrid.svelte';
@@ -13,6 +15,12 @@
 
         ...DashboardLayout_Stats_ActivityGrid_user
       }
+    }
+  `);
+
+  const generateActivityImage = graphql(`
+    mutation DashboardLayout_StatsModal_GenerateActivityImage {
+      generateActivityImage
     }
   `);
 
@@ -29,6 +37,14 @@
   $effect(() => {
     load();
   });
+
+  const copyActivityImage = async () => {
+    const b64 = await generateActivityImage();
+    const blob = new Blob([base64.parse(b64)], { type: 'image/png' });
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+    Toast.success('이미지가 클립보드에 복사되었어요.');
+  };
 </script>
 
 <Modal
@@ -51,6 +67,10 @@
       <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.faint' })}>지난 1년간의 기록</div>
 
       <ActivityGrid $user={$query.me} />
+
+      <div class={flex({ justifyContent: 'flex-end' })}>
+        <Button onclick={copyActivityImage}>이미지로 복사하기</Button>
+      </div>
     </div>
   {/if}
 </Modal>

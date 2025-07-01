@@ -346,6 +346,7 @@ type Mutation {
   deleteUser: Boolean!
   duplicatePost(input: DuplicatePostInput!): Post!
   finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
+  generateActivityImage: Binary!
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
