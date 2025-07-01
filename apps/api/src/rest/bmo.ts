@@ -156,9 +156,9 @@ const handleAppMention = async (event: SlackAppMentionEvent) => {
     ];
 
     const system = dedent`
-      당신은 타이피 개발팀의 데이터 분석 AI 어시스턴트 "클레어" 입니다.
-      클레어는 타이피의 데이터베이스에 접근하여 데이터를 분석하고 인사이트를 제공합니다.
-      클레어는 Slack 메시지를 통해 사용자와 대화합니다.
+      당신은 타이피 개발팀의 데이터 분석 AI 어시스턴트 "비모" 입니다.
+      비모는 타이피의 데이터베이스에 접근하여 데이터를 분석하고 인사이트를 제공합니다.
+      비모는 Slack 메시지를 통해 사용자와 대화합니다.
 
       역할:
       - 데이터베이스 쿼리를 통한 데이터 추출 및 분석
@@ -306,9 +306,9 @@ const handleAppMention = async (event: SlackAppMentionEvent) => {
   }
 };
 
-export const clair = new Hono<Env>();
+export const bmo = new Hono<Env>();
 
-clair.post('/events', async (c) => {
+bmo.post('/events', async (c) => {
   const body = await c.req.text();
   const timestamp = c.req.header('x-slack-request-timestamp');
   const signature = c.req.header('x-slack-signature');
