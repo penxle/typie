@@ -3,7 +3,7 @@ import * as Y from 'yjs';
 import { db, Entities, first, Folders, PostContents, Posts } from '@/db';
 import { EntityState, EntityVisibility } from '@/enums';
 import { schema } from '@/pm';
-import { generateRandomName, makeYDoc } from '@/utils';
+import { generateActivityImage, generateRandomName, makeYDoc } from '@/utils';
 import { builder } from '../builder';
 import { PostView } from '../objects';
 
@@ -106,6 +106,13 @@ builder.mutationFields((t) => ({
     type: 'String',
     resolve: () => {
       return generateRandomName();
+    },
+  }),
+
+  generateActivityImage: t.withAuth({ session: true }).field({
+    type: 'Binary',
+    resolve: async (_, __, ctx) => {
+      return await generateActivityImage(ctx.session.userId);
     },
   }),
 }));
