@@ -341,10 +341,17 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       - 모든 쿼리는 Asia/Seoul 타임존을 지정해 작성
       - 필요시 여러 쿼리를 연속 실행하여 심층 분석 가능
 
-      execute_sql_query 도구 사용 시 주의사항:
-      - description 파라미터는 반드시 구체적이고 의미 있는 설명으로 작성
-      - 쿼리가 조회하는 데이터, 사용하는 테이블, 조인 관계, 목적을 명확히 설명
-      - 좋은 예시:
+      execute_sql_query 도구 사용 시 필수 규칙:
+      - query 파라미터는 반드시 포함 (누락 시 오류 발생)
+      - description 파라미터도 반드시 구체적이고 의미 있는 설명으로 작성
+      - query: 실행할 SQL SELECT 쿼리를 정확히 작성
+      - description: 쿼리가 조회하는 데이터, 사용하는 테이블, 조인 관계, 목적을 명확히 설명
+      - 올바른 사용 예시:
+        {
+          "query": "SELECT COUNT(*) FROM users WHERE state = 'ACTIVE' AND created_at >= NOW() - INTERVAL '7 days'",
+          "description": "users 테이블에서 최근 7일간 신규 가입한 ACTIVE 상태 사용자 수 조회"
+        }
+      - description 좋은 예시:
         * "users 테이블에서 최근 7일간 신규 가입한 ACTIVE 상태 사용자 수 조회"
         * "subscriptions와 plans 테이블을 조인하여 이번 달 구독 매출 총액 계산"
         * "posts와 post_reactions 테이블을 조인하여 reaction 수 기준 상위 10개 인기 게시물 분석"
@@ -431,12 +438,23 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
 
             toolResult = await getDatabaseSchema();
           } else if (tool.name === 'execute_sql_query') {
-            const toolInput = tool.input as { query: string; description: string };
-            const truncatedQuery = toolInput.query.length > 1000 ? toolInput.query.slice(0, 1000) + '...' : toolInput.query;
-            statusMessage = `🔍 데이터베이스 조회 중: ${toolInput.description}\n\`\`\`\n${truncatedQuery}\n\`\`\``;
-            await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
+            const toolInput = tool.input as { query?: string; description?: string };
 
-            toolResult = await executeQuery(toolInput.query);
+            if (toolInput.query) {
+              const truncatedQuery = toolInput.query.length > 1000 ? toolInput.query.slice(0, 1000) + '...' : toolInput.query;
+              const description = toolInput.description || '설명 없음';
+              statusMessage = `🔍 데이터베이스 조회 중: ${description}\n\`\`\`\n${truncatedQuery}\n\`\`\``;
+              await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
+
+              toolResult = await executeQuery(toolInput.query);
+            } else {
+              toolResult = {
+                success: false,
+                error: 'query 파라미터가 누락되었습니다. SQL 쿼리를 반드시 포함해주세요.',
+              };
+              statusMessage = '❌ 쿼리 오류: query 파라미터가 누락되었습니다. 재시도 중...';
+              await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
+            }
           } else if (tool.name === 'get_current_time') {
             statusMessage = '⏰ 현재 시간 확인 중...';
             await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
