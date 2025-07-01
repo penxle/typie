@@ -342,15 +342,42 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       - 필요시 여러 쿼리를 연속 실행하여 심층 분석 가능
 
       execute_sql_query 도구 사용 시 필수 규칙:
-      - query 파라미터는 반드시 포함 (누락 시 오류 발생)
-      - description 파라미터도 반드시 구체적이고 의미 있는 설명으로 작성
+      - ⚠️ **query 파라미터는 반드시 포함해야 함** (누락 시 오류 발생)
+      - ⚠️ **description 파라미터도 반드시 구체적이고 의미 있는 설명으로 작성**
       - query: 실행할 SQL SELECT 쿼리를 정확히 작성
       - description: 쿼리가 조회하는 데이터, 사용하는 테이블, 조인 관계, 목적을 명확히 설명
-      - 올바른 사용 예시:
-        {
-          "query": "SELECT COUNT(*) FROM users WHERE state = 'ACTIVE' AND created_at >= NOW() - INTERVAL '7 days'",
-          "description": "users 테이블에서 최근 7일간 신규 가입한 ACTIVE 상태 사용자 수 조회"
-        }
+
+      올바른 사용 예시들 (반드시 query와 description 모두 포함):
+
+      예시 1 - 단순 조회:
+      {
+        "query": "SELECT COUNT(*) FROM users WHERE state = 'ACTIVE' AND created_at >= NOW() - INTERVAL '7 days'",
+        "description": "users 테이블에서 최근 7일간 신규 가입한 ACTIVE 상태 사용자 수 조회"
+      }
+
+      예시 2 - 조인 쿼리:
+      {
+        "query": "SELECT u.name, s.name as site_name, COUNT(e.id) as entity_count FROM users u JOIN sites s ON u.id = s.user_id JOIN entities e ON s.id = e.site_id WHERE u.state = 'ACTIVE' GROUP BY u.id, s.id ORDER BY entity_count DESC LIMIT 10",
+        "description": "users, sites, entities 테이블을 조인하여 엔티티를 가장 많이 생성한 상위 10명의 활성 사용자와 사이트 정보 조회"
+      }
+
+      예시 3 - 집계 함수 사용:
+      {
+        "query": "SELECT DATE_TRUNC('day', created_at) as date, COUNT(*) as post_count, COUNT(DISTINCT entity_id) as unique_entities FROM posts WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY DATE_TRUNC('day', created_at) ORDER BY date DESC",
+        "description": "posts 테이블에서 최근 30일간 일별 게시물 수와 고유 엔티티 수를 집계하여 시계열 분석"
+      }
+
+      예시 4 - 서브쿼리 사용:
+      {
+        "query": "SELECT p.title, p.created_at, (SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = p.id) as reaction_count, (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.state = 'ACTIVE') as comment_count FROM posts p JOIN entities e ON p.entity_id = e.id WHERE e.visibility = 'PUBLIC' ORDER BY reaction_count DESC, comment_count DESC LIMIT 20",
+        "description": "posts, entities 테이블 조인 및 서브쿼리로 post_reactions, comments 집계하여 공개 게시물 중 반응과 댓글이 많은 상위 20개 게시물 분석"
+      }
+
+      ❌ 잘못된 사용 (query 누락):
+      {
+        "description": "사용자 수 조회"
+      }
+      → 오류: query 파라미터가 누락되었습니다!
       - description 좋은 예시:
         * "users 테이블에서 최근 7일간 신규 가입한 ACTIVE 상태 사용자 수 조회"
         * "subscriptions와 plans 테이블을 조인하여 이번 달 구독 매출 총액 계산"
@@ -452,6 +479,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
                 success: false,
                 error: 'query 파라미터가 누락되었습니다. SQL 쿼리를 반드시 포함해주세요.',
               };
+
               statusMessage = '❌ 쿼리 오류: query 파라미터가 누락되었습니다. 재시도 중...';
               await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
             }
