@@ -50,6 +50,150 @@ const executeQuery = async (query: string) => {
   }
 };
 
+let schema: unknown | null = null;
+
+// spell-checker:disable
+const getSchemaQuery = `
+WITH table_info AS (
+  SELECT 
+    t.table_name,
+    obj_description(c.oid) as table_comment
+  FROM information_schema.tables t
+  LEFT JOIN pg_catalog.pg_class c ON c.relname = t.table_name AND c.relnamespace = (
+    SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = t.table_schema
+  )
+  WHERE t.table_schema = 'public' 
+    AND t.table_type = 'BASE TABLE'
+),
+column_info AS (
+  SELECT 
+    c.table_name,
+    c.column_name,
+    c.data_type,
+    c.is_nullable,
+    c.column_default,
+    c.ordinal_position,
+    col_description(pgc.oid, c.ordinal_position) as column_comment,
+    CASE 
+      WHEN fk.constraint_name IS NOT NULL THEN 
+        json_build_object(
+          'table', fk.foreign_table_name,
+          'column', fk.foreign_column_name
+        )
+      ELSE NULL
+    END as foreign_key
+  FROM information_schema.columns c
+  LEFT JOIN pg_catalog.pg_class pgc ON pgc.relname = c.table_name AND pgc.relnamespace = (
+    SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema
+  )
+  LEFT JOIN (
+    SELECT
+      kcu.table_name,
+      kcu.column_name,
+      ccu.table_name AS foreign_table_name,
+      ccu.column_name AS foreign_column_name,
+      tc.constraint_name
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+    JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+    WHERE tc.constraint_type = 'FOREIGN KEY'
+  ) fk ON fk.table_name = c.table_name AND fk.column_name = c.column_name
+  WHERE c.table_schema = 'public'
+),
+index_info AS (
+  SELECT 
+    tablename as table_name,
+    indexname,
+    indexdef
+  FROM pg_indexes
+  WHERE schemaname = 'public'
+),
+enum_info AS (
+  SELECT 
+    t.typname as enum_name,
+    array_agg(e.enumlabel ORDER BY e.enumsortorder) as enum_values
+  FROM pg_type t
+  JOIN pg_enum e ON t.oid = e.enumtypid
+  JOIN pg_namespace n ON n.oid = t.typnamespace
+  WHERE n.nspname = 'public'
+    AND t.typtype = 'e'
+  GROUP BY t.typname
+)
+SELECT json_build_object(
+  'tables', (
+    SELECT json_agg(
+      json_build_object(
+        'table_name', t.table_name,
+        'table_comment', t.table_comment,
+        'columns', (
+          SELECT json_agg(
+            json_build_object(
+              'column_name', c.column_name,
+              'data_type', c.data_type,
+              'is_nullable', c.is_nullable = 'YES',
+              'column_default', c.column_default,
+              'column_comment', c.column_comment,
+              'foreign_key', c.foreign_key
+            ) ORDER BY c.ordinal_position
+          )
+          FROM column_info c
+          WHERE c.table_name = t.table_name
+        ),
+        'indexes', (
+          SELECT json_agg(
+            json_build_object(
+              'index_name', i.indexname,
+              'index_def', i.indexdef
+            )
+          )
+          FROM index_info i
+          WHERE i.table_name = t.table_name
+        )
+      ) ORDER BY t.table_name
+    )
+    FROM table_info t
+  ),
+  'enums', (
+    SELECT json_agg(
+      json_build_object(
+        'enum_name', e.enum_name,
+        'enum_values', e.enum_values
+      ) ORDER BY e.enum_name
+    )
+    FROM enum_info e
+  )
+) as schema;
+`;
+// spell-checker:enable
+
+const getDatabaseSchema = async () => {
+  try {
+    if (schema) {
+      return {
+        success: true,
+        data: schema,
+      };
+    }
+
+    const result = await sql.begin('read only', async (sql) => {
+      const [row] = await sql.unsafe(getSchemaQuery);
+      return row?.schema || { tables: [], enums: [] };
+    });
+
+    schema = result;
+
+    return {
+      success: true,
+      data: result,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+};
+
 const SLACK_UPDATE_INTERVAL = 1000;
 const MIN_UPDATE_CHARS = 50;
 
@@ -137,6 +281,16 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
 
     const tools: Anthropic.Tool[] = [
       {
+        name: 'get_database_schema',
+        description:
+          '데이터베이스 스키마 정보를 가져옵니다. 테이블 구조, 컬럼 정보, 데이터 타입, 외래키 관계, 인덱스, 커스텀 ENUM 타입 등을 포함합니다. SQL 쿼리 작성 전에 먼저 이 도구를 사용하세요.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+          required: [],
+        },
+      },
+      {
         name: 'execute_sql_query',
         description:
           'PostgreSQL 데이터베이스에서 읽기 전용 트랜잭션으로 쿼리를 실행합니다. SELECT, WITH, SHOW, EXPLAIN 등 읽기 작업만 가능합니다.',
@@ -179,12 +333,23 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       - 데이터 기반 의사결정 지원
 
       데이터베이스 접근:
+      - 먼저 get_database_schema 도구로 스키마 정보를 확인
       - execute_sql_query 도구를 사용하여 PostgreSQL 데이터베이스 쿼리 실행
       - 읽기 전용 트랜잭션으로 안전하게 실행 (INSERT, UPDATE, DELETE 불가)
       - 실시간 데이터 조회 및 분석 가능
-      - DB 스키마를 직접 분석해 필요한 테이블과 컬럼을 찾아 쿼리 작성 
+      - 스키마 정보를 기반으로 정확한 테이블과 컬럼명을 사용해 쿼리 작성
       - 모든 쿼리는 Asia/Seoul 타임존을 지정해 작성
       - 필요시 여러 쿼리를 연속 실행하여 심층 분석 가능
+
+      execute_sql_query 도구 사용 시 주의사항:
+      - description 파라미터는 반드시 구체적이고 의미 있는 설명으로 작성
+      - 쿼리가 조회하는 데이터, 사용하는 테이블, 조인 관계, 목적을 명확히 설명
+      - 좋은 예시:
+        * "users 테이블에서 최근 7일간 신규 가입한 ACTIVE 상태 사용자 수 조회"
+        * "subscriptions와 plans 테이블을 조인하여 이번 달 구독 매출 총액 계산"
+        * "posts와 post_reactions 테이블을 조인하여 reaction 수 기준 상위 10개 인기 게시물 분석"
+        * "entities와 posts를 조인하고 post_contents와 연결하여 특정 사이트의 공개 게시물 목록 조회"
+        * "users, sites, entities를 차례로 조인하여 특정 유저가 작성한 모든 엔티티 개수 집계"
 
       시간 정보:
       - get_current_time 도구로 현재 한국 시간 확인 가능
@@ -260,9 +425,15 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
           let toolResult: unknown;
           let statusMessage = '';
 
-          if (tool.name === 'execute_sql_query') {
+          if (tool.name === 'get_database_schema') {
+            statusMessage = '📊 데이터베이스 스키마 확인 중...';
+            await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
+
+            toolResult = await getDatabaseSchema();
+          } else if (tool.name === 'execute_sql_query') {
             const toolInput = tool.input as { query: string; description: string };
-            statusMessage = `🔍 데이터베이스 조회 중: ${toolInput.description}`;
+            const truncatedQuery = toolInput.query.length > 1000 ? toolInput.query.slice(0, 1000) + '...' : toolInput.query;
+            statusMessage = `🔍 데이터베이스 조회 중: ${toolInput.description}\n\`\`\`\n${truncatedQuery}\n\`\`\``;
             await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
 
             toolResult = await executeQuery(toolInput.query);
