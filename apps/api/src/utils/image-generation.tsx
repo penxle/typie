@@ -103,7 +103,7 @@ export async function generateActivityImage(userId: string): Promise<Buffer> {
       createdAt: Users.createdAt,
     })
     .from(Users)
-    .leftJoin(Images, eq(Images.id, Users.avatarId))
+    .innerJoin(Images, eq(Images.id, Users.avatarId))
     .where(eq(Users.id, userId))
     .then(first);
 
@@ -190,6 +190,9 @@ export async function generateActivityImage(userId: string): Promise<Buffer> {
       activities: activitiesByMonth[monthKey],
     }));
 
+  const avatarBuffer = await ky(`https://typie.net/images/${user.avatarPath}?s=256&f=png`).arrayBuffer();
+  const avatarBase64 = Buffer.from(avatarBuffer).toString('base64');
+
   const node = (
     <div
       style={{
@@ -230,7 +233,7 @@ export async function generateActivityImage(userId: string): Promise<Buffer> {
               backgroundColor: gray[100],
             }}
           >
-            <img src={`https://typie.net/images/${user.avatarPath}?s=256&f=png`} width={80} height={80} style={{ objectFit: 'cover' }} />
+            <img src={`data:image/png;base64,${avatarBase64}`} width={80} height={80} style={{ objectFit: 'cover' }} />
           </div>
 
           <div
