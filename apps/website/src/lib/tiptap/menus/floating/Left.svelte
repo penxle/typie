@@ -12,7 +12,7 @@
     pos: number;
   };
 
-  let { editor = $bindable(), pos }: Props = $props();
+  let { editor, pos }: Props = $props();
 
   const handlePlusClick = () => {
     const node = editor.state.doc.nodeAt(pos);
