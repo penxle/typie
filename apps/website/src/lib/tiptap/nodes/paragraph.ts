@@ -185,7 +185,8 @@ export const Paragraph = Node.create({
 
           const textNode = getTextNodeToCopyMarks(this.type, $anchor);
           if (textNode) {
-            tr.ensureMarks(textNode.marks);
+            const marks = textNode.marks.filter((mark) => mark.type.spec.inclusive !== false);
+            tr.ensureMarks(marks);
             return tr;
           }
         },
