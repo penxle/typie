@@ -222,6 +222,7 @@ builder.mutationFields((t) => ({
     input: {
       folderId: t.input.id({ validate: validateDbId(TableCode.FOLDERS) }),
       visibility: t.input.field({ type: EntityVisibility }),
+      recursive: t.input.boolean({ required: false, defaultValue: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const { folder, siteId } = await db
@@ -236,12 +237,29 @@ builder.mutationFields((t) => ({
         siteId,
       });
 
-      await db
-        .update(Entities)
-        .set({ visibility: input.visibility })
-        .where(eq(Entities.id, folder.entityId))
-        .returning()
-        .then(firstOrThrow);
+      await db.transaction(async (tx) => {
+        await tx.update(Entities).set({ visibility: input.visibility }).where(eq(Entities.id, folder.entityId));
+
+        if (input.recursive) {
+          const descendantEntityIds = await tx
+            .execute<{ id: string }>(
+              sql`
+                WITH RECURSIVE sq AS (
+                  SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
+                  UNION ALL
+                  SELECT ${Entities.id} FROM ${Entities}
+                  JOIN sq ON ${Entities.parentId} = sq.id
+                )
+                SELECT id FROM sq;
+              `,
+            )
+            .then((rows) => rows.map(({ id }) => id));
+
+          if (descendantEntityIds.length > 0) {
+            await tx.update(Entities).set({ visibility: input.visibility }).where(inArray(Entities.id, descendantEntityIds));
+          }
+        }
+      });
 
       return folder;
     },

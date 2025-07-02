@@ -795,6 +795,7 @@ input UpdateEmailInput {
 
 input UpdateFolderOptionInput {
   folderId: ID!
+  recursive: Boolean = false
   visibility: EntityVisibility!
 }
 
