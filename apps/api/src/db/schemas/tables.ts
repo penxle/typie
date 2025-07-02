@@ -270,6 +270,24 @@ export const Posts = pgTable(
   (t) => [index().on(t.entityId), index().on(t.createdAt), index().on(t.updatedAt)],
 );
 
+export const PostAnchors = pgTable(
+  'post_anchors',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_ANCHORS)),
+    postId: text('post_id')
+      .notNull()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    nodeId: text('node_id').notNull(),
+    name: text('name'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.postId, t.nodeId)],
+);
+
 export const PostCharacterCountChanges = pgTable(
   'post_character_count_changes',
   {

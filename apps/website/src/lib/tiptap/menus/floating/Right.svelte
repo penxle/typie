@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { fade } from 'svelte/transition';
   import BookmarkIcon from '~icons/lucide/bookmark';
   import BookmarkFilledIcon from '~icons/typie/bookmark-filled';
@@ -23,10 +24,14 @@
 
     if (editor.storage.anchors.current[node.attrs.nodeId] === undefined) {
       editor.storage.anchors.current = { ...editor.storage.anchors.current, [node.attrs.nodeId]: null };
+
+      mixpanel.track('anchor_remove');
     } else {
       editor.storage.anchors.current = Object.fromEntries(
         Object.entries(editor.storage.anchors.current).filter(([key]) => key !== node.attrs.nodeId),
       );
+
+      mixpanel.track('anchor_add');
     }
   };
 </script>
