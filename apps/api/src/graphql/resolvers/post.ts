@@ -671,7 +671,9 @@ builder.mutationFields((t) => ({
           note: post.content.note,
         });
 
-        await tx.insert(PostAnchors).values(anchors.map((anchor) => ({ postId: newPost.id, nodeId: anchor.nodeId, name: anchor.name })));
+        if (anchors.length > 0) {
+          await tx.insert(PostAnchors).values(anchors.map((anchor) => ({ postId: newPost.id, nodeId: anchor.nodeId, name: anchor.name })));
+        }
 
         const postSnapshot = await tx
           .insert(PostSnapshots)
