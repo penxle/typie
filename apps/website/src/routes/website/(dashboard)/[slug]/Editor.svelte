@@ -37,6 +37,7 @@
   import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import Anchor from './Anchor.svelte';
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
   import PanelNote from './PanelNote.svelte';
@@ -190,6 +191,7 @@
   let lastHeartbeatAt = $state(dayjs());
 
   let showTimeline = $state(false);
+  let showAnchorOutline = $state(false);
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -236,11 +238,11 @@
         nodeId,
         element,
         position,
-        title:
+        name:
           anchors.current[nodeId] ||
           (element.textContent
-            ? element.textContent.length > 50
-              ? element.textContent.slice(0, 50) + '...'
+            ? element.textContent.length > 20
+              ? element.textContent.slice(0, 20) + '...'
               : element.textContent
             : '(앵커)'),
       };
@@ -623,7 +625,20 @@
 
     <Toolbar $site={$query.post.entity.site} {doc} {editor} />
 
-    <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
+    <div
+      class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}
+      onmouseleave={() => {
+        showAnchorOutline = false;
+      }}
+      onmousemove={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const width = rect.width;
+
+        showAnchorOutline = mouseX > width - 50;
+      }}
+      role="none"
+    >
       <div class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}>
         <div
           style:--prosemirror-max-width={`${maxWidth.current}px`}
@@ -771,41 +786,7 @@
       </div>
 
       {#each anchorPositions as anchor (anchor.nodeId)}
-        <button
-          style:top={`${anchor.position * 100}%`}
-          class={css({
-            position: 'absolute',
-            right: '8px',
-            width: '16px',
-            height: '2px',
-            borderRadius: 'full',
-            backgroundColor: { base: 'gray.300', _dark: 'dark.gray.600' },
-            zIndex: '10',
-            translate: 'auto',
-            translateY: '-1/2',
-            transition: 'all',
-            _hover: { height: '4px' },
-          })}
-          aria-label={anchor.title}
-          onclick={() => {
-            const editorEl = document.querySelector('.editor');
-            if (!editor || !editorEl || !anchor.element) return;
-
-            editorEl.scrollTo({
-              top: anchor.element.offsetTop,
-              behavior: 'smooth',
-            });
-
-            const pos = editor.current.view.posAtDOM(anchor.element, 0);
-            editor.current
-              .chain()
-              .setNodeSelection(pos - 1)
-              .focus(undefined, { scrollIntoView: false })
-              .run();
-          }}
-          type="button"
-          use:tooltip={{ message: anchor.title, placement: 'left', offset: 8 }}
-        ></button>
+        <Anchor name={anchor.name} {editor} element={anchor.element} outline={showAnchorOutline} position={anchor.position} />
       {/each}
 
       {#if app.preference.current.noteExpanded}

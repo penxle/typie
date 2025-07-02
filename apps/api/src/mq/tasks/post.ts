@@ -6,7 +6,17 @@ import { base64 } from 'rfc4648';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis, redlock } from '@/cache';
-import { db, Entities, firstOrThrow, PostCharacterCountChanges, PostContents, Posts, PostSnapshotContributors, PostSnapshots } from '@/db';
+import {
+  db,
+  Entities,
+  firstOrThrow,
+  PostAnchors,
+  PostCharacterCountChanges,
+  PostContents,
+  Posts,
+  PostSnapshotContributors,
+  PostSnapshots,
+} from '@/db';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
@@ -145,6 +155,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
         const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
         const note = (map.get('note') as string) || '';
         const storedMarks = (map.get('storedMarks') as unknown[]) ?? [];
+        const anchors = (map.get('anchors') as Record<string, string | null>) ?? {};
 
         const fragment = doc.getXmlFragment('body');
         const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
@@ -179,6 +190,18 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
             updatedAt,
           })
           .where(eq(PostContents.postId, postId));
+
+        await tx.delete(PostAnchors).where(and(eq(PostAnchors.postId, postId), notInArray(PostAnchors.nodeId, Object.keys(anchors))));
+
+        for (const [nodeId, name] of Object.entries(anchors)) {
+          await tx
+            .insert(PostAnchors)
+            .values({ postId, nodeId, name })
+            .onConflictDoUpdate({
+              target: [PostAnchors.postId, PostAnchors.nodeId],
+              set: { name },
+            });
+        }
       }
 
       signal.throwIfAborted();
