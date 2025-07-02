@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
+import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
@@ -8,6 +9,7 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/env.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
@@ -295,6 +297,46 @@ class ShareFolderBottomSheet extends HookWidget {
                       ],
                     ),
                   ),
+                  Tappable(
+                    onTap: () async {
+                      final visibility = form.data['visibility'] as GEntityVisibility;
+
+                      await client.request(
+                        GShareFolder_UpdateFolderOption_MutationReq(
+                          (b) => b
+                            ..vars.input.folderId =
+                                (data.entity.node as GShareFolder_QueryData_entity_node__asFolder).id
+                            ..vars.input.visibility = visibility
+                            ..vars.input.recursive = true,
+                        ),
+                      );
+
+                      unawaited(
+                        mixpanel.track(
+                          'update_folder_option',
+                          properties: {'visibility': visibility.name, 'recursive': true},
+                        ),
+                      );
+
+                      if (context.mounted) {
+                        context.toast(ToastType.success, '하위 폴더 및 포스트에도 동일한 설정이 적용되었어요');
+                        await context.router.maybePop();
+                      }
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: context.colors.borderStrong),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const Pad(vertical: 16),
+                      child: const Text(
+                        '하위 요소에 동일한 설정 적용하기',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  const Gap(4),
                   Builder(
                     builder: (context) => Tappable(
                       onTap: () async {

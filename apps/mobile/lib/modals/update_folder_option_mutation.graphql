@@ -5,6 +5,11 @@ mutation ShareFolder_UpdateFolderOption_Mutation($input: UpdateFolderOptionInput
     entity {
       id
       visibility
+
+      children {
+        id
+        visibility
+      }
     }
   }
 }
