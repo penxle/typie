@@ -14,6 +14,7 @@ import {
   first,
   firstOrThrow,
   firstOrThrowWith,
+  PostAnchors,
   PostCharacterCountChanges,
   PostContents,
   PostReactions,
@@ -608,6 +609,11 @@ builder.mutationFields((t) => ({
         .where(eq(Posts.id, input.postId))
         .then(firstOrThrow);
 
+      const anchors = await db
+        .select({ nodeId: PostAnchors.nodeId, name: PostAnchors.name })
+        .from(PostAnchors)
+        .where(eq(PostAnchors.postId, input.postId));
+
       const title = `(사본) ${post.title ?? '(제목 없음)'}`;
 
       const doc = makeYDoc({
@@ -617,6 +623,7 @@ builder.mutationFields((t) => ({
         maxWidth: post.maxWidth,
         storedMarks: post.content.storedMarks,
         note: post.content.note,
+        anchors: Object.fromEntries(anchors.map((anchor) => [anchor.nodeId, anchor.name])),
       });
 
       const snapshot = Y.snapshot(doc);
@@ -663,6 +670,8 @@ builder.mutationFields((t) => ({
           blobSize: post.content.blobSize,
           note: post.content.note,
         });
+
+        await tx.insert(PostAnchors).values(anchors.map((anchor) => ({ postId: newPost.id, nodeId: anchor.nodeId, name: anchor.name })));
 
         const postSnapshot = await tx
           .insert(PostSnapshots)
