@@ -4,12 +4,14 @@
   import { EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
+  import Layers2Icon from '~icons/lucide/layers-2';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
   import { fragment, graphql } from '$graphql';
   import { tooltip } from '$lib/actions';
-  import { HorizontalDivider, Icon, Select } from '$lib/components';
+  import { Button, HorizontalDivider, Icon, Select } from '$lib/components';
   import { createForm } from '$lib/form';
+  import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_Share_Folder_folder } from '$graphql';
@@ -44,6 +46,21 @@
         entity {
           id
           visibility
+
+          children {
+            id
+            visibility
+
+            children {
+              id
+              visibility
+
+              children {
+                id
+                visibility
+              }
+            }
+          }
         }
       }
     }
@@ -146,5 +163,22 @@
         bind:value={form.fields.visibility}
       />
     </div>
+
+    <HorizontalDivider />
+
+    <Button
+      style={css.raw({ marginLeft: 'auto', height: '26px', gap: '4px', fontSize: '12px' })}
+      onclick={async () => {
+        await updateFolderOption({ folderId: $folder.id, visibility: form.fields.visibility, recursive: true });
+
+        mixpanel.track('update_folder_option', { visibility: form.fields.visibility, recursive: true });
+        Toast.success('하위 폴더 및 포스트에도 동일한 설정이 적용되었어요');
+      }}
+      size="sm"
+      variant="secondary"
+    >
+      <Icon icon={Layers2Icon} size={14} />
+      하위 요소에 동일한 설정 적용하기
+    </Button>
   </div>
 </div>
