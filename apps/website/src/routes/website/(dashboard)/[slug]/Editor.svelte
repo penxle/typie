@@ -198,8 +198,54 @@
   const subtitle = new YState<string>(doc, 'subtitle', '');
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
+  const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
+
+  const anchorElements = $derived.by(() => {
+    if (!editor) {
+      return {};
+    }
+
+    const elements: Record<string, HTMLElement> = {};
+
+    for (const nodeId of Object.keys(anchors.current)) {
+      const element = document.querySelector(`[data-node-id="${nodeId}"]`);
+      if (element) {
+        elements[nodeId] = element as HTMLElement;
+      }
+    }
+
+    return elements;
+  });
+
+  const anchorPositions = $derived.by(() => {
+    if (!editor || Object.keys(anchorElements).length === 0) return [];
+
+    const editorEl = document.querySelector('.editor');
+    if (!editorEl) return [];
+
+    const totalHeight = editorEl.scrollHeight;
+    if (totalHeight === 0) return [];
+
+    return Object.entries(anchorElements).map(([nodeId, element]) => {
+      const offsetTop = element.offsetTop;
+      const position = Math.min(1, Math.max(0, offsetTop / totalHeight));
+
+      return {
+        nodeId,
+        element,
+        position,
+        title:
+          anchors.current[nodeId] ||
+          (element.textContent
+            ? element.textContent.length > 50
+              ? element.textContent.slice(0, 50) + '...'
+              : element.textContent
+            : '(앵커)'),
+      };
+    });
+  });
 
   const fontFaces = $derived(
     $query.post.entity.site.fonts
@@ -300,6 +346,8 @@
     });
 
     if (editor) {
+      editor.current.storage.anchors = anchors;
+
       const { tr, schema } = editor.current.state;
       tr.setSelection(TextSelection.create(tr.doc, 2));
       tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
@@ -575,7 +623,7 @@
 
     <Toolbar $site={$query.post.entity.site} {doc} {editor} />
 
-    <div class={flex({ flexGrow: '1', overflowY: 'hidden' })}>
+    <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
       <div class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}>
         <div
           style:--prosemirror-max-width={`${maxWidth.current}px`}
@@ -721,6 +769,44 @@
           </div>
         {/if}
       </div>
+
+      {#each anchorPositions as anchor (anchor.nodeId)}
+        <button
+          style:top={`${anchor.position * 100}%`}
+          class={css({
+            position: 'absolute',
+            right: '8px',
+            width: '16px',
+            height: '2px',
+            borderRadius: 'full',
+            backgroundColor: { base: 'gray.300', _dark: 'dark.gray.600' },
+            zIndex: '10',
+            translate: 'auto',
+            translateY: '-1/2',
+            transition: 'all',
+            _hover: { height: '4px' },
+          })}
+          aria-label={anchor.title}
+          onclick={() => {
+            const editorEl = document.querySelector('.editor');
+            if (!editor || !editorEl || !anchor.element) return;
+
+            editorEl.scrollTo({
+              top: anchor.element.offsetTop,
+              behavior: 'smooth',
+            });
+
+            const pos = editor.current.view.posAtDOM(anchor.element, 0);
+            editor.current
+              .chain()
+              .setNodeSelection(pos - 1)
+              .focus(undefined, { scrollIntoView: false })
+              .run();
+          }}
+          type="button"
+          use:tooltip={{ message: anchor.title, placement: 'left', offset: 8 }}
+        ></button>
+      {/each}
 
       {#if app.preference.current.noteExpanded}
         <div
