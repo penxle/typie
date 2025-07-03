@@ -37,7 +37,7 @@
 
   const change = $derived(calculateChange(data, type));
   const changeValue = $derived(formatChange(change));
-  const changeColor = $derived(change === 0 ? 'gray.500' : change > 0 ? 'green.600' : 'red.600');
+  const changeStyle = $derived(css({ color: change === 0 ? 'gray.500' : change > 0 ? 'green.600' : 'red.600' }));
 </script>
 
 <div
@@ -86,8 +86,6 @@
   </p>
   <p class={css({ fontSize: '13px', color: 'gray.600', display: 'flex', alignItems: 'center', gap: '4px' })}>
     <span class={css({ color: 'gray.500' })}>이전 기간 대비</span>
-    <span class={css({ color: changeColor })}>
-      {changeValue}
-    </span>
+    <span class={changeStyle}>{changeValue}</span>
   </p>
 </div>
