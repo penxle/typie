@@ -47,6 +47,5 @@ const createRepository = (name: string) => {
   return new Repository(name, { name });
 };
 
-createRepository('typie');
 createRepository('api');
 createRepository('website');
