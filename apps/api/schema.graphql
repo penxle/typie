@@ -80,10 +80,6 @@ input CreatePostReactionInput {
   postId: ID!
 }
 
-input CreatePreorderPaymentInput {
-  email: String!
-}
-
 type CreditCode {
   amount: Int!
   code: String!
@@ -189,12 +185,6 @@ type File implements Blob {
   name: String!
   size: Int!
   url: String!
-}
-
-input FinalizePreorderPaymentInput {
-  email: String!
-  paymentId: String!
-  wish: String!
 }
 
 type Folder implements IFolder {
@@ -338,14 +328,12 @@ type Mutation {
   createFolder(input: CreateFolderInput!): Folder!
   createPost(input: CreatePostInput!): Post!
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
-  createPreorderPayment(input: CreatePreorderPaymentInput!): PreorderPayment!
   createWsSession: String!
   deleteComment(input: DeleteCommentInput!): Comment!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deletePost(input: DeletePostInput!): Post!
   deleteUser: Boolean!
   duplicatePost(input: DuplicatePostInput!): Post!
-  finalizePreorderPayment(input: FinalizePreorderPaymentInput!): PreorderUser!
   generateActivityImage: Binary!
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
@@ -580,19 +568,10 @@ enum PostViewBodyUnavailableReason {
   REQUIRE_PASSWORD
 }
 
-type PreorderPayment {
-  id: ID!
-}
-
 enum PreorderPaymentState {
   COMPLETED
   FAILED
   PENDING
-}
-
-type PreorderUser {
-  email: String!
-  id: ID!
 }
 
 type Query {
