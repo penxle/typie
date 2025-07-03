@@ -683,7 +683,7 @@ class _EditorInfoBottomSheet extends HookWidget {
             children: [
               Text('입력한 글자', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               Text(
-                '${post.characterCountChange.additions}자',
+                '${post.characterCountChange.additions.comma}자',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
@@ -693,7 +693,7 @@ class _EditorInfoBottomSheet extends HookWidget {
             children: [
               Text('지운 글자', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               Text(
-                '${post.characterCountChange.deletions}자',
+                '${post.characterCountChange.deletions.comma}자',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
               ),
             ],
