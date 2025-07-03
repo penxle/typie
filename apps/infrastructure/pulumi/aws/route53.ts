@@ -42,24 +42,6 @@ new aws.route53.Record('help.typie.co', {
   ttl: 300,
 });
 
-new aws.route53.Record('k2._domainkey.typie.co', {
-  zoneId: zones.typie_co.zoneId,
-  type: 'CNAME',
-  name: 'k2._domainkey.typie.co',
-  // spell-checker:disable-next-line
-  records: ['dkim2.mcsv.net'],
-  ttl: 300,
-});
-
-new aws.route53.Record('k3._domainkey.typie.co', {
-  zoneId: zones.typie_co.zoneId,
-  type: 'CNAME',
-  name: 'k3._domainkey.typie.co',
-  // spell-checker:disable-next-line
-  records: ['dkim3.mcsv.net'],
-  ttl: 300,
-});
-
 export const outputs = {
   AWS_ROUTE53_TYPIE_CO_ZONE_ID: zones.typie_co.zoneId,
   AWS_ROUTE53_TYPIE_DEV_ZONE_ID: zones.typie_dev.zoneId,
