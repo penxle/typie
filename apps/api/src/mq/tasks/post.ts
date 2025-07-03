@@ -357,8 +357,9 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
       );
 
       const newDoc = new Y.Doc({ gc: false });
+      let index = 0;
 
-      for (const [index, snapshot] of retainedSnapshots.entries()) {
+      for (const snapshot of retainedSnapshots) {
         signal.throwIfAborted();
 
         const { snapshot: snapshotData } = await tx
@@ -367,7 +368,12 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
           .returning({ snapshot: PostSnapshots.snapshot })
           .then(firstOrThrow);
 
-        const snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(snapshotData));
+        let snapshotDoc;
+        try {
+          snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(snapshotData));
+        } catch {
+          continue;
+        }
 
         if (index === 0) {
           Y.applyUpdateV2(newDoc, Y.encodeStateAsUpdateV2(snapshotDoc));
@@ -404,6 +410,8 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
             })),
           );
         }
+
+        index++;
       }
 
       signal.throwIfAborted();
