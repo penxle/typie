@@ -11,7 +11,6 @@ import './resolvers/notification';
 import './resolvers/stats';
 import './resolvers/payment';
 import './resolvers/post';
-import './resolvers/preorder';
 import './resolvers/search';
 import './resolvers/site';
 import './resolvers/unfurl';
