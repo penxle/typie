@@ -4,12 +4,19 @@ LICENSE
 pnpm-lock.yaml
 docs/*
 !docs/*.md
+*.dart
 *.rs
 
 apps/api/drizzle/*
-apps/mobile/*
-!apps/mobile/package.json
-!apps/mobile/**/*.js
+apps/mobile/android/*
+apps/mobile/ios/*
 
+**/build/**
 **/vendor/**
 Dockerfile
+
+**/.dart_tool/**
+**/.flutter-plugins/**
+**/.flutter-plugins-dependencies/**
+**/.pub-cache/**
+**/.pub/**
