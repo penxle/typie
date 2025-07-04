@@ -8,7 +8,7 @@ import 'package:ferry/ferry_isolate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gql_dio_link/gql_dio_link.dart';
 import 'package:gql_error_link/gql_error_link.dart';
-import 'package:gql_exec/gql_exec.dart';
+import 'package:gql_exec/gql_exec.dart' hide GraphQLError;
 import 'package:injectable/injectable.dart';
 import 'package:sentry/sentry_io.dart';
 import 'package:typie/env.dart';
@@ -80,7 +80,7 @@ class GraphQLClient {
 
     if (resp.graphqlErrors?.isNotEmpty ?? false) {
       final error = resp.graphqlErrors![0];
-      throw OperationError.graphql(error);
+      throw OperationError.graphql(GraphQLError(error));
     }
 
     return resp.data as TData;
