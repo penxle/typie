@@ -131,6 +131,17 @@ Site.implement({
         };
       },
     }),
+
+    deletedPosts: t.field({
+      type: [Post],
+      resolve: async (self) => {
+        return await db
+          .select(getTableColumns(Posts))
+          .from(Posts)
+          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+          .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.DELETED)));
+      },
+    }),
   }),
 });
 
