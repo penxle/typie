@@ -370,8 +370,6 @@
         editor?.current.chain().focus().setCodeBlock().run();
       } else if (name === 'html_block') {
         editor?.current.chain().focus().setHtmlBlock().run();
-      } else if (name === 'hard_break') {
-        editor?.current.chain().focus().setHardBreak().run();
       } else if (name === 'undo') {
         editor?.current.chain().focus().undo().run();
       } else if (name === 'redo') {
