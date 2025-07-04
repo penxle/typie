@@ -3,7 +3,7 @@ query ShareFolder_Query($entityId: ID!) {
     id
     visibility
     permalink
-    
+
     node {
       ... on Folder {
         id

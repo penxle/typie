@@ -4,7 +4,7 @@ analyzer:
     - custom_lint
   errors:
     invalid_annotation_target: ignore
-  exclude: 
+  exclude:
     - '**/__generated__/**'
 linter:
   rules:
