@@ -398,6 +398,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       let responseText = '';
       let hasToolUse = false;
       const toolsToExecute: { id: string; name: string; input: unknown }[] = [];
+      const toolInputMap = new Map<string, string>();
 
       const stream = anthropic.messages.stream({
         model: 'claude-opus-4-20250514',
@@ -418,17 +419,28 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
               name: chunk.content_block.name,
               input: {},
             });
+            toolInputMap.set(chunk.content_block.id, '');
           }
         } else if (chunk.type === 'content_block_delta') {
           if (chunk.delta.type === 'text_delta') {
             responseText += chunk.delta.text;
             scheduleUpdate(responseText);
+          } else if (chunk.delta.type === 'input_json_delta') {
+            const toolId = toolsToExecute[chunk.index]?.id;
+            if (toolId) {
+              const currentJson = toolInputMap.get(toolId) || '';
+              toolInputMap.set(toolId, currentJson + chunk.delta.partial_json);
+            }
           }
-        } else if (chunk.type === 'content_block_stop' && chunk.index < toolsToExecute.length) {
-          const finalMessage = await stream.finalMessage();
-          const toolBlock = finalMessage.content[chunk.index];
-          if (toolBlock.type === 'tool_use') {
-            toolsToExecute[chunk.index].input = toolBlock.input;
+        }
+      }
+
+      const finalMessage = await stream.finalMessage();
+      for (const content of finalMessage.content) {
+        if (content.type === 'tool_use') {
+          const toolIndex = toolsToExecute.findIndex((t) => t.id === content.id);
+          if (toolIndex !== -1) {
+            toolsToExecute[toolIndex].input = content.input;
           }
         }
       }
