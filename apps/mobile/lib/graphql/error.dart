@@ -6,12 +6,11 @@ part 'error.freezed.dart';
 @freezed
 sealed class OperationError with _$OperationError implements Exception {
   const factory OperationError.exception(Object exception) = ExceptionError;
-  factory OperationError.graphql(gql.GraphQLError error) = GraphQLError;
+  const factory OperationError.graphql(GraphQLError error) = GraphQLOperationError;
 }
 
 @freezed
-// ignore: avoid_implementing_value_types freezed
-sealed class GraphQLError with _$GraphQLError implements OperationError {
+sealed class GraphQLError with _$GraphQLError {
   factory GraphQLError(gql.GraphQLError error) {
     return switch (error.extensions?['type']) {
       'UnexpectedError' => GraphQLError.unexpected(
@@ -20,12 +19,12 @@ sealed class GraphQLError with _$GraphQLError implements OperationError {
         originalError: error.extensions?['originalError'],
       ),
       'TypieError' => GraphQLError.typie(code: error.extensions?['code'] as String, message: error.message),
-      _ => GraphQLError._(error),
+      _ => GraphQLError.generic(error: error),
     };
   }
 
+  const factory GraphQLError.generic({required gql.GraphQLError error}) = GenericGraphQLError;
   const factory GraphQLError.unexpected({required String message, String? eventId, dynamic originalError}) =
       UnexpectedError;
   const factory GraphQLError.typie({required String code, String? message}) = TypieError;
-  const factory GraphQLError._(gql.GraphQLError error) = _GraphQLError;
 }

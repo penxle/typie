@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:jiffy/jiffy.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:naver_login_sdk/naver_login_sdk.dart';
@@ -23,6 +24,8 @@ Future<void> configureStaticServices() async {
   );
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  await GoogleSignIn.instance.initialize(clientId: Env.googleClientId, serverClientId: Env.googleServerClientId);
 
   KakaoSdk.init(nativeAppKey: Env.kakaoNativeAppKey);
 

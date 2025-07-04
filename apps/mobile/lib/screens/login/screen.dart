@@ -31,7 +31,6 @@ class LoginScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
-    final googleSignIn = useService<GoogleSignIn>();
     final mixpanel = useService<Mixpanel>();
 
     final login = useCallback((GSingleSignOnProvider provider, Map<String, dynamic> params) async {
@@ -78,11 +77,19 @@ class LoginScreen extends HookWidget {
                   foregroundColor: const Color(0xFF000000),
                   backgroundColor: const Color(0xFFFFFFFF),
                   onTap: () async {
-                    await googleSignIn.signOut();
-                    final result = await googleSignIn.signIn();
+                    try {
+                      await GoogleSignIn.instance.signOut();
+                    } catch (_) {
+                      // pass
+                    }
 
-                    if (result != null) {
-                      await login(GSingleSignOnProvider.GOOGLE, {'code': result.serverAuthCode});
+                    final serverAuth = await GoogleSignIn.instance.authorizationClient.authorizeServer([
+                      'email',
+                      'profile',
+                    ]);
+
+                    if (serverAuth != null) {
+                      await login(GSingleSignOnProvider.GOOGLE, {'code': serverAuth.serverAuthCode});
                     }
                   },
                 ),

@@ -6,7 +6,6 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:injectable/injectable.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/env.dart';
@@ -29,13 +28,6 @@ abstract class RegisterModule {
   Dio get dio => kDebugMode
       ? (Dio()..httpClientAdapter = HttpClientAdapter())
       : (Dio()..httpClientAdapter = Http2Adapter(ConnectionManager()));
-
-  @singleton
-  GoogleSignIn get googleSignIn => GoogleSignIn(
-    clientId: Env.googleClientId,
-    serverClientId: Env.googleServerClientId,
-    scopes: ['email', 'profile'],
-  );
 
   @singleton
   FlutterLocalNotificationsPlugin get flutterLocalNotificationsPlugin => FlutterLocalNotificationsPlugin()
