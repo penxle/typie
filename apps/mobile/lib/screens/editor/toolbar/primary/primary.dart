@@ -89,6 +89,13 @@ class PrimaryToolbar extends HookWidget {
             ),
           ),
           IconToolbarButton(
+            icon: LucideLightIcons.wrap_text,
+            isRepeatable: true,
+            onTap: () async {
+              await scope.command('hard_break');
+            },
+          ),
+          IconToolbarButton(
             icon: LucideLightIcons.chevron_left,
             isRepeatable: true,
             onTap: () async {
