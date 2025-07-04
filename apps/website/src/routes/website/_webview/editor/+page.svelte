@@ -467,6 +467,16 @@
   {@html '<st' + `yle type="text/css">${fontFaces}</st` + 'yle>'}
 </svelte:head>
 
+<svelte:window
+  onkeydown={(e) => {
+    if (e.key === 'Enter' && e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      editor?.current.chain().focus().setHardBreak().run();
+    }
+  }}
+/>
+
 <div
   bind:this={containerEl}
   style:--prosemirror-max-width={`${maxWidth.current}px`}
