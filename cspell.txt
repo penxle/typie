@@ -28,6 +28,7 @@ indexeddb
 ipaddr
 kakao
 khtml
+konva
 lucide
 luthor
 meilisearch
@@ -49,6 +50,7 @@ remeda
 resvg
 ridi
 rlib
+roughjs
 sadd
 sark
 scard
