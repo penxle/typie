@@ -2,6 +2,7 @@ packages:
   - apps/*
   - crates/*
   - packages/*
+
 ignoredBuiltDependencies:
   - '@firebase/util'
   - es5-ext
@@ -9,11 +10,15 @@ ignoredBuiltDependencies:
   - protobufjs
   - svelte-preprocess
   - ttf2woff2
+
 includeWorkspaceRoot: true
+
 onlyBuiltDependencies:
   - argon2
+  - canvas
   - esbuild
   - sharp
+
 publicHoistPattern:
   - '*eslint*'
   - '*prettier*'
