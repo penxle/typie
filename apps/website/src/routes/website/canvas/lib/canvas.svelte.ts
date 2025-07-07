@@ -213,6 +213,8 @@ export class Canvas {
       this.setOperation(ops.ellipse, e);
     } else if (this.#state.tool === 'line') {
       this.setOperation(ops.line, e);
+    } else if (this.#state.tool === 'arrow') {
+      this.setOperation(ops.arrow, e);
     } else if (this.#state.tool === 'stickynote') {
       this.setOperation(ops.stickynote, e);
     }

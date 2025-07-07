@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ArrowUpRightIcon from '~icons/lucide/arrow-up-right';
   import CircleIcon from '~icons/lucide/circle';
   import HandIcon from '~icons/lucide/hand';
   import MousePointer2Icon from '~icons/lucide/mouse-pointer-2';
@@ -24,6 +25,7 @@
     { id: 'rectangle', name: '사각형', icon: SquareIcon },
     { id: 'ellipse', name: '원', icon: CircleIcon },
     { id: 'line', name: '직선', icon: SlashIcon },
+    { id: 'arrow', name: '화살표', icon: ArrowUpRightIcon },
     { id: 'stickynote', name: '스티커', icon: StickyNoteIcon },
   ];
 </script>

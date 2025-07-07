@@ -2,6 +2,7 @@
   import { cubicInOut } from 'svelte/easing';
   import { fade } from 'svelte/transition';
   import { match } from 'ts-pattern';
+  import ArrowUpRightIcon from '~icons/lucide/arrow-up-right';
   import CircleIcon from '~icons/lucide/circle';
   import PaletteIcon from '~icons/lucide/palette';
   import SlashIcon from '~icons/lucide/slash';
@@ -10,7 +11,7 @@
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex, grid } from '$styled-system/patterns';
-  import { TypedBrush, TypedEllipse, TypedLine, TypedRect, TypedStickyNote } from '../lib/shapes';
+  import { TypedArrow, TypedBrush, TypedEllipse, TypedLine, TypedRect, TypedStickyNote } from '../lib/shapes';
   import { values } from '../lib/values';
   import type { Canvas } from '../lib/canvas.svelte';
   import type { Shapes } from '../lib/types';
@@ -26,6 +27,7 @@
   const type = $derived.by((): Shapes | null => {
     if (!node) return null;
 
+    if (node.current instanceof TypedArrow) return 'arrow';
     if (node.current instanceof TypedBrush) return 'brush';
     if (node.current instanceof TypedLine) return 'line';
     if (node.current instanceof TypedEllipse) return 'ellipse';
@@ -38,6 +40,7 @@
   type SectionType = 'backgroundColor' | 'backgroundStyle' | 'roughness' | 'borderRadius' | 'fontSize' | 'coordinates';
 
   const sectionsForType: Record<Shapes, SectionType[]> = {
+    arrow: ['roughness', 'coordinates'],
     rectangle: ['backgroundColor', 'backgroundStyle', 'roughness', 'borderRadius', 'coordinates'],
     ellipse: ['backgroundColor', 'backgroundStyle', 'roughness', 'coordinates'],
     line: ['roughness', 'coordinates'],
@@ -87,6 +90,7 @@
           .with('ellipse', () => CircleIcon)
           .with('stickynote', () => TypeIcon)
           .with('line', () => SlashIcon)
+          .with('arrow', () => ArrowUpRightIcon)
           .otherwise(() => SquareIcon)}
         size={16}
       />
@@ -96,6 +100,7 @@
           .with('ellipse', () => '원 속성')
           .with('stickynote', () => '스티커 노트 속성')
           .with('line', () => '선 속성')
+          .with('arrow', () => '화살표 속성')
           .otherwise(() => '속성')}
       </span>
     </div>
@@ -303,6 +308,23 @@
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>
                     {Math.round(
                       (Math.atan2((node?.current as TypedLine).attrs.dy, (node?.current as TypedLine).attrs.dx) * 180) / Math.PI,
+                    )}°
+                  </div>
+                </div>
+              {:else if type === 'arrow'}
+                <div>
+                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>길이</div>
+                  <div class={css({ fontSize: '13px', marginTop: '2px' })}>
+                    {Math.round(
+                      Math.sqrt(Math.pow((node?.current as TypedArrow).attrs.dx, 2) + Math.pow((node?.current as TypedArrow).attrs.dy, 2)),
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>각도</div>
+                  <div class={css({ fontSize: '13px', marginTop: '2px' })}>
+                    {Math.round(
+                      (Math.atan2((node?.current as TypedArrow).attrs.dy, (node?.current as TypedArrow).attrs.dx) * 180) / Math.PI,
                     )}°
                   </div>
                 </div>
