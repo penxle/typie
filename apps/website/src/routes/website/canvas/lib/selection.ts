@@ -103,6 +103,10 @@ export class Selection {
     return this.#nodes;
   }
 
+  contains(node: Konva.Node) {
+    return this.#nodes.includes(node);
+  }
+
   update() {
     if (this.#nodes.length === 0) {
       this.#group.visible(false);
@@ -210,5 +214,37 @@ export class Selection {
     }
 
     return intersection.attrs.handle as ResizeHandle;
+  }
+
+  isInsideBoundingBox(pos: Pos) {
+    if (this.#nodes.length === 0) {
+      return false;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const node of this.#nodes) {
+      const rect = node.getClientRect();
+      minX = Math.min(minX, rect.x);
+      minY = Math.min(minY, rect.y);
+      maxX = Math.max(maxX, rect.x + rect.width);
+      maxY = Math.max(maxY, rect.y + rect.height);
+    }
+
+    const scale = this.#stage.scaleX();
+    const stagePos = this.#stage.position();
+
+    const stageX = (pos.x - stagePos.x) / scale;
+    const stageY = (pos.y - stagePos.y) / scale;
+
+    const boxMinX = (minX - stagePos.x) / scale;
+    const boxMinY = (minY - stagePos.y) / scale;
+    const boxMaxX = (maxX - stagePos.x) / scale;
+    const boxMaxY = (maxY - stagePos.y) / scale;
+
+    return stageX >= boxMinX && stageX <= boxMaxX && stageY >= boxMinY && stageY <= boxMaxY;
   }
 }

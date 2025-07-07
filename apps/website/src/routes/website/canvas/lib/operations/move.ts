@@ -1,4 +1,5 @@
 import Konva from 'konva';
+import { getClosestGroup } from '../utils';
 import type { Operation } from '../types';
 
 export const move: Operation = (canvas) => {
@@ -7,36 +8,52 @@ export const move: Operation = (canvas) => {
     return;
   }
 
-  let shape: Konva.Node | null = canvas.scene.getIntersection(pos);
-  if (!shape) {
-    return;
-  }
+  let targets: Konva.Node[] = [];
 
-  let parent = shape.getParent();
-  while (parent && !(parent instanceof Konva.Layer)) {
-    if (parent instanceof Konva.Group) {
-      shape = parent;
-      break;
+  if (canvas.selection.isInsideBoundingBox(pos)) {
+    targets = canvas.selection.nodes();
+  } else {
+    let clickedShape: Konva.Node | null = canvas.scene.getIntersection(pos);
+
+    if (clickedShape) {
+      clickedShape = getClosestGroup(clickedShape);
+
+      if (canvas.selection.contains(clickedShape)) {
+        targets = canvas.selection.nodes();
+      } else {
+        canvas.selection.nodes([clickedShape]);
+        targets = [clickedShape];
+      }
+    } else {
+      return;
     }
-
-    parent = parent.getParent();
   }
 
-  canvas.selection.nodes([shape]);
-
-  const relativePos = shape.getRelativePointerPosition();
+  const relativePos = canvas.stage.getRelativePointerPosition();
   if (!relativePos) {
     return;
   }
 
+  const initialOffsets = targets.map((node) => ({
+    node,
+    offsetX: node.x() - relativePos.x,
+    offsetY: node.y() - relativePos.y,
+  }));
+
   return {
     update: () => {
-      const pos = canvas.stage.getRelativePointerPosition();
-      if (!pos) {
+      const currentPos = canvas.stage.getRelativePointerPosition();
+      if (!currentPos) {
         return;
       }
 
-      shape.setAttrs({ x: pos.x - relativePos.x, y: pos.y - relativePos.y });
+      for (const { node, offsetX, offsetY } of initialOffsets) {
+        node.setAttrs({
+          x: currentPos.x + offsetX,
+          y: currentPos.y + offsetY,
+        });
+      }
+
       canvas.selection.update();
     },
   };

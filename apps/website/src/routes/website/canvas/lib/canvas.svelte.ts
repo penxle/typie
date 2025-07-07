@@ -166,7 +166,14 @@ export class Canvas {
     }
 
     if (this.#state.tool === 'select') {
-      this.setOperation(this.scene.getIntersection(pos) ? ops.move : ops.select, e);
+      const isInsideSelection = this.selection.isInsideBoundingBox(pos);
+      const intersectedShape = this.scene.getIntersection(pos);
+
+      if (isInsideSelection || intersectedShape) {
+        this.setOperation(ops.move, e);
+      } else {
+        this.setOperation(ops.select, e);
+      }
     } else if (this.#state.tool === 'brush') {
       this.setOperation(ops.brush, e);
     } else if (this.#state.tool === 'rectangle') {
