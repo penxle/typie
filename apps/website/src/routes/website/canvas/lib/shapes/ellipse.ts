@@ -1,4 +1,6 @@
 import Konva from 'konva';
+import { clamp } from '$lib/utils';
+import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
 import { TypedShape } from './shape';
 import type { TypedContentfulShapeConfig } from './types';
@@ -9,19 +11,31 @@ type TypedEllipseConfig = TypedContentfulShapeConfig & {
 };
 
 export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
+  get effectiveRoughness() {
+    const { radiusX, radiusY, roughness } = this.attrs;
+
+    if (roughness === 'none') {
+      return 0;
+    }
+
+    const min = Math.min(radiusX * 2, radiusY * 2);
+
+    return clamp(min / MIN_SIZE - 1, 0.5, 2.5);
+  }
   override renderView(context: Konva.Context) {
-    const { radiusX, radiusY, roughness, backgroundColor, backgroundStyle, seed } = this.attrs;
+    const { radiusX, radiusY, backgroundColor, backgroundStyle, seed } = this.attrs;
 
     const drawable = roughGenerator.ellipse(0, 0, radiusX * 2, radiusY * 2, {
-      roughness: roughness === 'rough' ? 2 : 0,
-      bowing: 1,
+      roughness: this.effectiveRoughness,
+      bowing: 0.5,
       stroke: 'black',
-      strokeWidth: 2,
+      strokeWidth: 4,
       seed,
       fill: backgroundStyle === 'none' ? undefined : backgroundColor,
       fillStyle: backgroundStyle === 'none' ? undefined : backgroundStyle,
       fillWeight: 1,
       hachureGap: 8,
+      curveFitting: 1,
     });
 
     renderRoughDrawable(context, drawable);

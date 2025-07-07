@@ -1,4 +1,6 @@
 import Konva from 'konva';
+import { clamp } from '$lib/utils';
+import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
 import { TypedShape } from './shape';
 import type { TypedRoughShapeConfig } from './types';
@@ -9,14 +11,26 @@ type TypedLineConfig = TypedRoughShapeConfig & {
 };
 
 export class TypedLine extends TypedShape<TypedLineConfig> {
+  get effectiveRoughness() {
+    const { dx, dy, roughness } = this.attrs;
+
+    if (roughness === 'none') {
+      return 0;
+    }
+
+    const max = Math.max(Math.abs(dx), Math.abs(dy));
+
+    return clamp(max / MIN_SIZE - 1, 0.5, 2.5);
+  }
+
   override renderView(context: Konva.Context) {
-    const { dx, dy, roughness, seed } = this.attrs;
+    const { dx, dy, seed } = this.attrs;
 
     const drawable = roughGenerator.line(0, 0, dx, dy, {
-      roughness: roughness === 'rough' ? 2 : 0,
-      bowing: 1,
+      roughness: this.effectiveRoughness,
+      bowing: 0.5,
       stroke: 'black',
-      strokeWidth: 2,
+      strokeWidth: 4,
       seed,
     });
 

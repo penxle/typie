@@ -174,7 +174,13 @@ export class Canvas {
       } else {
         this.setOperation(ops.select, e);
       }
-    } else if (this.#state.tool === 'brush') {
+
+      return;
+    }
+
+    this.selection.nodes([]);
+
+    if (this.#state.tool === 'brush') {
       this.setOperation(ops.brush, e);
     } else if (this.#state.tool === 'rectangle') {
       this.setOperation(ops.rectangle, e);
