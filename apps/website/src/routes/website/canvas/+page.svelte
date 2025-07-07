@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { match } from 'ts-pattern';
   import { css } from '$styled-system/css';
   import Toolbar from './components/Toolbar.svelte';
   import Zoom from './components/Zoom.svelte';
@@ -6,6 +7,17 @@
 
   let container = $state<HTMLDivElement>();
   let canvas = $state<Canvas>();
+
+  const cursor = $derived.by(() => {
+    if (!canvas) return 'default';
+
+    return match(canvas.state.tool)
+      .with('pan', () => 'grab')
+      .with('select', () => 'default')
+      .with('brush', () => 'default')
+      .with('line', 'rectangle', 'ellipse', 'stickynote', () => 'crosshair')
+      .exhaustive();
+  });
 
   $effect(() => {
     if (!container) {
@@ -31,14 +43,9 @@
     backgroundColor: 'surface.subtle',
   })}
 >
-  <div
-    bind:this={container}
-    class={css({
-      width: 'full',
-      height: 'full',
-      backgroundColor: 'surface.subtle',
-    })}
-  ></div>
+  <div style:cursor class={css({ size: 'full', backgroundColor: 'surface.subtle' })}>
+    <div bind:this={container} class={css({ size: 'full' })}></div>
+  </div>
 
   {#if canvas}
     <div

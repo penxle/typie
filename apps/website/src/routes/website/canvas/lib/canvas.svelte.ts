@@ -127,6 +127,14 @@ export class Canvas {
     this.scaleTo(scale * delta, options);
   }
 
+  setCursor(cursor: string) {
+    this.#container.style.cursor = cursor;
+  }
+
+  restoreCursor() {
+    this.#container.style.cursor = '';
+  }
+
   destroy() {
     this.#observer.disconnect();
     this.#stage.destroy();
@@ -149,7 +157,6 @@ export class Canvas {
 
     this.#pointers.set(e.pointerId, pos);
 
-    e.target?.setPointerCapture(e.pointerId);
     if (e.evt.target instanceof Element) {
       e.evt.target.setPointerCapture(e.evt.pointerId);
     }
@@ -178,6 +185,11 @@ export class Canvas {
       return;
     }
 
+    if (this.#state.tool === 'pan') {
+      this.setOperation(ops.pan, e);
+      return;
+    }
+
     this.selection.nodes([]);
 
     if (this.#state.tool === 'brush') {
@@ -203,10 +215,6 @@ export class Canvas {
   }
 
   #handlePointerUp(e: Konva.KonvaPointerEvent) {
-    if (e.target?.hasPointerCapture(e.pointerId)) {
-      e.target.releaseCapture(e.pointerId);
-    }
-
     if (e.evt.target instanceof Element && e.evt.target.hasPointerCapture(e.evt.pointerId)) {
       e.evt.target.releasePointerCapture(e.evt.pointerId);
     }

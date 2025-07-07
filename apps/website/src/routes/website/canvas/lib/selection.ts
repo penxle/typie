@@ -47,7 +47,7 @@ export class Selection {
       });
 
       line.on('pointerleave', () => {
-        this.#container.style.cursor = 'default';
+        this.#container.style.cursor = '';
       });
 
       this.#handles.set(edge, line);
@@ -68,7 +68,7 @@ export class Selection {
       });
 
       rect.on('pointerleave', () => {
-        this.#container.style.cursor = 'default';
+        this.#container.style.cursor = '';
       });
 
       this.#handles.set(corner, rect);

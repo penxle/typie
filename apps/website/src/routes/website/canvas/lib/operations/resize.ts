@@ -24,9 +24,11 @@ const HANDLES: Record<ResizeHandle, [number, number, number, number]> = {
 
 export const createResizeOperation =
   (handle: ResizeHandle): Operation =>
-  (canvas) => {
+  (canvas, event) => {
     const nodes = canvas.selection.nodes();
     if (nodes.length === 0) return;
+
+    event?.target.setPointerCapture(event.pointerId);
 
     const states: NodeState[] = [];
     const min = { x: Infinity, y: Infinity };
@@ -301,6 +303,7 @@ export const createResizeOperation =
         canvas.selection.update();
       },
       destroy: () => {
+        event?.target.releaseCapture(event.pointerId);
         canvas.state.tool = 'select';
       },
     };

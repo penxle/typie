@@ -6,6 +6,8 @@ export const pan: Operation = (canvas) => {
     return;
   }
 
+  canvas.setCursor('grabbing');
+
   return {
     update: () => {
       const current = canvas.stage.getPointerPosition();
@@ -20,6 +22,9 @@ export const pan: Operation = (canvas) => {
       if (deltaX !== 0 || deltaY !== 0) {
         canvas.moveBy(deltaX, deltaY);
       }
+    },
+    destroy: () => {
+      canvas.restoreCursor();
     },
   };
 };
