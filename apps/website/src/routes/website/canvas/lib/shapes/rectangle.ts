@@ -1,4 +1,6 @@
 import Konva from 'konva';
+import { clamp } from '$lib/utils';
+import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
 import { TypedShape } from './shape';
 import type { TypedContentfulShapeConfig } from './types';
@@ -11,25 +13,38 @@ type TypedRectConfig = TypedContentfulShapeConfig & {
 
 export class TypedRect extends TypedShape<TypedRectConfig> {
   get effectiveBorderRadius() {
-    const { width: w, height: h, borderRadius } = this.attrs;
+    const { width, height, borderRadius } = this.attrs;
+
     if (borderRadius === 'none') {
       return 0;
     }
 
-    const side = Math.min(w, h);
-    return side > 128 ? 32 : side * 0.25;
+    const min = Math.min(width, height);
+    return Math.min(min * 0.25, 50);
+  }
+
+  get effectiveRoughness() {
+    const { width, height, roughness } = this.attrs;
+
+    if (roughness === 'none') {
+      return 0;
+    }
+
+    const min = Math.min(width, height);
+
+    return clamp(min / MIN_SIZE - 1, 0.5, 2.5);
   }
 
   override renderView(context: Konva.Context) {
-    const { width: w, height: h, roughness, backgroundColor, backgroundStyle, seed } = this.attrs;
+    const { width: w, height: h, backgroundColor, backgroundStyle, seed } = this.attrs;
     const r = this.effectiveBorderRadius;
 
     const d = `M ${r} 0 L ${w - r} 0 Q ${w} 0, ${w} ${r} L ${w} ${h - r} Q ${w} ${h}, ${w - r} ${h} L ${r} ${h} Q 0 ${h}, 0 ${h - r} L 0 ${r} Q 0 0, ${r} 0`;
     const drawable = roughGenerator.path(d, {
-      roughness: roughness === 'rough' ? 2 : 0,
-      bowing: 1,
+      roughness: this.effectiveRoughness,
+      bowing: 0.5,
       stroke: 'black',
-      strokeWidth: 2,
+      strokeWidth: 4,
       seed,
       fill: backgroundStyle === 'none' ? undefined : backgroundColor,
       fillStyle: backgroundStyle === 'none' ? undefined : backgroundStyle,
