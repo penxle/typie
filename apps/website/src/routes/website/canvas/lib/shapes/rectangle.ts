@@ -2,6 +2,7 @@ import Konva from 'konva';
 import { clamp } from '$lib/utils';
 import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
+import { values } from '../values';
 import { TypedShape } from './shape';
 import type { TypedContentfulShapeConfig } from './types';
 
@@ -39,21 +40,39 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
     const { width: w, height: h, backgroundColor, backgroundStyle, seed } = this.attrs;
     const r = this.effectiveBorderRadius;
 
-    const d = `M ${r} 0 L ${w - r} 0 Q ${w} 0, ${w} ${r} L ${w} ${h - r} Q ${w} ${h}, ${w - r} ${h} L ${r} ${h} Q 0 ${h}, 0 ${h - r} L 0 ${r} Q 0 0, ${r} 0`;
-    const drawable = roughGenerator.path(d, {
-      roughness: this.effectiveRoughness,
-      bowing: 0.5,
-      stroke: 'black',
-      strokeWidth: 4,
-      seed,
-      fill: backgroundStyle === 'none' ? undefined : backgroundColor,
-      fillStyle: backgroundStyle === 'none' ? undefined : backgroundStyle,
-      fillWeight: 1,
-      hachureGap: 8,
-      preserveVertices: true,
-    });
+    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)?.hex;
 
-    renderRoughDrawable(context, drawable);
+    if (r === 0) {
+      const drawable = roughGenerator.rectangle(0, 0, w, h, {
+        roughness: this.effectiveRoughness,
+        bowing: 1,
+        stroke: 'black',
+        strokeWidth: 4,
+        seed,
+        fill: backgroundStyle === 'none' ? undefined : bgColorHex,
+        fillStyle: backgroundStyle === 'none' ? undefined : backgroundStyle,
+        fillWeight: 1,
+        hachureGap: 8,
+      });
+
+      renderRoughDrawable(context, drawable);
+    } else {
+      const d = `M ${r} 0 L ${w - r} 0 Q ${w} 0, ${w} ${r} L ${w} ${h - r} Q ${w} ${h}, ${w - r} ${h} L ${r} ${h} Q 0 ${h}, 0 ${h - r} L 0 ${r} Q 0 0, ${r} 0`;
+      const drawable = roughGenerator.path(d, {
+        roughness: this.effectiveRoughness,
+        bowing: 1,
+        stroke: 'black',
+        strokeWidth: 4,
+        seed,
+        fill: backgroundStyle === 'none' ? undefined : bgColorHex,
+        fillStyle: backgroundStyle === 'none' ? undefined : backgroundStyle,
+        fillWeight: 1,
+        hachureGap: 8,
+        preserveVertices: true,
+      });
+
+      renderRoughDrawable(context, drawable);
+    }
   }
 
   override renderHitTest(context: Konva.Context) {

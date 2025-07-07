@@ -1,6 +1,7 @@
 <script lang="ts">
   import { match } from 'ts-pattern';
   import { css } from '$styled-system/css';
+  import PropertiesPanel from './components/PropertiesPanel.svelte';
   import Toolbar from './components/Toolbar.svelte';
   import Zoom from './components/Zoom.svelte';
   import { Canvas } from './lib/canvas.svelte';
@@ -48,6 +49,8 @@
   </div>
 
   {#if canvas}
+    <PropertiesPanel {canvas} />
+
     <div
       class={css({
         position: 'absolute',
