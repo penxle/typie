@@ -38,9 +38,8 @@ export const values = {
   ],
 
   fontFamily: [
-    { label: '고딕', value: 'sans-serif' },
-    { label: '명조', value: 'serif' },
-    { label: '고정폭', value: 'monospace' },
+    { label: '손글씨', value: 'handwriting', fontFamily: 'GWEduSaeeum' },
+    { label: '고딕', value: 'sans-serif', fontFamily: 'Pretendard' },
   ],
 } as const;
 
@@ -50,7 +49,7 @@ export const defaultValues = {
   roughness: 'rough',
   borderRadius: 'round',
   fontSize: 16,
-  fontFamily: 'sans-serif',
+  fontFamily: 'handwriting',
 } as const;
 
 export type BackgroundColor = (typeof values.backgroundColor)[number]['value'];

@@ -116,11 +116,11 @@ export class TypedStickyNote extends Konva.Group {
       x: 0,
       y: 1,
       text: config.text,
-      fontSize: config.fontSize,
-      fontFamily: config.fontFamily,
+      fontSize: this.effectiveFontSize,
+      fontFamily: this.effectiveFontFamily,
       fill: 'black',
       width: config.width,
-      padding: 15,
+      padding: 20,
       lineHeight: 1.2,
       letterSpacing: 0.01,
       wrap: 'char',
@@ -133,6 +133,22 @@ export class TypedStickyNote extends Konva.Group {
     this.on('dblclick', () => this.#startEditing());
 
     this.#boundUpdateTextareaPosition = () => this.#updateTextareaPosition();
+  }
+
+  get effectiveFontFamily() {
+    const { fontFamily } = this.attrs;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    return values.fontFamily.find((f) => f.value === fontFamily)!.fontFamily;
+  }
+
+  get effectiveFontSize() {
+    const { fontFamily, fontSize } = this.attrs;
+
+    if (fontFamily === 'handwriting') {
+      return fontSize * 1.2;
+    }
+
+    return fontSize;
   }
 
   override setAttrs(config: Partial<TypedStickyNoteConfig>) {
@@ -156,8 +172,8 @@ export class TypedStickyNote extends Konva.Group {
     this.text?.setAttrs({
       width: config.width ?? this.attrs.width,
       text: config.text ?? this.attrs.text,
-      fontSize: config.fontSize ?? this.attrs.fontSize,
-      fontFamily: config.fontFamily ?? this.attrs.fontFamily,
+      fontSize: this.effectiveFontSize,
+      fontFamily: this.effectiveFontFamily,
     });
 
     return this;
@@ -181,10 +197,10 @@ export class TypedStickyNote extends Konva.Group {
       top: '0',
       width: `${rect.width}px`,
       height: `${rect.height}px`,
-      padding: `${15 * scale}px`,
+      padding: `${20 * scale}px`,
       color: 'black',
-      fontSize: `${this.attrs.fontSize * scale}px`,
-      fontFamily: this.attrs.fontFamily,
+      fontSize: `${this.effectiveFontSize * scale}px`,
+      fontFamily: this.effectiveFontFamily,
       lineHeight: '1.2',
       letterSpacing: '0',
       whiteSpace: 'pre-wrap',
@@ -225,8 +241,8 @@ export class TypedStickyNote extends Konva.Group {
       this.#textarea.style.top = '0';
       this.#textarea.style.width = `${rect.width}px`;
       this.#textarea.style.height = `${rect.height}px`;
-      this.#textarea.style.fontSize = `${this.attrs.fontSize * scale}px`;
-      this.#textarea.style.padding = `${15 * scale}px`;
+      this.#textarea.style.fontSize = `${this.effectiveFontSize * scale}px`;
+      this.#textarea.style.padding = `${20 * scale}px`;
     });
   }
 

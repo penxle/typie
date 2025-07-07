@@ -1,4 +1,5 @@
 import { TypedArrow } from '../shapes/arrow';
+import { defaultValues } from '../values';
 import type { Operation } from '../types';
 
 export const arrow: Operation = (canvas) => {
@@ -12,7 +13,7 @@ export const arrow: Operation = (canvas) => {
     y: anchor.y,
     dx: 0,
     dy: 0,
-    roughness: 'rough',
+    roughness: defaultValues.roughness,
     seed: Math.random() * 2_147_483_637,
   });
 

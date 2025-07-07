@@ -236,6 +236,13 @@ export const globalFontface = defineGlobalFontface({
     fontWeight: '400',
     fontDisplay: 'block',
   },
+
+  GWEduSaeeum: {
+    src: 'url("https://cdn.typie.net/fonts/GangwonEduSaeeum.woff2") format("woff2")',
+    fontStyle: 'normal',
+    fontWeight: '400',
+    fontDisplay: 'block',
+  },
 });
 
 export const globalVars = {};
