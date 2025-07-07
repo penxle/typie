@@ -1,5 +1,6 @@
 <script lang="ts">
   import { match } from 'ts-pattern';
+  import { getThemeContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import PropertiesPanel from './components/PropertiesPanel.svelte';
   import Toolbar from './components/Toolbar.svelte';
@@ -8,6 +9,9 @@
 
   let container = $state<HTMLDivElement>();
   let canvas = $state<Canvas>();
+
+  const theme = getThemeContext();
+  theme.force('light');
 
   const cursor = $derived.by(() => {
     if (!canvas) return 'default';

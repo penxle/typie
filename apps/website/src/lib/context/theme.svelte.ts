@@ -13,10 +13,15 @@ const COOKIE = 'typie-th';
 export class ThemeState {
   #cookies = new Cookies();
 
+  #force = $state<Theme>();
   #current = $state<Theme>('auto');
   #effective = $derived.by<EffectiveTheme>(() => {
-    if (this.#current !== 'auto') return this.#current;
-    return this.#prefersDark.current ? 'dark' : 'light';
+    const value = this.#force ?? this.#current;
+    if (value === 'auto') {
+      return this.#prefersDark.current ? 'dark' : 'light';
+    } else {
+      return value;
+    }
   });
 
   #prefersDark = new MediaQuery('(prefers-color-scheme: dark)');
@@ -76,6 +81,16 @@ export class ThemeState {
 
   get effective(): EffectiveTheme {
     return this.#effective;
+  }
+
+  force(theme: Theme) {
+    $effect(() => {
+      this.#force = theme;
+
+      return () => {
+        this.#force = undefined;
+      };
+    });
   }
 }
 
