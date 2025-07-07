@@ -1,6 +1,7 @@
 import { DEFAULT_SIZE, MIN_SIZE } from '../const';
 import * as ops from '../operations';
 import { TypedRect } from '../shapes/rectangle';
+import { defaultValues } from '../values';
 import type { Operation } from '../types';
 
 export const rectangle: Operation = (canvas) => {
@@ -14,10 +15,10 @@ export const rectangle: Operation = (canvas) => {
     y: anchor.y,
     width: 0,
     height: 0,
-    borderRadius: 'round',
-    roughness: 'rough',
-    backgroundColor: 'white',
-    backgroundStyle: 'solid',
+    borderRadius: defaultValues.borderRadius,
+    roughness: defaultValues.roughness,
+    backgroundColor: defaultValues.backgroundColor,
+    backgroundStyle: defaultValues.backgroundStyle,
     seed: Math.random() * 2_147_483_637,
   });
 

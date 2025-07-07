@@ -80,6 +80,10 @@ export class Canvas {
     this.#stage.on('attrchange', () => {
       this.state._setSelections(this.#selection.nodes());
     });
+
+    document.fonts.ready.then(() => {
+      this.stage.batchDraw();
+    });
   }
 
   get state() {

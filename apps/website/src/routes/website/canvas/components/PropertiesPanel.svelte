@@ -37,14 +37,14 @@
     return null;
   });
 
-  type SectionType = 'backgroundColor' | 'backgroundStyle' | 'roughness' | 'borderRadius' | 'fontSize' | 'coordinates';
+  type SectionType = 'backgroundColor' | 'backgroundStyle' | 'roughness' | 'borderRadius' | 'fontSize' | 'fontFamily' | 'coordinates';
 
   const sectionsForType: Record<Shapes, SectionType[]> = {
     arrow: ['roughness', 'coordinates'],
     rectangle: ['backgroundColor', 'backgroundStyle', 'roughness', 'borderRadius', 'coordinates'],
     ellipse: ['backgroundColor', 'backgroundStyle', 'roughness', 'coordinates'],
     line: ['roughness', 'coordinates'],
-    stickynote: ['backgroundColor', 'fontSize', 'coordinates'],
+    stickynote: ['backgroundColor', 'fontFamily', 'coordinates'],
     brush: ['coordinates'],
   };
 
@@ -256,6 +256,37 @@
             >
               {#each values.fontSize as size (size.value)}
                 <option value={size.value}>{size.label}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
+        {#if visibleSections.includes('fontFamily')}
+          <div>
+            <label class={css({ fontSize: '13px', color: 'text.muted', marginBottom: '8px', display: 'block' })} for="font-family-select">
+              글꼴
+            </label>
+            <select
+              id="font-family-select"
+              class={css({
+                width: 'full',
+                paddingX: '12px',
+                paddingY: '6px',
+                borderRadius: '6px',
+                borderWidth: '1px',
+                borderColor: 'gray.200',
+                backgroundColor: 'surface.default',
+                fontSize: '13px',
+                cursor: 'pointer',
+                _hover: {
+                  borderColor: 'gray.400',
+                },
+              })}
+              onchange={(e) => updateNodeProperty('fontFamily', e.currentTarget.value)}
+              value={(node?.current as TypedStickyNote).attrs.fontFamily}
+            >
+              {#each values.fontFamily as font (font.value)}
+                <option value={font.value}>{font.label}</option>
               {/each}
             </select>
           </div>

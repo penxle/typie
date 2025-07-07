@@ -1,6 +1,7 @@
 import { DEFAULT_SIZE, MIN_SIZE } from '../const';
 import * as ops from '../operations';
 import { TypedEllipse } from '../shapes/ellipse';
+import { defaultValues } from '../values';
 import type { Operation } from '../types';
 
 export const ellipse: Operation = (canvas) => {
@@ -14,9 +15,9 @@ export const ellipse: Operation = (canvas) => {
     y: anchor.y,
     radiusX: 0,
     radiusY: 0,
-    roughness: 'rough',
-    backgroundColor: 'white',
-    backgroundStyle: 'solid',
+    roughness: defaultValues.roughness,
+    backgroundColor: defaultValues.backgroundColor,
+    backgroundStyle: defaultValues.backgroundStyle,
     seed: Math.random() * 2_147_483_637,
   });
 
