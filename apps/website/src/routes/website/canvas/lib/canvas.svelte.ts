@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import { clamp } from '$lib/utils';
+import { clamp, Ref } from '$lib/utils';
 import { Environment } from './environment';
 import * as ops from './operations';
 import { Scene } from './scene';
@@ -13,6 +13,7 @@ type ScaleOptions = {
 export class CanvasState {
   #tool = $state<Tool>('select');
   #scale = $state(1);
+  #selections = $state<Ref<Konva.Node>[]>([]);
 
   get tool() {
     return this.#tool;
@@ -28,6 +29,14 @@ export class CanvasState {
 
   _setScale(value: number) {
     this.#scale = value;
+  }
+
+  get selections() {
+    return this.#selections;
+  }
+
+  _setSelections(value: Konva.Node[]) {
+    this.#selections = value.map((node) => new Ref(node));
   }
 }
 
@@ -57,7 +66,7 @@ export class Canvas {
 
     this.#environment = new Environment(this.#stage);
     this.#scene = new Scene(this.#stage);
-    this.#selection = new Selection(this.#stage);
+    this.#selection = new Selection(this.#stage, this.#state);
 
     this.#observer = new ResizeObserver(() => this.resize());
     this.#observer.observe(this.#container);
@@ -67,6 +76,10 @@ export class Canvas {
     this.#stage.on('pointerup', (e) => this.#handlePointerUp(e));
     this.#stage.on('pointercancel', (e) => this.#handlePointerUp(e));
     this.#stage.on('wheel', (e) => this.#handleWheel(e));
+
+    this.#stage.on('attrchange', () => {
+      this.state._setSelections(this.#selection.nodes());
+    });
   }
 
   get state() {

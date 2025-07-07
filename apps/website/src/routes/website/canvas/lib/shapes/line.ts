@@ -28,7 +28,7 @@ export class TypedLine extends TypedShape<TypedLineConfig> {
 
     const drawable = roughGenerator.line(0, 0, dx, dy, {
       roughness: this.effectiveRoughness,
-      bowing: 0.5,
+      bowing: 1,
       stroke: 'black',
       strokeWidth: 4,
       seed,

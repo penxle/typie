@@ -9,6 +9,7 @@ export abstract class TypedShape<T extends TypedShapeConfig> extends Konva.Shape
 
   override setAttrs(config: Partial<T>) {
     super.setAttrs(config);
+    this.fire('attrchange', { target: this }, true);
     return this;
   }
 

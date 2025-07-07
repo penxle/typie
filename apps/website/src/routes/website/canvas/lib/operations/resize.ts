@@ -291,8 +291,8 @@ export const createResizeOperation =
               state.node.setAttrs({
                 x: newPos.x,
                 y: newPos.y,
-                width: Math.max(state.width * scale.x, MIN_SIZE),
-                height: Math.max(state.height * scale.y, MIN_SIZE),
+                width: Math.max(state.width * scale.x, MIN_SIZE * 10),
+                height: Math.max(state.height * scale.y, MIN_SIZE * 10),
               });
 
               break;

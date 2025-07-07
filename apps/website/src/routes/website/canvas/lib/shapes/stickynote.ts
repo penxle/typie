@@ -1,10 +1,15 @@
 import Konva from 'konva';
+import { clamp } from '$lib/utils';
+import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
-import type { TypedContentfulShapeConfig } from './types';
+import { values } from '../values';
+import type { TypedShapeConfig } from './types';
 
-type TypedStickyNoteShapeConfig = TypedContentfulShapeConfig & {
+type TypedStickyNoteShapeConfig = TypedShapeConfig & {
   width: number;
   height: number;
+  backgroundColor: string;
+  seed: number;
 };
 
 type TypedStickyNoteConfig = TypedStickyNoteShapeConfig & {
@@ -14,86 +19,59 @@ type TypedStickyNoteConfig = TypedStickyNoteShapeConfig & {
 };
 
 class StickyNoteShape extends Konva.Shape<TypedStickyNoteShapeConfig> {
+  get effectiveFoldSize() {
+    const { width, height } = this.attrs;
+    return Math.min(MIN_SIZE * 2, Math.min(width, height) * 0.2);
+  }
+
   _sceneFunc(context: Konva.Context) {
-    const { width: w, height: h, roughness, backgroundColor, backgroundStyle, seed } = this.attrs;
-    const foldSize = Math.min(30, Math.min(w, h) * 0.15);
+    const { width: w, height: h, backgroundColor, seed } = this.attrs;
 
-    const bodyPath = `
-      M 0 0
-      L 0 ${h}
-      L ${w - foldSize} ${h}
-      L ${w} ${h - foldSize}
-      L ${w} 0
-      Z
-    `;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)!.hex;
+    const roughness = clamp(Math.min(w, h) / (MIN_SIZE * 10) - 1, 0.5, 2.5);
+    const foldSize = this.effectiveFoldSize;
 
-    const bodyDrawable = roughGenerator.path(bodyPath.trim(), {
-      roughness: roughness === 'rough' ? 1 : 0,
-      bowing: 0.2,
-      stroke: 'none',
-      seed,
-      fill: backgroundColor || '#fef3c7',
-      fillStyle: backgroundStyle === 'none' ? undefined : backgroundStyle,
-      fillWeight: 1,
-      hachureGap: 6,
-      preserveVertices: true,
-    });
+    const notePath = `M 0 0 L 0 ${h} L ${w - foldSize} ${h} L ${w} ${h - foldSize} L ${w} 0 Z`;
 
     context.save();
+    const note = new Path2D(notePath);
+    context.fillStyle = bgColorHex;
     context.shadowColor = 'rgba(0, 0, 0, 0.1)';
-    context.shadowBlur = 4;
     context.shadowOffsetX = 2;
     context.shadowOffsetY = 2;
-    renderRoughDrawable(context, bodyDrawable);
+    context.shadowBlur = 4;
+    context.fill(note);
     context.restore();
 
-    const borderDrawable = roughGenerator.path(bodyPath.trim(), {
-      roughness: roughness === 'rough' ? 1 : 0,
-      bowing: 0.2,
+    const border = roughGenerator.path(notePath, {
+      roughness,
+      bowing: 1,
       stroke: 'rgba(0, 0, 0, 0.1)',
       strokeWidth: 1,
       seed,
-      fill: 'none',
     });
-    renderRoughDrawable(context, borderDrawable);
 
-    const foldPath = `
-      M ${w - foldSize} ${h}
-      L ${w - foldSize} ${h - foldSize}
-      L ${w} ${h - foldSize}
-      Z
-    `;
+    renderRoughDrawable(context, border);
 
-    if (roughness === 'rough') {
-      const foldDrawable = roughGenerator.path(foldPath.trim(), {
-        roughness: 0.5,
-        bowing: 0.1,
-        stroke: 'rgba(0, 0, 0, 0.15)',
-        strokeWidth: 1,
-        seed: seed + 1,
-        fill: 'rgba(0, 0, 0, 0.05)',
-        fillStyle: 'solid',
-      });
-      renderRoughDrawable(context, foldDrawable);
-    } else {
-      context.save();
-      context.fillStyle = 'rgba(0, 0, 0, 0.05)';
-      context.strokeStyle = 'rgba(0, 0, 0, 0.15)';
-      context.lineWidth = 1;
-      context.beginPath();
-      context.moveTo(w - foldSize, h);
-      context.lineTo(w - foldSize, h - foldSize);
-      context.lineTo(w, h - foldSize);
-      context.closePath();
-      context.fill();
-      context.stroke();
-      context.restore();
-    }
+    const foldPath = `M ${w - foldSize} ${h} L ${w - foldSize} ${h - foldSize} L ${w} ${h - foldSize} Z`;
+
+    const fold = roughGenerator.path(foldPath, {
+      roughness,
+      bowing: 1,
+      stroke: 'rgba(0, 0, 0, 0.15)',
+      strokeWidth: 1,
+      fill: 'rgba(0, 0, 0, 0.05)',
+      fillStyle: 'solid',
+      seed,
+    });
+
+    renderRoughDrawable(context, fold);
   }
 
   _hitFunc(context: Konva.Context) {
     const { width: w, height: h } = this.attrs;
-    const foldSize = Math.min(30, Math.min(w, h) * 0.15);
+    const foldSize = this.effectiveFoldSize;
 
     context.beginPath();
     context.moveTo(0, 0);
@@ -130,9 +108,7 @@ export class TypedStickyNote extends Konva.Group {
       y: 0,
       width: config.width,
       height: config.height,
-      roughness: config.roughness,
       backgroundColor: config.backgroundColor,
-      backgroundStyle: config.backgroundStyle,
       seed: config.seed,
     });
 
@@ -169,12 +145,12 @@ export class TypedStickyNote extends Konva.Group {
 
     Object.assign(this.attrs, config);
 
+    this.fire('attrchange', { target: this }, true);
+
     this.shape?.setAttrs({
       width: config.width ?? this.attrs.width,
       height: config.height ?? this.attrs.height,
-      roughness: config.roughness ?? this.attrs.roughness,
       backgroundColor: config.backgroundColor ?? this.attrs.backgroundColor,
-      backgroundStyle: config.backgroundStyle ?? this.attrs.backgroundStyle,
     });
 
     this.text?.setAttrs({

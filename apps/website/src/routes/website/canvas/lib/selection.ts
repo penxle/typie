@@ -1,4 +1,5 @@
 import Konva from 'konva';
+import type { CanvasState } from './canvas.svelte';
 import type { Pos, ResizeHandle } from './types';
 
 const CORNER_RECT_SIZE = 12;
@@ -10,6 +11,7 @@ export class Selection {
   #layer: Konva.Layer;
 
   #container: HTMLDivElement;
+  #state: CanvasState;
 
   #indicator: Konva.Rect;
   #group: Konva.Group;
@@ -17,8 +19,9 @@ export class Selection {
 
   #nodes: Konva.Node[] = [];
 
-  constructor(stage: Konva.Stage) {
+  constructor(stage: Konva.Stage, state: CanvasState) {
     this.#stage = stage;
+    this.#state = state;
     this.#container = this.#stage.container();
     this.#layer = new Konva.Layer();
     this.#stage.add(this.#layer);
@@ -96,6 +99,7 @@ export class Selection {
 
   nodes(newNodes?: Konva.Node[]) {
     if (newNodes !== undefined) {
+      this.#state._setSelections(newNodes);
       this.#nodes = [...newNodes];
       this.update();
     }
