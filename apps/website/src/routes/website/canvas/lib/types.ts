@@ -1,7 +1,7 @@
 import type Konva from 'konva';
 import type { Canvas } from './canvas.svelte';
 
-export type Tool = 'select' | 'brush' | 'rectangle' | 'ellipse' | 'line' | 'stickynote';
+export type Tool = 'pan' | 'select' | 'brush' | 'rectangle' | 'ellipse' | 'line' | 'stickynote';
 
 export type Pos = { x: number; y: number };
 

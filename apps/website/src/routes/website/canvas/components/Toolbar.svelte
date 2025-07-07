@@ -1,5 +1,6 @@
 <script lang="ts">
   import CircleIcon from '~icons/lucide/circle';
+  import HandIcon from '~icons/lucide/hand';
   import MousePointer2Icon from '~icons/lucide/mouse-pointer-2';
   import PenIcon from '~icons/lucide/pen';
   import SlashIcon from '~icons/lucide/slash';
@@ -17,6 +18,7 @@
   let { tool = $bindable() }: Props = $props();
 
   const tools: { id: Tool; name: string; icon: Component }[] = [
+    { id: 'pan', name: '이동', icon: HandIcon },
     { id: 'select', name: '선택', icon: MousePointer2Icon },
     { id: 'brush', name: '펜', icon: PenIcon },
     { id: 'rectangle', name: '사각형', icon: SquareIcon },
