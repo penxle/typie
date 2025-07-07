@@ -41,10 +41,10 @@
     width: 'full',
     height: '[100dvh]',
     overflow: 'hidden',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'gray.50',
   })}
 >
-  <div style:cursor class={css({ size: 'full', backgroundColor: 'surface.subtle' })}>
+  <div style:cursor class={css({ size: 'full', backgroundColor: 'gray.50' })}>
     <div bind:this={container} class={css({ size: 'full' })}></div>
   </div>
 

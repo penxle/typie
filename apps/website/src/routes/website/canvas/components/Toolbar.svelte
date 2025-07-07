@@ -37,7 +37,7 @@
     borderWidth: '1px',
     borderRadius: '12px',
     padding: '8px',
-    backgroundColor: 'surface.default',
+    backgroundColor: 'white',
     boxShadow: 'large',
   })}
 >
@@ -46,15 +46,15 @@
       class={center({
         borderRadius: '8px',
         size: '40px',
-        color: 'text.muted',
+        color: 'gray.600',
         transition: 'common',
         _hover: {
-          color: 'text.default',
-          backgroundColor: 'interactive.hover',
+          color: 'gray.900',
+          backgroundColor: 'gray.200',
         },
         _pressed: {
-          color: 'text.brand',
-          backgroundColor: 'accent.brand.subtle',
+          color: 'brand.500',
+          backgroundColor: 'brand.100',
         },
       })}
       aria-pressed={tool === t.id}

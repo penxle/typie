@@ -75,7 +75,7 @@
       zIndex: '10',
       borderWidth: '1px',
       borderRadius: '12px',
-      backgroundColor: 'surface.default',
+      backgroundColor: 'white',
       boxShadow: 'large',
       overflow: 'hidden',
     })}
@@ -88,7 +88,7 @@
         paddingX: '16px',
         paddingY: '12px',
         borderBottomWidth: '1px',
-        backgroundColor: 'surface.subtle',
+        backgroundColor: 'gray.50',
       })}
     >
       <Icon
@@ -118,7 +118,7 @@
           <div>
             <label class={css({ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' })}>
               <Icon icon={PaletteIcon} size={14} />
-              <span class={css({ fontSize: '13px', color: 'text.muted' })}>배경색</span>
+              <span class={css({ fontSize: '13px', color: 'gray.600' })}>배경색</span>
             </label>
             <div class={grid({ columns: 4, gap: '8px' })}>
               {#each values.backgroundColor as color (color.value)}
@@ -148,7 +148,7 @@
 
         {#if visibleSections.includes('backgroundStyle')}
           <div>
-            <div class={css({ fontSize: '13px', color: 'text.muted', marginBottom: '8px', display: 'block' })}>배경 스타일</div>
+            <div class={css({ fontSize: '13px', color: 'gray.600', marginBottom: '8px', display: 'block' })}>배경 스타일</div>
             <div class={flex({ gap: '8px' })}>
               {#each values.backgroundStyle as style (style.value)}
                 <button
@@ -158,12 +158,12 @@
                     borderRadius: '6px',
                     borderWidth: '1px',
                     borderColor: node?.current.attrs.backgroundStyle === style.value ? 'brand.600' : 'gray.200',
-                    backgroundColor: node?.current.attrs.backgroundStyle === style.value ? 'accent.brand.subtle' : 'surface.default',
+                    backgroundColor: node?.current.attrs.backgroundStyle === style.value ? 'brand.100' : 'white',
                     fontSize: '13px',
                     transition: 'common',
                     cursor: 'pointer',
                     _hover: {
-                      backgroundColor: 'interactive.hover',
+                      backgroundColor: 'gray.200',
                     },
                   })}
                   onclick={() => updateNodeProperty('backgroundStyle', style.value)}
@@ -178,7 +178,7 @@
 
         {#if visibleSections.includes('roughness')}
           <div>
-            <div class={css({ fontSize: '13px', color: 'text.muted', marginBottom: '8px', display: 'block' })}>선 스타일</div>
+            <div class={css({ fontSize: '13px', color: 'gray.600', marginBottom: '8px', display: 'block' })}>선 스타일</div>
             <div class={flex({ gap: '8px' })}>
               {#each values.roughness as option (option.value)}
                 <button
@@ -188,12 +188,12 @@
                     borderRadius: '6px',
                     borderWidth: '1px',
                     borderColor: node?.current.attrs.roughness === option.value ? 'brand.600' : 'gray.200',
-                    backgroundColor: node?.current.attrs.roughness === option.value ? 'accent.brand.subtle' : 'surface.default',
+                    backgroundColor: node?.current.attrs.roughness === option.value ? 'brand.100' : 'white',
                     fontSize: '13px',
                     transition: 'common',
                     cursor: 'pointer',
                     _hover: {
-                      backgroundColor: 'interactive.hover',
+                      backgroundColor: 'gray.200',
                     },
                   })}
                   onclick={() => updateNodeProperty('roughness', option.value)}
@@ -208,7 +208,7 @@
 
         {#if visibleSections.includes('borderRadius')}
           <div>
-            <div class={css({ fontSize: '13px', color: 'text.muted', marginBottom: '8px', display: 'block' })}>모서리</div>
+            <div class={css({ fontSize: '13px', color: 'gray.600', marginBottom: '8px', display: 'block' })}>모서리</div>
             <div class={flex({ gap: '8px' })}>
               {#each values.borderRadius as option (option.value)}
                 <button
@@ -218,13 +218,12 @@
                     borderRadius: '6px',
                     borderWidth: '1px',
                     borderColor: (node?.current as TypedRect).attrs.borderRadius === option.value ? 'brand.600' : 'gray.200',
-                    backgroundColor:
-                      (node?.current as TypedRect).attrs.borderRadius === option.value ? 'accent.brand.subtle' : 'surface.default',
+                    backgroundColor: (node?.current as TypedRect).attrs.borderRadius === option.value ? 'brand.100' : 'white',
                     fontSize: '13px',
                     transition: 'common',
                     cursor: 'pointer',
                     _hover: {
-                      backgroundColor: 'interactive.hover',
+                      backgroundColor: 'gray.200',
                     },
                   })}
                   onclick={() => updateNodeProperty('borderRadius', option.value)}
@@ -239,7 +238,7 @@
 
         {#if visibleSections.includes('fontSize')}
           <div>
-            <label class={css({ fontSize: '13px', color: 'text.muted', marginBottom: '8px', display: 'block' })} for="font-size-select">
+            <label class={css({ fontSize: '13px', color: 'gray.600', marginBottom: '8px', display: 'block' })} for="font-size-select">
               글자 크기
             </label>
             <select
@@ -251,7 +250,7 @@
                 borderRadius: '6px',
                 borderWidth: '1px',
                 borderColor: 'gray.200',
-                backgroundColor: 'surface.default',
+                backgroundColor: 'white',
                 fontSize: '13px',
                 cursor: 'pointer',
                 _hover: {
@@ -270,7 +269,7 @@
 
         {#if visibleSections.includes('fontFamily')}
           <div>
-            <label class={css({ fontSize: '13px', color: 'text.muted', marginBottom: '8px', display: 'block' })} for="font-family-select">
+            <label class={css({ fontSize: '13px', color: 'gray.600', marginBottom: '8px', display: 'block' })} for="font-family-select">
               글꼴
             </label>
             <select
@@ -282,7 +281,7 @@
                 borderRadius: '6px',
                 borderWidth: '1px',
                 borderColor: 'gray.200',
-                backgroundColor: 'surface.default',
+                backgroundColor: 'white',
                 fontSize: '13px',
                 cursor: 'pointer',
                 _hover: {
@@ -301,7 +300,7 @@
 
         {#if visibleSections.includes('textAlign')}
           <div>
-            <div class={css({ fontSize: '13px', color: 'text.muted', marginBottom: '8px', display: 'block' })}>텍스트 정렬</div>
+            <div class={css({ fontSize: '13px', color: 'gray.600', marginBottom: '8px', display: 'block' })}>텍스트 정렬</div>
             <div class={flex({ gap: '8px' })}>
               <button
                 class={css({
@@ -310,13 +309,12 @@
                   borderRadius: '6px',
                   borderWidth: '1px',
                   borderColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'left' ? 'brand.600' : 'gray.200',
-                  backgroundColor:
-                    (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'left' ? 'accent.brand.subtle' : 'surface.default',
+                  backgroundColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'left' ? 'brand.100' : 'white',
                   fontSize: '13px',
                   transition: 'common',
                   cursor: 'pointer',
                   _hover: {
-                    backgroundColor: 'interactive.hover',
+                    backgroundColor: 'gray.200',
                   },
                 })}
                 onclick={() => updateNodeProperty('textAlign', 'left')}
@@ -331,13 +329,12 @@
                   borderRadius: '6px',
                   borderWidth: '1px',
                   borderColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'center' ? 'brand.600' : 'gray.200',
-                  backgroundColor:
-                    (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'center' ? 'accent.brand.subtle' : 'surface.default',
+                  backgroundColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'center' ? 'brand.100' : 'white',
                   fontSize: '13px',
                   transition: 'common',
                   cursor: 'pointer',
                   _hover: {
-                    backgroundColor: 'interactive.hover',
+                    backgroundColor: 'gray.200',
                   },
                 })}
                 onclick={() => updateNodeProperty('textAlign', 'center')}
@@ -352,13 +349,12 @@
                   borderRadius: '6px',
                   borderWidth: '1px',
                   borderColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'right' ? 'brand.600' : 'gray.200',
-                  backgroundColor:
-                    (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'right' ? 'accent.brand.subtle' : 'surface.default',
+                  backgroundColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'right' ? 'brand.100' : 'white',
                   fontSize: '13px',
                   transition: 'common',
                   cursor: 'pointer',
                   _hover: {
-                    backgroundColor: 'interactive.hover',
+                    backgroundColor: 'gray.200',
                   },
                 })}
                 onclick={() => updateNodeProperty('textAlign', 'right')}
@@ -374,38 +370,38 @@
           <div class={css({ paddingTop: '8px', borderTopWidth: '1px' })}>
             <div class={grid({ columns: 2, gap: '8px' })}>
               <div>
-                <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>X 좌표</div>
+                <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>X 좌표</div>
                 <div class={css({ fontSize: '13px', marginTop: '2px' })}>{Math.round(node?.current.x())}</div>
               </div>
               <div>
-                <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>Y 좌표</div>
+                <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>Y 좌표</div>
                 <div class={css({ fontSize: '13px', marginTop: '2px' })}>{Math.round(node?.current.y())}</div>
               </div>
               {#if 'width' in node.current.attrs}
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>너비</div>
+                  <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>너비</div>
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>{Math.round(node?.current.attrs.width)}</div>
                 </div>
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>높이</div>
+                  <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>높이</div>
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>{Math.round(node?.current.attrs.height)}</div>
                 </div>
               {:else if type === 'ellipse'}
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>너비</div>
+                  <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>너비</div>
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>
                     {Math.round((node?.current as TypedEllipse).attrs.radiusX * 2)}
                   </div>
                 </div>
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>높이</div>
+                  <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>높이</div>
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>
                     {Math.round((node?.current as TypedEllipse).attrs.radiusY * 2)}
                   </div>
                 </div>
               {:else if type === 'line'}
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>길이</div>
+                  <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>길이</div>
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>
                     {Math.round(
                       Math.sqrt(Math.pow((node?.current as TypedLine).attrs.dx, 2) + Math.pow((node?.current as TypedLine).attrs.dy, 2)),
@@ -413,7 +409,7 @@
                   </div>
                 </div>
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>각도</div>
+                  <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>각도</div>
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>
                     {Math.round(
                       (Math.atan2((node?.current as TypedLine).attrs.dy, (node?.current as TypedLine).attrs.dx) * 180) / Math.PI,
@@ -422,7 +418,7 @@
                 </div>
               {:else if type === 'arrow'}
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>길이</div>
+                  <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>길이</div>
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>
                     {Math.round(
                       Math.sqrt(Math.pow((node?.current as TypedArrow).attrs.dx, 2) + Math.pow((node?.current as TypedArrow).attrs.dy, 2)),
@@ -430,7 +426,7 @@
                   </div>
                 </div>
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'text.muted', display: 'block' })}>각도</div>
+                  <div class={css({ fontSize: '11px', color: 'gray.600', display: 'block' })}>각도</div>
                   <div class={css({ fontSize: '13px', marginTop: '2px' })}>
                     {Math.round(
                       (Math.atan2((node?.current as TypedArrow).attrs.dy, (node?.current as TypedArrow).attrs.dx) * 180) / Math.PI,
