@@ -1,0 +1,40 @@
+import { TypedLine } from '../shapes/line';
+import type { Operation } from '../types';
+
+export const line: Operation = (canvas) => {
+  const anchor = canvas.stage.getRelativePointerPosition();
+  if (!anchor) {
+    return;
+  }
+
+  const shape = new TypedLine({
+    x: anchor.x,
+    y: anchor.y,
+    dx: 0,
+    dy: 0,
+    roughness: 'rough',
+    seed: Math.random() * 2_147_483_637,
+  });
+
+  return {
+    update: () => {
+      const head = canvas.stage.getRelativePointerPosition();
+      if (!head) {
+        return;
+      }
+
+      const dx = head.x - anchor.x;
+      const dy = head.y - anchor.y;
+
+      shape.setAttrs({ dx, dy });
+
+      canvas.scene.add(shape);
+    },
+    destroy: () => {
+      const { dx, dy } = shape.attrs;
+      if (dx === 0 && dy === 0) {
+        shape.destroy();
+      }
+    },
+  };
+};
