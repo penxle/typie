@@ -37,14 +37,22 @@
     return null;
   });
 
-  type SectionType = 'backgroundColor' | 'backgroundStyle' | 'roughness' | 'borderRadius' | 'fontSize' | 'fontFamily' | 'coordinates';
+  type SectionType =
+    | 'backgroundColor'
+    | 'backgroundStyle'
+    | 'roughness'
+    | 'borderRadius'
+    | 'fontSize'
+    | 'fontFamily'
+    | 'textAlign'
+    | 'coordinates';
 
   const sectionsForType: Record<Shapes, SectionType[]> = {
     arrow: ['roughness', 'coordinates'],
-    rectangle: ['backgroundColor', 'backgroundStyle', 'roughness', 'borderRadius', 'coordinates'],
-    ellipse: ['backgroundColor', 'backgroundStyle', 'roughness', 'coordinates'],
+    rectangle: ['backgroundColor', 'backgroundStyle', 'roughness', 'borderRadius', 'fontSize', 'fontFamily', 'textAlign', 'coordinates'],
+    ellipse: ['backgroundColor', 'backgroundStyle', 'roughness', 'fontSize', 'fontFamily', 'textAlign', 'coordinates'],
     line: ['roughness', 'coordinates'],
-    stickynote: ['backgroundColor', 'fontFamily', 'coordinates'],
+    stickynote: ['backgroundColor', 'coordinates'],
     brush: ['coordinates'],
   };
 
@@ -54,7 +62,6 @@
     if (!node?.current) return;
 
     node?.current.setAttrs({ [property]: value });
-    canvas.selection.update();
   }
 </script>
 
@@ -251,8 +258,8 @@
                   borderColor: 'gray.400',
                 },
               })}
-              onchange={(e) => updateNodeProperty('fontSize', Number(e.currentTarget.value))}
-              value={(node?.current as TypedStickyNote).attrs.fontSize}
+              onchange={(e) => updateNodeProperty('fontSize', e.currentTarget.value)}
+              value={(node?.current as TypedRect | TypedEllipse).attrs.fontSize}
             >
               {#each values.fontSize as size (size.value)}
                 <option value={size.value}>{size.label}</option>
@@ -283,12 +290,83 @@
                 },
               })}
               onchange={(e) => updateNodeProperty('fontFamily', e.currentTarget.value)}
-              value={(node?.current as TypedStickyNote).attrs.fontFamily}
+              value={(node?.current as TypedRect | TypedEllipse).attrs.fontFamily}
             >
               {#each values.fontFamily as font (font.value)}
                 <option value={font.value}>{font.label}</option>
               {/each}
             </select>
+          </div>
+        {/if}
+
+        {#if visibleSections.includes('textAlign')}
+          <div>
+            <div class={css({ fontSize: '13px', color: 'text.muted', marginBottom: '8px', display: 'block' })}>텍스트 정렬</div>
+            <div class={flex({ gap: '8px' })}>
+              <button
+                class={css({
+                  flex: '1',
+                  paddingY: '6px',
+                  borderRadius: '6px',
+                  borderWidth: '1px',
+                  borderColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'left' ? 'brand.600' : 'gray.200',
+                  backgroundColor:
+                    (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'left' ? 'accent.brand.subtle' : 'surface.default',
+                  fontSize: '13px',
+                  transition: 'common',
+                  cursor: 'pointer',
+                  _hover: {
+                    backgroundColor: 'interactive.hover',
+                  },
+                })}
+                onclick={() => updateNodeProperty('textAlign', 'left')}
+                type="button"
+              >
+                왼쪽
+              </button>
+              <button
+                class={css({
+                  flex: '1',
+                  paddingY: '6px',
+                  borderRadius: '6px',
+                  borderWidth: '1px',
+                  borderColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'center' ? 'brand.600' : 'gray.200',
+                  backgroundColor:
+                    (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'center' ? 'accent.brand.subtle' : 'surface.default',
+                  fontSize: '13px',
+                  transition: 'common',
+                  cursor: 'pointer',
+                  _hover: {
+                    backgroundColor: 'interactive.hover',
+                  },
+                })}
+                onclick={() => updateNodeProperty('textAlign', 'center')}
+                type="button"
+              >
+                가운데
+              </button>
+              <button
+                class={css({
+                  flex: '1',
+                  paddingY: '6px',
+                  borderRadius: '6px',
+                  borderWidth: '1px',
+                  borderColor: (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'right' ? 'brand.600' : 'gray.200',
+                  backgroundColor:
+                    (node?.current as TypedRect | TypedEllipse).attrs.textAlign === 'right' ? 'accent.brand.subtle' : 'surface.default',
+                  fontSize: '13px',
+                  transition: 'common',
+                  cursor: 'pointer',
+                  _hover: {
+                    backgroundColor: 'interactive.hover',
+                  },
+                })}
+                onclick={() => updateNodeProperty('textAlign', 'right')}
+                type="button"
+              >
+                오른쪽
+              </button>
+            </div>
           </div>
         {/if}
 

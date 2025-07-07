@@ -27,19 +27,14 @@ export const values = {
   ],
 
   fontSize: [
-    { label: '12px', value: 12 },
-    { label: '14px', value: 14 },
-    { label: '16px', value: 16 },
-    { label: '18px', value: 18 },
-    { label: '20px', value: 20 },
-    { label: '24px', value: 24 },
-    { label: '28px', value: 28 },
-    { label: '32px', value: 32 },
+    { label: '작게', value: 'small', size: 24 },
+    { label: '보통', value: 'medium', size: 48 },
+    { label: '크게', value: 'large', size: 96 },
   ],
 
   fontFamily: [
-    { label: '손글씨', value: 'handwriting', fontFamily: 'GWEduSaeeum' },
-    { label: '고딕', value: 'sans-serif', fontFamily: 'Pretendard' },
+    { label: '손글씨', value: 'handwriting', fontFamily: 'Dovemayo' },
+    { label: '고딕', value: 'sans', fontFamily: 'Paperlogy' },
   ],
 } as const;
 
@@ -48,7 +43,7 @@ export const defaultValues = {
   backgroundStyle: 'solid',
   roughness: 'rough',
   borderRadius: 'round',
-  fontSize: 16,
+  fontSize: 'medium',
   fontFamily: 'handwriting',
 } as const;
 

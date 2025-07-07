@@ -237,8 +237,22 @@ export const globalFontface = defineGlobalFontface({
     fontDisplay: 'block',
   },
 
-  GWEduSaeeum: {
-    src: 'url("https://cdn.typie.net/fonts/GangwonEduSaeeum.woff2") format("woff2")',
+  Interop: {
+    src: 'url("https://cdn.typie.net/fonts/Interop-Regular.woff2") format("woff2")',
+    fontStyle: 'normal',
+    fontWeight: '400',
+    fontDisplay: 'block',
+  },
+
+  Paperlogy: {
+    src: 'url("https://cdn.typie.net/fonts/Paperlogy-4Regular.woff2") format("woff2")',
+    fontStyle: 'normal',
+    fontWeight: '400',
+    fontDisplay: 'block',
+  },
+
+  Dovemayo: {
+    src: 'url("https://cdn.typie.net/fonts/Dovemayo.woff2") format("woff2")',
     fontStyle: 'normal',
     fontWeight: '400',
     fontDisplay: 'block',

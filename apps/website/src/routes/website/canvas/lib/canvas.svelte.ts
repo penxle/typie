@@ -78,6 +78,7 @@ export class Canvas {
     this.#stage.on('wheel', (e) => this.#handleWheel(e));
 
     this.#stage.on('attrchange', () => {
+      this.selection.update();
       this.state._setSelections(this.#selection.nodes());
     });
 

@@ -1,14 +1,16 @@
+import type { BackgroundStyle, Roughness } from '../values';
+
 export type TypedShapeConfig = {
   x: number;
   y: number;
 };
 
 export type TypedRoughShapeConfig = TypedShapeConfig & {
-  roughness: 'none' | 'rough';
+  roughness: Roughness;
   seed: number;
 };
 
 export type TypedContentfulShapeConfig = TypedRoughShapeConfig & {
   backgroundColor: string;
-  backgroundStyle: 'none' | 'solid' | 'hachure';
+  backgroundStyle: BackgroundStyle;
 };
