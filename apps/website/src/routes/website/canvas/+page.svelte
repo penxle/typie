@@ -16,7 +16,7 @@
       .with('pan', () => 'grab')
       .with('select', () => 'default')
       .with('brush', () => 'default')
-      .with('line', 'rectangle', 'ellipse', 'stickynote', () => 'crosshair')
+      .with('arrow', 'line', 'rectangle', 'ellipse', 'stickynote', () => 'crosshair')
       .exhaustive();
   });
 

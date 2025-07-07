@@ -1,5 +1,5 @@
 import { MIN_SIZE } from '../const';
-import { TypedEllipse, TypedRect, TypedStickyNote } from '../shapes';
+import { TypedArrow, TypedEllipse, TypedRect, TypedStickyNote } from '../shapes';
 import { TypedBrush } from '../shapes/brush';
 import { TypedLine } from '../shapes/line';
 import type { Operation, ResizeHandle } from '../types';
@@ -8,6 +8,7 @@ type NodeState =
   | { type: 'rect'; node: TypedRect; x: number; y: number; width: number; height: number }
   | { type: 'ellipse'; node: TypedEllipse; x: number; y: number; radiusX: number; radiusY: number }
   | { type: 'line'; node: TypedLine; x: number; y: number; dx: number; dy: number }
+  | { type: 'arrow'; node: TypedArrow; x: number; y: number; dx: number; dy: number }
   | { type: 'brush'; node: TypedBrush; x: number; y: number; points: [number, number][] }
   | { type: 'stickynote'; node: TypedStickyNote; x: number; y: number; width: number; height: number };
 
@@ -52,6 +53,13 @@ export const createResizeOperation =
       } else if (node instanceof TypedLine) {
         const { x, y, dx, dy } = node.attrs;
         states.push({ type: 'line', node, x, y, dx, dy });
+        min.x = Math.min(min.x, x, x + dx);
+        min.y = Math.min(min.y, y, y + dy);
+        max.x = Math.max(max.x, x, x + dx);
+        max.y = Math.max(max.y, y, y + dy);
+      } else if (node instanceof TypedArrow) {
+        const { x, y, dx, dy } = node.attrs;
+        states.push({ type: 'arrow', node, x, y, dx, dy });
         min.x = Math.min(min.x, x, x + dx);
         min.y = Math.min(min.y, y, y + dy);
         max.x = Math.max(max.x, x, x + dx);
@@ -269,6 +277,16 @@ export const createResizeOperation =
               break;
             }
             case 'line': {
+              state.node.setAttrs({
+                x: newPos.x,
+                y: newPos.y,
+                dx: state.dx * scale.x,
+                dy: state.dy * scale.y,
+              });
+
+              break;
+            }
+            case 'arrow': {
               state.node.setAttrs({
                 x: newPos.x,
                 y: newPos.y,

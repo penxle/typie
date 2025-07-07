@@ -1,3 +1,4 @@
+export * from './arrow';
 export * from './brush';
 export * from './ellipse';
 export * from './line';

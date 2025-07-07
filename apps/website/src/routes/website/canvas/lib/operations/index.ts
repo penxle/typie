@@ -1,3 +1,4 @@
+export { arrow } from './arrow';
 export { brush } from './brush';
 export { ellipse } from './ellipse';
 export { line } from './line';

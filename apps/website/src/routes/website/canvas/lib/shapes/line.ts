@@ -32,6 +32,8 @@ export class TypedLine extends TypedShape<TypedLineConfig> {
       stroke: 'black',
       strokeWidth: 4,
       seed,
+      disableMultiStroke: true,
+      preserveVertices: true,
     });
 
     renderRoughDrawable(context, drawable);
