@@ -16,12 +16,12 @@
   const buttonStyle = center({
     borderRadius: '8px',
     size: '36px',
-    color: 'text.muted',
-    backgroundColor: 'surface.default',
+    color: 'gray.600',
+    backgroundColor: 'white',
     transition: 'common',
     _hover: {
-      backgroundColor: 'interactive.hover',
-      color: 'text.default',
+      backgroundColor: 'gray.200',
+      color: 'gray.900',
     },
   });
 </script>
@@ -31,11 +31,11 @@
     flexDirection: 'column',
     gap: '2px',
     borderRadius: '12px',
-    backgroundColor: 'surface.default',
+    backgroundColor: 'white',
     padding: '8px',
     boxShadow: 'medium',
     borderWidth: '1px',
-    borderColor: 'border.default',
+    borderColor: 'gray.200',
   })}
 >
   <button class={buttonStyle} onclick={() => canvas.scaleBy(1.1)} title="확대 (Cmd/Ctrl + Scroll)" type="button">
@@ -49,7 +49,7 @@
   <div
     class={css({
       height: '1px',
-      backgroundColor: 'border.default',
+      backgroundColor: 'gray.200',
       marginY: '4px',
     })}
   ></div>
@@ -61,7 +61,7 @@
   <div
     class={center({
       marginTop: '4px',
-      color: 'text.muted',
+      color: 'gray.600',
       fontSize: '11px',
       fontWeight: 'medium',
       height: '24px',
