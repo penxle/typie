@@ -317,8 +317,6 @@ export const createResizeOperation =
             }
           }
         }
-
-        canvas.selection.update();
       },
       destroy: () => {
         event?.target.releaseCapture(event.pointerId);

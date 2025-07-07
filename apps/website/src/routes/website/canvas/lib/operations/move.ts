@@ -53,8 +53,6 @@ export const move: Operation = (canvas) => {
           y: currentPos.y + offsetY,
         });
       }
-
-      canvas.selection.update();
     },
   };
 };

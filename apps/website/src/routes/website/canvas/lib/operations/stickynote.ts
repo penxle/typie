@@ -1,7 +1,6 @@
 import { DEFAULT_SIZE, MIN_SIZE } from '../const';
 import * as ops from '../operations';
 import { TypedStickyNote } from '../shapes/stickynote';
-import { defaultValues } from '../values';
 import type { Operation } from '../types';
 
 export const stickynote: Operation = (canvas) => {
@@ -18,8 +17,6 @@ export const stickynote: Operation = (canvas) => {
     backgroundColor: 'yellow',
     seed: Math.random() * 2_147_483_637,
     text: '',
-    fontSize: defaultValues.fontSize,
-    fontFamily: defaultValues.fontFamily,
   });
 
   return {

@@ -3,29 +3,55 @@ import { clamp } from '$lib/utils';
 import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
 import { values } from '../values';
+import { TypedShape } from './shape';
+import type { BackgroundColor } from '../values';
 import type { TypedShapeConfig } from './types';
 
-type TypedStickyNoteShapeConfig = TypedShapeConfig & {
+type TypedStickyNoteConfig = TypedShapeConfig & {
   width: number;
   height: number;
-  backgroundColor: string;
+  backgroundColor: BackgroundColor;
   seed: number;
-};
-
-type TypedStickyNoteConfig = TypedStickyNoteShapeConfig & {
   text: string;
-  fontSize: number;
-  fontFamily: string;
 };
 
-class StickyNoteShape extends Konva.Shape<TypedStickyNoteShapeConfig> {
+const FONT_SIZE = 16;
+
+export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
+  #wrapper?: HTMLDivElement;
+  #textarea?: HTMLTextAreaElement;
+
+  #isEditing = false;
+  #boundUpdateTextareaPosition: () => void;
+
+  constructor(config: TypedStickyNoteConfig) {
+    super(config);
+
+    this.on('dblclick', () => this.#startEditing());
+    this.#boundUpdateTextareaPosition = () => this.#updateTextareaPosition();
+  }
+
   get effectiveFoldSize() {
     const { width, height } = this.attrs;
     return Math.min(MIN_SIZE * 2, Math.min(width, height) * 0.2);
   }
 
-  _sceneFunc(context: Konva.Context) {
-    const { width: w, height: h, backgroundColor, seed } = this.attrs;
+  getVerticalOffset() {
+    const fontSize = FONT_SIZE;
+    const lineHeightPx = fontSize * 1.4;
+
+    const unitsPerEm = 2816;
+    const ascender = 2728;
+    const descender = -680;
+
+    const fontSizeEm = fontSize / unitsPerEm;
+    const lineGap = (lineHeightPx - fontSizeEm * ascender + fontSizeEm * descender) / 2;
+
+    return fontSizeEm * ascender + lineGap;
+  }
+
+  override renderView(context: Konva.Context) {
+    const { width: w, height: h, backgroundColor, seed, text } = this.attrs;
 
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)!.hex;
@@ -34,15 +60,16 @@ class StickyNoteShape extends Konva.Shape<TypedStickyNoteShapeConfig> {
 
     const notePath = `M 0 0 L 0 ${h} L ${w - foldSize} ${h} L ${w} ${h - foldSize} L ${w} 0 Z`;
 
-    context.save();
+    const ctx = context._context;
+    ctx.save();
     const note = new Path2D(notePath);
-    context.fillStyle = bgColorHex;
-    context.shadowColor = 'rgba(0, 0, 0, 0.1)';
-    context.shadowOffsetX = 2;
-    context.shadowOffsetY = 2;
-    context.shadowBlur = 4;
-    context.fill(note);
-    context.restore();
+    ctx.fillStyle = bgColorHex;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+    ctx.shadowBlur = 4;
+    ctx.fill(note);
+    ctx.restore();
 
     const border = roughGenerator.path(notePath, {
       roughness,
@@ -67,9 +94,62 @@ class StickyNoteShape extends Konva.Shape<TypedStickyNoteShapeConfig> {
     });
 
     renderRoughDrawable(context, fold);
+
+    if (text && !this.#isEditing) {
+      ctx.save();
+
+      ctx.font = `${FONT_SIZE}px Interop`;
+      ctx.fillStyle = 'black';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+
+      const padding = 20;
+      const lineHeight = FONT_SIZE * 1.4;
+      const maxWidth = w - padding * 2;
+
+      const textX = padding;
+
+      const paragraphs = text.split('\n');
+      const lines: string[] = [];
+
+      for (const paragraph of paragraphs) {
+        if (paragraph === '') {
+          lines.push('');
+          continue;
+        }
+
+        let currentLine = '';
+
+        for (const char of paragraph) {
+          const testLine = currentLine + char;
+          const metrics = ctx.measureText(testLine);
+
+          if (metrics.width > maxWidth && currentLine) {
+            lines.push(currentLine);
+            currentLine = char;
+          } else {
+            currentLine = testLine;
+          }
+        }
+
+        if (currentLine) {
+          lines.push(currentLine);
+        }
+      }
+
+      const verticalOffset = this.getVerticalOffset();
+
+      for (const [i, line] of lines.entries()) {
+        const y = padding + i * lineHeight + verticalOffset;
+        if (y > h - padding) break;
+        ctx.fillText(line, textX, y);
+      }
+
+      ctx.restore();
+    }
   }
 
-  _hitFunc(context: Konva.Context) {
+  override renderHitTest(context: Konva.Context) {
     const { width: w, height: h } = this.attrs;
     const foldSize = this.effectiveFoldSize;
 
@@ -82,102 +162,6 @@ class StickyNoteShape extends Konva.Shape<TypedStickyNoteShapeConfig> {
     context.closePath();
     context.fillStrokeShape(this);
   }
-}
-
-export class TypedStickyNote extends Konva.Group {
-  declare attrs: TypedStickyNoteConfig;
-  shape: StickyNoteShape;
-  text: Konva.Text;
-
-  #textarea?: HTMLTextAreaElement;
-  #isEditing = false;
-  #boundUpdateTextareaPosition: () => void;
-
-  constructor(config: TypedStickyNoteConfig) {
-    super({
-      x: config.x,
-      y: config.y,
-      width: config.width,
-      height: config.height,
-    });
-
-    this.attrs = config;
-
-    this.shape = new StickyNoteShape({
-      x: 0,
-      y: 0,
-      width: config.width,
-      height: config.height,
-      backgroundColor: config.backgroundColor,
-      seed: config.seed,
-    });
-
-    this.text = new Konva.Text({
-      x: 0,
-      y: 1,
-      text: config.text,
-      fontSize: this.effectiveFontSize,
-      fontFamily: this.effectiveFontFamily,
-      fill: 'black',
-      width: config.width,
-      padding: 20,
-      lineHeight: 1.2,
-      letterSpacing: 0.01,
-      wrap: 'char',
-      listening: false,
-    });
-
-    this.add(this.shape);
-    this.add(this.text);
-
-    this.on('dblclick', () => this.#startEditing());
-
-    this.#boundUpdateTextareaPosition = () => this.#updateTextareaPosition();
-  }
-
-  get effectiveFontFamily() {
-    const { fontFamily } = this.attrs;
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return values.fontFamily.find((f) => f.value === fontFamily)!.fontFamily;
-  }
-
-  get effectiveFontSize() {
-    const { fontFamily, fontSize } = this.attrs;
-
-    if (fontFamily === 'handwriting') {
-      return fontSize * 1.2;
-    }
-
-    return fontSize;
-  }
-
-  override setAttrs(config: Partial<TypedStickyNoteConfig>) {
-    super.setAttrs({
-      x: config.x ?? this.attrs.x,
-      y: config.y ?? this.attrs.y,
-      width: config.width ?? this.attrs.width,
-      height: config.height ?? this.attrs.height,
-    });
-
-    Object.assign(this.attrs, config);
-
-    this.fire('attrchange', { target: this }, true);
-
-    this.shape?.setAttrs({
-      width: config.width ?? this.attrs.width,
-      height: config.height ?? this.attrs.height,
-      backgroundColor: config.backgroundColor ?? this.attrs.backgroundColor,
-    });
-
-    this.text?.setAttrs({
-      width: config.width ?? this.attrs.width,
-      text: config.text ?? this.attrs.text,
-      fontSize: this.effectiveFontSize,
-      fontFamily: this.effectiveFontFamily,
-    });
-
-    return this;
-  }
 
   #createTextarea() {
     if (this.#textarea) return;
@@ -187,28 +171,44 @@ export class TypedStickyNote extends Konva.Group {
 
     const rect = this.getClientRect();
     const scale = stage.scaleX();
+    const { text } = this.attrs;
 
-    this.#textarea = document.createElement('textarea');
-    this.#textarea.value = this.attrs.text;
-
-    Object.assign(this.#textarea.style, {
+    this.#wrapper = document.createElement('div');
+    Object.assign(this.#wrapper.style, {
       position: 'absolute',
       left: '0',
       top: '0',
       width: `${rect.width}px`,
       height: `${rect.height}px`,
+      transform: `translate(${rect.x}px, ${rect.y}px)`,
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'flex-start',
       padding: `${20 * scale}px`,
+      zIndex: '1000',
+      pointerEvents: 'none',
+    });
+
+    this.#textarea = document.createElement('textarea');
+    this.#textarea.value = text;
+    this.#textarea.rows = 1;
+
+    Object.assign(this.#textarea.style, {
+      width: '100%',
+      height: 'auto',
+      minHeight: '0',
+      maxHeight: '100%',
       color: 'black',
-      fontSize: `${this.effectiveFontSize * scale}px`,
-      fontFamily: this.effectiveFontFamily,
-      lineHeight: '1.2',
-      letterSpacing: '0',
+      fontSize: `${FONT_SIZE * scale}px`,
+      fontFamily: 'Interop',
+      textAlign: 'left',
+      lineHeight: '1.4',
+      letterSpacing: '-0.03em',
       whiteSpace: 'pre-wrap',
       wordBreak: 'break-all',
-      overflow: 'hidden',
-      zIndex: '1000',
+      overflow: 'auto',
       resize: 'none',
-      transform: `translate(${rect.x}px, ${rect.y}px)`,
+      pointerEvents: 'auto',
     });
 
     this.#textarea.addEventListener('blur', () => this.#finalizeEditing());
@@ -221,9 +221,39 @@ export class TypedStickyNote extends Konva.Group {
       }
     });
 
-    document.body.append(this.#textarea);
+    this.#textarea.addEventListener('input', () => this.#adjustTextareaHeight());
+
+    this.#wrapper.append(this.#textarea);
+    document.body.append(this.#wrapper);
 
     this.#textarea.focus();
+    this.#textarea.select();
+
+    this.#adjustTextareaHeight();
+  }
+
+  #adjustTextareaHeight() {
+    if (!this.#textarea || !this.#wrapper) return;
+
+    const stage = this.getStage();
+    if (!stage) return;
+
+    const scale = stage.scaleX();
+    const padding = 20 * scale;
+
+    this.#textarea.style.height = 'auto';
+    const scrollHeight = this.#textarea.scrollHeight;
+    this.#textarea.style.height = `${scrollHeight}px`;
+    const totalHeight = scrollHeight + padding * 2;
+    const rectHeight = this.attrs.height * scale;
+
+    if (totalHeight > rectHeight) {
+      const newRectHeight = totalHeight / scale;
+      this.setAttrs({ height: newRectHeight });
+      this.#wrapper.style.height = `${totalHeight}px`;
+    } else {
+      this.#wrapper.style.height = `${rectHeight}px`;
+    }
   }
 
   #updateTextareaPosition() {
@@ -231,18 +261,18 @@ export class TypedStickyNote extends Konva.Group {
     if (!stage) return;
 
     requestAnimationFrame(() => {
-      if (!this.#textarea) return;
+      if (!this.#textarea || !this.#wrapper) return;
 
       const rect = this.getClientRect();
       const scale = stage.scaleX();
 
-      this.#textarea.style.transform = `translate(${rect.x}px, ${rect.y}px)`;
-      this.#textarea.style.left = '0';
-      this.#textarea.style.top = '0';
-      this.#textarea.style.width = `${rect.width}px`;
-      this.#textarea.style.height = `${rect.height}px`;
-      this.#textarea.style.fontSize = `${this.effectiveFontSize * scale}px`;
-      this.#textarea.style.padding = `${20 * scale}px`;
+      this.#wrapper.style.transform = `translate(${rect.x}px, ${rect.y}px)`;
+      this.#wrapper.style.width = `${rect.width}px`;
+      this.#wrapper.style.padding = `${20 * scale}px`;
+
+      this.#textarea.style.fontSize = `${FONT_SIZE * scale}px`;
+
+      this.#adjustTextareaHeight();
     });
   }
 
@@ -250,8 +280,6 @@ export class TypedStickyNote extends Konva.Group {
     if (this.#isEditing) return;
 
     this.#isEditing = true;
-
-    this.text.hide();
     this.#createTextarea();
 
     const stage = this.getStage();
@@ -259,6 +287,8 @@ export class TypedStickyNote extends Konva.Group {
       stage.on('xChange yChange scaleXChange scaleYChange', this.#boundUpdateTextareaPosition);
       this.on('xChange yChange', this.#boundUpdateTextareaPosition);
     }
+
+    this.getLayer()?.batchDraw();
   }
 
   #finalizeEditing() {
@@ -267,9 +297,9 @@ export class TypedStickyNote extends Konva.Group {
     this.#isEditing = false;
 
     this.setAttrs({ text: this.#textarea.value });
-
-    this.text.show();
     this.#destroyTextarea();
+
+    this.getLayer()?.batchDraw();
   }
 
   #destroyTextarea() {
@@ -277,6 +307,11 @@ export class TypedStickyNote extends Konva.Group {
 
     this.#textarea.remove();
     this.#textarea = undefined;
+
+    if (this.#wrapper) {
+      this.#wrapper.remove();
+      this.#wrapper = undefined;
+    }
 
     const stage = this.getStage();
     if (stage) {
@@ -287,7 +322,6 @@ export class TypedStickyNote extends Konva.Group {
 
   override destroy() {
     this.#destroyTextarea();
-    super.destroy();
-    return this;
+    return super.destroy();
   }
 }

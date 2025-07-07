@@ -19,6 +19,10 @@ export const ellipse: Operation = (canvas) => {
     backgroundColor: defaultValues.backgroundColor,
     backgroundStyle: defaultValues.backgroundStyle,
     seed: Math.random() * 2_147_483_637,
+    text: '',
+    fontSize: defaultValues.fontSize,
+    fontFamily: defaultValues.fontFamily,
+    textAlign: 'center',
   });
 
   return {
