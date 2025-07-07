@@ -86,7 +86,7 @@
 
   <Button size="sm" type="submit">삽입</Button>
 
-  <!-- {#if editor.current.isActive('link')}
+  {#if editor.current.isActive('link')}
     <Button
       onclick={() => {
         editor.current.chain().focus().unsetLink().run();
@@ -98,5 +98,5 @@
     >
       삭제
     </Button>
-  {/if} -->
+  {/if}
 </form>

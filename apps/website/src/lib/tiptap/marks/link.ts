@@ -62,7 +62,7 @@ export const Link = Mark.create({
       unsetLink:
         () =>
         ({ chain }) => {
-          return chain().unsetMark(this.name, { extendEmptyMarkRange: true }).run();
+          return chain().unsetMark(this.name, { extendEmptyMarkRange: true }).setMeta('preventAutoLink', true).run();
         },
     };
   },
@@ -71,6 +71,12 @@ export const Link = Mark.create({
     return [
       new Plugin({
         appendTransaction: (transactions, oldState, newState) => {
+          const shouldSkip = transactions.some((tr) => tr.getMeta('preventAutoLink'));
+
+          if (shouldSkip) {
+            return;
+          }
+
           const docChanged = transactions.some((transaction) => transaction.docChanged) && !oldState.doc.eq(newState.doc);
 
           if (!docChanged) {
