@@ -85,7 +85,7 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
   override renderView(context: Konva.Context) {
     const { radiusX, radiusY, backgroundColor, backgroundStyle, seed, text, textAlign } = this.attrs;
 
-    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)?.hex;
+    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)?.color;
 
     const drawable = roughGenerator.ellipse(0, 0, radiusX * 2, radiusY * 2, {
       roughness: this.effectiveRoughness,
@@ -95,7 +95,7 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
       seed,
       fill: backgroundStyle === 'none' ? undefined : bgColorHex,
       fillStyle: backgroundStyle === 'none' ? undefined : backgroundStyle,
-      fillWeight: 1,
+      fillWeight: 2,
       hachureGap: 8,
       curveFitting: 1,
     });
