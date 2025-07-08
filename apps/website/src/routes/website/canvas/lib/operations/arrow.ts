@@ -14,7 +14,6 @@ export const arrow: Operation = (canvas) => {
     dx: 0,
     dy: 0,
     roughness: defaultValues.roughness,
-    seed: Math.random() * 2_147_483_637,
   });
 
   return {
@@ -35,6 +34,8 @@ export const arrow: Operation = (canvas) => {
       const { dx, dy } = shape.attrs;
       if (dx === 0 && dy === 0) {
         shape.destroy();
+      } else {
+        canvas.syncManager?.addOrUpdateKonvaNode(shape);
       }
     },
   };

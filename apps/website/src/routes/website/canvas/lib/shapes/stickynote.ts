@@ -5,7 +5,7 @@ import { renderRoughDrawable, roughGenerator } from '../rough';
 import { values } from '../values';
 import { TypedShape } from './shape';
 import type { BackgroundColor } from '../values';
-import type { TypedShapeConfig } from './types';
+import type { TypedShapeConfig, TypedShapeConstructorConfig } from './types';
 
 type TypedStickyNoteConfig = TypedShapeConfig & {
   width: number;
@@ -24,7 +24,7 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
   #isEditing = false;
   #boundUpdateTextareaPosition: () => void;
 
-  constructor(config: TypedStickyNoteConfig) {
+  constructor(config: TypedShapeConstructorConfig<TypedStickyNoteConfig>) {
     super(config);
 
     this.on('dblclick', () => this.#startEditing());
@@ -325,3 +325,5 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
     return super.destroy();
   }
 }
+
+TypedStickyNote.prototype._type = 'stickynote';

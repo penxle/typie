@@ -5,7 +5,7 @@ import { renderRoughDrawable, roughGenerator } from '../rough';
 import { values } from '../values';
 import { TypedShape } from './shape';
 import type { FontFamily, FontSize } from '../values';
-import type { TypedContentfulShapeConfig } from './types';
+import type { TypedContentfulShapeConfig, TypedShapeConstructorConfig } from './types';
 
 const FONT_METRICS = {
   sans: {
@@ -38,7 +38,7 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
   #isEditing = false;
   #boundUpdateTextareaPosition: () => void;
 
-  constructor(config: TypedEllipseConfig) {
+  constructor(config: TypedShapeConstructorConfig<TypedEllipseConfig>) {
     super(config);
 
     this.on('dblclick', () => this.#startEditing());
@@ -346,5 +346,6 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
   }
 }
 
+TypedEllipse.prototype._type = 'ellipse';
 TypedEllipse.prototype._centroid = true;
 TypedEllipse.prototype._attrsAffectingSize = ['radiusX', 'radiusY'];

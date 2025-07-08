@@ -71,4 +71,5 @@ export class TypedLine extends TypedShape<TypedLineConfig> {
   }
 }
 
+TypedLine.prototype._type = 'line';
 TypedLine.prototype._attrsAffectingSize = ['dx', 'dy'];
