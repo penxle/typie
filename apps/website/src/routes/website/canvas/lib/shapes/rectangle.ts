@@ -5,7 +5,7 @@ import { renderRoughDrawable, roughGenerator } from '../rough';
 import { values } from '../values';
 import { TypedShape } from './shape';
 import type { BorderRadius, FontFamily, FontSize } from '../values';
-import type { TypedContentfulShapeConfig } from './types';
+import type { TypedContentfulShapeConfig, TypedShapeConstructorConfig } from './types';
 
 const FONT_METRICS = {
   sans: {
@@ -39,7 +39,7 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
   #isEditing = false;
   #boundUpdateTextareaPosition: () => void;
 
-  constructor(config: TypedRectConfig) {
+  constructor(config: TypedShapeConstructorConfig<TypedRectConfig>) {
     super(config);
 
     this.on('dblclick', () => this.#startEditing());
@@ -376,3 +376,5 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
     return super.destroy();
   }
 }
+
+TypedRect.prototype._type = 'rectangle';

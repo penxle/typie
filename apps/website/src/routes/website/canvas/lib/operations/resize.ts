@@ -319,6 +319,10 @@ export const createResizeOperation =
         }
       },
       destroy: () => {
+        for (const node of nodes) {
+          canvas.syncManager?.addOrUpdateKonvaNode(node);
+        }
+
         event?.target.releaseCapture(event.pointerId);
         canvas.state.tool = 'select';
       },

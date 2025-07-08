@@ -37,6 +37,20 @@ interface Blob {
   size: Int!
 }
 
+type CanvasSyncStreamPayload {
+  canvasId: ID!
+  data: String!
+  type: CanvasSyncType!
+}
+
+enum CanvasSyncType {
+  AWARENESS
+  HEARTBEAT
+  PRESENCE
+  UPDATE
+  VECTOR
+}
+
 type CharacterCountChange {
   additions: Int!
   date: DateTime!
@@ -358,6 +372,7 @@ type Mutation {
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
+  syncCanvas(input: SyncCanvasInput!): Boolean!
   syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
@@ -724,6 +739,7 @@ input SubscribePlanWithBillingKeyInput {
 }
 
 type Subscription {
+  canvasSyncStream(canvasId: ID!, clientId: String!): CanvasSyncStreamPayload!
   postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
@@ -743,6 +759,13 @@ type Subscription_ {
   plan: Plan!
   startsAt: DateTime!
   state: SubscriptionState!
+}
+
+input SyncCanvasInput {
+  canvasId: String!
+  clientId: String!
+  data: String!
+  type: CanvasSyncType!
 }
 
 input SyncPostInput {

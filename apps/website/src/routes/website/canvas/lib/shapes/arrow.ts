@@ -104,4 +104,5 @@ export class TypedArrow extends TypedShape<TypedArrowConfig> {
   }
 }
 
+TypedArrow.prototype._type = 'arrow';
 TypedArrow.prototype._attrsAffectingSize = ['dx', 'dy'];

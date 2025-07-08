@@ -33,6 +33,8 @@ export const brush: Operation = (canvas) => {
       const { points } = shape.attrs;
       if (points.length < 2) {
         shape.destroy();
+      } else {
+        canvas.syncManager?.addOrUpdateKonvaNode(shape);
       }
     },
   };

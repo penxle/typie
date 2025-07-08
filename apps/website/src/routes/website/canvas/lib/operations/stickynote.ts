@@ -15,7 +15,6 @@ export const stickynote: Operation = (canvas) => {
     width: 0,
     height: 0,
     backgroundColor: 'yellow',
-    seed: Math.random() * 2_147_483_637,
     text: '',
   });
 
@@ -49,6 +48,8 @@ export const stickynote: Operation = (canvas) => {
 
         canvas.scene.add(shape);
         canvas.selection.nodes([shape]);
+
+        canvas.syncManager?.addOrUpdateKonvaNode(shape);
 
         canvas.state.tool = 'select';
       }

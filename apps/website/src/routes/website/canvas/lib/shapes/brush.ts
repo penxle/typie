@@ -100,4 +100,5 @@ export class TypedBrush extends TypedShape<TypedBrushConfig> {
   }
 }
 
+TypedBrush.prototype._type = 'brush';
 TypedBrush.prototype._attrsAffectingSize = ['points'];

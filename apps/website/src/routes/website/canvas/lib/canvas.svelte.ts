@@ -1,9 +1,13 @@
 import Konva from 'konva';
+import * as Y from 'yjs';
 import { clamp, Ref } from '$lib/utils';
+import { CursorManager } from './cursor-manager';
 import { Environment } from './environment';
 import * as ops from './operations';
 import { Scene } from './scene';
 import { Selection } from './selection';
+import { SyncManager } from './sync-manager';
+import type { Awareness } from 'y-protocols/awareness';
 import type { Operation, OperationReturn, Pos, Tool } from './types';
 
 type ScaleOptions = {
@@ -50,12 +54,15 @@ export class Canvas {
   #environment: Environment;
   #selection: Selection;
 
+  #syncManager?: SyncManager;
+  #cursorManager?: CursorManager;
+
   #observer: ResizeObserver;
   #pointers = new Map<number, Pos>();
 
   #operation: Partial<OperationReturn> | null = null;
 
-  constructor(container: HTMLDivElement) {
+  constructor(container: HTMLDivElement, doc?: Y.Doc, awareness?: Awareness) {
     this.#container = container;
 
     this.#stage = new Konva.Stage({
@@ -68,6 +75,14 @@ export class Canvas {
     this.#scene = new Scene(this.#stage);
     this.#selection = new Selection(this.#stage, this.#state);
 
+    if (doc) {
+      this.#syncManager = new SyncManager(this, doc);
+
+      if (awareness) {
+        this.#cursorManager = new CursorManager(this, awareness);
+      }
+    }
+
     this.#observer = new ResizeObserver(() => this.resize());
     this.#observer.observe(this.#container);
 
@@ -75,6 +90,7 @@ export class Canvas {
     this.#stage.on('pointermove', (e) => this.#handlePointerMove(e));
     this.#stage.on('pointerup', (e) => this.#handlePointerUp(e));
     this.#stage.on('pointercancel', (e) => this.#handlePointerUp(e));
+
     this.#stage.on('wheel', (e) => this.#handleWheel(e));
 
     this.#stage.on('attrchange', () => {
@@ -83,7 +99,7 @@ export class Canvas {
     });
 
     document.fonts.ready.then(() => {
-      this.stage.batchDraw();
+      this.stage._requestDraw();
     });
   }
 
@@ -103,6 +119,14 @@ export class Canvas {
     return this.#selection;
   }
 
+  get syncManager() {
+    return this.#syncManager;
+  }
+
+  get cursorManager() {
+    return this.#cursorManager;
+  }
+
   resize() {
     this.#stage.width(this.#container.offsetWidth);
     this.#stage.height(this.#container.offsetHeight);
@@ -113,6 +137,7 @@ export class Canvas {
     this.#stage.position({ x, y });
     this.#environment.update();
     this.#operation?.update?.();
+    this.#cursorManager?.update();
   }
 
   moveBy(dx: number, dy: number) {
@@ -138,6 +163,8 @@ export class Canvas {
 
     this.#state._setScale(value);
     this.#operation?.update?.();
+
+    this.#cursorManager?.update();
   }
 
   scaleBy(delta: number, options?: Partial<ScaleOptions>) {
@@ -155,6 +182,7 @@ export class Canvas {
 
   destroy() {
     this.#observer.disconnect();
+    this.#cursorManager?.destroy();
     this.#stage.destroy();
   }
 
@@ -231,6 +259,7 @@ export class Canvas {
       return;
     }
 
+    this.#cursorManager?.update();
     this.#operation?.update?.(e);
   }
 
@@ -270,6 +299,7 @@ export class Canvas {
       this.selection.nodes([]);
 
       for (const node of nodes) {
+        this.#syncManager?.removeKonvaNode(node);
         node.destroy();
       }
     } else if (e.key === 'Escape') {
