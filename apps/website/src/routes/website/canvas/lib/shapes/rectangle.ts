@@ -99,7 +99,7 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
     const { width: w, height: h, backgroundColor, backgroundStyle, seed, text, textAlign } = this.attrs;
     const r = this.effectiveBorderRadius;
 
-    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)?.hex;
+    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)?.color;
 
     if (r === 0) {
       const drawable = roughGenerator.rectangle(0, 0, w, h, {
@@ -125,7 +125,7 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
         seed,
         fill: backgroundStyle === 'none' ? undefined : bgColorHex,
         fillStyle: backgroundStyle === 'none' ? undefined : backgroundStyle,
-        fillWeight: 1,
+        fillWeight: 2,
         hachureGap: 8,
         preserveVertices: true,
       });

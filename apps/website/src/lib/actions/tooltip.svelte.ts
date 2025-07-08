@@ -7,6 +7,7 @@ import type { Action } from 'svelte/action';
 
 type Parameter = {
   message: string;
+  trailing?: string;
   placement?: Placement;
   offset?: number;
   delay?: number;
@@ -15,7 +16,7 @@ type Parameter = {
 
 export const tooltip: Action<HTMLElement, Parameter> = (
   element,
-  { message, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false }: Parameter,
+  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false }: Parameter,
 ) => {
   let show = $state(false);
   let timer = $state<NodeJS.Timeout>();
@@ -28,6 +29,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (
 
   const props = $state({
     message,
+    trailing,
     floating,
     arrow,
   });
@@ -92,8 +94,9 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   });
 
   return {
-    update: ({ message }: Parameter) => {
+    update: ({ message, trailing }: Parameter) => {
       props.message = message;
+      props.trailing = trailing;
     },
   };
 };

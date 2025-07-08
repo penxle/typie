@@ -5,11 +5,12 @@
 
   type Props = {
     message: string;
+    trailing?: string;
     floating: FloatingAction;
     arrow: ArrowAction;
   };
 
-  let { message, floating, arrow }: Props = $props();
+  let { message, trailing, floating, arrow }: Props = $props();
 </script>
 
 <div
@@ -30,6 +31,10 @@
   transition:scale|global={{ start: 0.9, duration: 200 }}
 >
   <span>{message}</span>
+
+  {#if trailing}
+    <span class={css({ marginLeft: '4px', color: 'text.bright', opacity: '50' })}>{trailing}</span>
+  {/if}
 
   <div
     class={css({

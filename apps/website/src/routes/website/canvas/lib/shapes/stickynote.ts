@@ -54,7 +54,7 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
     const { width: w, height: h, backgroundColor, seed, text } = this.attrs;
 
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)!.hex;
+    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)!.color;
     const roughness = clamp(Math.min(w, h) / (MIN_SIZE * 10) - 1, 0.5, 2.5);
     const foldSize = this.effectiveFoldSize;
 

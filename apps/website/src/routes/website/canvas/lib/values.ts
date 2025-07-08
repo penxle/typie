@@ -1,13 +1,13 @@
 export const values = {
   backgroundColor: [
-    { label: '흰색', value: 'white', hex: '#ffffff' },
-    { label: '회색', value: 'gray', hex: '#f3f4f6' },
-    { label: '노란색', value: 'yellow', hex: '#fef3c7' },
-    { label: '파란색', value: 'blue', hex: '#dbeafe' },
-    { label: '초록색', value: 'green', hex: '#dcfce7' },
-    { label: '분홍색', value: 'pink', hex: '#fce7f3' },
-    { label: '주황색', value: 'orange', hex: '#fed7aa' },
-    { label: '보라색', value: 'purple', hex: '#e9d5ff' },
+    { label: '흰색', value: 'white', color: '#ffffff' },
+    { label: '회색', value: 'gray', color: '#f3f4f6' },
+    { label: '노란색', value: 'yellow', color: '#fef3c7' },
+    { label: '파란색', value: 'blue', color: '#dbeafe' },
+    { label: '초록색', value: 'green', color: '#dcfce7' },
+    { label: '분홍색', value: 'pink', color: '#fce7f3' },
+    { label: '주황색', value: 'orange', color: '#fed7aa' },
+    { label: '보라색', value: 'purple', color: '#e9d5ff' },
   ],
 
   backgroundStyle: [

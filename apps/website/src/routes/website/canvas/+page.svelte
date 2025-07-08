@@ -2,10 +2,10 @@
   import { match } from 'ts-pattern';
   import { getThemeContext } from '$lib/context';
   import { css } from '$styled-system/css';
-  import PropertiesPanel from './components/PropertiesPanel.svelte';
-  import Toolbar from './components/Toolbar.svelte';
-  import Zoom from './components/Zoom.svelte';
   import { Canvas } from './lib/canvas.svelte';
+  import Panel from './Panel.svelte';
+  import Toolbar from './Toolbar.svelte';
+  import Zoom from './Zoom.svelte';
 
   let container = $state<HTMLDivElement>();
   let canvas = $state<Canvas>();
@@ -45,38 +45,16 @@
     width: 'full',
     height: '[100dvh]',
     overflow: 'hidden',
-    backgroundColor: 'gray.50',
+    backgroundColor: 'surface.subtle',
   })}
 >
-  <div style:cursor class={css({ size: 'full', backgroundColor: 'gray.50' })}>
+  <div style:cursor class={css({ size: 'full', backgroundColor: 'surface.subtle' })}>
     <div bind:this={container} class={css({ size: 'full' })}></div>
   </div>
 
   {#if canvas}
-    <PropertiesPanel {canvas} />
-
-    <div
-      class={css({
-        position: 'absolute',
-        bottom: '24px',
-        left: '1/2',
-        translate: 'auto',
-        translateX: '-1/2',
-        zIndex: '10',
-      })}
-    >
-      <Toolbar bind:tool={canvas.state.tool} />
-    </div>
-
-    <div
-      class={css({
-        position: 'absolute',
-        top: '20px',
-        right: '20px',
-        zIndex: '10',
-      })}
-    >
-      <Zoom {canvas} />
-    </div>
+    <Toolbar {canvas} />
+    <Zoom {canvas} />
+    <Panel {canvas} />
   {/if}
 </div>
