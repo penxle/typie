@@ -393,7 +393,7 @@ export async function generateActivityImage(userId: string): Promise<Buffer> {
                             style={{
                               width: '28px',
                               height: '28px',
-                              backgroundColor: levelColors[activity.level],
+                              backgroundColor: levelColors[activity.level] ?? levelColors[0],
                               borderRadius: '4px',
                             }}
                           />
