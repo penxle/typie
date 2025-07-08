@@ -29,8 +29,8 @@ export const stickynote: Operation = (canvas) => {
       const deltaX = Math.abs(head.x - anchor.x);
       const deltaY = Math.abs(head.y - anchor.y);
 
-      const width = Math.max(deltaX, MIN_SIZE);
-      const height = Math.max(deltaY, MIN_SIZE);
+      const width = Math.max(deltaX, MIN_SIZE * 10);
+      const height = Math.max(deltaY, MIN_SIZE * 10);
 
       shape.setAttrs({ width, height });
 
