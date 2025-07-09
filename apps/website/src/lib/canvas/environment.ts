@@ -32,14 +32,6 @@ export class Environment {
       visualSpacing = gridSize * stageScale;
     }
 
-    const background = new Konva.Rect({
-      x: 0,
-      y: 0,
-      width: stageWidth,
-      height: stageHeight,
-      fill: '#fafafa',
-    });
-
     const grid = new Konva.Shape({
       sceneFunc: (context) => {
         context.strokeStyle = 'rgba(0, 0, 0, 0.05)';
@@ -73,7 +65,6 @@ export class Environment {
 
     this.#layer.destroyChildren();
 
-    this.#layer.add(background);
     this.#layer.add(grid);
 
     this.#layer.batchDraw();

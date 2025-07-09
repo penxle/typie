@@ -36,8 +36,8 @@
       backgroundColor: 'surface.subtle',
     },
     _pressed: {
-      color: 'accent.brand.default',
-      backgroundColor: 'accent.brand.subtle',
+      color: 'text.bright',
+      backgroundColor: 'accent.brand.default',
     },
   })}
   aria-pressed={active}

@@ -42,7 +42,7 @@
 
 <svelte:window on:keydown={(e) => canvas?.handleKeyDown(e)} />
 
-<div style:cursor class={css(style)}>
+<div style:cursor class={css(style, { backgroundColor: 'gray.50' })}>
   <div
     bind:this={element}
     class={css({ position: 'relative', size: 'full', overflow: 'hidden' })}
