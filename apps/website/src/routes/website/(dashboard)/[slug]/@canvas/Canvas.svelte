@@ -19,13 +19,13 @@
   import Zoom from './Zoom.svelte';
 
   const syncCanvas = graphql(`
-    mutation Canvas_SyncCanvas_Mutation($input: SyncCanvasInput!) {
+    mutation DashboardSlugPage_Canvas_SyncCanvas_Mutation($input: SyncCanvasInput!) {
       syncCanvas(input: $input)
     }
   `);
 
   const canvasSyncStream = graphql(`
-    subscription Canvas_CanvasSyncStream_Subscription($clientId: String!, $canvasId: ID!) {
+    subscription DashboardSlugPage_Canvas_CanvasSyncStream_Subscription($clientId: String!, $canvasId: ID!) {
       canvasSyncStream(clientId: $clientId, canvasId: $canvasId) {
         canvasId
         type

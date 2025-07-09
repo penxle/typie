@@ -69,53 +69,57 @@
           ...Editor_Panel_user
         }
 
-        post(slug: $slug) {
+        entity(slug: $slug) {
           id
-          title
-          type
-          update
+          slug
+          url
 
-          entity {
+          ancestors {
             id
-            slug
-            url
 
-            ancestors {
-              id
+            node {
+              __typename
 
-              node {
-                __typename
-
-                ... on Folder {
-                  id
-                  name
-                }
-              }
-            }
-
-            site {
-              id
-              url
-
-              fonts {
+              ... on Folder {
                 id
                 name
-                weight
-                url
               }
-
-              ...Editor_Limit_site
-              ...Editor_Placeholder_site
-              ...Editor_Toolbar_site
-            }
-
-            user {
-              id
             }
           }
 
-          ...Editor_Panel_post
-          ...Editor_Timeline_post
+          site {
+            id
+            url
+
+            fonts {
+              id
+              name
+              weight
+              url
+            }
+
+            ...Editor_Limit_site
+            ...Editor_Placeholder_site
+            ...Editor_Toolbar_site
+          }
+
+          user {
+            id
+          }
+
+          node {
+            __typename
+
+            ... on Post {
+              id
+              title
+              type
+              update
+
+              ...Editor_Panel_post
+              ...Editor_Timeline_post
+            }
+          }
         }
       }
     `),
@@ -250,7 +254,7 @@
   });
 
   const fontFaces = $derived(
-    $query.post.entity.site.fonts
+    $query.entity.site.fonts
       .map(
         (font) =>
           `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
@@ -259,11 +263,11 @@
   );
 
   doc.on('updateV2', async (update, origin) => {
-    if (browser && origin !== 'remote') {
+    if (browser && origin !== 'remote' && $query.entity.node.__typename === 'Post') {
       await syncPost(
         {
           clientId,
-          postId: $query.post.id,
+          postId: $query.entity.node.id,
           type: PostSyncType.UPDATE,
           data: base64.stringify(update),
         },
@@ -273,13 +277,13 @@
   });
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
-    if (browser && origin !== 'remote') {
+    if (browser && origin !== 'remote' && $query.entity.node.__typename === 'Post') {
       const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
 
       await syncPost(
         {
           clientId,
-          postId: $query.post.id,
+          postId: $query.entity.node.id,
           type: PostSyncType.AWARENESS,
           data: base64.stringify(update),
         },
@@ -291,124 +295,130 @@
   const forceSync = async () => {
     const vector = Y.encodeStateVector(doc);
 
-    await syncPost(
-      {
-        clientId,
-        postId: $query.post.id,
-        type: PostSyncType.VECTOR,
-        data: base64.stringify(vector),
-      },
-      { transport: 'ws' },
-    );
+    if ($query.entity.node.__typename === 'Post') {
+      await syncPost(
+        {
+          clientId,
+          postId: $query.entity.node.id,
+          type: PostSyncType.VECTOR,
+          data: base64.stringify(vector),
+        },
+        { transport: 'ws' },
+      );
+    }
   };
 
   onMount(() => {
-    const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
-      if (payload.type === PostSyncType.HEARTBEAT) {
-        lastHeartbeatAt = dayjs(payload.data);
-        connectionStatus = 'connected';
-      } else if (payload.type === PostSyncType.UPDATE) {
-        Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
-      } else if (payload.type === PostSyncType.VECTOR) {
-        const update = Y.encodeStateAsUpdateV2(doc, base64.parse(payload.data));
+    if ($query.entity.node.__typename === 'Post') {
+      const postId = $query.entity.node.id;
 
-        await syncPost(
-          {
-            clientId,
-            postId: $query.post.id,
-            type: PostSyncType.UPDATE,
-            data: base64.stringify(update),
-          },
-          { transport: 'ws' },
-        );
-      } else if (payload.type === PostSyncType.AWARENESS) {
-        YAwareness.applyAwarenessUpdate(awareness, base64.parse(payload.data), 'remote');
-      } else if (payload.type === PostSyncType.PRESENCE) {
-        const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
+      const unsubscribe = postSyncStream.subscribe({ clientId, postId }, async (payload) => {
+        if (payload.type === PostSyncType.HEARTBEAT) {
+          lastHeartbeatAt = dayjs(payload.data);
+          connectionStatus = 'connected';
+        } else if (payload.type === PostSyncType.UPDATE) {
+          Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
+        } else if (payload.type === PostSyncType.VECTOR) {
+          const update = Y.encodeStateAsUpdateV2(doc, base64.parse(payload.data));
 
-        await syncPost(
-          {
-            clientId,
-            postId: $query.post.id,
-            type: PostSyncType.AWARENESS,
-            data: base64.stringify(update),
-          },
-          { transport: 'ws' },
-        );
+          await syncPost(
+            {
+              clientId,
+              postId,
+              type: PostSyncType.UPDATE,
+              data: base64.stringify(update),
+            },
+            { transport: 'ws' },
+          );
+        } else if (payload.type === PostSyncType.AWARENESS) {
+          YAwareness.applyAwarenessUpdate(awareness, base64.parse(payload.data), 'remote');
+        } else if (payload.type === PostSyncType.PRESENCE) {
+          const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
+
+          await syncPost(
+            {
+              clientId,
+              postId,
+              type: PostSyncType.AWARENESS,
+              data: base64.stringify(update),
+            },
+            { transport: 'ws' },
+          );
+        }
+      });
+
+      const persistence = new IndexeddbPersistence(`typie:editor:${$query.entity.node.id}`, doc);
+      persistence.on('synced', () => forceSync());
+
+      Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
+      awareness.setLocalStateField('user', {
+        name: $query.me.name,
+        color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
+      });
+
+      if (editor) {
+        editor.current.storage.anchors = anchors;
+
+        const { tr, schema } = editor.current.state;
+        tr.setSelection(TextSelection.create(tr.doc, 2));
+        tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
+        editor.current.view.dispatch(tr);
       }
-    });
 
-    const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
-    persistence.on('synced', () => forceSync());
+      const forceSyncInterval = setInterval(() => forceSync(), 10_000);
+      const heartbeatInterval = setInterval(() => {
+        if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
+          connectionStatus = 'disconnected';
+        }
+      }, 1000);
 
-    Y.applyUpdateV2(doc, base64.parse($query.post.update), 'remote');
-    awareness.setLocalStateField('user', {
-      name: $query.me.name,
-      color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
-    });
+      const off = on(globalThis.window, 'keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+          e.preventDefault();
+          e.stopPropagation();
 
-    if (editor) {
-      editor.current.storage.anchors = anchors;
+          forceSync();
+          Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
+        }
+      });
 
-      const { tr, schema } = editor.current.state;
-      tr.setSelection(TextSelection.create(tr.doc, 2));
-      tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
-      editor.current.view.dispatch(tr);
+      app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
+      app.state.current = $query.entity.id;
+
+      const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
+
+      const handler = ({ editor }: { editor: Editor }) => {
+        const marks =
+          arrayOrNull(editor.state.storedMarks) ||
+          arrayOrNull(editor.state.selection.$anchor.marks()) ||
+          arrayOrNull(editor.state.selection.$anchor.parent.firstChild?.firstChild?.marks) ||
+          [];
+
+        const jsonMarks = marks.map((mark) => mark.toJSON());
+
+        if (stringify(storedMarks.current) !== stringify(jsonMarks)) {
+          storedMarks.current = jsonMarks;
+        }
+      };
+
+      editor?.current.on('transaction', handler);
+
+      return () => {
+        off();
+
+        clearInterval(forceSyncInterval);
+        clearInterval(heartbeatInterval);
+
+        YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
+        unsubscribe();
+
+        editor?.current.off('transaction', handler);
+
+        persistence.destroy();
+        awareness.destroy();
+        doc.destroy();
+      };
     }
-
-    const forceSyncInterval = setInterval(() => forceSync(), 10_000);
-    const heartbeatInterval = setInterval(() => {
-      if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
-        connectionStatus = 'disconnected';
-      }
-    }, 1000);
-
-    const off = on(globalThis.window, 'keydown', (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault();
-        e.stopPropagation();
-
-        forceSync();
-        Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
-      }
-    });
-
-    app.state.ancestors = $query.post.entity.ancestors.map((ancestor) => ancestor.id);
-    app.state.current = $query.post.entity.id;
-
-    const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
-
-    const handler = ({ editor }: { editor: Editor }) => {
-      const marks =
-        arrayOrNull(editor.state.storedMarks) ||
-        arrayOrNull(editor.state.selection.$anchor.marks()) ||
-        arrayOrNull(editor.state.selection.$anchor.parent.firstChild?.firstChild?.marks) ||
-        [];
-
-      const jsonMarks = marks.map((mark) => mark.toJSON());
-
-      if (stringify(storedMarks.current) !== stringify(jsonMarks)) {
-        storedMarks.current = jsonMarks;
-      }
-    };
-
-    editor?.current.on('transaction', handler);
-
-    return () => {
-      off();
-
-      clearInterval(forceSyncInterval);
-      clearInterval(heartbeatInterval);
-
-      YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
-      unsubscribe();
-
-      editor?.current.off('transaction', handler);
-
-      persistence.destroy();
-      awareness.destroy();
-      doc.destroy();
-    };
   });
 </script>
 
@@ -419,396 +429,417 @@
 
 <Helmet title={`${effectiveTitle} 작성 중`} />
 
-<div class={flex({ height: 'full' })}>
-  <div class={flex({ flexDirection: 'column', flexGrow: '1' })}>
-    <div
-      class={flex({
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: '6px',
-        flexShrink: '0',
-        paddingLeft: '24px',
-        paddingRight: '8px',
-        height: '36px',
-      })}
-    >
-      <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
+{#if $query.entity.node.__typename === 'Post'}
+  <div class={flex({ height: 'full' })}>
+    <div class={flex({ flexDirection: 'column', flexGrow: '1' })}>
+      <div
+        class={flex({
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '6px',
+          flexShrink: '0',
+          paddingLeft: '24px',
+          paddingRight: '8px',
+          height: '36px',
+        })}
+      >
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
 
-        <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>내 포스트</div>
-        <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
+          <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>내 포스트</div>
+          <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
 
-        {#each $query.post.entity.ancestors as ancestor (ancestor.id)}
-          {#if ancestor.node.__typename === 'Folder'}
-            <div class={css({ fontSize: '12px', color: 'text.disabled' })}>{ancestor.node.name}</div>
-            <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
+          {#each $query.entity.ancestors as ancestor (ancestor.id)}
+            {#if ancestor.node.__typename === 'Folder'}
+              <div class={css({ fontSize: '12px', color: 'text.disabled' })}>{ancestor.node.name}</div>
+              <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
+            {/if}
+          {/each}
+
+          <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>{effectiveTitle}</div>
+        </div>
+
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <div class={center({ size: '24px' })}>
+            <div
+              style:background-color={match(connectionStatus)
+                .with('connecting', () => '#eab308')
+                .with('connected', () => '#22c55e')
+                .with('disconnected', () => '#ef4444')
+                .exhaustive()}
+              class={css({ size: '8px', borderRadius: 'full' })}
+              use:tooltip={{
+                message: match(connectionStatus)
+                  .with('connecting', () => '서버 연결 중...')
+                  .with('connected', () => '실시간 저장 중')
+                  .with('disconnected', () => '서버 연결 끊김')
+                  .exhaustive(),
+                placement: 'left',
+                offset: 12,
+                delay: 0,
+              }}
+            ></div>
+          </div>
+
+          {#if $query.me.id === $query.entity.user.id}
+            <Menu>
+              {#snippet button({ open })}
+                <button
+                  class={center({
+                    borderRadius: '4px',
+                    size: '24px',
+                    color: 'text.faint',
+                    transition: 'common',
+                    _hover: {
+                      color: 'text.subtle',
+                      backgroundColor: 'surface.muted',
+                    },
+                    _pressed: {
+                      color: 'text.subtle',
+                      backgroundColor: 'surface.muted',
+                    },
+                  })}
+                  aria-pressed={open}
+                  type="button"
+                >
+                  <Icon icon={ElipsisIcon} size={16} />
+                </button>
+              {/snippet}
+
+              <MenuItem external href={$query.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+
+              <HorizontalDivider color="secondary" />
+
+              <MenuItem
+                icon={BlendIcon}
+                onclick={() => {
+                  app.state.shareOpen = $query.entity.id;
+                  mixpanel.track('open_post_share_modal', { via: 'editor' });
+                }}
+              >
+                공유 및 게시
+              </MenuItem>
+
+              <MenuItem
+                icon={CopyIcon}
+                onclick={async () => {
+                  if ($query.entity.node.__typename === 'Post') {
+                    const postId = $query.entity.node.id;
+
+                    const resp = await duplicatePost({ postId });
+                    mixpanel.track('duplicate_post', { via: 'editor' });
+                    await goto(`/${resp.entity.slug}`);
+                  }
+                }}
+              >
+                복제
+              </MenuItem>
+
+              {#if $query.entity.node.type === PostType.NORMAL}
+                <MenuItem
+                  icon={ShapesIcon}
+                  onclick={() => {
+                    Dialog.confirm({
+                      title: '템플릿으로 전환',
+                      message:
+                        '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
+                      actionLabel: '전환',
+                      actionHandler: async () => {
+                        if ($query.entity.node.__typename === 'Post') {
+                          const postId = $query.entity.node.id;
+
+                          await updatePostType({ postId, type: PostType.TEMPLATE });
+                        }
+                      },
+                    });
+                  }}
+                >
+                  템플릿으로 전환
+                </MenuItem>
+              {:else if $query.entity.node.type === PostType.TEMPLATE}
+                <MenuItem
+                  icon={ShapesIcon}
+                  onclick={() => {
+                    Dialog.confirm({
+                      title: '포스트로 전환',
+                      message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
+                      actionLabel: '전환',
+                      actionHandler: async () => {
+                        if ($query.entity.node.__typename === 'Post') {
+                          const postId = $query.entity.node.id;
+
+                          await updatePostType({ postId, type: PostType.NORMAL });
+                        }
+                      },
+                    });
+                  }}
+                >
+                  포스트로 전환
+                </MenuItem>
+              {/if}
+
+              <HorizontalDivider color="secondary" />
+
+              {#if $query.me.role === UserRole.ADMIN}
+                <MenuItem
+                  icon={IconClockFading}
+                  onclick={() => {
+                    showTimeline = !showTimeline;
+                  }}
+                >
+                  {#if showTimeline}
+                    타임라인 닫기
+                  {:else}
+                    타임라인
+                  {/if}
+                </MenuItem>
+              {/if}
+
+              <HorizontalDivider color="secondary" />
+
+              <MenuItem
+                icon={TrashIcon}
+                onclick={() => {
+                  if ($query.entity.node.__typename === 'Post') {
+                    const postId = $query.entity.node.id;
+                    const title = $query.entity.node.title;
+
+                    Dialog.confirm({
+                      title: '포스트 삭제',
+                      message: `정말 "${title}" 포스트를 삭제하시겠어요?`,
+                      action: 'danger',
+                      actionLabel: '삭제',
+                      actionHandler: async () => {
+                        await deletePost({ postId });
+                        mixpanel.track('delete_post', { via: 'editor' });
+                        app.state.ancestors = [];
+                        app.state.current = undefined;
+                      },
+                    });
+                  }
+                }}
+                variant="danger"
+              >
+                삭제
+              </MenuItem>
+            </Menu>
           {/if}
+
+          <button
+            class={center({
+              borderRadius: '4px',
+              size: '24px',
+              color: 'text.faint',
+              transition: 'common',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            onclick={() => {
+              app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
+              mixpanel.track('toggle_panel_expanded', { expanded: app.preference.current.panelExpanded });
+            }}
+            type="button"
+            use:tooltip={{ message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기' }}
+          >
+            <Icon
+              style={css.raw({ color: 'text.faint' })}
+              icon={app.preference.current.panelExpanded ? PanelRightCloseIcon : PanelRightOpenIcon}
+              size={16}
+            />
+          </button>
+        </div>
+      </div>
+
+      <HorizontalDivider color="secondary" />
+
+      <Toolbar $site={$query.entity.site} {doc} {editor} />
+
+      <div
+        class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}
+        onmouseleave={() => {
+          showAnchorOutline = false;
+        }}
+        onmousemove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const width = rect.width;
+
+          showAnchorOutline = mouseX > width - 50;
+        }}
+        role="none"
+      >
+        <div
+          class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}
+        >
+          <div
+            style:--prosemirror-max-width={`${maxWidth.current}px`}
+            class={flex({
+              flexDirection: 'column',
+              alignItems: 'center',
+              paddingTop: '60px',
+              paddingX: '80px',
+              size: 'full',
+            })}
+          >
+            <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+              <textarea
+                bind:this={titleEl}
+                class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                autocapitalize="off"
+                autocomplete="off"
+                maxlength="100"
+                onkeydown={(e) => {
+                  if (e.isComposing) {
+                    return;
+                  }
+
+                  if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    subtitleEl?.focus();
+                  }
+                }}
+                placeholder="제목을 입력하세요"
+                rows={1}
+                spellcheck="false"
+                bind:value={title.current}
+                use:autosize
+              ></textarea>
+
+              <textarea
+                bind:this={subtitleEl}
+                class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
+                autocapitalize="off"
+                autocomplete="off"
+                maxlength="100"
+                onkeydown={(e) => {
+                  if (e.isComposing) {
+                    return;
+                  }
+
+                  if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
+                    e.preventDefault();
+                    titleEl?.focus();
+                  }
+
+                  if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+                    e.preventDefault();
+                    const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+                    editor?.current
+                      .chain()
+                      .focus()
+                      .setTextSelection(2)
+                      .command(({ tr, dispatch }) => {
+                        tr.setStoredMarks(marks);
+                        dispatch?.(tr);
+                        return true;
+                      })
+                      .run();
+                  }
+                }}
+                placeholder="부제목을 입력하세요"
+                rows={1}
+                spellcheck="false"
+                bind:value={subtitle.current}
+                use:autosize
+              ></textarea>
+
+              <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+            </div>
+
+            <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+              <TiptapEditor
+                style={css.raw({ size: 'full' })}
+                {awareness}
+                {doc}
+                oncreate={() => {
+                  titleEl?.focus();
+                }}
+                onfile={async ({ pos, file }) => {
+                  if (!editor) {
+                    return;
+                  }
+
+                  if (file.type.startsWith('image/')) {
+                    editor.current.chain().setImage().run();
+                    const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                    const url = URL.createObjectURL(file);
+                    nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
+
+                    try {
+                      const attrs = await uploadBlobAsImage(file);
+                      nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                    } catch {
+                      nodeView?.handle?.(new CustomEvent('error'));
+                    } finally {
+                      URL.revokeObjectURL(url);
+                    }
+                  } else {
+                    editor?.current.chain().focus(pos).setFile().run();
+                    const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                    nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
+
+                    try {
+                      const attrs = await uploadBlobAsFile(file);
+                      nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                    } catch {
+                      nodeView?.handle?.(new CustomEvent('error'));
+                    }
+                  }
+                }}
+                onkeydown={(view, e) => {
+                  const { doc, selection } = view.state;
+                  const { anchor } = selection;
+
+                  if (
+                    ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+                    (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+                  ) {
+                    e.preventDefault();
+                    subtitleEl?.focus();
+                  }
+                }}
+                bind:editor
+              />
+
+              {#if editor}
+                <Placeholder $site={$query.entity.site} {doc} {editor} />
+              {/if}
+            </div>
+          </div>
+
+          {#if showTimeline}
+            <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default', zIndex: '1' })}>
+              <Timeline $post={$query.entity.node} {doc} />
+            </div>
+          {/if}
+        </div>
+
+        {#each anchorPositions as anchor (anchor.nodeId)}
+          <Anchor name={anchor.name} {editor} element={anchor.element} outline={showAnchorOutline} position={anchor.position} />
         {/each}
 
-        <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>{effectiveTitle}</div>
-      </div>
-
-      <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <div class={center({ size: '24px' })}>
+        {#if app.preference.current.noteExpanded}
           <div
-            style:background-color={match(connectionStatus)
-              .with('connecting', () => '#eab308')
-              .with('connected', () => '#22c55e')
-              .with('disconnected', () => '#ef4444')
-              .exhaustive()}
-            class={css({ size: '8px', borderRadius: 'full' })}
-            use:tooltip={{
-              message: match(connectionStatus)
-                .with('connecting', () => '서버 연결 중...')
-                .with('connected', () => '실시간 저장 중')
-                .with('disconnected', () => '서버 연결 끊김')
-                .exhaustive(),
-              placement: 'left',
-              offset: 12,
-              delay: 0,
-            }}
-          ></div>
-        </div>
-
-        {#if $query.me.id === $query.post.entity.user.id}
-          <Menu>
-            {#snippet button({ open })}
-              <button
-                class={center({
-                  borderRadius: '4px',
-                  size: '24px',
-                  color: 'text.faint',
-                  transition: 'common',
-                  _hover: {
-                    color: 'text.subtle',
-                    backgroundColor: 'surface.muted',
-                  },
-                  _pressed: {
-                    color: 'text.subtle',
-                    backgroundColor: 'surface.muted',
-                  },
-                })}
-                aria-pressed={open}
-                type="button"
-              >
-                <Icon icon={ElipsisIcon} size={16} />
-              </button>
-            {/snippet}
-
-            <MenuItem external href={$query.post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
-
-            <HorizontalDivider color="secondary" />
-
-            <MenuItem
-              icon={BlendIcon}
-              onclick={() => {
-                app.state.shareOpen = $query.post.entity.id;
-                mixpanel.track('open_post_share_modal', { via: 'editor' });
-              }}
-            >
-              공유 및 게시
-            </MenuItem>
-
-            <MenuItem
-              icon={CopyIcon}
-              onclick={async () => {
-                const resp = await duplicatePost({ postId: $query.post.id });
-                mixpanel.track('duplicate_post', { via: 'editor' });
-                await goto(`/${resp.entity.slug}`);
-              }}
-            >
-              복제
-            </MenuItem>
-
-            {#if $query.post.type === PostType.NORMAL}
-              <MenuItem
-                icon={ShapesIcon}
-                onclick={() => {
-                  Dialog.confirm({
-                    title: '템플릿으로 전환',
-                    message:
-                      '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
-                    actionLabel: '전환',
-                    actionHandler: async () => {
-                      await updatePostType({ postId: $query.post.id, type: PostType.TEMPLATE });
-                    },
-                  });
-                }}
-              >
-                템플릿으로 전환
-              </MenuItem>
-            {:else if $query.post.type === PostType.TEMPLATE}
-              <MenuItem
-                icon={ShapesIcon}
-                onclick={() => {
-                  Dialog.confirm({
-                    title: '포스트로 전환',
-                    message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
-                    actionLabel: '전환',
-                    actionHandler: async () => {
-                      await updatePostType({ postId: $query.post.id, type: PostType.NORMAL });
-                    },
-                  });
-                }}
-              >
-                포스트로 전환
-              </MenuItem>
-            {/if}
-
-            <HorizontalDivider color="secondary" />
-
-            {#if $query.me.role === UserRole.ADMIN}
-              <MenuItem
-                icon={IconClockFading}
-                onclick={() => {
-                  showTimeline = !showTimeline;
-                }}
-              >
-                {#if showTimeline}
-                  타임라인 닫기
-                {:else}
-                  타임라인
-                {/if}
-              </MenuItem>
-            {/if}
-
-            <HorizontalDivider color="secondary" />
-
-            <MenuItem
-              icon={TrashIcon}
-              onclick={() => {
-                Dialog.confirm({
-                  title: '포스트 삭제',
-                  message: `정말 "${$query.post.title}" 포스트를 삭제하시겠어요?`,
-                  action: 'danger',
-                  actionLabel: '삭제',
-                  actionHandler: async () => {
-                    await deletePost({ postId: $query.post.id });
-                    mixpanel.track('delete_post', { via: 'editor' });
-                    app.state.ancestors = [];
-                    app.state.current = undefined;
-                  },
-                });
-              }}
-              variant="danger"
-            >
-              삭제
-            </MenuItem>
-          </Menu>
-        {/if}
-
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '24px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { backgroundColor: 'surface.muted' },
-          })}
-          onclick={() => {
-            app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
-            mixpanel.track('toggle_panel_expanded', { expanded: app.preference.current.panelExpanded });
-          }}
-          type="button"
-          use:tooltip={{ message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기' }}
-        >
-          <Icon
-            style={css.raw({ color: 'text.faint' })}
-            icon={app.preference.current.panelExpanded ? PanelRightCloseIcon : PanelRightOpenIcon}
-            size={16}
-          />
-        </button>
-      </div>
-    </div>
-
-    <HorizontalDivider color="secondary" />
-
-    <Toolbar $site={$query.post.entity.site} {doc} {editor} />
-
-    <div
-      class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}
-      onmouseleave={() => {
-        showAnchorOutline = false;
-      }}
-      onmousemove={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const width = rect.width;
-
-        showAnchorOutline = mouseX > width - 50;
-      }}
-      role="none"
-    >
-      <div class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}>
-        <div
-          style:--prosemirror-max-width={`${maxWidth.current}px`}
-          class={flex({
-            flexDirection: 'column',
-            alignItems: 'center',
-            paddingTop: '60px',
-            paddingX: '80px',
-            size: 'full',
-          })}
-        >
-          <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-            <textarea
-              bind:this={titleEl}
-              class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-              autocapitalize="off"
-              autocomplete="off"
-              maxlength="100"
-              onkeydown={(e) => {
-                if (e.isComposing) {
-                  return;
-                }
-
-                if (e.key === 'Enter' || e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  subtitleEl?.focus();
-                }
-              }}
-              placeholder="제목을 입력하세요"
-              rows={1}
-              spellcheck="false"
-              bind:value={title.current}
-              use:autosize
-            ></textarea>
-
-            <textarea
-              bind:this={subtitleEl}
-              class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
-              autocapitalize="off"
-              autocomplete="off"
-              maxlength="100"
-              onkeydown={(e) => {
-                if (e.isComposing) {
-                  return;
-                }
-
-                if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
-                  e.preventDefault();
-                  titleEl?.focus();
-                }
-
-                if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
-                  e.preventDefault();
-                  const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
-                  editor?.current
-                    .chain()
-                    .focus()
-                    .setTextSelection(2)
-                    .command(({ tr, dispatch }) => {
-                      tr.setStoredMarks(marks);
-                      dispatch?.(tr);
-                      return true;
-                    })
-                    .run();
-                }
-              }}
-              placeholder="부제목을 입력하세요"
-              rows={1}
-              spellcheck="false"
-              bind:value={subtitle.current}
-              use:autosize
-            ></textarea>
-
-            <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
-          </div>
-
-          <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
-            <TiptapEditor
-              style={css.raw({ size: 'full' })}
-              {awareness}
-              {doc}
-              oncreate={() => {
-                titleEl?.focus();
-              }}
-              onfile={async ({ pos, file }) => {
-                if (!editor) {
-                  return;
-                }
-
-                if (file.type.startsWith('image/')) {
-                  editor.current.chain().setImage().run();
-                  const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
-
-                  const url = URL.createObjectURL(file);
-                  nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
-
-                  try {
-                    const attrs = await uploadBlobAsImage(file);
-                    nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
-                  } catch {
-                    nodeView?.handle?.(new CustomEvent('error'));
-                  } finally {
-                    URL.revokeObjectURL(url);
-                  }
-                } else {
-                  editor?.current.chain().focus(pos).setFile().run();
-                  const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
-
-                  nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
-
-                  try {
-                    const attrs = await uploadBlobAsFile(file);
-                    nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
-                  } catch {
-                    nodeView?.handle?.(new CustomEvent('error'));
-                  }
-                }
-              }}
-              onkeydown={(view, e) => {
-                const { doc, selection } = view.state;
-                const { anchor } = selection;
-
-                if (
-                  ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
-                  (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
-                ) {
-                  e.preventDefault();
-                  subtitleEl?.focus();
-                }
-              }}
-              bind:editor
-            />
-
-            {#if editor}
-              <Placeholder $site={$query.post.entity.site} {doc} {editor} />
-            {/if}
-          </div>
-        </div>
-
-        {#if showTimeline}
-          <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default', zIndex: '1' })}>
-            <Timeline $post={$query.post} {doc} />
+            class={flex({
+              flexShrink: '0',
+              borderLeftWidth: '1px',
+              borderColor: 'border.subtle',
+              paddingTop: '16px',
+              width: '1/4',
+              height: 'full',
+              overflowY: 'auto',
+              scrollbarGutter: 'stable',
+            })}
+          >
+            <PanelNote {doc} />
           </div>
         {/if}
       </div>
-
-      {#each anchorPositions as anchor (anchor.nodeId)}
-        <Anchor name={anchor.name} {editor} element={anchor.element} outline={showAnchorOutline} position={anchor.position} />
-      {/each}
-
-      {#if app.preference.current.noteExpanded}
-        <div
-          class={flex({
-            flexShrink: '0',
-            borderLeftWidth: '1px',
-            borderColor: 'border.subtle',
-            paddingTop: '16px',
-            width: '1/4',
-            height: 'full',
-            overflowY: 'auto',
-            scrollbarGutter: 'stable',
-          })}
-        >
-          <PanelNote {doc} />
-        </div>
-      {/if}
     </div>
+
+    <Panel $post={$query.entity.node} $user={$query.me} {doc} {editor} />
   </div>
+{/if}
 
-  <Panel $post={$query.post} $user={$query.me} {doc} {editor} />
-</div>
-
-<Limit {$query} $site={$query.post.entity.site} {editor} />
+<Limit {$query} $site={$query.entity.site} {editor} />
