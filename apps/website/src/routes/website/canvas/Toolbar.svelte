@@ -10,7 +10,7 @@
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import ToolbarButton from './ToolbarButton.svelte';
-  import type { Canvas } from './lib/canvas.svelte';
+  import type { Canvas } from '$lib/canvas';
 
   type Props = {
     canvas: Canvas;

@@ -7,7 +7,7 @@ import { TypedEllipse } from './shapes/ellipse';
 import { TypedLine } from './shapes/line';
 import { TypedRect } from './shapes/rectangle';
 import { TypedStickyNote } from './shapes/stickynote';
-import type { Canvas } from './canvas.svelte';
+import type { Canvas } from './class.svelte';
 import type { Shapes } from './types';
 
 export type YShape = {

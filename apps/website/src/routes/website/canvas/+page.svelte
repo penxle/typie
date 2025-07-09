@@ -4,7 +4,6 @@
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
-  import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
@@ -12,9 +11,9 @@
   import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { graphql } from '$graphql';
+  import { Canvas, CanvasEditor } from '$lib/canvas';
   import { getThemeContext } from '$lib/context';
   import { css } from '$styled-system/css';
-  import { Canvas } from './lib/canvas.svelte';
   import Panel from './Panel.svelte';
   import Toolbar from './Toolbar.svelte';
   import Zoom from './Zoom.svelte';
@@ -38,7 +37,6 @@
   const clientId = nanoid();
   const canvasId = $derived(page.url.searchParams.get('id') ?? nanoid());
 
-  let container = $state<HTMLDivElement>();
   let canvas = $state<Canvas>();
 
   const doc = new Y.Doc();
@@ -46,17 +44,6 @@
 
   const theme = getThemeContext();
   theme.force('light');
-
-  const cursor = $derived.by(() => {
-    if (!canvas) return 'default';
-
-    return match(canvas.state.tool)
-      .with('pan', () => 'grab')
-      .with('select', () => 'default')
-      .with('brush', () => 'default')
-      .with('arrow', 'line', 'rectangle', 'ellipse', 'stickynote', () => 'crosshair')
-      .exhaustive();
-  });
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote') {
@@ -103,10 +90,6 @@
   };
 
   onMount(() => {
-    if (!container) {
-      return;
-    }
-
     const unsubscribe = canvasSyncStream.subscribe({ clientId, canvasId }, async (payload) => {
       if (payload.type === CanvasSyncType.HEARTBEAT) {
         // pass
@@ -149,8 +132,6 @@
       color: random({ luminosity: 'bright', seed: stringHash('anonymous') }).toHexString(),
     });
 
-    canvas = new Canvas(container, doc, awareness);
-
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
 
     return () => {
@@ -162,13 +143,9 @@
       persistence.destroy();
       awareness.destroy();
       doc.destroy();
-
-      canvas?.destroy();
     };
   });
 </script>
-
-<svelte:window on:keydown={(e) => canvas?.handleKeyDown(e)} />
 
 <div
   class={css({
@@ -179,9 +156,7 @@
     backgroundColor: 'surface.subtle',
   })}
 >
-  <div style:cursor class={css({ size: 'full', backgroundColor: 'surface.subtle' })}>
-    <div bind:this={container} class={css({ size: 'full' })}></div>
-  </div>
+  <CanvasEditor style={css.raw({ size: 'full' })} {awareness} {doc} bind:canvas />
 
   {#if canvas}
     <Toolbar {canvas} />
