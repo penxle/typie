@@ -24,6 +24,7 @@ import 'package:typie/modals/share.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/create_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.dart';
+import 'package:typie/screens/entity/__generated__/delete_canvas_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/duplicate_post_mutation.req.gql.dart';
@@ -365,14 +366,15 @@ class _EntityList extends HookWidget {
                       key: Key(entities[index].id),
                       padding: const Pad(vertical: 6),
                       child: GestureDetector(
-                        onTap: () async {
+                        onTap: () {
                           if (isReordering.value) {
                             return;
                           }
 
-                          await entities[index].node.when(
+                          entities[index].node.when(
                             folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
                             post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
+                            canvas: (canvas) => context.toast(ToastType.error, '캔버스는 아직 앱에서 열 수 없어요'),
                             orElse: () => throw UnimplementedError(),
                           );
                         },
@@ -598,6 +600,57 @@ class _EntityList extends HookWidget {
                                 ],
                               ),
                             ),
+                            canvas: (canvas) => context.showBottomSheet(
+                              child: BottomMenu(
+                                header: _BottomMenuHeader(entity: entities[index]),
+                                items: [
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.file_symlink,
+                                    label: '다른 폴더로 옮기기',
+                                    onTap: () async {
+                                      unawaited(
+                                        mixpanel.track('move_entity_try', properties: {'via': 'entity_canvas_menu'}),
+                                      );
+
+                                      await context.showBottomSheet(
+                                        intercept: true,
+                                        child: _MoveEntityModal(entities[index]),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.trash,
+                                    label: '삭제하기',
+                                    onTap: () async {
+                                      await context.showModal(
+                                        intercept: true,
+                                        child: ConfirmModal(
+                                          title: '캔버스 삭제',
+                                          message: '"${canvas.title}" 캔버스를 삭제하시겠어요?',
+                                          confirmText: '삭제하기',
+                                          confirmTextColor: context.colors.textBright,
+                                          confirmBackgroundColor: context.colors.accentDanger,
+                                          onConfirm: () async {
+                                            await client.request(
+                                              GEntityScreen_DeleteCanvas_MutationReq(
+                                                (b) => b..vars.input.canvasId = canvas.id,
+                                              ),
+                                            );
+
+                                            unawaited(
+                                              mixpanel.track(
+                                                'delete_canvas',
+                                                properties: {'via': 'entity_canvas_menu'},
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
                             orElse: () => throw UnimplementedError(),
                           );
                         },
@@ -631,6 +684,7 @@ class _EntityList extends HookWidget {
                                     child: entities[index].node.when(
                                       folder: (_) => _Folder(entities[index]),
                                       post: (_) => _Post(entities[index]),
+                                      canvas: (_) => _Canvas(entities[index]),
                                       orElse: () => throw UnimplementedError(),
                                     ),
                                   ),
@@ -766,6 +820,31 @@ class _Post extends StatelessWidget {
   }
 }
 
+class _Canvas extends StatelessWidget {
+  const _Canvas(this.entity);
+
+  final GEntityScreen_Entity_entity entity;
+  GEntityScreen_Entity_entity_node__asCanvas get canvas => entity.node as GEntityScreen_Entity_entity_node__asCanvas;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      spacing: 8,
+      children: [
+        const Icon(LucideLightIcons.line_squiggle, size: 18),
+        Expanded(
+          child: Text(
+            canvas.title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _BottomMenuHeader extends StatelessWidget {
   const _BottomMenuHeader({this.entity});
 
@@ -782,6 +861,7 @@ class _BottomMenuHeader extends StatelessWidget {
               entity?.node.when(
                     folder: (_) => LucideLightIcons.folder,
                     post: (_) => LucideLightIcons.file,
+                    canvas: (_) => LucideLightIcons.line_squiggle,
                     orElse: () => throw UnimplementedError(),
                   ) ??
                   LucideLightIcons.folder_open,
@@ -792,6 +872,7 @@ class _BottomMenuHeader extends StatelessWidget {
                 entity?.node.when(
                       folder: (folder) => folder.name,
                       post: (post) => post.title,
+                      canvas: (canvas) => canvas.title,
                       orElse: () => throw UnimplementedError(),
                     ) ??
                     '내 포스트',
@@ -922,9 +1003,8 @@ class _MoveEntityModal extends HookWidget {
                         .expand((e) => e),
                     const Icon(LucideLightIcons.chevron_right, size: 14),
                     Text(
-                      currentEntity.value!.node.when(
+                      currentEntity.value!.node.maybeWhen(
                         folder: (folder) => folder.name,
-                        post: (_) => throw UnimplementedError(),
                         orElse: () => throw UnimplementedError(),
                       ),
                       style: const TextStyle(fontWeight: FontWeight.w600),
@@ -969,13 +1049,12 @@ class _MoveEntityModal extends HookWidget {
                                 : context.colors.surfaceDefault,
                           ),
                           padding: const Pad(vertical: 12, horizontal: 16),
-                          child: entities.value![index].node.when(
+                          child: entities.value![index].node.maybeWhen(
                             folder: (folder) => _Folder(
                               entities.value![index],
                               color: entity.id == entities.value![index].id ? context.colors.textFaint : null,
                             ),
-                            post: (_) => const SizedBox.shrink(),
-                            orElse: () => throw UnimplementedError(),
+                            orElse: () => const SizedBox.shrink(),
                           ),
                         ),
                       );
@@ -1014,22 +1093,21 @@ class _MoveEntityModal extends HookWidget {
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: entity.node.when(
+                        color: entity.node.maybeWhen(
                           folder: (folder) =>
                               (currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
                                       (folder.maxDescendantFoldersDepth - entity.depth) >
                                   (maxDepth - 1)
                               ? context.colors.surfaceMuted
                               : context.colors.surfaceInverse,
-                          post: (_) => context.colors.surfaceInverse,
-                          orElse: () => throw UnimplementedError(),
+                          orElse: () => context.colors.surfaceInverse,
                         ),
                         borderRadius: const BorderRadius.all(Radius.circular(999)),
                       ),
                       padding: const Pad(vertical: 12),
                       child: Tappable(
                         onTap: () async {
-                          entity.node.when(
+                          entity.node.maybeWhen(
                             folder: (folder) {
                               if ((currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
                                       (folder.maxDescendantFoldersDepth - entity.depth) >
@@ -1038,8 +1116,7 @@ class _MoveEntityModal extends HookWidget {
                                 return;
                               }
                             },
-                            post: (_) {},
-                            orElse: () => throw UnimplementedError(),
+                            orElse: () {},
                           );
 
                           await client.request(
