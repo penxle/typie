@@ -64,7 +64,7 @@
       width: '60px',
       fontSize: '12px',
       fontWeight: 'medium',
-      color: 'text.subtle',
+      color: 'gray.700',
       textAlign: 'center',
     })}
   >

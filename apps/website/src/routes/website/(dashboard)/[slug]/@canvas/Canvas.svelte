@@ -12,7 +12,7 @@
   import { fragment, graphql } from '$graphql';
   import { Canvas, CanvasEditor } from '$lib/canvas';
   import { Helmet } from '$lib/components';
-  import { getAppContext, getThemeContext } from '$lib/context';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';
@@ -95,9 +95,6 @@
 
   const title = new YState<string>(doc, 'title', '');
   const effectiveTitle = $derived(title.current || '(제목 없음)');
-
-  const theme = getThemeContext();
-  theme.force('light');
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote' && canvasId) {
@@ -214,14 +211,7 @@
 
 <Helmet title={`${effectiveTitle} 그리는 중`} />
 
-<div
-  class={css({
-    position: 'relative',
-    size: 'full',
-    overflow: 'hidden',
-    backgroundColor: 'surface.subtle',
-  })}
->
+<div class={css({ position: 'relative', size: 'full', overflow: 'hidden' })}>
   <CanvasEditor style={css.raw({ size: 'full' })} {awareness} {doc} bind:canvas />
 
   {#if canvas}
