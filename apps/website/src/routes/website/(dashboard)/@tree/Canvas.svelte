@@ -1,10 +1,8 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
   import { EntityVisibility } from '@/enums';
-  import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
-  import ExternalLinkIcon from '~icons/lucide/external-link';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
@@ -154,12 +152,6 @@
         <Icon icon={EllipsisIcon} size={14} />
       </div>
     {/snippet}
-
-    <MenuItem external href={$canvas.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
-
-    <HorizontalDivider color="secondary" />
-
-    <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $canvas.entity.id)}>공유 및 게시</MenuItem>
 
     <MenuItem
       icon={CopyIcon}
