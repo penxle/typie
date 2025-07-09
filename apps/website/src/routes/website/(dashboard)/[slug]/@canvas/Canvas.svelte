@@ -217,8 +217,7 @@
 <div
   class={css({
     position: 'relative',
-    width: 'full',
-    height: '[100dvh]',
+    size: 'full',
     overflow: 'hidden',
     backgroundColor: 'surface.subtle',
   })}

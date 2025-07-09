@@ -219,7 +219,7 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
       letterSpacing: '-0.01em',
       whiteSpace: 'pre-wrap',
       wordBreak: 'break-all',
-      overflow: 'auto',
+      overflow: 'hidden',
       resize: 'none',
       pointerEvents: 'auto',
     });
@@ -237,7 +237,7 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
     this.#textarea.addEventListener('input', () => this.#adjustTextareaHeight());
 
     this.#wrapper.append(this.#textarea);
-    document.body.append(this.#wrapper);
+    stage.container().append(this.#wrapper);
 
     this.#updateTextareaPosition();
 
@@ -279,10 +279,7 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
       const rect = this.getClientRect();
       const scale = stage.scaleX();
 
-      const container = stage.container();
-      const containerRect = container.getBoundingClientRect();
-
-      this.#wrapper.style.transform = `translate(${containerRect.left + rect.x}px, ${containerRect.top + rect.y}px)`;
+      this.#wrapper.style.transform = `translate(${rect.x}px, ${rect.y}px)`;
       this.#wrapper.style.width = `${rect.width}px`;
       this.#wrapper.style.padding = `${20 * scale}px`;
 
