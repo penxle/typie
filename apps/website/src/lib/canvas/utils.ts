@@ -1,4 +1,6 @@
 import Konva from 'konva';
+import { TypedArrow } from './shapes/arrow';
+import { TypedLine } from './shapes/line';
 
 export const getClosestGroup = (node: Konva.Node) => {
   if (node instanceof Konva.Group) {
@@ -14,4 +16,8 @@ export const getClosestGroup = (node: Konva.Node) => {
   }
 
   return node;
+};
+
+export const isSingleLineLike = (nodes: Konva.Node[]): nodes is [TypedLine | TypedArrow] => {
+  return nodes.length === 1 && (nodes[0] instanceof TypedLine || nodes[0] instanceof TypedArrow);
 };

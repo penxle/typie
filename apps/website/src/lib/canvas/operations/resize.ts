@@ -2,7 +2,7 @@ import { MIN_SIZE } from '../const';
 import { TypedArrow, TypedEllipse, TypedRect, TypedStickyNote } from '../shapes';
 import { TypedBrush } from '../shapes/brush';
 import { TypedLine } from '../shapes/line';
-import type { Operation, ResizeHandle } from '../types';
+import type { Operation, ResizeHandle, ResizeRectHandle } from '../types';
 
 type NodeState =
   | { type: 'rect'; node: TypedRect; x: number; y: number; width: number; height: number }
@@ -12,7 +12,7 @@ type NodeState =
   | { type: 'brush'; node: TypedBrush; x: number; y: number; points: [number, number][] }
   | { type: 'stickynote'; node: TypedStickyNote; x: number; y: number; width: number; height: number };
 
-const HANDLES: Record<ResizeHandle, [number, number, number, number]> = {
+const HANDLES: Record<ResizeRectHandle, [number, number, number, number]> = {
   t: [0, -1, 0.5, 0],
   r: [1, 0, 1, 0.5],
   b: [0, 1, 0.5, 1],
@@ -30,6 +30,38 @@ export const createResizeOperation =
     if (nodes.length === 0) return;
 
     event?.target.setPointerCapture(event.pointerId);
+
+    if (handle === 'start' || handle === 'end') {
+      const [node] = nodes;
+      const { x, y, dx, dy } = node.attrs;
+      const isStart = handle === 'start';
+
+      return {
+        update: () => {
+          const mouse = canvas.stage.getRelativePointerPosition();
+          if (!mouse) return;
+
+          if (isStart) {
+            node.setAttrs({
+              x: mouse.x,
+              y: mouse.y,
+              dx: x + dx - mouse.x,
+              dy: y + dy - mouse.y,
+            });
+          } else {
+            node.setAttrs({
+              dx: mouse.x - x,
+              dy: mouse.y - y,
+            });
+          }
+        },
+        destroy: () => {
+          canvas.syncManager?.addOrUpdateKonvaNode(node);
+          event?.target.releaseCapture(event.pointerId);
+          canvas.state.tool = 'select';
+        },
+      };
+    }
 
     const states: NodeState[] = [];
     const min = { x: Infinity, y: Infinity };
@@ -89,7 +121,7 @@ export const createResizeOperation =
     const initCenter = { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2 };
     const ratio = initSize.w / initSize.h;
 
-    const hdl = HANDLES[handle];
+    const hdl = HANDLES[handle as ResizeRectHandle];
     const dragStart = {
       x: initBbox.min.x + hdl[2] * initSize.w,
       y: initBbox.min.y + hdl[3] * initSize.h,
