@@ -1,0 +1,5 @@
+mutation EntityScreen_DeleteCanvas_Mutation($input: DeleteCanvasInput!) {
+  deleteCanvas(input: $input) {
+    id
+  }
+}

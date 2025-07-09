@@ -24,6 +24,11 @@ fragment EntityScreen_Entity_entity on Entity {
         deletions
       }
     }
+
+    ... on Canvas {
+      id
+      title
+    }
   }
 
   ancestors {
