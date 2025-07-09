@@ -73,6 +73,11 @@
                 deletions
               }
             }
+
+            ... on Canvas {
+              id
+              title
+            }
           }
         }
       }
