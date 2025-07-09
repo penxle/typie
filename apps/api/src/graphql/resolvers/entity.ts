@@ -241,9 +241,21 @@ EntityView.implement({
 builder.queryFields((t) => ({
   entity: t.withAuth({ session: true }).field({
     type: Entity,
-    args: { entityId: t.arg.id({ validate: validateDbId(TableCode.ENTITIES) }) },
+    args: {
+      entityId: t.arg.id({ validate: validateDbId(TableCode.ENTITIES), required: false }),
+      slug: t.arg.string({ required: false }),
+    },
     resolve: async (_, args, ctx) => {
-      const entity = await db.select().from(Entities).where(eq(Entities.id, args.entityId)).then(firstOrThrowWith(new NotFoundError()));
+      if (!args.entityId && !args.slug) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const entity = await db
+        .select()
+        .from(Entities)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        .where(args.entityId ? eq(Entities.id, args.entityId) : eq(Entities.slug, args.slug!))
+        .then(firstOrThrowWith(new NotFoundError()));
 
       await assertSitePermission({
         userId: ctx.session.userId,
