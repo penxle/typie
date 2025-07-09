@@ -8,6 +8,7 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import PencilIcon from '~icons/lucide/pencil-line';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import TrashIcon from '~icons/lucide/trash';
@@ -93,6 +94,19 @@
     mutation DashboardLayout_EntityTree_Folder_CreateFolder_Mutation($input: CreateFolderInput!) {
       createFolder(input: $input) {
         id
+      }
+    }
+  `);
+
+  const createCanvas = graphql(`
+    mutation DashboardLayout_EntityTree_Folder_CreateCanvas_Mutation($input: CreateCanvasInput!) {
+      createCanvas(input: $input) {
+        id
+
+        entity {
+          id
+          slug
+        }
       }
     }
   `);
@@ -288,6 +302,22 @@
           }}
         >
           하위 포스트 생성
+        </MenuItem>
+
+        <MenuItem
+          icon={LineSquiggleIcon}
+          onclick={async () => {
+            const resp = await createCanvas({
+              siteId: $folder.entity.site.id,
+              parentEntityId: $folder.entity.id,
+            });
+
+            mixpanel.track('create_child_canvas');
+
+            await goto(`/${resp.entity.slug}`);
+          }}
+        >
+          하위 캔버스 생성
         </MenuItem>
 
         {#if $folder.entity.depth < maxDepth - 1}

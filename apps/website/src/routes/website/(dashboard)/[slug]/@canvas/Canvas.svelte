@@ -11,8 +11,10 @@
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { Canvas, CanvasEditor } from '$lib/canvas';
+  import { Helmet } from '$lib/components';
   import { getAppContext, getThemeContext } from '$lib/context';
   import { css } from '$styled-system/css';
+  import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';
   import Toolbar from './Toolbar.svelte';
   import Zoom from './Zoom.svelte';
@@ -90,6 +92,9 @@
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
+
+  const title = new YState<string>(doc, 'title', '');
+  const effectiveTitle = $derived(title.current || '(제목 없음)');
 
   const theme = getThemeContext();
   theme.force('light');
@@ -206,6 +211,8 @@
     };
   });
 </script>
+
+<Helmet title={`${effectiveTitle} 그리는 중`} />
 
 <div
   class={css({
