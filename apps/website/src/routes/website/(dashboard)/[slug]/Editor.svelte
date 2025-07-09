@@ -185,6 +185,7 @@
 
   const app = getAppContext();
   const clientId = nanoid();
+  const postId = $derived($query.entity.node.__typename === 'Post' ? $query.entity.node.id : null);
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -263,11 +264,11 @@
   );
 
   doc.on('updateV2', async (update, origin) => {
-    if (browser && origin !== 'remote' && $query.entity.node.__typename === 'Post') {
+    if (browser && origin !== 'remote' && postId) {
       await syncPost(
         {
           clientId,
-          postId: $query.entity.node.id,
+          postId,
           type: PostSyncType.UPDATE,
           data: base64.stringify(update),
         },
@@ -277,13 +278,13 @@
   });
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
-    if (browser && origin !== 'remote' && $query.entity.node.__typename === 'Post') {
+    if (browser && origin !== 'remote' && postId) {
       const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
 
       await syncPost(
         {
           clientId,
-          postId: $query.entity.node.id,
+          postId,
           type: PostSyncType.AWARENESS,
           data: base64.stringify(update),
         },
@@ -293,132 +294,133 @@
   });
 
   const forceSync = async () => {
+    if (!postId) return;
+
     const vector = Y.encodeStateVector(doc);
 
-    if ($query.entity.node.__typename === 'Post') {
-      await syncPost(
-        {
-          clientId,
-          postId: $query.entity.node.id,
-          type: PostSyncType.VECTOR,
-          data: base64.stringify(vector),
-        },
-        { transport: 'ws' },
-      );
-    }
+    await syncPost(
+      {
+        clientId,
+        postId,
+        type: PostSyncType.VECTOR,
+        data: base64.stringify(vector),
+      },
+      { transport: 'ws' },
+    );
   };
 
   onMount(() => {
-    if ($query.entity.node.__typename === 'Post') {
-      const postId = $query.entity.node.id;
+    if (!postId) return;
 
-      const unsubscribe = postSyncStream.subscribe({ clientId, postId }, async (payload) => {
-        if (payload.type === PostSyncType.HEARTBEAT) {
-          lastHeartbeatAt = dayjs(payload.data);
-          connectionStatus = 'connected';
-        } else if (payload.type === PostSyncType.UPDATE) {
-          Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
-        } else if (payload.type === PostSyncType.VECTOR) {
-          const update = Y.encodeStateAsUpdateV2(doc, base64.parse(payload.data));
+    const unsubscribe = postSyncStream.subscribe({ clientId, postId }, async (payload) => {
+      if (payload.type === PostSyncType.HEARTBEAT) {
+        lastHeartbeatAt = dayjs(payload.data);
+        connectionStatus = 'connected';
+      } else if (payload.type === PostSyncType.UPDATE) {
+        Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
+      } else if (payload.type === PostSyncType.VECTOR) {
+        const update = Y.encodeStateAsUpdateV2(doc, base64.parse(payload.data));
 
-          await syncPost(
-            {
-              clientId,
-              postId,
-              type: PostSyncType.UPDATE,
-              data: base64.stringify(update),
-            },
-            { transport: 'ws' },
-          );
-        } else if (payload.type === PostSyncType.AWARENESS) {
-          YAwareness.applyAwarenessUpdate(awareness, base64.parse(payload.data), 'remote');
-        } else if (payload.type === PostSyncType.PRESENCE) {
-          const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
+        await syncPost(
+          {
+            clientId,
+            postId,
+            type: PostSyncType.UPDATE,
+            data: base64.stringify(update),
+          },
+          { transport: 'ws' },
+        );
+      } else if (payload.type === PostSyncType.AWARENESS) {
+        YAwareness.applyAwarenessUpdate(awareness, base64.parse(payload.data), 'remote');
+      } else if (payload.type === PostSyncType.PRESENCE) {
+        const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
 
-          await syncPost(
-            {
-              clientId,
-              postId,
-              type: PostSyncType.AWARENESS,
-              data: base64.stringify(update),
-            },
-            { transport: 'ws' },
-          );
-        }
-      });
-
-      const persistence = new IndexeddbPersistence(`typie:editor:${$query.entity.node.id}`, doc);
-      persistence.on('synced', () => forceSync());
-
-      Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
-      awareness.setLocalStateField('user', {
-        name: $query.me.name,
-        color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
-      });
-
-      if (editor) {
-        editor.current.storage.anchors = anchors;
-
-        const { tr, schema } = editor.current.state;
-        tr.setSelection(TextSelection.create(tr.doc, 2));
-        tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
-        editor.current.view.dispatch(tr);
+        await syncPost(
+          {
+            clientId,
+            postId,
+            type: PostSyncType.AWARENESS,
+            data: base64.stringify(update),
+          },
+          { transport: 'ws' },
+        );
       }
+    });
 
-      const forceSyncInterval = setInterval(() => forceSync(), 10_000);
-      const heartbeatInterval = setInterval(() => {
-        if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
-          connectionStatus = 'disconnected';
-        }
-      }, 1000);
+    const persistence = new IndexeddbPersistence(`typie:editor:${postId}`, doc);
+    persistence.on('synced', () => forceSync());
 
-      const off = on(globalThis.window, 'keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-          e.preventDefault();
-          e.stopPropagation();
-
-          forceSync();
-          Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
-        }
-      });
-
-      app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
-      app.state.current = $query.entity.id;
-
-      const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
-
-      const handler = ({ editor }: { editor: Editor }) => {
-        const marks =
-          arrayOrNull(editor.state.storedMarks) ||
-          arrayOrNull(editor.state.selection.$anchor.marks()) ||
-          arrayOrNull(editor.state.selection.$anchor.parent.firstChild?.firstChild?.marks) ||
-          [];
-
-        const jsonMarks = marks.map((mark) => mark.toJSON());
-
-        if (stringify(storedMarks.current) !== stringify(jsonMarks)) {
-          storedMarks.current = jsonMarks;
-        }
-      };
-
-      editor?.current.on('transaction', handler);
-
-      return () => {
-        off();
-
-        clearInterval(forceSyncInterval);
-        clearInterval(heartbeatInterval);
-
-        YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
-        unsubscribe();
-
-        editor?.current.off('transaction', handler);
-
-        persistence.destroy();
-        awareness.destroy();
-        doc.destroy();
-      };
+    if ($query.entity.node.__typename === 'Post') {
+      Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
     }
+
+    awareness.setLocalStateField('user', {
+      name: $query.me.name,
+      color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
+    });
+
+    if (editor) {
+      editor.current.storage.anchors = anchors;
+
+      const { tr, schema } = editor.current.state;
+      tr.setSelection(TextSelection.create(tr.doc, 2));
+      tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
+      editor.current.view.dispatch(tr);
+    }
+
+    const forceSyncInterval = setInterval(() => forceSync(), 10_000);
+    const heartbeatInterval = setInterval(() => {
+      if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
+        connectionStatus = 'disconnected';
+      }
+    }, 1000);
+
+    const off = on(globalThis.window, 'keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        forceSync();
+        Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
+      }
+    });
+
+    app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
+    app.state.current = $query.entity.id;
+
+    const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
+
+    const handler = ({ editor }: { editor: Editor }) => {
+      const marks =
+        arrayOrNull(editor.state.storedMarks) ||
+        arrayOrNull(editor.state.selection.$anchor.marks()) ||
+        arrayOrNull(editor.state.selection.$anchor.parent.firstChild?.firstChild?.marks) ||
+        [];
+
+      const jsonMarks = marks.map((mark) => mark.toJSON());
+
+      if (stringify(storedMarks.current) !== stringify(jsonMarks)) {
+        storedMarks.current = jsonMarks;
+      }
+    };
+
+    editor?.current.on('transaction', handler);
+
+    return () => {
+      off();
+
+      clearInterval(forceSyncInterval);
+      clearInterval(heartbeatInterval);
+
+      YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
+      unsubscribe();
+
+      editor?.current.off('transaction', handler);
+
+      persistence.destroy();
+      awareness.destroy();
+      doc.destroy();
+    };
   });
 </script>
 
