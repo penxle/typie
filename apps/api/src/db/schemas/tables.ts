@@ -8,6 +8,86 @@ import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { NotificationData, PlanRules } from './json';
 
+export const Canvases = pgTable(
+  'canvases',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.CANVASES)),
+    entityId: text('entity_id')
+      .notNull()
+      .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    title: text('title'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.entityId)],
+);
+
+export const CanvasContents = pgTable('canvas_contents', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.CANVAS_CONTENTS)),
+  canvasId: text('canvas_id')
+    .notNull()
+    .unique()
+    .references(() => Canvases.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  shapes: jsonb('shapes').notNull().$type<Record<string, unknown>>(),
+  orders: jsonb('orders').notNull().$type<string[]>(),
+  update: bytea('update').notNull(),
+  vector: bytea('vector').notNull(),
+  compactedAt: datetime('compacted_at')
+    .notNull()
+    .default(sql`now()`),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const CanvasSnapshots = pgTable(
+  'canvas_snapshots',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.CANVAS_SNAPSHOTS)),
+    canvasId: text('canvas_id')
+      .notNull()
+      .references(() => Canvases.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    snapshot: bytea('snapshot').notNull(),
+    order: integer('order').notNull().default(0),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.canvasId, t.createdAt, t.order)],
+);
+
+export const CanvasSnapshotContributors = pgTable(
+  'canvas_snapshot_contributors',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.CANVAS_SNAPSHOT_CONTRIBUTORS)),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => CanvasSnapshots.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.snapshotId, t.userId)],
+);
+
 export const Comments = pgTable(
   'comments',
   {

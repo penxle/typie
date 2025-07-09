@@ -1,7 +1,11 @@
 // spell-checker:ignoreRegExp /: '[A-Z]{1,4}',/g
 
 export const TableCode = {
-  COMMENTS: 'C',
+  CANVASES: 'C',
+  CANVAS_CONTENTS: 'CC',
+  CANVAS_SNAPSHOTS: 'CS',
+  CANVAS_SNAPSHOT_CONTRIBUTORS: 'CSC',
+  COMMENTS: 'CMT',
   CREDIT_CODES: 'CRCD',
   EMBEDS: 'EMBD',
   ENTITIES: 'E',
