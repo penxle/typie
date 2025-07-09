@@ -14,7 +14,7 @@ export abstract class TypedShape<T extends TypedShapeConfig> extends Konva.Shape
     const newConfig = {
       ...config,
       id: config.id || nanoid(32),
-      seed: config.seed || Math.random() * 2_147_483_637,
+      seed: config.seed || Math.floor(Math.random() * 2_147_483_637),
     };
 
     super(newConfig as unknown as T);
