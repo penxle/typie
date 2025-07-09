@@ -43,5 +43,12 @@
 <svelte:window on:keydown={(e) => canvas?.handleKeyDown(e)} />
 
 <div style:cursor class={css(style)}>
-  <div bind:this={element} class={css({ size: 'full' })}></div>
+  <div
+    bind:this={element}
+    class={css({ position: 'relative', size: 'full', overflow: 'hidden' })}
+    onscroll={() => {
+      element.scrollLeft = 0;
+      element.scrollTop = 0;
+    }}
+  ></div>
 </div>
