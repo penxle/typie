@@ -1,6 +1,7 @@
 import Konva from 'konva';
+import { isSingleLineLike } from './utils';
 import type { CanvasState } from './class.svelte';
-import type { Pos, ResizeHandle } from './types';
+import type { Pos, ResizeHandle, ResizeLineHandle, ResizeRectHandle } from './types';
 
 const CORNER_RECT_SIZE = 12;
 const CORNER_RECT_STROKE_WIDTH = 2;
@@ -14,8 +15,12 @@ export class Selection {
   #state: CanvasState;
 
   #indicator: Konva.Rect;
-  #group: Konva.Group;
-  #handles = new Map<ResizeHandle, Konva.Shape>();
+
+  #rectHandlesGroup: Konva.Group;
+  #lineHandlesGroup: Konva.Group;
+
+  #rectHandles = new Map<ResizeRectHandle, Konva.Shape>();
+  #lineHandles = new Map<ResizeLineHandle, Konva.Circle>();
 
   #nodes: Konva.Node[] = [];
 
@@ -26,8 +31,10 @@ export class Selection {
     this.#layer = new Konva.Layer();
     this.#stage.add(this.#layer);
 
-    this.#group = new Konva.Group();
-    this.#layer.add(this.#group);
+    this.#rectHandlesGroup = new Konva.Group();
+    this.#lineHandlesGroup = new Konva.Group();
+    this.#layer.add(this.#rectHandlesGroup);
+    this.#layer.add(this.#lineHandlesGroup);
 
     this.#indicator = new Konva.Rect({
       stroke: 'rgba(0, 135, 255, 1)',
@@ -38,7 +45,7 @@ export class Selection {
 
     this.#layer.add(this.#indicator);
 
-    const edges: ResizeHandle[] = ['t', 'r', 'b', 'l'];
+    const edges: ResizeRectHandle[] = ['t', 'r', 'b', 'l'];
     for (const edge of edges) {
       const line = new Konva.Line({
         stroke: '#0087ff',
@@ -53,11 +60,11 @@ export class Selection {
         this.#container.style.cursor = '';
       });
 
-      this.#handles.set(edge, line);
-      this.#group.add(line);
+      this.#rectHandles.set(edge, line);
+      this.#rectHandlesGroup.add(line);
     }
 
-    const corners: ResizeHandle[] = ['tl', 'tr', 'br', 'bl'];
+    const corners: ResizeRectHandle[] = ['tl', 'tr', 'br', 'bl'];
     for (const corner of corners) {
       const rect = new Konva.Rect({
         fill: 'white',
@@ -74,8 +81,28 @@ export class Selection {
         this.#container.style.cursor = '';
       });
 
-      this.#handles.set(corner, rect);
-      this.#group.add(rect);
+      this.#rectHandles.set(corner, rect);
+      this.#rectHandlesGroup.add(rect);
+    }
+
+    const endpoints: ResizeLineHandle[] = ['start', 'end'];
+    for (const endpoint of endpoints) {
+      const circle = new Konva.Circle({
+        fill: 'white',
+        stroke: '#0087ff',
+        handle: endpoint,
+      });
+
+      circle.on('pointerenter', () => {
+        this.#container.style.cursor = 'move';
+      });
+
+      circle.on('pointerleave', () => {
+        this.#container.style.cursor = '';
+      });
+
+      this.#lineHandles.set(endpoint, circle);
+      this.#lineHandlesGroup.add(circle);
     }
   }
 
@@ -113,9 +140,41 @@ export class Selection {
 
   update() {
     if (this.#nodes.length === 0) {
-      this.#group.visible(false);
+      this.#rectHandlesGroup.visible(false);
+      this.#lineHandlesGroup.visible(false);
       return;
     }
+
+    if (isSingleLineLike(this.#nodes)) {
+      this.#rectHandlesGroup.visible(false);
+      this.#lineHandlesGroup.visible(true);
+
+      const node = this.#nodes[0];
+      const { x, y, dx, dy } = node.attrs;
+
+      const scale = this.#stage.scaleX();
+      const endpointCircleSize = CORNER_RECT_SIZE / scale;
+      const endpointCircleStrokeWidth = CORNER_RECT_STROKE_WIDTH / scale;
+
+      this.#lineHandles.get('start')?.setAttrs({
+        x,
+        y,
+        radius: endpointCircleSize / 2,
+        strokeWidth: endpointCircleStrokeWidth,
+      });
+
+      this.#lineHandles.get('end')?.setAttrs({
+        x: x + dx,
+        y: y + dy,
+        radius: endpointCircleSize / 2,
+        strokeWidth: endpointCircleStrokeWidth,
+      });
+
+      return;
+    }
+
+    this.#rectHandlesGroup.visible(true);
+    this.#lineHandlesGroup.visible(false);
 
     let minX = Infinity;
     let minY = Infinity;
@@ -132,7 +191,7 @@ export class Selection {
     }
 
     if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
-      this.#group.visible(false);
+      this.#rectHandlesGroup.visible(false);
       return;
     }
 
@@ -148,7 +207,7 @@ export class Selection {
     const cornerRectStrokeWidth = CORNER_RECT_STROKE_WIDTH / scale;
     const edgeLineStrokeWidth = EDGE_LINE_STROKE_WIDTH / scale;
 
-    this.#handles.get('tl')?.setAttrs({
+    this.#rectHandles.get('tl')?.setAttrs({
       x: x - cornerRectSize / 2,
       y: y - cornerRectSize / 2,
       width: cornerRectSize,
@@ -157,7 +216,7 @@ export class Selection {
       cornerRadius: cornerRectSize / 4,
     });
 
-    this.#handles.get('tr')?.setAttrs({
+    this.#rectHandles.get('tr')?.setAttrs({
       x: x + width - cornerRectSize / 2,
       y: y - cornerRectSize / 2,
       width: cornerRectSize,
@@ -166,7 +225,7 @@ export class Selection {
       cornerRadius: cornerRectSize / 4,
     });
 
-    this.#handles.get('br')?.setAttrs({
+    this.#rectHandles.get('br')?.setAttrs({
       x: x + width - cornerRectSize / 2,
       y: y + height - cornerRectSize / 2,
       width: cornerRectSize,
@@ -175,7 +234,7 @@ export class Selection {
       cornerRadius: cornerRectSize / 4,
     });
 
-    this.#handles.get('bl')?.setAttrs({
+    this.#rectHandles.get('bl')?.setAttrs({
       x: x - cornerRectSize / 2,
       y: y + height - cornerRectSize / 2,
       width: cornerRectSize,
@@ -184,31 +243,29 @@ export class Selection {
       cornerRadius: cornerRectSize / 4,
     });
 
-    this.#handles.get('t')?.setAttrs({
+    this.#rectHandles.get('t')?.setAttrs({
       points: [x, y, x + width, y],
       strokeWidth: edgeLineStrokeWidth,
       hitStrokeWidth: edgeLineStrokeWidth * 4,
     });
 
-    this.#handles.get('r')?.setAttrs({
+    this.#rectHandles.get('r')?.setAttrs({
       points: [x + width, y, x + width, y + height],
       strokeWidth: edgeLineStrokeWidth,
       hitStrokeWidth: edgeLineStrokeWidth * 4,
     });
 
-    this.#handles.get('b')?.setAttrs({
+    this.#rectHandles.get('b')?.setAttrs({
       points: [x + width, y + height, x, y + height],
       strokeWidth: edgeLineStrokeWidth,
       hitStrokeWidth: edgeLineStrokeWidth * 4,
     });
 
-    this.#handles.get('l')?.setAttrs({
+    this.#rectHandles.get('l')?.setAttrs({
       points: [x, y + height, x, y],
       strokeWidth: edgeLineStrokeWidth,
       hitStrokeWidth: edgeLineStrokeWidth * 4,
     });
-
-    this.#group.visible(true);
   }
 
   handle(pos: Pos) {

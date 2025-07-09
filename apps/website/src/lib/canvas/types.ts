@@ -6,7 +6,9 @@ export type Shapes = 'arrow' | 'brush' | 'ellipse' | 'line' | 'rectangle' | 'sti
 
 export type Pos = { x: number; y: number };
 
-export type ResizeHandle = 'tl' | 'tr' | 'br' | 'bl' | 't' | 'r' | 'b' | 'l';
+export type ResizeRectHandle = 'tl' | 'tr' | 'br' | 'bl' | 't' | 'r' | 'b' | 'l';
+export type ResizeLineHandle = 'start' | 'end';
+export type ResizeHandle = ResizeRectHandle | ResizeLineHandle;
 
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
 export type Operation = (canvas: Canvas, event?: Konva.KonvaPointerEvent) => Partial<OperationReturn> | void;
