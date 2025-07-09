@@ -1,19 +1,27 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
+  import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { CanvasSyncType } from '@/enums';
+  import CopyIcon from '~icons/lucide/copy';
+  import ElipsisIcon from '~icons/lucide/ellipsis';
+  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
+  import TrashIcon from '~icons/lucide/trash';
   import { browser } from '$app/environment';
+  import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { Canvas, CanvasEditor } from '$lib/canvas';
-  import { Helmet } from '$lib/components';
+  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { getAppContext } from '$lib/context';
+  import { Dialog } from '$lib/notification';
   import { css } from '$styled-system/css';
+  import { center } from '$styled-system/patterns';
   import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -68,6 +76,27 @@
     `),
   );
 
+  const duplicateCanvas = graphql(`
+    mutation Canvas_DuplicateCanvas_Mutation($input: DuplicateCanvasInput!) {
+      duplicateCanvas(input: $input) {
+        id
+
+        entity {
+          id
+          slug
+        }
+      }
+    }
+  `);
+
+  const deleteCanvas = graphql(`
+    mutation Canvas_DeleteCanvas_Mutation($input: DeleteCanvasInput!) {
+      deleteCanvas(input: $input) {
+        id
+      }
+    }
+  `);
+
   const syncCanvas = graphql(`
     mutation DashboardSlugPage_Canvas_SyncCanvas_Mutation($input: SyncCanvasInput!) {
       syncCanvas(input: $input)
@@ -95,6 +124,10 @@
 
   const title = new YState<string>(doc, 'title', '');
   const effectiveTitle = $derived(title.current || '(제목 없음)');
+
+  let titleInputEl = $state<HTMLInputElement>();
+  let titleEditing = $state(false);
+  let titleEditingText = $state('');
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote' && canvasId) {
@@ -213,6 +246,127 @@
 
 <div class={css({ position: 'relative', size: 'full', overflow: 'hidden' })}>
   <CanvasEditor style={css.raw({ size: 'full' })} {awareness} {doc} bind:canvas />
+
+  <div
+    class={center({
+      position: 'absolute',
+      top: '20px',
+      left: '20px',
+      gap: '12px',
+      borderRadius: '12px',
+      paddingX: '16px',
+      paddingY: '12px',
+      color: 'text.default',
+      backgroundColor: 'surface.default',
+      boxShadow: 'small',
+    })}
+  >
+    <Icon style={css.raw({ color: 'text.faint' })} icon={LineSquiggleIcon} size={16} />
+
+    <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.default' })}></div>
+
+    {#if titleEditing}
+      <input
+        bind:this={titleInputEl}
+        class={css({ fontSize: '14px', fontWeight: 'bold' })}
+        onblur={() => {
+          titleEditing = false;
+          title.current = titleEditingText;
+        }}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            titleEditing = false;
+            title.current = titleEditingText;
+          } else if (e.key === 'Escape') {
+            titleEditing = false;
+            titleEditingText = title.current;
+          }
+        }}
+        placeholder="(제목 없음)"
+        type="text"
+        bind:value={titleEditingText}
+      />
+    {:else}
+      <button
+        class={css({ fontSize: '14px', fontWeight: 'bold', cursor: 'text' })}
+        ondblclick={async () => {
+          titleEditingText = title.current;
+          titleEditing = true;
+          await tick();
+          titleInputEl?.select();
+        }}
+        type="button"
+      >
+        {effectiveTitle}
+      </button>
+    {/if}
+
+    <Menu placement="bottom-start">
+      {#snippet button({ open })}
+        <button
+          class={center({
+            borderRadius: '4px',
+            size: '24px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: {
+              color: 'text.subtle',
+              backgroundColor: 'surface.muted',
+            },
+            _pressed: {
+              color: 'text.subtle',
+              backgroundColor: 'surface.muted',
+            },
+          })}
+          aria-pressed={open}
+          type="button"
+        >
+          <Icon icon={ElipsisIcon} size={16} />
+        </button>
+      {/snippet}
+
+      <MenuItem
+        icon={CopyIcon}
+        onclick={async () => {
+          if (!canvasId) return;
+
+          const resp = await duplicateCanvas({ canvasId });
+          mixpanel.track('duplicate_canvas', { via: 'editor' });
+          await goto(`/${resp.entity.slug}`);
+        }}
+      >
+        복제
+      </MenuItem>
+
+      <HorizontalDivider color="secondary" />
+
+      <MenuItem
+        icon={TrashIcon}
+        onclick={() => {
+          if ($query.entity.node.__typename === 'Canvas') {
+            const canvasId = $query.entity.node.id;
+            const title = $query.entity.node.title;
+
+            Dialog.confirm({
+              title: '캔버스 삭제',
+              message: `정말 "${title}" 캔버스를 삭제하시겠어요?`,
+              action: 'danger',
+              actionLabel: '삭제',
+              actionHandler: async () => {
+                await deleteCanvas({ canvasId });
+                mixpanel.track('delete_canvas', { via: 'editor' });
+                app.state.ancestors = [];
+                app.state.current = undefined;
+              },
+            });
+          }
+        }}
+        variant="danger"
+      >
+        삭제
+      </MenuItem>
+    </Menu>
+  </div>
 
   {#if canvas}
     <Toolbar {canvas} />
