@@ -1,6 +1,6 @@
 import { DEFAULT_SIZE, MIN_SIZE } from '../const';
-import * as ops from '../operations';
 import { TypedStickyNote } from '../shapes/stickynote';
+import { createResizeOperation } from './resize';
 import type { Operation } from '../types';
 
 export const stickynote: Operation = (canvas) => {
@@ -36,7 +36,7 @@ export const stickynote: Operation = (canvas) => {
       canvas.scene.add(shape);
       canvas.selection.nodes([shape]);
 
-      canvas.setOperation(ops.createResizeOperation('br'), event);
+      canvas.setOperation(createResizeOperation('br'), event);
     },
     destroy: () => {
       const { width, height } = shape.attrs;

@@ -1,6 +1,6 @@
 import Konva from 'konva';
 import type { Awareness } from 'y-protocols/awareness';
-import type { Canvas } from './canvas.svelte';
+import type { Canvas } from './class.svelte';
 
 type UserInfo = {
   name: string;

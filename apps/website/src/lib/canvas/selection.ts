@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import type { CanvasState } from './canvas.svelte';
+import type { CanvasState } from './class.svelte';
 import type { Pos, ResizeHandle } from './types';
 
 const CORNER_RECT_SIZE = 12;

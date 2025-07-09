@@ -1,12 +1,10 @@
 <script lang="ts">
+  import { TypedArrow, TypedBrush, TypedEllipse, TypedLine, TypedRect, TypedStickyNote, values } from '$lib/canvas';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
-  import { TypedArrow, TypedBrush, TypedEllipse, TypedLine, TypedRect, TypedStickyNote } from './lib/shapes';
-  import { values } from './lib/values';
   import PanelButton from './PanelButton.svelte';
-  import type { Canvas } from './lib/canvas.svelte';
-  import type { Shapes } from './lib/types';
+  import type { Canvas, Shapes } from '$lib/canvas';
 
   type Props = {
     canvas: Canvas;

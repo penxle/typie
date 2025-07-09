@@ -4,7 +4,7 @@
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
-  import type { Canvas } from './lib/canvas.svelte';
+  import type { Canvas } from '$lib/canvas';
 
   type Props = {
     canvas: Canvas;

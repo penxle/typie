@@ -39,7 +39,7 @@ export const values = {
 } as const;
 
 export const defaultValues = {
-  backgroundColor: 'yellow',
+  backgroundColor: 'purple',
   backgroundStyle: 'solid',
   roughness: 'rough',
   borderRadius: 'round',
