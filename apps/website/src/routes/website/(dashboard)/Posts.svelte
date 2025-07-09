@@ -28,6 +28,7 @@
     graphql(`
       fragment DashboardLayout_Posts_user on User {
         id
+        role
 
         ...DashboardLayout_PlanUsageWidget_user
       }
@@ -239,28 +240,30 @@
           <Icon icon={FolderPlusIcon} />
         </button>
 
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '24px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          })}
-          onclick={async () => {
-            const resp = await createCanvas({
-              siteId: $site.id,
-            });
+        {#if $user.role === 'ADMIN'}
+          <button
+            class={center({
+              borderRadius: '4px',
+              size: '24px',
+              color: 'text.faint',
+              transition: 'common',
+              _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+            })}
+            onclick={async () => {
+              const resp = await createCanvas({
+                siteId: $site.id,
+              });
 
-            mixpanel.track('create_canvas', { via: 'tree' });
+              mixpanel.track('create_canvas', { via: 'tree' });
 
-            await goto(`/${resp.entity.slug}`);
-          }}
-          type="button"
-          use:tooltip={{ message: '새 캔버스 생성' }}
-        >
-          <Icon icon={LineSquiggleIcon} />
-        </button>
+              await goto(`/${resp.entity.slug}`);
+            }}
+            type="button"
+            use:tooltip={{ message: '새 캔버스 생성' }}
+          >
+            <Icon icon={LineSquiggleIcon} />
+          </button>
+        {/if}
 
         <button
           class={center({
