@@ -220,8 +220,6 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
     const stage = this.getStage();
     if (!stage) return;
 
-    const rect = this.getClientRect();
-    const scale = stage.scaleX();
     const { text, textAlign } = this.attrs;
 
     this.#wrapper = document.createElement('div');
@@ -229,13 +227,9 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
       position: 'absolute',
       left: '0',
       top: '0',
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
-      transform: `translate(${rect.x}px, ${rect.y}px)`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: `${20 * scale}px`,
       zIndex: '1000',
       pointerEvents: 'none',
     });
@@ -250,7 +244,6 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
       minHeight: '0',
       maxHeight: '100%',
       color: 'black',
-      fontSize: `${this.effectiveFontSize * scale}px`,
       fontFamily: this.effectiveFontFamily,
       textAlign,
       lineHeight: '1.4',
@@ -277,10 +270,10 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
     this.#wrapper.append(this.#textarea);
     document.body.append(this.#wrapper);
 
+    this.#updateTextareaPosition();
+
     this.#textarea.focus();
     this.#textarea.select();
-
-    this.#adjustTextareaHeight();
   }
 
   #adjustTextareaHeight() {
@@ -317,7 +310,10 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
       const rect = this.getClientRect();
       const scale = stage.scaleX();
 
-      this.#wrapper.style.transform = `translate(${rect.x}px, ${rect.y}px)`;
+      const container = stage.container();
+      const containerRect = container.getBoundingClientRect();
+
+      this.#wrapper.style.transform = `translate(${containerRect.left + rect.x}px, ${containerRect.top + rect.y}px)`;
       this.#wrapper.style.width = `${rect.width}px`;
       this.#wrapper.style.padding = `${20 * scale}px`;
 
