@@ -302,7 +302,13 @@
           <div class={flex({ fontSize: '12px', color: 'amber.400', alignItems: 'center', gap: '4px' })}>
             {#if $query.adminPost.entity.ancestors.length > 0}
               {#each $query.adminPost.entity.ancestors as ancestor, i (ancestor.id)}
-                <span>{ancestor.node.__typename === 'Folder' ? ancestor.node.name : ancestor.node.title}</span>
+                <span>
+                  {ancestor.node.__typename === 'Folder'
+                    ? ancestor.node.name
+                    : ancestor.node.__typename === 'Canvas'
+                      ? ''
+                      : ancestor.node.title}
+                </span>
                 {#if i < $query.adminPost.entity.ancestors.length - 1}
                   <AdminIcon icon={ChevronRightIcon} size={12} />
                 {/if}
