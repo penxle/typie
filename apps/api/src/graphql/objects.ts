@@ -44,10 +44,13 @@ export const isTypeOf = (tableCode: string) => (self: unknown) => {
 };
 
 export const IEntity = createInterfaceRef('IEntity', T.Entities);
+export const ICanvas = createInterfaceRef('ICanvas', T.Canvases);
 export const IFolder = createInterfaceRef('IFolder', T.Folders);
 export const IPost = createInterfaceRef('IPost', T.Posts);
 export const ISite = createInterfaceRef('ISite', T.Sites);
 
+export const Canvas = createObjectRef('Canvas', T.Canvases);
+export const CanvasSnapshot = createObjectRef('CanvasSnapshot', T.CanvasSnapshots);
 export const Comment = createObjectRef('Comment', T.Comments);
 export const CreditCode = createObjectRef('CreditCode', T.CreditCodes);
 export const Embed = createObjectRef('Embed', T.Embeds);
@@ -69,6 +72,7 @@ export const UserBillingKey = createObjectRef('UserBillingKey', T.UserBillingKey
 export const UserPersonalIdentity = createObjectRef('UserPersonalIdentity', T.UserPersonalIdentities);
 export const UserSingleSignOn = createObjectRef('UserSingleSignOn', T.UserSingleSignOns);
 
+export const CanvasView = createObjectRef('CanvasView', T.Canvases);
 export const EntityView = createObjectRef('EntityView', T.Entities);
 export const FolderView = createObjectRef('FolderView', T.Folders);
 export const PostView = createObjectRef('PostView', T.Posts);
@@ -78,11 +82,11 @@ type BlobShape = { id: string; size: number; path: string };
 export const Blob = builder.interfaceRef<BlobShape>('Blob');
 
 export const EntityNode = builder.unionType('EntityNode', {
-  types: [Folder, Post],
+  types: [Canvas, Folder, Post],
 });
 
 export const EntityViewNode = builder.unionType('EntityViewNode', {
-  types: [FolderView, PostView],
+  types: [CanvasView, FolderView, PostView],
 });
 
 export const CharacterCountChange = builder.simpleObject('CharacterCountChange', {
