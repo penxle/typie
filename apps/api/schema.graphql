@@ -649,7 +649,7 @@ type Query {
   canvas(slug: String!): Canvas!
   creditCode(code: String!): CreditCode!
   defaultPlanRule: PlanRule!
-  entity(entityId: ID!): Entity!
+  entity(entityId: ID, slug: String): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   image(imageId: ID!): Image!
   impersonation: Impersonation
