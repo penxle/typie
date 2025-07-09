@@ -9,14 +9,62 @@
   import * as Y from 'yjs';
   import { CanvasSyncType } from '@/enums';
   import { browser } from '$app/environment';
-  import { page } from '$app/state';
-  import { graphql } from '$graphql';
+  import { fragment, graphql } from '$graphql';
   import { Canvas, CanvasEditor } from '$lib/canvas';
-  import { getThemeContext } from '$lib/context';
+  import { getAppContext, getThemeContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import Panel from './Panel.svelte';
   import Toolbar from './Toolbar.svelte';
   import Zoom from './Zoom.svelte';
+  import type { Canvas_query } from '$graphql';
+
+  type Props = {
+    $query: Canvas_query;
+  };
+
+  let { $query: _query }: Props = $props();
+
+  const query = fragment(
+    _query,
+    graphql(`
+      fragment Canvas_query on Query {
+        me @required {
+          id
+          name
+          role
+        }
+
+        entity(slug: $slug) {
+          id
+          slug
+          url
+
+          ancestors {
+            id
+
+            node {
+              __typename
+
+              ... on Folder {
+                id
+                name
+              }
+            }
+          }
+
+          node {
+            __typename
+
+            ... on Canvas {
+              id
+              title
+              update
+            }
+          }
+        }
+      }
+    `),
+  );
 
   const syncCanvas = graphql(`
     mutation DashboardSlugPage_Canvas_SyncCanvas_Mutation($input: SyncCanvasInput!) {
@@ -34,8 +82,9 @@
     }
   `);
 
+  const app = getAppContext();
   const clientId = nanoid();
-  const canvasId = $derived(page.url.searchParams.get('id') ?? nanoid());
+  const canvasId = $derived($query.entity.node.__typename === 'Canvas' ? $query.entity.node.id : null);
 
   let canvas = $state<Canvas>();
 
@@ -46,7 +95,7 @@
   theme.force('light');
 
   doc.on('updateV2', async (update, origin) => {
-    if (browser && origin !== 'remote') {
+    if (browser && origin !== 'remote' && canvasId) {
       await syncCanvas(
         {
           clientId,
@@ -60,7 +109,7 @@
   });
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
-    if (browser && origin !== 'remote') {
+    if (browser && origin !== 'remote' && canvasId) {
       const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
 
       await syncCanvas(
@@ -76,6 +125,8 @@
   });
 
   const forceSync = async () => {
+    if (!canvasId) return;
+
     const vector = Y.encodeStateVector(doc);
 
     await syncCanvas(
@@ -90,6 +141,8 @@
   };
 
   onMount(() => {
+    if (!canvasId) return;
+
     const unsubscribe = canvasSyncStream.subscribe({ clientId, canvasId }, async (payload) => {
       if (payload.type === CanvasSyncType.HEARTBEAT) {
         // pass
@@ -127,12 +180,19 @@
     const persistence = new IndexeddbPersistence(`typie:canvas:${canvasId}`, doc);
     persistence.on('synced', () => forceSync());
 
+    if ($query.entity.node.__typename === 'Canvas') {
+      Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
+    }
+
     awareness.setLocalStateField('user', {
-      name: 'Anonymous',
-      color: random({ luminosity: 'bright', seed: stringHash('anonymous') }).toHexString(),
+      name: $query.me.name,
+      color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
     });
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
+
+    app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
+    app.state.current = $query.entity.id;
 
     return () => {
       clearInterval(forceSyncInterval);
