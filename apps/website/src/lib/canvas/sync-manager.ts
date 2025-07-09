@@ -20,7 +20,7 @@ export class SyncManager {
 
   #doc: Y.Doc;
   #shapes: Y.Map<YShape>;
-  #order: Y.Array<string>;
+  #orders: Y.Array<string>;
 
   #isUpdating = false;
   #nodeIdMap = new Map<string, Konva.Node>();
@@ -30,7 +30,7 @@ export class SyncManager {
 
     this.#doc = doc;
     this.#shapes = this.#doc.getMap('shapes');
-    this.#order = this.#doc.getArray('order');
+    this.#orders = this.#doc.getArray('orders');
 
     this.#shapes.observe((event) => {
       if (this.#isUpdating) return;
@@ -64,10 +64,10 @@ export class SyncManager {
       });
     });
 
-    this.#order.observe(() => {
+    this.#orders.observe(() => {
       if (this.#isUpdating) return;
 
-      const order = this.#order.toArray();
+      const order = this.#orders.toArray();
       order.forEach((id, index) => {
         const node = this.#nodeIdMap.get(id);
         if (node) {
@@ -78,7 +78,7 @@ export class SyncManager {
       this.#canvas.scene.batchDraw();
     });
 
-    for (const id of this.#order.toArray()) {
+    for (const id of this.#orders.toArray()) {
       const shape = this.#shapes.get(id);
       if (shape) {
         this.#createKonvaNode(id, shape);
@@ -135,7 +135,7 @@ export class SyncManager {
     } else {
       this.#doc.transact(() => {
         this.#shapes.set(id, { type, attrs });
-        this.#order.push([id]);
+        this.#orders.push([id]);
       });
 
       this.#nodeIdMap.set(id, node);
@@ -153,9 +153,9 @@ export class SyncManager {
     this.#doc.transact(() => {
       this.#shapes.delete(id);
 
-      const index = this.#order.toArray().indexOf(id);
+      const index = this.#orders.toArray().indexOf(id);
       if (index !== -1) {
-        this.#order.delete(index, 1);
+        this.#orders.delete(index, 1);
       }
     });
 
