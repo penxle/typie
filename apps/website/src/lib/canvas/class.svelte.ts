@@ -1,11 +1,19 @@
 import Konva from 'konva';
+import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { clamp, Ref } from '$lib/utils';
+import { copyShapesToClipboard, getShapesFromClipboard, offsetShapes } from './clipboard';
 import { CursorManager } from './cursor-manager';
 import { Environment } from './environment';
 import * as ops from './operations';
 import { Scene } from './scene';
 import { Selection } from './selection';
+import { TypedArrow } from './shapes/arrow';
+import { TypedBrush } from './shapes/brush';
+import { TypedEllipse } from './shapes/ellipse';
+import { TypedLine } from './shapes/line';
+import { TypedRect } from './shapes/rectangle';
+import { TypedStickyNote } from './shapes/stickynote';
 import { SyncManager } from './sync-manager';
 import type { Awareness } from 'y-protocols/awareness';
 import type { Operation, OperationReturn, Pos, Tool } from './types';
@@ -291,6 +299,34 @@ export class Canvas {
     }
   }
 
+  async pasteShapesFromClipboard() {
+    const shapes = await getShapesFromClipboard();
+    if (!shapes || shapes.length === 0) return;
+
+    const offsetShapesData = offsetShapes(shapes);
+    const newNodes: Konva.Node[] = [];
+
+    for (const shape of offsetShapesData) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const attrs = shape.attrs as any;
+      const node = match(shape.type)
+        .with('rectangle', () => new TypedRect(attrs))
+        .with('ellipse', () => new TypedEllipse(attrs))
+        .with('line', () => new TypedLine(attrs))
+        .with('arrow', () => new TypedArrow(attrs))
+        .with('brush', () => new TypedBrush(attrs))
+        .with('stickynote', () => new TypedStickyNote(attrs))
+        .exhaustive();
+
+      this.scene.add(node);
+      this.#syncManager?.addOrUpdateKonvaNode(node);
+      newNodes.push(node);
+    }
+
+    this.selection.nodes(newNodes);
+    this.scene.batchDraw();
+  }
+
   handleKeyDown(e: KeyboardEvent) {
     if (e.key === 'Backspace' || e.key === 'Delete') {
       e.preventDefault();
@@ -312,6 +348,15 @@ export class Canvas {
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
       e.preventDefault();
       this.selection.nodes(this.scene.children);
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      e.preventDefault();
+      const nodes = this.selection.nodes();
+      if (nodes.length > 0) {
+        copyShapesToClipboard(nodes);
+      }
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      e.preventDefault();
+      this.pasteShapesFromClipboard();
     }
   }
 }
