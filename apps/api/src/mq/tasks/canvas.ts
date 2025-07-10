@@ -9,6 +9,7 @@ import { pubsub } from '@/pubsub';
 import { queue } from '../bullmq';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
+import type { CanvasShape } from '@/db/schemas/json';
 
 export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canvasId: string) => {
   const updatesAvailable = await redis.scard(`canvas:sync:updates:${canvasId}`);
@@ -92,16 +93,20 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
         const map = doc.getMap('attrs');
         const title = (map.get('title') as string) || null;
 
-        const shapesMap = doc.getMap('shapes');
-        const shapes: Record<string, unknown> = {};
-        shapesMap.forEach((value, key) => {
-          shapes[key] = value;
-        });
+        const fragment = doc.getXmlFragment('shapes');
+        const shapes: CanvasShape[] = [];
+        fragment.forEach((element) => {
+          if (element instanceof Y.XmlElement) {
+            const type = element.nodeName;
+            const attrs: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(element.getAttributes())) {
+              if (value !== undefined && value !== null) {
+                attrs[key] = JSON.parse(value as string);
+              }
+            }
 
-        const ordersArray = doc.getArray('orders');
-        const orders: string[] = [];
-        ordersArray.forEach((item) => {
-          orders.push(item as string);
+            shapes.push({ type, attrs });
+          }
         });
 
         const updatedAt = dayjs();
@@ -118,7 +123,6 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
           .update(CanvasContents)
           .set({
             shapes,
-            orders,
             updatedAt,
           })
           .where(eq(CanvasContents.canvasId, canvasId));

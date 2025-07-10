@@ -17,3 +17,8 @@ export type NotificationCommentData = {
 };
 
 export type NotificationData = NotificationAnnouncementData | NotificationCommentData;
+
+export type CanvasShape = {
+  type: string;
+  attrs: Record<string, unknown>;
+};

@@ -10,110 +10,212 @@ import { TypedStickyNote } from './shapes/stickynote';
 import type { Canvas } from './class.svelte';
 import type { Shapes } from './types';
 
-export type YShape = {
+type Attrs = {
+  id: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+};
+
+type Shape = {
   type: Shapes;
-  attrs: Record<string, unknown>;
+  attrs: Attrs;
 };
 
 export class SyncManager {
   #canvas: Canvas;
 
   #doc: Y.Doc;
-  #shapes: Y.Map<YShape>;
-  #orders: Y.Array<string>;
+  #fragment: Y.XmlFragment;
+  #undoManager: Y.UndoManager;
+
+  #nodeMap = new Map<string, Konva.Node>();
+  #elementMap = new Map<string, Y.XmlElement>();
 
   #isUpdating = false;
-  #nodeIdMap = new Map<string, Konva.Node>();
 
   constructor(canvas: Canvas, doc: Y.Doc) {
     this.#canvas = canvas;
 
     this.#doc = doc;
-    this.#shapes = this.#doc.getMap('shapes');
-    this.#orders = this.#doc.getArray('orders');
+    this.#fragment = this.#doc.getXmlFragment('shapes');
 
-    this.#shapes.observe((event) => {
-      if (this.#isUpdating) return;
+    this.#undoManager = new Y.UndoManager([this.#fragment], {
+      captureTimeout: 500,
+      trackedOrigins: new Set(['local']),
+    });
 
-      event.keysChanged.forEach((id) => {
-        const change = event.changes.keys.get(id);
-        if (!change) return;
+    this.#fragment.observeDeep((events) => {
+      events.forEach((event) => {
+        if (event.transaction.origin === 'local') return;
 
-        if (change.action === 'add' || change.action === 'update') {
-          const shape = this.#shapes.get(id);
-          if (shape) {
-            const node = this.#nodeIdMap.get(id);
-            if (node) {
-              this.#isUpdating = true;
-              node.setAttrs(shape.attrs);
-              this.#isUpdating = false;
-            } else {
-              this.#createKonvaNode(id, shape);
-            }
-
-            this.#canvas.scene.batchDraw();
-          }
-        } else if (change.action === 'delete') {
-          const node = this.#nodeIdMap.get(id);
-          if (node) {
-            node.destroy();
-            this.#nodeIdMap.delete(id);
-            this.#canvas.scene.batchDraw();
-          }
+        if (event.target instanceof Y.XmlElement) {
+          this.#handleXmlElementChange(event);
+        } else if (event.target instanceof Y.XmlFragment) {
+          this.#handleXmlFragmentChange(event);
         }
       });
     });
 
-    this.#orders.observe(() => {
-      if (this.#isUpdating) return;
+    this.#syncNewElements();
+    this.#updateZIndices();
+  }
 
-      const order = this.#orders.toArray();
-      order.forEach((id, index) => {
-        const node = this.#nodeIdMap.get(id);
-        if (node) {
-          node.setZIndex(index);
-        }
-      });
+  #getElement(id: string) {
+    const element = this.#elementMap.get(id);
+    if (element) {
+      return element;
+    }
 
-      this.#canvas.scene.batchDraw();
-    });
-
-    for (const id of this.#orders.toArray()) {
-      const shape = this.#shapes.get(id);
-      if (shape) {
-        this.#createKonvaNode(id, shape);
+    this.#fragment.forEach((element) => {
+      if (element instanceof Y.XmlElement && this.#getElementId(element) === id) {
+        this.#elementMap.set(id, element);
+        return element;
       }
+    });
+
+    return null;
+  }
+
+  #getElementId(element: Y.XmlElement) {
+    const id = element.getAttribute('id');
+    if (!id) throw new Error('Element has no id');
+    return JSON.parse(id) as string;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  #updateShape(id: string, attrs: Record<string, any>) {
+    const element = this.#getElement(id);
+    if (!element) return;
+
+    this.#doc.transact(() => {
+      Object.entries(attrs).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          const v = JSON.stringify(value);
+          if (element.getAttribute(key) !== v) {
+            element.setAttribute(key, v);
+          }
+        } else {
+          element.removeAttribute(key);
+        }
+      });
+    }, 'local');
+  }
+
+  #elementToShape(element: Y.XmlElement) {
+    const type = element.nodeName as Shapes;
+    if (!type) return null;
+
+    const attrs: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(element.getAttributes())) {
+      if (value) {
+        attrs[key] = JSON.parse(value);
+      }
+    }
+
+    return { type, attrs } as Shape;
+  }
+
+  #handleXmlElementChange(event: Y.YEvent<Y.XmlElement>) {
+    const id = this.#getElementId(event.target);
+
+    if (event.changes.added.size > 0) {
+      this.#addElementToCanvas(id, event.target);
+    }
+
+    if (event.changes.deleted.size > 0) {
+      this.#removeElementFromCanvas(id);
+    }
+
+    if (event.changes.keys.size > 0) {
+      this.#updateElementAttributes(id, event.target);
     }
   }
 
-  #updateShape(id: string, attrs: Record<string, unknown>) {
-    const shape = this.#shapes.get(id);
-    if (!shape) return;
+  #handleXmlFragmentChange(event: Y.YEvent<Y.XmlFragment>) {
+    if (event.changes.added.size > 0) {
+      this.#syncNewElements();
+    }
 
-    this.#doc.transact(() => {
-      this.#shapes.set(id, { ...shape, attrs });
+    if (event.changes.added.size > 0 || event.changes.deleted.size > 0) {
+      this.#updateZIndices();
+    }
+  }
+
+  #addElementToCanvas(id: string, xmlElement: Y.XmlElement) {
+    if (this.#nodeMap.has(id)) return;
+
+    const shape = this.#elementToShape(xmlElement);
+    if (shape) {
+      this.#createKonvaNode(id, shape);
+      this.#elementMap.set(id, xmlElement);
+    }
+  }
+
+  #removeElementFromCanvas(id: string) {
+    const node = this.#nodeMap.get(id);
+    if (node) {
+      node.destroy();
+      this.#nodeMap.delete(id);
+      this.#elementMap.delete(id);
+    }
+  }
+
+  #updateElementAttributes(id: string, element: Y.XmlElement) {
+    const node = this.#nodeMap.get(id);
+    const shape = this.#elementToShape(element);
+
+    if (node && shape) {
+      this.#isUpdating = true;
+      node.setAttrs(shape.attrs);
+      this.#isUpdating = false;
+    }
+  }
+
+  #syncNewElements() {
+    this.#fragment.forEach((element) => {
+      if (element instanceof Y.XmlElement) {
+        const id = this.#getElementId(element);
+        this.#addElementToCanvas(id, element);
+      }
     });
   }
 
-  #createKonvaNode(id: string, shape: YShape) {
+  #updateZIndices() {
+    const elements = this.#fragment.toArray();
+    elements.forEach((element, index) => {
+      if (element instanceof Y.XmlElement) {
+        const id = this.#getElementId(element);
+        const node = this.#nodeMap.get(id);
+        if (node) {
+          node.setZIndex(index);
+        }
+      }
+    });
+  }
+
+  #createKonvaNode(id: string, shape: Shape) {
+    this.#isUpdating = true;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const attrs = { ...shape.attrs, id } as any;
     const node = match(shape.type)
-      .with('rectangle', () => new TypedRect(attrs))
-      .with('ellipse', () => new TypedEllipse(attrs))
-      .with('line', () => new TypedLine(attrs))
-      .with('arrow', () => new TypedArrow(attrs))
-      .with('brush', () => new TypedBrush(attrs))
-      .with('stickynote', () => new TypedStickyNote(attrs))
+      .with('TypedRect', () => new TypedRect(attrs))
+      .with('TypedEllipse', () => new TypedEllipse(attrs))
+      .with('TypedLine', () => new TypedLine(attrs))
+      .with('TypedArrow', () => new TypedArrow(attrs))
+      .with('TypedBrush', () => new TypedBrush(attrs))
+      .with('TypedStickyNote', () => new TypedStickyNote(attrs))
       .exhaustive();
 
-    this.#nodeIdMap.set(id, node);
+    this.#nodeMap.set(id, node);
     this.#canvas.scene.add(node);
     this.#setupNodeListeners(id);
+
+    this.#isUpdating = false;
   }
 
   #setupNodeListeners(id: string) {
-    const node = this.#nodeIdMap.get(id);
+    const node = this.#nodeMap.get(id);
     if (!node) return;
 
     node.on('attrchange', () => {
@@ -126,41 +228,54 @@ export class SyncManager {
   }
 
   addOrUpdateKonvaNode(node: Konva.Node) {
-    const { id, type, ...attrs } = node.attrs;
+    const { id, ...attrs } = node.attrs;
 
-    this.#isUpdating = true;
-
-    if (this.#nodeIdMap.has(id)) {
+    if (this.#elementMap.has(id)) {
       this.#updateShape(id, attrs);
     } else {
       this.#doc.transact(() => {
-        this.#shapes.set(id, { type, attrs });
-        this.#orders.push([id]);
-      });
+        const element = new Y.XmlElement(node.className);
+        element.setAttribute('id', JSON.stringify(id));
 
-      this.#nodeIdMap.set(id, node);
+        Object.entries(attrs).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            element.setAttribute(key, JSON.stringify(value));
+          }
+        });
+
+        this.#fragment.push([element]);
+        this.#elementMap.set(id, element);
+      }, 'local');
+
+      this.#nodeMap.set(id, node);
       this.#setupNodeListeners(id);
     }
-
-    this.#isUpdating = false;
   }
 
   removeKonvaNode(node: Konva.Node) {
     const { id } = node.attrs;
 
-    this.#isUpdating = true;
+    const element = this.#elementMap.get(id);
+    if (element) {
+      this.#doc.transact(() => {
+        const children = this.#fragment.toArray();
+        const index = children.indexOf(element);
+        if (index !== -1) {
+          this.#fragment.delete(index, 1);
+        }
+      }, 'local');
 
-    this.#doc.transact(() => {
-      this.#shapes.delete(id);
+      this.#elementMap.delete(id);
+    }
 
-      const index = this.#orders.toArray().indexOf(id);
-      if (index !== -1) {
-        this.#orders.delete(index, 1);
-      }
-    });
+    this.#nodeMap.delete(id);
+  }
 
-    this.#nodeIdMap.delete(id);
+  undo() {
+    this.#undoManager.undo();
+  }
 
-    this.#isUpdating = false;
+  redo() {
+    this.#undoManager.redo();
   }
 }

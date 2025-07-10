@@ -6,6 +6,7 @@ import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { schema, textSerializers } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
+import type { CanvasShape } from '@/db/schemas/json';
 
 type MakeYDocParams = {
   title?: string | null;
@@ -47,24 +48,24 @@ export const makeText = (body: JSONContent) => {
 
 type MakeCanvasYDocParams = {
   title?: string | null;
-  shapes: Record<string, unknown>;
-  orders: string[];
+  shapes: CanvasShape[];
 };
-export const makeCanvasYDoc = ({ title, shapes, orders }: MakeCanvasYDocParams) => {
+export const makeCanvasYDoc = ({ title, shapes }: MakeCanvasYDocParams) => {
   const doc = new Y.Doc();
 
   doc.transact(() => {
     const attrs = doc.getMap('attrs');
     attrs.set('title', title ?? '');
 
-    const shapesMap = doc.getMap('shapes');
-    for (const [id, shape] of Object.entries(shapes)) {
-      shapesMap.set(id, shape);
-    }
-
-    const ordersArray = doc.getArray('orders');
-    for (const order of orders) {
-      ordersArray.push([order]);
+    const fragment = doc.getXmlFragment('shapes');
+    for (const shape of shapes) {
+      const element = new Y.XmlElement(shape.type);
+      for (const [key, value] of Object.entries(shape.attrs)) {
+        if (value !== undefined && value !== null) {
+          element.setAttribute(key, JSON.stringify(value));
+        }
+      }
+      fragment.push([element]);
     }
   });
 

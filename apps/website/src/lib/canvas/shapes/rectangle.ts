@@ -370,4 +370,4 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
   }
 }
 
-TypedRect.prototype._type = 'rectangle';
+TypedRect.prototype.className = 'TypedRect';
