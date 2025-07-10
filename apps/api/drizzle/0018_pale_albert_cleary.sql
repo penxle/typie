@@ -1,0 +1,1 @@
+ALTER TABLE "canvas_contents" DROP COLUMN "orders";

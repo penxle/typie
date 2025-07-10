@@ -15,8 +15,8 @@ export const copyShapesToClipboard = async (nodes: Konva.Node[]): Promise<void> 
   if (nodes.length === 0) return;
 
   const shapes: ClipboardShape[] = nodes.map((node) => ({
-    type: node.attrs.type as Shapes,
-    attrs: { ...node.attrs },
+    type: node.className as Shapes,
+    attrs: node.attrs,
   }));
 
   const data: ClipboardData = { shapes };
@@ -48,7 +48,7 @@ export const offsetShapes = (shapes: ClipboardShape[], offsetX = 20, offsetY = 2
     ...shape,
     attrs: {
       ...shape.attrs,
-      id: nanoid(),
+      id: nanoid(32),
       x: (shape.attrs.x as number) + offsetX,
       y: (shape.attrs.y as number) + offsetY,
     },
