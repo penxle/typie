@@ -257,12 +257,14 @@ builder.queryFields((t) => ({
         .where(args.entityId ? eq(Entities.id, args.entityId) : eq(Entities.slug, args.slug!))
         .then(firstOrThrowWith(new NotFoundError()));
 
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: entity.siteId,
-      }).catch(() => {
-        throw new NotFoundError();
-      });
+      if (entity.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: entity.siteId,
+        }).catch(() => {
+          throw new NotFoundError();
+        });
+      }
 
       return entity;
     },
