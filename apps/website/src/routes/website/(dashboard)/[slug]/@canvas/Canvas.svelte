@@ -274,6 +274,8 @@
           title.current = titleEditingText;
         }}
         onkeydown={(e) => {
+          e.stopPropagation();
+
           if (e.key === 'Enter') {
             titleEditing = false;
             title.current = titleEditingText;
