@@ -72,7 +72,6 @@ type CanvasView implements ICanvas {
   createdAt: DateTime!
   entity: EntityView!
   id: ID!
-  orders: [String!]!
   shapes: JSON!
   title: String!
   updatedAt: DateTime!

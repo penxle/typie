@@ -25,6 +25,7 @@ import { generateEntityOrder, generatePermalink, generateSlug, makeCanvasYDoc } 
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Canvas, CanvasSnapshot, CanvasView, Entity, EntityView, ICanvas, isTypeOf } from '../objects';
+import type { CanvasShape } from '@/db/schemas/json';
 
 /**
  * * Types
@@ -92,25 +93,6 @@ CanvasView.implement({
       },
     }),
 
-    orders: t.field({
-      type: ['String'],
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'CanvasView.orders',
-          load: async (ids) => {
-            return await db
-              .select({ canvasId: CanvasContents.canvasId, orders: CanvasContents.orders })
-              .from(CanvasContents)
-              .where(inArray(CanvasContents.canvasId, ids));
-          },
-          key: ({ canvasId }) => canvasId,
-        });
-
-        const content = await loader.load(self.id);
-        return content.orders;
-      },
-    }),
-
     entity: t.expose('entityId', { type: EntityView }),
   }),
 });
@@ -172,10 +154,9 @@ builder.mutationFields((t) => ({
       });
 
       const title = null;
-      const shapes = {};
-      const orders: string[] = [];
+      const shapes: CanvasShape[] = [];
 
-      const doc = makeCanvasYDoc({ title, shapes, orders });
+      const doc = makeCanvasYDoc({ title, shapes });
       const snapshot = Y.snapshot(doc);
 
       let depth = 0;
@@ -237,7 +218,6 @@ builder.mutationFields((t) => ({
         await tx.insert(CanvasContents).values({
           canvasId: canvas.id,
           shapes,
-          orders,
           update: Y.encodeStateAsUpdateV2(doc),
           vector: Y.encodeStateVector(doc),
         });
@@ -308,7 +288,6 @@ builder.mutationFields((t) => ({
           title: Canvases.title,
           content: {
             shapes: CanvasContents.shapes,
-            orders: CanvasContents.orders,
           },
         })
         .from(Canvases)
@@ -321,7 +300,6 @@ builder.mutationFields((t) => ({
       const doc = makeCanvasYDoc({
         title,
         shapes: canvas.content.shapes,
-        orders: canvas.content.orders,
       });
 
       const snapshot = Y.snapshot(doc);
@@ -354,7 +332,6 @@ builder.mutationFields((t) => ({
         await tx.insert(CanvasContents).values({
           canvasId: newCanvas.id,
           shapes: canvas.content.shapes,
-          orders: canvas.content.orders,
           update: Y.encodeStateAsUpdateV2(doc),
           vector: Y.encodeStateVector(doc),
         });

@@ -310,12 +310,12 @@ export class Canvas {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const attrs = shape.attrs as any;
       const node = match(shape.type)
-        .with('rectangle', () => new TypedRect(attrs))
-        .with('ellipse', () => new TypedEllipse(attrs))
-        .with('line', () => new TypedLine(attrs))
-        .with('arrow', () => new TypedArrow(attrs))
-        .with('brush', () => new TypedBrush(attrs))
-        .with('stickynote', () => new TypedStickyNote(attrs))
+        .with('TypedRect', () => new TypedRect(attrs))
+        .with('TypedEllipse', () => new TypedEllipse(attrs))
+        .with('TypedLine', () => new TypedLine(attrs))
+        .with('TypedArrow', () => new TypedArrow(attrs))
+        .with('TypedBrush', () => new TypedBrush(attrs))
+        .with('TypedStickyNote', () => new TypedStickyNote(attrs))
         .exhaustive();
 
       this.scene.add(node);
@@ -327,7 +327,25 @@ export class Canvas {
     this.scene.batchDraw();
   }
 
+  undo() {
+    this.#syncManager?.undo();
+    this.selection.nodes([]);
+  }
+
+  redo() {
+    this.#syncManager?.redo();
+    this.selection.nodes([]);
+  }
+
   handleKeyDown(e: KeyboardEvent) {
+    const activeElement = document.activeElement;
+    if (
+      activeElement &&
+      (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.hasAttribute('contenteditable'))
+    ) {
+      return;
+    }
+
     if (e.key === 'Backspace' || e.key === 'Delete') {
       e.preventDefault();
 
@@ -357,6 +375,12 @@ export class Canvas {
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
       e.preventDefault();
       this.pasteShapesFromClipboard();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      this.undo();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      this.redo();
     }
   }
 }

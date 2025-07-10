@@ -319,4 +319,4 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
   }
 }
 
-TypedStickyNote.prototype._type = 'stickynote';
+TypedStickyNote.prototype.className = 'TypedStickyNote';

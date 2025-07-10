@@ -6,7 +6,7 @@ import { createDbId } from './id';
 import { bytea, datetime } from './types';
 import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { NotificationData, PlanRules } from './json';
+import type { CanvasShape, NotificationData, PlanRules } from './json';
 
 export const Canvases = pgTable(
   'canvases',
@@ -36,8 +36,7 @@ export const CanvasContents = pgTable('canvas_contents', {
     .notNull()
     .unique()
     .references(() => Canvases.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  shapes: jsonb('shapes').notNull().$type<Record<string, unknown>>(),
-  orders: jsonb('orders').notNull().$type<string[]>(),
+  shapes: jsonb('shapes').notNull().$type<CanvasShape[]>(),
   update: bytea('update').notNull(),
   vector: bytea('vector').notNull(),
   compactedAt: datetime('compacted_at')

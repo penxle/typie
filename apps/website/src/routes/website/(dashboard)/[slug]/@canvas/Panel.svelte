@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { TypedArrow, TypedBrush, TypedEllipse, TypedLine, TypedRect, TypedStickyNote, values } from '$lib/canvas';
+  import { values } from '$lib/canvas';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
@@ -13,28 +13,16 @@
   let { canvas }: Props = $props();
 
   const node = $derived(canvas.state.selections.length === 1 ? canvas.state.selections[0] : null);
-
-  const type = $derived.by((): Shapes | null => {
-    if (!node) return null;
-
-    if (node.current instanceof TypedArrow) return 'arrow';
-    if (node.current instanceof TypedBrush) return 'brush';
-    if (node.current instanceof TypedLine) return 'line';
-    if (node.current instanceof TypedEllipse) return 'ellipse';
-    if (node.current instanceof TypedRect) return 'rectangle';
-    if (node.current instanceof TypedStickyNote) return 'stickynote';
-
-    return null;
-  });
+  const type = $derived(node?.current.className as Shapes);
 
   type Section = 'backgroundColor' | 'backgroundStyle' | 'roughness' | 'borderRadius' | 'fontSize' | 'fontFamily';
   const sections: Record<Shapes, Section[]> = {
-    arrow: ['roughness'],
-    brush: ['roughness'],
-    ellipse: ['backgroundColor', 'backgroundStyle', 'roughness', 'fontSize', 'fontFamily'],
-    line: ['roughness'],
-    rectangle: ['backgroundColor', 'backgroundStyle', 'roughness', 'borderRadius', 'fontSize', 'fontFamily'],
-    stickynote: ['backgroundColor'],
+    TypedArrow: ['roughness'],
+    TypedBrush: ['roughness'],
+    TypedEllipse: ['backgroundColor', 'backgroundStyle', 'roughness', 'fontSize', 'fontFamily'],
+    TypedLine: ['roughness'],
+    TypedRect: ['backgroundColor', 'backgroundStyle', 'roughness', 'borderRadius', 'fontSize', 'fontFamily'],
+    TypedStickyNote: ['backgroundColor'],
   };
 
   const effectiveSections = $derived(type ? sections[type] : []);

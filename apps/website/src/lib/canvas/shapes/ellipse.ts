@@ -339,6 +339,6 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
   }
 }
 
-TypedEllipse.prototype._type = 'ellipse';
+TypedEllipse.prototype.className = 'TypedEllipse';
 TypedEllipse.prototype._centroid = true;
 TypedEllipse.prototype._attrsAffectingSize = ['radiusX', 'radiusY'];

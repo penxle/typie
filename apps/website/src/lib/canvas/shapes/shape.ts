@@ -1,10 +1,8 @@
 import Konva from 'konva';
 import { nanoid } from 'nanoid';
-import type { Shapes } from '../types';
 import type { TypedShapeConfig, TypedShapeConstructorConfig } from './types';
 
 export abstract class TypedShape<T extends TypedShapeConfig> extends Konva.Shape<T> {
-  declare _type: Shapes;
   declare attrs: T;
 
   abstract renderView(context: Konva.Context): void;
@@ -18,8 +16,6 @@ export abstract class TypedShape<T extends TypedShapeConfig> extends Konva.Shape
     };
 
     super(newConfig as unknown as T);
-
-    this.setAttr('type', this._type);
   }
 
   override setAttr(attr: string, val: unknown) {
