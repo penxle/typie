@@ -1,6 +1,7 @@
 <script lang="ts">
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import Wordmark from '$assets/logos/wordmark.svg?component';
+  import { env } from '$env/dynamic/public';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -18,7 +19,7 @@
 >
   <Wordmark class={css({ height: '24px', color: 'gray.900' })} />
 
-  <button
+  <a
     class={css({
       fontSize: '15px',
       fontWeight: 'medium',
@@ -29,12 +30,12 @@
         color: 'gray.900',
       },
     })}
-    type="button"
+    href="/pricing"
   >
     요금제
-  </button>
+  </a>
 
-  <button
+  <a
     class={cx(
       'group',
       center({
@@ -52,9 +53,9 @@
         },
       }),
     )}
-    type="button"
+    href={env.PUBLIC_AUTH_URL}
   >
     시작하기
     <Icon style={css.raw({ _groupHover: { transform: 'translateX(2px)' } })} icon={ArrowRightIcon} />
-  </button>
+  </a>
 </header>

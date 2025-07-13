@@ -1,5 +1,6 @@
 <script lang="ts">
   import ArrowRightIcon from '~icons/lucide/arrow-right';
+  import { env } from '$env/dynamic/public';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
 </script>
@@ -52,7 +53,7 @@
       </p>
     </div>
 
-    <button
+    <a
       class={cx(
         'group',
         css({
@@ -75,10 +76,11 @@
           },
         }),
       )}
+      href={env.PUBLIC_AUTH_URL}
       type="button"
     >
       시작하기
       <Icon style={css.raw({ _groupHover: { transform: 'translateX(2px)' } })} icon={ArrowRightIcon} size={16} />
-    </button>
+    </a>
   </div>
 </section>
