@@ -50,6 +50,7 @@
     "linkifyjs": "^4.3.1",
     "match-sorter": "^8.0.3",
     "mixpanel-browser": "^2.65.0",
+    "motion": "^12.23.1",
     "nanoid": "^5.1.5",
     "query-string": "^9.2.1",
     "remeda": "^2.23.3",

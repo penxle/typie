@@ -14,6 +14,10 @@ const theme: Handle = async ({ event, resolve }) => {
 
   return resolve(event, {
     transformPageChunk: ({ html }) => {
+      if (event.url.pathname.includes('landing')) {
+        return html.replace('%app.theme%', 'light');
+      }
+
       const defaultTheme = event.url.pathname.includes('_webview') ? 'light' : 'auto';
       const themeValue = theme && ['auto', 'light', 'dark'].includes(theme) ? theme : defaultTheme;
       return html.replace('%app.theme%', themeValue);

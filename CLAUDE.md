@@ -44,8 +44,8 @@ Typie is a Korean writing platform that aims to be a "space for writing thoughts
 
 ```typescript
 // Correct usage
-css({ paddingX: '16px', paddingY: '8px', color: 'text.primary', backgroundColor: 'surface.primary' });
+css({ paddingX: '16px', paddingY: '8px', color: 'text.primary', backgroundColor: 'surface.primary', lineHeight: '[1.6]' });
 
-// Incorrect usage (hardcoded values, shorthands, multiple values)
-css({ p: '16px 8px', color: '#000000', bg: 'white' });
+// Incorrect usage (hardcoded values, value without unit, shorthands, multiple values, arbitrary values without brackets)
+css({ p: '16 8', color: '#000000', bg: 'white', lineHeight: '1.6' });
 ```
