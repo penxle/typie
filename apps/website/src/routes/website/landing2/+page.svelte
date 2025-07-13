@@ -6,6 +6,7 @@
   import Header from './Header.svelte';
   import Hero from './Hero.svelte';
   import Manifesto from './Manifesto.svelte';
+  import MoreFeatures from './MoreFeatures.svelte';
   import Testimonials from './Testimonials.svelte';
   import TrackingFeatures from './TrackingFeatures.svelte';
   import WritingFeatures from './WritingFeatures.svelte';
@@ -26,6 +27,8 @@
   <DocumentFeatures />
 
   <TrackingFeatures />
+
+  <MoreFeatures />
 
   <Testimonials />
 
