@@ -10,6 +10,7 @@
 amazonses
 batang
 bbox
+bento
 buildx
 bullmq
 bytea

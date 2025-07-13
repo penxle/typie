@@ -244,12 +244,62 @@ export const globalFontface = defineGlobalFontface({
     fontDisplay: 'block',
   },
 
-  Paperlogy: {
-    src: 'url("https://cdn.typie.net/fonts/Paperlogy-4Regular.woff2") format("woff2")',
-    fontStyle: 'normal',
-    fontWeight: '400',
-    fontDisplay: 'block',
-  },
+  Paperlogy: [
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-1Thin.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '100',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-2ExtraLight.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '200',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-3Light.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '300',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-4Regular.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '400',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-5Medium.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '500',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-6SemiBold.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '600',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-7Bold.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '700',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-8ExtraBold.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '800',
+      fontDisplay: 'block',
+    },
+    {
+      src: 'url("https://cdn.typie.net/fonts/Paperlogy-9Black.woff2") format("woff2")',
+      fontStyle: 'normal',
+      fontWeight: '900',
+      fontDisplay: 'block',
+    },
+  ],
 
   Dovemayo: {
     src: 'url("https://cdn.typie.net/fonts/Dovemayo.woff2") format("woff2")',

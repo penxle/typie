@@ -10,7 +10,7 @@
     icon: Component;
     style?: SystemStyleObject;
     size?: Variants['size'];
-  } & Omit<SVGAttributes<SVGSVGElement>, 'style' | 'size'>;
+  } & Omit<SVGAttributes<SVGSVGElement>, 'style' | 'size' | 'color'>;
 
   let { icon: Icon, style, size = 16, ...rest }: Props = $props();
 
