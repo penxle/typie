@@ -2,6 +2,7 @@
   import { animate } from 'motion';
   import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
+  import { env } from '$env/dynamic/public';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -151,7 +152,7 @@
         }),
       )}
       data-element="actionbar-login"
-      href="/login"
+      href={env.PUBLIC_AUTH_URL}
     >
       시작하기
 

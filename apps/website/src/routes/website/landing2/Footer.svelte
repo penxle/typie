@@ -21,18 +21,6 @@
 >
   <div
     class={css({
-      position: 'absolute',
-      top: '0',
-      right: '0',
-      width: '[400px]',
-      height: '[400px]',
-      background: '[radial-gradient(circle, rgba(251, 191, 36, 0.03) 0%, transparent 70%)]',
-      pointerEvents: 'none',
-    })}
-  ></div>
-
-  <div
-    class={css({
       maxWidth: '[1200px]',
       marginX: 'auto',
       paddingX: '24px',
@@ -58,6 +46,7 @@
                 width: '[32px]',
                 height: '[32px]',
                 borderRadius: 'full',
+                color: 'dark.gray.400',
                 backgroundColor: 'dark.gray.900',
                 display: 'flex',
                 alignItems: 'center',
@@ -77,6 +66,7 @@
                 width: '[32px]',
                 height: '[32px]',
                 borderRadius: 'full',
+                color: 'dark.gray.400',
                 backgroundColor: 'dark.gray.900',
                 display: 'flex',
                 alignItems: 'center',
@@ -165,7 +155,9 @@
                 color: 'dark.gray.200',
               },
             })}
-            href="/support"
+            href="https://typie.link/help"
+            rel="noopener noreferrer"
+            target="_blank"
           >
             고객센터
           </a>
