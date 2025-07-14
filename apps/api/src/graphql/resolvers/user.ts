@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, gte, inArray, lt, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import * as uuid from 'uuid';
 import { redis } from '@/cache';
@@ -48,6 +48,7 @@ import { redeemCodeSchema, userSchema } from '@/validation';
 import { builder } from '../builder';
 import {
   CharacterCountChange,
+  Entity,
   Image,
   isTypeOf,
   Notification,
@@ -78,6 +79,18 @@ User.implement({
     uuid: t.string({
       // just a randomly-picked uuid for namespace
       resolve: (self) => uuid.v5(self.id, '1d394eb5-c61c-4c49-944e-05c9f9435adf'),
+    }),
+
+    recentlyViewedEntities: t.field({
+      type: [Entity],
+      resolve: async (self) => {
+        return await db
+          .select()
+          .from(Entities)
+          .where(and(eq(Entities.userId, self.id), eq(Entities.state, EntityState.ACTIVE), isNotNull(Entities.viewedAt)))
+          .orderBy(desc(Entities.viewedAt))
+          .limit(10);
+      },
     }),
 
     sites: t.field({

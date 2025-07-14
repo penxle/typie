@@ -20,6 +20,11 @@
             slug
           }
         }
+
+        recentlyViewedEntities {
+          id
+          slug
+        }
       }
     }
   `);
