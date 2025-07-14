@@ -5,6 +5,7 @@
   import BookmarkIcon from '~icons/lucide/bookmark';
   import CheckIcon from '~icons/lucide/check';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
+  import CircleIcon from '~icons/lucide/circle';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
   import DraftingCompassIcon from '~icons/lucide/drafting-compass';
@@ -14,12 +15,16 @@
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
   import ListIcon from '~icons/lucide/list';
+  import MousePointer2Icon from '~icons/lucide/mouse-pointer-2';
   import NotebookTabsIcon from '~icons/lucide/notebook-tabs';
+  import PaletteIcon from '~icons/lucide/palette';
   import PaperclipIcon from '~icons/lucide/paperclip';
+  import PencilIcon from '~icons/lucide/pencil';
   import PlusIcon from '~icons/lucide/plus';
   import QuoteIcon from '~icons/lucide/quote';
   import SettingsIcon from '~icons/lucide/settings';
   import SpellCheckIcon from '~icons/lucide/spell-check';
+  import SquareIcon from '~icons/lucide/square';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import TableIcon from '~icons/lucide/table';
   import TypeIcon from '~icons/lucide/type';
@@ -95,8 +100,8 @@
         fontWeight: 'medium',
       })}
     >
-      <Icon icon={TypeIcon} size={16} />
-      강력한 편집 도구
+      <Icon icon={DraftingCompassIcon} size={16} />
+      완벽한 글쓰기 도구
     </div>
 
     <h2
@@ -110,7 +115,7 @@
         lineHeight: '[1.2]',
       })}
     >
-      글쓰기를 완성하는 강력한 도구들
+      글쓰기에 필요한 모든 도구
     </h2>
     <p
       class={css({
@@ -123,7 +128,7 @@
         lineHeight: '[1.6]',
       })}
     >
-      서식, 맞춤법 검사, 폰트 설정 등 글쓰기에 필요한 모든 기능을 제공합니다. 복잡함 없이, 오직 쓰기 자체에만 집중해 보세요.
+      본문 작성부터 아이디어 시각화까지, 글쓰기의 모든 과정을 지원합니다. 생각을 온전히 표현할 수 있는 완벽한 도구들이 준비되어 있습니다.
     </p>
   </div>
 
@@ -626,6 +631,124 @@
           </div>
           <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
             쓰기 중 떠오르는 아이디어나 메모를 포스트 옆에 바로 기록할 수 있어, 흐름을 유지하며 생각을 보관할 수 있습니다.
+          </p>
+        </div>
+      </Bento>
+
+      <Bento>
+        <div class={css({ position: 'relative', flexGrow: 1, overflow: 'hidden' })}>
+          <div
+            class={css({
+              position: 'relative',
+              width: 'full',
+              height: '280px',
+              backgroundColor: 'gray.50',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              backgroundImage: `
+                linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px)
+              `,
+              backgroundSize: '20px 20px',
+            })}
+          >
+            <div
+              class={css({
+                position: 'absolute',
+                top: '[50%]',
+                left: '[50%]',
+                transform: 'translate(-50%, -50%) translate(-40px, -20px)',
+                width: '140px',
+                height: '140px',
+                borderRadius: '[20px]',
+                backgroundColor: '[#dbeafe]',
+                borderWidth: '2px',
+                borderColor: '[#60a5fa]',
+                boxShadow: 'small',
+              })}
+            ></div>
+
+            <div
+              class={css({
+                position: 'absolute',
+                top: '[50%]',
+                left: '[50%]',
+                transform: 'translate(-50%, -50%) translate(40px, 20px)',
+                width: '120px',
+                height: '120px',
+                borderRadius: 'full',
+                backgroundColor: '[#fef3c7]',
+                borderWidth: '2px',
+                borderColor: '[#fbbf24]',
+                boxShadow: 'small',
+              })}
+            ></div>
+
+            <div
+              class={flex({
+                position: 'absolute',
+                bottom: '10px',
+                left: '1/2',
+                transform: 'translateX(-50%)',
+                gap: '4px',
+                padding: '6px',
+                backgroundColor: 'white',
+                borderRadius: '8px',
+                boxShadow: 'small',
+              })}
+            >
+              <div
+                class={center({
+                  size: '24px',
+                  borderRadius: '4px',
+                  backgroundColor: 'gray.100',
+                  color: 'gray.600',
+                })}
+              >
+                <Icon icon={MousePointer2Icon} size={14} />
+              </div>
+              <div
+                class={center({
+                  size: '24px',
+                  borderRadius: '4px',
+                  backgroundColor: 'amber.100',
+                  color: 'amber.700',
+                })}
+              >
+                <Icon icon={SquareIcon} size={14} />
+              </div>
+              <div
+                class={center({
+                  size: '24px',
+                  borderRadius: '4px',
+                  backgroundColor: 'gray.100',
+                  color: 'gray.600',
+                })}
+              >
+                <Icon icon={CircleIcon} size={14} />
+              </div>
+              <div class={css({ width: '1px', height: '20px', backgroundColor: 'gray.200', marginX: '2px' })}></div>
+              <div
+                class={center({
+                  size: '24px',
+                  borderRadius: '4px',
+                  backgroundColor: 'gray.100',
+                  color: 'gray.600',
+                })}
+              >
+                <Icon icon={PencilIcon} size={14} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class={css({ marginTop: 'auto', paddingTop: '24px' })}>
+          <div class={flex({ alignItems: 'center', gap: '10px', marginBottom: '12px' })}>
+            <Icon icon={PaletteIcon} size={20} />
+            <h3 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.800' })}>캔버스</h3>
+          </div>
+          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
+            자유롭게 그림을 그리고 다이어그램을 만들어 보세요. 아이디어를 시각적으로 표현하고 글과 함께 배치할 수 있습니다.
           </p>
         </div>
       </Bento>
