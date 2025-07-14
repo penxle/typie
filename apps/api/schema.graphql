@@ -430,6 +430,7 @@ type Mutation {
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
+  updatePassword(input: UpdatePasswordInput!): User!
   updatePostOption(input: UpdatePostOptionInput!): Post!
   updatePostType(input: UpdatePostTypeInput!): Post!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
@@ -857,6 +858,11 @@ input UpdateMarketingConsentInput {
   marketingConsent: Boolean!
 }
 
+input UpdatePasswordInput {
+  currentPassword: String
+  newPassword: String!
+}
+
 input UpdatePostOptionInput {
   allowComment: Boolean!
   allowReaction: Boolean!
@@ -890,6 +896,7 @@ type User {
   createdAt: DateTime!
   credit: Int!
   email: String!
+  hasPassword: Boolean!
   id: ID!
   marketingConsent: Boolean!
   name: String!

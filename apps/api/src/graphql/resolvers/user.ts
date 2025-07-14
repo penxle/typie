@@ -1,3 +1,4 @@
+import argon2 from 'argon2';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
@@ -80,6 +81,8 @@ User.implement({
       // just a randomly-picked uuid for namespace
       resolve: (self) => uuid.v5(self.id, '1d394eb5-c61c-4c49-944e-05c9f9435adf'),
     }),
+
+    hasPassword: t.boolean({ resolve: (user) => !!user.password }),
 
     recentlyViewedEntities: t.field({
       type: [Entity],
@@ -244,7 +247,6 @@ User.implement({
           .from(PostCharacterCountChanges)
           .where(eq(PostCharacterCountChanges.userId, user.id))
           .then(firstOrThrow);
-
         return Math.max(0, Number(result.total));
       },
     }),
@@ -587,6 +589,34 @@ builder.mutationFields((t) => ({
       await redis.setex(`user:ws:${token}`, 60 * 10, JSON.stringify({ userId: ctx.session.userId }));
 
       return token;
+    },
+  }),
+
+  updatePassword: t.withAuth({ session: true }).fieldWithInput({
+    type: User,
+    input: {
+      currentPassword: t.input.string({ required: false }),
+      newPassword: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const user = await db.select({ password: Users.password }).from(Users).where(eq(Users.id, ctx.session.userId)).then(firstOrThrow);
+
+      if (user.password) {
+        if (!input.currentPassword) {
+          throw new TypieError({ code: 'current_password_required' });
+        }
+
+        if (!(await argon2.verify(user.password, input.currentPassword))) {
+          throw new TypieError({ code: 'invalid_password' });
+        }
+      }
+
+      return await db
+        .update(Users)
+        .set({ password: await argon2.hash(input.newPassword) })
+        .where(eq(Users.id, ctx.session.userId))
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 }));

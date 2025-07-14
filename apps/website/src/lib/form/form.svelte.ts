@@ -24,6 +24,7 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
   #formState = $state<FormState>({ isLoading: false, isDirty: false });
   #formData = $state<Partial<z.infer<Schema>>>({});
   #errors = $state<FormFieldErrors<z.infer<Schema>>>({} as FormFieldErrors<z.infer<Schema>>);
+  #defaultValues: Partial<z.infer<Schema>>;
 
   #options: CreateFormOptions<Schema, D>;
 
@@ -37,7 +38,8 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
 
   constructor(options: CreateFormOptions<Schema, D>) {
     this.#options = options;
-    this.#formData = options.defaultValues ?? {};
+    this.#defaultValues = options.defaultValues ?? {};
+    this.#formData = { ...this.#defaultValues };
 
     this.fields = new Proxy(this.#formData, {
       set: (target, prop, value) => {
@@ -89,6 +91,19 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
       this.#formState.isLoading = false;
       this.#formState.isDirty = false;
     }
+  };
+
+  reset = () => {
+    Object.keys(this.#formData).forEach((key) => {
+      this.#formData[key as keyof z.infer<Schema>] = this.#defaultValues[key as keyof z.infer<Schema>];
+    });
+
+    for (const key of Object.keys(this.#errors)) {
+      this.#errors[key as keyof z.infer<Schema>] = undefined;
+    }
+
+    this.#formState.isDirty = false;
+    this.#formState.isLoading = false;
   };
 }
 

@@ -14,6 +14,7 @@
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import UpdateEmailModal from './UpdateEmailModal.svelte';
+  import UpdatePasswordModal from './UpdatePasswordModal.svelte';
   import type { DashboardLayout_PreferenceModal_AccountTab_user } from '$graphql';
 
   type Props = {
@@ -30,6 +31,7 @@
         name
         email
         marketingConsent
+        hasPassword
 
         singleSignOns {
           id
@@ -93,6 +95,7 @@
   });
 
   let updateEmailOpen = $state(false);
+  let updatePasswordOpen = $state(false);
 </script>
 
 <div class={flex({ direction: 'column', gap: '32px' })}>
@@ -177,6 +180,16 @@
         변경
       </Button>
     </div>
+  </div>
+
+  <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
+
+  <div class={flex({ align: 'center', justify: 'space-between' })}>
+    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>비밀번호</h3>
+
+    <Button style={css.raw({ flex: 'none', height: '36px' })} onclick={() => (updatePasswordOpen = true)} size="sm" variant="secondary">
+      {$user.hasPassword ? '변경' : '설정하기'}
+    </Button>
   </div>
 
   {#if $user.singleSignOns.length > 0}
@@ -293,3 +306,4 @@
 </div>
 
 <UpdateEmailModal email={$user.email} bind:open={updateEmailOpen} />
+<UpdatePasswordModal hasPassword={$user.hasPassword} bind:open={updatePasswordOpen} />
