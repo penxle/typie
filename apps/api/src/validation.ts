@@ -10,7 +10,7 @@ export const userSchema = {
 
 export const siteSchema = {
   slug: z
-    .string({ required_error: '사이트 주소를 입력해 주세요' })
+    .string({ error: '사이트 주소를 입력해 주세요' })
     .trim()
     .toLowerCase()
     .min(4, { message: '사이트 주소는 4글자 이상이여야 해요' })
@@ -23,17 +23,17 @@ export const siteSchema = {
 
 export const cardSchema = {
   cardNumber: z
-    .string({ required_error: '카드 번호를 입력해 주세요' })
+    .string({ error: '카드 번호를 입력해 주세요' })
     .transform((str) => str.replaceAll(/\D/g, ''))
     .refine((str) => str.length >= 15 && str.length <= 16, { message: '올바른 카드 번호를 입력해 주세요' }),
 
   expiryDate: z
-    .string({ required_error: '만료일을 입력해 주세요' })
+    .string({ error: '만료일을 입력해 주세요' })
     .transform((str) => str.replaceAll(/\D/g, ''))
     .refine((str) => str.length === 4, { message: '올바른 만료일을 입력해 주세요' }),
 
   birthOrBusinessRegistrationNumber: z
-    .string({ required_error: '생년월일 또는 사업자 등록번호를 입력해 주세요' })
+    .string({ error: '생년월일 또는 사업자 등록번호를 입력해 주세요' })
     .transform((str) => str.replaceAll(/\D/g, ''))
     .transform((str) => (str.length === 8 ? str.slice(2) : str)) // YYYYMMDD -> YYMMDD
     .refine((str) => str.length === 6 || str.length === 10, {
@@ -41,12 +41,12 @@ export const cardSchema = {
     }),
 
   passwordTwoDigits: z
-    .string({ required_error: '카드 비밀번호를 입력해 주세요' })
+    .string({ error: '카드 비밀번호를 입력해 주세요' })
     .regex(/^\d{2}$/, { message: '올바른 카드 비밀번호를 입력해 주세요' }),
 };
 
 export const redeemCodeSchema = z
-  .string({ required_error: '코드를 입력해 주세요' })
+  .string({ error: '코드를 입력해 주세요' })
   .trim()
   .toUpperCase()
   .regex(/^[A-Z0-9-]+$/, { message: '코드 형식이 맞지 않아요' })

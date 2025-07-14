@@ -20,7 +20,7 @@
 
   const form = createForm({
     schema: z.object({
-      email: z.string({ required_error: '이메일을 입력해주세요.' }).email('올바른 이메일 형식을 입력해주세요.'),
+      email: z.string({ error: '이메일을 입력해주세요.' }).email('올바른 이메일 형식을 입력해주세요.'),
     }),
     onSubmit: async (data) => {
       await sendPasswordResetEmail({
