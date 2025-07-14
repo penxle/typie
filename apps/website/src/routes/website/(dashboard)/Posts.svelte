@@ -228,11 +228,14 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
-            await createFolder({
+            const resp = await createFolder({
               siteId: $site.id,
               name: '새 폴더',
             });
+
             mixpanel.track('create_folder', { via: 'tree' });
+
+            app.state.newFolderId = resp.id;
           }}
           type="button"
           use:tooltip={{ message: '새 폴더 생성' }}

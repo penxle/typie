@@ -131,6 +131,7 @@
   const app = getAppContext();
   const active = $derived(app.state.ancestors.includes($folder.entity.id));
 
+  let detailsEl = $state<HTMLDetailsElement>();
   let inputEl = $state<HTMLInputElement>();
 
   let open = $state(false);
@@ -150,9 +151,32 @@
       open = true;
     }
   });
+
+  $effect(() => {
+    if (app.state.newFolderId === $folder.id) {
+      editing = true;
+      app.state.newFolderId = undefined;
+
+      if (detailsEl) {
+        const rect = detailsEl.getBoundingClientRect();
+        const isInViewport = rect.top >= 0 && rect.bottom <= window.innerHeight;
+
+        if (!isInViewport) {
+          detailsEl.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+        }
+      }
+    }
+  });
 </script>
 
-<details data-id={$folder.entity.id} data-order={$folder.entity.order} data-path-depth={$folder.entity.depth} data-type="folder" bind:open>
+<details
+  bind:this={detailsEl}
+  data-id={$folder.entity.id}
+  data-order={$folder.entity.order}
+  data-path-depth={$folder.entity.depth}
+  data-type="folder"
+  bind:open
+>
   <summary
     class={cx(
       'group',
@@ -324,7 +348,7 @@
           <MenuItem
             icon={FolderPlusIcon}
             onclick={async () => {
-              await createFolder({
+              const resp = await createFolder({
                 siteId: $folder.entity.site.id,
                 parentEntityId: $folder.entity.id,
                 name: '새 폴더',
@@ -333,6 +357,7 @@
               mixpanel.track('create_child_folder');
 
               open = true;
+              app.state.newFolderId = resp.id;
             }}
           >
             하위 폴더 생성
