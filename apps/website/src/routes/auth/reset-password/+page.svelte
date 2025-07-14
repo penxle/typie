@@ -21,8 +21,8 @@
   const form = createForm({
     schema: z
       .object({
-        password: z.string({ required_error: '새 비밀번호를 입력해주세요.' }).nonempty('새 비밀번호를 입력해주세요.'),
-        confirmPassword: z.string({ required_error: '비밀번호 확인을 입력해주세요.' }).nonempty('비밀번호 확인을 입력해주세요.'),
+        password: z.string({ error: '새 비밀번호를 입력해주세요.' }).min(1, '새 비밀번호를 입력해주세요.'),
+        confirmPassword: z.string({ error: '비밀번호 확인을 입력해주세요.' }).min(1, '비밀번호 확인을 입력해주세요.'),
       })
       .refine((data) => data.password === data.confirmPassword, {
         path: ['confirmPassword'],

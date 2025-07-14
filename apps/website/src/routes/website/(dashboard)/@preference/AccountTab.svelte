@@ -75,7 +75,7 @@
 
   const form = createForm({
     schema: z.object({
-      name: z.string({ required_error: '이름을 입력해주세요.' }).nonempty('이름을 입력해주세요.'),
+      name: z.string({ error: '이름을 입력해주세요.' }).min(1, '이름을 입력해주세요.'),
       avatarId: z.string(),
     }),
     onSubmit: async (data) => {
