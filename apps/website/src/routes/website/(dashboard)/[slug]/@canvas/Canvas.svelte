@@ -229,6 +229,17 @@
     app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
     app.state.current = $query.entity.id;
 
+    if (canvas) {
+      const { x, y, width, height } = canvas.scene.getLayer().getClientRect();
+      const stageWidth = canvas.stage.width();
+      const stageHeight = canvas.stage.height();
+
+      canvas.moveTo(-(x + width / 2 - stageWidth / 2), -(y + height / 2 - stageHeight / 2));
+
+      // 여유도 주고 node 없을 때 div0 되지 않게 100 더함
+      canvas.scaleTo(Math.min(stageWidth / (width + 100), stageHeight / (height + 100), 1));
+    }
+
     return () => {
       clearInterval(forceSyncInterval);
 
