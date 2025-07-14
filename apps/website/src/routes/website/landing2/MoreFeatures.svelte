@@ -1,13 +1,8 @@
 <script lang="ts">
-  import CircleIcon from '~icons/lucide/circle';
   import GlobeIcon from '~icons/lucide/globe';
   import MoonIcon from '~icons/lucide/moon';
-  import MousePointer2Icon from '~icons/lucide/mouse-pointer-2';
-  import PaletteIcon from '~icons/lucide/palette';
-  import PencilIcon from '~icons/lucide/pencil';
   import Share2Icon from '~icons/lucide/share-2';
   import SmartphoneIcon from '~icons/lucide/smartphone';
-  import SquareIcon from '~icons/lucide/square';
   import SunIcon from '~icons/lucide/sun';
   import UsersIcon from '~icons/lucide/users';
   import { Icon } from '$lib/components';
@@ -42,7 +37,7 @@
       })}
     >
       <Icon icon={GlobeIcon} size={16} />
-      더 많은 기능들
+      연결과 확장
     </div>
 
     <h2
@@ -56,7 +51,7 @@
         lineHeight: '[1.2]',
       })}
     >
-      글쓰기를 더욱 풍부하게
+      함께, 언제 어디서나
     </h2>
     <p
       class={css({
@@ -69,7 +64,7 @@
         lineHeight: '[1.6]',
       })}
     >
-      캔버스부터 실시간 협업, 다크모드까지. 타이피가 제공하는 다양한 기능으로 더 나은 글쓰기 경험을 만들어 보세요.
+      혼자가 아닌 함께, 한 곳이 아닌 어디서나. 글쓰기의 경계를 넘어 더 넓은 가능성을 만나보세요.
     </p>
   </div>
 
@@ -79,126 +74,6 @@
       marginBottom: '24px',
     })}
   >
-    <div class={css({ flex: '1' })}>
-      <Bento>
-        <div class={css({ position: 'relative', flexGrow: 1, overflow: 'hidden' })}>
-          <div
-            class={css({
-              position: 'relative',
-              width: 'full',
-              height: '280px',
-              backgroundColor: 'gray.50',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              backgroundImage: `
-                linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px)
-              `,
-              backgroundSize: '20px 20px',
-            })}
-          >
-            <div
-              class={css({
-                position: 'absolute',
-                top: '[50%]',
-                left: '[50%]',
-                transform: 'translate(-50%, -50%) translate(-40px, -20px)',
-                width: '140px',
-                height: '140px',
-                borderRadius: '[20px]',
-                backgroundColor: '[#dbeafe]',
-                borderWidth: '2px',
-                borderColor: '[#60a5fa]',
-                boxShadow: 'small',
-              })}
-            ></div>
-
-            <div
-              class={css({
-                position: 'absolute',
-                top: '[50%]',
-                left: '[50%]',
-                transform: 'translate(-50%, -50%) translate(40px, 20px)',
-                width: '120px',
-                height: '120px',
-                borderRadius: 'full',
-                backgroundColor: '[#fef3c7]',
-                borderWidth: '2px',
-                borderColor: '[#fbbf24]',
-                boxShadow: 'small',
-              })}
-            ></div>
-
-            <div
-              class={flex({
-                position: 'absolute',
-                bottom: '10px',
-                left: '1/2',
-                transform: 'translateX(-50%)',
-                gap: '4px',
-                padding: '6px',
-                backgroundColor: 'white',
-                borderRadius: '8px',
-                boxShadow: 'small',
-              })}
-            >
-              <div
-                class={center({
-                  size: '24px',
-                  borderRadius: '4px',
-                  backgroundColor: 'gray.100',
-                  color: 'gray.600',
-                })}
-              >
-                <Icon icon={MousePointer2Icon} size={14} />
-              </div>
-              <div
-                class={center({
-                  size: '24px',
-                  borderRadius: '4px',
-                  backgroundColor: 'amber.100',
-                  color: 'amber.700',
-                })}
-              >
-                <Icon icon={SquareIcon} size={14} />
-              </div>
-              <div
-                class={center({
-                  size: '24px',
-                  borderRadius: '4px',
-                  backgroundColor: 'gray.100',
-                  color: 'gray.600',
-                })}
-              >
-                <Icon icon={CircleIcon} size={14} />
-              </div>
-              <div class={css({ width: '1px', height: '20px', backgroundColor: 'gray.200', marginX: '2px' })}></div>
-              <div
-                class={center({
-                  size: '24px',
-                  borderRadius: '4px',
-                  backgroundColor: 'gray.100',
-                  color: 'gray.600',
-                })}
-              >
-                <Icon icon={PencilIcon} size={14} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class={css({ marginTop: 'auto', paddingTop: '24px' })}>
-          <div class={flex({ alignItems: 'center', gap: '10px', marginBottom: '12px' })}>
-            <Icon icon={PaletteIcon} size={20} />
-            <h3 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.800' })}>캔버스</h3>
-          </div>
-          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
-            자유롭게 그림을 그리고 다이어그램을 만들어 보세요. 아이디어를 시각적으로 표현하고 글과 함께 배치할 수 있습니다.
-          </p>
-        </div>
-      </Bento>
-    </div>
-
     <div class={css({ flex: '1' })}>
       <Bento>
         <div class={center({ flexGrow: 1 })}>
@@ -317,7 +192,6 @@
   <div
     class={flex({
       gap: '24px',
-      marginBottom: '24px',
     })}
   >
     <div class={css({ flex: '1' })}>
