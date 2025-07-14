@@ -26,7 +26,7 @@
   });
 </script>
 
-<div class={center({ flexDirection: 'column', width: 'full', position: 'relative', paddingY: '140px', zIndex: '50' })}>
+<div class={center({ flexDirection: 'column', width: 'full', position: 'relative', paddingY: '140px', zIndex: '50', overflow: 'hidden' })}>
   <div
     class={css({
       position: 'absolute',
