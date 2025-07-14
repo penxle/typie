@@ -12,7 +12,8 @@ on:
 
 jobs:
   claude-review:
-    if: github.event.sender.login != 'graphite-app'
+    if: |
+      !contains(github.event.pull_request.labels.*.name, ':rocket:')
 
     runs-on: ubuntu-latest
     permissions:
