@@ -27,6 +27,8 @@ type AppState = {
     totalCharacterCount: number;
     totalBlobSize: number;
   };
+
+  newFolderId?: string;
 };
 
 type AppTimerState = {
