@@ -1,3 +1,4 @@
+import dayjs from 'dayjs';
 import { and, asc, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
@@ -440,6 +441,26 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
 
       return updatedEntity;
+    },
+  }),
+
+  viewEntity: t.withAuth({ session: true }).fieldWithInput({
+    type: Entity,
+    input: { entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }) },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db
+        .select({ userId: Entities.userId })
+        .from(Entities)
+        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
+        .then(firstOrThrowWith(new NotFoundError()));
+
+      if (entity.userId !== ctx.session.userId) {
+        throw new TypieError({ code: 'forbidden' });
+      }
+
+      await db.update(Entities).set({ viewedAt: dayjs() }).where(eq(Entities.id, input.entityId));
+
+      return input.entityId;
     },
   }),
 }));

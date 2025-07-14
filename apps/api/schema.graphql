@@ -435,6 +435,7 @@ type Mutation {
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
+  viewEntity(input: ViewEntityInput!): Entity!
 }
 
 type Notification {
@@ -896,6 +897,7 @@ type User {
   personalIdentity: UserPersonalIdentity
   postCount: Int!
   recentPosts: [Post!]!
+  recentlyViewedEntities: [Entity!]!
   role: UserRole!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
@@ -938,6 +940,10 @@ enum UserState {
 
 input VerifyPersonalIdentityInput {
   identityVerificationId: String!
+}
+
+input ViewEntityInput {
+  entityId: ID!
 }
 
 type Welcome {

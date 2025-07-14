@@ -4,7 +4,6 @@
   import { afterNavigate } from '$app/navigation';
   import { graphql } from '$graphql';
   import { Helmet, Icon } from '$lib/components';
-  import { LocalStore } from '$lib/state';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Canvas from './@canvas/Canvas.svelte';
@@ -39,13 +38,19 @@
     }
   `);
 
+  const viewEntity = graphql(`
+    mutation DashboardSlugPage_ViewEntity_Mutation($input: ViewEntityInput!) {
+      viewEntity(input: $input) {
+        id
+      }
+    }
+  `);
+
   const name = $derived($query.entity.node.__typename === 'Post' ? '포스트' : '캔버스');
 
-  afterNavigate(() => {
-    if ($query.me.id === $query.entity.user.id) {
-      const lvp = LocalStore.get<Record<string, string>>('typie:lvp') ?? {};
-      lvp[$query.entity.site.id] = $query.entity.slug;
-      LocalStore.set('typie:lvp', lvp);
+  afterNavigate(async () => {
+    if ($query.me.id === $query.entity.user.id && $query.entity.state === EntityState.ACTIVE) {
+      await viewEntity({ entityId: $query.entity.id });
     }
   });
 </script>

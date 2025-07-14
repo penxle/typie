@@ -10,6 +10,7 @@
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
+  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -45,6 +46,25 @@
 
         sites {
           id
+        }
+
+        recentlyViewedEntities {
+          id
+          slug
+
+          node {
+            __typename
+
+            ... on Post {
+              id
+              title
+            }
+
+            ... on Canvas {
+              id
+              title
+            }
+          }
         }
       }
     `),
@@ -190,13 +210,39 @@
     })),
   );
 
+  const recentlyViewedHits = $derived(
+    query.length === 0
+      ? $user.recentlyViewedEntities
+          .slice(0, 5)
+          .map((entity) =>
+            match(entity.node)
+              .with({ __typename: 'Post' }, (node) => ({
+                __typename: 'SearchHitRecent' as const,
+                entity,
+                title: node.title || '제목 없음',
+                icon: FileIcon,
+              }))
+              .with({ __typename: 'Canvas' }, (node) => ({
+                __typename: 'SearchHitRecent' as const,
+                entity,
+                title: node.title || '제목 없음',
+                icon: LineSquiggleIcon,
+              }))
+              .with({ __typename: 'Folder' }, () => null)
+              .exhaustive(),
+          )
+          .filter((hit): hit is NonNullable<typeof hit> => hit !== null)
+      : [],
+  );
+
   const searchHits = $derived(
-    [...(query.length > 0 ? ($searchQuery?.search.hits ?? []) : []), ...commandHits].map((hit, idx) => ({
+    [...(query.length > 0 ? ($searchQuery?.search.hits ?? []) : recentlyViewedHits), ...commandHits].map((hit, idx) => ({
       ...hit,
       idx,
       action: match(hit)
         .with({ __typename: 'SearchHitCommand' }, (hit) => hit.action)
         .with({ __typename: 'SearchHitPost' }, (hit) => () => goto(`/${hit.post.entity.slug}`))
+        .with({ __typename: 'SearchHitRecent' }, (hit) => () => goto(`/${hit.entity.slug}`))
         .exhaustive(),
     })),
   );
@@ -407,6 +453,7 @@
         {match(type)
           .with('SearchHitCommand', () => '액션')
           .with('SearchHitPost', () => '포스트')
+          .with('SearchHitRecent', () => '최근 본 항목')
           .exhaustive()}
       </div>
 
@@ -468,6 +515,14 @@
                 {@html hit.text}
               </div>
             {/if}
+          {:else if hit.__typename === 'SearchHitRecent'}
+            <div
+              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+            >
+              <Icon icon={hit.icon} size={16} />
+            </div>
+
+            <span class={css({ fontSize: '14px', fontWeight: 'medium' })}>{hit.title}</span>
           {/if}
         </button>
       {/each}

@@ -214,6 +214,7 @@ export const Entities = pgTable(
     state: E._EntityState('state').notNull().default('ACTIVE'),
     visibility: E._EntityVisibility('visibility').notNull().default('PRIVATE'),
     availability: E._EntityAvailability('availability').notNull().default('PRIVATE'),
+    viewedAt: datetime('viewed_at'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
@@ -230,6 +231,7 @@ export const Entities = pgTable(
     index().on(t.siteId, t.state),
     index().on(t.siteId, t.parentId, t.state),
     index().on(t.parentId, t.state),
+    index().on(t.userId, t.viewedAt),
   ],
 );
 

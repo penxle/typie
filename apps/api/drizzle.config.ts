@@ -9,7 +9,7 @@ export default defineConfig({
 
   dialect: 'postgresql',
   dbCredentials: {
-    url: `${process.env.DATABASE_URL}?sslmode=no-verify`,
+    url: `${process.env.DATABASE_URL}?sslmode=prefer`,
   },
 
   tablesFilter: ['!pg_stat_statements', '!pg_stat_statements_info'],
