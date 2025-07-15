@@ -2,21 +2,27 @@ import Konva from 'konva';
 import { getClosestGroup } from '../utils';
 import type { Operation } from '../types';
 
-export const move: Operation = (canvas) => {
+export const move: Operation = (canvas, event) => {
   const pos = canvas.stage.getPointerPosition();
   if (!pos) {
     return;
   }
 
   let targets: Konva.Node[] = [];
+  let clickedShape: Konva.Node | null = canvas.scene.getIntersection(pos);
 
   if (canvas.selection.isInsideBoundingBox(pos)) {
+    if (event?.evt.shiftKey && clickedShape && canvas.selection.contains(clickedShape)) {
+      canvas.selection.nodes(canvas.selection.nodes().filter((node) => node !== clickedShape));
+    }
     targets = canvas.selection.nodes();
   } else {
-    let clickedShape: Konva.Node | null = canvas.scene.getIntersection(pos);
-
     if (clickedShape) {
       clickedShape = getClosestGroup(clickedShape);
+
+      if (event?.evt.shiftKey) {
+        canvas.selection.nodes([...canvas.selection.nodes(), clickedShape]);
+      }
 
       if (canvas.selection.contains(clickedShape)) {
         targets = canvas.selection.nodes();
