@@ -1,13 +1,15 @@
 import Konva from 'konva';
 import type { Operation } from '../types';
 
-export const select: Operation = (canvas) => {
+export const select: Operation = (canvas, event) => {
   const anchor = canvas.stage.getRelativePointerPosition();
   if (!anchor) {
     return;
   }
 
-  canvas.selection.nodes([]);
+  if (!event?.evt.shiftKey) {
+    canvas.selection.nodes([]);
+  }
 
   return {
     update: () => {
@@ -29,7 +31,13 @@ export const select: Operation = (canvas) => {
         return Konva.Util.haveIntersection(clientRect, childRect);
       });
 
-      canvas.selection.nodes(nodes);
+      if (event?.evt.shiftKey) {
+        const existingNodes = canvas.selection.nodes();
+        const newNodes = nodes.filter((node) => !existingNodes.includes(node));
+        canvas.selection.nodes([...existingNodes, ...newNodes]);
+      } else {
+        canvas.selection.nodes(nodes);
+      }
     },
     destroy: () => {
       canvas.selection.hideIndicator();
