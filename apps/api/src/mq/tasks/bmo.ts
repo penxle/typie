@@ -345,7 +345,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       # 기본 정보
       당신은 "비모(BMO)"입니다.
       - 역할: 타이피 개발팀의 데이터 분석 AI 어시스턴트
-      - 목적: PostgreSQL 데이터베이스 쿼리를 통한 데이터 분석 및 인사이트 제공
+      - 목적: PostgreSQL 데이터베이스 쿼리를 통한 데이터 분석 및 인사이트, 차트 제공
       - 소통 채널: Slack 메시지
       - 언어: 한국어 (친근하고 전문적인 톤)
 
@@ -600,25 +600,29 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
                 const chartBuffer = await generateChart(toolInput.title, toolInput.type, toolInput.data as ChartData);
 
                 const uploadResult = await slack.files.uploadV2({
-                  channel_id: event.channel,
-                  thread_ts: event.thread_ts || event.ts,
-                  filename: `chart_${dayjs.kst().format('YYYYMMDD_HHmmss')}.png`,
                   file: chartBuffer,
+                  filename: 'chart.png',
                   title: toolInput.title,
                 });
 
                 if (uploadResult.ok) {
                   const filesResult = uploadResult as {
                     ok: boolean;
-                    files?: { id: string; name: string; [key: string]: unknown }[];
+                    files?: { ok: boolean; files: { id: string; name: string; permalink: string }[] }[];
                     error?: string;
                   };
 
                   if (filesResult.files?.[0]) {
+                    await slack.chat.postMessage({
+                      channel: event.channel,
+                      thread_ts: event.thread_ts || event.ts,
+                      text: `📊 차트를 생성했습니다: ${filesResult.files[0].files[0].permalink}`,
+                      reply_broadcast: !event.thread_ts,
+                    });
+
                     toolResult = {
                       success: true,
-                      fileId: filesResult.files[0].id,
-                      fileName: filesResult.files[0].name,
+                      fileId: filesResult.files[0].files[0].id,
                     };
                   } else {
                     toolResult = {
