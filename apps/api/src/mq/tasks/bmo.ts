@@ -9,7 +9,9 @@ import dedent from 'dedent';
 import postgres from 'postgres';
 import { env } from '@/env';
 import * as aws from '@/external/aws';
+import { generateChart } from '@/utils/chart-generation';
 import { defineJob } from '../types';
+import type { ChartData } from '@/utils/chart-generation';
 
 type SlackAppMentionEventPayload = {
   user: string;
@@ -309,6 +311,29 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
           required: ['filename', 'content'],
         },
       },
+      {
+        name: 'create_chart',
+        description: '데이터를 시각화하여 차트 이미지를 생성하고 슬랙에 업로드합니다. 막대 차트, 선 차트, 원 차트를 지원합니다.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              description: '차트 제목',
+            },
+            type: {
+              type: 'string',
+              enum: ['bar', 'line', 'pie'],
+              description: '차트 타입: bar (막대), line (선), pie (원)',
+            },
+            data: {
+              type: 'object',
+              description: '차트 데이터. 모든 차트: { labels: string[], datasets: [{ label: string, data: number[] }] }',
+            },
+          },
+          required: ['title', 'type', 'data'],
+        },
+      },
     ];
 
     const dbSchema = await getDatabaseSchema();
@@ -393,6 +418,32 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       3. 사용자 행동 패턴 분석
       4. 성장 지표 및 KPI 모니터링
       5. 데이터 기반 의사결정 지원
+      6. 데이터 시각화 및 차트 생성
+      7. 분석 결과 파일 저장 및 공유
+
+      # 도구 사용 가이드
+
+      ## upload_to_s3 도구
+      - 용도: 대용량 데이터나 상세 분석 결과를 파일로 저장하고 공유
+      - 사용 시기:
+        * 쿼리 결과가 너무 길어서 슬랙 메시지로 표시하기 어려울 때
+        * CSV, JSON 형식의 원본 데이터를 공유해야 할 때
+        * 정기 리포트나 백업 데이터를 보관할 때
+        * 여러 사람과 데이터를 공유해야 할 때
+      - 특징: 7일간 유효한 다운로드 링크 제공
+
+      ## create_chart 도구
+      - 용도: 데이터를 시각적으로 표현하여 인사이트 전달
+      - 사용 시기:
+        * 추세나 패턴을 한눈에 보여주고 싶을 때
+        * 여러 항목의 비교가 필요할 때
+        * 비율이나 구성을 표현할 때
+        * 시계열 데이터의 변화를 보여줄 때
+      - 지원 차트:
+        * bar: 카테고리별 비교 (예: 월별 가입자 수)
+        * line: 시간에 따른 변화 (예: 일별 활성 사용자)
+        * pie: 구성 비율 (예: 사용자 유입 경로 비율)
+      - 특징: 슬랙 스레드에 이미지로 바로 표시
 
       # 데이터베이스 스키마
       \`\`\`json
@@ -532,6 +583,68 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
               };
 
               statusMessage = '❌ 업로드 오류: 필수 파라미터가 누락되었습니다.';
+              await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
+            }
+          } else if (tool.name === 'create_chart') {
+            const toolInput = tool.input as {
+              title?: string;
+              type?: 'bar' | 'line' | 'pie';
+              data?: unknown;
+            };
+
+            if (toolInput.title && toolInput.type && toolInput.data) {
+              try {
+                statusMessage = `📊 차트 생성 중: ${toolInput.title}`;
+                await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
+
+                const chartBuffer = await generateChart(toolInput.title, toolInput.type, toolInput.data as ChartData);
+
+                const uploadResult = await slack.files.uploadV2({
+                  channel_id: event.channel,
+                  thread_ts: event.thread_ts || event.ts,
+                  filename: `chart_${dayjs.kst().format('YYYYMMDD_HHmmss')}.png`,
+                  file: chartBuffer,
+                  title: toolInput.title,
+                });
+
+                if (uploadResult.ok) {
+                  const filesResult = uploadResult as {
+                    ok: boolean;
+                    files?: { id: string; name: string; [key: string]: unknown }[];
+                    error?: string;
+                  };
+
+                  if (filesResult.files?.[0]) {
+                    toolResult = {
+                      success: true,
+                      fileId: filesResult.files[0].id,
+                      fileName: filesResult.files[0].name,
+                    };
+                  } else {
+                    toolResult = {
+                      success: false,
+                      error: '파일 업로드는 성공했으나 파일 정보를 가져올 수 없습니다.',
+                    };
+                  }
+                } else {
+                  toolResult = {
+                    success: false,
+                    error: uploadResult.error || '차트 업로드에 실패했습니다.',
+                  };
+                }
+              } catch (err) {
+                toolResult = {
+                  success: false,
+                  error: err instanceof Error ? err.message : String(err),
+                };
+              }
+            } else {
+              toolResult = {
+                success: false,
+                error: 'title, type, data 파라미터가 필요합니다.',
+              };
+
+              statusMessage = '❌ 차트 생성 오류: 필수 파라미터가 누락되었습니다.';
               await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
             }
           }
