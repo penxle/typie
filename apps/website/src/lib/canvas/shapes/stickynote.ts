@@ -27,7 +27,7 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
   constructor(config: TypedShapeConstructorConfig<TypedStickyNoteConfig>) {
     super(config);
 
-    this.on('dblclick', () => this.#startEditing());
+    this.on('dblclick', () => this.startEditing());
     this.#boundUpdateTextareaPosition = () => this.#updateTextareaPosition();
   }
 
@@ -269,7 +269,7 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
     });
   }
 
-  #startEditing() {
+  startEditing() {
     if (this.#isEditing) return;
 
     this.#isEditing = true;

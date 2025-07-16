@@ -43,6 +43,8 @@ export const rectangle: Operation = (canvas) => {
       canvas.scene.add(shape);
       canvas.selection.nodes([shape]);
 
+      shape.startEditing();
+
       canvas.setOperation(createResizeOperation('br'), event);
     },
     destroy: () => {
@@ -55,6 +57,8 @@ export const rectangle: Operation = (canvas) => {
 
         canvas.scene.add(shape);
         canvas.selection.nodes([shape]);
+
+        shape.startEditing();
 
         canvas.syncManager?.addOrUpdateKonvaNode(shape);
 
