@@ -43,7 +43,7 @@ new typie.Service('api', {
         },
         {
           Effect: 'Allow',
-          Action: ['s3:PutObject'],
+          Action: ['s3:GetObject', 's3:PutObject'],
           Resource: [pulumi.concat(ref.requireOutput('AWS_S3_BUCKET_MISC_ARN'), '/*')],
         },
         {
