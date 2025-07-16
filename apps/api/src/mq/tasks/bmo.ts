@@ -288,7 +288,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       {
         name: 'upload_to_s3',
         description:
-          'S3 버킷 typie-assets에 데이터를 업로드하고 다운로드 URL을 생성합니다. JSON, CSV, 텍스트 등 다양한 형식의 데이터를 업로드할 수 있습니다.',
+          'S3 버킷에 데이터를 업로드하고 다운로드 URL을 생성합니다. JSON, CSV, 텍스트 등 다양한 형식의 데이터를 업로드할 수 있습니다.',
         input_schema: {
           type: 'object',
           properties: {
@@ -497,7 +497,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
 
                 await aws.s3.send(
                   new PutObjectCommand({
-                    Bucket: 'typie-assets',
+                    Bucket: 'typie-misc',
                     Key: key,
                     Body: toolInput.content,
                     ContentType: contentType,
@@ -507,10 +507,10 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
                 const downloadUrl = await getSignedUrl(
                   aws.s3,
                   new GetObjectCommand({
-                    Bucket: 'typie-assets',
+                    Bucket: 'typie-misc',
                     Key: key,
                   }),
-                  { expiresIn: 7 * 24 * 60 * 60 }, // 7일
+                  { expiresIn: 7 * 24 * 60 * 60 },
                 );
 
                 toolResult = {

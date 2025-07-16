@@ -24,7 +24,7 @@ new aws.iam.UserPolicy('developer@team', {
       },
       {
         Effect: 'Allow',
-        Action: ['s3:PutObject'],
+        Action: ['s3:GetObject', 's3:PutObject'],
         Resource: [pulumi.concat(buckets.misc.arn, '/*')],
       },
       {
