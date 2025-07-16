@@ -381,6 +381,16 @@ export class Canvas {
     } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
       e.preventDefault();
       this.redo();
+    } else if (e.key === 'Alt') {
+      e.preventDefault();
+      this.setCursor('copy');
+    }
+  }
+
+  handleKeyUp(e: KeyboardEvent) {
+    if (e.key === 'Alt') {
+      e.preventDefault();
+      this.restoreCursor();
     }
   }
 }
