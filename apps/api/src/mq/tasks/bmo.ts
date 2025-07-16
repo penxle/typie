@@ -1,11 +1,14 @@
 import '@typie/lib/dayjs';
 
 import { Anthropic } from '@anthropic-ai/sdk';
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { WebClient } from '@slack/web-api';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
 import postgres from 'postgres';
 import { env } from '@/env';
+import * as aws from '@/external/aws';
 import { defineJob } from '../types';
 
 type SlackAppMentionEventPayload = {
@@ -282,6 +285,30 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
           required: ['query'],
         },
       },
+      {
+        name: 'upload_to_s3',
+        description:
+          'S3 버킷 typie-assets에 데이터를 업로드하고 다운로드 URL을 생성합니다. JSON, CSV, 텍스트 등 다양한 형식의 데이터를 업로드할 수 있습니다.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            filename: {
+              type: 'string',
+              description: '업로드할 파일 이름 (예: report.json, data.csv)',
+            },
+            content: {
+              type: 'string',
+              description: '업로드할 파일 내용',
+            },
+            contentType: {
+              type: 'string',
+              description: 'MIME 타입 (예: application/json, text/csv, text/plain)',
+              default: 'text/plain',
+            },
+          },
+          required: ['filename', 'content'],
+        },
+      },
     ];
 
     const dbSchema = await getDatabaseSchema();
@@ -455,6 +482,56 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
               };
 
               statusMessage = '❌ 쿼리 오류: query 파라미터가 누락되었습니다. 재시도 중...';
+              await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
+            }
+          } else if (tool.name === 'upload_to_s3') {
+            const toolInput = tool.input as { filename?: string; content?: string; contentType?: string };
+
+            if (toolInput.filename && toolInput.content) {
+              try {
+                statusMessage = `📤 S3에 파일 업로드 중: ${toolInput.filename}`;
+                await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
+
+                const key = `bmo/${aws.createFragmentedS3ObjectKey()}_${toolInput.filename}`;
+                const contentType = toolInput.contentType || 'text/plain';
+
+                await aws.s3.send(
+                  new PutObjectCommand({
+                    Bucket: 'typie-assets',
+                    Key: key,
+                    Body: toolInput.content,
+                    ContentType: contentType,
+                  }),
+                );
+
+                const downloadUrl = await getSignedUrl(
+                  aws.s3,
+                  new GetObjectCommand({
+                    Bucket: 'typie-assets',
+                    Key: key,
+                  }),
+                  { expiresIn: 7 * 24 * 60 * 60 }, // 7일
+                );
+
+                toolResult = {
+                  success: true,
+                  downloadUrl,
+                  size: Buffer.byteLength(toolInput.content),
+                  expiresAt: dayjs.kst().add(7, 'days').format('YYYY-MM-DD HH:mm:ss'),
+                };
+              } catch (err) {
+                toolResult = {
+                  success: false,
+                  error: err instanceof Error ? err.message : String(err),
+                };
+              }
+            } else {
+              toolResult = {
+                success: false,
+                error: 'filename과 content 파라미터가 필요합니다.',
+              };
+
+              statusMessage = '❌ 업로드 오류: 필수 파라미터가 누락되었습니다.';
               await updateSlackMessage(responseText + '\n\n' + statusMessage, true);
             }
           }
