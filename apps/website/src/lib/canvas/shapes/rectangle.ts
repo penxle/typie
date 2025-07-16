@@ -42,7 +42,7 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
   constructor(config: TypedShapeConstructorConfig<TypedRectConfig>) {
     super(config);
 
-    this.on('dblclick', () => this.#startEditing());
+    this.on('dblclick', () => this.startEditing());
     this.#boundUpdateTextareaPosition = () => this.#updateTextareaPosition();
   }
 
@@ -320,7 +320,7 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
     });
   }
 
-  #startEditing() {
+  startEditing() {
     if (this.#isEditing) return;
 
     this.#isEditing = true;

@@ -41,7 +41,7 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
   constructor(config: TypedShapeConstructorConfig<TypedEllipseConfig>) {
     super(config);
 
-    this.on('dblclick', () => this.#startEditing());
+    this.on('dblclick', () => this.startEditing());
     this.#boundUpdateTextareaPosition = () => this.#updateTextareaPosition();
   }
 
@@ -289,7 +289,7 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
     });
   }
 
-  #startEditing() {
+  startEditing() {
     if (this.#isEditing) return;
 
     this.#isEditing = true;
