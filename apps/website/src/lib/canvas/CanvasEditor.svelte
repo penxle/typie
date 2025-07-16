@@ -40,7 +40,7 @@
   });
 </script>
 
-<svelte:window onkeydown={(e) => canvas?.handleKeyDown(e)} />
+<svelte:window onkeydown={(e) => canvas?.handleKeyDown(e)} onkeyup={(e) => canvas?.handleKeyUp(e)} />
 
 <div style:cursor class={css(style, { backgroundColor: 'gray.50' })}>
   <div

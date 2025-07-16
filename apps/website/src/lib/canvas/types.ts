@@ -4,6 +4,11 @@ import type { Canvas } from './class.svelte';
 export type Tool = 'pan' | 'select' | 'brush' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'stickynote';
 export type Shapes = 'TypedArrow' | 'TypedBrush' | 'TypedEllipse' | 'TypedLine' | 'TypedRect' | 'TypedStickyNote';
 
+export type SerializedShape = {
+  type: Shapes;
+  attrs: Record<string, unknown>;
+};
+
 export type Pos = { x: number; y: number };
 
 export type ResizeRectHandle = 'tl' | 'tr' | 'br' | 'bl' | 't' | 'r' | 'b' | 'l';
