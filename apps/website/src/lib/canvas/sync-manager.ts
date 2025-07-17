@@ -139,6 +139,23 @@ export class SyncManager {
     if (event.changes.added.size > 0 || event.changes.deleted.size > 0) {
       this.#updateZIndices();
     }
+
+    if (event.changes.deleted.size > 0) {
+      const existingIds = new Set<string>();
+
+      this.#fragment.forEach((element) => {
+        if (element instanceof Y.XmlElement) {
+          const id = this.#getElementId(element);
+          existingIds.add(id);
+        }
+      });
+
+      for (const id of this.#elementMap.keys()) {
+        if (!existingIds.has(id)) {
+          this.#removeElementFromCanvas(id);
+        }
+      }
+    }
   }
 
   #addElementToCanvas(id: string, xmlElement: Y.XmlElement) {
