@@ -200,6 +200,7 @@
               fontSize: '15px',
               color: 'dark.gray.400',
               fontFamily: 'Pretendard',
+              fontWeight: 'medium',
               transition: 'colors',
               _hover: {
                 color: 'dark.gray.200',
