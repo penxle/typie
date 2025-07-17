@@ -17,7 +17,9 @@
     gap: '32px',
   })}
 >
-  <Wordmark class={css({ height: '24px', color: 'gray.900' })} />
+  <a href="/">
+    <Wordmark class={css({ height: '24px', color: 'gray.900' })} />
+  </a>
 
   <a
     class={css({
