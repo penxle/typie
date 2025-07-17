@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '$styled-system/css';
   import CallToAction from './CallToAction.svelte';
+  import Dashboard from './Dashboard.svelte';
   import DocumentFeatures from './DocumentFeatures.svelte';
   import Footer from './Footer.svelte';
   import Header from './Header.svelte';
@@ -23,6 +24,8 @@
   <Manifesto />
 
   <WritingFeatures />
+
+  <Dashboard />
 
   <DocumentFeatures />
 
