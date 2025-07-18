@@ -8,4 +8,5 @@ export * from './placeholder';
 export * from './selection';
 export * from './syntax-highlight';
 export * from './trailing-node';
+export * from './typewriter';
 export * from './typography';
