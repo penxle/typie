@@ -105,6 +105,10 @@ export const Typewriter = Extension.create({
 
           handleDOMEvents: {
             keydown: (view) => {
+              if (this.editor.storage.typewriter.position === undefined) {
+                return;
+              }
+
               const container = view.dom.closest('.editor') as HTMLElement;
               if (!container) return false;
 

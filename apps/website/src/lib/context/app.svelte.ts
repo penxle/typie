@@ -14,6 +14,8 @@ type AppPreference = {
 
   typewriterEnabled?: boolean;
   typewriterPosition?: number;
+
+  lineHighlightEnabled?: boolean;
 };
 
 type AppState = {

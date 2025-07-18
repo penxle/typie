@@ -28,10 +28,12 @@
 
   let typewriterEnabled = $state(preference.current.typewriterEnabled ?? false);
   let typewriterPosition = $state(preference.current.typewriterPosition ?? 0.5);
+  let lineHighlightEnabled = $state(preference.current.lineHighlightEnabled ?? true);
 
   $effect(() => {
     preference.current.typewriterEnabled = typewriterEnabled;
     preference.current.typewriterPosition = typewriterPosition;
+    preference.current.lineHighlightEnabled = lineHighlightEnabled;
   });
 
   const handleTypewriterToggle = () => {
@@ -46,6 +48,12 @@
         position: Math.round(typewriterPosition * 100),
       });
     }
+  };
+
+  const handleLineHighlightToggle = () => {
+    mixpanel.track('toggle_line_highlight', {
+      enabled: lineHighlightEnabled,
+    });
   };
 </script>
 
@@ -84,4 +92,13 @@
       </div>
     </div>
   {/if}
+
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
+    <div>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>현재 줄 강조</h3>
+      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>현재 작성 중인 줄을 강조하여 화면에 표시합니다.</p>
+    </div>
+
+    <Switch onchange={handleLineHighlightToggle} bind:checked={lineHighlightEnabled} />
+  </div>
 </div>

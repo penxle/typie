@@ -849,7 +849,9 @@
 
               {#if editor && mounted}
                 <Placeholder $site={$query.entity.site} {doc} {editor} />
-                <Highlight {editor} />
+                {#if app.preference.current.lineHighlightEnabled !== false}
+                  <Highlight {editor} />
+                {/if}
               {/if}
             </div>
           </div>
