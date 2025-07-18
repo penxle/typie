@@ -141,7 +141,7 @@
                 color: 'dark.gray.200',
               },
             })}
-            href="/pricing"
+            href="/pricing2"
           >
             요금제
           </a>

@@ -32,7 +32,7 @@
         color: 'gray.900',
       },
     })}
-    href="/pricing"
+    href="/pricing2"
   >
     요금제
   </a>
