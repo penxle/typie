@@ -371,9 +371,11 @@
       color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
     });
 
-    editor?.current.once('create', ({ editor }) => {
-      editor.storage.anchors = anchors;
+    if (editor) {
+      editor.current.storage.anchors = anchors;
+    }
 
+    editor?.current.once('create', ({ editor }) => {
       const { tr, schema } = editor.state;
       tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
       editor.view.dispatch(tr);

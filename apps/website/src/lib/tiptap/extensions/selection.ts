@@ -57,9 +57,12 @@ export const Selection = Extension.create({
             }
 
             if (this.editor.isEditable && (selection instanceof NodeSelection || selection instanceof MultiNodeSelection)) {
-              body.descendants((node, offset) => {
+              const startPos = Math.max(1, from - 1);
+              const endPos = Math.min(body.content.size + 1, to + 1);
+
+              body.nodesBetween(startPos - 1, endPos - 1, (node, offset) => {
                 if (!node.isBlock) {
-                  return false;
+                  return true;
                 }
 
                 const pos = offset + 1;
@@ -88,7 +91,7 @@ export const Selection = Extension.create({
                   }),
                 );
 
-                return false;
+                return true;
               });
             }
 
