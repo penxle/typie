@@ -1,4 +1,4 @@
-import { combineTransactionSteps, Extension, findChildren, findChildrenInRange, findDuplicates, getChangedRanges } from '@tiptap/core';
+import { combineTransactionSteps, Extension, findChildren, findChildrenInRange, getChangedRanges } from '@tiptap/core';
 import { Fragment, Node as ProseMirrorNode, Slice } from '@tiptap/pm/model';
 import { Plugin, Transaction } from '@tiptap/pm/state';
 import { nanoid } from 'nanoid';
@@ -89,9 +89,11 @@ export const NodeId = Extension.create({
           const { mapping } = transform;
           const { tr } = newState;
 
+          const seenIds = new Set<string>();
+          const duplicateIds = new Set<string>();
+
           for (const { newRange } of getChangedRanges(transform)) {
             const nodes = findChildrenInRange(newState.doc, newRange, (node) => types.includes(node.type.name));
-            const ids: string[] = nodes.map(({ node }) => node.attrs.nodeId).filter((id) => id !== null);
 
             for (const [index, { node, pos }] of nodes.entries()) {
               const id = tr.doc.nodeAt(pos)?.attrs.nodeId;
@@ -104,6 +106,12 @@ export const NodeId = Extension.create({
                 continue;
               }
 
+              if (seenIds.has(id)) {
+                duplicateIds.add(id);
+              } else {
+                seenIds.add(id);
+              }
+
               const nextNode = nodes[index + 1];
 
               if (nextNode && node.content.size === 0) {
@@ -112,8 +120,6 @@ export const NodeId = Extension.create({
                   nodeId: id,
                 });
 
-                ids[index + 1] = id;
-
                 if (!nextNode.node.attrs.nodeId) {
                   const newId = generateId();
 
@@ -121,21 +127,19 @@ export const NodeId = Extension.create({
                     ...node.attrs,
                     nodeId: newId,
                   });
-
-                  ids[index] = newId;
                 }
 
                 continue;
               }
 
-              const duplicateIds = findDuplicates(ids);
-              const { deleted } = mapping.invert().mapResult(pos);
-
-              if (deleted && duplicateIds.includes(id)) {
-                tr.setNodeMarkup(pos, undefined, {
-                  ...node.attrs,
-                  nodeId: generateId(),
-                });
+              if (duplicateIds.has(id)) {
+                const { deleted } = mapping.invert().mapResult(pos);
+                if (deleted) {
+                  tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    nodeId: generateId(),
+                  });
+                }
               }
             }
           }

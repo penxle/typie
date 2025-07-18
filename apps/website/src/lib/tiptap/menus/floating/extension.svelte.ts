@@ -5,8 +5,13 @@ import { mount, unmount } from 'svelte';
 import { css } from '$styled-system/css';
 import Left from './Left.svelte';
 import Right from './Right.svelte';
+import type { EditorView } from '@tiptap/pm/view';
 
 type State = { pos: number | null };
+
+type ViewWithUpdate = {
+  __updateFloatingMenu?: (view: EditorView, pos: number | null) => void;
+} & EditorView;
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
@@ -32,6 +37,9 @@ export const FloatingMenu = Extension.create({
     let rightDom: HTMLElement | null = null;
     let rightComponent: Record<string, never> | null = null;
     let rightCleanup: (() => void) | null = null;
+
+    // 내부 상태로 관리할 현재 위치
+    let currentPos: number | null = null;
 
     const remove = () => {
       leftCleanup?.();
@@ -78,7 +86,105 @@ export const FloatingMenu = Extension.create({
             return prev;
           },
         },
-        view: () => {
+        view: (editorView) => {
+          const updateFloatingMenu = (view: EditorView, pos: number | null) => {
+            if (pos === currentPos) {
+              return;
+            }
+
+            currentPos = pos;
+
+            if (pos === null) {
+              remove();
+              return;
+            }
+
+            const resolvedPos = view.state.doc.resolve(pos);
+            if (resolvedPos.depth !== 1) {
+              remove();
+              return;
+            }
+
+            const nodeDOM = view.nodeDOM(pos) as HTMLElement | null;
+            if (!nodeDOM) {
+              return;
+            }
+
+            remove();
+
+            leftDom = document.createElement('div');
+            leftComponent = mount(Left, {
+              target: leftDom,
+              props: {
+                editor: this.editor,
+                pos,
+              },
+            });
+
+            leftDom.className = css({
+              position: 'absolute',
+              top: '0',
+              left: '0',
+              width: 'max',
+              visibility: 'hidden',
+            });
+
+            document.body.append(leftDom);
+
+            rightDom = document.createElement('div');
+            rightComponent = mount(Right, {
+              target: rightDom,
+              props: {
+                editor: this.editor,
+                pos,
+              },
+            });
+
+            rightDom.className = css({
+              position: 'absolute',
+              top: '0',
+              left: '0',
+              width: 'max',
+              visibility: 'hidden',
+            });
+
+            document.body.append(rightDom);
+
+            leftCleanup?.();
+            leftCleanup = autoUpdate(nodeDOM, leftDom, async () => {
+              if (!leftDom) {
+                return;
+              }
+
+              const { x, y, middlewareData } = await computePosition(nodeDOM, leftDom, {
+                placement: 'left-start',
+                middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
+              });
+
+              leftDom.style.left = `${x}px`;
+              leftDom.style.top = `${y}px`;
+              leftDom.style.visibility = middlewareData.hide?.escaped ? 'hidden' : 'visible';
+            });
+
+            rightCleanup?.();
+            rightCleanup = autoUpdate(nodeDOM, rightDom, async () => {
+              if (!rightDom) {
+                return;
+              }
+
+              const { x, y, middlewareData } = await computePosition(nodeDOM, rightDom, {
+                placement: 'right-start',
+                middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
+              });
+
+              rightDom.style.left = `${x}px`;
+              rightDom.style.top = `${y}px`;
+              rightDom.style.visibility = middlewareData.hide?.escaped ? 'hidden' : 'visible';
+            });
+          };
+
+          (editorView as ViewWithUpdate).__updateFloatingMenu = updateFloatingMenu;
+
           return {
             update: (view, prevState) => {
               const state = pluginKey.getState(view.state);
@@ -88,97 +194,9 @@ export const FloatingMenu = Extension.create({
                 return;
               }
 
-              if (state.pos === null) {
-                remove();
-                return;
+              if (state.pos !== prev.pos) {
+                updateFloatingMenu(view, state.pos);
               }
-
-              const pos = view.state.doc.resolve(state.pos);
-              if (pos.depth !== 1) {
-                remove();
-                return;
-              }
-
-              const nodeDOM = view.nodeDOM(state.pos) as HTMLElement | null;
-              if (!nodeDOM) {
-                return;
-              }
-
-              if (state.pos === prev.pos) {
-                return;
-              }
-
-              remove();
-
-              leftDom = document.createElement('div');
-              leftComponent = mount(Left, {
-                target: leftDom,
-                props: {
-                  editor: this.editor,
-                  pos: state.pos,
-                },
-              });
-
-              leftDom.className = css({
-                position: 'absolute',
-                top: '0',
-                left: '0',
-                width: 'max',
-                visibility: 'hidden',
-              });
-
-              document.body.append(leftDom);
-
-              rightDom = document.createElement('div');
-              rightComponent = mount(Right, {
-                target: rightDom,
-                props: {
-                  editor: this.editor,
-                  pos: state.pos,
-                },
-              });
-
-              rightDom.className = css({
-                position: 'absolute',
-                top: '0',
-                left: '0',
-                width: 'max',
-                visibility: 'hidden',
-              });
-
-              document.body.append(rightDom);
-
-              leftCleanup?.();
-              leftCleanup = autoUpdate(nodeDOM, leftDom, async () => {
-                if (!leftDom) {
-                  return;
-                }
-
-                const { x, y, middlewareData } = await computePosition(nodeDOM, leftDom, {
-                  placement: 'left-start',
-                  middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
-                });
-
-                leftDom.style.left = `${x}px`;
-                leftDom.style.top = `${y}px`;
-                leftDom.style.visibility = middlewareData.hide?.escaped ? 'hidden' : 'visible';
-              });
-
-              rightCleanup?.();
-              rightCleanup = autoUpdate(nodeDOM, rightDom, async () => {
-                if (!rightDom) {
-                  return;
-                }
-
-                const { x, y, middlewareData } = await computePosition(nodeDOM, rightDom, {
-                  placement: 'right-start',
-                  middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
-                });
-
-                rightDom.style.left = `${x}px`;
-                rightDom.style.top = `${y}px`;
-                rightDom.style.visibility = middlewareData.hide?.escaped ? 'hidden' : 'visible';
-              });
             },
             destroy: () => {
               leftCleanup?.();
@@ -193,6 +211,7 @@ export const FloatingMenu = Extension.create({
               }
               leftDom?.remove();
               rightDom?.remove();
+              delete (editorView as ViewWithUpdate).__updateFloatingMenu;
             },
           };
         },
@@ -203,21 +222,30 @@ export const FloatingMenu = Extension.create({
 
               const posAtCoords = view.posAtCoords({ left, top: event.clientY });
               if (!posAtCoords) {
-                return;
+                const updateFn = (view as ViewWithUpdate).__updateFloatingMenu;
+                if (updateFn) {
+                  updateFn(view, null);
+                }
+                return false;
               }
 
               const pos = posAtCoords.inside === -1 ? posAtCoords.pos : posAtCoords.inside;
-              const pos$ = view.state.doc.resolve(pos);
+              const resolvedPos = view.state.doc.resolve(pos);
+              const newPos = resolvedPos.before(2) ?? null;
 
-              const { tr } = view.state;
-              tr.setMeta(pluginKey, { pos: pos$.before(2) ?? null });
-              view.dispatch(tr);
+              const updateFn = (view as ViewWithUpdate).__updateFloatingMenu;
+              if (updateFn) {
+                updateFn(view, newPos);
+              }
+              return false;
             },
 
             keydown: (view) => {
-              const { tr } = view.state;
-              tr.setMeta(pluginKey, { pos: null });
-              view.dispatch(tr);
+              const updateFn = (view as ViewWithUpdate).__updateFloatingMenu;
+              if (updateFn) {
+                updateFn(view, null);
+              }
+              return false;
             },
           },
         },
