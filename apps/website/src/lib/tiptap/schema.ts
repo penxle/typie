@@ -1,4 +1,15 @@
-import { Behavior, Command, DropCursor, NodeId, Placeholder, Selection, SyntaxHighlight, TrailingNode, Typography } from './extensions';
+import {
+  Behavior,
+  Command,
+  DropCursor,
+  NodeId,
+  Placeholder,
+  Selection,
+  SyntaxHighlight,
+  TrailingNode,
+  Typewriter,
+  Typography,
+} from './extensions';
 import { Bold, Italic, Link, Ruby, Strike, TextStyle, Underline } from './marks';
 import { FloatingMenu, SlashMenu } from './menus';
 import {
@@ -73,6 +84,7 @@ export const editorExtensions = [
   Command,
   DropCursor,
   Placeholder,
+  Typewriter,
   Typography,
 
   // menus

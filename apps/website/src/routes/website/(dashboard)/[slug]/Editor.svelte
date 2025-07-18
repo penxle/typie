@@ -379,7 +379,7 @@
 
       const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
       if (postId && selections[postId]) {
-        editor.current.chain().setTextSelection(selections[postId]).focus().run();
+        editor.current.chain().setTextSelection(selections[postId]).focus(null, { scrollIntoView: false }).run();
       } else {
         editor.current.once('create', () => {
           titleEl?.focus();
