@@ -6,11 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "(jq -r 'select(.tool_input.file_path | test(\"\\\\.(js|jsx|ts|tsx|svelte)$\")) | .tool_input.file_path' | xargs -I {} sh -c 'pnpm -w eslint --fix \"{}\" 1>&2') || { [ $? -eq 1 ] && exit 2 || exit $?; }"
-          },
-          {
-            "type": "command",
-            "command": "(jq -r 'select(.tool_input.file_path | test(\"\\\\.(js|jsx|ts|tsx|svelte)$\")) | .tool_input.file_path' | xargs -I {} sh -c 'pnpm -w prettier --write \"{}\" 1>&2') || { [ $? -eq 1 ] && exit 2 || exit $?; }"
+            "command": "node hooks/edit.js"
           }
         ]
       }
