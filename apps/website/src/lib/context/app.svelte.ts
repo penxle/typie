@@ -12,10 +12,10 @@ type AppPreference = {
 
   announcementViewedIds?: string[];
 
-  typewriterEnabled?: boolean;
-  typewriterPosition?: number;
+  typewriterEnabled: boolean;
+  typewriterPosition: number;
 
-  lineHighlightEnabled?: boolean;
+  lineHighlightEnabled: boolean;
 };
 
 type AppState = {
@@ -79,6 +79,11 @@ export const setupAppContext = (userId: string) => {
 
       focusDuration: 30,
       restDuration: 10,
+
+      typewriterEnabled: false,
+      typewriterPosition: 0.5,
+
+      lineHighlightEnabled: true,
     }),
     state: appState,
     timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {
