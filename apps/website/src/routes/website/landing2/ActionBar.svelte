@@ -165,7 +165,7 @@
       />
     </a>
 
-    <a class={css({ color: 'gray.500', display: 'none', opacity: '0', paddingY: '6px' })} data-element="actionbar-item" href="/pricing">
+    <a class={css({ color: 'gray.500', display: 'none', opacity: '0', paddingY: '6px' })} data-element="actionbar-item" href="/pricing2">
       요금제
     </a>
 
