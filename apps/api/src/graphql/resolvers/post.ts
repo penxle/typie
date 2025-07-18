@@ -719,6 +719,7 @@ builder.mutationFields((t) => ({
         .update(Entities)
         .set({
           state: EntityState.DELETED,
+          deletedAt: dayjs(),
         })
         .where(eq(Entities.id, entity.id));
 
