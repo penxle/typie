@@ -1,6 +1,7 @@
 import { Node } from '@tiptap/pm/model';
 import dayjs from 'dayjs';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
 import { base64 } from 'rfc4648';
@@ -1067,6 +1068,74 @@ builder.mutationFields((t) => ({
           (error): error is { from: number; to: number; context: string; corrections: string[]; explanation: string } =>
             error.from !== undefined && error.to !== undefined,
         );
+    },
+  }),
+
+  undeletePost: t.withAuth({ session: true }).fieldWithInput({
+    type: Post,
+    input: {
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const parentEntity = alias(Entities, 'parentEntities');
+
+      const entity = await db
+        .select({
+          id: Entities.id,
+          post: Posts,
+          siteId: Entities.siteId,
+          parentEntity: {
+            id: parentEntity.id,
+            state: parentEntity.state,
+          },
+        })
+        .from(Entities)
+        .innerJoin(Posts, eq(Entities.id, Posts.entityId))
+        .leftJoin(parentEntity, eq(Entities.parentId, parentEntity.id))
+        .where(and(eq(Posts.id, input.postId), eq(Entities.state, EntityState.DELETED)))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+      });
+
+      const parentEntityId = entity.parentEntity?.state === EntityState.ACTIVE ? entity.parentEntity.id : null;
+      const lastChildOrder = await db
+        .select({ order: Entities.order })
+        .from(Entities)
+        .where(
+          and(
+            eq(Entities.siteId, entity.siteId),
+            eq(Entities.state, EntityState.ACTIVE),
+            parentEntityId ? eq(Entities.parentId, parentEntityId) : isNull(Entities.parentId),
+          ),
+        )
+        .orderBy(desc(Entities.order))
+        .limit(1)
+        .then(first)
+        .then((result) => result?.order ?? null);
+
+      await db
+        .update(Entities)
+        .set({
+          state: EntityState.ACTIVE,
+          order: generateEntityOrder({ lower: lastChildOrder, upper: null }),
+          deletedAt: null,
+          // 부모 엔티티가 삭제되었다면 최상위로 옮김
+          ...(entity.parentEntity?.state !== EntityState.ACTIVE && {
+            parentId: parentEntityId,
+            depth: 0,
+          }),
+        })
+        .where(eq(Entities.id, entity.id))
+        .returning()
+        .then(firstOrThrow);
+
+      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      pubsub.publish('site:usage:update', entity.siteId, null);
+
+      return entity.post;
     },
   }),
 }));
