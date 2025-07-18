@@ -254,6 +254,16 @@
     });
   });
 
+  const persistSelection = () => {
+    if (!editor?.current || !postId) return;
+
+    const { from, to } = editor.current.state.selection;
+
+    const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+    selections[postId] = { from, to, timestamp: dayjs().valueOf() };
+    localStorage.setItem('typie:selections', JSON.stringify(selections));
+  };
+
   const fontFaces = $derived(
     $query.entity.site.fonts
       .map(
@@ -366,6 +376,15 @@
       tr.setSelection(TextSelection.create(tr.doc, 2));
       tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
       editor.current.view.dispatch(tr);
+
+      const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+      if (postId && selections[postId]) {
+        editor.current.chain().setTextSelection(selections[postId]).focus().run();
+      } else {
+        editor.current.once('create', () => {
+          titleEl?.focus();
+        });
+      }
     }
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
@@ -405,6 +424,7 @@
     };
 
     editor?.current.on('transaction', handler);
+    editor?.current.on('selectionUpdate', persistSelection);
 
     return () => {
       off();
@@ -416,6 +436,7 @@
       unsubscribe();
 
       editor?.current.off('transaction', handler);
+      editor?.current.off('selectionUpdate', persistSelection);
 
       persistence.destroy();
       awareness.destroy();
@@ -752,9 +773,6 @@
                 style={css.raw({ size: 'full' })}
                 {awareness}
                 {doc}
-                oncreate={() => {
-                  titleEl?.focus();
-                }}
                 onfile={async ({ pos, file }) => {
                   if (!editor) {
                     return;
