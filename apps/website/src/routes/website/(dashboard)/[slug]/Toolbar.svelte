@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import BoldIcon from '~icons/lucide/bold';
@@ -7,7 +8,9 @@
   import CodeXmlIcon from '~icons/lucide/code-xml';
   import FileUpIcon from '~icons/lucide/file-up';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
+  import HighlighterIcon from '~icons/lucide/highlighter';
   import ImageIcon from '~icons/lucide/image';
+  import InfoIcon from '~icons/lucide/info';
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
   import ListIcon from '~icons/lucide/list';
@@ -19,6 +22,7 @@
   import SettingsIcon from '~icons/lucide/settings';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import TableIcon from '~icons/lucide/table';
+  import TypeIcon from '~icons/lucide/type';
   import UnderlineIcon from '~icons/lucide/underline';
   import UndoIcon from '~icons/lucide/undo';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
@@ -26,7 +30,8 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
   import { fragment, graphql } from '$graphql';
-  import { HorizontalDivider, Icon, SegmentButtons, VerticalDivider } from '$lib/components';
+  import { HorizontalDivider, Icon, SegmentButtons, Slider, Switch, Tooltip, VerticalDivider } from '$lib/components';
+  import { getAppContext } from '$lib/context/app.svelte';
   import { defaultValues, values } from '$lib/tiptap/values';
   import { css } from '$styled-system/css';
   import { center, flex, grid } from '$styled-system/patterns';
@@ -75,6 +80,7 @@
     `),
   );
 
+  const app = getAppContext();
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
 </script>
 
@@ -639,7 +645,7 @@
 
     <div class={css({ flexGrow: '1' })}></div>
 
-    <ToolbarDropdownButton label="본문 설정" placement="bottom-end" size="small">
+    <ToolbarDropdownButton label="설정" placement="bottom-end" size="small">
       {#snippet anchor({ opened })}
         <ToolbarIcon style={css.raw({ transform: opened ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={SettingsIcon} />
       {/snippet}
@@ -715,6 +721,60 @@
                 value={editor?.current.state.doc.firstChild?.attrs.blockGap}
               />
             </div>
+          </div>
+
+          <HorizontalDivider style={css.raw({ marginY: '12px' })} />
+
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>타자기 모드</div>
+              <Tooltip message="현재 작성 중인 줄을 항상 화면의 특정 위치에 고정합니다." placement="top">
+                <Icon style={css.raw({ color: 'text.faint' })} icon={InfoIcon} />
+              </Tooltip>
+            </div>
+            <Switch
+              onchange={() => {
+                mixpanel.track('toggle_typewriter', {
+                  enabled: app.preference.current.typewriterEnabled,
+                });
+              }}
+              bind:checked={app.preference.current.typewriterEnabled}
+            />
+          </div>
+
+          {#if app.preference.current.typewriterEnabled}
+            <div class={flex({ width: 'full', align: 'center', gap: '16px' })}>
+              <div class={css({ flexShrink: '0', fontSize: '11px', color: 'text.muted' })}>상단</div>
+              <Slider
+                max={1}
+                min={0}
+                onchange={() => {
+                  mixpanel.track('change_typewriter_position', {
+                    position: Math.round(app.preference.current.typewriterPosition * 100),
+                  });
+                }}
+                step={0.05}
+                tooltipFormatter={(v) => `${Math.round(v * 100)}% 위치에 고정`}
+                bind:value={app.preference.current.typewriterPosition}
+              />
+              <div class={css({ flexShrink: '0', fontSize: '11px', color: 'text.muted' })}>하단</div>
+            </div>
+          {/if}
+
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', marginTop: '8px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={HighlighterIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>현재 줄 강조</div>
+            </div>
+            <Switch
+              onchange={() => {
+                mixpanel.track('toggle_line_highlight', {
+                  enabled: app.preference.current.lineHighlightEnabled,
+                });
+              }}
+              bind:checked={app.preference.current.lineHighlightEnabled}
+            />
           </div>
         </div>
       {/snippet}

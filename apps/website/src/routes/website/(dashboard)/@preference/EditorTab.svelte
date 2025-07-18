@@ -23,38 +23,7 @@
     `),
   );
 
-  const appContext = getAppContext();
-  const { preference } = appContext;
-
-  let typewriterEnabled = $state(preference.current.typewriterEnabled ?? false);
-  let typewriterPosition = $state(preference.current.typewriterPosition ?? 0.5);
-  let lineHighlightEnabled = $state(preference.current.lineHighlightEnabled ?? true);
-
-  $effect(() => {
-    preference.current.typewriterEnabled = typewriterEnabled;
-    preference.current.typewriterPosition = typewriterPosition;
-    preference.current.lineHighlightEnabled = lineHighlightEnabled;
-  });
-
-  const handleTypewriterToggle = () => {
-    mixpanel.track('toggle_typewriter', {
-      enabled: typewriterEnabled,
-    });
-  };
-
-  const handleTypewriterPositionChange = () => {
-    if (typewriterEnabled) {
-      mixpanel.track('change_typewriter_position', {
-        position: Math.round(typewriterPosition * 100),
-      });
-    }
-  };
-
-  const handleLineHighlightToggle = () => {
-    mixpanel.track('toggle_line_highlight', {
-      enabled: lineHighlightEnabled,
-    });
-  };
+  const app = getAppContext();
 </script>
 
 <div class={flex({ direction: 'column', gap: '32px' })}>
@@ -68,10 +37,17 @@
       </p>
     </div>
 
-    <Switch onchange={handleTypewriterToggle} bind:checked={typewriterEnabled} />
+    <Switch
+      onchange={() => {
+        mixpanel.track('toggle_typewriter', {
+          enabled: app.preference.current.typewriterEnabled,
+        });
+      }}
+      bind:checked={app.preference.current.typewriterEnabled}
+    />
   </div>
 
-  {#if typewriterEnabled}
+  {#if app.preference.current.typewriterEnabled}
     <div class={flex({ direction: 'column', gap: '16px' })}>
       <div class={flex({ direction: 'column', gap: '4px' })}>
         <div class={css({ fontSize: '14px', fontWeight: 'medium' })}>고정 위치</div>
@@ -83,10 +59,14 @@
         <Slider
           max={1}
           min={0}
-          onchange={handleTypewriterPositionChange}
+          onchange={() => {
+            mixpanel.track('change_typewriter_position', {
+              position: Math.round(app.preference.current.typewriterPosition * 100),
+            });
+          }}
           step={0.05}
           tooltipFormatter={(v) => `${Math.round(v * 100)}%`}
-          bind:value={typewriterPosition}
+          bind:value={app.preference.current.typewriterPosition}
         />
         <div class={css({ flexShrink: '0', fontSize: '13px', color: 'text.faint', fontWeight: 'medium' })}>화면 하단</div>
       </div>
@@ -99,6 +79,13 @@
       <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>현재 작성 중인 줄을 강조하여 화면에 표시합니다.</p>
     </div>
 
-    <Switch onchange={handleLineHighlightToggle} bind:checked={lineHighlightEnabled} />
+    <Switch
+      onchange={() => {
+        mixpanel.track('toggle_line_highlight', {
+          enabled: app.preference.current.lineHighlightEnabled,
+        });
+      }}
+      bind:checked={app.preference.current.lineHighlightEnabled}
+    />
   </div>
 </div>

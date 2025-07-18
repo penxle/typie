@@ -325,7 +325,7 @@
     if (app.preference.current.typewriterEnabled && app.preference.current.typewriterPosition !== undefined) {
       untrack(() => {
         if (editor) {
-          editor.current.storage.typewriter = { position: app.preference.current.typewriterPosition ?? 0.5 };
+          editor.current.storage.typewriter = { position: app.preference.current.typewriterPosition };
         }
       });
     } else {
@@ -849,7 +849,7 @@
 
               {#if editor && mounted}
                 <Placeholder $site={$query.entity.site} {doc} {editor} />
-                {#if app.preference.current.lineHighlightEnabled !== false}
+                {#if app.preference.current.lineHighlightEnabled}
                   <Highlight {editor} />
                 {/if}
               {/if}
