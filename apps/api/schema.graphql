@@ -750,7 +750,7 @@ type Site implements ISite {
   slug: String!
   templates: [Post!]!
   url: String!
-  usage: SiteUsage!
+  usage: SiteUsage! @deprecated(reason: "Use User.usage instead")
   user: User!
   view: SiteView!
 }
@@ -917,6 +917,7 @@ type User {
   state: UserState!
   subscription: Subscription_
   totalCharacterCount: Int!
+  usage: UserUsage!
   uuid: String!
 }
 
@@ -949,6 +950,11 @@ type UserSingleSignOn {
 enum UserState {
   ACTIVE
   DEACTIVATED
+}
+
+type UserUsage {
+  totalBlobSize: Int!
+  totalCharacterCount: Int!
 }
 
 input VerifyPersonalIdentityInput {

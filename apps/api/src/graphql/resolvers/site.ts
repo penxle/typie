@@ -108,6 +108,7 @@ Site.implement({
     }),
 
     usage: t.field({
+      deprecationReason: 'Use User.usage instead',
       type: t.builder.simpleObject('SiteUsage', {
         fields: (t) => ({
           totalCharacterCount: t.int(),

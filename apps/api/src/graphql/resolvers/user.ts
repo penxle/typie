@@ -45,6 +45,7 @@ import { env } from '@/env';
 import { TypieError } from '@/errors';
 import * as portone from '@/external/portone';
 import { delay } from '@/utils/promise';
+import { getUserUsage } from '@/utils/user';
 import { redeemCodeSchema, userSchema } from '@/validation';
 import { builder } from '../builder';
 import {
@@ -248,6 +249,18 @@ User.implement({
           .where(eq(PostCharacterCountChanges.userId, user.id))
           .then(firstOrThrow);
         return Math.max(0, Number(result.total));
+      },
+    }),
+
+    usage: t.field({
+      type: t.builder.simpleObject('UserUsage', {
+        fields: (t) => ({
+          totalCharacterCount: t.int(),
+          totalBlobSize: t.int(),
+        }),
+      }),
+      resolve: async (self) => {
+        return await getUserUsage({ userId: self.id });
       },
     }),
   }),
