@@ -2,9 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Communication Language
+## Language Guidelines
 
-All responses should be written in Korean (한국어).
+- All chat responses should be written in Korean (한국어).
+- When adding memories to this file, always use English language.
 
 ## Project Overview
 
@@ -14,7 +15,7 @@ Typie is a Korean writing platform that aims to be a "space for writing thoughts
 
 ### Monorepo Structure
 
-- **Package Manager**: pnpm (v10.12.4) with workspaces
+- **Package Manager**: pnpm with workspaces
 - **Main directories**:
   - `apps/` - Applications (api, website, mobile, etc.)
   - `packages/` - Shared packages
