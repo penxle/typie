@@ -19,7 +19,7 @@ export const TrailingNode = Extension.create({
       }
 
       if (lastNode.type.name === 'paragraph') {
-        return lastNode.content.size > 0;
+        return false;
       }
 
       return true;
@@ -38,7 +38,7 @@ export const TrailingNode = Extension.create({
         },
         state: {
           init: (_, state) => needsTrailingNode(state),
-          apply: (tr, value, oldState, newState) => {
+          apply: (tr, value, _, newState) => {
             return tr.docChanged ? needsTrailingNode(newState) : value;
           },
         },
