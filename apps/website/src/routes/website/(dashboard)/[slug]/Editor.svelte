@@ -7,7 +7,7 @@
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { on } from 'svelte/events';
   import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
@@ -321,6 +321,22 @@
     );
   };
 
+  $effect(() => {
+    if (app.preference.current.typewriterEnabled && app.preference.current.typewriterPosition !== undefined) {
+      untrack(() => {
+        if (editor) {
+          editor.current.storage.typewriter = { position: app.preference.current.typewriterPosition ?? 0.5 };
+        }
+      });
+    } else {
+      untrack(() => {
+        if (editor) {
+          editor.current.storage.typewriter = { position: undefined };
+        }
+      });
+    }
+  });
+
   onMount(() => {
     if (!postId) return;
 
@@ -384,7 +400,7 @@
       if (postId && selections[postId]) {
         editor.chain().setTextSelection(selections[postId]).focus(null, { scrollIntoView: false }).run();
         document.fonts.ready.then(() => {
-          editor.commands.scrollIntoViewFixed({ animate: false });
+          editor.commands.scrollIntoView();
         });
       } else {
         editor.commands.setTextSelection(2);
@@ -700,6 +716,7 @@
         >
           <div
             style:--prosemirror-max-width={`${maxWidth.current}px`}
+            style:--prosemirror-padding-bottom={`${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}
             class={flex({
               flexDirection: 'column',
               alignItems: 'center',

@@ -2,6 +2,7 @@
   import CreditCardIcon from '~icons/lucide/credit-card';
   import KeyboardIcon from '~icons/lucide/keyboard';
   import PanelTopIcon from '~icons/lucide/panel-top';
+  import PencilIcon from '~icons/lucide/pencil';
   import ShieldCheckIcon from '~icons/lucide/shield-check';
   import UserIcon from '~icons/lucide/user';
   import { replaceState } from '$app/navigation';
@@ -12,6 +13,7 @@
   import { flex } from '$styled-system/patterns';
   import AccountTab from './AccountTab.svelte';
   import BillingTab from './BillingTab.svelte';
+  import EditorTab from './EditorTab.svelte';
   import IdentityTab from './IdentityTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
   import SiteTab from './SiteTab.svelte';
@@ -46,6 +48,7 @@
         ...DashboardLayout_PreferenceModal_IdentityTab_user
         ...DashboardLayout_PreferenceModal_SiteTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
+        ...DashboardLayout_PreferenceModal_EditorTab_user
       }
     `),
   );
@@ -56,6 +59,12 @@
       label: '계정',
       icon: UserIcon,
       component: AccountTab,
+    },
+    {
+      path: '/preference/editor',
+      label: '에디터',
+      icon: PencilIcon,
+      component: EditorTab,
     },
     ...($user.subscription
       ? [

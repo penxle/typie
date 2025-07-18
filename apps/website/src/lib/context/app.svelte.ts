@@ -11,6 +11,9 @@ type AppPreference = {
   restDuration: number;
 
   announcementViewedIds?: string[];
+
+  typewriterEnabled?: boolean;
+  typewriterPosition?: number;
 };
 
 type AppState = {

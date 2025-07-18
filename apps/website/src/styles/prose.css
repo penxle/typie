@@ -56,7 +56,7 @@
 }
 
 .ProseMirror-editable {
-  padding-bottom: 80px;
+  padding-bottom: var(--prosemirror-padding-bottom);
 
   & [data-drag-handle] {
     cursor: grab;
