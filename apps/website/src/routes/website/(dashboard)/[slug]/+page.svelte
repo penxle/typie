@@ -42,6 +42,14 @@
     mutation DashboardSlugPage_ViewEntity_Mutation($input: ViewEntityInput!) {
       viewEntity(input: $input) {
         id
+
+        user {
+          id
+
+          recentlyViewedEntities {
+            id
+          }
+        }
       }
     }
   `);
