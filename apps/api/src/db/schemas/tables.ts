@@ -215,6 +215,7 @@ export const Entities = pgTable(
     visibility: E._EntityVisibility('visibility').notNull().default('PRIVATE'),
     availability: E._EntityAvailability('availability').notNull().default('PRIVATE'),
     viewedAt: datetime('viewed_at'),
+    deletedAt: datetime('deleted_at'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),

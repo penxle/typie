@@ -1,3 +1,4 @@
+import dayjs from 'dayjs';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility } from '@/enums';
@@ -206,7 +207,7 @@ builder.mutationFields((t) => ({
 
       const entityIds = [folder.entityId, ...descendants.map(({ id }) => id)];
 
-      await db.update(Entities).set({ state: EntityState.DELETED }).where(inArray(Entities.id, entityIds));
+      await db.update(Entities).set({ state: EntityState.DELETED, deletedAt: dayjs() }).where(inArray(Entities.id, entityIds));
 
       pubsub.publish('site:update', folder.siteId, { scope: 'site' });
       for (const entityId of entityIds) {
