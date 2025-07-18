@@ -1,4 +1,5 @@
-import { and, asc, eq, getTableColumns, inArray, isNull, sql, sum } from 'drizzle-orm';
+import dayjs from 'dayjs';
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, sql, sum } from 'drizzle-orm';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
 import { db, Entities, first, firstOrThrow, Fonts, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
@@ -129,6 +130,24 @@ Site.implement({
           totalCharacterCount: row.totalCharacterCount || 0,
           totalBlobSize: row.totalBlobSize || 0,
         };
+      },
+    }),
+
+    deletedPosts: t.field({
+      type: [Post],
+      resolve: async (self) => {
+        return await db
+          .select(getTableColumns(Posts))
+          .from(Posts)
+          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+          .where(
+            and(
+              eq(Entities.siteId, self.id),
+              eq(Entities.state, EntityState.DELETED),
+              gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
+            ),
+          )
+          .orderBy(desc(Entities.deletedAt));
       },
     }),
   }),
