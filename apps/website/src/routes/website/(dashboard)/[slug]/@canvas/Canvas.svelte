@@ -1,10 +1,12 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
+  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
   import { onMount, tick } from 'svelte';
+  import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
@@ -16,6 +18,7 @@
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
+  import { tooltip } from '$lib/actions';
   import { Canvas, CanvasEditor } from '$lib/canvas';
   import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { getAppContext } from '$lib/context';
@@ -119,6 +122,9 @@
 
   let canvas = $state<Canvas>();
 
+  let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
+  let lastHeartbeatAt = $state(dayjs());
+
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
 
@@ -180,7 +186,8 @@
 
     const unsubscribe = canvasSyncStream.subscribe({ clientId, canvasId }, async (payload) => {
       if (payload.type === CanvasSyncType.HEARTBEAT) {
-        // pass
+        lastHeartbeatAt = dayjs(payload.data);
+        connectionStatus = 'connected';
       } else if (payload.type === CanvasSyncType.UPDATE) {
         Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
       } else if (payload.type === CanvasSyncType.VECTOR) {
@@ -225,6 +232,11 @@
     });
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
+    const heartbeatInterval = setInterval(() => {
+      if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
+        connectionStatus = 'disconnected';
+      }
+    }, 1000);
 
     app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
     app.state.current = $query.entity.id;
@@ -242,6 +254,7 @@
 
     return () => {
       clearInterval(forceSyncInterval);
+      clearInterval(heartbeatInterval);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
@@ -275,6 +288,25 @@
     <Icon style={css.raw({ color: 'text.faint' })} icon={LineSquiggleIcon} size={16} />
 
     <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.default' })}></div>
+
+    <div
+      style:background-color={match(connectionStatus)
+        .with('connecting', () => '#eab308')
+        .with('connected', () => '#22c55e')
+        .with('disconnected', () => '#ef4444')
+        .exhaustive()}
+      class={css({ size: '8px', borderRadius: 'full' })}
+      use:tooltip={{
+        message: match(connectionStatus)
+          .with('connecting', () => '서버 연결 중...')
+          .with('connected', () => '실시간 저장 중')
+          .with('disconnected', () => '서버 연결 끊김')
+          .exhaustive(),
+        placement: 'left',
+        offset: 12,
+        delay: 0,
+      }}
+    ></div>
 
     {#if titleEditing}
       <input
