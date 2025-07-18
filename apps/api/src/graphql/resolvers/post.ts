@@ -47,6 +47,7 @@ import { schema, textSerializers } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug, getKoreanAge, makeText, makeYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
+import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
 import {
   CharacterCountChange,
@@ -609,6 +610,9 @@ builder.mutationFields((t) => ({
         .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
         .where(eq(Posts.id, input.postId))
         .then(firstOrThrow);
+
+      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });
+      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalBlobSize' });
 
       const anchors = await db
         .select({ nodeId: PostAnchors.nodeId, name: PostAnchors.name })
