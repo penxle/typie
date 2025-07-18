@@ -424,6 +424,7 @@ type Mutation {
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   syncCanvas(input: SyncCanvasInput!): Boolean!
   syncPost(input: SyncPostInput!): Boolean!
+  undeletePost(input: UndeletePostInput!): Post!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
@@ -740,6 +741,7 @@ enum SingleSignOnProvider {
 }
 
 type Site implements ISite {
+  deletedPosts: [Post!]!
   entities: [Entity!]!
   firstEntity(type: EntityType!): Entity
   fonts: [Font!]!
@@ -826,6 +828,10 @@ input SyncPostInput {
   data: String!
   postId: ID!
   type: PostSyncType!
+}
+
+input UndeletePostInput {
+  postId: ID!
 }
 
 input UnfurlEmbedInput {
