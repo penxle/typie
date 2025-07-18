@@ -107,6 +107,10 @@
           }, 200);
         }
       },
+
+      onUpdate: ({ editor }) => {
+        editor.commands.scrollIntoView();
+      },
     });
 
     editor = new Ref(e);

@@ -10,6 +10,8 @@
 
   let { editor }: Props = $props();
 
+  let visible = $state(false);
+
   let top = $state(0);
   let height = $state(0);
 
@@ -19,15 +21,19 @@
 
     const handler = () => {
       const { selection } = editor.current.state;
-      if (!selection.empty) {
+      if (!selection.empty && !editor.current.view.composing) {
+        visible = false;
         return;
       }
 
       const coords = editor.current.view.coordsAtPos(selection.anchor);
       const rect = editor.current.view.dom.getBoundingClientRect();
+      const padding = 4;
 
-      top = coords.top - rect.top;
-      height = coords.bottom - coords.top;
+      top = coords.top - rect.top - padding;
+      height = coords.bottom - coords.top + padding * 2;
+
+      visible = true;
     };
 
     document.fonts.ready.then(() => {
@@ -42,8 +48,10 @@
   });
 </script>
 
-<div
-  style:top={`${top}px`}
-  style:height={`${height}px`}
-  class={css({ position: 'absolute', insetX: '-80px', backgroundColor: 'surface.subtle', zIndex: '[-1]' })}
-></div>
+{#if visible}
+  <div
+    style:top={`${top}px`}
+    style:height={`${height}px`}
+    class={css({ position: 'absolute', insetX: '-80px', backgroundColor: 'surface.muted', zIndex: '[-1]' })}
+  ></div>
+{/if}

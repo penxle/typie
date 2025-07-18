@@ -1,5 +1,6 @@
 import { mount, unmount } from 'svelte';
 import { on } from 'svelte/events';
+import { debounce } from '$lib/utils';
 import { createFloatingActions } from './floating.svelte';
 import Tooltip from './TooltipComponent.svelte';
 import type { Placement } from '@floating-ui/dom';
@@ -12,13 +13,29 @@ type Parameter = {
   offset?: number;
   delay?: number;
   keepOnClick?: boolean;
+  force?: boolean;
 };
 
 export const tooltip: Action<HTMLElement, Parameter> = (
   element,
-  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false }: Parameter,
+  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false, force = false }: Parameter,
 ) => {
   let show = $state(false);
+  let forceShow = $state(force);
+
+  let shouldShow = $state(false);
+
+  const debouncedShouldShow = debounce(() => {
+    shouldShow = show || forceShow;
+  }, 0);
+
+  $effect(() => {
+    void show;
+    void forceShow;
+
+    debouncedShouldShow();
+  });
+
   let timer = $state<NodeJS.Timeout>();
 
   const { anchor, floating, arrow } = createFloatingActions({
@@ -35,17 +52,21 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   });
 
   $effect(() => {
-    const mouseenter = on(element, 'mouseenter', () => {
+    const pointerenter = on(element, 'pointerenter', () => {
       if (timer) {
         clearTimeout(timer);
       }
 
-      timer = setTimeout(() => {
+      if (delay > 0) {
+        timer = setTimeout(() => {
+          show = true;
+        }, delay);
+      } else {
         show = true;
-      }, delay);
+      }
     });
 
-    const mouseleave = on(element, 'mouseleave', () => {
+    const pointerleave = on(element, 'pointerleave', () => {
       if (timer) {
         clearTimeout(timer);
       }
@@ -73,14 +94,14 @@ export const tooltip: Action<HTMLElement, Parameter> = (
     anchor(element);
 
     return () => {
-      mouseenter();
-      mouseleave();
+      pointerenter();
+      pointerleave();
       click();
     };
   });
 
   $effect(() => {
-    if (show) {
+    if (shouldShow) {
       const component = mount(Tooltip, {
         target: document.body,
         props,
@@ -94,9 +115,10 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   });
 
   return {
-    update: ({ message, trailing }: Parameter) => {
+    update: ({ message, trailing, force = false }: Parameter) => {
       props.message = message;
       props.trailing = trailing;
+      forceShow = force;
     },
   };
 };

@@ -9,6 +9,11 @@ declare module '@tiptap/core' {
       scrollIntoViewFixed: (options?: { animate?: boolean; position?: number }) => ReturnType;
     };
   }
+
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface Storage {
+    typewriter: { position?: number };
+  }
 }
 
 export const Typewriter = Extension.create({
@@ -25,7 +30,12 @@ export const Typewriter = Extension.create({
       scrollIntoViewFixed:
         (options = {}) =>
         ({ editor, dispatch }) => {
-          const { animate = true, position = 0.5 } = options;
+          const { animate = false } = options;
+
+          const position = editor.storage.typewriter.position;
+          if (position === undefined) {
+            return false;
+          }
 
           if (dispatch) {
             const { from } = editor.state.selection;
@@ -74,7 +84,9 @@ export const Typewriter = Extension.create({
 
               this.storage.animationId = requestAnimationFrame(animateScroll);
             } else {
-              container.scrollTop = clampedScrollTop;
+              requestAnimationFrame(() => {
+                container.scrollTop = clampedScrollTop;
+              });
             }
           }
 
@@ -87,6 +99,10 @@ export const Typewriter = Extension.create({
     return [
       new Plugin({
         props: {
+          handleScrollToSelection: () => {
+            return this.editor.commands.scrollIntoViewFixed({ animate: false });
+          },
+
           handleDOMEvents: {
             keydown: (view) => {
               const container = view.dom.closest('.editor') as HTMLElement;
@@ -97,9 +113,6 @@ export const Typewriter = Extension.create({
                 container.scrollTop = scrollTop;
               });
             },
-          },
-          handleScrollToSelection: () => {
-            return this.editor.commands.scrollIntoViewFixed({ animate: true });
           },
         },
       }),
