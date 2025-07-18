@@ -20,10 +20,6 @@ export const Typewriter = Extension.create({
     };
   },
 
-  onCreate() {
-    this.editor.commands.scrollIntoViewFixed({ animate: false });
-  },
-
   addCommands() {
     return {
       scrollIntoViewFixed:
@@ -47,6 +43,7 @@ export const Typewriter = Extension.create({
             const scrollOffset = cursorTop - targetOffset;
             const currentScrollTop = container.scrollTop;
             const targetScrollTop = currentScrollTop + scrollOffset;
+
             const maxScrollLength = container.scrollHeight - container.clientHeight;
             const clampedScrollTop = clamp(targetScrollTop, 0, maxScrollLength);
 

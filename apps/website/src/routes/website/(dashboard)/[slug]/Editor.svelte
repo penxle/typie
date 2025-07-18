@@ -2,7 +2,6 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import { Mark } from '@tiptap/pm/model';
-  import { TextSelection } from '@tiptap/pm/state';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
@@ -38,6 +37,7 @@
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Anchor from './Anchor.svelte';
+  import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
   import PanelNote from './PanelNote.svelte';
@@ -194,6 +194,8 @@
 
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
   let lastHeartbeatAt = $state(dayjs());
+
+  let mounted = $state(false);
 
   let showTimeline = $state(false);
   let showAnchorOutline = $state(false);
@@ -369,23 +371,24 @@
       color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
     });
 
-    if (editor) {
-      editor.current.storage.anchors = anchors;
+    editor?.current.once('create', ({ editor }) => {
+      editor.storage.anchors = anchors;
 
-      const { tr, schema } = editor.current.state;
-      tr.setSelection(TextSelection.create(tr.doc, 2));
+      const { tr, schema } = editor.state;
       tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
-      editor.current.view.dispatch(tr);
+      editor.view.dispatch(tr);
 
       const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
       if (postId && selections[postId]) {
-        editor.current.chain().setTextSelection(selections[postId]).focus(null, { scrollIntoView: false }).run();
-      } else {
-        editor.current.once('create', () => {
-          titleEl?.focus();
+        editor.chain().setTextSelection(selections[postId]).focus(null, { scrollIntoView: false }).run();
+        document.fonts.ready.then(() => {
+          editor.commands.scrollIntoViewFixed({ animate: false });
         });
+      } else {
+        editor.commands.setTextSelection(2);
+        titleEl?.focus();
       }
-    }
+    });
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
     const heartbeatInterval = setInterval(() => {
@@ -768,11 +771,14 @@
               <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
             </div>
 
-            <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+            <div class={css({ position: 'relative', flexGrow: '1', width: 'full', zIndex: '0' })}>
               <TiptapEditor
                 style={css.raw({ size: 'full' })}
                 {awareness}
                 {doc}
+                oncreate={() => {
+                  mounted = true;
+                }}
                 onfile={async ({ pos, file }) => {
                   if (!editor) {
                     return;
@@ -822,8 +828,9 @@
                 bind:editor
               />
 
-              {#if editor}
+              {#if editor && mounted}
                 <Placeholder $site={$query.entity.site} {doc} {editor} />
+                <Highlight {editor} />
               {/if}
             </div>
           </div>
