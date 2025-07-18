@@ -1,6 +1,7 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
   import { EntityVisibility, PostType } from '@/enums';
+  import { TypieError } from '@/errors';
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -12,7 +13,7 @@
   import { fragment, graphql } from '$graphql';
   import { HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { Dialog } from '$lib/notification';
+  import { Dialog, Toast } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import type { DashboardLayout_EntityTree_Post_post } from '$graphql';
@@ -170,9 +171,21 @@
     <MenuItem
       icon={CopyIcon}
       onclick={async () => {
-        const resp = await duplicatePost({ postId: $post.id });
-        mixpanel.track('duplicate_post', { via: 'tree' });
-        await goto(`/${resp.entity.slug}`);
+        try {
+          const resp = await duplicatePost({ postId: $post.id });
+          mixpanel.track('duplicate_post', { via: 'tree' });
+          await goto(`/${resp.entity.slug}`);
+        } catch (err) {
+          const errorMessages: Record<string, string> = {
+            character_count_limit_exceeded: '현재 플랜의 글자 수 제한을 초과했어요.',
+            blob_size_limit_exceeded: '현재 플랜의 파일 크기 제한을 초과했어요.',
+          };
+
+          if (err instanceof TypieError) {
+            const message = errorMessages[err.code] || err.code;
+            Toast.error(message);
+          }
+        }
       }}
     >
       복제
