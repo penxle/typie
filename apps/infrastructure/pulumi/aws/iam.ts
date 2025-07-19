@@ -3,52 +3,6 @@ import * as pulumi from '@pulumi/pulumi';
 import { buckets } from '$aws/s3';
 import { configurationSet, emailIdentity } from '$aws/ses';
 
-const iamMfaRequiredPolicy = new aws.iam.Policy('IAMMFARequired', {
-  name: 'IAMMFARequired',
-  description: 'Require MFA for all actions except setting up MFA',
-  policy: {
-    Version: '2012-10-17',
-    Statement: [
-      {
-        Effect: 'Allow',
-        Action: ['iam:GetAccountPasswordPolicy', 'iam:ListVirtualMFADevices'],
-        Resource: '*',
-      },
-      {
-        Effect: 'Allow',
-        Action: [
-          'iam:ChangePassword',
-          'iam:CreateVirtualMFADevice',
-          'iam:EnableMFADevice',
-          'iam:GetUser',
-          'iam:ListMFADevices',
-          'iam:ListVirtualMFADevices',
-          'iam:ResyncMFADevice',
-        ],
-        Resource: ['arn:aws:iam::*:user/${aws:username}', 'arn:aws:iam::*:mfa/${aws:username}'],
-      },
-      {
-        Effect: 'Deny',
-        NotAction: [
-          'iam:CreateVirtualMFADevice',
-          'iam:EnableMFADevice',
-          'iam:GetUser',
-          'iam:ListMFADevices',
-          'iam:ListVirtualMFADevices',
-          'iam:ResyncMFADevice',
-          'sts:GetSessionToken',
-        ],
-        Resource: '*',
-        Condition: {
-          BoolIfExists: {
-            'aws:MultiFactorAuthPresent': 'false',
-          },
-        },
-      },
-    ],
-  },
-});
-
 const team = new aws.iam.Group('team', {
   name: 'team',
 });
@@ -62,7 +16,7 @@ new aws.iam.GroupPolicy('team', {
       {
         Effect: 'Allow',
         Action: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:GetParametersByPath', 'ssm:DescribeParameters'],
-        Resource: ['arn:aws:ssm:*:*:parameter/apps/*/local/*'],
+        Resource: ['arn:aws:ssm:*:*:parameter/apps/*/local/', 'arn:aws:ssm:*:*:parameter/apps/*/local/*'],
       },
       {
         Effect: 'Allow',
@@ -118,11 +72,6 @@ new aws.iam.GroupPolicy('team', {
   },
 });
 
-new aws.iam.GroupPolicyAttachment('IAMMFARequired@team', {
-  group: team.name,
-  policyArn: iamMfaRequiredPolicy.arn,
-});
-
 const githubActionsOidcProvider = new aws.iam.OpenIdConnectProvider('actions@github', {
   url: 'https://token.actions.githubusercontent.com',
   clientIdLists: ['sts.amazonaws.com'],
@@ -159,50 +108,6 @@ new aws.iam.RolePolicy('actions@github', {
       {
         Effect: 'Allow',
         Action: '*',
-        Resource: '*',
-      },
-    ],
-  },
-});
-
-const dopplerRole = new aws.iam.Role('integration@doppler', {
-  name: 'integration@doppler',
-  assumeRolePolicy: {
-    Version: '2012-10-17',
-    Statement: [
-      {
-        Effect: 'Allow',
-        Principal: { AWS: '299900769157' },
-        Action: 'sts:AssumeRole',
-        Condition: {
-          StringEquals: {
-            'sts:ExternalId': 'a622bad8b546cbb9c2be',
-          },
-        },
-      },
-    ],
-  },
-});
-
-new aws.iam.RolePolicy('integration@doppler', {
-  role: dopplerRole.name,
-  policy: {
-    Version: '2012-10-17',
-    Statement: [
-      {
-        Effect: 'Allow',
-        Action: [
-          'ssm:PutParameter',
-          'ssm:LabelParameterVersion',
-          'ssm:DeleteParameter',
-          'ssm:RemoveTagsFromResource',
-          'ssm:GetParameterHistory',
-          'ssm:AddTagsToResource',
-          'ssm:GetParametersByPath',
-          'ssm:GetParameters',
-          'ssm:GetParameter',
-          'ssm:DeleteParameters',
-        ],
         Resource: '*',
       },
     ],
