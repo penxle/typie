@@ -3,15 +3,67 @@ import * as pulumi from '@pulumi/pulumi';
 import { buckets } from '$aws/s3';
 import { configurationSet, emailIdentity } from '$aws/ses';
 
-const developer = new aws.iam.User('developer@team', {
-  name: 'developer@team',
-});
-
-new aws.iam.UserPolicy('developer@team', {
-  user: developer.name,
+const iamMfaRequiredPolicy = new aws.iam.Policy('IAMMFARequired', {
+  name: 'IAMMFARequired',
+  description: 'Require MFA for all actions except setting up MFA',
   policy: {
     Version: '2012-10-17',
     Statement: [
+      {
+        Effect: 'Allow',
+        Action: ['iam:GetAccountPasswordPolicy', 'iam:ListVirtualMFADevices'],
+        Resource: '*',
+      },
+      {
+        Effect: 'Allow',
+        Action: [
+          'iam:ChangePassword',
+          'iam:CreateVirtualMFADevice',
+          'iam:EnableMFADevice',
+          'iam:GetUser',
+          'iam:ListMFADevices',
+          'iam:ListVirtualMFADevices',
+          'iam:ResyncMFADevice',
+        ],
+        Resource: ['arn:aws:iam::*:user/${aws:username}', 'arn:aws:iam::*:mfa/${aws:username}'],
+      },
+      {
+        Effect: 'Deny',
+        NotAction: [
+          'iam:CreateVirtualMFADevice',
+          'iam:EnableMFADevice',
+          'iam:GetUser',
+          'iam:ListMFADevices',
+          'iam:ListVirtualMFADevices',
+          'iam:ResyncMFADevice',
+          'sts:GetSessionToken',
+        ],
+        Resource: '*',
+        Condition: {
+          BoolIfExists: {
+            'aws:MultiFactorAuthPresent': 'false',
+          },
+        },
+      },
+    ],
+  },
+});
+
+const team = new aws.iam.Group('team', {
+  name: 'team',
+});
+
+new aws.iam.GroupPolicy('team', {
+  group: team.name,
+  name: 'team',
+  policy: {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Action: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:GetParametersByPath', 'ssm:DescribeParameters'],
+        Resource: ['arn:aws:ssm:*:*:parameter/apps/*/local/*'],
+      },
       {
         Effect: 'Allow',
         Action: ['s3:GetObject', 's3:PutObject'],
@@ -42,12 +94,33 @@ new aws.iam.UserPolicy('developer@team', {
         Action: ['ce:GetCostAndUsage'],
         Resource: '*',
       },
+      {
+        Effect: 'Allow',
+        Action: [
+          'iam:GetUser',
+          'iam:ListAccessKeys',
+          'iam:ListGroupsForUser',
+          'iam:ChangePassword',
+          'iam:CreateAccessKey',
+          'iam:DeleteAccessKey',
+          'iam:UpdateAccessKey',
+          'iam:GetAccessKeyLastUsed',
+          'iam:CreateVirtualMFADevice',
+          'iam:DeleteVirtualMFADevice',
+          'iam:EnableMFADevice',
+          'iam:DeactivateMFADevice',
+          'iam:ListMFADevices',
+          'iam:ResyncMFADevice',
+        ],
+        Resource: 'arn:aws:iam::*:user/${aws:username}',
+      },
     ],
   },
 });
 
-const developerAccessKey = new aws.iam.AccessKey('developer@team', {
-  user: developer.name,
+new aws.iam.GroupPolicyAttachment('IAMMFARequired@team', {
+  group: team.name,
+  policyArn: iamMfaRequiredPolicy.arn,
 });
 
 const githubActionsOidcProvider = new aws.iam.OpenIdConnectProvider('actions@github', {
@@ -510,8 +583,3 @@ new aws.iam.RolePolicy('datadog@monitoring', {
   },
 });
 // spell-checker:enable
-
-export const outputs = {
-  AWS_IAM_DEVELOPER_ACCESS_KEY_ID: developerAccessKey.id,
-  AWS_IAM_DEVELOPER_SECRET_ACCESS_KEY: developerAccessKey.secret,
-};
