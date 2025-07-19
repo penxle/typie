@@ -196,7 +196,7 @@
                     class={flex({
                       align: 'center',
                       gap: '8px',
-                      borderRadius: '8px',
+                      borderRadius: '6px',
                       paddingX: '16px',
                       paddingY: '4px',
                       height: { base: '64px', lg: '64px' },
