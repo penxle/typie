@@ -1,0 +1,20 @@
+{
+  "name": "@typie/rps",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "rps": "./index.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.846.0",
+    "commander": "^12.1.0",
+    "execa": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "@typie/tsconfig": "workspace:*"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
