@@ -200,7 +200,6 @@
                       paddingX: '16px',
                       paddingY: '4px',
                       height: { base: '64px', lg: '64px' },
-                      _last: { borderBottomRadius: '12px' },
                       _hover: { backgroundColor: 'surface.muted' },
                     })}
                     href={post.url}
