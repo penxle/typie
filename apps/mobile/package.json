@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "buildrunner": "dart run build_runner clean && doppler run -- dart run build_runner watch --delete-conflicting-outputs",
+    "buildrunner": "dart run build_runner clean && rps -- dart run build_runner watch --delete-conflicting-outputs",
     "clean": "flutter clean && dart run build_runner clean"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.57",
     "@iconify-json/lucide-lab": "^1.2.3",
     "@iconify/tools": "^4.1.2",
+    "@typie/rps": "workspace:*",
     "change-case-all": "^2.1.0",
     "fantasticon": "^3.0.0",
     "oslllo-svg-fixer": "^5.0.0"

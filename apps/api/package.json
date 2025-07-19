@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "exit 0",
-    "dev": "doppler run -- pnpm tsx watch --clear-screen=false src/main.ts",
+    "dev": "rps -- pnpm tsx watch --clear-screen=false src/main.ts",
     "dev:email": "email dev --port 3001 --dir src/email/templates",
     "lint:typecheck": "tsc",
     "start": "tsx src/main.ts"
@@ -95,6 +95,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@typie/pulumi": "workspace:*",
+    "@typie/rps": "workspace:*",
     "drizzle-kit": "^0.31.4",
     "react-email": "^4.2.0",
     "tsup": "^8.5.0"
