@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { db, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, Folders, PostContents, Posts, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility } from '@/enums';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug } from '@/utils';
@@ -47,6 +47,32 @@ Folder.implement({
         return rows[0].depth;
       },
     }),
+
+    characterCount: t.int({
+      resolve: async (self) => {
+        const rows = await db.execute<{ total: number }>(
+          sql`
+            WITH RECURSIVE descendant_entities AS (
+              SELECT id
+              FROM ${Entities}
+              WHERE id = ${self.entityId}
+              UNION ALL
+              SELECT e.id
+              FROM ${Entities} e
+              JOIN descendant_entities de ON e.parent_id = de.id
+              WHERE e.state = ${EntityState.ACTIVE}
+            )
+            SELECT COALESCE(SUM(pc.character_count), 0) AS total
+            FROM descendant_entities de
+            JOIN ${Posts} p ON p.entity_id = de.id
+            JOIN ${PostContents} pc ON pc.post_id = p.id
+            JOIN ${Entities} e ON e.id = p.entity_id
+            WHERE e.state = ${EntityState.ACTIVE}
+          `,
+        );
+        return rows[0]?.total || 0;
+      },
+    }),
   }),
 });
 
@@ -57,6 +83,32 @@ FolderView.implement({
     entity: t.expose('entityId', { type: EntityView }),
   }),
 });
+
+/**
+ * * Queries
+ */
+
+builder.queryFields((t) => ({
+  folder: t.withAuth({ session: true }).field({
+    type: Folder,
+    args: { id: t.arg.id({ validate: validateDbId(TableCode.FOLDERS) }) },
+    resolve: async (_, args, ctx) => {
+      const folder = await db
+        .select({ siteId: Entities.siteId })
+        .from(Folders)
+        .innerJoin(Entities, eq(Folders.entityId, Entities.id))
+        .where(eq(Folders.id, args.id))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: folder.siteId,
+      });
+
+      return args.id;
+    },
+  }),
+}));
 
 /**
  * * Mutations

@@ -5,6 +5,7 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import DotIcon from '~icons/lucide/dot';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
@@ -18,6 +19,7 @@
   import { HorizontalDivider, Icon, Menu, MenuItem, RingSpinner } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { Dialog } from '$lib/notification';
+  import { comma } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Entity from './Entity.svelte';
@@ -72,6 +74,24 @@
         descendants {
           id
           type
+        }
+      }
+    }
+  `);
+
+  const info = graphql(`
+    query DashboardLayout_EntityTree_Folder_Info_Query($folderId: ID!) @client {
+      folder(id: $folderId) {
+        id
+        characterCount
+
+        entity {
+          id
+
+          descendants {
+            id
+            type
+          }
         }
       }
     }
@@ -137,6 +157,7 @@
   let open = $state(false);
   let editing = $state(false);
   let loadingDescendants = $state(false);
+  let loadingInfo = $state(false);
 
   $effect(() => {
     if (editing) {
@@ -273,7 +294,15 @@
         {$folder.name}
       </span>
 
-      <Menu placement="bottom-start">
+      <Menu
+        onopen={() => {
+          loadingInfo = true;
+          info.load({ folderId: $folder.id }).then(() => {
+            loadingInfo = false;
+          });
+        }}
+        placement="bottom-start"
+      >
         {#snippet button({ open })}
           <div
             class={center({
@@ -390,6 +419,33 @@
         >
           삭제
         </MenuItem>
+
+        <HorizontalDivider color="secondary" />
+
+        <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
+          {#if loadingInfo}
+            <span class={flex({ alignItems: 'center', gap: '4px' })}>
+              <RingSpinner style={css.raw({ size: '12px' })} />
+              불러오는 중...
+            </span>
+          {:else if $info}
+            {@const folders = $info.folder.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
+            {@const posts = $info.folder.entity.descendants.filter((d) => d.type === EntityType.POST).length}
+
+            <div class={flex({ alignItems: 'center' })}>
+              {#if folders > 0}
+                <span>폴더 {folders}개</span>
+                <Icon icon={DotIcon} size={12} />
+              {/if}
+
+              {#if posts > 0}
+                <span>포스트 {posts}개</span>
+              {/if}
+            </div>
+
+            <span>총 {comma($info.folder.characterCount)}자</span>
+          {/if}
+        </div>
       </Menu>
     {/if}
   </summary>
