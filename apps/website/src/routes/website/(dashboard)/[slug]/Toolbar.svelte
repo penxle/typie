@@ -93,7 +93,6 @@
       borderBottomWidth: '1px',
       borderColor: 'border.subtle',
       paddingY: '8px',
-      zIndex: '10',
     },
     style,
   )}

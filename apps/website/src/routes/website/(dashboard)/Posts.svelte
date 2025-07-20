@@ -137,7 +137,6 @@
           overflow: 'var(--overflow)',
         },
   )}
-  hidden={app.preference.current.zenModeEnabled}
   ontransitionendcapture={(e) => {
     if (!app.preference.current.postsExpanded && !app.state.postsOpen) {
       e.currentTarget.style.setProperty('--fixed-width', '0');

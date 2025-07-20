@@ -94,7 +94,6 @@
     paddingY: '12px',
     width: '64px',
   })}
-  hidden={app.preference.current.zenModeEnabled}
 >
   <a class={css({ flexShrink: '0', borderRadius: '8px', size: '32px', overflow: 'hidden' })} href="/home">
     <FaviconLight class={css({ size: 'full', _dark: { display: 'none' } })} />

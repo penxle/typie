@@ -85,7 +85,6 @@
       gap: '8px',
       position: 'sticky',
       bottom: '0',
-      zIndex: '50',
       borderTopWidth: '1px',
       borderColor: 'border.subtle',
       paddingX: '12px',
