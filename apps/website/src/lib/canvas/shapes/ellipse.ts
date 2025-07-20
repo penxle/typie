@@ -1,4 +1,5 @@
 import Konva from 'konva';
+import Cookies from 'universal-cookie';
 import { clamp } from '$lib/utils';
 import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
@@ -85,7 +86,10 @@ export class TypedEllipse extends TypedShape<TypedEllipseConfig> {
   override renderView(context: Konva.Context) {
     const { radiusX, radiusY, backgroundColor, backgroundStyle, seed, text, textAlign } = this.attrs;
 
-    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)?.color;
+    const theme = new Cookies().get('typie-th');
+    const isDarkMode = theme === 'dark';
+    const bgColorItem = values.backgroundColor.find((c) => c.value === backgroundColor);
+    const bgColorHex = isDarkMode ? bgColorItem?.darkColor : bgColorItem?.color;
 
     const drawable = roughGenerator.ellipse(0, 0, radiusX * 2, radiusY * 2, {
       roughness: this.effectiveRoughness,

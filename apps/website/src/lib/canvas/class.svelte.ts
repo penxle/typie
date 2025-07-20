@@ -111,6 +111,10 @@ export class Canvas {
     });
   }
 
+  get environment() {
+    return this.#environment;
+  }
+
   get state() {
     return this.#state;
   }
