@@ -753,7 +753,10 @@
                 mixpanel.track('toggle_panel_expanded', { expanded: app.preference.current.panelExpanded });
               }}
               type="button"
-              use:tooltip={{ message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기' }}
+              use:tooltip={{
+                message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기',
+                keys: ['Mod', 'Shift', 'P'],
+              }}
             >
               <Icon
                 style={css.raw({ color: 'text.faint' })}

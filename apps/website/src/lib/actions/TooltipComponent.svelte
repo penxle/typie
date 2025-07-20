@@ -1,20 +1,34 @@
 <script lang="ts">
   import { scale } from 'svelte/transition';
   import { css } from '$styled-system/css';
+  import { center, flex } from '$styled-system/patterns';
   import type { ArrowAction, FloatingAction } from './floating.svelte';
 
   type Props = {
     message: string;
     trailing?: string;
+    keys?: [...ModifierKey[], string];
     floating: FloatingAction;
     arrow: ArrowAction;
   };
 
-  let { message, trailing, floating, arrow }: Props = $props();
+  type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
+
+  const isMac = typeof window !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+  const modifierKeys: Record<ModifierKey, string> = {
+    Mod: isMac ? '⌘' : 'Ctrl',
+    Ctrl: isMac ? '⌃' : 'Ctrl',
+    Alt: isMac ? '⌥' : 'Alt',
+    Shift: isMac ? '⇧' : 'Shift',
+  };
+
+  let { message, trailing, keys, floating, arrow }: Props = $props();
 </script>
 
 <div
-  class={css({
+  class={flex({
+    alignItems: 'center',
+    gap: '4px',
     borderRadius: '4px',
     paddingX: '8px',
     paddingY: '4px',
@@ -33,7 +47,31 @@
   <span>{message}</span>
 
   {#if trailing}
-    <span class={css({ marginLeft: '4px', color: 'text.bright', opacity: '50' })}>{trailing}</span>
+    <span class={css({ color: 'text.bright', opacity: '50' })}>{trailing}</span>
+  {/if}
+
+  {#if keys}
+    <div
+      class={flex({
+        gap: isMac ? '0' : '2px',
+        alignItems: 'center',
+        fontFamily: '[Pretendard]',
+        fontWeight: 'medium',
+        color: 'text.bright',
+        opacity: '50',
+        lineHeight: '[1em]',
+      })}
+    >
+      {#each keys as key, index (index)}
+        <kbd class={center({ minWidth: '12px' })}>
+          {modifierKeys[key as ModifierKey] ?? key}
+        </kbd>
+
+        {#if !isMac && index < keys.length - 1}
+          <span>+</span>
+        {/if}
+      {/each}
+    </div>
   {/if}
 
   <div

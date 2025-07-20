@@ -73,10 +73,6 @@
       ],
     },
     {
-      title: '생성',
-      shortcuts: [{ keys: ['Alt', 'N'], description: '새 포스트 생성' }],
-    },
-    {
       title: '내비게이션',
       shortcuts: [
         { keys: ['Alt', '↑'], description: '폴더 내 이전 포스트로 이동' },
@@ -86,9 +82,9 @@
     {
       title: '레이아웃',
       shortcuts: [
-        { keys: ['Alt', 'T'], description: '내 포스트 토글' },
-        { keys: ['Alt', 'P'], description: '우측 패널 토글' },
-        { keys: ['Shift', 'Alt', 'Z'], description: '집중 모드 전환' },
+        { keys: [modKey, 'Shift', 'E'], description: '내 포스트 토글' },
+        { keys: [modKey, 'Shift', 'P'], description: '우측 패널 토글' },
+        { keys: [modKey, 'Shift', 'M'], description: '집중 모드 전환' },
       ],
     },
   ];
