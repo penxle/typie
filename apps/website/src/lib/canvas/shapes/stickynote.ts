@@ -1,4 +1,5 @@
 import Konva from 'konva';
+import Cookies from 'universal-cookie';
 import { clamp } from '$lib/utils';
 import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
@@ -53,8 +54,11 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
   override renderView(context: Konva.Context) {
     const { width: w, height: h, backgroundColor, seed, text } = this.attrs;
 
+    const theme = new Cookies().get('typie-th');
+    const isDarkMode = theme === 'dark';
+    const bgColorItem = values.backgroundColor.find((c) => c.value === backgroundColor);
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)!.color;
+    const bgColorHex = isDarkMode ? bgColorItem!.darkColor : bgColorItem!.color;
     const roughness = clamp(Math.min(w, h) / (MIN_SIZE * 10) - 1, 0.5, 2.5);
     const foldSize = this.effectiveFoldSize;
 
@@ -74,7 +78,7 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
     const border = roughGenerator.path(notePath, {
       roughness,
       bowing: 1,
-      stroke: 'rgba(0, 0, 0, 0.1)',
+      stroke: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
       strokeWidth: 1,
       seed,
     });
@@ -86,9 +90,9 @@ export class TypedStickyNote extends TypedShape<TypedStickyNoteConfig> {
     const fold = roughGenerator.path(foldPath, {
       roughness,
       bowing: 1,
-      stroke: 'rgba(0, 0, 0, 0.15)',
+      stroke: isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.15)',
       strokeWidth: 1,
-      fill: 'rgba(0, 0, 0, 0.05)',
+      fill: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
       fillStyle: 'solid',
       seed,
     });

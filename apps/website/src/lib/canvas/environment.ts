@@ -1,4 +1,5 @@
 import Konva from 'konva';
+import Cookies from 'universal-cookie';
 import { GRID_SIZE } from './const';
 
 export class Environment {
@@ -32,9 +33,12 @@ export class Environment {
       visualSpacing = gridSize * stageScale;
     }
 
+    const theme = new Cookies().get('typie-th');
+
     const grid = new Konva.Shape({
       sceneFunc: (context) => {
-        context.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+        const isDarkMode = theme === 'dark';
+        context.strokeStyle = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
         context.lineWidth = 1 / stageScale;
 
         const viewLeft = -stagePos.x / stageScale;

@@ -1,4 +1,5 @@
 import Konva from 'konva';
+import Cookies from 'universal-cookie';
 import { clamp } from '$lib/utils';
 import { MIN_SIZE } from '../const';
 import { renderRoughDrawable, roughGenerator } from '../rough';
@@ -99,7 +100,10 @@ export class TypedRect extends TypedShape<TypedRectConfig> {
     const { width: w, height: h, backgroundColor, backgroundStyle, seed, text, textAlign } = this.attrs;
     const r = this.effectiveBorderRadius;
 
-    const bgColorHex = values.backgroundColor.find((c) => c.value === backgroundColor)?.color;
+    const theme = new Cookies().get('typie-th');
+    const isDarkMode = theme === 'dark';
+    const bgColorItem = values.backgroundColor.find((c) => c.value === backgroundColor);
+    const bgColorHex = isDarkMode ? bgColorItem?.darkColor : bgColorItem?.color;
 
     if (r === 0) {
       const drawable = roughGenerator.rectangle(0, 0, w, h, {

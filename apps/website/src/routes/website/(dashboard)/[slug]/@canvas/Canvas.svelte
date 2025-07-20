@@ -21,7 +21,7 @@
   import { tooltip } from '$lib/actions';
   import { Canvas, CanvasEditor } from '$lib/canvas';
   import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
-  import { getAppContext } from '$lib/context';
+  import { getAppContext, getThemeContext } from '$lib/context';
   import { Dialog } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
@@ -117,6 +117,7 @@
   `);
 
   const app = getAppContext();
+  const theme = getThemeContext();
   const clientId = nanoid();
   const canvasId = $derived($query.entity.node.__typename === 'Canvas' ? $query.entity.node.id : null);
 
@@ -263,6 +264,15 @@
       awareness.destroy();
       doc.destroy();
     };
+  });
+
+  $effect(() => {
+    const currentTheme = theme.effective;
+
+    if (canvas && currentTheme) {
+      canvas.environment.update();
+      canvas.stage.batchDraw();
+    }
   });
 </script>
 

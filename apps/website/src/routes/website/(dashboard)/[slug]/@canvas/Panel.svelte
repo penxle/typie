@@ -1,5 +1,6 @@
 <script lang="ts">
   import { values } from '$lib/canvas';
+  import { getThemeContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
@@ -30,6 +31,8 @@
   const setAttribute = (property: string, value: unknown) => {
     node?.current.setAttrs({ [property]: value });
   };
+
+  const theme = getThemeContext();
 </script>
 
 {#if effectiveSections.length > 0}
@@ -56,9 +59,9 @@
         <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>배경색</div>
 
         <div class={flex({ gap: '4px' })}>
-          {#each values.backgroundColor as { label, value, color } (value)}
+          {#each values.backgroundColor as { label, value, color, darkColor } (value)}
             <button
-              style:background-color={color}
+              style:background-color={theme.effective === 'dark' ? darkColor : color}
               style:outline-color={value === 'white' ? token('colors.border.default') : color}
               class={center({
                 borderWidth: '1px',
