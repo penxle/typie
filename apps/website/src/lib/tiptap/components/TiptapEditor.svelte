@@ -85,7 +85,13 @@
       },
 
       onTransaction: ({ editor: e }) => {
-        editor = new Ref(e);
+        if ($effect.tracking()) {
+          setTimeout(() => {
+            editor = new Ref(e);
+          }, 0);
+        } else {
+          editor = new Ref(e);
+        }
       },
 
       onCreate: () => {

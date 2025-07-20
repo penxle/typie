@@ -113,7 +113,15 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
 
     this.#handleTransaction = () => {
       if (this.#props) {
-        this.#props.editor = new Ref(this.editor);
+        if ($effect.tracking()) {
+          setTimeout(() => {
+            if (this.#props) {
+              this.#props.editor = new Ref(this.editor);
+            }
+          }, 0);
+        } else {
+          this.#props.editor = new Ref(this.editor);
+        }
       }
     };
 
