@@ -42,6 +42,9 @@
   const handleKeydown = async (event: KeyboardEvent) => {
     if (event.altKey && event.code === 'KeyN') {
       event.preventDefault();
+      if (event.key === 'Dead') {
+        (event.target as HTMLElement)?.blur();
+      }
 
       const siteId = $query.me.sites[0].id;
       const resp = await createPost({ siteId, parentEntityId: app.state.ancestors.at(-1) });
