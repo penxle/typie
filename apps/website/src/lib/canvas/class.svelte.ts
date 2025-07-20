@@ -1,8 +1,10 @@
 import Konva from 'konva';
+import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { clamp, Ref } from '$lib/utils';
 import { copyShapesToClipboard, getShapesFromClipboard, offsetShapes } from './clipboard';
+import { ARROW_MOVE_DISTANCE, ARROW_MOVE_DISTANCE_FAST, ARROW_PAN_DISTANCE, ARROW_PAN_DISTANCE_FAST } from './const';
 import { CursorManager } from './cursor-manager';
 import { Environment } from './environment';
 import * as ops from './operations';
@@ -16,7 +18,7 @@ import { TypedRect } from './shapes/rectangle';
 import { TypedStickyNote } from './shapes/stickynote';
 import { SyncManager } from './sync-manager';
 import type { Awareness } from 'y-protocols/awareness';
-import type { Operation, OperationReturn, Pos, Tool } from './types';
+import type { Operation, OperationReturn, Pos, SerializedShape, Shapes, Tool } from './types';
 
 type ScaleOptions = {
   origin: Pos;
@@ -388,6 +390,13 @@ export class Canvas {
     } else if (e.key === 'Alt') {
       e.preventDefault();
       this.setCursor('copy');
+    } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      if (this.selection.nodes().length > 0) {
+        this.moveSelectedShapesWithArrowKey(e);
+      } else {
+        this.panCanvasWithArrowKey(e);
+      }
     }
   }
 
@@ -395,6 +404,91 @@ export class Canvas {
     if (e.key === 'Alt') {
       e.preventDefault();
       this.restoreCursor();
+    }
+  }
+
+  moveSelectedShapesWithArrowKey(e: KeyboardEvent) {
+    const moveDistance = e.shiftKey ? ARROW_MOVE_DISTANCE_FAST : ARROW_MOVE_DISTANCE;
+    const { dx, dy } = this.getArrowKeyDelta(e.key, moveDistance);
+
+    let selectedNodes = this.selection.nodes();
+    const updatedShapes: { id: string; attrs: Record<string, unknown> }[] = [];
+
+    const duplicate = e.altKey;
+
+    if (duplicate) {
+      const nodes = this.selection.nodes();
+      const newNodes: Konva.Node[] = [];
+
+      const shapes: SerializedShape[] = nodes.map((node) => ({
+        type: node.className as Shapes,
+        attrs: { ...node.attrs, id: nanoid(32) },
+      }));
+
+      for (const shape of shapes) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const attrs = shape.attrs as any;
+        const node = match(shape.type)
+          .with('TypedRect', () => new TypedRect(attrs))
+          .with('TypedEllipse', () => new TypedEllipse(attrs))
+          .with('TypedLine', () => new TypedLine(attrs))
+          .with('TypedArrow', () => new TypedArrow(attrs))
+          .with('TypedBrush', () => new TypedBrush(attrs))
+          .with('TypedStickyNote', () => new TypedStickyNote(attrs))
+          .exhaustive();
+
+        this.scene.add(node);
+        this.#syncManager?.addOrUpdateKonvaNode(node);
+        newNodes.push(node);
+      }
+      selectedNodes = this.selection.nodes(newNodes);
+    }
+
+    for (const node of selectedNodes) {
+      const newAttrs = {
+        x: node.x() + dx,
+        y: node.y() + dy,
+      };
+
+      updatedShapes.push({ id: node.id(), attrs: newAttrs });
+    }
+
+    if (updatedShapes.length > 0 && this.#syncManager) {
+      for (const { id, attrs } of updatedShapes) {
+        const node = selectedNodes.find((n) => n.id() === id);
+        if (node) {
+          node.setAttrs(attrs);
+          this.#syncManager.addOrUpdateKonvaNode(node);
+        }
+      }
+      this.selection.update();
+    }
+  }
+
+  panCanvasWithArrowKey(e: KeyboardEvent) {
+    const panDistance = e.shiftKey ? ARROW_PAN_DISTANCE_FAST : ARROW_PAN_DISTANCE;
+    const { dx, dy } = this.getArrowKeyDelta(e.key, panDistance);
+
+    this.moveBy(-dx, -dy);
+  }
+
+  private getArrowKeyDelta(key: string, distance: number): { dx: number; dy: number } {
+    switch (key) {
+      case 'ArrowUp': {
+        return { dx: 0, dy: -distance };
+      }
+      case 'ArrowDown': {
+        return { dx: 0, dy: distance };
+      }
+      case 'ArrowLeft': {
+        return { dx: -distance, dy: 0 };
+      }
+      case 'ArrowRight': {
+        return { dx: distance, dy: 0 };
+      }
+      default: {
+        return { dx: 0, dy: 0 };
+      }
     }
   }
 }
