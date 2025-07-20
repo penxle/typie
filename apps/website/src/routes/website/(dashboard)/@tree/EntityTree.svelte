@@ -50,6 +50,23 @@
     mutation DashboardLayout_EntityTree_MoveEntity_Mutation($input: MoveEntityInput!) {
       moveEntity(input: $input) {
         id
+
+        parent {
+          id
+
+          children {
+            id
+            slug
+
+            node {
+              __typename
+
+              ... on Post {
+                id
+              }
+            }
+          }
+        }
       }
     }
   `);

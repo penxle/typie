@@ -74,6 +74,24 @@
           slug
           url
 
+          parent {
+            id
+
+            children {
+              id
+              slug
+
+              node {
+                __typename
+
+                ... on Post {
+                  id
+                  title
+                }
+              }
+            }
+          }
+
           ancestors {
             id
 
@@ -90,6 +108,20 @@
           site {
             id
             url
+
+            entities {
+              id
+              slug
+
+              node {
+                __typename
+
+                ... on Post {
+                  id
+                  title
+                }
+              }
+            }
 
             fonts {
               id
@@ -415,13 +447,45 @@
       }
     }, 1000);
 
-    const off = on(globalThis.window, 'keydown', (e) => {
+    const off = on(globalThis.window, 'keydown', async (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         e.stopPropagation();
 
         forceSync();
         Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
+      }
+
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const currentEntityId = $query.entity.id;
+
+        let siblingEntities: { id: string; slug: string; node: { __typename: string } }[] = [];
+
+        if ($query.entity.parent) {
+          siblingEntities = $query.entity.parent.children.filter((child) => child.node.__typename === 'Post');
+        } else {
+          siblingEntities = $query.entity.site.entities.filter((entity) => entity.node.__typename === 'Post');
+        }
+
+        const currentIndex = siblingEntities.findIndex((entity) => entity.id === currentEntityId);
+        if (currentIndex === -1) return;
+
+        let targetIndex;
+        if (e.key === 'ArrowUp') {
+          targetIndex = currentIndex - 1;
+          if (targetIndex < 0) targetIndex = siblingEntities.length - 1;
+        } else {
+          targetIndex = currentIndex + 1;
+          if (targetIndex >= siblingEntities.length) targetIndex = 0;
+        }
+
+        const targetEntity = siblingEntities[targetIndex];
+        if (targetEntity && targetEntity.slug) {
+          await goto(`/${targetEntity.slug}`);
+        }
       }
     });
 
@@ -737,7 +801,7 @@
                     return;
                   }
 
-                  if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                  if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
                     e.preventDefault();
                     subtitleEl?.focus();
                   }
@@ -760,12 +824,12 @@
                     return;
                   }
 
-                  if (e.key === 'ArrowUp' || (e.key === 'Backspace' && !subtitleEl?.value)) {
+                  if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !subtitleEl?.value)) {
                     e.preventDefault();
                     titleEl?.focus();
                   }
 
-                  if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+                  if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
                     e.preventDefault();
                     const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
                     editor?.current
@@ -837,7 +901,7 @@
                   const { anchor } = selection;
 
                   if (
-                    ((e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+                    (((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
                     (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
                   ) {
                     e.preventDefault();

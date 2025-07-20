@@ -72,6 +72,13 @@
         { keys: ['Esc'], description: '열린 메뉴 닫기' },
       ],
     },
+    {
+      title: '내비게이션',
+      shortcuts: [
+        { keys: ['Alt', '↑'], description: '폴더 내 이전 포스트로 이동' },
+        { keys: ['Alt', '↓'], description: '폴더 내 다음 포스트로 이동' },
+      ],
+    },
   ];
 </script>
 
