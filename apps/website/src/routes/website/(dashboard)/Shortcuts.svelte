@@ -1,6 +1,4 @@
 <script lang="ts">
-  import mixpanel from 'mixpanel-browser';
-  import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { getAppContext } from '$lib/context/app.svelte';
   import type { DashboardLayout_Shortcuts_query } from '$graphql';
@@ -13,49 +11,20 @@
 
   const app = getAppContext();
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = fragment(
     _query,
     graphql(`
       fragment DashboardLayout_Shortcuts_query on Query {
         me @required {
           id
-          sites {
-            id
-          }
         }
       }
     `),
   );
 
-  const createPost = graphql(`
-    mutation Shortcuts_CreatePost_Mutation($input: CreatePostInput!) {
-      createPost(input: $input) {
-        id
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
   const handleKeydown = async (event: KeyboardEvent) => {
-    if (event.altKey && event.code === 'KeyN') {
-      event.preventDefault();
-      if (event.key === 'Dead') {
-        (event.target as HTMLElement)?.blur();
-      }
-
-      const siteId = $query.me.sites[0].id;
-      const resp = await createPost({ siteId, parentEntityId: app.state.ancestors.at(-1) });
-
-      mixpanel.track('create_post', { via: 'shortcut' });
-      await goto(`/${resp.entity.slug}`);
-
-      return;
-    }
-
-    if (event.altKey && event.code === 'KeyT') {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyE') {
       event.preventDefault();
 
       if (app.preference.current.postsExpanded === false) {
@@ -67,7 +36,7 @@
       return;
     }
 
-    if (event.altKey && event.code === 'KeyP') {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyP') {
       event.preventDefault();
 
       app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
@@ -75,7 +44,7 @@
       return;
     }
 
-    if (event.shiftKey && event.altKey && event.code === 'KeyZ') {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyM') {
       event.preventDefault();
 
       app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;

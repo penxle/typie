@@ -6,15 +6,18 @@
   import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
   import type { SystemStyleObject } from '$styled-system/types';
 
+  type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
+
   type Props = {
     as?: 'button' | 'a';
     icon: Component;
     label: string;
     active?: boolean;
     iconStyle?: SystemStyleObject;
+    keys?: [...ModifierKey[], string];
   } & (HTMLButtonAttributes | HTMLAnchorAttributes);
 
-  let { as = 'button', icon, label, active = false, iconStyle, ...rest }: Props = $props();
+  let { as = 'button', icon, label, active = false, iconStyle, keys, ...rest }: Props = $props();
 </script>
 
 <svelte:element
@@ -35,7 +38,7 @@
   })}
   aria-pressed={active}
   type={as === 'button' ? 'button' : undefined}
-  use:tooltip={{ message: label, placement: 'right', offset: 12 }}
+  use:tooltip={{ message: label, placement: 'right', offset: 12, keys }}
   {...rest}
 >
   <Icon style={iconStyle} {icon} size={20} />

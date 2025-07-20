@@ -6,10 +6,13 @@ import Tooltip from './TooltipComponent.svelte';
 import type { Placement } from '@floating-ui/dom';
 import type { Action } from 'svelte/action';
 
+type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
+
 type Parameter = {
   message: string;
   trailing?: string;
   placement?: Placement;
+  keys?: [...ModifierKey[], string];
   offset?: number;
   delay?: number;
   keepOnClick?: boolean;
@@ -18,7 +21,7 @@ type Parameter = {
 
 export const tooltip: Action<HTMLElement, Parameter> = (
   element,
-  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false, force = false }: Parameter,
+  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false, force = false, keys }: Parameter,
 ) => {
   let show = $state(false);
   let forceShow = $state(force);
@@ -47,6 +50,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   const props = $state({
     message,
     trailing,
+    keys,
     floating,
     arrow,
   });
@@ -115,9 +119,10 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   });
 
   return {
-    update: ({ message, trailing, force = false }: Parameter) => {
+    update: ({ message, trailing, keys, force = false }: Parameter) => {
       props.message = message;
       props.trailing = trailing;
+      props.keys = keys;
       forceShow = force;
     },
   };

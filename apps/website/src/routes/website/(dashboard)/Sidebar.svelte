@@ -136,6 +136,7 @@
     <SidebarButton
       active={app.preference.current.postsExpanded === false ? app.state.postsOpen : app.preference.current.postsExpanded === 'open'}
       icon={FolderIcon}
+      keys={['Mod', 'Shift', 'E']}
       label="내 포스트"
       onclick={() => {
         if (app.preference.current.postsExpanded === false) {
