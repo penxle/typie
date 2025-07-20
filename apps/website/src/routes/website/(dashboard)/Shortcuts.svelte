@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { fragment, graphql } from '$graphql';
   import { getAppContext } from '$lib/context/app.svelte';
   import type { DashboardLayout_Shortcuts_query } from '$graphql';
@@ -49,6 +50,12 @@
 
       app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
 
+      if (app.preference.current.zenModeEnabled) {
+        mixpanel.track('zen_mode_enabled', { via: 'shortcut' });
+      } else {
+        mixpanel.track('zen_mode_disabled', { via: 'shortcut' });
+      }
+
       return;
     }
 
@@ -56,6 +63,7 @@
       event.preventDefault();
 
       app.preference.current.zenModeEnabled = false;
+      mixpanel.track('zen_mode_disabled', { via: 'esc' });
 
       return;
     }
