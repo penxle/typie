@@ -16,6 +16,8 @@ type AppPreference = {
   typewriterPosition: number;
 
   lineHighlightEnabled: boolean;
+
+  zenModeEnabled: boolean;
 };
 
 type AppState = {
@@ -84,6 +86,8 @@ export const setupAppContext = (userId: string) => {
       typewriterPosition: 0.5,
 
       lineHighlightEnabled: true,
+
+      zenModeEnabled: false,
     }),
     state: appState,
     timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {

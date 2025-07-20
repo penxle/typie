@@ -88,6 +88,7 @@
       shortcuts: [
         { keys: ['Alt', 'T'], description: '내 포스트 토글' },
         { keys: ['Alt', 'P'], description: '우측 패널 토글' },
+        { keys: ['Shift', 'Alt', 'Z'], description: '집중 모드 전환' },
       ],
     },
   ];

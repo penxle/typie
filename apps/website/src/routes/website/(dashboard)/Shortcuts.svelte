@@ -74,6 +74,22 @@
 
       return;
     }
+
+    if (event.shiftKey && event.altKey && event.code === 'KeyZ') {
+      event.preventDefault();
+
+      app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
+
+      return;
+    }
+
+    if (event.code === 'Escape' && app.preference.current.zenModeEnabled) {
+      event.preventDefault();
+
+      app.preference.current.zenModeEnabled = false;
+
+      return;
+    }
   };
 </script>
 

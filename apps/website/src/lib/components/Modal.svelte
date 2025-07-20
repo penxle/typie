@@ -27,6 +27,7 @@
 <svelte:window
   onkeydown={(e) => {
     if (open && e.key === 'Escape') {
+      e.stopPropagation();
       close();
     }
   }}
