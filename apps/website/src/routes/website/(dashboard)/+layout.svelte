@@ -13,6 +13,7 @@
   import { token } from '$styled-system/tokens';
   import ShareModal from './@share/ShareModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
+  import Shortcuts from './Shortcuts.svelte';
   import Sidebar from './Sidebar.svelte';
 
   let { children } = $props();
@@ -40,6 +41,7 @@
 
       ...DashboardLayout_Sidebar_query
       ...AdminImpersonateBanner_query
+      ...DashboardLayout_Shortcuts_query
     }
   `);
 
@@ -218,3 +220,4 @@
 
 <CommandPalette $user={$query.me} />
 <ShareModal />
+<Shortcuts {$query} />
