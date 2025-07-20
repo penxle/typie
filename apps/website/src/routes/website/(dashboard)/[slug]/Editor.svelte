@@ -21,6 +21,7 @@
   import ElipsisIcon from '~icons/lucide/ellipsis';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderIcon from '~icons/lucide/folder';
+  import Maximize2Icon from '~icons/lucide/maximize-2';
   import PanelRightCloseIcon from '~icons/lucide/panel-right-close';
   import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
   import ShapesIcon from '~icons/lucide/shapes';
@@ -739,6 +740,31 @@
                 </MenuItem>
               </Menu>
             {/if}
+
+            <button
+              class={center({
+                borderRadius: '4px',
+                size: '24px',
+                color: 'text.faint',
+                transition: 'common',
+                _hover: { backgroundColor: 'surface.muted' },
+              })}
+              onclick={() => {
+                app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
+                if (app.preference.current.zenModeEnabled) {
+                  mixpanel.track('zen_mode_enabled', { via: 'editor' });
+                } else {
+                  mixpanel.track('zen_mode_disabled', { via: 'editor' });
+                }
+              }}
+              type="button"
+              use:tooltip={{
+                message: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
+                keys: ['Mod', 'Shift', 'M'],
+              }}
+            >
+              <Icon style={css.raw({ color: 'text.faint' })} icon={Maximize2Icon} size={16} />
+            </button>
 
             <button
               class={center({

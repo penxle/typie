@@ -8,10 +8,10 @@
   import { match } from 'ts-pattern';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
-  import IconClockFadingIcon from '~icons/lucide/clock-fading';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
+  import Maximize2Icon from '~icons/lucide/maximize-2';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -132,9 +132,14 @@
     {
       name: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
       aliases: ['zen mode'],
-      icon: IconClockFadingIcon,
+      icon: Maximize2Icon,
       action: () => {
         app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
+        if (app.preference.current.zenModeEnabled) {
+          mixpanel.track('zen_mode_enabled', { via: 'command_palette' });
+        } else {
+          mixpanel.track('zen_mode_disabled', { via: 'command_palette' });
+        }
       },
     },
     {
