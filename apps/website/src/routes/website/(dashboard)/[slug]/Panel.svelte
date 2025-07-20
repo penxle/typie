@@ -79,6 +79,7 @@
     willChange: 'min-width, max-width, opacity',
     overflowX: 'hidden',
   })}
+  hidden={app.preference.current.zenModeEnabled}
 >
   <div
     class={flex({

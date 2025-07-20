@@ -8,6 +8,7 @@
   import { match } from 'ts-pattern';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
+  import IconClockFadingIcon from '~icons/lucide/clock-fading';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
@@ -126,6 +127,14 @@
         mixpanel.track('create_post', { via: 'command_palette' });
 
         await goto(`/${resp.entity.slug}`);
+      },
+    },
+    {
+      name: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
+      aliases: ['zen mode'],
+      icon: IconClockFadingIcon,
+      action: () => {
+        app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
       },
     },
     {
@@ -266,6 +275,7 @@
       app.state.commandPaletteOpen = !app.state.commandPaletteOpen;
     } else if (app.state.commandPaletteOpen) {
       if (event.key === 'Escape') {
+        event.stopPropagation();
         close();
         return;
       }

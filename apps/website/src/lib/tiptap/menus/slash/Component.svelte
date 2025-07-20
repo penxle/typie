@@ -40,6 +40,7 @@
     }
 
     if (event.key === 'Escape') {
+      event.stopPropagation();
       onclose();
     }
 
