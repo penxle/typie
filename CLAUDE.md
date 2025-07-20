@@ -50,3 +50,7 @@ css({ paddingX: '16px', paddingY: '8px', color: 'text.primary', backgroundColor:
 // Incorrect usage (hardcoded values, value without unit, shorthands, multiple values, arbitrary values without brackets)
 css({ p: '16 8', color: '#000000', bg: 'white', lineHeight: '1.6' });
 ```
+
+## Workflow Guidelines
+
+- Always perform tasks in parallel and simultaneously. For example, when reading and writing files, always do so concurrently. When executing multiple commands, always execute them in parallel.
