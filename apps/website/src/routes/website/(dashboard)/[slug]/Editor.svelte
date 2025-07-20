@@ -547,259 +547,262 @@
 {#if $query.entity.node.__typename === 'Post'}
   <div class={flex({ height: 'full' })}>
     <div class={flex({ flexDirection: 'column', flexGrow: '1' })}>
-      <div hidden={app.preference.current.zenModeEnabled}>
-        <div
-          class={flex({
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '6px',
-            flexShrink: '0',
-            paddingLeft: '24px',
-            paddingRight: '8px',
-            height: '36px',
-          })}
-        >
-          <div class={flex({ alignItems: 'center', gap: '4px' })}>
-            <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
+      <div
+        class={flex({
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '6px',
+          flexShrink: '0',
+          paddingLeft: '24px',
+          paddingRight: '8px',
+          height: '36px',
+        })}
+      >
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
 
-            <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>내 포스트</div>
-            <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
+          <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>내 포스트</div>
+          <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
 
-            {#each $query.entity.ancestors as ancestor (ancestor.id)}
-              {#if ancestor.node.__typename === 'Folder'}
-                <div class={css({ fontSize: '12px', color: 'text.disabled' })}>{ancestor.node.name}</div>
-                <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
-              {/if}
-            {/each}
-
-            <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>{effectiveTitle}</div>
-          </div>
-
-          <div class={flex({ alignItems: 'center', gap: '4px' })}>
-            <div class={center({ size: '24px' })}>
-              <div
-                style:background-color={match(connectionStatus)
-                  .with('connecting', () => '#eab308')
-                  .with('connected', () => '#22c55e')
-                  .with('disconnected', () => '#ef4444')
-                  .exhaustive()}
-                class={css({ size: '8px', borderRadius: 'full' })}
-                use:tooltip={{
-                  message: match(connectionStatus)
-                    .with('connecting', () => '서버 연결 중...')
-                    .with('connected', () => '실시간 저장 중')
-                    .with('disconnected', () => '서버 연결 끊김')
-                    .exhaustive(),
-                  placement: 'left',
-                  offset: 12,
-                  delay: 0,
-                }}
-              ></div>
-            </div>
-
-            {#if $query.me.id === $query.entity.user.id}
-              <Menu>
-                {#snippet button({ open })}
-                  <button
-                    class={center({
-                      borderRadius: '4px',
-                      size: '24px',
-                      color: 'text.faint',
-                      transition: 'common',
-                      _hover: {
-                        color: 'text.subtle',
-                        backgroundColor: 'surface.muted',
-                      },
-                      _pressed: {
-                        color: 'text.subtle',
-                        backgroundColor: 'surface.muted',
-                      },
-                    })}
-                    aria-pressed={open}
-                    type="button"
-                  >
-                    <Icon icon={ElipsisIcon} size={16} />
-                  </button>
-                {/snippet}
-
-                <MenuItem external href={$query.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
-
-                <HorizontalDivider color="secondary" />
-
-                <MenuItem
-                  icon={BlendIcon}
-                  onclick={() => {
-                    app.state.shareOpen = $query.entity.id;
-                    mixpanel.track('open_post_share_modal', { via: 'editor' });
-                  }}
-                >
-                  공유 및 게시
-                </MenuItem>
-
-                <MenuItem
-                  icon={CopyIcon}
-                  onclick={async () => {
-                    if ($query.entity.node.__typename === 'Post') {
-                      const postId = $query.entity.node.id;
-
-                      const resp = await duplicatePost({ postId });
-                      mixpanel.track('duplicate_post', { via: 'editor' });
-                      await goto(`/${resp.entity.slug}`);
-                    }
-                  }}
-                >
-                  복제
-                </MenuItem>
-
-                {#if $query.entity.node.type === PostType.NORMAL}
-                  <MenuItem
-                    icon={ShapesIcon}
-                    onclick={() => {
-                      Dialog.confirm({
-                        title: '템플릿으로 전환',
-                        message:
-                          '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
-                        actionLabel: '전환',
-                        actionHandler: async () => {
-                          if ($query.entity.node.__typename === 'Post') {
-                            const postId = $query.entity.node.id;
-
-                            await updatePostType({ postId, type: PostType.TEMPLATE });
-                          }
-                        },
-                      });
-                    }}
-                  >
-                    템플릿으로 전환
-                  </MenuItem>
-                {:else if $query.entity.node.type === PostType.TEMPLATE}
-                  <MenuItem
-                    icon={ShapesIcon}
-                    onclick={() => {
-                      Dialog.confirm({
-                        title: '포스트로 전환',
-                        message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
-                        actionLabel: '전환',
-                        actionHandler: async () => {
-                          if ($query.entity.node.__typename === 'Post') {
-                            const postId = $query.entity.node.id;
-
-                            await updatePostType({ postId, type: PostType.NORMAL });
-                          }
-                        },
-                      });
-                    }}
-                  >
-                    포스트로 전환
-                  </MenuItem>
-                {/if}
-
-                <HorizontalDivider color="secondary" />
-
-                {#if $query.me.role === UserRole.ADMIN}
-                  <MenuItem
-                    icon={IconClockFading}
-                    onclick={() => {
-                      showTimeline = !showTimeline;
-                    }}
-                  >
-                    {#if showTimeline}
-                      타임라인 닫기
-                    {:else}
-                      타임라인
-                    {/if}
-                  </MenuItem>
-                {/if}
-
-                <HorizontalDivider color="secondary" />
-
-                <MenuItem
-                  icon={TrashIcon}
-                  onclick={() => {
-                    if ($query.entity.node.__typename === 'Post') {
-                      const postId = $query.entity.node.id;
-                      const title = $query.entity.node.title;
-
-                      Dialog.confirm({
-                        title: '포스트 삭제',
-                        message: `정말 "${title}" 포스트를 삭제하시겠어요?`,
-                        action: 'danger',
-                        actionLabel: '삭제',
-                        actionHandler: async () => {
-                          await deletePost({ postId });
-                          mixpanel.track('delete_post', { via: 'editor' });
-                          app.state.ancestors = [];
-                          app.state.current = undefined;
-                        },
-                      });
-                    }
-                  }}
-                  variant="danger"
-                >
-                  삭제
-                </MenuItem>
-              </Menu>
+          {#each $query.entity.ancestors as ancestor (ancestor.id)}
+            {#if ancestor.node.__typename === 'Folder'}
+              <div class={css({ fontSize: '12px', color: 'text.disabled' })}>{ancestor.node.name}</div>
+              <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
             {/if}
+          {/each}
 
-            <button
-              class={center({
-                borderRadius: '4px',
-                size: '24px',
-                color: 'text.faint',
-                transition: 'common',
-                _hover: { backgroundColor: 'surface.muted' },
-              })}
-              onclick={() => {
-                app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
-                if (app.preference.current.zenModeEnabled) {
-                  mixpanel.track('zen_mode_enabled', { via: 'editor' });
-                } else {
-                  mixpanel.track('zen_mode_disabled', { via: 'editor' });
-                }
-              }}
-              type="button"
-              use:tooltip={{
-                message: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
-                keys: ['Mod', 'Shift', 'M'],
-              }}
-            >
-              <Icon style={css.raw({ color: 'text.faint' })} icon={Maximize2Icon} size={16} />
-            </button>
-
-            <button
-              class={center({
-                borderRadius: '4px',
-                size: '24px',
-                color: 'text.faint',
-                transition: 'common',
-                _hover: { backgroundColor: 'surface.muted' },
-              })}
-              onclick={() => {
-                app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
-                mixpanel.track('toggle_panel_expanded', { expanded: app.preference.current.panelExpanded });
-              }}
-              type="button"
-              use:tooltip={{
-                message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기',
-                keys: ['Mod', 'Shift', 'P'],
-              }}
-            >
-              <Icon
-                style={css.raw({ color: 'text.faint' })}
-                icon={app.preference.current.panelExpanded ? PanelRightCloseIcon : PanelRightOpenIcon}
-                size={16}
-              />
-            </button>
-          </div>
+          <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>{effectiveTitle}</div>
         </div>
 
-        <HorizontalDivider color="secondary" />
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <div class={center({ size: '24px' })}>
+            <div
+              style:background-color={match(connectionStatus)
+                .with('connecting', () => '#eab308')
+                .with('connected', () => '#22c55e')
+                .with('disconnected', () => '#ef4444')
+                .exhaustive()}
+              class={css({ size: '8px', borderRadius: 'full' })}
+              use:tooltip={{
+                message: match(connectionStatus)
+                  .with('connecting', () => '서버 연결 중...')
+                  .with('connected', () => '실시간 저장 중')
+                  .with('disconnected', () => '서버 연결 끊김')
+                  .exhaustive(),
+                placement: 'left',
+                offset: 12,
+                delay: 0,
+              }}
+            ></div>
+          </div>
 
-        <Toolbar $site={$query.entity.site} {doc} {editor} />
+          {#if $query.me.id === $query.entity.user.id}
+            <Menu>
+              {#snippet button({ open })}
+                <button
+                  class={center({
+                    borderRadius: '4px',
+                    size: '24px',
+                    color: 'text.faint',
+                    transition: 'common',
+                    _hover: {
+                      color: 'text.subtle',
+                      backgroundColor: 'surface.muted',
+                    },
+                    _pressed: {
+                      color: 'text.subtle',
+                      backgroundColor: 'surface.muted',
+                    },
+                  })}
+                  aria-pressed={open}
+                  type="button"
+                >
+                  <Icon icon={ElipsisIcon} size={16} />
+                </button>
+              {/snippet}
+
+              <MenuItem external href={$query.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+
+              <HorizontalDivider color="secondary" />
+
+              <MenuItem
+                icon={BlendIcon}
+                onclick={() => {
+                  app.state.shareOpen = $query.entity.id;
+                  mixpanel.track('open_post_share_modal', { via: 'editor' });
+                }}
+              >
+                공유 및 게시
+              </MenuItem>
+
+              <MenuItem
+                icon={CopyIcon}
+                onclick={async () => {
+                  if ($query.entity.node.__typename === 'Post') {
+                    const postId = $query.entity.node.id;
+
+                    const resp = await duplicatePost({ postId });
+                    mixpanel.track('duplicate_post', { via: 'editor' });
+                    await goto(`/${resp.entity.slug}`);
+                  }
+                }}
+              >
+                복제
+              </MenuItem>
+
+              {#if $query.entity.node.type === PostType.NORMAL}
+                <MenuItem
+                  icon={ShapesIcon}
+                  onclick={() => {
+                    Dialog.confirm({
+                      title: '템플릿으로 전환',
+                      message:
+                        '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
+                      actionLabel: '전환',
+                      actionHandler: async () => {
+                        if ($query.entity.node.__typename === 'Post') {
+                          const postId = $query.entity.node.id;
+
+                          await updatePostType({ postId, type: PostType.TEMPLATE });
+                        }
+                      },
+                    });
+                  }}
+                >
+                  템플릿으로 전환
+                </MenuItem>
+              {:else if $query.entity.node.type === PostType.TEMPLATE}
+                <MenuItem
+                  icon={ShapesIcon}
+                  onclick={() => {
+                    Dialog.confirm({
+                      title: '포스트로 전환',
+                      message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
+                      actionLabel: '전환',
+                      actionHandler: async () => {
+                        if ($query.entity.node.__typename === 'Post') {
+                          const postId = $query.entity.node.id;
+
+                          await updatePostType({ postId, type: PostType.NORMAL });
+                        }
+                      },
+                    });
+                  }}
+                >
+                  포스트로 전환
+                </MenuItem>
+              {/if}
+
+              <HorizontalDivider color="secondary" />
+
+              {#if $query.me.role === UserRole.ADMIN}
+                <MenuItem
+                  icon={IconClockFading}
+                  onclick={() => {
+                    showTimeline = !showTimeline;
+                  }}
+                >
+                  {#if showTimeline}
+                    타임라인 닫기
+                  {:else}
+                    타임라인
+                  {/if}
+                </MenuItem>
+              {/if}
+
+              <HorizontalDivider color="secondary" />
+
+              <MenuItem
+                icon={TrashIcon}
+                onclick={() => {
+                  if ($query.entity.node.__typename === 'Post') {
+                    const postId = $query.entity.node.id;
+                    const title = $query.entity.node.title;
+
+                    Dialog.confirm({
+                      title: '포스트 삭제',
+                      message: `정말 "${title}" 포스트를 삭제하시겠어요?`,
+                      action: 'danger',
+                      actionLabel: '삭제',
+                      actionHandler: async () => {
+                        await deletePost({ postId });
+                        mixpanel.track('delete_post', { via: 'editor' });
+                        app.state.ancestors = [];
+                        app.state.current = undefined;
+                      },
+                    });
+                  }
+                }}
+                variant="danger"
+              >
+                삭제
+              </MenuItem>
+            </Menu>
+          {/if}
+
+          <button
+            class={center({
+              borderRadius: '4px',
+              size: '24px',
+              color: 'text.faint',
+              transition: 'common',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            onclick={() => {
+              app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
+              if (app.preference.current.zenModeEnabled) {
+                mixpanel.track('zen_mode_enabled', { via: 'editor' });
+              } else {
+                mixpanel.track('zen_mode_disabled', { via: 'editor' });
+              }
+            }}
+            type="button"
+            use:tooltip={{
+              message: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
+              keys: ['Mod', 'Shift', 'M'],
+            }}
+          >
+            <Icon style={css.raw({ color: 'text.faint' })} icon={Maximize2Icon} size={16} />
+          </button>
+
+          <button
+            class={center({
+              borderRadius: '4px',
+              size: '24px',
+              color: 'text.faint',
+              transition: 'common',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            onclick={() => {
+              app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
+              mixpanel.track('toggle_panel_expanded', { expanded: app.preference.current.panelExpanded });
+            }}
+            type="button"
+            use:tooltip={{
+              message: app.preference.current.panelExpanded ? '패널 닫기' : '패널 열기',
+              keys: ['Mod', 'Shift', 'P'],
+            }}
+          >
+            <Icon
+              style={css.raw({ color: 'text.faint' })}
+              icon={app.preference.current.panelExpanded ? PanelRightCloseIcon : PanelRightOpenIcon}
+              size={16}
+            />
+          </button>
+        </div>
       </div>
 
+      <HorizontalDivider color="secondary" />
+
+      <Toolbar $site={$query.entity.site} {doc} {editor} />
+
       <div
-        class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}
+        style:position={app.preference.current.zenModeEnabled ? 'fixed' : 'relative'}
+        style:top={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+        style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+        style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+        style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+        class={flex({ position: 'relative', flexGrow: '1', zIndex: '1', overflowY: 'hidden', backgroundColor: 'surface.default' })}
         onmouseleave={() => {
           showAnchorOutline = false;
         }}

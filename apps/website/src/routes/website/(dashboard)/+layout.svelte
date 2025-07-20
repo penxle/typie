@@ -101,7 +101,7 @@
     }
   `);
 
-  const app = setupAppContext($query.me.id);
+  setupAppContext($query.me.id);
 
   $effect(() => {
     return untrack(() => {
@@ -201,12 +201,11 @@
       <Sidebar {$query} $user={$query.me} />
 
       <div
-        style:margin-top={app.preference.current.zenModeEnabled ? '0px' : '8px'}
-        style:margin-right={app.preference.current.zenModeEnabled ? '0px' : '8px'}
-        style:margin-bottom={app.preference.current.zenModeEnabled ? '0px' : '8px'}
         class={css({
           flexGrow: '1',
           borderWidth: '[0.5px]',
+          marginY: '8px',
+          marginRight: '8px',
           borderRadius: '4px',
           backgroundColor: 'surface.default',
           boxShadow: '[0 3px 6px -2px {colors.shadow.default/3}, 0 1px 1px {colors.shadow.default/5}]',
