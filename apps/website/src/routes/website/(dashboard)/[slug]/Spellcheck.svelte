@@ -249,7 +249,7 @@
   {@const error = errors.find((error) => error.id === activeId)}
 
   {#if error}
-    <div class={flex({ alignItems: 'center', gap: '4px', backgroundColor: 'surface.default' })} use:floating>
+    <div class={flex({ alignItems: 'center', gap: '4px', backgroundColor: 'surface.default', zIndex: '50' })} use:floating>
       {#each error.corrections as correction, index (index)}
         <button
           class={flex({
