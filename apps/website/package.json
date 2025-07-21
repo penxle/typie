@@ -43,6 +43,7 @@
     "es-hangul": "^2.3.5",
     "fast-json-stable-stringify": "^2.1.0",
     "focus-trap": "^7.6.5",
+    "graphql-request": "^7.2.0",
     "graphql-ws": "^6.0.6",
     "happy-dom": "^18.0.1",
     "hono": "^4.8.5",
