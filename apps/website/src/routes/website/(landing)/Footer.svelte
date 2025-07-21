@@ -141,9 +141,23 @@
                 color: 'dark.gray.200',
               },
             })}
-            href="/pricing2"
+            href="/pricing"
           >
             요금제
+          </a>
+          <a
+            class={css({
+              fontSize: '15px',
+              color: 'dark.gray.400',
+              fontFamily: 'Pretendard',
+              transition: 'colors',
+              _hover: {
+                color: 'dark.gray.200',
+              },
+            })}
+            href="/changelog"
+          >
+            업데이트 노트
           </a>
           <a
             class={css({
