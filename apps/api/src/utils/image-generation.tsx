@@ -152,11 +152,9 @@ export async function generateActivityImage(userId: string): Promise<Buffer> {
         activities.push({ date: currentDate, additions: 0, level: 0 });
       } else if (range === 0) {
         activities.push({ date: currentDate, additions: change.additions, level: 3 });
-      } else if (change.additions === max) {
-        activities.push({ date: currentDate, additions: change.additions, level: 5 });
       } else {
         const value = (change.additions - min) / range;
-        const level = (Math.round(value * 5) + 1) as Level;
+        const level = Math.min(Math.floor(value * 5) + 1, 5) as Level;
         activities.push({ date: currentDate, additions: change.additions, level });
       }
     } else {
