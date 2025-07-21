@@ -104,7 +104,6 @@
     backgroundColor: 'white',
   })}
 >
-  <!-- Background gradient -->
   <div
     class={css({
       position: 'absolute',
@@ -115,7 +114,6 @@
     })}
   ></div>
 
-  <!-- Dot pattern -->
   <div
     class={css({
       position: 'absolute',
@@ -128,7 +126,6 @@
     })}
   ></div>
 
-  <!-- Gradient orbs -->
   <div
     class={css({
       position: 'absolute',
@@ -163,64 +160,99 @@
     bind:this={elements[0]}
     class={css({
       position: 'relative',
-      paddingTop: '160px',
+      paddingTop: '100px',
       paddingBottom: '80px',
       paddingX: '24px',
       zIndex: '2',
       opacity: '0',
-      transform: 'translateY(20px)',
-      transition: '[opacity 0.4s ease-out, transform 0.4s ease-out]',
+      transform: 'translateY(40px) rotate(-1deg) scale(0.95)',
+      transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+      '&.in-view': {
+        opacity: '100',
+        transform: 'translateY(0) rotate(0) scale(1)',
+      },
     })}
   >
     <div class={center({ flexDirection: 'column', maxWidth: '[1024px]', marginX: 'auto' })}>
-      <!-- Badge -->
       <div
         class={css({
           display: 'inline-flex',
           alignItems: 'center',
           gap: '8px',
-          backgroundColor: 'amber.50',
-          color: 'amber.900',
+          backgroundColor: 'gray.900',
+          color: 'white',
           paddingX: '20px',
           paddingY: '8px',
-          borderRadius: 'full',
           fontSize: '14px',
-          fontWeight: 'semibold',
+          fontWeight: 'bold',
           marginBottom: '40px',
-          border: '1px solid',
-          borderColor: 'amber.200',
-          letterSpacing: 'wide',
-          animation: 'none',
+          letterSpacing: '[0.1em]',
+          textTransform: 'uppercase',
+          transform: 'rotate(-2deg) scale(0)',
+          transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s]',
+          '.in-view &': {
+            transform: 'rotate(-2deg) scale(1)',
+          },
         })}
       >
         <Icon icon={SparklesIcon} size={16} />
-        요금제
+        PRICING
       </div>
 
       <h1
         class={css({
-          fontSize: { base: '[48px]', md: '[72px]' },
-          fontWeight: 'extrabold',
+          fontSize: { base: '[56px]', md: '[80px]', lg: '[96px]' },
+          fontWeight: 'black',
           color: 'gray.900',
           textAlign: 'center',
           fontFamily: 'Paperlogy',
-          lineHeight: '[1.1]',
+          lineHeight: '[1]',
           marginBottom: '32px',
-          letterSpacing: 'tight',
+          textTransform: 'uppercase',
+          opacity: '0',
+          transform: 'translateY(20px)',
+          transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+          '.in-view &': {
+            opacity: '100',
+            transform: 'translateY(0)',
+          },
         })}
       >
-        심플하고 투명한 요금제
+        심플하고
+        <br />
+        <span
+          class={css({
+            backgroundColor: 'amber.400',
+            paddingX: '20px',
+            display: 'inline-block',
+            transform: 'rotate(1deg) scale(0)',
+            transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s]',
+            '.in-view &': {
+              transform: 'rotate(1deg) scale(1)',
+            },
+          })}
+        >
+          투명한
+        </span>
+        요금제
       </h1>
       <p
         class={css({
-          fontSize: { base: '18px', md: '21px' },
-          fontWeight: 'normal',
-          color: 'gray.600',
+          fontSize: '20px',
+          fontWeight: 'medium',
+          color: 'gray.700',
           textAlign: 'center',
           fontFamily: 'Pretendard',
           lineHeight: '[1.7]',
           maxWidth: '[700px]',
           marginX: 'auto',
+          opacity: '0',
+          transform: 'translateY(10px)',
+          transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s]',
+          '.in-view &': {
+            opacity: '100',
+            transform: 'translateY(0)',
+          },
         })}
       >
         복잡한 옵션 없이, 필요에 맞는 플랜을 선택하세요.
@@ -247,34 +279,45 @@
           display: 'flex',
           justifyContent: 'center',
           opacity: '0',
-          transform: 'translateY(20px)',
-          transition: '[opacity 0.4s ease-out 0.1s, transform 0.4s ease-out 0.1s]',
+          transform: 'translateY(20px) rotate(-1deg)',
+          transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'translateY(0) rotate(0)',
+          },
         })}
       >
         <div
           class={flex({
             alignItems: 'center',
-            gap: '0',
-            padding: '4px',
+            gap: '8px',
+            paddingY: '4px',
+            paddingX: '8px',
             backgroundColor: 'white',
-            borderRadius: 'full',
-            border: '1px solid',
-            borderColor: 'gray.200',
-            boxShadow: '[0 4px 12px rgba(0, 0, 0, 0.04)]',
+            border: '4px solid',
+            borderColor: 'gray.900',
+            boxShadow: '[6px 6px 0 0 #000]',
           })}
         >
           <button
             class={css({
               paddingX: '24px',
-              paddingY: '10px',
-              fontSize: '14px',
-              fontWeight: 'semibold',
-              borderRadius: 'full',
-              transition: '[all 0.2s ease]',
-              backgroundColor: billingPeriod === 'monthly' ? 'gray.900' : 'transparent',
-              color: billingPeriod === 'monthly' ? 'white' : 'gray.600',
-              boxShadow: billingPeriod === 'monthly' ? '[0 4px 12px rgba(0, 0, 0, 0.1)]' : undefined,
+              paddingY: '12px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              letterSpacing: '[0.05em]',
+              textTransform: 'uppercase',
+              transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              backgroundColor: billingPeriod === 'monthly' ? 'gray.900' : 'white',
+              color: billingPeriod === 'monthly' ? 'white' : 'gray.900',
               cursor: 'pointer',
+              border: 'none',
+              position: 'relative',
+              zIndex: billingPeriod === 'monthly' ? '2' : '1',
+              transform: billingPeriod === 'monthly' ? 'scale(1.05)' : 'scale(1)',
+              _hover: {
+                backgroundColor: billingPeriod === 'monthly' ? 'gray.800' : 'gray.100',
+              },
             })}
             onclick={() => (billingPeriod = 'monthly')}
             type="button"
@@ -284,15 +327,22 @@
           <button
             class={css({
               paddingX: '24px',
-              paddingY: '10px',
-              fontSize: '14px',
-              fontWeight: 'semibold',
-              borderRadius: 'full',
-              transition: '[all 0.2s ease]',
-              backgroundColor: billingPeriod === 'annually' ? 'gray.900' : 'transparent',
-              color: billingPeriod === 'annually' ? 'white' : 'gray.600',
-              boxShadow: billingPeriod === 'annually' ? '[0 4px 12px rgba(0, 0, 0, 0.1)]' : undefined,
+              paddingY: '12px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              letterSpacing: '[0.05em]',
+              textTransform: 'uppercase',
+              transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              backgroundColor: billingPeriod === 'annually' ? 'gray.900' : 'white',
+              color: billingPeriod === 'annually' ? 'white' : 'gray.900',
               cursor: 'pointer',
+              border: 'none',
+              position: 'relative',
+              zIndex: billingPeriod === 'annually' ? '2' : '1',
+              transform: billingPeriod === 'annually' ? 'scale(1.05)' : 'scale(1)',
+              _hover: {
+                backgroundColor: billingPeriod === 'annually' ? 'gray.800' : 'gray.100',
+              },
             })}
             onclick={() => (billingPeriod = 'annually')}
             type="button"
@@ -301,13 +351,16 @@
             <span
               class={css({
                 marginLeft: '8px',
-                paddingX: '8px',
-                paddingY: '2px',
+                paddingX: '10px',
+                paddingY: '4px',
                 fontSize: '12px',
-                fontWeight: 'semibold',
-                color: 'amber.800',
-                backgroundColor: 'amber.100',
-                borderRadius: 'full',
+                fontWeight: 'black',
+                color: 'gray.900',
+                backgroundColor: 'amber.400',
+                transform: 'rotate(-2deg)',
+                display: 'inline-block',
+                border: '2px solid',
+                borderColor: 'gray.900',
               })}
             >
               2개월 무료
@@ -324,49 +377,53 @@
           gap: '32px',
           opacity: '0',
           transform: 'translateY(20px)',
-          transition: '[opacity 0.4s ease-out 0.2s, transform 0.4s ease-out 0.2s]',
+          transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
           marginTop: '20px',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'translateY(0)',
+          },
         })}
       >
-        <!-- Basic Plan -->
         <div
           class={css({
             position: 'relative',
             backgroundColor: 'white',
-            borderRadius: '[32px]',
             padding: { base: '32px', md: '48px' },
-            border: '2px solid',
-            borderColor: 'gray.100',
-            boxShadow: '[0 1px 3px rgba(0, 0, 0, 0.02)]',
-            transition: '[all 0.3s ease]',
-            transform: 'translateZ(0)',
+            border: '4px solid',
+            borderColor: 'gray.900',
+            boxShadow: '[8px 8px 0 0 #000]',
+            transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+            transform: 'rotate(-0.5deg)',
             display: 'flex',
             flexDirection: 'column',
             _hover: {
-              transform: 'translateY(-8px)',
-              boxShadow: '[0 20px 40px rgba(0, 0, 0, 0.08)]',
-              borderColor: 'gray.200',
+              transform: 'translate(-4px, -4px) rotate(0deg)',
+              boxShadow: '[12px 12px 0 0 #000]',
             },
           })}
         >
           <h3
             class={css({
-              fontSize: '24px',
-              fontWeight: 'bold',
+              fontSize: '[28px]',
+              fontWeight: 'black',
               color: 'gray.900',
               fontFamily: 'Paperlogy',
-              marginBottom: '8px',
+              marginBottom: '12px',
+              textTransform: 'uppercase',
+              letterSpacing: '[0.05em]',
             })}
           >
             {plans.basic.name}
           </h3>
           <p
             class={css({
-              fontSize: '15px',
-              color: 'gray.600',
+              fontSize: '16px',
+              color: 'gray.700',
               fontFamily: 'Pretendard',
               marginBottom: '32px',
               lineHeight: '[1.6]',
+              fontWeight: 'medium',
             })}
           >
             {plans.basic.description}
@@ -374,76 +431,98 @@
 
           <div class={css({ marginBottom: '40px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px', height: '[72px]' })}>
-              <span class={css({ fontSize: '[48px]', fontWeight: 'extrabold', color: 'gray.900', lineHeight: '[1]' })}>무료</span>
+              <span class={css({ fontSize: '[56px]', fontWeight: 'black', color: 'gray.900', lineHeight: '[1]', fontFamily: 'Paperlogy' })}>
+                무료
+              </span>
             </div>
           </div>
 
           <a
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 'full',
-              paddingY: '12px',
-              borderRadius: 'full',
-              fontSize: '16px',
-              fontWeight: 'semibold',
-              backgroundColor: 'gray.100',
-              color: 'gray.900',
-              transition: 'all',
-              marginBottom: '32px',
-              _hover: {
-                backgroundColor: 'gray.200',
-              },
-            })}
+            class={cx(
+              'group',
+              css({
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 'full',
+                paddingY: '14px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                backgroundColor: 'gray.100',
+                color: 'gray.900',
+                border: '3px solid',
+                borderColor: 'gray.900',
+                transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                marginBottom: '32px',
+                textTransform: 'uppercase',
+                letterSpacing: '[0.05em]',
+                position: 'relative',
+                overflow: 'hidden',
+                _hover: {
+                  backgroundColor: 'gray.900',
+                  color: 'white',
+                  transform: 'translateY(-2px)',
+                },
+              }),
+            )}
             href={env.PUBLIC_AUTH_URL}
           >
             무료로 시작하기
           </a>
 
           <div class={flex({ flexDirection: 'column', gap: '16px', flex: '1' })}>
-            <p class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'gray.700' })}>포함 사항:</p>
-            <ul class={flex({ flexDirection: 'column', gap: '12px' })}>
+            <p
+              class={css({
+                fontSize: '14px',
+                fontWeight: 'bold',
+                color: 'gray.900',
+                textTransform: 'uppercase',
+                letterSpacing: '[0.05em]',
+              })}
+            >
+              포함 사항:
+            </p>
+            <ul class={flex({ flexDirection: 'column', gap: '16px' })}>
               {#each plans.basic.features as feature, index (index)}
                 <li class={flex({ alignItems: 'flex-start', gap: '12px' })}>
-                  <Icon style={css.raw({ color: 'gray.400', flexShrink: 0, marginTop: '2px' })} icon={CheckIcon} size={16} />
-                  <span class={css({ fontSize: '14px', color: 'gray.600', lineHeight: '[1.5]' })}>{feature}</span>
+                  <div
+                    class={css({
+                      width: '20px',
+                      height: '20px',
+                      backgroundColor: 'gray.200',
+                      border: '3px solid',
+                      borderColor: 'gray.900',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      marginTop: '2px',
+                    })}
+                  >
+                    <Icon style={css.raw({ color: 'gray.900' })} icon={CheckIcon} size={12} />
+                  </div>
+                  <span class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>{feature}</span>
                 </li>
               {/each}
             </ul>
           </div>
         </div>
 
-        <!-- Full Access Plan -->
         <div
           class={css({
             position: 'relative',
             backgroundColor: 'gray.900',
-            borderRadius: '[32px]',
             padding: { base: '32px', md: '48px' },
-            border: '2px solid',
-            borderColor: 'gray.800',
-            boxShadow: '[0 20px 40px rgba(0, 0, 0, 0.15)]',
-            transition: '[all 0.3s ease]',
-            transform: 'translateZ(0)',
+            border: '4px solid',
+            borderColor: 'gray.900',
+            boxShadow: '[8px 8px 0 0 #fbbf24]',
+            transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+            transform: 'rotate(0.5deg)',
             display: 'flex',
             flexDirection: 'column',
             _hover: {
-              transform: 'translateY(-8px)',
-              boxShadow: '[0 30px 60px rgba(0, 0, 0, 0.2)]',
-            },
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: '0',
-              left: '0',
-              right: '0',
-              bottom: '0',
-              backgroundImage: 'linear-gradient(to bottom, token(colors.amber.400), transparent 50%)',
-              opacity: '[0.08]',
-              pointerEvents: 'none',
-              borderRadius: '[32px]',
-              overflow: 'hidden',
+              transform: 'translate(-4px, -4px) rotate(0deg)',
+              boxShadow: '[12px 12px 0 0 #fbbf24]',
             },
           })}
         >
@@ -451,18 +530,20 @@
             <div
               class={css({
                 position: 'absolute',
-                top: '-14px',
-                left: '[50%]',
-                transform: 'translateX(-50%)',
+                top: '-20px',
+                right: '20px',
                 paddingX: '20px',
-                paddingY: '6px',
+                paddingY: '8px',
                 fontSize: '12px',
-                fontWeight: 'bold',
+                fontWeight: 'black',
                 color: 'gray.900',
                 backgroundColor: 'amber.400',
-                borderRadius: 'full',
-                letterSpacing: '[0.05em]',
-                boxShadow: '[0 4px 12px rgba(251, 191, 36, 0.3)]',
+                letterSpacing: '[0.1em]',
+                textTransform: 'uppercase',
+                border: '4px solid',
+                borderColor: 'gray.900',
+                transform: 'rotate(2deg)',
+                boxShadow: '[4px 4px 0 0 #000]',
                 zIndex: '10',
               })}
             >
@@ -472,22 +553,25 @@
 
           <h3
             class={css({
-              fontSize: '24px',
-              fontWeight: 'bold',
+              fontSize: '[28px]',
+              fontWeight: 'black',
               color: 'white',
               fontFamily: 'Paperlogy',
-              marginBottom: '8px',
+              marginBottom: '12px',
+              textTransform: 'uppercase',
+              letterSpacing: '[0.05em]',
             })}
           >
             {plans.full.name}
           </h3>
           <p
             class={css({
-              fontSize: '15px',
+              fontSize: '16px',
               color: 'gray.300',
               fontFamily: 'Pretendard',
               marginBottom: '32px',
               lineHeight: '[1.6]',
+              fontWeight: 'medium',
             })}
           >
             {plans.full.description}
@@ -497,23 +581,26 @@
             <div class={flex({ alignItems: 'baseline', gap: '8px', height: '[72px]' })}>
               <NumberFlow
                 class={css({
-                  fontSize: '[48px]',
-                  fontWeight: 'extrabold',
-                  color: 'white',
+                  fontSize: '[56px]',
+                  fontWeight: 'black',
+                  color: 'amber.400',
                   lineHeight: '[1]',
                   fontVariantNumeric: 'tabular-nums',
+                  letterSpacing: '[0.05em]',
+                  fontFamily: 'Paperlogy',
                 })}
                 value={currentPrice}
               />
               <div>
-                <span class={css({ fontSize: '16px', color: 'gray.400' })}>원 / 월</span>
+                <span class={css({ fontSize: '18px', color: 'gray.400', fontWeight: 'bold' })}>원 / 월</span>
                 <span
                   class={css({
-                    fontSize: '12px',
+                    fontSize: '14px',
                     color: 'gray.500',
                     opacity: billingPeriod === 'annually' ? '100' : '0',
                     transition: '[opacity 0.2s ease]',
                     marginLeft: '4px',
+                    fontWeight: 'medium',
                   })}
                 >
                   (연 {comma(plans.full.yearlyPrice)}원)
@@ -531,37 +618,70 @@
                 justifyContent: 'center',
                 gap: '8px',
                 width: 'full',
-                paddingY: '12px',
-                borderRadius: 'full',
+                paddingY: '14px',
                 fontSize: '16px',
-                fontWeight: 'semibold',
+                fontWeight: 'black',
                 backgroundColor: 'amber.400',
                 color: 'gray.900',
-                transition: 'all',
+                border: '3px solid',
+                borderColor: 'gray.900',
+                transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                 marginBottom: '32px',
+                textTransform: 'uppercase',
+                letterSpacing: '[0.05em]',
+                position: 'relative',
+                boxShadow: '[4px 4px 0 0 #000]',
                 _hover: {
-                  backgroundColor: 'amber.300',
+                  transform: 'translate(-2px, -2px)',
+                  boxShadow: '[6px 6px 0 0 #000]',
+                },
+                _active: {
+                  transform: 'translate(2px, 2px)',
+                  boxShadow: '[2px 2px 0 0 #000]',
                 },
               }),
             )}
             href={env.PUBLIC_AUTH_URL}
           >
-            <Icon icon={ZapIcon} size={16} />
+            <Icon icon={ZapIcon} size={18} />
             지금 시작하기
             <Icon
-              style={css.raw({ _groupHover: { transform: 'translateX(4px)' }, transition: '[transform 0.2s ease]' })}
+              style={css.raw({
+                transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                _groupHover: {
+                  transform: 'translateX(4px) rotate(-15deg)',
+                },
+              })}
               icon={ArrowRightIcon}
-              size={16}
+              size={18}
             />
           </a>
 
           <div class={flex({ flexDirection: 'column', gap: '16px', flex: '1' })}>
-            <p class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'gray.300' })}>제한 없이 모든 기능 사용:</p>
-            <ul class={flex({ flexDirection: 'column', gap: '12px' })}>
+            <p class={css({ fontSize: '14px', fontWeight: 'bold', color: 'white', textTransform: 'uppercase', letterSpacing: '[0.05em]' })}>
+              제한 없이 모든 기능 사용:
+            </p>
+            <ul class={flex({ flexDirection: 'column', gap: '16px' })}>
               {#each plans.full.features as feature, index (index)}
                 <li class={flex({ alignItems: 'flex-start', gap: '12px' })}>
-                  <Icon style={css.raw({ color: 'amber.400', flexShrink: 0, marginTop: '2px' })} icon={CheckIcon} size={16} />
-                  <span class={css({ fontSize: '14px', color: 'gray.400', lineHeight: '[1.5]' })}>{feature}</span>
+                  <div
+                    class={css({
+                      width: '20px',
+                      height: '20px',
+                      backgroundColor: 'amber.400',
+                      border: '3px solid',
+                      borderColor: 'gray.900',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      marginTop: '2px',
+                      transform: 'rotate(45deg)',
+                    })}
+                  >
+                    <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={CheckIcon} size={12} />
+                  </div>
+                  <span class={css({ fontSize: '15px', color: 'gray.300', lineHeight: '[1.6]', fontWeight: 'medium' })}>{feature}</span>
                 </li>
               {/each}
             </ul>
@@ -587,8 +707,13 @@
           flexDirection: 'column',
           marginBottom: '80px',
           opacity: '0',
-          transform: 'translateY(20px)',
-          transition: '[opacity 0.3s ease-out 0.15s, transform 0.3s ease-out 0.15s]',
+          transform: 'translateY(20px) rotate(-1deg)',
+          transition:
+            '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'translateY(0) rotate(0)',
+          },
         })}
       >
         <div
@@ -596,16 +721,16 @@
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            backgroundColor: 'gray.100',
-            color: 'gray.700',
-            paddingX: '16px',
-            paddingY: '6px',
-            borderRadius: 'full',
-            fontSize: '13px',
-            fontWeight: 'semibold',
-            marginBottom: '32px',
-            letterSpacing: 'wide',
+            backgroundColor: 'gray.900',
+            color: 'white',
+            paddingX: '20px',
+            paddingY: '8px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            marginBottom: '40px',
+            letterSpacing: '[0.1em]',
             textTransform: 'uppercase',
+            transform: 'rotate(-2deg)',
           })}
         >
           FAQ
@@ -613,16 +738,27 @@
 
         <h2
           class={css({
-            fontSize: { base: '[40px]', md: '[56px]' },
-            fontWeight: 'extrabold',
+            fontSize: { base: '[48px]', md: '[64px]' },
+            fontWeight: 'black',
             color: 'gray.900',
             textAlign: 'center',
             fontFamily: 'Paperlogy',
-            lineHeight: '[1.2]',
-            letterSpacing: 'tight',
+            lineHeight: '[1.1]',
+            textTransform: 'uppercase',
           })}
         >
-          자주 묻는 질문
+          자주 묻는
+          <br />
+          <span
+            class={css({
+              backgroundColor: 'amber.400',
+              paddingX: '20px',
+              display: 'inline-block',
+              transform: 'rotate(1deg)',
+            })}
+          >
+            질문
+          </span>
         </h2>
       </div>
 
@@ -633,28 +769,32 @@
           marginX: 'auto',
           opacity: '0',
           transform: 'translateY(20px)',
-          transition: '[opacity 0.3s ease-out 0.2s, transform 0.3s ease-out 0.2s]',
+          transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'translateY(0)',
+          },
         })}
       >
         <div
           class={flex({
             flexDirection: 'column',
-            gap: '16px',
+            gap: '24px',
           })}
         >
           {#each faqs as faq, index (index)}
             <div
               class={css({
                 backgroundColor: 'white',
-                borderRadius: '[16px]',
-                border: '1px solid',
-                borderColor: expandedFaqIndex === index ? 'gray.300' : 'gray.200',
-                transition: '[border-color 0.15s ease, box-shadow 0.15s ease]',
+                border: '4px solid',
+                borderColor: 'gray.900',
+                transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                 overflow: 'hidden',
-                boxShadow: expandedFaqIndex === index ? '[0 4px 12px rgba(0, 0, 0, 0.05)]' : undefined,
+                boxShadow: expandedFaqIndex === index ? '[8px 8px 0 0 #000]' : '[4px 4px 0 0 #000]',
+                transform: expandedFaqIndex === index ? 'translate(-2px, -2px)' : 'translate(0, 0)',
                 _hover: {
-                  borderColor: 'gray.300',
-                  boxShadow: '[0 4px 12px rgba(0, 0, 0, 0.05)]',
+                  transform: 'translate(-2px, -2px)',
+                  boxShadow: '[8px 8px 0 0 #000]',
                 },
               })}
             >
@@ -669,11 +809,11 @@
                   gap: '16px',
                   textAlign: 'left',
                   cursor: 'pointer',
-                  backgroundColor: 'transparent',
+                  backgroundColor: expandedFaqIndex === index ? 'amber.50' : 'transparent',
                   border: 'none',
-                  transition: '[background-color 0.2s ease]',
+                  transition: '[background-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                   _hover: {
-                    backgroundColor: expandedFaqIndex === index ? 'transparent' : 'gray.50',
+                    backgroundColor: expandedFaqIndex === index ? 'amber.50' : 'gray.50',
                   },
                 })}
                 onclick={() => toggleFaq(index)}
@@ -681,8 +821,8 @@
               >
                 <h3
                   class={css({
-                    fontSize: '18px',
-                    fontWeight: 'semibold',
+                    fontSize: '20px',
+                    fontWeight: 'bold',
                     color: 'gray.900',
                     fontFamily: 'Pretendard',
                     lineHeight: '[1.5]',
@@ -690,16 +830,29 @@
                 >
                   {faq.question}
                 </h3>
-                <Icon
-                  style={css.raw({
-                    color: 'gray.500',
+                <div
+                  class={css({
+                    width: '32px',
+                    height: '32px',
+                    backgroundColor: expandedFaqIndex === index ? 'gray.900' : 'amber.400',
+                    border: '3px solid',
+                    borderColor: 'gray.900',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     flexShrink: 0,
                     transform: expandedFaqIndex === index ? 'rotate(180deg)' : 'rotate(0deg)',
                     transition: '[transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)]',
                   })}
-                  icon={ChevronDownIcon}
-                  size={20}
-                />
+                >
+                  <Icon
+                    style={css.raw({
+                      color: expandedFaqIndex === index ? 'white' : 'gray.900',
+                    })}
+                    icon={ChevronDownIcon}
+                    size={18}
+                  />
+                </div>
               </button>
 
               <div
@@ -714,22 +867,31 @@
                     overflow: 'hidden',
                   })}
                 >
-                  <p
+                  <div
                     class={css({
-                      fontSize: '16px',
-                      color: 'gray.600',
-                      fontFamily: 'Pretendard',
-                      lineHeight: '[1.7]',
-                      paddingX: '32px',
-                      paddingBottom: '24px',
-                      opacity: expandedFaqIndex === index ? '100' : '0',
-                      transform: expandedFaqIndex === index ? 'translateY(0)' : 'translateY(-10px)',
-                      transition: '[opacity 0.2s ease-out, transform 0.2s ease-out]',
-                      transitionDelay: expandedFaqIndex === index ? '0.05s' : '0s',
+                      backgroundColor: 'amber.50',
+                      borderTop: '4px solid',
+                      borderColor: 'gray.900',
                     })}
                   >
-                    {faq.answer}
-                  </p>
+                    <p
+                      class={css({
+                        fontSize: '17px',
+                        color: 'gray.800',
+                        fontFamily: 'Pretendard',
+                        lineHeight: '[1.7]',
+                        paddingX: '32px',
+                        paddingY: '24px',
+                        fontWeight: 'medium',
+                        opacity: expandedFaqIndex === index ? '100' : '0',
+                        transform: expandedFaqIndex === index ? 'translateY(0)' : 'translateY(-10px)',
+                        transition: '[opacity 0.2s ease-out, transform 0.2s ease-out]',
+                        transitionDelay: expandedFaqIndex === index ? '0.05s' : '0s',
+                      })}
+                    >
+                      {faq.answer}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -747,33 +909,49 @@
       backgroundColor: 'gray.900',
       overflow: 'hidden',
       zIndex: '2',
+      borderTop: '8px solid',
+      borderColor: 'gray.900',
     })}
   >
-    <!-- Background pattern -->
     <div
       class={css({
         position: 'absolute',
         inset: '0',
-        backgroundImage: 'radial-gradient(circle at 1px 1px, token(colors.gray.800) 1px, transparent 1px)',
-        backgroundSize: '[40px 40px]',
-        opacity: '[0.5]',
+        backgroundImage: `
+          repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 20px,
+            rgba(251, 191, 36, 0.1) 20px,
+            rgba(251, 191, 36, 0.1) 40px
+          )
+        `,
         pointerEvents: 'none',
       })}
     ></div>
 
-    <!-- Gradient glow -->
     <div
       class={css({
         position: 'absolute',
-        top: '[50%]',
-        left: '[50%]',
-        transform: 'translate(-50%, -50%)',
-        width: '[800px]',
-        height: '[400px]',
-        backgroundImage: 'radial-gradient(ellipse, token(colors.amber.500), transparent)',
+        top: '[10%]',
+        left: '[5%]',
+        width: '100px',
+        height: '100px',
+        backgroundColor: 'amber.400',
+        transform: 'rotate(45deg)',
+        opacity: '[0.2]',
+      })}
+    ></div>
+    <div
+      class={css({
+        position: 'absolute',
+        bottom: '[15%]',
+        right: '[10%]',
+        width: '80px',
+        height: '80px',
+        backgroundColor: 'amber.400',
+        transform: 'rotate(15deg)',
         opacity: '[0.15]',
-        filter: '[blur(100px)]',
-        pointerEvents: 'none',
       })}
     ></div>
 
@@ -784,8 +962,13 @@
           flexDirection: 'column',
           textAlign: 'center',
           opacity: '0',
-          transform: 'translateY(20px)',
-          transition: '[opacity 0.3s ease-out 0.15s, transform 0.3s ease-out 0.15s]',
+          transform: 'translateY(40px) rotate(-1deg) scale(0.95)',
+          transition:
+            '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'translateY(0) rotate(0) scale(1)',
+          },
         })}
       >
         <div
@@ -793,47 +976,59 @@
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            backgroundColor: 'gray.800',
-            color: 'amber.400',
-            paddingX: '20px',
-            paddingY: '8px',
-            borderRadius: 'full',
+            backgroundColor: 'amber.400',
+            color: 'gray.900',
+            paddingX: '24px',
+            paddingY: '10px',
             fontSize: '14px',
-            fontWeight: 'semibold',
-            marginBottom: '40px',
-            border: '1px solid',
-            borderColor: 'gray.700',
-            animation: '[shimmer 3s linear infinite]',
-            backgroundImage: 'linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.1) 50%, transparent)',
-            backgroundSize: '[200% 100%]',
+            fontWeight: 'black',
+            marginBottom: '48px',
+            border: '4px solid',
+            borderColor: 'gray.900',
+            letterSpacing: '[0.1em]',
+            textTransform: 'uppercase',
+            transform: 'rotate(-2deg)',
+            boxShadow: '[4px 4px 0 0 #000]',
           })}
         >
           <Icon icon={SparklesIcon} size={16} />
-          지금 시작하세요
+          START NOW
         </div>
 
         <h2
           class={css({
-            fontSize: { base: '[48px]', md: '[64px]' },
-            fontWeight: 'extrabold',
+            fontSize: { base: '[64px]', md: '[80px]', lg: '[96px]' },
+            fontWeight: 'black',
             color: 'white',
             fontFamily: 'Paperlogy',
-            marginBottom: '24px',
-            lineHeight: '[1.1]',
-            letterSpacing: 'tight',
+            marginBottom: '32px',
+            lineHeight: '[1]',
+            textTransform: 'uppercase',
           })}
         >
-          준비되셨나요?
+          준비되셨나요
+          <span
+            class={css({
+              display: 'inline-block',
+              backgroundColor: 'amber.400',
+              color: 'gray.900',
+              paddingX: '24px',
+              marginX: '8px',
+              transform: 'rotate(2deg)',
+            })}
+          >
+            ?
+          </span>
         </h2>
         <p
           class={css({
             fontSize: { base: '20px', md: '24px' },
-            fontWeight: 'normal',
+            fontWeight: 'medium',
             color: 'gray.300',
             fontFamily: 'Pretendard',
-            marginBottom: '48px',
+            marginBottom: '56px',
             lineHeight: '[1.6]',
-            maxWidth: '[600px]',
+            maxWidth: '[700px]',
             marginX: 'auto',
           })}
         >
@@ -848,21 +1043,27 @@
             css({
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '8px',
-              paddingX: '32px',
-              paddingY: '16px',
-              fontSize: '18px',
-              fontWeight: 'semibold',
+              gap: '10px',
+              paddingX: '40px',
+              paddingY: '20px',
+              fontSize: '20px',
+              fontWeight: 'black',
               color: 'gray.900',
               backgroundColor: 'amber.400',
-              borderRadius: 'full',
-              transition: '[all 0.3s ease]',
-              transform: 'scale(1)',
-              boxShadow: '[0 8px 24px rgba(251, 191, 36, 0.3)]',
+              border: '4px solid',
+              borderColor: 'gray.900',
+              transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              transform: 'rotate(-1deg)',
+              textTransform: 'uppercase',
+              letterSpacing: '[0.05em]',
+              boxShadow: '[8px 8px 0 0 #000]',
               _hover: {
-                backgroundColor: 'amber.300',
-                transform: 'scale(1.05)',
-                boxShadow: '[0 12px 32px rgba(251, 191, 36, 0.4)]',
+                transform: 'translate(-4px, -4px) rotate(0)',
+                boxShadow: '[12px 12px 0 0 #000]',
+              },
+              _active: {
+                transform: 'translate(4px, 4px)',
+                boxShadow: '[4px 4px 0 0 #000]',
               },
             }),
           )}
@@ -870,38 +1071,17 @@
         >
           무료로 시작하기
           <Icon
-            style={css.raw({ _groupHover: { transform: 'translateX(4px)' }, transition: '[transform 0.2s ease]' })}
+            style={css.raw({
+              transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              _groupHover: {
+                transform: 'translateX(4px) rotate(-15deg)',
+              },
+            })}
             icon={ArrowRightIcon}
-            size={20}
+            size={24}
           />
         </a>
       </div>
     </div>
   </section>
 </div>
-
-<style>
-  @keyframes -global-float {
-    0%,
-    100% {
-      transform: translateY(0px);
-    }
-    50% {
-      transform: translateY(-20px);
-    }
-  }
-
-  @keyframes -global-shimmer {
-    0% {
-      background-position: -200% center;
-    }
-    100% {
-      background-position: 200% center;
-    }
-  }
-
-  :global(.in-view) {
-    opacity: 1 !important;
-    transform: translateY(0) !important;
-  }
-</style>

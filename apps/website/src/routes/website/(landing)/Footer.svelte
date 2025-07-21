@@ -10,9 +10,11 @@
 <footer
   class={css({
     width: 'full',
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'gray.900',
     position: 'relative',
     overflow: 'hidden',
+    borderTop: '4px solid',
+    borderColor: 'gray.900',
   })}
 >
   <div
@@ -20,94 +22,102 @@
       maxWidth: '[1200px]',
       marginX: 'auto',
       paddingX: '24px',
-      paddingTop: '64px',
-      paddingBottom: '24px',
+      paddingTop: '80px',
+      paddingBottom: '60px',
       position: 'relative',
     })}
   >
     <div
       class={css({
         display: 'grid',
-        gridTemplateColumns: '2fr 1fr 1fr',
-        gap: '48px',
-        marginBottom: '64px',
+        gridTemplateColumns: { base: '1fr', lg: '2fr 1fr 1fr' },
+        gap: { base: '48px', lg: '64px' },
+        marginBottom: '80px',
       })}
     >
       <div>
-        <div class={flex({ align: 'center', gap: '16px', marginBottom: '16px' })}>
-          <Wordmark class={css({ height: '20px', color: 'dark.gray.50' })} />
+        <div class={flex({ align: 'center', gap: '20px', marginBottom: '24px', flexWrap: 'wrap' })}>
+          <Wordmark class={css({ height: '24px', color: 'white' })} />
           <div class={flex({ gap: '12px' })}>
             <a
               class={css({
-                width: '[32px]',
-                height: '[32px]',
-                borderRadius: 'full',
-                color: 'dark.gray.400',
-                backgroundColor: 'dark.gray.900',
+                width: '32px',
+                height: '32px',
+                backgroundColor: 'gray.800',
+                color: 'gray.500',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all',
+                transition: '[color 0.2s ease, background-color 0.2s ease]',
                 _hover: {
-                  backgroundColor: 'dark.gray.800',
+                  backgroundColor: 'gray.700',
+                  color: 'gray.300',
                 },
               })}
               aria-label="Twitter"
               href="https://twitter.com/typieofficial"
             >
-              <Icon icon={TwitterIcon} size={16} />
+              <Icon icon={TwitterIcon} size={14} />
             </a>
             <a
               class={css({
-                width: '[32px]',
-                height: '[32px]',
-                borderRadius: 'full',
-                color: 'dark.gray.400',
-                backgroundColor: 'dark.gray.900',
+                width: '32px',
+                height: '32px',
+                backgroundColor: 'gray.800',
+                color: 'gray.500',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all',
+                transition: '[color 0.2s ease, background-color 0.2s ease]',
                 _hover: {
-                  backgroundColor: 'dark.gray.800',
+                  backgroundColor: 'gray.700',
+                  color: 'gray.300',
                 },
               })}
               aria-label="GitHub"
               href="https://github.com/penxle"
             >
-              <Icon icon={GithubIcon} size={16} />
+              <Icon icon={GithubIcon} size={14} />
             </a>
           </div>
         </div>
 
         <div
           class={css({
-            fontSize: '13px',
-            color: 'dark.gray.500',
+            fontSize: '12px',
             fontFamily: 'Pretendard',
             lineHeight: '[1.6]',
+            color: 'gray.600',
+            '& p': {
+              marginBottom: '4px',
+            },
+            '& p:last-child': {
+              marginBottom: '0',
+            },
           })}
         >
           <p>(주) 펜슬컴퍼니</p>
-          <p>대표: 배준현</p>
-          <p>개인정보관리책임자: 배준현</p>
+          <p>대표: 배준현 | 개인정보관리책임자: 배준현</p>
           <p>사업자등록번호: 610-88-03078</p>
           <p>통신판매업신고번호: 2023-서울강남-4541</p>
-          <p>주소: 서울특별시 강남구 강남대로100길 14, 6층</p>
-          <p>전화: 02-565-7695</p>
+          <p>서울특별시 강남구 강남대로100길 14, 6층</p>
+          <p>02-565-7695</p>
         </div>
       </div>
 
       <div>
         <h4
           class={css({
-            fontSize: '13px',
-            fontWeight: 'semibold',
-            color: 'dark.gray.300',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: 'white',
             fontFamily: 'Pretendard',
-            marginBottom: '16px',
+            marginBottom: '20px',
             textTransform: 'uppercase',
-            letterSpacing: '[0.05em]',
+            letterSpacing: '[0.1em]',
+            paddingBottom: '12px',
+            borderBottom: '3px solid',
+            borderColor: 'gray.700',
           })}
         >
           서비스
@@ -116,11 +126,15 @@
           <a
             class={css({
               fontSize: '15px',
-              color: 'dark.gray.400',
+              color: 'gray.400',
               fontFamily: 'Pretendard',
-              transition: 'colors',
+              fontWeight: 'medium',
+              transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'white',
+                textDecoration: 'underline',
+                textDecorationThickness: '2px',
+                textUnderlineOffset: '4px',
               },
             })}
             href="/"
@@ -130,11 +144,15 @@
           <a
             class={css({
               fontSize: '15px',
-              color: 'dark.gray.400',
+              color: 'gray.400',
               fontFamily: 'Pretendard',
-              transition: 'colors',
+              fontWeight: 'medium',
+              transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'white',
+                textDecoration: 'underline',
+                textDecorationThickness: '2px',
+                textUnderlineOffset: '4px',
               },
             })}
             href="/pricing"
@@ -144,11 +162,15 @@
           <a
             class={css({
               fontSize: '15px',
-              color: 'dark.gray.400',
+              color: 'gray.400',
               fontFamily: 'Pretendard',
-              transition: 'colors',
+              fontWeight: 'medium',
+              transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'white',
+                textDecoration: 'underline',
+                textDecorationThickness: '2px',
+                textUnderlineOffset: '4px',
               },
             })}
             href="/changelog"
@@ -158,11 +180,15 @@
           <a
             class={css({
               fontSize: '15px',
-              color: 'dark.gray.400',
+              color: 'gray.400',
               fontFamily: 'Pretendard',
-              transition: 'colors',
+              fontWeight: 'medium',
+              transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'white',
+                textDecoration: 'underline',
+                textDecorationThickness: '2px',
+                textUnderlineOffset: '4px',
               },
             })}
             href="https://typie.link/help"
@@ -177,13 +203,16 @@
       <div>
         <h4
           class={css({
-            fontSize: '13px',
-            fontWeight: 'semibold',
-            color: 'dark.gray.300',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: 'white',
             fontFamily: 'Pretendard',
-            marginBottom: '16px',
+            marginBottom: '20px',
             textTransform: 'uppercase',
-            letterSpacing: '[0.05em]',
+            letterSpacing: '[0.1em]',
+            paddingBottom: '12px',
+            borderBottom: '3px solid',
+            borderColor: 'gray.700',
           })}
         >
           정책
@@ -192,11 +221,15 @@
           <a
             class={css({
               fontSize: '15px',
-              color: 'dark.gray.400',
+              color: 'gray.400',
               fontFamily: 'Pretendard',
-              transition: 'colors',
+              fontWeight: 'medium',
+              transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'white',
+                textDecoration: 'underline',
+                textDecorationThickness: '2px',
+                textUnderlineOffset: '4px',
               },
             })}
             href="https://help.typie.co/legal/terms"
@@ -208,12 +241,15 @@
           <a
             class={css({
               fontSize: '15px',
-              color: 'dark.gray.400',
+              color: 'gray.400',
               fontFamily: 'Pretendard',
               fontWeight: 'medium',
-              transition: 'colors',
+              transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'white',
+                textDecoration: 'underline',
+                textDecorationThickness: '2px',
+                textUnderlineOffset: '4px',
               },
             })}
             href="https://help.typie.co/legal/privacy"
