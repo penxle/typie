@@ -7,6 +7,8 @@
 
   let { data } = $props();
   let articles = $state<HTMLElement[]>([]);
+  let elements = $state<HTMLElement[]>([]);
+  let headerElement = $state<HTMLElement>();
 
   onMount(() => {
     const observer = new IntersectionObserver(
@@ -18,19 +20,29 @@
         });
       },
       {
-        threshold: 0.05,
-        rootMargin: '0px 0px 100px 0px',
+        threshold: 0.1,
+        rootMargin: '0px 0px 50px 0px',
       },
     );
+
+    elements.forEach((element) => {
+      if (element) observer.observe(element);
+    });
 
     articles.forEach((article) => {
       if (article) observer.observe(article);
     });
 
+    if (headerElement) observer.observe(headerElement);
+
     return () => {
+      elements.forEach((element) => {
+        if (element) observer.unobserve(element);
+      });
       articles.forEach((article) => {
         if (article) observer.unobserve(article);
       });
+      if (headerElement) observer.unobserve(headerElement);
     };
   });
 </script>
@@ -38,20 +50,30 @@
 <div
   class={css({
     position: 'relative',
-    paddingY: '120px',
     minHeight: '[100vh]',
+    overflow: 'hidden',
     backgroundColor: 'white',
-    backgroundImage: 'linear-gradient(to bottom, token(colors.white), token(colors.gray.50) 50%, token(colors.white))',
   })}
 >
   <div
     class={css({
       position: 'absolute',
       inset: '0',
-      backgroundImage: 'radial-gradient(circle at 1px 1px, token(colors.gray.300) 1px, transparent 1px)',
-      backgroundSize: '[40px 40px]',
-      opacity: '[0.4]',
+      backgroundImage:
+        'linear-gradient(to bottom, token(colors.white), token(colors.gray.50) 25%, token(colors.gray.50) 75%, token(colors.white))',
+      zIndex: '0',
+    })}
+  ></div>
+
+  <div
+    class={css({
+      position: 'absolute',
+      inset: '0',
+      backgroundImage: 'radial-gradient(circle at 1px 1px, token(colors.gray.200) 1px, transparent 1px)',
+      backgroundSize: '[50px 50px]',
+      opacity: '[0.3]',
       pointerEvents: 'none',
+      zIndex: '1',
     })}
   ></div>
 
@@ -66,6 +88,7 @@
       opacity: '[0.6]',
       filter: '[blur(150px)]',
       pointerEvents: 'none',
+      zIndex: '1',
     })}
   ></div>
 
@@ -80,131 +103,223 @@
       opacity: '[0.7]',
       filter: '[blur(120px)]',
       pointerEvents: 'none',
+      zIndex: '1',
     })}
   ></div>
 
-  <div class={css({ position: 'relative', maxWidth: '[1024px]', marginX: 'auto', paddingX: { base: '24px', lg: '40px' } })}>
-    <header class={css({ marginBottom: '100px', textAlign: 'center' })}>
+  <section
+    class={css({
+      position: 'relative',
+      paddingY: '100px',
+      paddingX: '24px',
+      zIndex: '2',
+      marginBottom: '120px',
+    })}
+  >
+    <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
       <div
+        bind:this={headerElement}
         class={css({
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          backgroundColor: 'amber.50',
-          color: 'amber.900',
-          paddingX: '16px',
-          paddingY: '6px',
-          borderRadius: 'full',
-          fontSize: '13px',
-          fontWeight: 'semibold',
-          marginBottom: '32px',
-          border: '1px solid',
-          borderColor: 'amber.200',
-          letterSpacing: 'wide',
-          textTransform: 'uppercase',
+          backgroundColor: 'white',
+          border: '4px solid',
+          borderColor: 'gray.900',
+          borderRadius: '0',
+          paddingY: { base: '60px', md: '80px' },
+          paddingX: { base: '40px', md: '60px' },
+          position: 'relative',
+          boxShadow: '[8px 8px 0 0 #000]',
+          opacity: '0',
+          transform: 'translateY(-40px) rotate(-1deg) scale(0.95)',
+          transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'translateY(0) rotate(0) scale(1)',
+          },
         })}
       >
-        <span
+        <div
           class={css({
-            width: '6px',
-            height: '6px',
-            backgroundColor: 'amber.500',
-            borderRadius: 'full',
-            boxShadow: '[0 0 0 4px rgba(251, 191, 36, 0.2)]',
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            width: '40px',
+            height: '40px',
+            backgroundColor: 'amber.400',
+            borderRight: '4px solid',
+            borderBottom: '4px solid',
+            borderColor: 'gray.900',
+            transform: 'scale(0)',
+            transformOrigin: 'top left',
+            transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.8s]',
+            '.in-view &': {
+              transform: 'scale(1)',
+            },
           })}
-        ></span>
-        업데이트 노트
+        ></div>
+        <div
+          class={css({
+            position: 'absolute',
+            bottom: '0',
+            right: '0',
+            width: '40px',
+            height: '40px',
+            backgroundColor: 'amber.400',
+            borderTop: '4px solid',
+            borderLeft: '4px solid',
+            borderColor: 'gray.900',
+            transform: 'scale(0)',
+            transformOrigin: 'bottom right',
+            transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.9s]',
+            '.in-view &': {
+              transform: 'scale(1)',
+            },
+          })}
+        ></div>
+
+        <div class={css({ textAlign: 'center' })}>
+          <div
+            class={css({
+              display: 'inline-block',
+              backgroundColor: 'gray.900',
+              color: 'white',
+              paddingY: '8px',
+              paddingX: '24px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              letterSpacing: '[0.1em]',
+              marginBottom: '40px',
+              transform: 'rotate(-2deg) scale(0)',
+              transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s]',
+              '.in-view &': {
+                transform: 'rotate(-2deg) scale(1)',
+              },
+            })}
+          >
+            UPDATES & RELEASES
+          </div>
+
+          <h1
+            class={css({
+              fontSize: { base: '[56px]', md: '[80px]', lg: '[96px]' },
+              fontWeight: 'black',
+              color: 'gray.900',
+              fontFamily: 'Paperlogy',
+              lineHeight: '[1]',
+              textTransform: 'uppercase',
+              marginBottom: '32px',
+              opacity: '0',
+              transform: 'translateY(20px)',
+              transition:
+                '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+              '.in-view &': {
+                opacity: '100',
+                transform: 'translateY(0)',
+              },
+            })}
+          >
+            업데이트
+            <br />
+            <span
+              class={css({
+                backgroundColor: 'amber.400',
+                paddingX: '20px',
+                display: 'inline-block',
+                transform: 'rotate(1deg) scale(0)',
+                transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s]',
+                '.in-view &': {
+                  transform: 'rotate(1deg) scale(1)',
+                },
+              })}
+            >
+              노트
+            </span>
+          </h1>
+
+          <p
+            class={css({
+              fontSize: '20px',
+              fontWeight: 'medium',
+              color: 'gray.700',
+              maxWidth: '[600px]',
+              marginX: 'auto',
+              opacity: '0',
+              transform: 'translateY(10px)',
+              transition:
+                '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s]',
+              '.in-view &': {
+                opacity: '100',
+                transform: 'translateY(0)',
+              },
+            })}
+          >
+            핵심만 콕콕 짚은 업데이트 목록.
+          </p>
+        </div>
       </div>
+    </div>
+  </section>
 
-      <h1
-        class={css({
-          fontSize: { base: '[48px]', md: '[64px]' },
-          fontWeight: 'extrabold',
-          lineHeight: '[1.1]',
-          marginBottom: '24px',
-          color: 'gray.900',
-          fontFamily: 'Paperlogy',
-          letterSpacing: 'tight',
-        })}
-      >
-        업데이트 노트
-      </h1>
-      <p
-        class={css({
-          fontSize: '18px',
-          color: 'gray.600',
-          lineHeight: '[1.7]',
-          fontWeight: 'normal',
-          fontFamily: 'Pretendard',
-          maxWidth: '[600px]',
-          marginX: 'auto',
-        })}
-      >
-        타이피의 최신 업데이트와 개선사항을 확인하세요.
-        <br />
-        더 나은 글쓰기 경험을 위해 지속적으로 발전하고 있습니다.
-      </p>
-    </header>
-
+  <section
+    class={css({
+      position: 'relative',
+      paddingTop: '0',
+      paddingBottom: '160px',
+      paddingX: '24px',
+      zIndex: '2',
+    })}
+  >
     <div class={css({ position: 'relative', maxWidth: '[1200px]', marginX: 'auto' })}>
       <div
         class={css({
           position: 'absolute',
-          left: '280px',
+          left: { base: '32px', md: '240px' },
           top: '0',
           bottom: '0',
-          width: '1px',
-          backgroundColor: 'gray.200',
+          width: '4px',
+          backgroundColor: 'gray.900',
           zIndex: '0',
-          '@media (max-width: 768px)': {
-            left: '32px',
-          },
         })}
       ></div>
 
       <div class={css({ position: 'relative', paddingBottom: '40px' })}>
-        <div class={flex({ direction: 'column', gap: '0' })}>
+        <div class={flex({ direction: 'column', gap: '60px' })}>
           {#each data.entries as entry, index (entry.id)}
             <article
               bind:this={articles[index]}
               class={css({
                 position: 'relative',
                 display: 'grid',
-                gridTemplateColumns: { base: '1fr', md: '240px 80px 1fr' },
+                gridTemplateColumns: { base: '80px 1fr', md: '220px 60px 1fr' },
                 gap: '0',
                 opacity: '0',
-                transform: 'translateY(30px)',
-                transition: '[opacity 0.8s ease-out, transform 0.8s ease-out]',
-                marginBottom: '80px',
-                '&:last-child': {
-                  marginBottom: '0',
-                },
+                transform: 'translateX(-10px) rotate(-0.5deg)',
+                transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                 '&.in-view': {
                   opacity: '100',
-                  transform: 'translateY(0)',
+                  transform: 'translateX(0) rotate(0)',
                 },
               })}
             >
               <div
                 class={css({
                   display: { base: 'none', md: 'block' },
-                  paddingRight: '40px',
+                  paddingRight: '32px',
                   textAlign: 'right',
                   alignSelf: 'start',
-                  position: 'sticky',
-                  top: '120px',
-                  zIndex: '1',
+                  paddingTop: '16px',
                 })}
               >
                 <time
                   class={css({
+                    display: 'inline-block',
+                    backgroundColor: 'gray.900',
+                    color: 'white',
+                    paddingY: '6px',
+                    paddingX: '16px',
                     fontSize: '14px',
-                    color: 'gray.600',
-                    fontWeight: 'semibold',
-                    lineHeight: '[1.5]',
-                    display: 'block',
-                    paddingTop: '32px',
-                    paddingBottom: '32px',
+                    fontWeight: 'bold',
+                    transform: 'rotate(-2deg)',
+                    letterSpacing: '[0.05em]',
                   })}
                 >
                   {dayjs(entry.date).formatAsDate()}
@@ -216,41 +331,26 @@
                   display: 'flex',
                   justifyContent: 'center',
                   alignSelf: 'start',
-                  position: 'sticky',
-                  top: '120px',
-                  zIndex: '1',
+                  paddingTop: '20px',
                 })}
               >
                 <div
                   class={css({
                     position: 'relative',
-                    marginTop: '32px',
-                    marginBottom: '32px',
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: 'full',
-                    backgroundColor: 'white',
-                    border: '3px solid',
-                    borderColor: 'amber.400',
+                    width: '32px',
+                    height: '32px',
+                    backgroundColor: 'amber.400',
+                    border: '4px solid',
+                    borderColor: 'gray.900',
                     zIndex: '2',
-                    boxShadow: '[0 0 0 6px rgba(251, 191, 36, 0.1)]',
-                    transition: '[all 0.3s ease]',
-                    '&:hover': {
-                      transform: 'scale(1.3)',
-                      boxShadow: '[0 0 0 10px rgba(251, 191, 36, 0.15)]',
+                    transform: 'rotate(45deg) translateX(-11px) scale(0)',
+                    transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s]',
+                    '.in-view &': {
+                      transform: 'rotate(45deg) translateX(-11px) scale(1)',
                     },
-                  })}
-                ></div>
-
-                <div
-                  class={css({
-                    position: 'absolute',
-                    top: '40px',
-                    left: '20px',
-                    width: '24px',
-                    height: '1px',
-                    backgroundColor: 'gray.200',
-                    display: { base: 'none', md: 'block' },
+                    '&:hover': {
+                      transform: 'rotate(45deg) translateX(-11px) scale(1.2)',
+                    },
                   })}
                 ></div>
               </div>
@@ -258,61 +358,67 @@
               <div
                 class={css({
                   backgroundColor: 'white',
-                  borderRadius: '[16px]',
-                  border: '1px solid',
-                  borderColor: 'gray.100',
-                  padding: { base: '28px', md: '36px' },
-                  boxShadow: '[0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 24px rgba(0, 0, 0, 0.02)]',
-                  transition: '[all 0.3s ease]',
+                  border: '4px solid',
+                  borderColor: 'gray.900',
+                  paddingY: { base: '32px', md: '40px' },
+                  paddingX: { base: '24px', md: '32px' },
                   position: 'relative',
-                  overflow: 'hidden',
-                  marginLeft: { base: '60px', md: '0' },
+                  marginLeft: { base: '24px', md: '32px' },
+                  boxShadow: '[8px 8px 0 0 #000]',
+                  transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                   '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: '[0 4px 6px rgba(0, 0, 0, 0.06), 0 12px 48px rgba(0, 0, 0, 0.04)]',
-                    borderColor: 'gray.200',
-                  },
-                  '&::before': {
-                    content: '""',
-                    position: 'absolute',
-                    top: '0',
-                    left: '0',
-                    width: '4px',
-                    height: 'full',
-                    backgroundImage: 'linear-gradient(to bottom, token(colors.amber.400), token(colors.amber.300))',
-                    opacity: '0',
-                    transition: '[opacity 0.3s ease]',
-                  },
-                  '&:hover::before': {
-                    opacity: '1',
+                    transform: 'translate(-4px, -4px) rotate(0.5deg)',
+                    boxShadow: '[12px 12px 0 0 #000]',
                   },
                 })}
               >
                 <time
                   class={css({
-                    fontSize: '13px',
-                    color: 'gray.500',
+                    display: { base: 'inline-block', md: 'none' },
+                    backgroundColor: 'gray.900',
+                    color: 'white',
+                    paddingY: '4px',
+                    paddingX: '12px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    letterSpacing: '[0.05em]',
                     marginBottom: '16px',
-                    display: { base: 'inline-flex', md: 'none' },
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontWeight: 'medium',
-                    letterSpacing: 'wide',
-                    textTransform: 'uppercase',
+                    transform: 'rotate(-1deg)',
                   })}
                 >
                   {dayjs(entry.date).formatAsDate()}
                 </time>
 
+                <div
+                  class={css({
+                    position: 'absolute',
+                    top: '[-2px]',
+                    right: '40px',
+                    backgroundColor: 'amber.400',
+                    color: 'gray.900',
+                    paddingY: '8px',
+                    paddingX: '16px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase',
+                    border: '4px solid',
+                    borderColor: 'gray.900',
+                    transform: 'translateY(-50%) rotate(2deg)',
+                    letterSpacing: '[0.1em]',
+                  })}
+                >
+                  UPDATE
+                </div>
+
                 <h2
                   class={css({
-                    fontSize: { base: '24px', md: '28px' },
-                    fontWeight: 'bold',
+                    fontSize: { base: '[28px]', md: '[36px]' },
+                    fontWeight: 'black',
                     marginBottom: '24px',
                     color: 'gray.900',
-                    lineHeight: '[1.4]',
+                    lineHeight: '[1.2]',
                     fontFamily: 'Paperlogy',
-                    letterSpacing: 'tight',
+                    textTransform: 'uppercase',
                   })}
                 >
                   {entry.title}
@@ -321,12 +427,11 @@
                 {#if entry.image?.url}
                   <div
                     class={css({
-                      marginBottom: '28px',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      border: '1px solid',
-                      borderColor: 'gray.100',
-                      backgroundColor: 'gray.50',
+                      marginBottom: '32px',
+                      border: '4px solid',
+                      borderColor: 'gray.900',
+                      backgroundColor: 'gray.100',
+                      padding: '4px',
                     })}
                   >
                     <img
@@ -346,114 +451,139 @@
 
                 <div
                   class={css({
-                    fontSize: '15px',
+                    fontSize: '16px',
                     lineHeight: '[1.8]',
-                    color: 'gray.700',
-                    marginBottom: '20px',
+                    color: 'gray.800',
+                    fontWeight: 'medium',
                     '& p': {
-                      marginBottom: '16px',
+                      marginBottom: '20px',
                     },
                     '& p:last-child': {
                       marginBottom: '0',
                     },
+                    '& h1, & h2, & h3': {
+                      fontWeight: 'black',
+                      textTransform: 'uppercase',
+                      marginTop: '32px',
+                      marginBottom: '16px',
+                    },
                     '& h1': {
-                      fontSize: '20px',
-                      fontWeight: 'bold',
+                      fontSize: '24px',
                     },
                     '& h2': {
-                      fontSize: '18px',
-                      fontWeight: 'bold',
+                      fontSize: '20px',
                     },
                     '& h3': {
-                      fontSize: '16px',
-                      fontWeight: 'semibold',
+                      fontSize: '18px',
+                    },
+                    '& ul, & ol': {
+                      marginLeft: '24px',
+                      marginBottom: '20px',
                     },
                     '& ul': {
-                      marginLeft: '24px',
-                      marginBottom: '16px',
-                      listStyle: 'disc',
+                      listStyle: 'none',
+                    },
+                    '& ul li': {
+                      position: 'relative',
+                      paddingLeft: '20px',
+                      '&::before': {
+                        content: '"▪"',
+                        position: 'absolute',
+                        left: '0',
+                        fontWeight: 'bold',
+                      },
                     },
                     '& ol': {
-                      marginLeft: '24px',
-                      marginBottom: '16px',
                       listStyle: 'decimal',
                     },
                     '& li': {
-                      lineHeight: '[1.6]',
-                      marginBottom: '8px',
-                    },
-                    '& ul ul, & ol ul, & ul ol, & ol ol': {
-                      marginTop: '8px',
-                      marginBottom: '0',
+                      marginBottom: '12px',
+                      fontWeight: 'medium',
                     },
                     '& a': {
-                      color: 'amber.600',
-                      fontWeight: 'medium',
+                      color: 'gray.900',
+                      fontWeight: 'extrabold',
+                      textDecoration: 'underline',
+                      textDecorationThickness: '3px',
+                      textDecorationColor: 'amber.400',
+                      textUnderlineOffset: '2px',
                       transition: '[all 0.2s ease]',
                       '&:hover': {
-                        color: 'amber.700',
-                        textDecoration: 'underline',
-                        textUnderlineOffset: '3px',
+                        backgroundColor: 'amber.400',
+                        textDecoration: 'none',
                       },
                     },
                     '& strong, & b': {
-                      fontWeight: 'semibold',
+                      fontWeight: 'black',
                       color: 'gray.900',
                     },
                     '& em, & i': {
-                      fontStyle: 'italic',
+                      fontStyle: 'normal',
+                      backgroundColor: 'amber.400',
+                      paddingX: '4px',
                     },
                     '& del, & s': {
                       textDecoration: 'line-through',
-                      opacity: '[0.7]',
+                      textDecorationThickness: '3px',
+                      opacity: '[0.6]',
                     },
                     '& code': {
-                      backgroundColor: 'gray.100',
-                      paddingX: '6px',
+                      backgroundColor: 'gray.900',
+                      color: 'white',
+                      paddingX: '8px',
                       paddingY: '2px',
-                      borderRadius: '4px',
                       fontSize: '14px',
                       fontFamily: 'mono',
-                      color: 'gray.800',
+                      fontWeight: 'bold',
                     },
                     '& pre': {
                       backgroundColor: 'gray.900',
-                      padding: '20px',
-                      borderRadius: '8px',
-                      overflow: 'auto',
-                      marginBottom: '16px',
-                      marginTop: '16px',
+                      color: 'white',
+                      padding: '24px',
+                      border: '4px solid',
+                      borderColor: 'gray.900',
+                      marginY: '24px',
+                      fontWeight: 'bold',
+                      boxShadow: '[6px 6px 0 0 #fbbf24]',
                     },
                     '& pre code': {
                       backgroundColor: 'transparent',
                       padding: '0',
                       fontSize: '14px',
-                      lineHeight: '[1.5]',
-                      color: 'gray.100',
+                      lineHeight: '[1.6]',
                     },
                     '& blockquote': {
-                      borderLeft: '3px solid',
+                      borderLeft: '8px solid',
                       borderColor: 'amber.400',
-                      paddingLeft: '20px',
-                      marginY: '20px',
-                      fontStyle: 'italic',
-                      color: 'gray.600',
                       backgroundColor: 'amber.50',
-                      paddingY: '16px',
-                      paddingRight: '20px',
-                      borderRadius: '[0 8px 8px 0]',
+                      padding: '24px',
+                      marginY: '24px',
+                      fontWeight: 'semibold',
+                      color: 'gray.900',
+                      position: 'relative',
+                      '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        top: '8px',
+                        left: '16px',
+                        fontSize: '[48px]',
+                        fontWeight: 'black',
+                        color: 'amber.400',
+                        opacity: '[0.5]',
+                      },
                     },
                     '& hr': {
                       border: 'none',
-                      borderTop: '1px solid',
-                      borderColor: 'gray.200',
-                      marginY: '32px',
+                      borderTop: '4px solid',
+                      borderColor: 'gray.900',
+                      marginY: '40px',
                     },
                     '& img': {
                       maxWidth: 'full',
                       height: 'auto',
-                      borderRadius: '8px',
-                      marginY: '16px',
+                      border: '4px solid',
+                      borderColor: 'gray.900',
+                      marginY: '24px',
                     },
                   })}
                 >
@@ -468,31 +598,21 @@
         <div
           class={css({
             position: 'absolute',
-            left: '280px',
+            left: { base: '32px', md: '240px' },
             bottom: '0',
-            width: '1px',
-            height: '30px',
-            backgroundColor: 'gray.200',
-            '@media (max-width: 768px)': {
-              left: '32px',
-            },
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: '0',
-              left: '[-3.5px]',
-              width: '8px',
-              height: '8px',
-              borderRadius: 'full',
-              backgroundColor: 'gray.300',
-            },
+            transform: 'translateX(-18px)',
           })}
-        ></div>
+        >
+          <div
+            class={css({
+              width: '40px',
+              height: '40px',
+              backgroundColor: 'gray.900',
+              transform: 'rotate(45deg)',
+            })}
+          ></div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
-
-<div class={css({ backgroundColor: 'gray.50' })}>
-  <div class={css({ borderTopRadius: 'full', width: 'full', height: '50px', backgroundColor: 'dark.gray.950' })}></div>
+  </section>
 </div>

@@ -47,12 +47,10 @@ export const typewriter = (node: Element, params: TypewriterParams) => {
     };
   });
 
-  // 초기에 모든 텍스트를 숨김
   nodeRanges.forEach(({ textNode }) => {
     textNode.textContent = '';
   });
 
-  // 커서 요소 생성
   const cursorElement = document.createElement('span');
   cursorElement.innerHTML = '&nbsp;'; // non-breaking space
   cursorElement.style.cssText = `
@@ -74,14 +72,12 @@ export const typewriter = (node: Element, params: TypewriterParams) => {
     let currentNodeIndex = 0;
     let activeTextNode: Text | null = null;
 
-    // 완료된 노드들은 전체 텍스트 표시
     while (currentNodeIndex < nodeRanges.length && position >= nodeRanges[currentNodeIndex].range[1]) {
       const { textNode, originalText } = nodeRanges[currentNodeIndex];
       textNode.textContent = originalText;
       currentNodeIndex++;
     }
 
-    // 현재 진행 중인 노드
     if (currentNodeIndex < nodeRanges.length) {
       const currentNode = nodeRanges[currentNodeIndex];
       const visibleParts = position - currentNode.range[0];
@@ -111,12 +107,10 @@ export const typewriter = (node: Element, params: TypewriterParams) => {
         activeTextNode = currentNode.textNode;
       }
 
-      // 나머지 노드들은 비움
       for (let i = currentNodeIndex + 1; i < nodeRanges.length; i++) {
         nodeRanges[i].textNode.textContent = '';
       }
     } else if (nodeRanges.length > 0) {
-      // 모든 텍스트가 완료된 경우 마지막 노드를 활성 노드로 설정
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       activeTextNode = nodeRanges.at(-1)!.textNode;
     }
@@ -126,22 +120,18 @@ export const typewriter = (node: Element, params: TypewriterParams) => {
   };
 
   const updateCursor = () => {
-    // 기존 커서 제거
     cursorElement.remove();
 
-    // showCursor가 true이고 활성 텍스트 노드가 있을 때만 커서 추가
     if (showCursor && currentActiveTextNode && currentActiveTextNode.parentNode) {
       currentActiveTextNode.parentNode.insertBefore(cursorElement, currentActiveTextNode.nextSibling);
     }
   };
 
-  // $effect를 사용하여 value와 showCursor 변화 감지
   $effect(() => {
     const currentValue = value.get();
     updateText(currentValue);
   });
 
-  // value의 변화를 구독
   unsubscribe = value.on('change', (currentValue) => {
     updateText(currentValue);
   });
@@ -151,16 +141,13 @@ export const typewriter = (node: Element, params: TypewriterParams) => {
       value = newParams.value;
       showCursor = newParams.showCursor;
 
-      // showCursor 변경 시 즉시 커서 상태 업데이트
       updateCursor();
     },
     destroy() {
       if (unsubscribe) {
         unsubscribe();
       }
-      // 커서 제거
       cursorElement.remove();
-      // 정리 시 원본 텍스트 복원
       nodeRanges.forEach(({ textNode, originalText }) => {
         textNode.textContent = originalText;
       });
