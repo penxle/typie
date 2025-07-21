@@ -1,13 +1,10 @@
 <script lang="ts">
   import dayjs from 'dayjs';
+  import { marked } from 'marked';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
   let { data } = $props();
-
-  const formatDate = (dateString: string) => {
-    return dayjs(dateString).formatAsDate();
-  };
 </script>
 
 <div class={css({ paddingY: '80px', minHeight: '[100vh]' })}>
@@ -83,7 +80,7 @@
               })}
             >
               <time class={css({ fontSize: '14px', color: 'text.subtle', marginBottom: '12px', display: 'block' })}>
-                {formatDate(entry.date)}
+                {dayjs(entry.date).formatAsDate()}
               </time>
 
               <h2
@@ -122,16 +119,112 @@
                 </div>
               {/if}
 
-              <p
+              <div
                 class={css({
                   fontSize: '16px',
-                  lineHeight: '[1.7]',
+                  lineHeight: '[1.6]',
                   color: 'text.subtle',
                   marginBottom: '20px',
+                  '& p': {
+                    marginBottom: '16px',
+                  },
+                  '& p:last-child': {
+                    marginBottom: '0',
+                  },
+                  '& h1': {
+                    fontSize: '20px',
+                    fontWeight: 'bold',
+                  },
+                  '& h2': {
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                  },
+                  '& h3': {
+                    fontSize: '16px',
+                    fontWeight: 'semibold',
+                  },
+                  '& ul': {
+                    marginLeft: '24px',
+                    marginBottom: '16px',
+                    listStyle: 'disc',
+                  },
+                  '& ol': {
+                    marginLeft: '24px',
+                    marginBottom: '16px',
+                    listStyle: 'decimal',
+                  },
+                  '& li': {
+                    lineHeight: '[1.6]',
+                    marginBottom: '8px',
+                  },
+                  '& ul ul, & ol ul, & ul ol, & ol ol': {
+                    marginTop: '8px',
+                    marginBottom: '0',
+                  },
+                  '& a': {
+                    '&:hover': {
+                      color: 'text.default',
+                      textDecoration: 'underline',
+                      textUnderlineOffset: '2px',
+                    },
+                  },
+                  '& strong, & b': {
+                    fontWeight: 'semibold',
+                    color: 'text.default',
+                  },
+                  '& em, & i': {
+                    fontStyle: 'italic',
+                  },
+                  '& del, & s': {
+                    textDecoration: 'line-through',
+                    opacity: '[0.7]',
+                  },
+                  '& code': {
+                    backgroundColor: 'surface.subtle',
+                    paddingX: '6px',
+                    paddingY: '2px',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    fontFamily: 'mono',
+                  },
+                  '& pre': {
+                    backgroundColor: 'surface.subtle',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    overflow: 'auto',
+                    marginBottom: '16px',
+                  },
+                  '& pre code': {
+                    backgroundColor: 'transparent',
+                    padding: '0',
+                    fontSize: '14px',
+                    lineHeight: '[1.5]',
+                  },
+                  '& blockquote': {
+                    borderLeft: '4px solid',
+                    borderColor: 'border.default',
+                    paddingLeft: '20px',
+                    marginY: '20px',
+                    fontStyle: 'italic',
+                    color: 'text.subtle',
+                  },
+                  '& hr': {
+                    border: 'none',
+                    borderTop: '1px solid',
+                    borderColor: 'border.subtle',
+                    marginY: '24px',
+                  },
+                  '& img': {
+                    maxWidth: 'full',
+                    height: 'auto',
+                    borderRadius: '8px',
+                    marginY: '16px',
+                  },
                 })}
               >
-                {entry.body}
-              </p>
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                {@html marked(entry.body, { gfm: true, breaks: true })}
+              </div>
             </div>
           </article>
         {/each}
