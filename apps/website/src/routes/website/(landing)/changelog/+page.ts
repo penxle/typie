@@ -1,6 +1,5 @@
 import { gql, GraphQLClient } from 'graphql-request';
 import { env } from '$env/dynamic/public';
-import type { PageLoad } from './$types';
 
 const client = new GraphQLClient(env.PUBLIC_CMS_URL);
 
@@ -18,7 +17,7 @@ const query = gql`
   }
 `;
 
-export const load: PageLoad = async () => {
+export const load = async () => {
   const data = await client.request<{
     changelogs: {
       id: string;

@@ -17,7 +17,7 @@
 
     let animation = animate([
       ['[data-element="actionbar-login"]', { color: '#ffba00' }, { duration: 0.6, ease: 'linear' }],
-      ['[data-element="actionbar"]', { width: '350px' }, { ease: 'easeInOut', duration: 0.3, at: '<' }],
+      ['[data-element="actionbar"]', { width: '400px' }, { ease: 'easeInOut', duration: 0.3, at: '<' }],
       ['[data-element="actionbar-item"]', { opacity: 1, display: 'flex', duration: 0.3 }],
     ]);
 
@@ -165,7 +165,11 @@
       />
     </a>
 
-    <a class={css({ color: 'gray.500', display: 'none', opacity: '0', paddingY: '6px' })} data-element="actionbar-item" href="/pricing2">
+    <a class={css({ color: 'gray.500', display: 'none', opacity: '0', paddingY: '6px' })} data-element="actionbar-item" href="/changelog">
+      업데이트 노트
+    </a>
+
+    <a class={css({ color: 'gray.500', display: 'none', opacity: '0', paddingY: '6px' })} data-element="actionbar-item" href="/pricing">
       요금제
     </a>
 

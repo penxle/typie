@@ -2,9 +2,8 @@
   import dayjs from 'dayjs';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import type { PageData } from './$types';
 
-  let { data }: { data: PageData } = $props();
+  let { data } = $props();
 
   const formatDate = (dateString: string) => {
     return dayjs(dateString).formatAsDate();
