@@ -492,3 +492,7 @@
     </div>
   </div>
 </div>
+
+<div class={css({ backgroundColor: 'gray.50' })}>
+  <div class={css({ borderTopRadius: 'full', width: 'full', height: '50px', backgroundColor: 'dark.gray.950' })}></div>
+</div>
