@@ -17,6 +17,7 @@
     "@iconify-json/lucide": "^1.2.57",
     "@iconify-json/simple-icons": "^1.2.43",
     "@iconify-json/twemoji": "^1.2.2",
+    "@number-flow/svelte": "^0.3.9",
     "@observablehq/plot": "^0.6.17",
     "@pandacss/dev": "^0.54.0",
     "@portone/browser-sdk": "^0.0.23",

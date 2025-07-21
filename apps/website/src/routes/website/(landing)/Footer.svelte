@@ -7,10 +7,6 @@
   import { flex } from '$styled-system/patterns';
 </script>
 
-<div class={css({ backgroundColor: 'gray.50' })}>
-  <div class={css({ borderTopRadius: 'full', width: 'full', height: '50px', backgroundColor: 'dark.gray.950' })}></div>
-</div>
-
 <footer
   class={css({
     width: 'full',
