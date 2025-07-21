@@ -25,7 +25,21 @@ const theme: Handle = async ({ event, resolve }) => {
   });
 };
 
-export const handle = sequence(logging, theme);
+const header: Handle = async ({ event, resolve }) => {
+  return resolve(event, {
+    filterSerializedResponseHeaders: (name) => {
+      const n = name.toLowerCase();
+
+      if (n === 'content-type') {
+        return true;
+      }
+
+      return false;
+    },
+  });
+};
+
+export const handle = sequence(logging, theme, header);
 
 export const handleError: HandleServerError = ({ error, status, message }) => {
   log.error('Server error {*}', { status, message, error });
