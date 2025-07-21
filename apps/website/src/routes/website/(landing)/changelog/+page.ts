@@ -1,8 +1,6 @@
 import { gql, GraphQLClient } from 'graphql-request';
 import { env } from '$env/dynamic/public';
 
-const client = new GraphQLClient(env.PUBLIC_CMS_URL);
-
 const query = gql`
   query GetChangelogs {
     changelogs(orderBy: date_DESC) {
@@ -17,7 +15,9 @@ const query = gql`
   }
 `;
 
-export const load = async () => {
+export const load = async ({ fetch }) => {
+  const client = new GraphQLClient(env.PUBLIC_CMS_URL, { fetch });
+
   const data = await client.request<{
     changelogs: {
       id: string;
