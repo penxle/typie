@@ -12,6 +12,7 @@
   import { uploadBlob } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
@@ -25,6 +26,8 @@
   };
 
   let { $site: _site, editor }: Props = $props();
+
+  let planUpgradeOpen = $state(false);
 
   const site = fragment(
     _site,
@@ -167,26 +170,27 @@
             <div style:font-family={id}>{name}</div>
           </ToolbarDropdownMenuItem>
         {/each}
-
-        <ToolbarDropdownMenuItem
-          onclick={() => {
-            open = true;
-            close();
-          }}
-        >
-          <div class={flex({ alignItems: 'center', gap: '4px' })}>
-            <Icon
-              style={css.raw({ color: 'text.faint', transitionProperty: 'none', _groupHover: { color: 'text.brand' } })}
-              icon={PlusIcon}
-              size={14}
-            />
-            <span class={css({ color: 'text.subtle', _groupHover: { color: 'text.brand' } })}>직접 업로드</span>
-          </div>
-        </ToolbarDropdownMenuItem>
       {/if}
+      <ToolbarDropdownMenuItem
+        onclick={() => {
+          open = true;
+          close();
+        }}
+      >
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <Icon
+            style={css.raw({ color: 'text.faint', transitionProperty: 'none', _groupHover: { color: 'text.brand' } })}
+            icon={PlusIcon}
+            size={14}
+          />
+          <span class={css({ color: 'text.subtle', _groupHover: { color: 'text.brand' } })}>직접 업로드</span>
+        </div>
+      </ToolbarDropdownMenuItem>
     </ToolbarDropdownMenu>
   {/snippet}
 </ToolbarDropdownButton>
+
+<PlanUpgradeModal bind:open={planUpgradeOpen} />
 
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>
   <div class={center({ gap: '8px', padding: '12px' })}>
@@ -239,6 +243,10 @@
       </ul>
     </div>
 
-    <Button loading={inflight} onclick={handleUpload}>파일 선택</Button>
+    {#if $site?.user.subscription}
+      <Button loading={inflight} onclick={handleUpload}>파일 선택</Button>
+    {:else}
+      <Button onclick={() => (planUpgradeOpen = true)}>파일 선택</Button>
+    {/if}
   </div>
 </Modal>

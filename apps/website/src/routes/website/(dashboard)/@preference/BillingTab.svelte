@@ -9,7 +9,9 @@
   import ImagesIcon from '~icons/lucide/images';
   import LinkIcon from '~icons/lucide/link';
   import SearchIcon from '~icons/lucide/search';
+  import SpellCheckIcon from '~icons/lucide/spell-check';
   import SproutIcon from '~icons/lucide/sprout';
+  import TypeOutlineIcon from '~icons/lucide/type-outline';
   import { fragment, graphql } from '$graphql';
   import { Button, Icon } from '$lib/components';
   import { Dialog } from '$lib/notification';
@@ -144,8 +146,18 @@
           </li>
 
           <li class={flex({ alignItems: 'center', gap: '6px' })}>
+            <Icon style={css.raw({ color: 'text.disabled' })} icon={SpellCheckIcon} size={14} />
+            <span>맞춤법 검사</span>
+          </li>
+
+          <li class={flex({ alignItems: 'center', gap: '6px' })}>
             <Icon style={css.raw({ color: 'text.disabled' })} icon={LinkIcon} size={14} />
             <span>커스텀 게시 주소</span>
+          </li>
+
+          <li class={flex({ alignItems: 'center', gap: '6px' })}>
+            <Icon style={css.raw({ color: 'text.disabled' })} icon={TypeOutlineIcon} size={14} />
+            <span>커스텀 폰트 업로드</span>
           </li>
 
           <li class={flex({ alignItems: 'center', gap: '6px' })}>
