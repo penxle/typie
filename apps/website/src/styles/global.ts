@@ -41,13 +41,9 @@ export const globalCss = defineGlobalStyles({
 
     scrollbarWidth: 'thin',
     scrollbarColor: '{colors.control.scrollbar.default} {colors.transparent}',
+    scrollbarGutter: 'stable',
 
     WebkitTapHighlightColor: 'transparent',
-  },
-
-  body: {
-    width: '[100dvw]',
-    height: '[100dvh]',
   },
 
   a: {
