@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import AnchorIcon from '~icons/lucide/anchor';
+  import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
   import CodeIcon from '~icons/lucide/code';
-  import FileTextIcon from '~icons/lucide/file-text';
   import FolderTreeIcon from '~icons/lucide/folder-tree';
   import ImageIcon from '~icons/lucide/image';
   import LinkIcon from '~icons/lucide/link';
@@ -11,7 +10,8 @@
   import NotebookIcon from '~icons/lucide/notebook';
   import PaletteIcon from '~icons/lucide/palette';
   import PencilIcon from '~icons/lucide/pencil';
-  import SettingsIcon from '~icons/lucide/settings';
+  import QuoteIcon from '~icons/lucide/quote';
+  import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import SparklesIcon from '~icons/lucide/sparkles';
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import TableIcon from '~icons/lucide/table';
@@ -19,34 +19,6 @@
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
-
-  let elements = $state<HTMLElement[]>([]);
-
-  onMount(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
-          }
-        });
-      },
-      {
-        threshold: 0.1,
-        rootMargin: '0px 0px 50px 0px',
-      },
-    );
-
-    elements.forEach((element) => {
-      if (element) observer.observe(element);
-    });
-
-    return () => {
-      elements.forEach((element) => {
-        if (element) observer.unobserve(element);
-      });
-    };
-  });
 </script>
 
 <section
@@ -62,7 +34,6 @@
 >
   <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
     <div
-      bind:this={elements[0]}
       class={center({
         flexDirection: 'column',
         marginBottom: { sm: '60px', lg: '80px' },
@@ -74,6 +45,7 @@
           transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
         },
       })}
+      data-observe
     >
       <div
         class={css({
@@ -139,7 +111,6 @@
     </div>
 
     <div
-      bind:this={elements[1]}
       class={css({
         display: 'grid',
         gridTemplateColumns: { sm: '1fr', lg: '2fr 1fr' },
@@ -153,6 +124,7 @@
           transform: 'translateY(0)',
         },
       })}
+      data-observe
     >
       <div
         class={css({
@@ -200,7 +172,7 @@
             marginBottom: { sm: '24px', lg: '32px' },
           })}
         >
-          {#each [ImageIcon, LinkIcon, TableIcon, ListIcon, CodeIcon, FileTextIcon] as icon, index (index)}
+          {#each [ImageIcon, LinkIcon, QuoteIcon, TableIcon, ListIcon, CodeIcon] as icon, index (index)}
             <div
               class={css({
                 height: { sm: '48px', lg: '64px' },
@@ -276,7 +248,6 @@
     </div>
 
     <div
-      bind:this={elements[2]}
       class={css({
         display: 'grid',
         gridTemplateColumns: { sm: '1fr', lg: '1fr 1fr 1fr' },
@@ -289,6 +260,7 @@
           transform: 'translateY(0)',
         },
       })}
+      data-observe
     >
       <div
         class={css({
@@ -466,7 +438,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={SettingsIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={RulerDimensionLineIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -662,7 +634,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={TypeIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={ChartNoAxesCombinedIcon} size={24} />
         </div>
         <h3
           class={css({

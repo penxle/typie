@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
 
@@ -69,43 +68,11 @@
   };
 
   const columns = makeColumns(testimonials);
-
-  let headerElement = $state<HTMLElement>();
-  let columnElements = $state<HTMLElement[]>([]);
-
-  onMount(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
-          }
-        });
-      },
-      {
-        threshold: 0.1,
-        rootMargin: '0px 0px 50px 0px',
-      },
-    );
-
-    if (headerElement) observer.observe(headerElement);
-    columnElements.forEach((element) => {
-      if (element) observer.observe(element);
-    });
-
-    return () => {
-      if (headerElement) observer.unobserve(headerElement);
-      columnElements.forEach((element) => {
-        if (element) observer.unobserve(element);
-      });
-    };
-  });
 </script>
 
 <section class={css({ position: 'relative', paddingY: { sm: '80px', lg: '120px' }, backgroundColor: 'gray.50' })}>
   <div class={css({ position: 'relative', maxWidth: '[1024px]', marginX: 'auto', paddingX: { sm: '16px', lg: '40px' } })}>
     <div
-      bind:this={headerElement}
       class={center({
         flexDirection: 'column',
         marginBottom: { sm: '60px', lg: '80px' },
@@ -117,6 +84,7 @@
           transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
         },
       })}
+      data-observe
     >
       <div
         class={css({
@@ -191,7 +159,6 @@
     >
       {#each columns as column, colIndex (colIndex)}
         <div
-          bind:this={columnElements[colIndex]}
           style:transition={`opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${0.1 + colIndex * 0.1}s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${0.1 + colIndex * 0.1}s`}
           class={css({
             display: 'flex',
@@ -204,6 +171,7 @@
               transform: 'translateY(0)',
             },
           })}
+          data-observe
         >
           {#each column as testimonial, idx (idx)}
             <div
