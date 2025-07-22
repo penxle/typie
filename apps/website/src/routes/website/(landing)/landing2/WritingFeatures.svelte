@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import AnchorIcon from '~icons/lucide/anchor';
   import CodeIcon from '~icons/lucide/code';
   import FileTextIcon from '~icons/lucide/file-text';
+  import FolderTreeIcon from '~icons/lucide/folder-tree';
   import ImageIcon from '~icons/lucide/image';
   import LinkIcon from '~icons/lucide/link';
   import ListIcon from '~icons/lucide/list';
+  import MoonIcon from '~icons/lucide/moon';
   import NotebookIcon from '~icons/lucide/notebook';
   import PaletteIcon from '~icons/lucide/palette';
   import PencilIcon from '~icons/lucide/pencil';
@@ -115,7 +118,7 @@
             transform: 'rotate(1deg)',
           })}
         >
-          모든 도구
+          모든 것
         </span>
       </h2>
       <p
@@ -231,7 +234,7 @@
           강력한 에디터 도구
         </h3>
         <p class={css({ fontSize: '16px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          기본적인 서식부터 이미지, 링크, 표 삽입까지. 글을 풍부하게 만드는 데 필요한 모든 도구가 준비되어 있습니다.
+          기본적인 서식부터 이미지, 링크, 표 삽입까지. 글을 풍부하게 만드는 데 필요한 모든 도구가 준비되어 있어요.
         </p>
       </div>
 
@@ -265,7 +268,9 @@
           </h3>
         </div>
         <p class={css({ fontSize: '16px', color: 'gray.300', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          자유롭게 그림을 그리고 다이어그램을 만들어 보세요. 아이디어를 시각적으로 표현하고 글과 함께 배치할 수 있습니다.
+          아이디어 구상, 관계도 정리 등
+          <br />
+          자유롭게 시각적으로 정리해보세요
         </p>
       </div>
     </div>
@@ -328,7 +333,9 @@
           맞춤법 검사
         </h3>
         <p class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          오탈자 걱정 없이 편하게 쓸 수 있도록, 맞춤법과 문법을 꼼꼼하게 살펴 교정합니다.
+          헷갈리는 맞춤법,
+          <br />
+          쓰면서 바로 확인하고 고쳐보세요.
         </p>
       </div>
 
@@ -375,7 +382,9 @@
           폰트 선택
         </h3>
         <p class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          엄선된 기본 폰트는 물론, 원하는 폰트를 직접 업로드하여 사용할 수 있습니다.
+          기본 폰트부터 직접 업로드한 폰트까지
+          <br />
+          자유롭게 사용할 수 있어요.
         </p>
       </div>
 
@@ -422,7 +431,9 @@
           작성 노트
         </h3>
         <p class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          쓰기 중 떠오르는 아이디어나 메모를 포스트 옆에 바로 기록할 수 있습니다.
+          글 쓰면서 생각나는 내용을
+          <br />
+          바로바로 정리해 보세요.
         </p>
       </div>
 
@@ -469,7 +480,205 @@
           양식 설정
         </h3>
         <p class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          본문 폭, 들여쓰기, 문단 간격 등 세밀한 양식 설정으로 읽기 편한 환경을 만들 수 있습니다.
+          본문 폭, 들여쓰기, 문단 간격까지
+          <br />
+          읽기 좋은 형태로 조정할 수 있어요.
+        </p>
+      </div>
+
+      <div
+        class={css({
+          backgroundColor: 'white',
+          padding: '32px',
+          border: '4px solid',
+          borderColor: 'gray.900',
+          boxShadow: '[8px 8px 0 0 #000]',
+          transform: 'rotate(0.5deg)',
+          transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          _hover: {
+            transform: 'translate(-4px, -4px) rotate(0)',
+            boxShadow: '[12px 12px 0 0 #000]',
+          },
+        })}
+      >
+        <div
+          class={css({
+            width: '48px',
+            height: '48px',
+            backgroundColor: 'amber.400',
+            border: '3px solid',
+            borderColor: 'gray.900',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '24px',
+            transform: 'rotate(45deg)',
+          })}
+        >
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={AnchorIcon} size={24} />
+        </div>
+        <h3
+          class={css({
+            fontSize: '20px',
+            fontWeight: 'black',
+            color: 'gray.900',
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+          })}
+        >
+          앵커
+        </h3>
+        <p class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
+          언제든지 글 안에서 원하는 위치로
+          <br />
+          바로 이동할 수 있어요.
+        </p>
+      </div>
+
+      <div
+        class={css({
+          backgroundColor: 'white',
+          padding: '32px',
+          border: '4px solid',
+          borderColor: 'gray.900',
+          boxShadow: '[8px 8px 0 0 #000]',
+          transform: 'rotate(0.5deg)',
+          transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          _hover: {
+            transform: 'translate(-4px, -4px) rotate(0)',
+            boxShadow: '[12px 12px 0 0 #000]',
+          },
+        })}
+      >
+        <div
+          class={css({
+            width: '48px',
+            height: '48px',
+            backgroundColor: 'amber.400',
+            border: '3px solid',
+            borderColor: 'gray.900',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '24px',
+            transform: 'rotate(45deg)',
+          })}
+        >
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={MoonIcon} size={24} />
+        </div>
+        <h3
+          class={css({
+            fontSize: '20px',
+            fontWeight: 'black',
+            color: 'gray.900',
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+          })}
+        >
+          다크 모드
+        </h3>
+        <p class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
+          어두운 환경에서도 편하게
+          <br />
+          글을 쓸 수 있어요.
+        </p>
+      </div>
+
+      <div
+        class={css({
+          backgroundColor: 'white',
+          padding: '32px',
+          border: '4px solid',
+          borderColor: 'gray.900',
+          boxShadow: '[8px 8px 0 0 #000]',
+          transform: 'rotate(0.5deg)',
+          transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          _hover: {
+            transform: 'translate(-4px, -4px) rotate(0)',
+            boxShadow: '[12px 12px 0 0 #000]',
+          },
+        })}
+      >
+        <div
+          class={css({
+            width: '48px',
+            height: '48px',
+            backgroundColor: 'amber.400',
+            border: '3px solid',
+            borderColor: 'gray.900',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '24px',
+            transform: 'rotate(45deg)',
+          })}
+        >
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={FolderTreeIcon} size={24} />
+        </div>
+        <h3
+          class={css({
+            fontSize: '20px',
+            fontWeight: 'black',
+            color: 'gray.900',
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+          })}
+        >
+          폴더로 정리하기
+        </h3>
+        <p class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
+          포스트와 자료를
+          <br />
+          주제별로 깔끔하게 정리할 수 있어요.
+        </p>
+      </div>
+
+      <div
+        class={css({
+          backgroundColor: 'white',
+          padding: '32px',
+          border: '4px solid',
+          borderColor: 'gray.900',
+          boxShadow: '[8px 8px 0 0 #000]',
+          transform: 'rotate(0.5deg)',
+          transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          _hover: {
+            transform: 'translate(-4px, -4px) rotate(0)',
+            boxShadow: '[12px 12px 0 0 #000]',
+          },
+        })}
+      >
+        <div
+          class={css({
+            width: '48px',
+            height: '48px',
+            backgroundColor: 'amber.400',
+            border: '3px solid',
+            borderColor: 'gray.900',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '24px',
+            transform: 'rotate(45deg)',
+          })}
+        >
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={TypeIcon} size={24} />
+        </div>
+        <h3
+          class={css({
+            fontSize: '20px',
+            fontWeight: 'black',
+            color: 'gray.900',
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+          })}
+        >
+          글쓰기 현황
+        </h3>
+        <p class={css({ fontSize: '15px', color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
+          포스트별, 하루 기준 글자 수까지
+          <br />
+          쉽게 확인할 수 있어요.
         </p>
       </div>
 

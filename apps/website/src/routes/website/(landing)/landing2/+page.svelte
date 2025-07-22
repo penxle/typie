@@ -1,10 +1,10 @@
 <script lang="ts">
   import CallToAction from './CallToAction.svelte';
-  import DocumentFeatures from './DocumentFeatures.svelte';
+  // import DocumentFeatures from './DocumentFeatures.svelte';
   import Hero from './Hero.svelte';
-  import MoreFeatures from './MoreFeatures.svelte';
+  // import MoreFeatures from './MoreFeatures.svelte';
   import Testimonials from './Testimonials.svelte';
-  import TrackingFeatures from './TrackingFeatures.svelte';
+  // import TrackingFeatures from './TrackingFeatures.svelte';
   import WritingFeatures from './WritingFeatures.svelte';
 </script>
 
@@ -12,11 +12,11 @@
 
 <WritingFeatures />
 
-<DocumentFeatures />
+<!-- <DocumentFeatures /> -->
 
-<TrackingFeatures />
+<!-- <TrackingFeatures /> -->
 
-<MoreFeatures />
+<!-- <MoreFeatures /> -->
 
 <Testimonials />
 
