@@ -1,26 +1,35 @@
 <script lang="ts">
   import ArrowRightIcon from '~icons/lucide/arrow-right';
+  import MenuIcon from '~icons/lucide/menu';
+  import { afterNavigate } from '$app/navigation';
   import Wordmark from '$assets/logos/wordmark.svg?component';
   import { env } from '$env/dynamic/public';
+  import { outsideClick } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+
+  let mobileMenuOpen = false;
+
+  afterNavigate(() => {
+    mobileMenuOpen = false;
+  });
 </script>
 
 <header
   class={flex({
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingX: '24px',
-    height: '80px',
-    gap: '32px',
+    paddingX: { sm: '16px', lg: '24px' },
+    height: { sm: '64px', lg: '80px' },
+    gap: { sm: '16px', lg: '32px' },
     backgroundColor: 'white',
     border: '4px solid',
     borderColor: 'gray.900',
     position: 'fixed',
-    top: '16px',
-    left: '16px',
-    right: '16px',
+    top: { sm: '8px', lg: '16px' },
+    left: { sm: '8px', lg: '16px' },
+    right: { sm: '8px', lg: '16px' },
     zIndex: '50',
     boxShadow: '[8px 8px 0 0 #000]',
   })}
@@ -35,10 +44,11 @@
     })}
     href="/landing"
   >
-    <Wordmark class={css({ height: '28px', color: 'gray.900' })} />
+    <Wordmark class={css({ height: { sm: '24px', lg: '28px' }, color: 'gray.900' })} />
   </a>
 
-  <div class={flex({ alignItems: 'center', gap: '24px' })}>
+  <!-- 데스크탑 네비게이션 -->
+  <div class={flex({ alignItems: 'center', gap: '24px', display: { sm: 'none', lg: 'flex' } })}>
     <a
       class={css({
         fontSize: '16px',
@@ -123,4 +133,121 @@
       />
     </a>
   </div>
+
+  <!-- 모바일 네비게이션 -->
+  <div class={flex({ alignItems: 'center', gap: '8px', display: { sm: 'flex', lg: 'none' } })}>
+    <button
+      class={css({
+        padding: '8px',
+        backgroundColor: 'gray.900',
+        color: 'white',
+        border: '2px solid',
+        borderColor: 'gray.900',
+        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+      })}
+      onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
+      type="button"
+    >
+      <Icon icon={MenuIcon} />
+    </button>
+  </div>
 </header>
+
+<!-- 모바일 메뉴 드롭다운 -->
+{#if mobileMenuOpen}
+  <div
+    class={css({
+      position: 'fixed',
+      top: '88px',
+      left: '8px',
+      right: '8px',
+      backgroundColor: 'white',
+      border: '4px solid',
+      borderColor: 'gray.900',
+      boxShadow: '[8px 8px 0 0 #000]',
+      zIndex: '40',
+      display: { sm: 'block', lg: 'none' },
+      paddingY: '16px',
+    })}
+    onoutsideclick={() => (mobileMenuOpen = false)}
+    use:outsideClick
+  >
+    <a
+      class={css({
+        display: 'block',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        color: 'gray.900',
+        textTransform: 'uppercase',
+        letterSpacing: '[0.05em]',
+        paddingY: '12px',
+        paddingX: '24px',
+        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+      })}
+      href="/landing"
+    >
+      소개
+    </a>
+
+    <a
+      class={css({
+        display: 'block',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        color: 'gray.900',
+        textTransform: 'uppercase',
+        letterSpacing: '[0.05em]',
+        paddingY: '12px',
+        paddingX: '24px',
+        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+      })}
+      href="/pricing"
+    >
+      요금제
+    </a>
+
+    <a
+      class={css({
+        display: 'block',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        color: 'gray.900',
+        textTransform: 'uppercase',
+        letterSpacing: '[0.05em]',
+        paddingY: '12px',
+        paddingX: '24px',
+        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+      })}
+      href="/changelog"
+    >
+      업데이트 노트
+    </a>
+
+    <a
+      class={cx(
+        'group',
+        css({
+          display: 'block',
+          marginX: '24px',
+          marginTop: '16px',
+          paddingX: '24px',
+          paddingY: '12px',
+          backgroundColor: 'gray.900',
+          color: 'white',
+          fontSize: '16px',
+          fontWeight: 'black',
+          textTransform: 'uppercase',
+          letterSpacing: '[0.05em]',
+          border: '4px solid',
+          borderColor: 'gray.900',
+          textAlign: 'center',
+          boxShadow: '[4px 4px 0 0 #000]',
+          transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        }),
+      )}
+      href={env.PUBLIC_AUTH_URL}
+    >
+      시작하기
+    </a>
+  </div>
+{/if}

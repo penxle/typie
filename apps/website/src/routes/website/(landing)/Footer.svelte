@@ -21,23 +21,23 @@
     class={css({
       maxWidth: '[1200px]',
       marginX: 'auto',
-      paddingX: '24px',
-      paddingTop: '80px',
-      paddingBottom: '60px',
+      paddingX: { sm: '16px', lg: '24px' },
+      paddingTop: { sm: '60px', lg: '80px' },
+      paddingBottom: { sm: '40px', lg: '60px' },
       position: 'relative',
     })}
   >
     <div
       class={css({
         display: 'grid',
-        gridTemplateColumns: { base: '1fr', lg: '2fr 1fr 1fr' },
-        gap: { base: '48px', lg: '64px' },
-        marginBottom: '80px',
+        gridTemplateColumns: { sm: '1fr', lg: '2fr 1fr 1fr' },
+        gap: { sm: '32px', lg: '64px' },
+        marginBottom: { sm: '40px', lg: '80px' },
       })}
     >
       <div>
-        <div class={flex({ align: 'center', gap: '20px', marginBottom: '24px', flexWrap: 'wrap' })}>
-          <Wordmark class={css({ height: '24px', color: 'white' })} />
+        <div class={flex({ align: 'center', gap: { sm: '16px', lg: '20px' }, marginBottom: '24px', flexWrap: 'wrap' })}>
+          <Wordmark class={css({ height: { sm: '20px', lg: '24px' }, color: 'white' })} />
           <div class={flex({ gap: '12px' })}>
             <a
               class={css({
@@ -84,7 +84,7 @@
 
         <div
           class={css({
-            fontSize: '12px',
+            fontSize: { sm: '11px', lg: '12px' },
             fontFamily: 'Pretendard',
             lineHeight: '[1.6]',
             color: 'gray.600',
@@ -108,14 +108,14 @@
       <div>
         <h4
           class={css({
-            fontSize: '14px',
+            fontSize: { sm: '13px', lg: '14px' },
             fontWeight: 'bold',
-            color: 'white',
+            color: 'gray.200',
             fontFamily: 'Pretendard',
-            marginBottom: '20px',
+            marginBottom: { sm: '16px', lg: '20px' },
             textTransform: 'uppercase',
             letterSpacing: '[0.1em]',
-            paddingBottom: '12px',
+            paddingBottom: { sm: '8px', lg: '12px' },
             borderBottom: '3px solid',
             borderColor: 'gray.700',
           })}
@@ -125,13 +125,13 @@
         <div class={flex({ direction: 'column', gap: '12px' })}>
           <a
             class={css({
-              fontSize: '15px',
-              color: 'gray.400',
+              fontSize: { sm: '14px', lg: '15px' },
+              color: 'gray.500',
               fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'white',
+                color: 'gray.200',
                 textDecoration: 'underline',
                 textDecorationThickness: '2px',
                 textUnderlineOffset: '4px',
@@ -143,13 +143,13 @@
           </a>
           <a
             class={css({
-              fontSize: '15px',
-              color: 'gray.400',
+              fontSize: { sm: '14px', lg: '15px' },
+              color: 'gray.500',
               fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'white',
+                color: 'gray.200',
                 textDecoration: 'underline',
                 textDecorationThickness: '2px',
                 textUnderlineOffset: '4px',
@@ -161,13 +161,13 @@
           </a>
           <a
             class={css({
-              fontSize: '15px',
-              color: 'gray.400',
+              fontSize: { sm: '14px', lg: '15px' },
+              color: 'gray.500',
               fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'white',
+                color: 'gray.200',
                 textDecoration: 'underline',
                 textDecorationThickness: '2px',
                 textUnderlineOffset: '4px',
@@ -179,13 +179,13 @@
           </a>
           <a
             class={css({
-              fontSize: '15px',
-              color: 'gray.400',
+              fontSize: { sm: '14px', lg: '15px' },
+              color: 'gray.500',
               fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'white',
+                color: 'gray.200',
                 textDecoration: 'underline',
                 textDecorationThickness: '2px',
                 textUnderlineOffset: '4px',
@@ -203,14 +203,14 @@
       <div>
         <h4
           class={css({
-            fontSize: '14px',
+            fontSize: { sm: '13px', lg: '14px' },
             fontWeight: 'bold',
-            color: 'white',
+            color: 'gray.200',
             fontFamily: 'Pretendard',
-            marginBottom: '20px',
+            marginBottom: { sm: '16px', lg: '20px' },
             textTransform: 'uppercase',
             letterSpacing: '[0.1em]',
-            paddingBottom: '12px',
+            paddingBottom: { sm: '8px', lg: '12px' },
             borderBottom: '3px solid',
             borderColor: 'gray.700',
           })}
@@ -220,13 +220,13 @@
         <div class={flex({ direction: 'column', gap: '12px' })}>
           <a
             class={css({
-              fontSize: '15px',
-              color: 'gray.400',
+              fontSize: { sm: '14px', lg: '15px' },
+              color: 'gray.500',
               fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'white',
+                color: 'gray.200',
                 textDecoration: 'underline',
                 textDecorationThickness: '2px',
                 textUnderlineOffset: '4px',
@@ -240,13 +240,13 @@
           </a>
           <a
             class={css({
-              fontSize: '15px',
-              color: 'gray.400',
+              fontSize: { sm: '14px', lg: '15px' },
+              color: 'gray.500',
               fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'white',
+                color: 'gray.200',
                 textDecoration: 'underline',
                 textDecorationThickness: '2px',
                 textUnderlineOffset: '4px',
