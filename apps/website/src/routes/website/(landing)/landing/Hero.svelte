@@ -98,16 +98,16 @@
     bind:this={element}
     class={css({
       position: 'relative',
-      paddingTop: '120px',
-      paddingBottom: '100px',
-      paddingX: '24px',
+      paddingTop: { sm: '80px', lg: '120px' },
+      paddingBottom: { sm: '60px', lg: '100px' },
+      paddingX: { sm: '16px', lg: '24px' },
       zIndex: '2',
       opacity: '0',
-      transform: 'translateY(40px) rotate(-1deg) scale(0.95)',
+      transform: { sm: 'translateY(40px) scale(0.95)', lg: 'translateY(40px) rotate(-1deg) scale(0.95)' },
       transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
       '&.in-view': {
         opacity: '100',
-        transform: 'translateY(0) rotate(0) scale(1)',
+        transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
       },
     })}
   >
@@ -119,11 +119,11 @@
           gap: '8px',
           backgroundColor: 'gray.900',
           color: 'white',
-          paddingX: '20px',
-          paddingY: '8px',
-          fontSize: '14px',
+          paddingX: { sm: '16px', lg: '20px' },
+          paddingY: { sm: '6px', lg: '8px' },
+          fontSize: { sm: '12px', lg: '14px' },
           fontWeight: 'bold',
-          marginBottom: '48px',
+          marginBottom: { sm: '32px', lg: '48px' },
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
           transform: 'rotate(-2deg) scale(0)',
@@ -139,13 +139,13 @@
 
       <h1
         class={css({
-          fontSize: { base: '[64px]', md: '[88px]', lg: '[112px]' },
+          fontSize: { sm: '[48px]', lg: '[112px]' },
           fontWeight: 'black',
           color: 'gray.900',
           textAlign: 'center',
           fontFamily: 'Paperlogy',
           lineHeight: '[1]',
-          marginBottom: '40px',
+          marginBottom: { sm: '24px', lg: '40px' },
           textTransform: 'uppercase',
           opacity: '0',
           transform: 'translateY(20px)',
@@ -161,7 +161,7 @@
         <span
           class={css({
             backgroundColor: 'amber.400',
-            paddingX: '24px',
+            paddingX: { sm: '16px', lg: '24px' },
             display: 'inline-block',
             transform: 'rotate(1deg) scale(0)',
             transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s]',
@@ -178,12 +178,12 @@
 
       <p
         class={css({
-          fontSize: { base: '20px', md: '24px' },
+          fontSize: { sm: '16px', lg: '24px' },
           fontWeight: 'medium',
           color: 'gray.700',
           textAlign: 'center',
           fontFamily: 'Pretendard',
-          marginBottom: '64px',
+          marginBottom: { sm: '40px', lg: '64px' },
           lineHeight: '[1.6]',
           maxWidth: '[800px]',
           marginX: 'auto',
@@ -204,10 +204,10 @@
       <div
         class={css({
           display: 'flex',
-          gap: '20px',
+          gap: { sm: '16px', lg: '20px' },
           justifyContent: 'center',
           flexWrap: 'wrap',
-          marginBottom: '80px',
+          marginBottom: { sm: '60px', lg: '80px' },
           opacity: '0',
           transform: 'translateY(10px)',
           transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.8s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.8s]',
@@ -223,22 +223,22 @@
             css({
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '10px',
-              paddingX: '32px',
-              paddingY: '16px',
-              fontSize: '18px',
+              gap: { sm: '8px', lg: '10px' },
+              paddingX: { sm: '24px', lg: '32px' },
+              paddingY: { sm: '12px', lg: '16px' },
+              fontSize: { sm: '16px', lg: '18px' },
               fontWeight: 'black',
               color: 'gray.900',
               backgroundColor: 'amber.400',
               border: '4px solid',
               borderColor: 'gray.900',
               transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-              transform: 'rotate(-1deg)',
+              transform: { sm: 'rotate(0)', lg: 'rotate(-1deg)' },
               textTransform: 'uppercase',
               letterSpacing: '[0.05em]',
               boxShadow: '[6px 6px 0 0 #000]',
               _hover: {
-                transform: 'translate(-2px, -2px) rotate(0)',
+                transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-2px, -2px) rotate(0)' },
                 boxShadow: '[8px 8px 0 0 #000]',
               },
               _active: {
@@ -271,24 +271,24 @@
           marginX: 'auto',
           width: 'full',
           opacity: '0',
-          transform: 'translateY(20px) rotate(-0.5deg)',
+          transform: { sm: 'translateY(20px)', lg: 'translateY(20px) rotate(-0.5deg)' },
           transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.9s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.9s]',
           '.in-view &': {
             opacity: '100',
-            transform: 'translateY(0) rotate(0)',
+            transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
           },
         })}
       >
         <div
           class={css({
             position: 'absolute',
-            top: '-20px',
-            left: '20px',
+            top: { sm: '-16px', lg: '-20px' },
+            left: { sm: '16px', lg: '20px' },
             backgroundColor: 'amber.400',
             color: 'gray.900',
-            paddingX: '20px',
-            paddingY: '10px',
-            fontSize: '14px',
+            paddingX: { sm: '16px', lg: '20px' },
+            paddingY: { sm: '8px', lg: '10px' },
+            fontSize: { sm: '12px', lg: '14px' },
             fontWeight: 'black',
             textTransform: 'uppercase',
             letterSpacing: '[0.1em]',
@@ -305,14 +305,14 @@
         <div
           class={css({
             backgroundColor: 'white',
-            padding: '8px',
+            padding: { sm: '4px', lg: '8px' },
             border: '4px solid',
             borderColor: 'gray.900',
-            boxShadow: '[12px 12px 0 0 #000]',
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
             transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
             _hover: {
-              transform: 'translate(-4px, -4px)',
-              boxShadow: '[16px 16px 0 0 #000]',
+              transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px)' },
+              boxShadow: { sm: '[10px 10px 0 0 #000]', lg: '[16px 16px 0 0 #000]' },
             },
           })}
         >
