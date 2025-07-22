@@ -126,7 +126,7 @@ export const FloatingMenu = Extension.create({
               top: '0',
               left: '0',
               width: 'max',
-              zIndex: '50',
+              zIndex: '10',
               visibility: 'hidden',
             });
 
@@ -146,7 +146,7 @@ export const FloatingMenu = Extension.create({
               top: '0',
               left: '0',
               width: 'max',
-              zIndex: '50',
+              zIndex: '10',
               visibility: 'hidden',
             });
 
