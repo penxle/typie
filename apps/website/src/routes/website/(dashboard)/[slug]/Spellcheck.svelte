@@ -15,12 +15,14 @@
   import { Icon, RingSpinner, Tooltip } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import type { VirtualElement } from '@floating-ui/dom';
   import type { Ref } from '$lib/utils';
 
   type Props = {
     editor?: Ref<Editor>;
+    subscription: boolean;
   };
 
   type SpellingError = {
@@ -32,12 +34,14 @@
     explanation: string;
   };
 
-  let { editor }: Props = $props();
+  let { editor, subscription }: Props = $props();
 
   const key = new PluginKey<DecorationSet>('spellcheck');
 
   let inflight = $state(false);
   let mounted = $state(false);
+
+  let planUpgradeOpen = $state(false);
 
   let errors = $state<SpellingError[]>([]);
   let activeId = $state<string>();
@@ -237,12 +241,18 @@
   });
 </script>
 
-{#if inflight}
-  <div class={center({ size: '48px' })}>
-    <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
-  </div>
+<PlanUpgradeModal bind:open={planUpgradeOpen} />
+
+{#if subscription}
+  {#if inflight}
+    <div class={center({ size: '48px' })}>
+      <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
+    </div>
+  {:else}
+    <ToolbarButton icon={SpellCheckIcon} label="맞춤법" onclick={spellcheck} size="large" />
+  {/if}
 {:else}
-  <ToolbarButton icon={SpellCheckIcon} label="맞춤법" onclick={spellcheck} size="large" />
+  <ToolbarButton icon={SpellCheckIcon} label="맞춤법" onclick={() => (planUpgradeOpen = true)} size="large" />
 {/if}
 
 {#if activeId}
