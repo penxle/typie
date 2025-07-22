@@ -917,15 +917,8 @@
       class={css({
         position: 'absolute',
         inset: '0',
-        backgroundImage: `
-          repeating-linear-gradient(
-            45deg,
-            transparent,
-            transparent 20px,
-            rgba(251, 191, 36, 0.1) 20px,
-            rgba(251, 191, 36, 0.1) 40px
-          )
-        `,
+        backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(251, 191, 36, 0.15) 1px, transparent 1px)',
+        backgroundSize: '[60px 60px]',
         pointerEvents: 'none',
       })}
     ></div>
@@ -933,25 +926,14 @@
     <div
       class={css({
         position: 'absolute',
-        top: '[10%]',
-        left: '[5%]',
-        width: '100px',
-        height: '100px',
-        backgroundColor: 'amber.400',
-        transform: 'rotate(45deg)',
-        opacity: '[0.2]',
-      })}
-    ></div>
-    <div
-      class={css({
-        position: 'absolute',
-        bottom: '[15%]',
-        right: '[10%]',
-        width: '80px',
-        height: '80px',
-        backgroundColor: 'amber.400',
-        transform: 'rotate(15deg)',
-        opacity: '[0.15]',
+        top: '[50%]',
+        left: '[50%]',
+        width: '[800px]',
+        height: '[800px]',
+        backgroundImage: 'radial-gradient(circle, rgba(251, 191, 36, 0.2), transparent)',
+        transform: 'translate(-50%, -50%)',
+        filter: '[blur(120px)]',
+        pointerEvents: 'none',
       })}
     ></div>
 
