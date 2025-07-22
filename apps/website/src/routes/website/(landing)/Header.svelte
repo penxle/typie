@@ -47,7 +47,6 @@
     <Wordmark class={css({ height: { sm: '24px', lg: '28px' }, color: 'gray.900' })} />
   </a>
 
-  <!-- 데스크탑 네비게이션 -->
   <div class={flex({ alignItems: 'center', gap: '24px', display: { sm: 'none', lg: 'flex' } })}>
     <a
       class={css({
@@ -134,7 +133,6 @@
     </a>
   </div>
 
-  <!-- 모바일 네비게이션 -->
   <div class={flex({ alignItems: 'center', gap: '8px', display: { sm: 'flex', lg: 'none' } })}>
     <button
       class={css({
@@ -153,7 +151,6 @@
   </div>
 </header>
 
-<!-- 모바일 메뉴 드롭다운 -->
 {#if mobileMenuOpen}
   <div
     class={css({

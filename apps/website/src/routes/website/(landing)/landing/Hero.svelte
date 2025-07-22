@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import SparklesIcon from '~icons/lucide/sparkles';
   import ZapIcon from '~icons/lucide/zap';
@@ -8,30 +7,6 @@
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import heroImage from './images/hero.png';
-
-  let element = $state<HTMLElement>();
-
-  onMount(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
-          }
-        });
-      },
-      {
-        threshold: 0.05,
-        rootMargin: '0px 0px 100px 0px',
-      },
-    );
-
-    if (element) observer.observe(element);
-
-    return () => {
-      if (element) observer.unobserve(element);
-    };
-  });
 </script>
 
 <div
@@ -95,7 +70,6 @@
   ></div>
 
   <section
-    bind:this={element}
     class={css({
       position: 'relative',
       paddingTop: { sm: '80px', lg: '120px' },
@@ -110,6 +84,7 @@
         transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
       },
     })}
+    data-observe
   >
     <div class={center({ flexDirection: 'column', maxWidth: '[1200px]', marginX: 'auto' })}>
       <div

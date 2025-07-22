@@ -1,43 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import SparklesIcon from '~icons/lucide/sparkles';
   import { env } from '$env/dynamic/public';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
-
-  let boxElement = $state<HTMLElement>();
-  let sparkleElement = $state<HTMLElement>();
-  let decorElement1 = $state<HTMLElement>();
-  let decorElement2 = $state<HTMLElement>();
-
-  onMount(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
-          }
-        });
-      },
-      {
-        threshold: 0.1,
-        rootMargin: '0px 0px 50px 0px',
-      },
-    );
-
-    const elements = [boxElement, sparkleElement, decorElement1, decorElement2];
-    elements.forEach((element) => {
-      if (element) observer.observe(element);
-    });
-
-    return () => {
-      elements.forEach((element) => {
-        if (element) observer.unobserve(element);
-      });
-    };
-  });
 </script>
 
 <section
@@ -49,7 +16,6 @@
 >
   <div class={css({ paddingX: { sm: '16px', lg: '40px' }, maxWidth: '[1024px]', marginX: 'auto' })}>
     <div
-      bind:this={boxElement}
       class={css({
         position: 'relative',
         backgroundColor: 'amber.400',
@@ -70,9 +36,9 @@
           boxShadow: { sm: '[12px 12px 0 0 #000]', lg: '[16px 16px 0 0 #000]' },
         },
       })}
+      data-observe
     >
       <div
-        bind:this={sparkleElement}
         class={css({
           position: 'absolute',
           top: { sm: '-16px', lg: '-20px' },
@@ -90,6 +56,7 @@
             transform: 'rotate(12deg) scale(1)',
           },
         })}
+        data-observe
       >
         <Icon style={css.raw({ color: 'white' })} icon={SparklesIcon} size={24} />
       </div>
@@ -184,7 +151,6 @@
       </div>
 
       <div
-        bind:this={decorElement1}
         class={css({
           position: 'absolute',
           bottom: { sm: '24px', lg: '40px' },
@@ -203,10 +169,10 @@
             transform: 'rotate(45deg) scale(1)',
           },
         })}
+        data-observe
       ></div>
 
       <div
-        bind:this={decorElement2}
         class={css({
           position: 'absolute',
           top: { sm: '24px', lg: '40px' },
@@ -222,6 +188,7 @@
             transform: 'rotate(-15deg) scale(1)',
           },
         })}
+        data-observe
       ></div>
     </div>
   </div>
