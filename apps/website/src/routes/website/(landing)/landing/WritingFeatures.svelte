@@ -90,14 +90,19 @@
         display: 'inline-flex',
         alignItems: 'center',
         gap: '8px',
-        paddingX: '16px',
-        paddingY: '6px',
-        marginBottom: '24px',
-        borderRadius: 'full',
+        paddingX: '20px',
+        paddingY: '8px',
+        marginBottom: '32px',
         backgroundColor: 'gray.900',
         color: 'white',
         fontSize: '14px',
-        fontWeight: 'medium',
+        fontWeight: 'bold',
+        letterSpacing: '[0.1em]',
+        textTransform: 'uppercase',
+        transform: 'rotate(-2deg)',
+        border: '4px solid',
+        borderColor: 'gray.900',
+        boxShadow: '[4px 4px 0 0 #fbbf24]',
       })}
     >
       <Icon icon={DraftingCompassIcon} size={16} />
@@ -106,26 +111,38 @@
 
     <h2
       class={css({
-        fontSize: '[44px]',
-        fontWeight: 'extrabold',
+        fontSize: '[56px]',
+        fontWeight: 'black',
         color: 'gray.950',
         textAlign: 'center',
         fontFamily: 'Paperlogy',
-        marginBottom: '16px',
-        lineHeight: '[1.2]',
+        marginBottom: '24px',
+        lineHeight: '[1.1]',
+        textTransform: 'uppercase',
       })}
     >
-      글쓰기에 필요한 모든 도구
+      글쓰기에 필요한
+      <br />
+      <span
+        class={css({
+          backgroundColor: 'amber.400',
+          paddingX: '20px',
+          display: 'inline-block',
+          transform: 'rotate(1deg)',
+        })}
+      >
+        모든 도구
+      </span>
     </h2>
     <p
       class={css({
-        fontSize: '18px',
-        fontWeight: 'medium',
-        color: 'gray.600',
+        fontSize: '20px',
+        fontWeight: 'semibold',
+        color: 'gray.700',
         textAlign: 'center',
         fontFamily: 'Pretendard',
         maxWidth: '600px',
-        lineHeight: '[1.6]',
+        lineHeight: '[1.7]',
       })}
     >
       본문 작성부터 아이디어 시각화까지, 글쓰기의 모든 과정을 지원합니다.
@@ -137,48 +154,62 @@
   <Bento>
     <div class={center({ flexGrow: 1 })}>
       <div class={css({ position: 'relative', height: '[220px]', overflow: 'hidden' })}>
-        <div class={grid({ columns: 8, gap: '20px' })}>
+        <div class={grid({ columns: 8, gap: '16px' })}>
           {#each editorTools as tool (tool.icon)}
             <div
               class={css({
-                size: '64px',
-                borderRadius: '12px',
+                size: '56px',
                 backgroundColor: 'white',
+                border: '3px solid',
+                borderColor: 'gray.900',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: 'small',
+                transition:
+                  '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), background-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                _hover: {
+                  backgroundColor: 'amber.400',
+                  transform: 'translateY(-2px)',
+                },
               })}
             >
-              <Icon style={css.raw({ color: 'gray.700' })} icon={tool.icon} size={28} />
+              <Icon style={css.raw({ color: 'gray.900' })} icon={tool.icon} size={24} />
             </div>
           {/each}
 
           <div
             class={css({
-              size: '64px',
-              borderRadius: '12px',
+              size: '56px',
               backgroundColor: 'white',
+              border: '3px solid',
+              borderColor: 'gray.900',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: 'small',
+              transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              _hover: {
+                transform: 'translateY(-2px)',
+              },
             })}
           >
-            <div class={css({ size: '28px', borderRadius: 'full', backgroundColor: 'red.500' })}></div>
+            <div class={css({ size: '24px', borderRadius: 'full', backgroundColor: 'red.500' })}></div>
           </div>
           <div
             class={css({
-              size: '64px',
-              borderRadius: '12px',
+              size: '56px',
               backgroundColor: 'white',
+              border: '3px solid',
+              borderColor: 'gray.900',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: 'small',
+              transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              _hover: {
+                transform: 'translateY(-2px)',
+              },
             })}
           >
-            <div class={css({ size: '28px', borderRadius: '6px', backgroundColor: 'amber.200' })}></div>
+            <div class={css({ size: '24px', backgroundColor: 'amber.400' })}></div>
           </div>
         </div>
 
@@ -188,8 +219,8 @@
             bottom: '0',
             left: '0',
             right: '0',
-            height: '60px',
-            background: '[linear-gradient(to top, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.9) 30%, rgba(255, 255, 255, 0) 100%)]',
+            height: '40px',
+            background: '[linear-gradient(to top, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.8) 50%, rgba(255, 255, 255, 0) 100%)]',
             pointerEvents: 'none',
           })}
         ></div>
@@ -199,9 +230,11 @@
     <div class={css({ marginTop: 'auto', paddingTop: '24px' })}>
       <div class={flex({ alignItems: 'center', gap: '10px', marginBottom: '12px' })}>
         <Icon icon={DraftingCompassIcon} size={20} />
-        <h3 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.800' })}>글쓰기에 필요한 모든 것</h3>
+        <h3 class={css({ fontSize: '20px', fontWeight: 'black', color: 'gray.800', textTransform: 'uppercase' })}>
+          글쓰기에 필요한 모든 것
+        </h3>
       </div>
-      <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
+      <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]', fontWeight: 'medium' })}>
         기본적인 서식부터 이미지, 링크, 표 삽입까지. 글을 풍부하게 만드는 데 필요한 모든 도구가 준비되어 있습니다.
       </p>
     </div>
@@ -222,7 +255,6 @@
               width: 'full',
               height: 'full',
               backgroundColor: 'gray.50',
-              borderRadius: '8px',
               overflow: 'hidden',
               backgroundImage: `
                 linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
@@ -239,11 +271,10 @@
                 transform: 'translate(-50%, -50%) translate(-40px, -20px)',
                 width: '140px',
                 height: '140px',
-                borderRadius: '[20px]',
-                backgroundColor: '[#dbeafe]',
-                borderWidth: '2px',
-                borderColor: '[#60a5fa]',
-                boxShadow: 'small',
+                backgroundColor: 'blue.200',
+                border: '4px solid',
+                borderColor: 'blue.600',
+                boxShadow: '[4px 4px 0 0 #000]',
               })}
             ></div>
 
@@ -256,10 +287,10 @@
                 width: '120px',
                 height: '120px',
                 borderRadius: 'full',
-                backgroundColor: '[#fef3c7]',
-                borderWidth: '2px',
-                borderColor: '[#fbbf24]',
-                boxShadow: 'small',
+                backgroundColor: 'amber.200',
+                border: '4px solid',
+                borderColor: 'amber.600',
+                boxShadow: '[4px 4px 0 0 #000]',
               })}
             ></div>
 
@@ -270,52 +301,75 @@
                 left: '1/2',
                 transform: 'translateX(-50%)',
                 gap: '4px',
-                padding: '6px',
+                padding: '8px',
                 backgroundColor: 'white',
-                borderRadius: '8px',
-                boxShadow: 'small',
+                border: '3px solid',
+                borderColor: 'gray.900',
+                boxShadow: '[3px 3px 0 0 #000]',
               })}
             >
               <div
                 class={center({
-                  size: '24px',
-                  borderRadius: '4px',
+                  size: '28px',
                   backgroundColor: 'gray.100',
                   color: 'gray.600',
+                  border: '2px solid',
+                  borderColor: 'gray.900',
+                  transition: 'all',
+                  transitionDuration: '150ms',
+                  _hover: {
+                    backgroundColor: 'gray.900',
+                    color: 'white',
+                  },
                 })}
               >
-                <Icon icon={MousePointer2Icon} size={14} />
+                <Icon icon={MousePointer2Icon} size={16} />
               </div>
               <div
                 class={center({
-                  size: '24px',
-                  borderRadius: '4px',
-                  backgroundColor: 'amber.100',
-                  color: 'amber.700',
+                  size: '28px',
+                  backgroundColor: 'amber.400',
+                  color: 'gray.900',
+                  border: '2px solid',
+                  borderColor: 'gray.900',
                 })}
               >
-                <Icon icon={SquareIcon} size={14} />
+                <Icon icon={SquareIcon} size={16} />
               </div>
               <div
                 class={center({
-                  size: '24px',
-                  borderRadius: '4px',
+                  size: '28px',
                   backgroundColor: 'gray.100',
                   color: 'gray.600',
+                  border: '2px solid',
+                  borderColor: 'gray.900',
+                  transition: 'all',
+                  transitionDuration: '150ms',
+                  _hover: {
+                    backgroundColor: 'gray.900',
+                    color: 'white',
+                  },
                 })}
               >
-                <Icon icon={CircleIcon} size={14} />
+                <Icon icon={CircleIcon} size={16} />
               </div>
-              <div class={css({ width: '1px', height: '20px', backgroundColor: 'gray.200', marginX: '2px' })}></div>
+              <div class={css({ width: '2px', height: '24px', backgroundColor: 'gray.900', marginX: '2px' })}></div>
               <div
                 class={center({
-                  size: '24px',
-                  borderRadius: '4px',
+                  size: '28px',
                   backgroundColor: 'gray.100',
                   color: 'gray.600',
+                  border: '2px solid',
+                  borderColor: 'gray.900',
+                  transition: 'all',
+                  transitionDuration: '150ms',
+                  _hover: {
+                    backgroundColor: 'gray.900',
+                    color: 'white',
+                  },
                 })}
               >
-                <Icon icon={PencilIcon} size={14} />
+                <Icon icon={PencilIcon} size={16} />
               </div>
             </div>
           </div>
@@ -324,9 +378,9 @@
         <div class={css({ marginTop: 'auto', paddingTop: '24px' })}>
           <div class={flex({ alignItems: 'center', gap: '10px', marginBottom: '12px' })}>
             <Icon icon={PaletteIcon} size={20} />
-            <h3 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.800' })}>캔버스</h3>
+            <h3 class={css({ fontSize: '20px', fontWeight: 'black', color: 'gray.800', textTransform: 'uppercase' })}>캔버스</h3>
           </div>
-          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
+          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]', fontWeight: 'medium' })}>
             자유롭게 그림을 그리고 다이어그램을 만들어 보세요. 아이디어를 시각적으로 표현하고 글과 함께 배치할 수 있습니다.
           </p>
         </div>
@@ -334,25 +388,26 @@
 
       <Bento>
         <div class={center({ flexGrow: 1 })}>
-          <div class={css({ width: 'full', maxWidth: '320px' })}>
+          <div class={css({ width: 'full', maxWidth: '360px' })}>
             <div
               class={css({
                 padding: '20px',
-                borderRadius: '8px',
                 backgroundColor: 'white',
-                border: '[1px solid]',
-                borderColor: 'gray.200',
+                border: '4px solid',
+                borderColor: 'gray.900',
                 marginBottom: '16px',
                 position: 'relative',
+                boxShadow: '[4px 4px 0 0 #000]',
               })}
             >
-              <p class={css({ fontSize: '15px', lineHeight: '[1.8]', color: 'gray.800' })}>
+              <p class={css({ fontSize: '15px', lineHeight: '[1.8]', color: 'gray.800', fontWeight: 'medium' })}>
                 겨울밤 하늘에는 별들이
                 <span
                   class={css({
                     textDecoration: 'underline wavy',
                     textDecorationColor: 'red.500',
-                    textUnderlineOffset: '2px',
+                    textUnderlineOffset: '4px',
+                    textDecorationThickness: '2px',
                   })}
                 >
                   총총이 빛나고
@@ -363,12 +418,11 @@
 
             <div
               class={css({
-                padding: '8px',
-                borderRadius: '8px',
+                padding: '12px',
                 backgroundColor: 'white',
-                boxShadow: 'medium',
-                border: '[1px solid]',
-                borderColor: 'gray.200',
+                border: '4px solid',
+                borderColor: 'gray.900',
+                boxShadow: '[4px 4px 0 0 #000]',
               })}
             >
               <button
@@ -376,18 +430,20 @@
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   gap: '8px',
-                  borderWidth: '1px',
-                  borderColor: 'red.200',
-                  borderRadius: '6px',
-                  paddingX: '12px',
-                  paddingY: '8px',
+                  border: '3px solid',
+                  borderColor: 'red.500',
+                  paddingX: '16px',
+                  paddingY: '10px',
                   fontSize: '14px',
-                  fontWeight: 'medium',
+                  fontWeight: 'bold',
                   color: 'red.700',
                   backgroundColor: 'red.50',
                   width: 'full',
+                  transition: 'all',
+                  transitionDuration: '150ms',
                   _hover: {
                     backgroundColor: 'red.100',
+                    transform: 'translateY(-2px)',
                   },
                 })}
                 type="button"
@@ -398,17 +454,19 @@
 
               <div
                 class={css({
-                  marginTop: '8px',
-                  paddingX: '12px',
-                  paddingY: '8px',
-                  borderRadius: '6px',
+                  marginTop: '12px',
+                  paddingX: '16px',
+                  paddingY: '12px',
                   backgroundColor: 'gray.50',
-                  fontSize: '12px',
+                  fontSize: '13px',
                   color: 'gray.600',
                   lineHeight: '[1.5]',
+                  border: '3px solid',
+                  borderColor: 'gray.300',
+                  fontWeight: 'medium',
                 })}
               >
-                <strong class={css({ color: 'gray.700' })}>부사 표기 오류</strong>
+                <strong class={css({ color: 'gray.800' })}>부사 표기 오류</strong>
                 <br />
                 '총총이'는 '총총히'로 써야 올바른 표현입니다.
               </div>
@@ -419,9 +477,11 @@
         <div class={css({ marginTop: 'auto', paddingTop: '24px' })}>
           <div class={flex({ alignItems: 'center', gap: '10px', marginBottom: '12px' })}>
             <Icon icon={SpellCheckIcon} size={20} />
-            <h3 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.800' })}>정교한 맞춤법 검사</h3>
+            <h3 class={css({ fontSize: '20px', fontWeight: 'black', color: 'gray.800', textTransform: 'uppercase' })}>
+              정교한 맞춤법 검사
+            </h3>
           </div>
-          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
+          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]', fontWeight: 'medium' })}>
             오탈자 걱정 없이 편하게 쓸 수 있도록, 맞춤법과 문법을 꼼꼼하게 살펴 교정 방향과 그 이유를 함께 제시합니다.
           </p>
         </div>
@@ -431,34 +491,39 @@
     <div class={css({ flex: '1', display: 'flex', flexDirection: 'column', gap: '24px' })}>
       <Bento>
         <div class={center({ flexGrow: '1' })}>
-          <div class={flex({ gap: '16px', alignItems: 'stretch', flexGrow: '1' })}>
+          <div class={flex({ gap: '16px', alignItems: 'stretch', flexGrow: '1', maxWidth: '380px' })}>
             <div
               class={css({
                 flexGrow: '1',
-                borderWidth: '1px',
-                borderColor: 'gray.200',
-                borderRadius: '8px',
+                border: '4px solid',
+                borderColor: 'gray.900',
                 backgroundColor: 'white',
                 overflow: 'hidden',
-                boxShadow: 'small',
+                boxShadow: '[4px 4px 0 0 #000]',
               })}
             >
               {#each fontExamples as example, index (example.font)}
                 <div
                   class={css({
                     paddingX: '16px',
-                    paddingY: '12px',
-                    borderBottomWidth: index < fontExamples.length - 1 ? '1px' : '0',
-                    borderColor: 'gray.100',
+                    paddingY: '14px',
+                    borderBottomWidth: index < fontExamples.length - 1 ? '3px' : '0',
+                    borderColor: 'gray.900',
+                    transition: 'all',
+                    transitionDuration: '150ms',
+                    _hover: {
+                      backgroundColor: 'amber.50',
+                    },
                   })}
                 >
                   <p
                     style:font-family={example.font}
                     class={css({
-                      fontSize: '14px',
+                      fontSize: '15px',
                       lineHeight: '[1.4]',
                       color: 'gray.800',
                       margin: '0',
+                      fontWeight: 'semibold',
                     })}
                   >
                     {example.text}
@@ -472,30 +537,31 @@
                 flexGrow: '1',
                 padding: '20px',
                 backgroundColor: 'amber.50',
-                borderWidth: '2px',
-                borderStyle: 'dashed',
-                borderColor: 'amber.300',
-                borderRadius: '8px',
-                transition: 'common',
+                border: '4px dashed',
+                borderColor: 'amber.600',
+                transition: 'all',
+                transitionDuration: '200ms',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '12px',
+                cursor: 'pointer',
                 _hover: {
-                  borderColor: 'amber.400',
+                  borderColor: 'gray.900',
                   backgroundColor: 'amber.100',
+                  borderStyle: 'solid',
                 },
               })}
             >
-              <Icon style={css.raw({ color: 'amber.600' })} icon={PlusIcon} size={24} />
+              <Icon style={css.raw({ color: 'amber.700' })} icon={PlusIcon} size={28} />
               <div class={css({ textAlign: 'center' })}>
-                <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'amber.700', marginBottom: '4px' })}>
+                <p class={css({ fontSize: '14px', fontWeight: 'bold', color: 'amber.800', marginBottom: '4px' })}>
                   내가 원하는
                   <br />
                   폰트 업로드
                 </p>
-                <p class={css({ fontSize: '11px', color: 'amber.600' })}>TTF, OTF 파일 지원</p>
+                <p class={css({ fontSize: '12px', color: 'amber.700', fontWeight: 'medium' })}>TTF, OTF 파일 지원</p>
               </div>
             </div>
           </div>
@@ -504,9 +570,11 @@
         <div class={css({ marginTop: 'auto', paddingTop: '24px' })}>
           <div class={flex({ alignItems: 'center', gap: '10px', marginBottom: '12px' })}>
             <Icon icon={TypeIcon} size={20} />
-            <h3 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.800' })}>자유로운 폰트 선택</h3>
+            <h3 class={css({ fontSize: '20px', fontWeight: 'black', color: 'gray.800', textTransform: 'uppercase' })}>
+              자유로운 폰트 선택
+            </h3>
           </div>
-          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
+          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]', fontWeight: 'medium' })}>
             엄선된 기본 폰트는 물론, 원하는 폰트를 직접 업로드하여 원하는 모습으로 글을 꾸밀 수 있습니다.
           </p>
         </div>
@@ -518,13 +586,13 @@
             <div
               class={css({
                 padding: '20px',
-                borderRadius: '8px',
                 backgroundColor: 'white',
-                border: '[1px solid]',
-                borderColor: 'gray.200',
+                border: '4px solid',
+                borderColor: 'gray.900',
+                boxShadow: '[4px 4px 0 0 #000]',
               })}
             >
-              <p class={css({ fontSize: '15px', lineHeight: '[1.7]', color: 'gray.800' })}>
+              <p class={css({ fontSize: '15px', lineHeight: '[1.7]', color: 'gray.800', fontWeight: 'medium' })}>
                 봄비가 내리던 날, 나는 낡은 우산을 들고 거리를 걸었다. 빗방울이 우산에 부딪히는 소리가 마치 옛 추억을 두드리는 것 같았다.
                 젖은 아스팔트 위로 가로등 불빛이 번지고 있었다.
               </p>
@@ -533,22 +601,45 @@
             <div
               class={css({
                 padding: '16px',
-                borderRadius: '8px',
-                backgroundColor: 'amber.50',
-                border: '[1px solid]',
-                borderColor: 'amber.200',
+                backgroundColor: 'amber.400',
+                border: '4px solid',
+                borderColor: 'gray.900',
+                position: 'relative',
+                transform: 'rotate(1deg)',
+                boxShadow: '[4px 4px 0 0 #000]',
+                transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                _hover: {
+                  transform: 'rotate(0)',
+                },
               })}
             >
-              <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'amber.700', marginBottom: '8px' })}>작성 노트</div>
               <div
                 class={css({
-                  fontSize: '13px',
-                  color: 'gray.700',
-                  lineHeight: '[1.5]',
+                  position: 'absolute',
+                  top: '-16px',
+                  right: '16px',
+                  backgroundColor: 'gray.900',
+                  color: 'white',
+                  paddingX: '12px',
+                  paddingY: '4px',
+                  fontSize: '12px',
+                  fontWeight: 'black',
+                  textTransform: 'uppercase',
+                  letterSpacing: '[0.1em]',
+                  border: '3px solid',
+                  borderColor: 'gray.900',
+                  boxShadow: '[3px 3px 0 0 #fbbf24]',
                 })}
               >
-                우산 소리 묘사 더 구체적으로 / 주인공 감정선 추가 / 거리 풍경 세밀하게 / 다음 장면 전환 고민
+                작성 노트
               </div>
+              <p class={css({ fontSize: '14px', lineHeight: '[1.6]', color: 'gray.900', fontWeight: 'bold' })}>
+                - 비 오는 날의 정서를 더 강조
+                <br />
+                - 우산의 의미 확장 필요
+                <br />
+                - 마지막에 희망적 메시지 추가?
+              </p>
             </div>
           </div>
         </div>
@@ -556,198 +647,95 @@
         <div class={css({ marginTop: 'auto', paddingTop: '24px' })}>
           <div class={flex({ alignItems: 'center', gap: '10px', marginBottom: '12px' })}>
             <Icon icon={NotebookTabsIcon} size={20} />
-            <h3 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.800' })}>작성 노트</h3>
+            <h3 class={css({ fontSize: '20px', fontWeight: 'black', color: 'gray.800', textTransform: 'uppercase' })}>작성 노트</h3>
           </div>
-          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
-            쓰기 중 떠오르는 아이디어나 메모를 포스트 옆에 바로 기록할 수 있어, 흐름을 유지하며 생각을 보관할 수 있습니다.
+          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]', fontWeight: 'medium' })}>
+            쓰기 중 떠오르는 아이디어나 메모를 포스트 옆에 바로 기록할 수 있습니다.
           </p>
         </div>
       </Bento>
+    </div>
+  </div>
 
+  <div
+    class={flex({
+      gap: '24px',
+      marginTop: '24px',
+    })}
+  >
+    <div class={css({ flex: '1' })}>
       <Bento>
         <div class={center({ flexGrow: 1 })}>
-          <div
-            class={flex({
-              flexDirection: 'column',
-              gap: '20px',
-              borderWidth: '1px',
-              borderColor: 'gray.200',
-              borderRadius: '8px',
-              padding: '20px',
-            })}
-          >
-            <div class={css({ width: 'full' })}>
-              <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.600', marginBottom: '10px' })}>본문 폭</div>
-              <div class={flex({ alignItems: 'center', gap: '12px' })}>
+          <div class={css({ width: 'full', maxWidth: '380px' })}>
+            <div
+              class={flex({
+                alignItems: 'center',
+                gap: '16px',
+                paddingX: '20px',
+                paddingY: '16px',
+                backgroundColor: 'gray.50',
+                border: '4px solid',
+                borderColor: 'gray.900',
+                marginBottom: '16px',
+              })}
+            >
+              <div class={css({ fontSize: '14px', fontWeight: 'bold', color: 'gray.600', textTransform: 'uppercase' })}>본문 폭</div>
+              <div
+                class={css({
+                  flex: '1',
+                  height: '6px',
+                  backgroundColor: 'gray.300',
+                  position: 'relative',
+                })}
+              >
                 <div
                   class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'gray.50',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'gray.400',
-                    opacity: '40',
+                    position: 'absolute',
+                    left: '0',
+                    width: '[60%]',
+                    height: 'full',
+                    backgroundColor: 'gray.900',
                   })}
-                >
-                  600px
-                </div>
+                ></div>
                 <div
                   class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'amber.100',
-                    borderWidth: '1px',
-                    borderColor: 'amber.300',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'amber.700',
+                    position: 'absolute',
+                    left: '[60%]',
+                    top: '[50%]',
+                    transform: 'translate(-50%, -50%)',
+                    size: '20px',
+                    backgroundColor: 'amber.400',
+                    border: '4px solid',
+                    borderColor: 'gray.900',
+                    boxShadow: '[2px 2px 0 0 #000]',
+                    cursor: 'pointer',
                   })}
-                >
-                  800px
-                </div>
-                <div
-                  class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'gray.50',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'gray.400',
-                    opacity: '40',
-                  })}
-                >
-                  1000px
-                </div>
+                ></div>
               </div>
+              <div class={css({ fontSize: '14px', fontWeight: 'black', color: 'gray.900' })}>600px</div>
             </div>
 
-            <div class={css({ width: 'full' })}>
-              <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.600', marginBottom: '10px' })}>첫 줄 들여쓰기</div>
-              <div class={flex({ alignItems: 'center', gap: '12px' })}>
-                <div
+            <div
+              class={css({
+                padding: '20px',
+                backgroundColor: 'white',
+                border: '4px solid',
+                borderColor: 'gray.900',
+                boxShadow: '[4px 4px 0 0 #000]',
+              })}
+            >
+              <div class={css({ maxWidth: '240px', marginX: 'auto' })}>
+                <p
                   class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'amber.100',
-                    borderWidth: '1px',
-                    borderColor: 'amber.300',
                     fontSize: '13px',
+                    lineHeight: '[1.8]',
+                    color: 'gray.700',
+                    textAlign: 'justify',
                     fontWeight: 'medium',
-                    color: 'amber.700',
                   })}
                 >
-                  없음
-                </div>
-                <div
-                  class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'gray.50',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'gray.400',
-                    opacity: '40',
-                  })}
-                >
-                  0.5칸
-                </div>
-                <div
-                  class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'gray.50',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'gray.400',
-                    opacity: '40',
-                  })}
-                >
-                  1칸
-                </div>
-                <div
-                  class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'gray.50',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'gray.400',
-                    opacity: '40',
-                  })}
-                >
-                  2칸
-                </div>
-              </div>
-            </div>
-
-            <div class={css({ width: 'full' })}>
-              <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'gray.600', marginBottom: '10px' })}>문단 사이 간격</div>
-              <div class={flex({ alignItems: 'center', gap: '12px' })}>
-                <div
-                  class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'gray.50',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'gray.400',
-                    opacity: '40',
-                  })}
-                >
-                  없음
-                </div>
-                <div
-                  class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'gray.50',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'gray.400',
-                    opacity: '40',
-                  })}
-                >
-                  0.5줄
-                </div>
-                <div
-                  class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'amber.100',
-                    borderWidth: '1px',
-                    borderColor: 'amber.300',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'amber.700',
-                  })}
-                >
-                  1줄
-                </div>
-                <div
-                  class={css({
-                    paddingX: '16px',
-                    paddingY: '6px',
-                    borderRadius: 'full',
-                    backgroundColor: 'gray.50',
-                    fontSize: '13px',
-                    fontWeight: 'medium',
-                    color: 'gray.400',
-                    opacity: '40',
-                  })}
-                >
-                  2줄
-                </div>
+                  적절한 본문 폭은 읽기 경험을 크게 향상시킵니다. 너무 넓으면 시선이 분산되고, 너무 좁으면 답답함을 느낄 수 있습니다.
+                </p>
               </div>
             </div>
           </div>
@@ -756,10 +744,10 @@
         <div class={css({ marginTop: 'auto', paddingTop: '24px' })}>
           <div class={flex({ alignItems: 'center', gap: '10px', marginBottom: '12px' })}>
             <Icon icon={SettingsIcon} size={20} />
-            <h3 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'gray.800' })}>원고 양식 설정</h3>
+            <h3 class={css({ fontSize: '20px', fontWeight: 'black', color: 'gray.800', textTransform: 'uppercase' })}>양식 설정</h3>
           </div>
-          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]' })}>
-            본문 폭, 들여쓰기, 문단 사이 간격 등 세밀한 양식 설정으로 가장 읽기 편한 환경을 만들 수 있습니다.
+          <p class={css({ fontSize: '16px', color: 'gray.600', lineHeight: '[1.6]', fontWeight: 'medium' })}>
+            본문 폭, 들여쓰기, 문단 간격 등 세밀한 양식 설정으로 읽기 편한 환경을 만들 수 있습니다.
           </p>
         </div>
       </Bento>
