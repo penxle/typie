@@ -1,21 +1,21 @@
 <script lang="ts">
-  import AnchorIcon from '~icons/lucide/anchor';
-  import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
+  import BookMarkedIcon from '~icons/lucide/book-marked';
+  import CalendarDaysIcon from '~icons/lucide/calendar-days';
   import CodeIcon from '~icons/lucide/code';
-  import FolderTreeIcon from '~icons/lucide/folder-tree';
+  import FolderHeartIcon from '~icons/lucide/folder-heart';
+  import GlobeIcon from '~icons/lucide/globe';
   import ImageIcon from '~icons/lucide/image';
   import LinkIcon from '~icons/lucide/link';
   import ListIcon from '~icons/lucide/list';
-  import MoonIcon from '~icons/lucide/moon';
-  import NotebookIcon from '~icons/lucide/notebook';
-  import PaletteIcon from '~icons/lucide/palette';
+  import PenToolIcon from '~icons/lucide/pen-tool';
   import PencilIcon from '~icons/lucide/pencil';
   import QuoteIcon from '~icons/lucide/quote';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
+  import SaveIcon from '~icons/lucide/save';
+  import ShapesIcon from '~icons/lucide/shapes';
   import SparklesIcon from '~icons/lucide/sparkles';
-  import SpellCheckIcon from '~icons/lucide/spell-check';
   import TableIcon from '~icons/lucide/table';
-  import TypeIcon from '~icons/lucide/type';
+  import UsersRoundIcon from '~icons/lucide/users-round';
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -203,10 +203,12 @@
             textTransform: 'uppercase',
           })}
         >
-          강력한 에디터 도구
+          방해 없이, 쓰는 데만 집중할 수 있어요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '16px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          기본적인 서식부터 이미지, 링크, 표 삽입까지. 글을 풍부하게 만드는 데 필요한 모든 도구가 준비되어 있어요.
+          글쓰기를 방해하는 작은 불편들을 세심하게 줄였어요. 현재 줄이 항상 화면 중앙에 오도록 고정되는 타자기 모드, 커서를 기준으로 줄을
+          강조해주는 시선 유도, 따옴표 자동 입력, 손에 익은 단축키와 눈이 편안한 다크 테마까지. 눈과 손, 커서가 자연스럽게 맞물리는 경험을
+          제공해요.
         </p>
       </div>
 
@@ -227,7 +229,7 @@
         })}
       >
         <div class={flex({ alignItems: 'center', gap: { sm: '8px', lg: '12px' }, marginBottom: { sm: '16px', lg: '24px' } })}>
-          <Icon style={css.raw({ color: 'amber.400' })} icon={PaletteIcon} size={24} />
+          <Icon style={css.raw({ color: 'amber.400' })} icon={ShapesIcon} size={24} />
           <h3
             class={css({
               fontSize: { sm: '20px', lg: '24px' },
@@ -236,13 +238,12 @@
               textTransform: 'uppercase',
             })}
           >
-            캔버스
+            어떤 글이든, 어떤 방식이든
           </h3>
         </div>
         <p class={css({ fontSize: { sm: '14px', lg: '16px' }, color: 'gray.300', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          아이디어 구상, 관계도 정리 등
-          <br />
-          자유롭게 시각적으로 정리해보세요
+          웹소설 연재, 출판 원고, 일기, 블로그 초안까지. 원하는 어떤 포맷의 글이든 쓸 수 있어요. 자주 쓰는 포맷은 템플릿으로 저장하고 언제든
+          불러오세요.
         </p>
       </div>
     </div>
@@ -291,7 +292,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={SpellCheckIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={RulerDimensionLineIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -302,12 +303,11 @@
             textTransform: 'uppercase',
           })}
         >
-          맞춤법 검사
+          언제나 가장 취향인 환경에서
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          헷갈리는 맞춤법,
-          <br />
-          쓰면서 바로 확인하고 고쳐보세요.
+          문단 간격, 들여쓰기, 본문 폭 등 원고 서식을 세밀하게 조정할 수 있어요. 기본 제공되는 폰트 중 원하는 느낌이 없다면, 가지고 있는
+          폰트를 직접 업로드해서 쓸 수도 있어요.
         </p>
       </div>
 
@@ -340,7 +340,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={TypeIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={PenToolIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -351,12 +351,11 @@
             textTransform: 'uppercase',
           })}
         >
-          폰트 선택
+          복잡한 플롯도 한눈에 정리해요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          기본 폰트부터 직접 업로드한 폰트까지
-          <br />
-          자유롭게 사용할 수 있어요.
+          캔버스 기능을 활용하면 인물 관계, 사건의 흐름, 세계관 구조 등을 시각적으로 구성할 수 있어요. 긴 글을 쓰기 전 맥락과 전개를
+          정리하는 데 제일 좋아요. 글 옆에 작은 메모를 남길 수 있는 작성 노트도 유용하게 이용하세요.
         </p>
       </div>
 
@@ -389,7 +388,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={NotebookIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={FolderHeartIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -400,12 +399,11 @@
             textTransform: 'uppercase',
           })}
         >
-          작성 노트
+          글과 자료를 함께 관리해요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          글 쓰면서 생각나는 내용을
-          <br />
-          바로바로 정리해 보세요.
+          폴더를 이용해 글을 주제별로 정리하고, 참고용 메모나 시놉시스도 함께 보관할 수 있어요. 글과 관련된 모든 자료를 구조화해 한번에
+          관리하세요.
         </p>
       </div>
 
@@ -438,7 +436,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={RulerDimensionLineIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={BookMarkedIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -449,12 +447,11 @@
             textTransform: 'uppercase',
           })}
         >
-          양식 설정
+          글 속에서 헤메지 않아요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          본문 폭, 들여쓰기, 문단 간격까지
-          <br />
-          읽기 좋은 형태로 조정할 수 있어요.
+          검색 기능과 단축키로 여러 글을 빠르게 탐색할 수 있어요. 글 안에서는 앵커 기능으로 글 내에 미리 표시해둔 위치로 바로 이동할 수도
+          있어요. 글이 많고 길어질수록 빛나는 기능이에요.
         </p>
       </div>
 
@@ -487,7 +484,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={AnchorIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={UsersRoundIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -498,12 +495,11 @@
             textTransform: 'uppercase',
           })}
         >
-          앵커
+          실시간으로 함께 쓰고, 공유해요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          언제든지 글 안에서 원하는 위치로
-          <br />
-          바로 이동할 수 있어요.
+          링크 하나로 글을 공유하고, 타인과 동시에 편집할 수도 있어요. 공동 작성, 피드백 요청, 감수 작업까지 모두 효율적으로 진행해요.
+          필요하다면 성인 인증이나 비밀번호를 걸어 내용을 보호할 수도 있어요.
         </p>
       </div>
 
@@ -536,7 +532,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={MoonIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={SaveIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -547,12 +543,11 @@
             textTransform: 'uppercase',
           })}
         >
-          다크 모드
+          언제나 안전하게 저장해요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          어두운 환경에서도 편하게
-          <br />
-          글을 쓸 수 있어요.
+          모든 글을 매 타이핑마다 실시간으로 브라우저와 서버에 자동 저장해요. 연결이 끊기거나 실수로 창을 닫아도, 바로 직전 상태로 복원할 수
+          있어요. 중요한 작업일수록 안심하고 작성하세요.
         </p>
       </div>
 
@@ -585,7 +580,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={FolderTreeIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={GlobeIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -596,12 +591,11 @@
             textTransform: 'uppercase',
           })}
         >
-          폴더로 정리하기
+          언제 어디서든, 끊기지 않고 이어서 써요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          포스트와 자료를
-          <br />
-          주제별로 깔끔하게 정리할 수 있어요.
+          PC 웹과 Android/iOS 앱 모두 지원하며, 작업 내용은 자동으로 실시간 동기화돼요. 집에서 쓰다 잠깐 나와서도, 침대에 누워서도 갑자기
+          떠오른 문장을 바로 이어 쓸 수 있어요. 어떤 기기에서도 동일한 경험으로 글쓰기 흐름을 유지하세요.
         </p>
       </div>
 
@@ -634,7 +628,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={ChartNoAxesCombinedIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={CalendarDaysIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -645,12 +639,11 @@
             textTransform: 'uppercase',
           })}
         >
-          글쓰기 현황
+          매일의 글쓰기 흐름을 기록해요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          포스트별, 하루 기준 글자 수까지
-          <br />
-          쉽게 확인할 수 있어요.
+          하루하루의 작성 기록을 자동으로 기록해요. 매일 얼마나 썼는지, 얼마나 지웠는지를 개별적으로 볼 수 있어요. 쓰는 리듬을 만들고,
+          꾸준히 이어나가 달력을 칸칸이 채워보세요.
         </p>
       </div>
 
@@ -708,7 +701,7 @@
             textAlign: 'center',
           })}
         >
-          계속해서 추가되는 새로운 기능들로 글쓰기 경험을 향상시키세요.
+          계속해서 편리한 기능들이 추가되고 있어요!
         </p>
       </div>
     </div>
