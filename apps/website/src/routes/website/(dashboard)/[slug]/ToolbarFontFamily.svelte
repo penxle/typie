@@ -173,7 +173,12 @@
       {/if}
       <ToolbarDropdownMenuItem
         onclick={() => {
-          open = true;
+          if ($site?.user.subscription) {
+            open = true;
+          } else {
+            planUpgradeOpen = true;
+          }
+
           close();
         }}
       >
@@ -243,10 +248,6 @@
       </ul>
     </div>
 
-    {#if $site?.user.subscription}
-      <Button loading={inflight} onclick={handleUpload}>파일 선택</Button>
-    {:else}
-      <Button onclick={() => (planUpgradeOpen = true)}>파일 선택</Button>
-    {/if}
+    <Button loading={inflight} onclick={handleUpload}>파일 선택</Button>
   </div>
 </Modal>
