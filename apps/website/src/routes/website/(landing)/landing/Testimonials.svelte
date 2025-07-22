@@ -102,19 +102,19 @@
   });
 </script>
 
-<section class={css({ position: 'relative', paddingY: '120px', backgroundColor: 'gray.50' })}>
-  <div class={css({ position: 'relative', maxWidth: '[1024px]', marginX: 'auto', paddingX: '40px' })}>
+<section class={css({ position: 'relative', paddingY: { sm: '80px', lg: '120px' }, backgroundColor: 'gray.50' })}>
+  <div class={css({ position: 'relative', maxWidth: '[1024px]', marginX: 'auto', paddingX: { sm: '16px', lg: '40px' } })}>
     <div
       bind:this={headerElement}
       class={center({
         flexDirection: 'column',
-        marginBottom: '80px',
+        marginBottom: { sm: '60px', lg: '80px' },
         opacity: '0',
-        transform: 'translateY(20px) rotate(-1deg)',
+        transform: { sm: 'translateY(20px)', lg: 'translateY(20px) rotate(-1deg)' },
         transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
         '&.in-view': {
           opacity: '100',
-          transform: 'translateY(0) rotate(0)',
+          transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
         },
       })}
     >
@@ -123,12 +123,12 @@
           display: 'inline-flex',
           alignItems: 'center',
           gap: '8px',
-          paddingX: '20px',
-          paddingY: '8px',
-          marginBottom: '32px',
+          paddingX: { sm: '16px', lg: '20px' },
+          paddingY: { sm: '6px', lg: '8px' },
+          marginBottom: { sm: '24px', lg: '32px' },
           backgroundColor: 'gray.900',
           color: 'white',
-          fontSize: '14px',
+          fontSize: { sm: '12px', lg: '14px' },
           fontWeight: 'bold',
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
@@ -143,12 +143,12 @@
 
       <h2
         class={css({
-          fontSize: '[56px]',
+          fontSize: { sm: '[36px]', lg: '[56px]' },
           fontWeight: 'black',
           color: 'gray.950',
           textAlign: 'center',
           fontFamily: 'Paperlogy',
-          marginBottom: '24px',
+          marginBottom: { sm: '16px', lg: '24px' },
           lineHeight: '[1.1]',
           textTransform: 'uppercase',
         })}
@@ -158,7 +158,7 @@
         <span
           class={css({
             backgroundColor: 'amber.400',
-            paddingX: '20px',
+            paddingX: { sm: '16px', lg: '20px' },
             display: 'inline-block',
             transform: 'rotate(1deg)',
           })}
@@ -168,7 +168,7 @@
       </h2>
       <p
         class={css({
-          fontSize: '20px',
+          fontSize: { sm: '16px', lg: '20px' },
           fontWeight: 'semibold',
           color: 'gray.700',
           textAlign: 'center',
@@ -184,8 +184,8 @@
     <div
       class={css({
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '24px',
+        gridTemplateColumns: { sm: '1fr', lg: 'repeat(3, 1fr)' },
+        gap: { sm: '16px', lg: '24px' },
         alignItems: 'start',
       })}
     >
@@ -196,7 +196,7 @@
           class={css({
             display: 'flex',
             flexDirection: 'column',
-            gap: '24px',
+            gap: { sm: '16px', lg: '24px' },
             opacity: '0',
             transform: 'translateY(20px)',
             '&.in-view': {
@@ -209,24 +209,24 @@
             <div
               class={css({
                 display: 'block',
-                padding: '24px',
+                padding: { sm: '16px', lg: '24px' },
                 backgroundColor: 'white',
                 border: '4px solid',
                 borderColor: 'gray.900',
                 textDecoration: 'none',
                 transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                 boxShadow: '[6px 6px 0 0 #000]',
-                transform: idx % 2 === 0 ? 'rotate(-1deg)' : 'rotate(1deg)',
+                transform: { sm: 'rotate(0)', lg: idx % 2 === 0 ? 'rotate(-1deg)' : 'rotate(1deg)' },
                 _hover: {
-                  transform: 'translate(-4px, -4px) rotate(0deg)',
+                  transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0deg)' },
                   boxShadow: '[10px 10px 0 0 #000]',
                 },
               })}
             >
-              <div class={flex({ alignItems: 'center', gap: '12px', marginBottom: '16px' })}>
+              <div class={flex({ alignItems: 'center', gap: { sm: '8px', lg: '12px' }, marginBottom: { sm: '12px', lg: '16px' } })}>
                 <img
                   class={css({
-                    size: '40px',
+                    size: { sm: '32px', lg: '40px' },
                     backgroundColor: 'gray.200',
                     objectFit: 'cover',
                     border: '3px solid',
@@ -238,7 +238,7 @@
                 <div class={css({ flex: '1' })}>
                   <span
                     class={css({
-                      fontSize: '16px',
+                      fontSize: { sm: '14px', lg: '16px' },
                       fontWeight: 'black',
                       color: 'gray.900',
                       fontFamily: 'Pretendard',
@@ -252,7 +252,7 @@
 
               <p
                 class={css({
-                  fontSize: '15px',
+                  fontSize: { sm: '14px', lg: '15px' },
                   lineHeight: '[1.7]',
                   color: 'gray.800',
                   fontFamily: 'Pretendard',

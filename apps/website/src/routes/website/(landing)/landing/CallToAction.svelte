@@ -43,11 +43,11 @@
 <section
   class={css({
     position: 'relative',
-    paddingY: '120px',
+    paddingY: { sm: '80px', lg: '120px' },
     backgroundColor: 'gray.50',
   })}
 >
-  <div class={css({ paddingX: '40px', maxWidth: '[1024px]', marginX: 'auto' })}>
+  <div class={css({ paddingX: { sm: '16px', lg: '40px' }, maxWidth: '[1024px]', marginX: 'auto' })}>
     <div
       bind:this={boxElement}
       class={css({
@@ -55,19 +55,19 @@
         backgroundColor: 'amber.400',
         border: '4px solid',
         borderColor: 'gray.900',
-        boxShadow: '[12px 12px 0 0 #000]',
-        padding: '60px',
-        transform: 'rotate(-1deg) scale(0.95)',
+        boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
+        padding: { sm: '40px', lg: '60px' },
+        transform: { sm: 'scale(0.95)', lg: 'rotate(-1deg) scale(0.95)' },
         opacity: '0',
         transition:
           '[transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
         '&.in-view': {
           opacity: '100',
-          transform: 'rotate(-1deg) scale(1)',
+          transform: { sm: 'scale(1)', lg: 'rotate(-1deg) scale(1)' },
         },
         _hover: {
-          transform: 'rotate(0deg) scale(1)',
-          boxShadow: '[16px 16px 0 0 #000]',
+          transform: { sm: 'scale(1)', lg: 'rotate(0deg) scale(1)' },
+          boxShadow: { sm: '[12px 12px 0 0 #000]', lg: '[16px 16px 0 0 #000]' },
         },
       })}
     >
@@ -75,10 +75,10 @@
         bind:this={sparkleElement}
         class={css({
           position: 'absolute',
-          top: '-20px',
-          right: '60px',
+          top: { sm: '-16px', lg: '-20px' },
+          right: { sm: '40px', lg: '60px' },
           backgroundColor: 'gray.900',
-          padding: '12px',
+          padding: { sm: '8px', lg: '12px' },
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[4px 4px 0 0 #fff]',
@@ -97,12 +97,12 @@
       <div class={center({ flexDirection: 'column', textAlign: 'center' })}>
         <h2
           class={css({
-            fontSize: '[56px]',
+            fontSize: { sm: '[36px]', lg: '[56px]' },
             fontWeight: 'black',
             color: 'gray.950',
             fontFamily: 'Paperlogy',
             lineHeight: '[1.1]',
-            marginBottom: '24px',
+            marginBottom: { sm: '16px', lg: '24px' },
             textTransform: 'uppercase',
           })}
         >
@@ -111,14 +111,14 @@
           <span
             class={css({
               backgroundColor: 'white',
-              paddingX: '24px',
-              paddingY: '8px',
+              paddingX: { sm: '16px', lg: '24px' },
+              paddingY: { sm: '6px', lg: '8px' },
               display: 'inline-block',
               transform: 'rotate(-2deg)',
               border: '4px solid',
               borderColor: 'gray.900',
               boxShadow: '[6px 6px 0 0 #000]',
-              marginTop: '8px',
+              marginTop: { sm: '4px', lg: '8px' },
             })}
           >
             시작하세요!
@@ -126,12 +126,12 @@
         </h2>
         <p
           class={css({
-            fontSize: '20px',
+            fontSize: { sm: '16px', lg: '20px' },
             fontWeight: 'bold',
             color: 'gray.900',
             fontFamily: 'Pretendard',
             lineHeight: '[1.6]',
-            marginBottom: '40px',
+            marginBottom: { sm: '32px', lg: '40px' },
             maxWidth: '600px',
           })}
         >
@@ -146,10 +146,10 @@
             css({
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '12px',
-              paddingX: '32px',
-              paddingY: '16px',
-              fontSize: '18px',
+              gap: { sm: '8px', lg: '12px' },
+              paddingX: { sm: '24px', lg: '32px' },
+              paddingY: { sm: '12px', lg: '16px' },
+              fontSize: { sm: '16px', lg: '18px' },
               fontWeight: 'black',
               color: 'white',
               backgroundColor: 'gray.900',
@@ -187,10 +187,10 @@
         bind:this={decorElement1}
         class={css({
           position: 'absolute',
-          bottom: '40px',
-          left: '40px',
-          width: '80px',
-          height: '80px',
+          bottom: { sm: '24px', lg: '40px' },
+          left: { sm: '24px', lg: '40px' },
+          width: { sm: '60px', lg: '80px' },
+          height: { sm: '60px', lg: '80px' },
           backgroundColor: 'white',
           border: '4px solid',
           borderColor: 'gray.900',
@@ -209,10 +209,10 @@
         bind:this={decorElement2}
         class={css({
           position: 'absolute',
-          top: '40px',
-          left: '60px',
-          width: '60px',
-          height: '60px',
+          top: { sm: '24px', lg: '40px' },
+          left: { sm: '40px', lg: '60px' },
+          width: { sm: '40px', lg: '60px' },
+          height: { sm: '40px', lg: '60px' },
           backgroundColor: 'gray.900',
           transform: 'rotate(-15deg) scale(0)',
           opacity: '0',
