@@ -1,50 +1,10 @@
 <script lang="ts">
   import dayjs from 'dayjs';
   import { marked } from 'marked';
-  import { onMount } from 'svelte';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
   let { data } = $props();
-  let articles = $state<HTMLElement[]>([]);
-  let elements = $state<HTMLElement[]>([]);
-  let headerElement = $state<HTMLElement>();
-
-  onMount(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
-          }
-        });
-      },
-      {
-        threshold: 0.1,
-        rootMargin: '0px 0px 50px 0px',
-      },
-    );
-
-    elements.forEach((element) => {
-      if (element) observer.observe(element);
-    });
-
-    articles.forEach((article) => {
-      if (article) observer.observe(article);
-    });
-
-    if (headerElement) observer.observe(headerElement);
-
-    return () => {
-      elements.forEach((element) => {
-        if (element) observer.unobserve(element);
-      });
-      articles.forEach((article) => {
-        if (article) observer.unobserve(article);
-      });
-      if (headerElement) observer.unobserve(headerElement);
-    };
-  });
 </script>
 
 <div
@@ -118,7 +78,6 @@
   >
     <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
       <div
-        bind:this={headerElement}
         class={css({
           backgroundColor: 'white',
           border: '4px solid',
@@ -136,6 +95,7 @@
             transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
           },
         })}
+        data-observe
       >
         <div
           class={css({
@@ -284,9 +244,8 @@
 
       <div class={css({ position: 'relative', paddingBottom: '40px' })}>
         <div class={flex({ direction: 'column', gap: '60px' })}>
-          {#each data.entries as entry, index (entry.id)}
+          {#each data.entries as entry (entry.id)}
             <article
-              bind:this={articles[index]}
               class={css({
                 position: 'relative',
                 display: 'grid',
@@ -300,6 +259,7 @@
                   transform: { sm: 'translateX(0)', lg: 'translateX(0) rotate(0)' },
                 },
               })}
+              data-observe
             >
               <div
                 class={css({
