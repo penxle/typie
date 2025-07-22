@@ -4,6 +4,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { disassemble } from 'es-hangul';
 import { matchSorter } from 'match-sorter';
 import { mount, unmount } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 import { css } from '$styled-system/css';
 import Component from './Component.svelte';
 import { menuItems } from './items';
@@ -15,7 +16,7 @@ type State = { active: false } | { active: true; range: Range; items: MenuItem[]
 
 export const pluginKey = new PluginKey<State>('slash_menu');
 const pattern = /\/(\S*)/g;
-const menuItemTypeSet = new Set(menuItems.map((item) => item.type));
+const menuItemTypeSet = new SvelteSet(menuItems.map((item) => item.type));
 
 export const SlashMenu = Extension.create({
   name: 'slash_menu',
@@ -75,7 +76,7 @@ export const SlashMenu = Extension.create({
             const query = match[1];
 
             const block = match.index === 0 ? anchor.node(Math.max(0, anchor.depth - 1)) : anchor.parent;
-            const typeSet = new Set<string>();
+            const typeSet = new SvelteSet<string>();
 
             for (let i = 0; i < block.type.contentMatch.edgeCount; i++) {
               const edge = block.type.contentMatch.edge(i);

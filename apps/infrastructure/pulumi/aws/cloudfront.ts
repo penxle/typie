@@ -1,26 +1,19 @@
 import * as aws from '@pulumi/aws';
-import { usEast1 } from '$aws/providers';
 import { zones } from '$aws/route53';
 import { buckets } from '$aws/s3';
 
 const createCertificate = (domain: string, ...subjectAlternativeNames: string[]) => {
-  const certificate = new aws.acm.Certificate(
-    `${domain}@cloudfront`,
-    {
-      domainName: domain,
-      subjectAlternativeNames: [`*.${domain}`, ...subjectAlternativeNames],
-      validationMethod: 'DNS',
-    },
-    { provider: usEast1 },
-  );
+  const certificate = new aws.acm.Certificate(`${domain}@cloudfront`, {
+    region: 'us-east-1',
+    domainName: domain,
+    subjectAlternativeNames: [`*.${domain}`, ...subjectAlternativeNames],
+    validationMethod: 'DNS',
+  });
 
-  new aws.acm.CertificateValidation(
-    `${domain}@cloudfront`,
-    {
-      certificateArn: certificate.arn,
-    },
-    { provider: usEast1 },
-  );
+  new aws.acm.CertificateValidation(`${domain}@cloudfront`, {
+    region: 'us-east-1',
+    certificateArn: certificate.arn,
+  });
 
   return certificate;
 };
