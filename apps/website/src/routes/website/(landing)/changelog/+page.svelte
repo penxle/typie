@@ -110,10 +110,10 @@
   <section
     class={css({
       position: 'relative',
-      paddingY: '100px',
-      paddingX: '24px',
+      paddingY: { sm: '80px', lg: '100px' },
+      paddingX: { sm: '16px', lg: '24px' },
       zIndex: '2',
-      marginBottom: '120px',
+      marginBottom: { sm: '80px', lg: '120px' },
     })}
   >
     <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
@@ -124,16 +124,16 @@
           border: '4px solid',
           borderColor: 'gray.900',
           borderRadius: '0',
-          paddingY: { base: '60px', md: '80px' },
-          paddingX: { base: '40px', md: '60px' },
+          paddingY: { sm: '40px', lg: '80px' },
+          paddingX: { sm: '24px', lg: '60px' },
           position: 'relative',
           boxShadow: '[8px 8px 0 0 #000]',
           opacity: '0',
-          transform: 'translateY(-40px) rotate(-1deg) scale(0.95)',
+          transform: { sm: 'translateY(-40px) scale(0.95)', lg: 'translateY(-40px) rotate(-1deg) scale(0.95)' },
           transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
           '&.in-view': {
             opacity: '100',
-            transform: 'translateY(0) rotate(0) scale(1)',
+            transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
           },
         })}
       >
@@ -200,7 +200,7 @@
 
           <h1
             class={css({
-              fontSize: { base: '[56px]', md: '[80px]', lg: '[96px]' },
+              fontSize: { sm: '[40px]', lg: '[80px]' },
               fontWeight: 'black',
               color: 'gray.900',
               fontFamily: 'Paperlogy',
@@ -237,7 +237,7 @@
 
           <p
             class={css({
-              fontSize: '20px',
+              fontSize: { sm: '18px', lg: '20px' },
               fontWeight: 'medium',
               color: 'gray.700',
               maxWidth: '[600px]',
@@ -263,8 +263,8 @@
     class={css({
       position: 'relative',
       paddingTop: '0',
-      paddingBottom: '160px',
-      paddingX: '24px',
+      paddingBottom: { sm: '120px', lg: '160px' },
+      paddingX: { sm: '16px', lg: '24px' },
       zIndex: '2',
     })}
   >
@@ -272,12 +272,13 @@
       <div
         class={css({
           position: 'absolute',
-          left: { base: '32px', md: '240px' },
+          left: { sm: '20px', lg: '240px' },
           top: '0',
           bottom: '0',
           width: '4px',
           backgroundColor: 'gray.900',
           zIndex: '0',
+          display: { sm: 'none', lg: 'block' },
         })}
       ></div>
 
@@ -289,20 +290,20 @@
               class={css({
                 position: 'relative',
                 display: 'grid',
-                gridTemplateColumns: { base: '80px 1fr', md: '220px 60px 1fr' },
+                gridTemplateColumns: { sm: '1fr', lg: '220px 60px 1fr' },
                 gap: '0',
                 opacity: '0',
-                transform: 'translateX(-10px) rotate(-0.5deg)',
+                transform: { sm: 'translateX(-10px)', lg: 'translateX(-10px) rotate(-0.5deg)' },
                 transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                 '&.in-view': {
                   opacity: '100',
-                  transform: 'translateX(0) rotate(0)',
+                  transform: { sm: 'translateX(0)', lg: 'translateX(0) rotate(0)' },
                 },
               })}
             >
               <div
                 class={css({
-                  display: { base: 'none', md: 'block' },
+                  display: { sm: 'none', lg: 'block' },
                   paddingRight: '32px',
                   textAlign: 'right',
                   alignSelf: 'start',
@@ -328,7 +329,7 @@
 
               <div
                 class={css({
-                  display: 'flex',
+                  display: { sm: 'none', lg: 'flex' },
                   justifyContent: 'center',
                   alignSelf: 'start',
                   paddingTop: '20px',
@@ -348,7 +349,7 @@
                     '.in-view &': {
                       transform: 'rotate(45deg) translateX(-11px) scale(1)',
                     },
-                    '&:hover': {
+                    _hover: {
                       transform: 'rotate(45deg) translateX(-11px) scale(1.2)',
                     },
                   })}
@@ -360,21 +361,21 @@
                   backgroundColor: 'white',
                   border: '4px solid',
                   borderColor: 'gray.900',
-                  paddingY: { base: '32px', md: '40px' },
-                  paddingX: { base: '24px', md: '32px' },
+                  paddingY: { sm: '24px', lg: '40px' },
+                  paddingX: { sm: '20px', lg: '32px' },
                   position: 'relative',
-                  marginLeft: { base: '24px', md: '32px' },
+                  marginLeft: { sm: '0', lg: '32px' },
                   boxShadow: '[8px 8px 0 0 #000]',
                   transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-                  '&:hover': {
-                    transform: 'translate(-4px, -4px) rotate(0.5deg)',
+                  _hover: {
+                    transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px) rotate(0.5deg)' },
                     boxShadow: '[12px 12px 0 0 #000]',
                   },
                 })}
               >
                 <time
                   class={css({
-                    display: { base: 'inline-block', md: 'none' },
+                    display: { sm: 'inline-block', lg: 'none' },
                     backgroundColor: 'gray.900',
                     color: 'white',
                     paddingY: '4px',
@@ -412,7 +413,7 @@
 
                 <h2
                   class={css({
-                    fontSize: { base: '[28px]', md: '[36px]' },
+                    fontSize: { sm: '[24px]', lg: '[36px]' },
                     fontWeight: 'black',
                     marginBottom: '24px',
                     color: 'gray.900',
@@ -508,7 +509,7 @@
                       textDecorationColor: 'amber.400',
                       textUnderlineOffset: '2px',
                       transition: '[all 0.2s ease]',
-                      '&:hover': {
+                      _hover: {
                         backgroundColor: 'amber.400',
                         textDecoration: 'none',
                       },
@@ -598,9 +599,10 @@
         <div
           class={css({
             position: 'absolute',
-            left: { base: '32px', md: '240px' },
+            left: { sm: '20px', lg: '240px' },
             bottom: '0',
             transform: 'translateX(-18px)',
+            display: { sm: 'none', lg: 'block' },
           })}
         >
           <div

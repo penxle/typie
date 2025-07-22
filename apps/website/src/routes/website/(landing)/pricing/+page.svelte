@@ -160,16 +160,16 @@
     bind:this={elements[0]}
     class={css({
       position: 'relative',
-      paddingTop: '100px',
-      paddingBottom: '80px',
-      paddingX: '24px',
+      paddingTop: { sm: '80px', lg: '100px' },
+      paddingBottom: { sm: '60px', lg: '80px' },
+      paddingX: { sm: '16px', lg: '24px' },
       zIndex: '2',
       opacity: '0',
-      transform: 'translateY(40px) rotate(-1deg) scale(0.95)',
+      transform: { sm: 'translateY(40px) scale(0.95)', lg: 'translateY(40px) rotate(-1deg) scale(0.95)' },
       transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
       '&.in-view': {
         opacity: '100',
-        transform: 'translateY(0) rotate(0) scale(1)',
+        transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
       },
     })}
   >
@@ -201,7 +201,7 @@
 
       <h1
         class={css({
-          fontSize: { base: '[56px]', md: '[80px]', lg: '[96px]' },
+          fontSize: { sm: '[40px]', lg: '[80px]' },
           fontWeight: 'black',
           color: 'gray.900',
           textAlign: 'center',
@@ -238,7 +238,7 @@
       </h1>
       <p
         class={css({
-          fontSize: '20px',
+          fontSize: { sm: '18px', lg: '20px' },
           fontWeight: 'medium',
           color: 'gray.700',
           textAlign: 'center',
@@ -266,8 +266,8 @@
     class={css({
       position: 'relative',
       paddingTop: '0',
-      paddingBottom: '160px',
-      paddingX: '24px',
+      paddingBottom: { sm: '120px', lg: '160px' },
+      paddingX: { sm: '16px', lg: '24px' },
       zIndex: '2',
     })}
   >
@@ -279,11 +279,11 @@
           display: 'flex',
           justifyContent: 'center',
           opacity: '0',
-          transform: 'translateY(20px) rotate(-1deg)',
+          transform: { sm: 'translateY(20px)', lg: 'translateY(20px) rotate(-1deg)' },
           transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s]',
           '&.in-view': {
             opacity: '100',
-            transform: 'translateY(0) rotate(0)',
+            transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
           },
         })}
       >
@@ -373,8 +373,8 @@
         bind:this={elements[2]}
         class={css({
           display: 'grid',
-          gridTemplateColumns: { base: '1fr', lg: '1fr 1fr' },
-          gap: '32px',
+          gridTemplateColumns: { sm: '1fr', lg: '1fr 1fr' },
+          gap: { sm: '24px', lg: '32px' },
           opacity: '0',
           transform: 'translateY(20px)',
           transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
@@ -389,16 +389,17 @@
           class={css({
             position: 'relative',
             backgroundColor: 'white',
-            padding: { base: '32px', md: '48px' },
+            padding: { sm: '24px', lg: '48px' },
             border: '4px solid',
             borderColor: 'gray.900',
             boxShadow: '[8px 8px 0 0 #000]',
             transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-            transform: 'rotate(-0.5deg)',
+            transform: { sm: 'rotate(0deg)', lg: 'rotate(-0.5deg)' },
             display: 'flex',
             flexDirection: 'column',
+            order: { sm: '2', lg: '1' },
             _hover: {
-              transform: 'translate(-4px, -4px) rotate(0deg)',
+              transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px) rotate(0deg)' },
               boxShadow: '[12px 12px 0 0 #000]',
             },
           })}
@@ -512,16 +513,17 @@
           class={css({
             position: 'relative',
             backgroundColor: 'gray.900',
-            padding: { base: '32px', md: '48px' },
+            padding: { sm: '24px', lg: '48px' },
             border: '4px solid',
             borderColor: 'gray.900',
             boxShadow: '[8px 8px 0 0 #fbbf24]',
             transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-            transform: 'rotate(0.5deg)',
+            transform: { sm: 'rotate(0deg)', lg: 'rotate(0.5deg)' },
             display: 'flex',
             flexDirection: 'column',
+            order: { sm: '1', lg: '2' },
             _hover: {
-              transform: 'translate(-4px, -4px) rotate(0deg)',
+              transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px) rotate(0deg)' },
               boxShadow: '[12px 12px 0 0 #fbbf24]',
             },
           })}
@@ -694,8 +696,8 @@
   <section
     class={css({
       position: 'relative',
-      paddingY: '120px',
-      paddingX: '24px',
+      paddingY: { sm: '80px', lg: '120px' },
+      paddingX: { sm: '16px', lg: '24px' },
       backgroundColor: 'white',
       zIndex: '2',
     })}
@@ -707,12 +709,12 @@
           flexDirection: 'column',
           marginBottom: '80px',
           opacity: '0',
-          transform: 'translateY(20px) rotate(-1deg)',
+          transform: { sm: 'translateY(20px)', lg: 'translateY(20px) rotate(-1deg)' },
           transition:
             '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s]',
           '&.in-view': {
             opacity: '100',
-            transform: 'translateY(0) rotate(0)',
+            transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
           },
         })}
       >
@@ -738,7 +740,7 @@
 
         <h2
           class={css({
-            fontSize: { base: '[48px]', md: '[64px]' },
+            fontSize: { sm: '[36px]', lg: '[64px]' },
             fontWeight: 'black',
             color: 'gray.900',
             textAlign: 'center',
@@ -801,8 +803,8 @@
               <button
                 class={css({
                   width: 'full',
-                  paddingX: '32px',
-                  paddingY: '24px',
+                  paddingX: { sm: '24px', lg: '32px' },
+                  paddingY: { sm: '20px', lg: '24px' },
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -821,7 +823,7 @@
               >
                 <h3
                   class={css({
-                    fontSize: '20px',
+                    fontSize: { sm: '18px', lg: '20px' },
                     fontWeight: 'bold',
                     color: 'gray.900',
                     fontFamily: 'Pretendard',
@@ -880,8 +882,8 @@
                         color: 'gray.800',
                         fontFamily: 'Pretendard',
                         lineHeight: '[1.7]',
-                        paddingX: '32px',
-                        paddingY: '24px',
+                        paddingX: { sm: '24px', lg: '32px' },
+                        paddingY: { sm: '20px', lg: '24px' },
                         fontWeight: 'medium',
                         opacity: expandedFaqIndex === index ? '100' : '0',
                         transform: expandedFaqIndex === index ? 'translateY(0)' : 'translateY(-10px)',
@@ -904,8 +906,8 @@
   <section
     class={css({
       position: 'relative',
-      paddingY: '160px',
-      paddingX: '24px',
+      paddingY: { sm: '120px', lg: '160px' },
+      paddingX: { sm: '16px', lg: '24px' },
       backgroundColor: 'gray.900',
       overflow: 'hidden',
       zIndex: '2',
@@ -944,12 +946,12 @@
           flexDirection: 'column',
           textAlign: 'center',
           opacity: '0',
-          transform: 'translateY(40px) rotate(-1deg) scale(0.95)',
+          transform: { sm: 'translateY(40px) scale(0.95)', lg: 'translateY(40px) rotate(-1deg) scale(0.95)' },
           transition:
             '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s]',
           '&.in-view': {
             opacity: '100',
-            transform: 'translateY(0) rotate(0) scale(1)',
+            transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
           },
         })}
       >
@@ -979,7 +981,7 @@
 
         <h2
           class={css({
-            fontSize: { base: '[64px]', md: '[80px]', lg: '[96px]' },
+            fontSize: { sm: '[48px]', lg: '[80px]' },
             fontWeight: 'black',
             color: 'white',
             fontFamily: 'Paperlogy',
@@ -1004,7 +1006,7 @@
         </h2>
         <p
           class={css({
-            fontSize: { base: '20px', md: '24px' },
+            fontSize: { sm: '18px', lg: '24px' },
             fontWeight: 'medium',
             color: 'gray.300',
             fontFamily: 'Pretendard',
@@ -1026,21 +1028,21 @@
               display: 'inline-flex',
               alignItems: 'center',
               gap: '10px',
-              paddingX: '40px',
-              paddingY: '20px',
-              fontSize: '20px',
+              paddingX: { sm: '32px', lg: '40px' },
+              paddingY: { sm: '16px', lg: '20px' },
+              fontSize: { sm: '18px', lg: '20px' },
               fontWeight: 'black',
               color: 'gray.900',
               backgroundColor: 'amber.400',
               border: '4px solid',
               borderColor: 'gray.900',
               transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-              transform: 'rotate(-1deg)',
+              transform: { sm: 'rotate(0deg)', lg: 'rotate(-1deg)' },
               textTransform: 'uppercase',
               letterSpacing: '[0.05em]',
               boxShadow: '[8px 8px 0 0 #000]',
               _hover: {
-                transform: 'translate(-4px, -4px) rotate(0)',
+                transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px) rotate(0)' },
                 boxShadow: '[12px 12px 0 0 #000]',
               },
               _active: {
