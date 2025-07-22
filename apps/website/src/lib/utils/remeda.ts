@@ -13,3 +13,17 @@ export const debounce = <TArgs extends readonly unknown[]>(fn: (...args: TArgs) 
   );
   return call;
 };
+
+export const throttle = <TArgs extends readonly unknown[]>(fn: (...args: TArgs) => void, delay: number): ((...args: TArgs) => void) => {
+  const { call } = R.funnel(
+    (args: TArgs) => {
+      fn(...args);
+    },
+    {
+      reducer: (_, ...args: TArgs) => args,
+      minQuietPeriodMs: delay,
+      triggerAt: 'start',
+    },
+  );
+  return call;
+};
