@@ -12,7 +12,9 @@
 >
   <Header />
 
-  {@render children()}
+  <div class={css({ paddingTop: '96px' })}>
+    {@render children()}
+  </div>
 
   <Footer />
 </div>

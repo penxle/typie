@@ -1,10 +1,34 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import Wordmark from '$assets/logos/wordmark.svg?component';
   import { env } from '$env/dynamic/public';
   import { Icon } from '$lib/components';
+  import { throttle } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+
+  let hidden = $state(false);
+  let lastScrollY = 0;
+
+  onMount(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      if (currentScrollY > lastScrollY && currentScrollY > 80) {
+        hidden = true;
+      } else {
+        hidden = false;
+      }
+
+      lastScrollY = currentScrollY;
+    };
+
+    const throttledHandleScroll = throttle(handleScroll, 100);
+
+    window.addEventListener('scroll', throttledHandleScroll);
+    return () => window.removeEventListener('scroll', throttledHandleScroll);
+  });
 </script>
 
 <header
@@ -12,14 +36,19 @@
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingX: '24px',
-    width: 'full',
     height: '80px',
     gap: '32px',
     backgroundColor: 'white',
-    borderBottom: '4px solid',
+    border: '4px solid',
     borderColor: 'gray.900',
-    position: 'relative',
-    zIndex: '10',
+    position: 'fixed',
+    top: '16px',
+    left: '16px',
+    right: '16px',
+    zIndex: '50',
+    boxShadow: '[8px 8px 0 0 #000]',
+    transform: hidden ? 'translateY(-92px)' : 'translateY(0)',
+    transition: '[transform 0.25s cubic-bezier(0.4, 0, 0.6, 1)]',
   })}
 >
   <a
