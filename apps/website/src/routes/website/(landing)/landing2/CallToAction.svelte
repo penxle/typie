@@ -1,10 +1,43 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import SparklesIcon from '~icons/lucide/sparkles';
   import { env } from '$env/dynamic/public';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
+
+  let boxElement = $state<HTMLElement>();
+  let sparkleElement = $state<HTMLElement>();
+  let decorElement1 = $state<HTMLElement>();
+  let decorElement2 = $state<HTMLElement>();
+
+  onMount(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in-view');
+          }
+        });
+      },
+      {
+        threshold: 0.1,
+        rootMargin: '0px 0px 50px 0px',
+      },
+    );
+
+    const elements = [boxElement, sparkleElement, decorElement1, decorElement2];
+    elements.forEach((element) => {
+      if (element) observer.observe(element);
+    });
+
+    return () => {
+      elements.forEach((element) => {
+        if (element) observer.unobserve(element);
+      });
+    };
+  });
 </script>
 
 <section
@@ -16,6 +49,7 @@
 >
   <div class={css({ paddingX: '40px', maxWidth: '[1024px]', marginX: 'auto' })}>
     <div
+      bind:this={boxElement}
       class={css({
         position: 'relative',
         backgroundColor: 'amber.400',
@@ -23,14 +57,22 @@
         borderColor: 'gray.900',
         boxShadow: '[12px 12px 0 0 #000]',
         padding: '60px',
-        transform: 'rotate(-1deg)',
-        transition: '[transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        transform: 'rotate(-1deg) scale(0.95)',
+        opacity: '0',
+        transition:
+          '[transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        '&.in-view': {
+          opacity: '100',
+          transform: 'rotate(-1deg) scale(1)',
+        },
         _hover: {
-          transform: 'rotate(0deg)',
+          transform: 'rotate(0deg) scale(1)',
+          boxShadow: '[16px 16px 0 0 #000]',
         },
       })}
     >
       <div
+        bind:this={sparkleElement}
         class={css({
           position: 'absolute',
           top: '-20px',
@@ -40,7 +82,13 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[4px 4px 0 0 #fff]',
-          transform: 'rotate(12deg)',
+          transform: 'rotate(12deg) scale(0)',
+          opacity: '0',
+          transition: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'rotate(12deg) scale(1)',
+          },
         })}
       >
         <Icon style={css.raw({ color: 'white' })} icon={SparklesIcon} size={24} />
@@ -136,6 +184,7 @@
       </div>
 
       <div
+        bind:this={decorElement1}
         class={css({
           position: 'absolute',
           bottom: '40px',
@@ -145,12 +194,19 @@
           backgroundColor: 'white',
           border: '4px solid',
           borderColor: 'gray.900',
-          transform: 'rotate(45deg)',
+          transform: 'rotate(45deg) scale(0)',
+          opacity: '0',
           boxShadow: '[4px 4px 0 0 #000]',
+          transition: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'rotate(45deg) scale(1)',
+          },
         })}
       ></div>
 
       <div
+        bind:this={decorElement2}
         class={css({
           position: 'absolute',
           top: '40px',
@@ -158,7 +214,13 @@
           width: '60px',
           height: '60px',
           backgroundColor: 'gray.900',
-          transform: 'rotate(-15deg)',
+          transform: 'rotate(-15deg) scale(0)',
+          opacity: '0',
+          transition: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'rotate(-15deg) scale(1)',
+          },
         })}
       ></div>
     </div>

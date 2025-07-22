@@ -7,7 +7,7 @@
 </script>
 
 <div
-  class={css({ width: '[100dvw]', minHeight: '[100dvh]', color: 'gray.900', backgroundColor: 'gray.50', wordBreak: 'keep-all' })}
+  class={css({ width: '[100dvw]', minHeight: '[100dvh]', color: 'gray.900', backgroundColor: 'white', wordBreak: 'keep-all' })}
   data-element="root"
 >
   <Header />

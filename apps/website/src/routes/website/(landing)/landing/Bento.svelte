@@ -4,16 +4,19 @@
 
 <div
   class={css({
-    padding: '28px',
-    borderRadius: '[20px]',
-    background: '[linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.6) 100%)]',
-    backdropFilter: '[blur(20px) saturate(180%)]',
-    boxShadow: '[0 20px 40px -10px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8)]',
-    border: '[1px solid]',
-    borderColor: '[rgba(255, 255, 255, 0.5)]',
+    padding: '32px',
+    backgroundColor: 'white',
+    border: '4px solid',
+    borderColor: 'gray.900',
+    boxShadow: '[8px 8px 0 0 #000]',
     height: 'full',
     display: 'flex',
     flexDirection: 'column',
+    transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+    _hover: {
+      transform: 'translate(-4px, -4px)',
+      boxShadow: '[12px 12px 0 0 #000]',
+    },
   })}
 >
   <slot />
