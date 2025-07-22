@@ -1,74 +1,34 @@
 <script lang="ts">
   import NumberFlow from '@number-flow/svelte';
-  import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import SparklesIcon from '~icons/lucide/sparkles';
   import ZapIcon from '~icons/lucide/zap';
+  import { browser } from '$app/environment';
   import { env } from '$env/dynamic/public';
   import { Icon } from '$lib/components';
   import { comma } from '$lib/utils/number';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
 
-  let billingPeriod = $state<'monthly' | 'annually'>('monthly');
-  let elements = $state<HTMLElement[]>([]);
-  let expandedFaqIndex = $state<number | null>(null);
-  let currentPrice = $derived(billingPeriod === 'monthly' ? 4900 : Math.floor(49_000 / 12));
+  let selectedInterval = $state<'monthly' | 'yearly'>('monthly');
+  let expandedIndex = $state<number | null>(null);
 
-  onMount(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
-          }
-        });
-      },
-      {
-        threshold: 0.05,
-        rootMargin: '0px 0px 100px 0px',
-      },
-    );
-
-    elements.forEach((element) => {
-      if (element) observer.observe(element);
-    });
-
-    return () => {
-      elements.forEach((element) => {
-        if (element) observer.unobserve(element);
-      });
-    };
-  });
-
-  const plans = {
-    basic: {
-      name: '타이피 BASIC ACCESS',
-      price: 0,
-      description: '간단한 메모와 가벼운 글쓰기를 시작하세요',
-      features: ['총 16,000자까지 작성 가능', '총 20MB까지 파일 업로드 가능'],
-    },
-    full: {
-      name: '타이피 FULL ACCESS',
-      price: 4900,
-      yearlyPrice: 49_000,
-      description: '제한 없이 자유롭게 글쓰기를 즐기세요',
-      features: [
-        '무제한 글자 수',
-        '무제한 파일 업로드',
-        '고급 검색',
-        '맞춤법 검사',
-        '커스텀 게시 주소',
-        '커스텀 폰트 업로드',
-        '베타 기능 우선 접근',
-        '문제 발생시 우선 지원',
-        '디스코드 커뮤니티 참여',
-        '그리고 더 많은 혜택',
-      ],
-      badge: 'RECOMMENDED',
-    },
+  const features = {
+    basic: ['총 16,000자까지 작성 가능', '총 20MB까지 파일 업로드 가능'],
+    full: [
+      '무제한 글자 수',
+      '무제한 파일 업로드',
+      '고급 검색',
+      '맞춤법 검사',
+      '커스텀 게시 주소',
+      '커스텀 폰트 업로드',
+      '베타 기능 우선 접근',
+      '문제 발생시 우선 지원',
+      '디스코드 커뮤니티 참여',
+      '그리고 더 많은 혜택',
+    ],
   };
 
   const faqs = [
@@ -92,7 +52,7 @@
   ];
 
   const toggleFaq = (index: number) => {
-    expandedFaqIndex = expandedFaqIndex === index ? null : index;
+    expandedIndex = expandedIndex === index ? null : index;
   };
 </script>
 
@@ -109,20 +69,10 @@
       position: 'absolute',
       inset: '0',
       backgroundImage:
-        'linear-gradient(to bottom, token(colors.white), token(colors.gray.50) 25%, token(colors.gray.50) 75%, token(colors.white))',
-      zIndex: '0',
-    })}
-  ></div>
-
-  <div
-    class={css({
-      position: 'absolute',
-      inset: '0',
-      backgroundImage: 'radial-gradient(circle at 1px 1px, token(colors.gray.200) 1px, transparent 1px)',
-      backgroundSize: '[50px 50px]',
+        'linear-gradient(to bottom, token(colors.white), token(colors.gray.50) 25%, token(colors.gray.50) 75%, token(colors.white)), radial-gradient(circle at 1px 1px, token(colors.gray.200) 1px, transparent 1px)',
+      backgroundSize: '[1px, 50px 50px]',
       opacity: '[0.3]',
       pointerEvents: 'none',
-      zIndex: '1',
     })}
   ></div>
 
@@ -137,7 +87,6 @@
       opacity: '[0.3]',
       filter: '[blur(180px)]',
       pointerEvents: 'none',
-      zIndex: '1',
     })}
   ></div>
 
@@ -152,12 +101,10 @@
       opacity: '[0.4]',
       filter: '[blur(150px)]',
       pointerEvents: 'none',
-      zIndex: '1',
     })}
   ></div>
 
   <section
-    bind:this={elements[0]}
     class={css({
       position: 'relative',
       paddingTop: { sm: '80px', lg: '100px' },
@@ -172,6 +119,7 @@
         transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
       },
     })}
+    data-observe
   >
     <div class={center({ flexDirection: 'column', maxWidth: '[1024px]', marginX: 'auto' })}>
       <div
@@ -273,7 +221,6 @@
   >
     <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
       <div
-        bind:this={elements[1]}
         class={css({
           marginBottom: '64px',
           display: 'flex',
@@ -286,6 +233,7 @@
             transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
           },
         })}
+        data-observe
       >
         <div
           class={flex({
@@ -308,18 +256,28 @@
               letterSpacing: '[0.05em]',
               textTransform: 'uppercase',
               transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-              backgroundColor: billingPeriod === 'monthly' ? 'gray.900' : 'white',
-              color: billingPeriod === 'monthly' ? 'white' : 'gray.900',
+              backgroundColor: 'white',
+              color: 'gray.900',
               cursor: 'pointer',
               border: 'none',
               position: 'relative',
-              zIndex: billingPeriod === 'monthly' ? '2' : '1',
-              transform: billingPeriod === 'monthly' ? 'scale(1.05)' : 'scale(1)',
+              zIndex: '1',
+              transform: 'scale(1)',
               _hover: {
-                backgroundColor: billingPeriod === 'monthly' ? 'gray.800' : 'gray.100',
+                backgroundColor: 'gray.100',
+              },
+              _pressed: {
+                backgroundColor: 'gray.900',
+                color: 'white',
+                zIndex: '2',
+                transform: 'scale(1.05)',
+                _hover: {
+                  backgroundColor: 'gray.800',
+                },
               },
             })}
-            onclick={() => (billingPeriod = 'monthly')}
+            aria-pressed={selectedInterval === 'monthly'}
+            onclick={() => (selectedInterval = 'monthly')}
             type="button"
           >
             월간 결제
@@ -333,18 +291,28 @@
               letterSpacing: '[0.05em]',
               textTransform: 'uppercase',
               transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-              backgroundColor: billingPeriod === 'annually' ? 'gray.900' : 'white',
-              color: billingPeriod === 'annually' ? 'white' : 'gray.900',
+              backgroundColor: 'white',
+              color: 'gray.900',
               cursor: 'pointer',
               border: 'none',
               position: 'relative',
-              zIndex: billingPeriod === 'annually' ? '2' : '1',
-              transform: billingPeriod === 'annually' ? 'scale(1.05)' : 'scale(1)',
+              zIndex: '1',
+              transform: 'scale(1)',
               _hover: {
-                backgroundColor: billingPeriod === 'annually' ? 'gray.800' : 'gray.100',
+                backgroundColor: 'gray.100',
+              },
+              _pressed: {
+                backgroundColor: 'gray.900',
+                color: 'white',
+                zIndex: '2',
+                transform: 'scale(1.05)',
+                _hover: {
+                  backgroundColor: 'gray.800',
+                },
               },
             })}
-            onclick={() => (billingPeriod = 'annually')}
+            aria-pressed={selectedInterval === 'yearly'}
+            onclick={() => (selectedInterval = 'yearly')}
             type="button"
           >
             연간 결제
@@ -370,7 +338,6 @@
       </div>
 
       <div
-        bind:this={elements[2]}
         class={css({
           display: 'grid',
           gridTemplateColumns: { sm: '1fr', lg: '1fr 1fr' },
@@ -384,6 +351,7 @@
             transform: 'translateY(0)',
           },
         })}
+        data-observe
       >
         <div
           class={css({
@@ -415,7 +383,7 @@
               letterSpacing: '[0.05em]',
             })}
           >
-            {plans.basic.name}
+            타이피 BASIC ACCESS
           </h3>
           <p
             class={css({
@@ -427,15 +395,20 @@
               fontWeight: 'medium',
             })}
           >
-            {plans.basic.description}
+            간단한 메모와 가벼운 글쓰기를 시작하세요
           </p>
 
-          <div class={css({ marginBottom: '40px' })}>
-            <div class={flex({ alignItems: 'center', gap: '8px', height: '[72px]' })}>
-              <span class={css({ fontSize: '[56px]', fontWeight: 'black', color: 'gray.900', lineHeight: '[1]', fontFamily: 'Paperlogy' })}>
-                무료
-              </span>
-            </div>
+          <div
+            class={css({
+              fontSize: '[56px]',
+              fontWeight: 'black',
+              color: 'gray.900',
+              lineHeight: '[1]',
+              fontFamily: 'Paperlogy',
+              marginBottom: '40px',
+            })}
+          >
+            무료
           </div>
 
           <a
@@ -484,7 +457,7 @@
               포함 사항:
             </p>
             <ul class={flex({ flexDirection: 'column', gap: '16px' })}>
-              {#each plans.basic.features as feature, index (index)}
+              {#each features.basic as feature, index (index)}
                 <li class={flex({ alignItems: 'flex-start', gap: '12px' })}>
                   <div
                     class={css({
@@ -528,30 +501,28 @@
             },
           })}
         >
-          {#if plans.full.badge}
-            <div
-              class={css({
-                position: 'absolute',
-                top: '-20px',
-                right: '20px',
-                paddingX: '20px',
-                paddingY: '8px',
-                fontSize: '12px',
-                fontWeight: 'black',
-                color: 'gray.900',
-                backgroundColor: 'amber.400',
-                letterSpacing: '[0.1em]',
-                textTransform: 'uppercase',
-                border: '4px solid',
-                borderColor: 'gray.900',
-                transform: 'rotate(2deg)',
-                boxShadow: '[4px 4px 0 0 #000]',
-                zIndex: '10',
-              })}
-            >
-              {plans.full.badge}
-            </div>
-          {/if}
+          <div
+            class={css({
+              position: 'absolute',
+              top: '-20px',
+              right: '20px',
+              paddingX: '20px',
+              paddingY: '8px',
+              fontSize: '12px',
+              fontWeight: 'black',
+              color: 'gray.900',
+              backgroundColor: 'amber.400',
+              letterSpacing: '[0.1em]',
+              textTransform: 'uppercase',
+              border: '4px solid',
+              borderColor: 'gray.900',
+              transform: 'rotate(2deg)',
+              boxShadow: '[4px 4px 0 0 #000]',
+              zIndex: '10',
+            })}
+          >
+            RECOMMENDED
+          </div>
 
           <h3
             class={css({
@@ -564,7 +535,7 @@
               letterSpacing: '[0.05em]',
             })}
           >
-            {plans.full.name}
+            타이피 FULL ACCESS
           </h3>
           <p
             class={css({
@@ -576,11 +547,11 @@
               fontWeight: 'medium',
             })}
           >
-            {plans.full.description}
+            제한 없이 자유롭게 글쓰기를 즐기세요
           </p>
 
-          <div class={css({ marginBottom: '40px' })}>
-            <div class={flex({ alignItems: 'baseline', gap: '8px', height: '[72px]' })}>
+          <div class={flex({ alignItems: 'baseline', gap: '8px', marginBottom: '12px' })}>
+            {#if browser}
               <NumberFlow
                 class={css({
                   fontSize: '[56px]',
@@ -591,23 +562,37 @@
                   letterSpacing: '[0.05em]',
                   fontFamily: 'Paperlogy',
                 })}
-                value={currentPrice}
+                value={selectedInterval === 'monthly' ? 4900 : Math.floor(49_000 / 12)}
               />
-              <div>
-                <span class={css({ fontSize: '18px', color: 'gray.400', fontWeight: 'bold' })}>원 / 월</span>
-                <span
-                  class={css({
-                    fontSize: '14px',
-                    color: 'gray.500',
-                    opacity: billingPeriod === 'annually' ? '100' : '0',
-                    transition: '[opacity 0.2s ease]',
-                    marginLeft: '4px',
-                    fontWeight: 'medium',
-                  })}
-                >
-                  (연 {comma(plans.full.yearlyPrice)}원)
-                </span>
+            {:else}
+              <div
+                class={css({
+                  fontSize: '[56px]',
+                  fontWeight: 'black',
+                  color: 'amber.400',
+                  lineHeight: '[1]',
+                  fontVariantNumeric: 'tabular-nums',
+                  letterSpacing: '[0.05em]',
+                  fontFamily: 'Paperlogy',
+                })}
+              >
+                {selectedInterval === 'monthly' ? 4900 : Math.floor(49_000 / 12)}
               </div>
+            {/if}
+            <div>
+              <span class={css({ fontSize: '18px', color: 'gray.400', fontWeight: 'bold' })}>원 / 월</span>
+              <span
+                class={css({
+                  fontSize: '14px',
+                  color: 'gray.500',
+                  opacity: selectedInterval === 'yearly' ? '100' : '0',
+                  transition: '[opacity 0.2s ease]',
+                  marginLeft: '4px',
+                  fontWeight: 'medium',
+                })}
+              >
+                (연 {comma(49_000)}원)
+              </span>
             </div>
           </div>
 
@@ -664,7 +649,7 @@
               제한 없이 모든 기능 사용:
             </p>
             <ul class={flex({ flexDirection: 'column', gap: '16px' })}>
-              {#each plans.full.features as feature, index (index)}
+              {#each features.full as feature, index (index)}
                 <li class={flex({ alignItems: 'flex-start', gap: '12px' })}>
                   <div
                     class={css({
@@ -704,7 +689,6 @@
   >
     <div class={css({ maxWidth: '[1024px]', marginX: 'auto' })}>
       <div
-        bind:this={elements[3]}
         class={center({
           flexDirection: 'column',
           marginBottom: '80px',
@@ -717,6 +701,7 @@
             transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
           },
         })}
+        data-observe
       >
         <div
           class={css({
@@ -765,7 +750,6 @@
       </div>
 
       <div
-        bind:this={elements[4]}
         class={css({
           maxWidth: '[800px]',
           marginX: 'auto',
@@ -777,6 +761,7 @@
             transform: 'translateY(0)',
           },
         })}
+        data-observe
       >
         <div
           class={flex({
@@ -786,19 +771,27 @@
         >
           {#each faqs as faq, index (index)}
             <div
-              class={css({
-                backgroundColor: 'white',
-                border: '4px solid',
-                borderColor: 'gray.900',
-                transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-                overflow: 'hidden',
-                boxShadow: expandedFaqIndex === index ? '[8px 8px 0 0 #000]' : '[4px 4px 0 0 #000]',
-                transform: expandedFaqIndex === index ? 'translate(-2px, -2px)' : 'translate(0, 0)',
-                _hover: {
-                  transform: 'translate(-2px, -2px)',
-                  boxShadow: '[8px 8px 0 0 #000]',
-                },
-              })}
+              class={cx(
+                'group',
+                css({
+                  backgroundColor: 'white',
+                  border: '4px solid',
+                  borderColor: 'gray.900',
+                  transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                  overflow: 'hidden',
+                  boxShadow: '[4px 4px 0 0 #000]',
+                  transform: 'translate(0, 0)',
+                  _hover: {
+                    transform: 'translate(-2px, -2px)',
+                    boxShadow: '[8px 8px 0 0 #000]',
+                  },
+                  _expanded: {
+                    boxShadow: '[8px 8px 0 0 #000]',
+                    transform: 'translate(-2px, -2px)',
+                  },
+                }),
+              )}
+              aria-expanded={expandedIndex === index}
             >
               <button
                 class={css({
@@ -811,45 +804,53 @@
                   gap: '16px',
                   textAlign: 'left',
                   cursor: 'pointer',
-                  backgroundColor: expandedFaqIndex === index ? 'amber.50' : 'transparent',
+                  backgroundColor: 'transparent',
                   border: 'none',
                   transition: '[background-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                  fontSize: { sm: '18px', lg: '20px' },
+                  fontWeight: 'bold',
+                  color: 'gray.900',
+                  fontFamily: 'Pretendard',
+                  lineHeight: '[1.5]',
                   _hover: {
-                    backgroundColor: expandedFaqIndex === index ? 'amber.50' : 'gray.50',
+                    backgroundColor: 'gray.50',
+                  },
+                  _groupExpanded: {
+                    backgroundColor: 'amber.50',
+                    _hover: {
+                      backgroundColor: 'amber.50',
+                    },
                   },
                 })}
                 onclick={() => toggleFaq(index)}
                 type="button"
               >
-                <h3
-                  class={css({
-                    fontSize: { sm: '18px', lg: '20px' },
-                    fontWeight: 'bold',
-                    color: 'gray.900',
-                    fontFamily: 'Pretendard',
-                    lineHeight: '[1.5]',
-                  })}
-                >
-                  {faq.question}
-                </h3>
+                {faq.question}
                 <div
                   class={css({
                     width: '32px',
                     height: '32px',
-                    backgroundColor: expandedFaqIndex === index ? 'gray.900' : 'amber.400',
+                    backgroundColor: 'amber.400',
                     border: '3px solid',
                     borderColor: 'gray.900',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    transform: expandedFaqIndex === index ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transform: 'rotate(0deg)',
                     transition: '[transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)]',
+                    _groupExpanded: {
+                      backgroundColor: 'gray.900',
+                      transform: 'rotate(180deg)',
+                    },
                   })}
                 >
                   <Icon
                     style={css.raw({
-                      color: expandedFaqIndex === index ? 'white' : 'gray.900',
+                      color: 'gray.900',
+                      _groupExpanded: {
+                        color: 'white',
+                      },
                     })}
                     icon={ChevronDownIcon}
                     size={18}
@@ -860,8 +861,11 @@
               <div
                 class={css({
                   display: 'grid',
-                  gridTemplateRows: expandedFaqIndex === index ? '1fr' : '0fr',
+                  gridTemplateRows: '0fr',
                   transition: '[grid-template-rows 0.15s cubic-bezier(0.4, 0, 0.2, 1)]',
+                  _groupExpanded: {
+                    gridTemplateRows: '1fr',
+                  },
                 })}
               >
                 <div
@@ -885,10 +889,15 @@
                         paddingX: { sm: '24px', lg: '32px' },
                         paddingY: { sm: '20px', lg: '24px' },
                         fontWeight: 'medium',
-                        opacity: expandedFaqIndex === index ? '100' : '0',
-                        transform: expandedFaqIndex === index ? 'translateY(0)' : 'translateY(-10px)',
+                        opacity: '0',
+                        transform: 'translateY(-10px)',
                         transition: '[opacity 0.2s ease-out, transform 0.2s ease-out]',
-                        transitionDelay: expandedFaqIndex === index ? '0.05s' : '0s',
+                        transitionDelay: '0s',
+                        _groupExpanded: {
+                          opacity: '100',
+                          transform: 'translateY(0)',
+                          transitionDelay: '0.05s',
+                        },
                       })}
                     >
                       {faq.answer}
@@ -941,7 +950,6 @@
 
     <div class={css({ maxWidth: '[1024px]', marginX: 'auto', position: 'relative' })}>
       <div
-        bind:this={elements[5]}
         class={center({
           flexDirection: 'column',
           textAlign: 'center',
@@ -954,6 +962,7 @@
             transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
           },
         })}
+        data-observe
       >
         <div
           class={css({
