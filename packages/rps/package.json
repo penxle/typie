@@ -6,12 +6,12 @@
     "rps": "./index.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-ssm": "^3.846.0",
-    "commander": "^12.1.0",
+    "@aws-sdk/client-ssm": "^3.849.0",
+    "commander": "^14.0.0",
     "execa": "^9.6.0"
   },
   "devDependencies": {
-    "@types/node": "^22.16.5",
+    "@types/node": "^24.0.15",
     "@typie/tsconfig": "workspace:*"
   },
   "engines": {

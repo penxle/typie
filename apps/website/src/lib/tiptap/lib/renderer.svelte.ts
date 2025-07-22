@@ -1,5 +1,6 @@
 import { NodeView } from '@tiptap/core';
 import { mount, unmount } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 import { Ref } from '$lib/utils';
 import type {
   DecorationWithType,
@@ -50,7 +51,7 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
       }, 0);
     };
 
-    const context = new Map();
+    const context = new SvelteMap();
     context.set('onDragStart', (event: DragEvent) => this.#onDragStart(event));
 
     this.#props = {

@@ -5,6 +5,7 @@
   import mixpanel from 'mixpanel-browser';
   import * as R from 'remeda';
   import { tick } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { match } from 'ts-pattern';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
@@ -263,7 +264,7 @@
   const searchHitsByType = $derived.by(() => {
     type SearchHit = (typeof searchHits)[number];
 
-    const map = new Map<SearchHit['__typename'], SearchHit[]>();
+    const map = new SvelteMap<SearchHit['__typename'], SearchHit[]>();
 
     for (const [idx, hit] of searchHits.entries()) {
       const key = hit.__typename;

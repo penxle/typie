@@ -1,5 +1,6 @@
 import Konva from 'konva';
 import { nanoid } from 'nanoid';
+import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { clamp, Ref } from '$lib/utils';
@@ -68,7 +69,7 @@ export class Canvas {
   #cursorManager?: CursorManager;
 
   #observer: ResizeObserver;
-  #pointers = new Map<number, Pos>();
+  #pointers = new SvelteMap<number, Pos>();
 
   #operation: Partial<OperationReturn> | null = null;
 

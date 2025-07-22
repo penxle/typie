@@ -1,5 +1,5 @@
 import { untrack } from 'svelte';
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteURLSearchParams } from 'svelte/reactivity';
 import { goto } from '$app/navigation';
 import { page } from '$app/state';
 import { debounce } from '$lib/utils';
@@ -10,7 +10,7 @@ $effect.root(() => {
   $effect(() => {
     if (pendingUpdates.size > 0) {
       untrack(() => {
-        const params = new URLSearchParams(page.url.searchParams);
+        const params = new SvelteURLSearchParams(page.url.searchParams);
 
         for (const [key, value] of pendingUpdates) {
           if (value === null) {

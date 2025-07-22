@@ -1,7 +1,7 @@
 import * as aws from '@pulumi/aws';
 import * as pulumi from '@pulumi/pulumi';
 
-const cdn = new aws.s3.BucketV2('cdn', {
+const cdn = new aws.s3.Bucket('cdn', {
   bucket: 'typie-cdn',
 });
 
@@ -20,7 +20,7 @@ new aws.s3.BucketPolicy('cdn', {
   },
 });
 
-const usercontents = new aws.s3.BucketV2('usercontents', {
+const usercontents = new aws.s3.Bucket('usercontents', {
   bucket: 'typie-usercontents',
 });
 
@@ -39,7 +39,7 @@ new aws.s3.BucketPolicy('usercontents', {
   },
 });
 
-new aws.s3.BucketLifecycleConfigurationV2('usercontents', {
+new aws.s3.BucketLifecycleConfiguration('usercontents', {
   bucket: usercontents.bucket,
   rules: [
     {
@@ -55,11 +55,11 @@ new aws.s3.BucketLifecycleConfigurationV2('usercontents', {
   ],
 });
 
-const uploads = new aws.s3.BucketV2('uploads', {
+const uploads = new aws.s3.Bucket('uploads', {
   bucket: 'typie-uploads',
 });
 
-new aws.s3.BucketLifecycleConfigurationV2('uploads', {
+new aws.s3.BucketLifecycleConfiguration('uploads', {
   bucket: uploads.bucket,
   rules: [
     {
@@ -72,7 +72,7 @@ new aws.s3.BucketLifecycleConfigurationV2('uploads', {
   ],
 });
 
-new aws.s3.BucketCorsConfigurationV2('uploads', {
+new aws.s3.BucketCorsConfiguration('uploads', {
   bucket: uploads.bucket,
   corsRules: [
     {
@@ -83,7 +83,7 @@ new aws.s3.BucketCorsConfigurationV2('uploads', {
   ],
 });
 
-const misc = new aws.s3.BucketV2('misc', {
+const misc = new aws.s3.Bucket('misc', {
   bucket: 'typie-misc',
 });
 
