@@ -7,8 +7,7 @@
   import ImageIcon from '~icons/lucide/image';
   import LinkIcon from '~icons/lucide/link';
   import ListIcon from '~icons/lucide/list';
-  import PenToolIcon from '~icons/lucide/pen-tool';
-  import PencilIcon from '~icons/lucide/pencil';
+  import PencilRulerIcon from '~icons/lucide/pencil-ruler';
   import QuoteIcon from '~icons/lucide/quote';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import SaveIcon from '~icons/lucide/save';
@@ -64,8 +63,7 @@
           transform: 'rotate(-2deg)',
         })}
       >
-        <Icon icon={PencilIcon} size={16} />
-        WRITING TOOLS
+        FEATURES
       </div>
 
       <h2
@@ -100,13 +98,14 @@
           color: 'gray.700',
           textAlign: 'center',
           fontFamily: 'Pretendard',
-          maxWidth: '[700px]',
+          maxWidth: '[800px]',
           lineHeight: '[1.6]',
+          marginX: 'auto',
         })}
       >
-        본문 작성부터 아이디어 시각화까지, 글쓰기의 모든 과정을 지원합니다.
+        수많은 원고를 쓰고 고치며 생각했던 내용을 모두 담았어요.
         <br />
-        생각을 온전히 표현할 수 있는 완벽한 도구들이 준비되어 있습니다.
+        타이핑부터 저장까지, 세심하게 다듬은 글쓰기의 모든 과정을 경험해보세요.
       </p>
     </div>
 
@@ -206,7 +205,7 @@
           방해 없이, 쓰는 데만 집중할 수 있어요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '16px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
-          글쓰기를 방해하는 작은 불편들을 세심하게 줄였어요. 현재 줄이 항상 화면 중앙에 오도록 고정되는 타자기 모드, 커서를 기준으로 줄을
+          매일 글을 쓰며 마주치는 사소한 불편함들을 줄였어요. 현재 줄이 항상 화면 중앙에 오도록 고정되는 타자기 모드, 커서를 기준으로 줄을
           강조해주는 시선 유도, 따옴표 자동 입력, 손에 익은 단축키와 눈이 편안한 다크 테마까지. 눈과 손, 커서가 자연스럽게 맞물리는 경험을
           제공해요.
         </p>
@@ -340,7 +339,7 @@
             transform: 'rotate(45deg)',
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={PenToolIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={PencilRulerIcon} size={24} />
         </div>
         <h3
           class={css({

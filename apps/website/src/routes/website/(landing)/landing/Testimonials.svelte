@@ -93,7 +93,7 @@
           gap: '8px',
           paddingX: { sm: '16px', lg: '20px' },
           paddingY: { sm: '6px', lg: '8px' },
-          marginBottom: { sm: '24px', lg: '32px' },
+          marginBottom: { sm: '24px', lg: '40px' },
           backgroundColor: 'gray.900',
           color: 'white',
           fontSize: { sm: '12px', lg: '14px' },
@@ -101,9 +101,6 @@
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
           transform: 'rotate(-2deg)',
-          border: '4px solid',
-          borderColor: 'gray.900',
-          boxShadow: '[4px 4px 0 0 #fbbf24]',
         })}
       >
         TESTIMONIALS
@@ -113,7 +110,7 @@
         class={css({
           fontSize: { sm: '[36px]', lg: '[56px]' },
           fontWeight: 'black',
-          color: 'gray.950',
+          color: 'gray.900',
           textAlign: 'center',
           fontFamily: 'Paperlogy',
           marginBottom: { sm: '16px', lg: '24px' },
@@ -137,12 +134,13 @@
       <p
         class={css({
           fontSize: { sm: '16px', lg: '20px' },
-          fontWeight: 'semibold',
+          fontWeight: 'medium',
           color: 'gray.700',
           textAlign: 'center',
           fontFamily: 'Pretendard',
-          maxWidth: '600px',
-          lineHeight: '[1.7]',
+          maxWidth: '[800px]',
+          lineHeight: '[1.6]',
+          marginX: 'auto',
         })}
       >
         실제로 써본 사람들이 말하는 타이피의 장점, 지금 직접 확인해보세요.
