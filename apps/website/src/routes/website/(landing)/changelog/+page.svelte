@@ -1,7 +1,9 @@
 <script lang="ts">
   import dayjs from 'dayjs';
   import { marked } from 'marked';
-  import { Helmet } from '$lib/components';
+  import CalendarIcon from '~icons/lucide/calendar';
+  import CircleFadingArrowUpIcon from '~icons/lucide/circle-fading-arrow-up';
+  import { Helmet, Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
@@ -142,7 +144,9 @@
         <div class={css({ textAlign: 'center' })}>
           <div
             class={css({
-              display: 'inline-block',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
               backgroundColor: 'gray.900',
               color: 'white',
               paddingY: '8px',
@@ -158,6 +162,7 @@
               },
             })}
           >
+            <Icon icon={CircleFadingArrowUpIcon} size={16} />
             FEATURES & IMPROVEMENTS
           </div>
 
@@ -275,7 +280,9 @@
               >
                 <time
                   class={css({
-                    display: 'inline-block',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
                     backgroundColor: 'gray.900',
                     color: 'white',
                     paddingY: '6px',
@@ -286,6 +293,7 @@
                     letterSpacing: '[0.05em]',
                   })}
                 >
+                  <Icon icon={CalendarIcon} size={14} />
                   {dayjs(entry.date).formatAsDate()}
                 </time>
               </div>
