@@ -37,11 +37,15 @@
         flexDirection: 'column',
         marginBottom: { sm: '60px', lg: '80px' },
         opacity: '0',
-        transform: { sm: 'translateY(20px)', lg: 'translateY(20px) rotate(-1deg)' },
-        transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        transform: { sm: 'translate3d(0, 20px, 0)', lg: 'translate3d(0, 20px, 0) rotate(-1deg)' },
+        transition: {
+          sm: '[opacity 0.3s ease-out, transform 0.3s ease-out]',
+          lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        },
+        willChange: 'transform, opacity',
         '&.in-view': {
           opacity: '100',
-          transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'translate3d(0, 0, 0) rotate(0)' },
         },
       })}
       data-observe
@@ -60,7 +64,7 @@
           marginBottom: { sm: '24px', lg: '40px' },
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
-          transform: 'rotate(-2deg)',
+          transform: { sm: 'rotate(0)', lg: 'rotate(-2deg)' },
         })}
       >
         FEATURES
@@ -85,7 +89,7 @@
             backgroundColor: 'amber.400',
             paddingX: { sm: '16px', lg: '20px' },
             display: 'inline-block',
-            transform: 'rotate(1deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(1deg)' },
           })}
         >
           모든 것
@@ -115,11 +119,15 @@
         gap: { sm: '24px', lg: '32px' },
         marginBottom: { sm: '24px', lg: '32px' },
         opacity: '0',
-        transform: 'translateY(20px)',
-        transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
+        transform: 'translate3d(0, 20px, 0)',
+        transition: {
+          sm: '[opacity 0.3s ease-out 0.1s, transform 0.3s ease-out 0.1s]',
+          lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
+        },
+        willChange: 'transform, opacity',
         '&.in-view': {
           opacity: '100',
-          transform: 'translateY(0)',
+          transform: 'translate3d(0, 0, 0)',
         },
       })}
       data-observe
@@ -132,11 +140,12 @@
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
           position: 'relative',
-          transform: { sm: 'rotate(0)', lg: 'rotate(-0.3deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(-0.3deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -155,7 +164,7 @@
             letterSpacing: '[0.1em]',
             border: '4px solid',
             borderColor: 'gray.900',
-            transform: 'rotate(2deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(2deg)' },
             boxShadow: '[4px 4px 0 0 #000]',
           })}
         >
@@ -183,7 +192,7 @@
                 transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                 _hover: {
                   backgroundColor: 'amber.400',
-                  transform: 'translateY(-2px)',
+                  transform: 'translate3d(0, -2px, 0)',
                 },
               })}
             >
@@ -218,11 +227,12 @@
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #fbbf24]',
           position: 'relative',
-          transform: { sm: 'rotate(0)', lg: 'rotate(0.2deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(0.2deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #fbbf24]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #fbbf24]', lg: '[12px 12px 0 0 #fbbf24]' },
           },
         })}
       >
@@ -252,11 +262,15 @@
         gridTemplateColumns: { sm: '1fr', lg: '1fr 1fr 1fr' },
         gap: { sm: '24px', lg: '32px' },
         opacity: '0',
-        transform: 'translateY(20px)',
-        transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s]',
+        transform: 'translate3d(0, 20px, 0)',
+        transition: {
+          sm: '[opacity 0.3s ease-out 0.2s, transform 0.3s ease-out 0.2s]',
+          lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s]',
+        },
+        willChange: 'transform, opacity',
         '&.in-view': {
           opacity: '100',
-          transform: 'translateY(0)',
+          transform: 'translate3d(0, 0, 0)',
         },
       })}
       data-observe
@@ -268,11 +282,12 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
-          transform: { sm: 'rotate(0)', lg: 'rotate(-0.5deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(-0.5deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -287,10 +302,14 @@
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: { sm: '16px', lg: '24px' },
-            transform: 'rotate(45deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={RulerDimensionLineIcon} size={24} />
+          <Icon
+            style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })}
+            icon={RulerDimensionLineIcon}
+            size={24}
+          />
         </div>
         <h3
           class={css({
@@ -316,11 +335,12 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
-          transform: { sm: 'rotate(0)', lg: 'rotate(0.1deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(0.1deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -335,10 +355,14 @@
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: { sm: '16px', lg: '24px' },
-            transform: 'rotate(45deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={PencilRulerIcon} size={24} />
+          <Icon
+            style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })}
+            icon={PencilRulerIcon}
+            size={24}
+          />
         </div>
         <h3
           class={css({
@@ -364,11 +388,12 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
-          transform: { sm: 'rotate(0)', lg: 'rotate(0.4deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(0.4deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -383,10 +408,14 @@
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: { sm: '16px', lg: '24px' },
-            transform: 'rotate(45deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={FolderHeartIcon} size={24} />
+          <Icon
+            style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })}
+            icon={FolderHeartIcon}
+            size={24}
+          />
         </div>
         <h3
           class={css({
@@ -412,11 +441,12 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
-          transform: { sm: 'rotate(0)', lg: 'rotate(-0.1deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(-0.1deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -431,10 +461,14 @@
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: { sm: '16px', lg: '24px' },
-            transform: 'rotate(45deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={BookMarkedIcon} size={24} />
+          <Icon
+            style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })}
+            icon={BookMarkedIcon}
+            size={24}
+          />
         </div>
         <h3
           class={css({
@@ -460,11 +494,12 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
-          transform: { sm: 'rotate(0)', lg: 'rotate(-0.3deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(-0.3deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -479,10 +514,14 @@
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: { sm: '16px', lg: '24px' },
-            transform: 'rotate(45deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={UsersRoundIcon} size={24} />
+          <Icon
+            style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })}
+            icon={UsersRoundIcon}
+            size={24}
+          />
         </div>
         <h3
           class={css({
@@ -508,11 +547,12 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
-          transform: { sm: 'rotate(0)', lg: 'rotate(-0.4deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(-0.4deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -527,10 +567,10 @@
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: { sm: '16px', lg: '24px' },
-            transform: 'rotate(45deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={SaveIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })} icon={SaveIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -556,11 +596,12 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
-          transform: { sm: 'rotate(0)', lg: 'rotate(0.1deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(0.1deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -575,10 +616,10 @@
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: { sm: '16px', lg: '24px' },
-            transform: 'rotate(45deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={GlobeIcon} size={24} />
+          <Icon style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })} icon={GlobeIcon} size={24} />
         </div>
         <h3
           class={css({
@@ -604,11 +645,12 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #000]',
-          transform: { sm: 'rotate(0)', lg: 'rotate(-0.2deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(-0.2deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #000]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
           },
         })}
       >
@@ -623,10 +665,14 @@
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: { sm: '16px', lg: '24px' },
-            transform: 'rotate(45deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
           })}
         >
-          <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={CalendarDaysIcon} size={24} />
+          <Icon
+            style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })}
+            icon={CalendarDaysIcon}
+            size={24}
+          />
         </div>
         <h3
           class={css({
@@ -653,11 +699,12 @@
           borderColor: 'gray.900',
           boxShadow: '[8px 8px 0 0 #fbbf24]',
           gridColumn: { sm: '1', lg: 'auto' },
-          transform: { sm: 'rotate(0)', lg: 'rotate(-0.6deg)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'rotate(-0.6deg)' },
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          willChange: 'transform',
           _hover: {
-            transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0)' },
-            boxShadow: '[12px 12px 0 0 #fbbf24]',
+            transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
+            boxShadow: { sm: '[8px 8px 0 0 #fbbf24]', lg: '[12px 12px 0 0 #fbbf24]' },
           },
         })}
       >
@@ -672,10 +719,14 @@
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transform: 'rotate(45deg)',
+              transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
             })}
           >
-            <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={SparklesIcon} size={24} />
+            <Icon
+              style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })}
+              icon={SparklesIcon}
+              size={24}
+            />
           </div>
         </div>
         <h3

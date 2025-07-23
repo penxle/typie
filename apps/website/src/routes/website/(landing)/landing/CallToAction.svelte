@@ -23,16 +23,19 @@
         borderColor: 'gray.900',
         boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[12px 12px 0 0 #000]' },
         padding: { sm: '40px', lg: '60px' },
-        transform: { sm: 'scale(0.95)', lg: 'rotate(-1deg) scale(0.95)' },
+        transform: { sm: 'translate3d(0, 0, 0) scale(0.95)', lg: 'rotate(-1deg) scale(0.95)' },
         opacity: '0',
-        transition:
-          '[transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        transition: {
+          sm: '[transform 0.4s ease-out, opacity 0.4s ease-out, box-shadow 0.3s ease-out]',
+          lg: '[transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        },
+        willChange: 'transform, opacity',
         '&.in-view': {
           opacity: '100',
-          transform: { sm: 'scale(1)', lg: 'rotate(-1deg) scale(1)' },
+          transform: { sm: 'translate3d(0, 0, 0) scale(1)', lg: 'rotate(-1deg) scale(1)' },
         },
         _hover: {
-          transform: { sm: 'scale(1)', lg: 'rotate(0deg) scale(1)' },
+          transform: { sm: 'translate3d(0, 0, 0) scale(1)', lg: 'rotate(0deg) scale(1)' },
           boxShadow: { sm: '[12px 12px 0 0 #000]', lg: '[16px 16px 0 0 #000]' },
         },
       })}
@@ -48,12 +51,16 @@
           border: '4px solid',
           borderColor: 'gray.900',
           boxShadow: '[4px 4px 0 0 #fff]',
-          transform: 'rotate(12deg) scale(0)',
+          transform: { sm: 'scale(0)', lg: 'rotate(12deg) scale(0)' },
           opacity: '0',
-          transition: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s]',
+          transition: {
+            sm: '[transform 0.3s ease-out 0.2s, opacity 0.3s ease-out 0.2s]',
+            lg: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s]',
+          },
+          willChange: 'transform',
           '&.in-view': {
             opacity: '100',
-            transform: 'rotate(12deg) scale(1)',
+            transform: { sm: 'scale(1)', lg: 'rotate(12deg) scale(1)' },
           },
         })}
         data-observe
@@ -81,7 +88,7 @@
               paddingX: { sm: '16px', lg: '24px' },
               paddingY: { sm: '6px', lg: '8px' },
               display: 'inline-block',
-              transform: 'rotate(-2deg)',
+              transform: { sm: 'rotate(0)', lg: 'rotate(-2deg)' },
               border: '4px solid',
               borderColor: 'gray.900',
               boxShadow: '[6px 6px 0 0 #000]',
@@ -129,7 +136,7 @@
               boxShadow: '[6px 6px 0 0 #fff]',
               transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
               _hover: {
-                transform: 'translate(-4px, -4px)',
+                transform: 'translate3d(-4px, -4px, 0)',
                 boxShadow: '[10px 10px 0 0 #fff]',
               },
             }),
@@ -142,7 +149,7 @@
               transition: 'transform',
               transitionDuration: '200ms',
               _groupHover: {
-                transform: 'translateX(4px)',
+                transform: 'translate3d(4px, 0, 0)',
               },
             })}
             icon={ArrowRightIcon}
@@ -161,13 +168,17 @@
           backgroundColor: 'white',
           border: '4px solid',
           borderColor: 'gray.900',
-          transform: 'rotate(45deg) scale(0)',
+          transform: { sm: 'scale(0)', lg: 'rotate(45deg) scale(0)' },
           opacity: '0',
           boxShadow: '[4px 4px 0 0 #000]',
-          transition: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+          transition: {
+            sm: '[transform 0.3s ease-out 0.3s, opacity 0.3s ease-out 0.3s]',
+            lg: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+          },
+          willChange: 'transform',
           '&.in-view': {
             opacity: '100',
-            transform: 'rotate(45deg) scale(1)',
+            transform: { sm: 'scale(1)', lg: 'rotate(45deg) scale(1)' },
           },
         })}
         data-observe
@@ -181,12 +192,16 @@
           width: { sm: '40px', lg: '60px' },
           height: { sm: '40px', lg: '60px' },
           backgroundColor: 'gray.900',
-          transform: 'rotate(-15deg) scale(0)',
+          transform: { sm: 'scale(0)', lg: 'rotate(-15deg) scale(0)' },
           opacity: '0',
-          transition: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s]',
+          transition: {
+            sm: '[transform 0.3s ease-out 0.4s, opacity 0.3s ease-out 0.4s]',
+            lg: '[transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s]',
+          },
+          willChange: 'transform',
           '&.in-view': {
             opacity: '100',
-            transform: 'rotate(-15deg) scale(1)',
+            transform: { sm: 'scale(1)', lg: 'rotate(-15deg) scale(1)' },
           },
         })}
         data-observe

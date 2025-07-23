@@ -118,11 +118,15 @@
         flexDirection: 'column',
         marginBottom: { sm: '60px', lg: '80px' },
         opacity: '0',
-        transform: { sm: 'translateY(20px)', lg: 'translateY(20px) rotate(-1deg)' },
-        transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        transform: { sm: 'translate3d(0, 20px, 0)', lg: 'translate3d(0, 20px, 0) rotate(-1deg)' },
+        transition: {
+          sm: '[opacity 0.3s ease-out, transform 0.3s ease-out]',
+          lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        },
+        willChange: 'transform, opacity',
         '&.in-view': {
           opacity: '100',
-          transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
+          transform: { sm: 'translate3d(0, 0, 0)', lg: 'translate3d(0, 0, 0) rotate(0)' },
         },
       })}
       data-observe
@@ -141,7 +145,7 @@
           fontWeight: 'bold',
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
-          transform: 'rotate(-2deg)',
+          transform: { sm: 'rotate(0)', lg: 'rotate(-2deg)' },
         })}
       >
         TESTIMONIALS
@@ -166,7 +170,7 @@
             backgroundColor: 'amber.400',
             paddingX: { sm: '16px', lg: '20px' },
             display: 'inline-block',
-            transform: 'rotate(1deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(1deg)' },
           })}
         >
           생생한 후기
@@ -203,10 +207,11 @@
             flexDirection: 'column',
             gap: { sm: '16px', lg: '24px' },
             opacity: '0',
-            transform: 'translateY(20px)',
+            transform: 'translate3d(0, 20px, 0)',
+            willChange: 'transform, opacity',
             '&.in-view': {
               opacity: '100',
-              transform: 'translateY(0)',
+              transform: 'translate3d(0, 0, 0)',
             },
           })}
           data-observe
@@ -222,10 +227,10 @@
                 textDecoration: 'none',
                 transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                 boxShadow: '[6px 6px 0 0 #000]',
-                transform: { sm: 'rotate(0)', lg: idx % 2 === 0 ? 'rotate(-1deg)' : 'rotate(1deg)' },
+                transform: { sm: 'translate3d(0, 0, 0)', lg: idx % 2 === 0 ? 'rotate(-1deg)' : 'rotate(1deg)' },
                 _hover: {
-                  transform: { sm: 'translate(-4px, -4px)', lg: 'translate(-4px, -4px) rotate(0deg)' },
-                  boxShadow: '[10px 10px 0 0 #000]',
+                  transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0deg)' },
+                  boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[10px 10px 0 0 #000]' },
                 },
               })}
               href={testimonial.url}
