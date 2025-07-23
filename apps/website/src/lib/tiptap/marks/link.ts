@@ -90,7 +90,14 @@ export const Link = Mark.create({
           for (const { newRange } of changes) {
             const nodes = findChildrenInRange(tr.doc, newRange, (node) => node.isTextblock);
             for (const node of nodes) {
-              const text = tr.doc.textBetween(node.pos, node.pos + node.node.nodeSize);
+              const text = tr.doc.textBetween(node.pos, node.pos + node.node.nodeSize, '\n', (node) => {
+                if (node.type.name === 'hard_break') {
+                  return '\n';
+                }
+
+                return node.text ?? '';
+              });
+
               const links = find(text, { defaultProtocol: 'https' }).filter((link) => link.isLink);
 
               for (const link of links) {
