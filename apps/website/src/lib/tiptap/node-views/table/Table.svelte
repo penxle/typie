@@ -243,6 +243,7 @@
                   display: 'none',
                 },
               })}
+              contenteditable={false}
             >
               <ColHandle {editor} {focusedColumnIndex} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
             </div>
