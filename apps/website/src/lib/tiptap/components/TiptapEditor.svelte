@@ -53,7 +53,13 @@
         handleKeyDown: onkeydown,
 
         clipboardTextSerializer: (content) => {
-          const text = content.content.textBetween(0, content.content.size, '\n');
+          const text = content.content.textBetween(0, content.content.size, '\n', (node) => {
+            if (node.type.name === 'hard_break') {
+              return '\n';
+            }
+
+            return '';
+          });
           return text.replaceAll(/\n{3,}/g, '\n\n');
         },
 
