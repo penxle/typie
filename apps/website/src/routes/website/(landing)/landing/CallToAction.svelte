@@ -96,7 +96,6 @@
             fontSize: { sm: '16px', lg: '20px' },
             fontWeight: 'semibold',
             color: 'gray.700',
-            fontFamily: 'Pretendard',
             lineHeight: '[1.6]',
             marginBottom: { sm: '32px', lg: '40px' },
             maxWidth: '[800px]',

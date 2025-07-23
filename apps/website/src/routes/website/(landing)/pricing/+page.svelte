@@ -190,7 +190,6 @@
           fontWeight: 'medium',
           color: 'gray.700',
           textAlign: 'center',
-          fontFamily: 'Pretendard',
           lineHeight: '[1.7]',
           maxWidth: '[700px]',
           marginX: 'auto',
@@ -389,7 +388,6 @@
             class={css({
               fontSize: '16px',
               color: 'gray.700',
-              fontFamily: 'Pretendard',
               marginBottom: '32px',
               lineHeight: '[1.6]',
               fontWeight: 'medium',
@@ -541,7 +539,6 @@
             class={css({
               fontSize: '16px',
               color: 'gray.300',
-              fontFamily: 'Pretendard',
               marginBottom: '32px',
               lineHeight: '[1.6]',
               fontWeight: 'medium',
@@ -810,7 +807,6 @@
                   fontSize: { sm: '18px', lg: '20px' },
                   fontWeight: 'bold',
                   color: 'gray.900',
-                  fontFamily: 'Pretendard',
                   lineHeight: '[1.5]',
                   _hover: {
                     backgroundColor: 'gray.50',
@@ -884,7 +880,6 @@
                       class={css({
                         fontSize: '17px',
                         color: 'gray.800',
-                        fontFamily: 'Pretendard',
                         lineHeight: '[1.7]',
                         paddingX: { sm: '24px', lg: '32px' },
                         paddingY: { sm: '20px', lg: '24px' },
@@ -1015,7 +1010,6 @@
             fontSize: { sm: '18px', lg: '24px' },
             fontWeight: 'medium',
             color: 'gray.300',
-            fontFamily: 'Pretendard',
             marginBottom: '56px',
             lineHeight: '[1.6]',
             maxWidth: '[700px]',
