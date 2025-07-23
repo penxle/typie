@@ -51,7 +51,7 @@
       height: '[600px]',
       backgroundImage: 'radial-gradient(circle, token(colors.amber.200), transparent)',
       opacity: '[0.6]',
-      filter: '[blur(150px)]',
+      filter: { sm: '[blur(60px)]', lg: '[blur(150px)]' },
       pointerEvents: 'none',
       zIndex: '1',
     })}
@@ -66,7 +66,7 @@
       height: '[500px]',
       backgroundImage: 'radial-gradient(circle, token(colors.gray.200), transparent)',
       opacity: '[0.7]',
-      filter: '[blur(120px)]',
+      filter: { sm: '[blur(50px)]', lg: '[blur(120px)]' },
       pointerEvents: 'none',
       zIndex: '1',
     })}
@@ -93,11 +93,15 @@
           position: 'relative',
           boxShadow: '[8px 8px 0 0 #000]',
           opacity: '0',
-          transform: { sm: 'translateY(-40px) scale(0.95)', lg: 'translateY(-40px) rotate(-1deg) scale(0.95)' },
-          transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          transform: { sm: 'translate3d(0, -40px, 0) scale(0.95)', lg: 'translate3d(0, -40px, 0) rotate(-1deg) scale(0.95)' },
+          transition: {
+            sm: '[opacity 0.4s ease-out, transform 0.4s ease-out]',
+            lg: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+          },
+          willChange: 'transform, opacity',
           '&.in-view': {
             opacity: '100',
-            transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
+            transform: { sm: 'translate3d(0, 0, 0) scale(1)', lg: 'translate3d(0, 0, 0) rotate(0) scale(1)' },
           },
         })}
         data-observe
@@ -155,10 +159,13 @@
               fontWeight: 'bold',
               letterSpacing: '[0.1em]',
               marginBottom: '40px',
-              transform: 'rotate(-2deg) scale(0)',
-              transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s]',
+              transform: { sm: 'scale(0)', lg: 'rotate(-2deg) scale(0)' },
+              transition: {
+                sm: '[transform 0.3s ease-out 0.2s]',
+                lg: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s]',
+              },
               '.in-view &': {
-                transform: 'rotate(-2deg) scale(1)',
+                transform: { sm: 'scale(1)', lg: 'rotate(-2deg) scale(1)' },
               },
             })}
           >
@@ -176,12 +183,15 @@
               textTransform: 'uppercase',
               marginBottom: '32px',
               opacity: '0',
-              transform: 'translateY(20px)',
-              transition:
-                '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+              transform: 'translate3d(0, 20px, 0)',
+              transition: {
+                sm: '[opacity 0.4s ease-out 0.2s, transform 0.4s ease-out 0.2s]',
+                lg: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+              },
+              willChange: 'transform, opacity',
               '.in-view &': {
                 opacity: '100',
-                transform: 'translateY(0)',
+                transform: 'translate3d(0, 0, 0)',
               },
             })}
           >
@@ -192,10 +202,13 @@
                 backgroundColor: 'amber.400',
                 paddingX: '20px',
                 display: 'inline-block',
-                transform: 'rotate(1deg) scale(0)',
-                transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s]',
+                transform: { sm: 'scale(0)', lg: 'rotate(1deg) scale(0)' },
+                transition: {
+                  sm: '[transform 0.3s ease-out 0.4s]',
+                  lg: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s]',
+                },
                 '.in-view &': {
-                  transform: 'rotate(1deg) scale(1)',
+                  transform: { sm: 'scale(1)', lg: 'rotate(1deg) scale(1)' },
                 },
               })}
             >
@@ -211,12 +224,15 @@
               maxWidth: '[600px]',
               marginX: 'auto',
               opacity: '0',
-              transform: 'translateY(10px)',
-              transition:
-                '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s]',
+              transform: 'translate3d(0, 10px, 0)',
+              transition: {
+                sm: '[opacity 0.4s ease-out 0.4s, transform 0.4s ease-out 0.4s]',
+                lg: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s]',
+              },
+              willChange: 'transform, opacity',
               '.in-view &': {
                 opacity: '100',
-                transform: 'translateY(0)',
+                transform: 'translate3d(0, 0, 0)',
               },
             })}
           >
@@ -260,11 +276,15 @@
                 gridTemplateColumns: { sm: '1fr', lg: '220px 60px 1fr' },
                 gap: '0',
                 opacity: '0',
-                transform: { sm: 'translateX(-10px)', lg: 'translateX(-10px) rotate(-0.5deg)' },
-                transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                transform: { sm: 'translate3d(-10px, 0, 0)', lg: 'translate3d(-10px, 0, 0) rotate(-0.5deg)' },
+                transition: {
+                  sm: '[opacity 0.3s ease-out, transform 0.3s ease-out]',
+                  lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                },
+                willChange: 'transform, opacity',
                 '&.in-view': {
                   opacity: '100',
-                  transform: { sm: 'translateX(0)', lg: 'translateX(0) rotate(0)' },
+                  transform: { sm: 'translate3d(0, 0, 0)', lg: 'translate3d(0, 0, 0) rotate(0)' },
                 },
               })}
               data-observe
@@ -289,7 +309,7 @@
                     paddingX: '16px',
                     fontSize: '14px',
                     fontWeight: 'bold',
-                    transform: 'rotate(-2deg)',
+                    transform: { sm: 'rotate(0)', lg: 'rotate(-2deg)' },
                     letterSpacing: '[0.05em]',
                   })}
                 >
@@ -315,13 +335,17 @@
                     border: '4px solid',
                     borderColor: 'gray.900',
                     zIndex: '2',
-                    transform: 'rotate(45deg) translateX(-11px) scale(0)',
-                    transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s]',
+                    transform: { sm: 'scale(0)', lg: 'rotate(45deg) translateX(-11px) scale(0)' },
+                    transition: {
+                      sm: '[transform 0.3s ease-out 0.3s]',
+                      lg: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s]',
+                    },
+                    willChange: 'transform',
                     '.in-view &': {
-                      transform: 'rotate(45deg) translateX(-11px) scale(1)',
+                      transform: { sm: 'scale(1)', lg: 'rotate(45deg) translateX(-11px) scale(1)' },
                     },
                     _hover: {
-                      transform: 'rotate(45deg) translateX(-11px) scale(1.2)',
+                      transform: { sm: 'scale(1.1)', lg: 'rotate(45deg) translateX(-11px) scale(1.2)' },
                     },
                   })}
                 ></div>
@@ -339,7 +363,7 @@
                   boxShadow: '[8px 8px 0 0 #000]',
                   transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                   _hover: {
-                    transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px) rotate(0.5deg)' },
+                    transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0.5deg)' },
                     boxShadow: '[12px 12px 0 0 #000]',
                   },
                 })}
@@ -355,7 +379,7 @@
                     fontWeight: 'bold',
                     letterSpacing: '[0.05em]',
                     marginBottom: '16px',
-                    transform: 'rotate(-1deg)',
+                    transform: { sm: 'rotate(0)', lg: 'rotate(-1deg)' },
                   })}
                 >
                   {dayjs(entry.date).formatAsDate()}
@@ -375,7 +399,7 @@
                     textTransform: 'uppercase',
                     border: '4px solid',
                     borderColor: 'gray.900',
-                    transform: 'translateY(-50%) rotate(2deg)',
+                    transform: { sm: 'translate3d(0, -50%, 0)', lg: 'translate3d(0, -50%, 0) rotate(2deg)' },
                     letterSpacing: '[0.1em]',
                   })}
                 >
@@ -578,7 +602,7 @@
               width: '40px',
               height: '40px',
               backgroundColor: 'gray.900',
-              transform: 'rotate(45deg)',
+              transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
             })}
           ></div>
         </div>

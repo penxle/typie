@@ -16,17 +16,27 @@
   $effect(() => {
     if (!elements) return;
 
+    const isMobile = window.innerWidth < 1024;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
+            if (isMobile) {
+              requestAnimationFrame(() => {
+                entry.target.classList.add('in-view');
+              });
+            } else {
+              entry.target.classList.add('in-view');
+            }
+
+            observer.unobserve(entry.target);
           }
         });
       },
       {
-        threshold: 0.1,
-        rootMargin: '0px 0px 50px 0px',
+        threshold: isMobile ? 0.05 : 0.1,
+        rootMargin: isMobile ? '0px 0px 20px 0px' : '0px 0px 50px 0px',
       },
     );
 

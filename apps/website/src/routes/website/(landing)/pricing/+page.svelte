@@ -114,11 +114,15 @@
       paddingX: { sm: '16px', lg: '24px' },
       zIndex: '2',
       opacity: '0',
-      transform: { sm: 'translateY(40px) scale(0.95)', lg: 'translateY(40px) rotate(-1deg) scale(0.95)' },
-      transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+      transform: { sm: 'translate3d(0, 40px, 0) scale(0.95)', lg: 'translate3d(0, 40px, 0) rotate(-1deg) scale(0.95)' },
+      transition: {
+        sm: '[opacity 0.4s ease-out, transform 0.4s ease-out]',
+        lg: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+      },
+      willChange: 'transform, opacity',
       '&.in-view': {
         opacity: '100',
-        transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
+        transform: { sm: 'translate3d(0, 0, 0) scale(1)', lg: 'translate3d(0, 0, 0) rotate(0) scale(1)' },
       },
     })}
     data-observe
@@ -138,10 +142,10 @@
           marginBottom: '40px',
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
-          transform: 'rotate(-2deg) scale(0)',
+          transform: { sm: 'scale(0)', lg: 'rotate(-2deg) scale(0)' },
           transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s]',
           '.in-view &': {
-            transform: 'rotate(-2deg) scale(1)',
+            transform: { sm: 'scale(1)', lg: 'rotate(-2deg) scale(1)' },
           },
         })}
       >
@@ -160,11 +164,15 @@
           marginBottom: '32px',
           textTransform: 'uppercase',
           opacity: '0',
-          transform: 'translateY(20px)',
-          transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+          transform: 'translate3d(0, 20px, 0)',
+          transition: {
+            sm: '[opacity 0.4s ease-out 0.2s, transform 0.4s ease-out 0.2s]',
+            lg: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s]',
+          },
+          willChange: 'transform, opacity',
           '.in-view &': {
             opacity: '100',
-            transform: 'translateY(0)',
+            transform: 'translate3d(0, 0, 0)',
           },
         })}
       >
@@ -173,10 +181,10 @@
             backgroundColor: 'amber.400',
             paddingX: '20px',
             display: 'inline-block',
-            transform: 'rotate(1deg) scale(0)',
+            transform: { sm: 'scale(0)', lg: 'rotate(1deg) scale(0)' },
             transition: '[transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s]',
             '.in-view &': {
-              transform: 'rotate(1deg) scale(1)',
+              transform: { sm: 'scale(1)', lg: 'rotate(1deg) scale(1)' },
             },
           })}
         >
@@ -194,11 +202,15 @@
           maxWidth: '[700px]',
           marginX: 'auto',
           opacity: '0',
-          transform: 'translateY(10px)',
-          transition: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s]',
+          transform: 'translate3d(0, 10px, 0)',
+          transition: {
+            sm: '[opacity 0.4s ease-out 0.4s, transform 0.4s ease-out 0.4s]',
+            lg: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.7s]',
+          },
+          willChange: 'transform, opacity',
           '.in-view &': {
             opacity: '100',
-            transform: 'translateY(0)',
+            transform: 'translate3d(0, 0, 0)',
           },
         })}
       >
@@ -225,11 +237,15 @@
           display: 'flex',
           justifyContent: 'center',
           opacity: '0',
-          transform: { sm: 'translateY(20px)', lg: 'translateY(20px) rotate(-1deg)' },
-          transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s]',
+          transform: { sm: 'translate3d(0, 20px, 0)', lg: 'translate3d(0, 20px, 0) rotate(-1deg)' },
+          transition: {
+            sm: '[opacity 0.3s ease-out 0.05s, transform 0.3s ease-out 0.05s]',
+            lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s]',
+          },
+          willChange: 'transform, opacity',
           '&.in-view': {
             opacity: '100',
-            transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
+            transform: { sm: 'translate3d(0, 0, 0)', lg: 'translate3d(0, 0, 0) rotate(0)' },
           },
         })}
         data-observe
@@ -324,7 +340,7 @@
                 fontWeight: 'black',
                 color: 'gray.900',
                 backgroundColor: 'amber.400',
-                transform: 'rotate(-2deg)',
+                transform: { sm: 'rotate(0)', lg: 'rotate(-2deg)' },
                 display: 'inline-block',
                 border: '2px solid',
                 borderColor: 'gray.900',
@@ -342,12 +358,16 @@
           gridTemplateColumns: { sm: '1fr', lg: '1fr 1fr' },
           gap: { sm: '24px', lg: '32px' },
           opacity: '0',
-          transform: 'translateY(20px)',
-          transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
+          transform: 'translate3d(0, 20px, 0)',
+          transition: {
+            sm: '[opacity 0.3s ease-out 0.1s, transform 0.3s ease-out 0.1s]',
+            lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
+          },
+          willChange: 'transform, opacity',
           marginTop: '20px',
           '&.in-view': {
             opacity: '100',
-            transform: 'translateY(0)',
+            transform: 'translate3d(0, 0, 0)',
           },
         })}
         data-observe
@@ -366,7 +386,7 @@
             flexDirection: 'column',
             order: { sm: '2', lg: '1' },
             _hover: {
-              transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px) rotate(0deg)' },
+              transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0deg)' },
               boxShadow: '[12px 12px 0 0 #000]',
             },
           })}
@@ -433,7 +453,7 @@
                 _hover: {
                   backgroundColor: 'gray.900',
                   color: 'white',
-                  transform: 'translateY(-2px)',
+                  transform: 'translate3d(0, -2px, 0)',
                 },
               }),
             )}
@@ -494,7 +514,7 @@
             flexDirection: 'column',
             order: { sm: '1', lg: '2' },
             _hover: {
-              transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px) rotate(0deg)' },
+              transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0deg)' },
               boxShadow: '[12px 12px 0 0 #fbbf24]',
             },
           })}
@@ -514,7 +534,7 @@
               textTransform: 'uppercase',
               border: '4px solid',
               borderColor: 'gray.900',
-              transform: 'rotate(2deg)',
+              transform: { sm: 'rotate(0)', lg: 'rotate(2deg)' },
               boxShadow: '[4px 4px 0 0 #000]',
               zIndex: '10',
             })}
@@ -616,11 +636,11 @@
                 position: 'relative',
                 boxShadow: '[4px 4px 0 0 #000]',
                 _hover: {
-                  transform: 'translate(-2px, -2px)',
+                  transform: 'translate3d(-2px, -2px, 0)',
                   boxShadow: '[6px 6px 0 0 #000]',
                 },
                 _active: {
-                  transform: 'translate(2px, 2px)',
+                  transform: 'translate3d(2px, 2px, 0)',
                   boxShadow: '[2px 2px 0 0 #000]',
                 },
               }),
@@ -633,7 +653,7 @@
               style={css.raw({
                 transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                 _groupHover: {
-                  transform: 'translateX(4px) rotate(-15deg)',
+                  transform: { sm: 'translate3d(4px, 0, 0)', lg: 'translate3d(4px, 0, 0) rotate(-15deg)' },
                 },
               })}
               icon={ArrowRightIcon}
@@ -660,10 +680,14 @@
                       justifyContent: 'center',
                       flexShrink: 0,
                       marginTop: '2px',
-                      transform: 'rotate(45deg)',
+                      transform: { sm: 'rotate(0)', lg: 'rotate(45deg)' },
                     })}
                   >
-                    <Icon style={css.raw({ color: 'gray.900', transform: 'rotate(-45deg)' })} icon={CheckIcon} size={12} />
+                    <Icon
+                      style={css.raw({ color: 'gray.900', transform: { sm: 'rotate(0)', lg: 'rotate(-45deg)' } })}
+                      icon={CheckIcon}
+                      size={12}
+                    />
                   </div>
                   <span class={css({ fontSize: '15px', color: 'gray.300', lineHeight: '[1.6]', fontWeight: 'medium' })}>{feature}</span>
                 </li>
@@ -690,12 +714,15 @@
           flexDirection: 'column',
           marginBottom: '80px',
           opacity: '0',
-          transform: { sm: 'translateY(20px)', lg: 'translateY(20px) rotate(-1deg)' },
-          transition:
-            '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s]',
+          transform: { sm: 'translate3d(0, 20px, 0)', lg: 'translate3d(0, 20px, 0) rotate(-1deg)' },
+          transition: {
+            sm: '[opacity 0.3s ease-out 0.1s, transform 0.3s ease-out 0.1s]',
+            lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s]',
+          },
+          willChange: 'transform, opacity',
           '&.in-view': {
             opacity: '100',
-            transform: { sm: 'translateY(0)', lg: 'translateY(0) rotate(0)' },
+            transform: { sm: 'translate3d(0, 0, 0)', lg: 'translate3d(0, 0, 0) rotate(0)' },
           },
         })}
         data-observe
@@ -714,7 +741,7 @@
             marginBottom: '40px',
             letterSpacing: '[0.1em]',
             textTransform: 'uppercase',
-            transform: 'rotate(-2deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(-2deg)' },
           })}
         >
           FAQ
@@ -738,7 +765,7 @@
               backgroundColor: 'amber.400',
               paddingX: '20px',
               display: 'inline-block',
-              transform: 'rotate(1deg)',
+              transform: { sm: 'rotate(0)', lg: 'rotate(1deg)' },
             })}
           >
             질문
@@ -751,11 +778,15 @@
           maxWidth: '[800px]',
           marginX: 'auto',
           opacity: '0',
-          transform: 'translateY(20px)',
-          transition: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
+          transform: 'translate3d(0, 20px, 0)',
+          transition: {
+            sm: '[opacity 0.3s ease-out 0.1s, transform 0.3s ease-out 0.1s]',
+            lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s]',
+          },
+          willChange: 'transform, opacity',
           '&.in-view': {
             opacity: '100',
-            transform: 'translateY(0)',
+            transform: 'translate3d(0, 0, 0)',
           },
         })}
         data-observe
@@ -777,14 +808,14 @@
                   transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
                   overflow: 'hidden',
                   boxShadow: '[4px 4px 0 0 #000]',
-                  transform: 'translate(0, 0)',
+                  transform: 'translate3d(0, 0, 0)',
                   _hover: {
-                    transform: 'translate(-2px, -2px)',
+                    transform: 'translate3d(-2px, -2px, 0)',
                     boxShadow: '[8px 8px 0 0 #000]',
                   },
                   _expanded: {
                     boxShadow: '[8px 8px 0 0 #000]',
-                    transform: 'translate(-2px, -2px)',
+                    transform: 'translate3d(-2px, -2px, 0)',
                   },
                 }),
               )}
@@ -885,12 +916,12 @@
                         paddingY: { sm: '20px', lg: '24px' },
                         fontWeight: 'medium',
                         opacity: '0',
-                        transform: 'translateY(-10px)',
+                        transform: 'translate3d(0, -10px, 0)',
                         transition: '[opacity 0.2s ease-out, transform 0.2s ease-out]',
                         transitionDelay: '0s',
                         _groupExpanded: {
                           opacity: '100',
-                          transform: 'translateY(0)',
+                          transform: 'translate3d(0, 0, 0)',
                           transitionDelay: '0.05s',
                         },
                       })}
@@ -937,7 +968,7 @@
         width: '[800px]',
         height: '[800px]',
         backgroundImage: 'radial-gradient(circle, rgba(251, 191, 36, 0.2), transparent)',
-        transform: 'translate(-50%, -50%)',
+        transform: 'translate3d(-50%, -50%, 0)',
         filter: '[blur(120px)]',
         pointerEvents: 'none',
       })}
@@ -949,12 +980,15 @@
           flexDirection: 'column',
           textAlign: 'center',
           opacity: '0',
-          transform: { sm: 'translateY(40px) scale(0.95)', lg: 'translateY(40px) rotate(-1deg) scale(0.95)' },
-          transition:
-            '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s]',
+          transform: { sm: 'translate3d(0, 40px, 0) scale(0.95)', lg: 'translate3d(0, 40px, 0) rotate(-1deg) scale(0.95)' },
+          transition: {
+            sm: '[opacity 0.4s ease-out 0.1s, transform 0.4s ease-out 0.1s]',
+            lg: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s]',
+          },
+          willChange: 'transform, opacity',
           '&.in-view': {
             opacity: '100',
-            transform: { sm: 'translateY(0) scale(1)', lg: 'translateY(0) rotate(0) scale(1)' },
+            transform: { sm: 'translate3d(0, 0, 0) scale(1)', lg: 'translate3d(0, 0, 0) rotate(0) scale(1)' },
           },
         })}
         data-observe
@@ -973,7 +1007,7 @@
             paddingBottom: '4px',
             borderBottom: '4px solid',
             borderColor: 'amber.400',
-            transform: 'rotate(-1deg)',
+            transform: { sm: 'rotate(0)', lg: 'rotate(-1deg)' },
           })}
         >
           <Icon icon={SparklesIcon} size={16} />
@@ -999,7 +1033,7 @@
               color: 'gray.900',
               paddingX: '24px',
               marginX: '8px',
-              transform: 'rotate(2deg)',
+              transform: { sm: 'rotate(0)', lg: 'rotate(2deg)' },
             })}
           >
             ?
@@ -1042,11 +1076,11 @@
               letterSpacing: '[0.05em]',
               boxShadow: '[8px 8px 0 0 #000]',
               _hover: {
-                transform: { sm: 'translate(-2px, -2px)', lg: 'translate(-4px, -4px) rotate(0)' },
+                transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0)' },
                 boxShadow: '[12px 12px 0 0 #000]',
               },
               _active: {
-                transform: 'translate(4px, 4px)',
+                transform: 'translate3d(4px, 4px, 0)',
                 boxShadow: '[4px 4px 0 0 #000]',
               },
             }),
@@ -1058,7 +1092,7 @@
             style={css.raw({
               transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
               _groupHover: {
-                transform: 'translateX(4px) rotate(-15deg)',
+                transform: { sm: 'translate3d(4px, 0, 0)', lg: 'translate3d(4px, 0, 0) rotate(-15deg)' },
               },
             })}
             icon={ArrowRightIcon}
