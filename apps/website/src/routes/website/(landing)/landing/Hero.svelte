@@ -1,6 +1,6 @@
 <script lang="ts">
   import ArrowRightIcon from '~icons/lucide/arrow-right';
-  import SparklesIcon from '~icons/lucide/sparkles';
+  import PenLineIcon from '~icons/lucide/pen-line';
   import ZapIcon from '~icons/lucide/zap';
   import { env } from '$env/dynamic/public';
   import { Icon } from '$lib/components';
@@ -108,8 +108,8 @@
           },
         })}
       >
-        <Icon icon={SparklesIcon} size={16} />
-        NEW EDITOR EXPERIENCE
+        <Icon icon={PenLineIcon} size={16} />
+        Built for Focused Writing
       </div>
 
       <h1
@@ -131,7 +131,7 @@
           },
         })}
       >
-        글쓰기의
+        작가를 위한
         <br />
         <span
           class={css({
@@ -145,10 +145,8 @@
             },
           })}
         >
-          모든 과정
+          올인원 글쓰기 도구
         </span>
-        <br />
-        하나로 완성
       </h1>
 
       <p
@@ -170,9 +168,9 @@
           },
         })}
       >
-        쓰는 것이 즐거워지는 새로운 편집 경험.
+        원고 작성부터 자료 정리, 실시간 협업과 공유까지.
         <br />
-        흩어지고 끊기던 글쓰기의 흐름이, 이제는 자연스럽게 이어집니다.
+        글쓰기에 필요한 모든 기능을 한곳에 담았어요.
       </p>
 
       <div
