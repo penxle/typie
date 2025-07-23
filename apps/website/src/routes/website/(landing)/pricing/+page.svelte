@@ -56,7 +56,7 @@
   };
 </script>
 
-<Helmet description="월 4,900원으로 타이피의 모든 기능을 사용할 수 있어요." title="구독 안내" />
+<Helmet description="언제든 무료로 시작하세요. 필요시 월 4,900원으로 타이피의 모든 기능을 사용할 수 있어요." title="구독 안내" />
 
 <div
   class={css({

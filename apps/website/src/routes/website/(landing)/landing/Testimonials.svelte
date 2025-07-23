@@ -159,6 +159,8 @@
           textTransform: 'uppercase',
         })}
       >
+        실제 이용자가 전하는
+        <br />
         <span
           class={css({
             backgroundColor: 'amber.400',
@@ -167,10 +169,8 @@
             transform: 'rotate(1deg)',
           })}
         >
-          실제 이용자가
+          생생한 후기
         </span>
-        <br />
-        말하는 타이피
       </h2>
       <p
         class={css({

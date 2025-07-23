@@ -6,7 +6,11 @@
   import Testimonials from './Testimonials.svelte';
 </script>
 
-<Helmet description="본문 작성부터 아이디어 시각화까지, 글쓰기의 모든 과정을 지원합니다." title="글쓰기에 필요한 모든 것" />
+<Helmet
+  description="작성, 정리, 공유까지. 글쓰기의 모든 과정을 하나의 도구로 해결하세요."
+  title="타이피 - 작가를 위한 올인원 글쓰기 도구"
+  trailing={null}
+/>
 
 <Hero />
 

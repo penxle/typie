@@ -10,7 +10,7 @@
   let { data } = $props();
 </script>
 
-<Helmet description="타이피의 새로운 기능과 개선 사항들을 확인해보세요." title="업데이트 노트" />
+<Helmet description="올인원 글쓰기 도구 타이피의 새로운 기능과 개선 사항들을 확인해보세요." title="업데이트 노트" />
 
 <div
   class={css({
