@@ -119,7 +119,7 @@
   const app = getAppContext();
   const theme = getThemeContext();
   const clientId = nanoid();
-  const canvasId = $derived($query.entity.node.__typename === 'Canvas' ? $query.entity.node.id : null);
+  const canvasId = $derived($query && $query.entity.node.__typename === 'Canvas' ? $query.entity.node.id : null);
 
   let canvas = $state<Canvas>();
 

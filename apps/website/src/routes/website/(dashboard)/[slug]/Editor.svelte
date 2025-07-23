@@ -218,7 +218,7 @@
 
   const app = getAppContext();
   const clientId = nanoid();
-  const postId = $derived($query.entity.node.__typename === 'Post' ? $query.entity.node.id : null);
+  const postId = $derived($query && $query.entity.node.__typename === 'Post' ? $query.entity.node.id : null);
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
