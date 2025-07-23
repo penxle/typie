@@ -1,11 +1,14 @@
 <script lang="ts">
   import dayjs from 'dayjs';
   import { marked } from 'marked';
+  import { Helmet } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
 
   let { data } = $props();
 </script>
+
+<Helmet description="타이피의 최신 업데이트와 새로운 기능들을 확인하세요." title="업데이트 노트" />
 
 <div
   class={css({
