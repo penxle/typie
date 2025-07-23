@@ -16,7 +16,7 @@
   let expandedIndex = $state<number | null>(null);
 
   const features = {
-    basic: ['총 16,000자까지 작성 가능', '총 20MB까지 파일 업로드 가능'],
+    basic: ['총 16,000자의 글자 작성', '총 20MB의 파일 업로드'],
     full: [
       '무제한 글자 수',
       '무제한 파일 업로드',
@@ -35,19 +35,19 @@
     {
       question: '유료 플랜에서 무료 플랜으로 다운그레이드하면 기존 데이터는 어떻게 되나요?',
       answer:
-        '기존 데이터는 모두 안전하게 보존됩니다. 다만 무료 플랜의 제한을 초과한 콘텐츠는 읽기 전용으로 전환되며, 제한 내로 조정하시면 다시 편집이 가능합니다.',
+        '기존 데이터는 모두 안전하게 보존돼요. 다만 무료 플랜의 제한을 초과한 콘텐츠는 읽기 전용으로 전환되며, 제한 내로 조정하면 다시 편집이 가능해요.',
     },
     {
       question: '언제든지 요금제를 변경할 수 있나요?',
-      answer: '네, 언제든지 요금제를 변경할 수 있습니다. 변경된 요금제는 다음 결제 주기부터 자동으로 적용됩니다.',
+      answer: '네, 언제든지 요금제를 변경할 수 있어요. 변경된 요금제는 다음 결제 주기부터 자동으로 적용돼요.',
     },
     {
       question: '결제 수단은 무엇을 지원하나요?',
-      answer: '국내 신용카드, 체크카드를 지원합니다.',
+      answer: '지금은 국내 신용카드, 체크카드를 지원하고 있어요.',
     },
     {
       question: '환불 정책은 어떻게 되나요?',
-      answer: '결제 후 7일 이내에는 전액 환불이 가능합니다. 이후에는 남은 기간에 대해 일할 계산하여 환불해 드립니다.',
+      answer: '결제 후 7일 이내에는 전액 환불이 가능해요. 이후에는 남은 기간에 대해 일할 계산해 환불해드려요.',
     },
   ];
 
@@ -168,8 +168,6 @@
           },
         })}
       >
-        심플하고
-        <br />
         <span
           class={css({
             backgroundColor: 'amber.400',
@@ -182,9 +180,9 @@
             },
           })}
         >
-          투명한
+          가격
         </span>
-        요금제
+        안내
       </h1>
       <p
         class={css({
@@ -205,9 +203,9 @@
           },
         })}
       >
-        복잡한 옵션 없이, 필요에 맞는 플랜을 선택하세요.
+        처음엔 가볍게 시작하고,
         <br />
-        언제든지 업그레이드하거나 취소할 수 있습니다.
+        필요할 땐 제한 없이 모든 기능을 사용할 수 있어요.
       </p>
     </div>
   </section>
@@ -397,7 +395,7 @@
               fontWeight: 'medium',
             })}
           >
-            간단한 메모와 가벼운 글쓰기를 시작하세요
+            부담 없이, 필요한 만큼만 써보세요
           </p>
 
           <div
@@ -456,7 +454,7 @@
                 letterSpacing: '[0.05em]',
               })}
             >
-              포함 사항:
+              언제든 다음 기능을 이용하세요
             </p>
             <ul class={flex({ flexDirection: 'column', gap: '16px' })}>
               {#each features.basic as feature, index (index)}
@@ -549,7 +547,7 @@
               fontWeight: 'medium',
             })}
           >
-            제한 없이 자유롭게 글쓰기를 즐기세요
+            더 많은 도구와 함께, 자유롭게 글을 시작해보세요
           </p>
 
           <div class={flex({ alignItems: 'baseline', gap: '8px', marginBottom: '12px' })}>
@@ -648,7 +646,7 @@
 
           <div class={flex({ flexDirection: 'column', gap: '16px', flex: '1' })}>
             <p class={css({ fontSize: '14px', fontWeight: 'bold', color: 'white', textTransform: 'uppercase', letterSpacing: '[0.05em]' })}>
-              제한 없이 모든 기능 사용:
+              제한 없이 모든 기능을 사용하세요
             </p>
             <ul class={flex({ flexDirection: 'column', gap: '16px' })}>
               {#each features.full as feature, index (index)}
@@ -987,7 +985,7 @@
           })}
         >
           <Icon icon={SparklesIcon} size={16} />
-          START NOW
+          TRY NOW
         </div>
 
         <h2
@@ -1029,7 +1027,7 @@
         >
           지금 바로 타이피와 함께 더 나은 글쓰기를 시작하세요.
           <br />
-          무료로 시작하고, 필요할 때 업그레이드하세요.
+          필요한 건 이미 다 준비되어 있어요.
         </p>
 
         <a
