@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { afterNavigate } from '$app/navigation';
   import { css } from '$styled-system/css';
   import Footer from './Footer.svelte';
   import Header from './Header.svelte';
@@ -8,19 +9,8 @@
   let element = $state<HTMLDivElement>();
   let elements = $state<NodeListOf<Element>>();
 
-  $effect(() => {
-    if (!element) return;
-
-    const observer = new MutationObserver(() => {
-      elements = document.querySelectorAll('[data-observe]');
-    });
-
-    observer.observe(element, { childList: true });
+  afterNavigate(() => {
     elements = document.querySelectorAll('[data-observe]');
-
-    return () => {
-      observer.disconnect();
-    };
   });
 
   $effect(() => {
@@ -49,7 +39,14 @@
 </script>
 
 <div
-  class={css({ width: 'full', minHeight: '[100dvh]', color: 'gray.900', backgroundColor: 'white', wordBreak: 'keep-all' })}
+  class={css({
+    width: 'full',
+    minHeight: '[100dvh]',
+    color: 'gray.900',
+    backgroundColor: 'white',
+    fontFamily: 'Pretendard',
+    wordBreak: 'keep-all',
+  })}
   data-element="root"
 >
   <Header />

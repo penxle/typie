@@ -157,7 +157,6 @@
           fontWeight: 'medium',
           color: 'gray.700',
           textAlign: 'center',
-          fontFamily: 'Pretendard',
           marginBottom: { sm: '40px', lg: '64px' },
           lineHeight: '[1.6]',
           maxWidth: '[800px]',
@@ -225,7 +224,7 @@
           href={env.PUBLIC_AUTH_URL}
         >
           <Icon icon={ZapIcon} size={20} />
-          무료로 시작하기
+          지금 시작하기
           <Icon
             style={css.raw({
               transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
@@ -274,7 +273,7 @@
             zIndex: '10',
           })}
         >
-          LIVE DEMO
+          PREVIEW
         </div>
 
         <div

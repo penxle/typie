@@ -97,7 +97,6 @@
           fontWeight: 'medium',
           color: 'gray.700',
           textAlign: 'center',
-          fontFamily: 'Pretendard',
           maxWidth: '[800px]',
           lineHeight: '[1.6]',
           marginX: 'auto',

@@ -85,7 +85,6 @@
         <div
           class={css({
             fontSize: { sm: '11px', lg: '12px' },
-            fontFamily: 'Pretendard',
             lineHeight: '[1.6]',
             color: 'gray.600',
             '& p': {
@@ -111,7 +110,6 @@
             fontSize: { sm: '13px', lg: '14px' },
             fontWeight: 'bold',
             color: 'gray.200',
-            fontFamily: 'Pretendard',
             marginBottom: { sm: '16px', lg: '20px' },
             textTransform: 'uppercase',
             letterSpacing: '[0.1em]',
@@ -127,7 +125,6 @@
             class={css({
               fontSize: { sm: '14px', lg: '15px' },
               color: 'gray.500',
-              fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
@@ -145,7 +142,6 @@
             class={css({
               fontSize: { sm: '14px', lg: '15px' },
               color: 'gray.500',
-              fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
@@ -163,7 +159,6 @@
             class={css({
               fontSize: { sm: '14px', lg: '15px' },
               color: 'gray.500',
-              fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
@@ -181,7 +176,6 @@
             class={css({
               fontSize: { sm: '14px', lg: '15px' },
               color: 'gray.500',
-              fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
@@ -206,7 +200,6 @@
             fontSize: { sm: '13px', lg: '14px' },
             fontWeight: 'bold',
             color: 'gray.200',
-            fontFamily: 'Pretendard',
             marginBottom: { sm: '16px', lg: '20px' },
             textTransform: 'uppercase',
             letterSpacing: '[0.1em]',
@@ -222,7 +215,6 @@
             class={css({
               fontSize: { sm: '14px', lg: '15px' },
               color: 'gray.500',
-              fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
@@ -242,7 +234,6 @@
             class={css({
               fontSize: { sm: '14px', lg: '15px' },
               color: 'gray.500',
-              fontFamily: 'Pretendard',
               fontWeight: 'medium',
               transition: '[color 0.2s ease]',
               _hover: {
