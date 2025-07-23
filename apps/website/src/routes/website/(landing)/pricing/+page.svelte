@@ -7,7 +7,7 @@
   import ZapIcon from '~icons/lucide/zap';
   import { browser } from '$app/environment';
   import { env } from '$env/dynamic/public';
-  import { Icon } from '$lib/components';
+  import { Helmet, Icon } from '$lib/components';
   import { comma } from '$lib/utils/number';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -55,6 +55,8 @@
     expandedIndex = expandedIndex === index ? null : index;
   };
 </script>
+
+<Helmet description="타이피의 심플하고 투명한 요금제를 확인하세요." title="요금제" />
 
 <div
   class={css({
