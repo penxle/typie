@@ -8,7 +8,7 @@
   let { data } = $props();
 </script>
 
-<Helmet description="타이피의 최신 업데이트와 새로운 기능들을 확인하세요." title="업데이트 노트" />
+<Helmet description="타이피의 새로운 기능과 개선 사항들을 확인해보세요." title="업데이트 노트" />
 
 <div
   class={css({
@@ -158,7 +158,7 @@
               },
             })}
           >
-            UPDATES & RELEASES
+            FEATURES & IMPROVEMENTS
           </div>
 
           <h1
@@ -215,7 +215,7 @@
               },
             })}
           >
-            핵심만 콕콕 짚은 업데이트 목록.
+            새로운 기능과 개선 사항들을 한눈에 확인해봐요!
           </p>
         </div>
       </div>
@@ -427,9 +427,6 @@
                     },
                     '& h1, & h2, & h3': {
                       fontWeight: 'black',
-                      textTransform: 'uppercase',
-                      marginTop: '32px',
-                      marginBottom: '16px',
                     },
                     '& h1': {
                       fontSize: '24px',
