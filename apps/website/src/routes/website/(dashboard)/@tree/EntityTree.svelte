@@ -146,7 +146,9 @@
       }
     }
 
-    const targetElement = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-id]');
+    const targetElement =
+      document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-id]') ??
+      document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
     if (!targetElement) {
       return;
     }
@@ -196,16 +198,27 @@
           upperOrder: targetElement.dataset.order,
         };
       } else {
-        offsetElement = getNextElement(tree, targetElement, '[data-id]');
-        dragging.indicator.top = anchorRect.top + anchorRect.height;
+        if (targetElement.dataset.type === 'folder') {
+          offsetElement = targetElement;
+          dragging.indicator.top = targetRect.top + targetRect.height;
 
-        const thisElement = offsetElement ?? targetElement;
-        parentElement = thisElement.closest<HTMLElement>(`[data-id]:not([data-id="${thisElement.dataset.id}"])`);
+          parentElement = targetElement.closest<HTMLElement>(`[data-id]:not([data-id="${targetElement.dataset.id}"])`);
 
-        dragging.drop = {
-          lowerOrder: targetElement.dataset.order,
-          upperOrder: offsetElement?.dataset.order,
-        };
+          dragging.drop = {
+            lowerOrder: targetElement.dataset.order,
+          };
+        } else {
+          offsetElement = getNextElement(tree, targetElement, '[data-id]');
+          dragging.indicator.top = anchorRect.top + anchorRect.height;
+
+          const thisElement = offsetElement ?? targetElement;
+          parentElement = thisElement.closest<HTMLElement>(`[data-id]:not([data-id="${thisElement.dataset.id}"])`);
+
+          dragging.drop = {
+            lowerOrder: targetElement.dataset.order,
+            upperOrder: offsetElement?.dataset.order,
+          };
+        }
       }
 
       dragging.indicator.height = 4;
