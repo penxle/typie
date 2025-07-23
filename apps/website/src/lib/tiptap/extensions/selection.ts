@@ -65,6 +65,10 @@ export const Selection = Extension.create({
                   return true;
                 }
 
+                if (node.type.name === 'table_row' || node.type.name === 'table_cell') {
+                  return true;
+                }
+
                 const pos = offset + 1;
                 const selected = from <= pos && to >= pos + node.nodeSize;
 
