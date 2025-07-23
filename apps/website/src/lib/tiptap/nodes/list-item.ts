@@ -158,9 +158,6 @@ export const ListItem = Node.create({
 
         return this.editor.chain().liftListItem(this.type).run();
       },
-      'Mod-Backspace': () => {
-        return this.editor.commands.keyboardShortcut('Backspace');
-      },
 
       Delete: () => {
         if (!isNodeActive(this.editor.state, this.type)) {
