@@ -303,7 +303,7 @@
             textTransform: 'uppercase',
           })}
         >
-          언제나 가장 취향인 환경에서
+          언제나 원하는 느낌을 살려서
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
           문단 간격, 들여쓰기, 본문 폭 등 원고 서식을 세밀하게 조정할 수 있어요. 기본 제공되는 폰트 중 원하는 느낌이 없다면, 가지고 있는
@@ -447,7 +447,7 @@
             textTransform: 'uppercase',
           })}
         >
-          글 속에서 헤메지 않아요
+          글 속에서 헤매지 않아요
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
           검색 기능과 단축키로 여러 글을 빠르게 탐색할 수 있어요. 글 안에서는 앵커 기능으로 글 내에 미리 표시해둔 위치로 바로 이동할 수도
@@ -595,7 +595,7 @@
         </h3>
         <p class={css({ fontSize: { sm: '14px', lg: '15px' }, color: 'gray.700', lineHeight: '[1.6]', fontWeight: 'medium' })}>
           PC 웹과 Android/iOS 앱 모두 지원하며, 작업 내용은 자동으로 실시간 동기화돼요. 집에서 쓰다 잠깐 나와서도, 침대에 누워서도 갑자기
-          떠오른 문장을 바로 이어 쓸 수 있어요. 어떤 기기에서도 동일한 경험으로 글쓰기 흐름을 유지하세요.
+          떠오른 문장을 바로 이어 쓸 수 있어요.
         </p>
       </div>
 
