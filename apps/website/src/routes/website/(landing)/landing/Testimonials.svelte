@@ -121,8 +121,6 @@
           textTransform: 'uppercase',
         })}
       >
-        먼저 사용해 본
-        <br />
         <span
           class={css({
             backgroundColor: 'amber.400',
@@ -131,8 +129,10 @@
             transform: 'rotate(1deg)',
           })}
         >
-          사람들의 이야기
+          실제 이용자가
         </span>
+        <br />
+        말하는 타이피
       </h2>
       <p
         class={css({
@@ -145,7 +145,7 @@
           lineHeight: '[1.7]',
         })}
       >
-        다양한 분야의 사용자들이 어떻게 타이피를 활용하고 있는지 확인해 보세요.
+        실제로 써본 사람들이 말하는 타이피의 장점, 지금 직접 확인해보세요.
       </p>
     </div>
 
