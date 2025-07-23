@@ -157,7 +157,7 @@
             })}
             href="/pricing"
           >
-            요금제
+            가격 안내
           </a>
           <a
             class={css({
