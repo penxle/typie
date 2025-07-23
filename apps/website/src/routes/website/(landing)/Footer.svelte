@@ -157,7 +157,7 @@
             })}
             href="/pricing"
           >
-            가격 안내
+            구독 안내
           </a>
           <a
             class={css({
