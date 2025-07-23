@@ -732,6 +732,12 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
       pubsub.publish('site:usage:update', entity.siteId, null);
 
+      await enqueueJob('post:index', input.postId, {
+        deduplication: {
+          id: `post:index:${input.postId}`,
+        },
+      });
+
       return input.postId;
     },
   }),

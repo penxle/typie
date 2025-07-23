@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, Entities, first, firstOrThrow, Folders, PostContents, Posts, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility } from '@/enums';
+import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
@@ -245,15 +246,15 @@ builder.mutationFields((t) => ({
         siteId: folder.siteId,
       });
 
-      const descendants = await db.execute<{ id: string }>(
+      const descendants = await db.execute<{ id: string; type: EntityType }>(
         sql`
           WITH RECURSIVE sq AS (
-            SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
+            SELECT ${Entities.id}, ${Entities.type} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
             UNION ALL
-            SELECT ${Entities.id} FROM ${Entities}
+            SELECT ${Entities.id}, ${Entities.type} FROM ${Entities}
             JOIN sq ON ${Entities.parentId} = sq.id
           )
-          SELECT id FROM sq;
+          SELECT id, type FROM sq;
         `,
       );
 
@@ -264,6 +265,24 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', folder.siteId, { scope: 'site' });
       for (const entityId of entityIds) {
         pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId });
+      }
+
+      const deletedPosts = await db
+        .select({ id: Posts.id })
+        .from(Posts)
+        .where(
+          inArray(
+            Posts.entityId,
+            descendants.filter(({ type }) => type === EntityType.POST).map(({ id }) => id),
+          ),
+        );
+
+      for (const post of deletedPosts) {
+        await enqueueJob('post:index', post.id, {
+          deduplication: {
+            id: `post:index:${post.id}`,
+          },
+        });
       }
 
       return folder.id;

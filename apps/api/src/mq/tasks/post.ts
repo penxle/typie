@@ -17,6 +17,7 @@ import {
   PostSnapshotContributors,
   PostSnapshots,
 } from '@/db';
+import { EntityState } from '@/enums';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
@@ -243,6 +244,7 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
   const post = await db
     .select({
       id: Posts.id,
+      state: Entities.state,
       siteId: Entities.siteId,
       title: Posts.title,
       subtitle: Posts.subtitle,
@@ -254,15 +256,19 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
     .where(eq(Posts.id, postId))
     .then(firstOrThrow);
 
-  await meilisearch.index('posts').addDocuments([
-    {
-      id: post.id,
-      siteId: post.siteId,
-      title: post.title,
-      subtitle: post.subtitle,
-      text: post.text,
-    },
-  ]);
+  if (post.state === EntityState.ACTIVE) {
+    await meilisearch.index('posts').addDocuments([
+      {
+        id: post.id,
+        siteId: post.siteId,
+        title: post.title,
+        subtitle: post.subtitle,
+        text: post.text,
+      },
+    ]);
+  } else {
+    await meilisearch.index('posts').deleteDocument(post.id);
+  }
 });
 
 type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
