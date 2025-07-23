@@ -66,7 +66,7 @@
           class={css({
             fontSize: { sm: '[36px]', lg: '[56px]' },
             fontWeight: 'black',
-            color: 'gray.950',
+            color: 'gray.900',
             fontFamily: 'Paperlogy',
             lineHeight: '[1.1]',
             marginBottom: { sm: '16px', lg: '24px' },
@@ -94,12 +94,14 @@
         <p
           class={css({
             fontSize: { sm: '16px', lg: '20px' },
-            fontWeight: 'bold',
-            color: 'gray.900',
+            fontWeight: 'semibold',
+            color: 'gray.700',
             fontFamily: 'Pretendard',
             lineHeight: '[1.6]',
             marginBottom: { sm: '32px', lg: '40px' },
-            maxWidth: '600px',
+            maxWidth: '[800px]',
+            textAlign: 'center',
+            marginX: 'auto',
           })}
         >
           별다른 준비 없이도 바로 시작할 수 있어요.
