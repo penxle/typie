@@ -1,13 +1,30 @@
 <script lang="ts">
-  import { page } from '$app/state';
   import { css } from '$styled-system/css';
   import Footer from './Footer.svelte';
   import Header from './Header.svelte';
 
   const { children } = $props();
 
+  let element = $state<HTMLDivElement>();
+  let elements = $state<NodeListOf<Element>>();
+
   $effect(() => {
-    void page.url.pathname;
+    if (!element) return;
+
+    const observer = new MutationObserver(() => {
+      elements = document.querySelectorAll('[data-observe]');
+    });
+
+    observer.observe(element, { childList: true });
+    elements = document.querySelectorAll('[data-observe]');
+
+    return () => {
+      observer.disconnect();
+    };
+  });
+
+  $effect(() => {
+    if (!elements) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -23,7 +40,6 @@
       },
     );
 
-    const elements = document.querySelectorAll('[data-observe]');
     elements.forEach((element) => observer.observe(element));
 
     return () => {
@@ -38,7 +54,7 @@
 >
   <Header />
 
-  <div class={css({ paddingTop: '96px' })}>
+  <div bind:this={element} class={css({ paddingTop: '96px' })}>
     {@render children()}
   </div>
 
