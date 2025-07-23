@@ -204,7 +204,7 @@
           contenteditable={false}
           role="rowgroup"
         >
-          {#each rowElems as row, i (row)}
+          {#each rowElems as row, i (i)}
             <div
               style:height={`${row.clientHeight}px`}
               style:top={`${row.offsetTop}px`}
