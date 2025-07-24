@@ -921,10 +921,19 @@ class _BottomMenuHeader extends StatelessWidget {
                   spacing: 4,
                   children: [
                     Text(
-                      entity!.visibility == GEntityVisibility.UNLISTED ? '링크 조회 가능' : '비공개',
+                      entity!.visibility == GEntityVisibility.UNLISTED &&
+                              entity!.availability == GEntityAvailability.UNLISTED
+                          ? '링크 조회/편집 가능'
+                          : entity!.visibility == GEntityVisibility.UNLISTED
+                          ? '링크 조회 가능'
+                          : entity!.availability == GEntityAvailability.UNLISTED
+                          ? '링크 편집 가능'
+                          : '비공개',
                       style: TextStyle(
                         fontSize: 14,
-                        color: entity!.visibility == GEntityVisibility.UNLISTED
+                        color:
+                            entity!.visibility == GEntityVisibility.UNLISTED ||
+                                entity!.availability == GEntityAvailability.UNLISTED
                             ? context.colors.accentBrand
                             : context.colors.textSubtle,
                       ),
