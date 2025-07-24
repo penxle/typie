@@ -19,6 +19,7 @@
   import QuoteIcon from '~icons/lucide/quote';
   import RedoIcon from '~icons/lucide/redo';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
+  import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import TableIcon from '~icons/lucide/table';
@@ -42,6 +43,7 @@
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
+  import ToolbarFloatingFindReplace from './ToolbarFloatingFindReplace.svelte';
   import ToolbarFloatingLink from './ToolbarFloatingLink.svelte';
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarFontFamily from './ToolbarFontFamily.svelte';
@@ -275,6 +277,18 @@
     <div class={css({ flexGrow: '1' })}></div>
 
     {#if editor}
+      <ToolbarDropdownButton disabled={!editor.current} label="찾기" placement="bottom-end" size="large">
+        {#snippet anchor()}
+          <ToolbarIcon icon={SearchIcon} />
+        {/snippet}
+
+        {#snippet floating({ close })}
+          {#if editor}
+            <ToolbarFloatingFindReplace {close} {editor} />
+          {/if}
+        {/snippet}
+      </ToolbarDropdownButton>
+
       <Spellcheck {editor} subscription={!!$site?.user.subscription} />
     {/if}
   </div>
