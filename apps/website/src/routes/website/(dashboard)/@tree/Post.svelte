@@ -1,6 +1,6 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
-  import { EntityVisibility, PostType } from '@/enums';
+  import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
   import { TypieError } from '@/errors';
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
@@ -40,6 +40,7 @@
           order
           slug
           visibility
+          availability
           url
         }
       }
@@ -220,8 +221,16 @@
 
     <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
       <div class={css({ fontWeight: 'medium' })}>
-        {#if $post.entity.visibility === EntityVisibility.UNLISTED}
-          <span class={css({ color: 'accent.brand.default' })}>링크 조회 가능 포스트</span>
+        {#if $post.entity.visibility === EntityVisibility.UNLISTED || $post.entity.availability === EntityAvailability.UNLISTED}
+          <span class={css({ color: 'accent.brand.default' })}>
+            {#if $post.entity.visibility === EntityVisibility.UNLISTED && $post.entity.availability === EntityAvailability.UNLISTED}
+              링크 조회/편집 가능 포스트
+            {:else if $post.entity.visibility === EntityVisibility.UNLISTED}
+              링크 조회 가능 포스트
+            {:else if $post.entity.availability === EntityAvailability.UNLISTED}
+              링크 편집 가능 포스트
+            {/if}
+          </span>
         {:else}
           <span>비공개 포스트</span>
         {/if}

@@ -5,6 +5,7 @@ fragment EntityScreen_Entity_entity on Entity {
   order
   url
   visibility
+  availability
 
   node {
     ... on Folder {
