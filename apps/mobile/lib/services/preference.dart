@@ -19,4 +19,13 @@ class Pref {
 
   bool get devMode => _box.get('dev_mode', defaultValue: false) as bool;
   set devMode(bool value) => _box.put('dev_mode', value);
+
+  bool get typewriterEnabled => _box.get('typewriter_enabled', defaultValue: false) as bool;
+  set typewriterEnabled(bool value) => _box.put('typewriter_enabled', value);
+
+  double get typewriterPosition => _box.get('typewriter_position', defaultValue: 0.5) as double;
+  set typewriterPosition(double value) => _box.put('typewriter_position', value);
+
+  bool get lineHighlightEnabled => _box.get('line_highlight_enabled', defaultValue: true) as bool;
+  set lineHighlightEnabled(bool value) => _box.put('line_highlight_enabled', value);
 }
