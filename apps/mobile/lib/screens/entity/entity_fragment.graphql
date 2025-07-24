@@ -4,12 +4,14 @@ fragment EntityScreen_Entity_entity on Entity {
   slug
   order
   url
+  visibility
 
   node {
     ... on Folder {
       id
       name
       maxDescendantFoldersDepth
+      characterCount
     }
 
     ... on Post {
@@ -18,6 +20,7 @@ fragment EntityScreen_Entity_entity on Entity {
       type
       excerpt
       updatedAt
+      characterCount
 
       characterCountChange {
         additions

@@ -13,6 +13,7 @@ import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
+import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
@@ -853,6 +854,7 @@ class _BottomMenuHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           spacing: 16,
@@ -885,20 +887,65 @@ class _BottomMenuHeader extends StatelessWidget {
         ),
         Padding(
           padding: const Pad(left: 36),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 4,
             children: [
-              Text('내 포스트', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-              ...?entity?.ancestors
-                  .map(
-                    (ancestor) => [
-                      const Icon(LucideLightIcons.chevron_right, size: 14),
+              Row(
+                children: [
+                  Text('내 포스트', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                  ...?entity?.ancestors
+                      .map(
+                        (ancestor) => [
+                          const Icon(LucideLightIcons.chevron_right, size: 14),
+                          Text(
+                            ancestor.node.when(
+                              folder: (folder) => folder.name,
+                              orElse: () => throw UnimplementedError(),
+                            ),
+                            style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                          ),
+                        ],
+                      )
+                      .flattened,
+                ],
+              ),
+              if (entity != null &&
+                  entity!.node.when(
+                    folder: (folder) => true,
+                    post: (post) => true,
+                    canvas: (canvas) => false,
+                    orElse: () => false,
+                  ))
+                Row(
+                  spacing: 4,
+                  children: [
+                    Text(
+                      entity!.visibility == GEntityVisibility.UNLISTED ? '링크 조회 가능' : '비공개',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: entity!.visibility == GEntityVisibility.UNLISTED
+                            ? context.colors.accentBrand
+                            : context.colors.textSubtle,
+                      ),
+                    ),
+                    if (entity!.node.maybeWhen(
+                      folder: (folder) => true,
+                      post: (post) => true,
+                      orElse: () => false,
+                    )) ...[
+                      Icon(LucideLightIcons.dot, size: 14, color: context.colors.textSubtle),
                       Text(
-                        ancestor.node.when(folder: (folder) => folder.name, orElse: () => throw UnimplementedError()),
+                        entity!.node.maybeWhen(
+                          folder: (folder) => '총 ${folder.characterCount.comma}자',
+                          post: (post) => '총 ${post.characterCount.comma}자',
+                          orElse: () => '',
+                        ),
                         style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                       ),
                     ],
-                  )
-                  .flattened,
+                  ],
+                ),
             ],
           ),
         ),

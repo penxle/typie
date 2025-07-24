@@ -23,6 +23,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.borderStrong,
     required this.borderInverse,
 
+    required this.accentBrand,
     required this.accentDanger,
     required this.accentSuccess,
 
@@ -52,6 +53,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   final Color borderStrong;
   final Color borderInverse;
 
+  final Color accentBrand;
   final Color accentDanger;
   final Color accentSuccess;
 
@@ -81,6 +83,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     borderStrong: AppColors.gray_950,
     borderInverse: AppColors.gray_950,
 
+    accentBrand: AppColors.brand_500,
     accentDanger: AppColors.red_500,
     accentSuccess: AppColors.green_500,
 
@@ -111,6 +114,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     borderStrong: AppColors.dark.gray_700,
     borderInverse: AppColors.dark.gray_50,
 
+    accentBrand: AppColors.dark.brand_400,
     accentDanger: AppColors.dark.red_400,
     accentSuccess: AppColors.dark.green_400,
 
@@ -142,6 +146,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     Color? borderStrong,
     Color? borderInverse,
 
+    Color? accentBrand,
     Color? accentDanger,
     Color? accentSuccess,
 
@@ -171,6 +176,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       borderStrong: borderStrong ?? this.borderStrong,
       borderInverse: borderInverse ?? this.borderInverse,
 
+      accentBrand: accentBrand ?? this.accentBrand,
       accentDanger: accentDanger ?? this.accentDanger,
       accentSuccess: accentSuccess ?? this.accentSuccess,
 
@@ -207,6 +213,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
       borderInverse: Color.lerp(borderInverse, other.borderInverse, t)!,
 
+      accentBrand: Color.lerp(accentBrand, other.accentBrand, t)!,
       accentDanger: Color.lerp(accentDanger, other.accentDanger, t)!,
       accentSuccess: Color.lerp(accentSuccess, other.accentSuccess, t)!,
 
