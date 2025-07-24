@@ -14,6 +14,7 @@
   import { HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { Dialog, Toast } from '$lib/notification';
+  import { comma } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import type { DashboardLayout_EntityTree_Post_post } from '$graphql';
@@ -31,6 +32,7 @@
         id
         type
         title
+        characterCount
 
         entity {
           id
@@ -213,5 +215,19 @@
     >
       삭제
     </MenuItem>
+
+    <HorizontalDivider color="secondary" />
+
+    <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
+      <div class={css({ fontWeight: 'medium' })}>
+        {#if $post.entity.visibility === EntityVisibility.UNLISTED}
+          <span class={css({ color: 'accent.brand.default' })}>링크 조회 가능 포스트</span>
+        {:else}
+          <span>비공개 포스트</span>
+        {/if}
+      </div>
+
+      <span>총 {comma($post.characterCount)}자</span>
+    </div>
   </Menu>
 </a>
