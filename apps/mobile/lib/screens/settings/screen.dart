@@ -115,6 +115,17 @@ class SettingsScreen extends HookWidget {
                   ],
                 ),
                 _Section(
+                  title: '편집 경험 설정',
+                  children: [
+                    _Item(
+                      label: '에디터 설정',
+                      onTap: () async {
+                        await context.router.push(const EditorSettingsRoute());
+                      },
+                    ),
+                  ],
+                ),
+                _Section(
                   title: '이벤트 알림 설정',
                   children: [
                     HookForm(

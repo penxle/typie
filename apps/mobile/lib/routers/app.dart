@@ -38,6 +38,7 @@ class AppRouter extends RootStackRouter {
               ],
             ),
             AutoRoute(page: SettingsRoute.page),
+            AutoRoute(page: EditorSettingsRoute.page),
             AutoRoute(page: UpdateProfileRoute.page),
             AutoRoute(page: UpdateEmailRoute.page),
             AutoRoute(page: UpdateSiteSlugRoute.page),
