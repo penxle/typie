@@ -8,7 +8,6 @@
   import HeadsetIcon from '~icons/lucide/headset';
   import ImagesIcon from '~icons/lucide/images';
   import LinkIcon from '~icons/lucide/link';
-  import SearchIcon from '~icons/lucide/search';
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import SproutIcon from '~icons/lucide/sprout';
   import TypeOutlineIcon from '~icons/lucide/type-outline';
@@ -95,17 +94,12 @@
         <ul class={flex({ flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'text.muted' })}>
           <li class={flex({ alignItems: 'center', gap: '6px' })}>
             <Icon style={css.raw({ color: 'text.disabled' })} icon={TypeIcon} size={14} />
-            <span>총 16,000자까지 작성 가능</span>
+            <span>총 16,000자의 글자 작성</span>
           </li>
 
           <li class={flex({ alignItems: 'center', gap: '6px' })}>
             <Icon style={css.raw({ color: 'text.disabled' })} icon={ImagesIcon} size={14} />
-            <span>총 20MB까지 파일 업로드 가능</span>
-          </li>
-
-          <li class={flex({ alignItems: 'center', gap: '6px' })}>
-            <Icon style={css.raw({ color: 'text.disabled' })} icon={SearchIcon} size={14} />
-            <span>일반 검색</span>
+            <span>총 20MB의 파일 업로드</span>
           </li>
         </ul>
       </div>
@@ -138,11 +132,6 @@
           <li class={flex({ alignItems: 'center', gap: '6px' })}>
             <Icon style={css.raw({ color: 'text.disabled' })} icon={ImagesIcon} size={14} />
             <span>무제한 파일 업로드</span>
-          </li>
-
-          <li class={flex({ alignItems: 'center', gap: '6px' })}>
-            <Icon style={css.raw({ color: 'text.disabled' })} icon={SearchIcon} size={14} />
-            <span>고급 검색</span>
           </li>
 
           <li class={flex({ alignItems: 'center', gap: '6px' })}>

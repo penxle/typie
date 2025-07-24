@@ -9,7 +9,6 @@
   import ImagesIcon from '~icons/lucide/images';
   import KeyIcon from '~icons/lucide/key';
   import LinkIcon from '~icons/lucide/link';
-  import SearchIcon from '~icons/lucide/search';
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import SproutIcon from '~icons/lucide/sprout';
   import StarIcon from '~icons/lucide/star';
@@ -117,11 +116,6 @@
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
         <Icon style={css.raw({ color: 'text.faint' })} icon={ImagesIcon} size={14} />
         <span>무제한 파일 업로드</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={SearchIcon} size={14} />
-        <span>고급 검색</span>
       </li>
 
       <li class={flex({ alignItems: 'center', gap: '6px' })}>
