@@ -35,6 +35,7 @@ new typie.Service('website', {
       'PUBLIC_API_URL',
       'PUBLIC_AUTH_URL',
       'PUBLIC_CMS_URL',
+      'PUBLIC_CMS_STAGE',
       'PUBLIC_MIXPANEL_TOKEN',
       'PUBLIC_OIDC_CLIENT_ID',
       'PUBLIC_USERSITE_HOST',
