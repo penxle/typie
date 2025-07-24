@@ -12,6 +12,7 @@ import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/env.dart';
+import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
@@ -597,10 +598,36 @@ class _EditorInfoBottomSheet extends HookWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
+            '포스트 정보',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: context.colors.textSubtle),
+          ),
+          const Gap(12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('최초 생성 시각', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+              Text(
+                '${post.createdAt.toLocal().yyyyMMdd} ${post.createdAt.toLocal().Hm}',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('마지막 수정 시각', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+              Text(
+                '${post.updatedAt.toLocal().yyyyMMdd} ${post.updatedAt.toLocal().Hm}',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
+              ),
+            ],
+          ),
+          const Gap(32),
+          Text(
             '본문 정보',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: context.colors.textSubtle),
           ),
-          const Gap(16),
+          const Gap(12),
           Row(
             spacing: 4,
             children: [
@@ -642,7 +669,7 @@ class _EditorInfoBottomSheet extends HookWidget {
               ),
             ],
           ),
-          const Gap(16),
+          const Gap(12),
           Row(
             spacing: 4,
             children: [

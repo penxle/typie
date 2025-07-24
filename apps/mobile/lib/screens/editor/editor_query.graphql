@@ -3,6 +3,8 @@ query EditorScreen_Query($slug: String!, $siteId: ID!) {
     id
     title
     type
+    createdAt
+    updatedAt
 
     entity {
       id
