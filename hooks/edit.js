@@ -24,6 +24,15 @@ try {
     }
   }
 
+  if (/\.(dart)$/.test(filePath)) {
+    try {
+      await execAsync(`dart format "${filePath}"`);
+    } catch (err) {
+      console.error(err.stderr || err.stdout);
+      process.exit(2);
+    }
+  }
+
   try {
     await execAsync(`pnpm -w prettier --write "${filePath}"`);
   } catch (err) {

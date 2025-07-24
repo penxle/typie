@@ -8,6 +8,7 @@
   import { browser } from '$app/environment';
   import { env } from '$env/dynamic/public';
   import { Helmet, Icon } from '$lib/components';
+  import { PLAN_FEATURES } from '$lib/constants';
   import { comma } from '$lib/utils/number';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -16,18 +17,8 @@
   let expandedIndex = $state<number | null>(null);
 
   const features = {
-    basic: ['총 16,000자의 글자 작성', '총 20MB의 파일 업로드'],
-    full: [
-      '무제한 글자 수',
-      '무제한 파일 업로드',
-      '맞춤법 검사',
-      '커스텀 게시 주소',
-      '커스텀 폰트 업로드',
-      '베타 기능 우선 접근',
-      '문제 발생시 우선 지원',
-      '디스코드 커뮤니티 참여',
-      '그리고 더 많은 혜택',
-    ],
+    basic: PLAN_FEATURES.basic.map((feature) => feature.label),
+    full: PLAN_FEATURES.full.map((feature) => feature.label),
   };
 
   const faqs = [
