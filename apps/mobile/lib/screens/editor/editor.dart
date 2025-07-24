@@ -44,9 +44,10 @@ import 'package:typie/widgets/webview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class Editor extends HookWidget {
-  const Editor({required this.slug, super.key});
+  const Editor({required this.slug, required this.goToNote, super.key});
 
   final String slug;
+  final void Function() goToNote;
 
   @override
   Widget build(BuildContext context) {
@@ -167,6 +168,7 @@ class Editor extends HookWidget {
                             );
                           },
                         ),
+                        BottomMenuItem(icon: LucideLightIcons.notebook_tabs, label: '작성 노트', onTap: goToNote),
                         BottomMenuItem(
                           icon: LucideLightIcons.settings,
                           label: '본문 설정',
