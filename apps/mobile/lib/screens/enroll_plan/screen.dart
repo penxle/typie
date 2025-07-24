@@ -10,6 +10,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:typie/constants/plan_features.dart';
 import 'package:typie/context/loader.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
@@ -113,12 +114,11 @@ class EnrollPlanScreen extends HookWidget {
                       const Gap(12),
                       HorizontalDivider(color: context.colors.borderStrong),
                       const Gap(12),
-                      const Column(
+                      Column(
                         spacing: 8,
-                        children: [
-                          _FeatureItem(icon: LucideLightIcons.book_open_text, label: '16,000자까지 작성 가능'),
-                          _FeatureItem(icon: LucideLightIcons.images, label: '20MB까지 파일 업로드 가능'),
-                        ],
+                        children: basicPlanFeatures
+                            .map((feature) => _FeatureItem(icon: feature.icon, label: feature.label))
+                            .toList(),
                       ),
                     ],
                   ),
@@ -141,19 +141,11 @@ class EnrollPlanScreen extends HookWidget {
                           const Gap(12),
                           HorizontalDivider(color: context.colors.borderStrong),
                           const Gap(12),
-                          const Column(
+                          Column(
                             spacing: 8,
-                            children: [
-                              _FeatureItem(icon: LucideLightIcons.book_open_text, label: '무제한 글자 수'),
-                              _FeatureItem(icon: LucideLightIcons.images, label: '무제한 파일 업로드'),
-                              _FeatureItem(icon: LucideLightIcons.spell_check, label: '맞춤법 검사'),
-                              _FeatureItem(icon: LucideLightIcons.link, label: '커스텀 게시 주소'),
-                              _FeatureItem(icon: LucideLightIcons.type_, label: '커스텀 폰트 업로드'),
-                              _FeatureItem(icon: LucideLightIcons.flask_conical, label: '베타 기능 우선 접근'),
-                              _FeatureItem(icon: LucideLightIcons.headset, label: '문제 발생시 우선 지원'),
-                              _FeatureItem(icon: LucideLightIcons.sprout, label: '디스코드 커뮤니티 참여'),
-                              _FeatureItem(icon: LucideLightIcons.ellipsis, label: '그리고 더 많은 혜택'),
-                            ],
+                            children: fullPlanFeatures
+                                .map((feature) => _FeatureItem(icon: feature.icon, label: feature.label))
+                                .toList(),
                           ),
                         ],
                       ),

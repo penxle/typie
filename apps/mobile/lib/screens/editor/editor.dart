@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:typie/constants/plan_features.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
@@ -525,17 +526,11 @@ class _LimitBottomSheet extends StatelessWidget {
                   const Gap(12),
                   HorizontalDivider(color: context.colors.borderStrong),
                   const Gap(12),
-                  const Column(
+                  Column(
                     spacing: 8,
-                    children: [
-                      _FeatureItem(icon: LucideLightIcons.book_open_text, label: '무제한 글자 수'),
-                      _FeatureItem(icon: LucideLightIcons.images, label: '무제한 파일 업로드'),
-                      _FeatureItem(icon: LucideLightIcons.link, label: '커스텀 공유 주소'),
-                      _FeatureItem(icon: LucideLightIcons.flask_conical, label: '베타 기능 우선 접근'),
-                      _FeatureItem(icon: LucideLightIcons.headset, label: '문제 발생 시 우선 지원'),
-                      _FeatureItem(icon: LucideLightIcons.sprout, label: '디스코드 커뮤니티 참여'),
-                      _FeatureItem(icon: LucideLightIcons.ellipsis, label: '그리고 더 많은 혜택'),
-                    ],
+                    children: fullPlanFeatures
+                        .map((feature) => _FeatureItem(icon: feature.icon, label: feature.label))
+                        .toList(),
                   ),
                 ],
               ),

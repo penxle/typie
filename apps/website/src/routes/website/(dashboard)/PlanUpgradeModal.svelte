@@ -1,21 +1,13 @@
 <script lang="ts">
   import ArrowRightIcon from '~icons/lucide/arrow-right';
-  import TypeIcon from '~icons/lucide/book-open-text';
   import CrownIcon from '~icons/lucide/crown';
-  import EllipsisIcon from '~icons/lucide/ellipsis';
-  import FlaskConicalIcon from '~icons/lucide/flask-conical';
   import GiftIcon from '~icons/lucide/gift';
-  import HeadsetIcon from '~icons/lucide/headset';
-  import ImagesIcon from '~icons/lucide/images';
   import KeyIcon from '~icons/lucide/key';
-  import LinkIcon from '~icons/lucide/link';
-  import SpellCheckIcon from '~icons/lucide/spell-check';
-  import SproutIcon from '~icons/lucide/sprout';
   import StarIcon from '~icons/lucide/star';
   import TagIcon from '~icons/lucide/tag';
-  import TypeOutlineIcon from '~icons/lucide/type-outline';
   import { pushState } from '$app/navigation';
   import { Button, HorizontalDivider, Icon, Modal } from '$lib/components';
+  import { PLAN_FEATURES } from '$lib/constants';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import type { Snippet } from 'svelte';
@@ -108,50 +100,12 @@
     <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
 
     <ul class={flex({ flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} size={14} />
-        <span>무제한 글자 수</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={ImagesIcon} size={14} />
-        <span>무제한 파일 업로드</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={SpellCheckIcon} size={14} />
-        <span>맞춤법 검사</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={LinkIcon} size={14} />
-        <span>커스텀 게시 주소</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeOutlineIcon} size={14} />
-        <span>커스텀 폰트 업로드</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={FlaskConicalIcon} size={14} />
-        <span>베타 기능 우선 접근</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={HeadsetIcon} size={14} />
-        <span>문제 발생시 우선 지원</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={SproutIcon} size={14} />
-        <span>디스코드 커뮤니티 참여</span>
-      </li>
-
-      <li class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={EllipsisIcon} size={14} />
-        <span>그리고 더 많은 혜택</span>
-      </li>
+      {#each PLAN_FEATURES.full as feature, index (index)}
+        <li class={flex({ alignItems: 'center', gap: '6px' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={feature.icon} size={14} />
+          <span>{feature.label}</span>
+        </li>
+      {/each}
     </ul>
   </div>
 

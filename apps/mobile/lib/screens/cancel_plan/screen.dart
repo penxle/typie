@@ -7,11 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:typie/constants/plan_features.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/cancel_plan/__generated__/cancel_plan_query.req.gql.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
@@ -58,15 +58,7 @@ class CancelPlanScreen extends HookWidget {
                   spacing: 8,
                   children: [
                     Text('이용중인 혜택', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-                    const _FeatureItem(icon: LucideLightIcons.book_open_text, label: '무제한 글자 수'),
-                    const _FeatureItem(icon: LucideLightIcons.images, label: '무제한 파일 업로드'),
-                    const _FeatureItem(icon: LucideLightIcons.spell_check, label: '맞춤법 검사'),
-                    const _FeatureItem(icon: LucideLightIcons.link, label: '커스텀 게시 주소'),
-                    const _FeatureItem(icon: LucideLightIcons.type_, label: '커스텀 폰트 업로드'),
-                    const _FeatureItem(icon: LucideLightIcons.flask_conical, label: '베타 기능 우선 접근'),
-                    const _FeatureItem(icon: LucideLightIcons.headset, label: '문제 발생시 우선 지원'),
-                    const _FeatureItem(icon: LucideLightIcons.sprout, label: '디스코드 커뮤니티 참여'),
-                    const _FeatureItem(icon: LucideLightIcons.ellipsis, label: '그리고 더 많은 혜택'),
+                    ...fullPlanFeatures.map((feature) => _FeatureItem(icon: feature.icon, label: feature.label)),
                   ],
                 ),
               ),
