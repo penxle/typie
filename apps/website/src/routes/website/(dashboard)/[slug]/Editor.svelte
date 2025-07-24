@@ -908,7 +908,7 @@
                   }
 
                   if (file.type.startsWith('image/')) {
-                    editor.current.chain().setImage().run();
+                    editor.current.chain().focus(pos).setImage().run();
                     const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
 
                     const url = URL.createObjectURL(file);
