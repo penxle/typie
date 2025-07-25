@@ -1,4 +1,12 @@
 query EditorScreen_Query($slug: String!, $siteId: ID!) {
+  me {
+    id
+
+    subscription {
+      id
+    }
+  }
+
   post(slug: $slug) {
     id
     title

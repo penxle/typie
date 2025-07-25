@@ -33,7 +33,6 @@
   const query = graphql(`
     query WebViewEditorPage_Query($slug: String!, $siteId: ID!) {
       ...WebViewEditor_Limit_query
-      ...WebViewEditor_Spellcheck_query
 
       me @required {
         id
@@ -126,13 +125,13 @@
   `);
 
   const clientId = nanoid();
+  let editor = $state<Ref<Editor>>();
 
-  let containerEl = $state<HTMLDivElement>();
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
-  let editor = $state<Ref<Editor>>();
+
   let features = $state<string[]>([]);
-  let editorSettings = $state<{
+  let settings = $state<{
     lineHighlightEnabled?: boolean;
     typewriterEnabled?: boolean;
     typewriterPosition?: number;
@@ -311,11 +310,11 @@
 
     window.__webview__?.addEventListener('appReady', (data) => {
       features = data.features || [];
-      editorSettings = data.editorSettings || {};
+      settings = data.settings || {};
 
-      if (editorSettings.typewriterEnabled && editorSettings.typewriterPosition !== undefined) {
+      if (settings.typewriterEnabled && settings.typewriterPosition !== undefined) {
         if (editor) {
-          editor.current.storage.typewriter = { position: editorSettings.typewriterPosition };
+          editor.current.storage.typewriter = { position: settings.typewriterPosition };
         }
       } else {
         if (editor) {
@@ -500,9 +499,8 @@
 />
 
 <div
-  bind:this={containerEl}
   style:--prosemirror-max-width={`${maxWidth.current}px`}
-  style:--prosemirror-padding-bottom={`${editorSettings.typewriterPosition ? (1 - editorSettings.typewriterPosition) * 100 : 0}vh`}
+  style:--prosemirror-padding-bottom={`${settings.typewriterPosition ? (1 - settings.typewriterPosition) * 100 : 0}vh`}
   style:--prosemirror-color-selection={token.var('colors.border.strong')}
   class={cx(
     'editor',
@@ -616,11 +614,11 @@
 
     {#if editor}
       <Placeholder {editor} isTemplateActive={features.includes('template')} />
-      {#if editorSettings.lineHighlightEnabled}
+      {#if settings.lineHighlightEnabled}
         <Highlight {editor} />
       {/if}
       <Limit {$query} {editor} />
-      <Spellcheck {$query} {editor} />
+      <Spellcheck {editor} />
     {/if}
   </div>
 </div>
