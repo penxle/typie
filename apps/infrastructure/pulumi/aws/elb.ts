@@ -52,15 +52,6 @@ const createListeners = (name: string, alb: aws.lb.LoadBalancer) => {
   return listener;
 };
 
-const publicAlb = new aws.lb.LoadBalancer('public', {
-  name: 'public',
-
-  ipAddressType: 'ipv4',
-
-  subnets: [subnets.public.az1.id, subnets.public.az2.id],
-  securityGroups: [securityGroups.publicWeb.id, securityGroups.internal.id],
-});
-
 const privateAlb = new aws.lb.LoadBalancer('private', {
   name: 'private',
 
@@ -71,19 +62,15 @@ const privateAlb = new aws.lb.LoadBalancer('private', {
   securityGroups: [securityGroups.internal.id],
 });
 
-const publicListener = createListeners('public', publicAlb);
 const privateListener = createListeners('private', privateAlb);
 
-export const loadBalancers = { public: publicAlb, private: privateAlb };
-export const listeners = { public: publicListener, private: privateListener };
+export const loadBalancers = { private: privateAlb };
+export const listeners = { private: privateListener };
 
 export const outputs = {
-  AWS_ELB_PUBLIC_DNS_NAME: publicAlb.dnsName,
   AWS_ELB_PRIVATE_DNS_NAME: privateAlb.dnsName,
 
-  AWS_ELB_PUBLIC_ZONE_ID: publicAlb.zoneId,
   AWS_ELB_PRIVATE_ZONE_ID: privateAlb.zoneId,
 
-  AWS_ELB_PUBLIC_LISTENER_ARN: publicListener.arn,
   AWS_ELB_PRIVATE_LISTENER_ARN: privateListener.arn,
 };
