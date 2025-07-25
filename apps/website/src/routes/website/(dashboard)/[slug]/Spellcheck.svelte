@@ -1,11 +1,8 @@
 <script lang="ts">
   import { hide } from '@floating-ui/dom';
   import { Editor, posToDOMRect } from '@tiptap/core';
-  import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Mapping } from '@tiptap/pm/transform';
-  import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import mixpanel from 'mixpanel-browser';
-  import { nanoid } from 'nanoid';
   import { untrack } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CircleHelpIcon from '~icons/lucide/circle-help';
@@ -13,11 +10,15 @@
   import { graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { Icon, RingSpinner, Tooltip } from '$lib/components';
+  import { createSpellcheckPlugin, mapErrors, spellcheckKey, updateErrorPositions } from '$lib/editor/spellcheck';
+  import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import type { VirtualElement } from '@floating-ui/dom';
+  import type { Transaction } from '@tiptap/pm/state';
+  import type { SpellingError } from '$lib/editor/spellcheck';
   import type { Ref } from '$lib/utils';
 
   type Props = {
@@ -25,18 +26,9 @@
     subscription: boolean;
   };
 
-  type SpellingError = {
-    id: string;
-    from: number;
-    to: number;
-    context: string;
-    corrections: string[];
-    explanation: string;
-  };
-
   let { editor, subscription }: Props = $props();
 
-  const key = new PluginKey<DecorationSet>('spellcheck');
+  const key = spellcheckKey;
 
   let inflight = $state(false);
   let mounted = $state(false);
@@ -88,26 +80,7 @@
 
       mixpanel.track('spellcheck', { errors: resp.length });
 
-      const map = (pos: number) => {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const result = mapping!.mapResult(pos);
-        if (result.deleted) {
-          return null;
-        }
-
-        return result.pos;
-      };
-
-      errors = resp
-        .map((error) => ({
-          id: nanoid(),
-          from: map(error.from),
-          to: map(error.to),
-          context: error.context,
-          corrections: error.corrections,
-          explanation: error.explanation,
-        }))
-        .filter((error): error is SpellingError => error.from !== null && error.to !== null);
+      errors = mapErrors(resp, mapping);
 
       mapping = undefined;
 
@@ -115,6 +88,8 @@
       tr.setMeta(key, errors);
       tr.setMeta('addToHistory', false);
       editor.current.view.dispatch(tr);
+    } catch {
+      Toast.error('맞춤법 검사에 실패했습니다');
     } finally {
       inflight = false;
     }
@@ -129,83 +104,19 @@
   $effect(() => {
     if (mounted) {
       untrack(() => {
-        editor?.current.registerPlugin(
-          new Plugin({
-            key,
-            state: {
-              init: () => DecorationSet.empty,
-              apply: (tr, state, _, newState) => {
-                const meta = tr.getMeta(key) as { from: number; to: number }[];
-                if (meta) {
-                  const decorations: Decoration[] = [];
-
-                  for (const error of meta) {
-                    const decoration = Decoration.inline(error.from, error.to, {
-                      class: css({
-                        textDecoration: 'underline',
-                        textDecorationColor: 'text.danger',
-                        textDecorationStyle: 'wavy',
-                        textUnderlineOffset: '2px',
-                      }),
-                    });
-
-                    decorations.push(decoration);
-                  }
-
-                  return DecorationSet.create(newState.doc, decorations);
-                }
-
-                if (tr.docChanged) {
-                  return state.map(tr.mapping, tr.doc);
-                }
-
-                return state;
-              },
-            },
-            props: {
-              decorations: (state) => key.getState(state),
-            },
-          }),
-        );
+        editor?.current.registerPlugin(createSpellcheckPlugin(spellcheckKey));
       });
     }
 
     return () => {
-      editor?.current.unregisterPlugin(key);
+      editor?.current.unregisterPlugin(spellcheckKey);
     };
   });
 
   const handleTransaction = ({ transaction }: { transaction: Transaction }) => {
     if (transaction.docChanged) {
       mapping?.appendMapping(transaction.mapping);
-
-      const newErrors: SpellingError[] = [];
-
-      for (const error of errors) {
-        const { from, to } = error;
-
-        const map = (pos: number) => {
-          const result = transaction.mapping.mapResult(pos);
-          if (result.deleted) {
-            return null;
-          }
-
-          return result.pos;
-        };
-
-        const mappedFrom = map(from);
-        const mappedTo = map(to);
-
-        if (mappedFrom !== null && mappedTo !== null) {
-          newErrors.push({
-            ...error,
-            from: mappedFrom,
-            to: mappedTo,
-          });
-        }
-      }
-
-      errors = newErrors;
+      errors = updateErrorPositions(errors, transaction);
     }
   };
 

@@ -25,6 +25,7 @@
   import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
   import Placeholder from './Placeholder.svelte';
+  import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
@@ -32,6 +33,7 @@
   const query = graphql(`
     query WebViewEditorPage_Query($slug: String!, $siteId: ID!) {
       ...WebViewEditor_Limit_query
+      ...WebViewEditor_Spellcheck_query
 
       me @required {
         id
@@ -614,6 +616,7 @@
         <Highlight {editor} />
       {/if}
       <Limit {$query} {editor} />
+      <Spellcheck {$query} {editor} />
     {/if}
   </div>
 </div>

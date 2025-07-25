@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
-import 'package:typie/constants/plan_features.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
@@ -27,8 +26,10 @@ import 'package:typie/screens/editor/__generated__/duplicate_post_mutation.req.g
 import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/update_post_type_mutation.req.gql.dart';
+import 'package:typie/screens/editor/limit.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
+import 'package:typie/screens/editor/spellcheck.dart';
 import 'package:typie/screens/editor/toolbar/floating/floating.dart';
 import 'package:typie/screens/editor/toolbar/toolbar.dart';
 import 'package:typie/services/auth.dart';
@@ -96,6 +97,8 @@ class Editor extends HookWidget {
       return null;
     }, [mode]);
 
+    useSpellCheckErrorHandler(context, scope);
+
     useEffect(() {
       if (webViewController == null) {
         return null;
@@ -123,7 +126,7 @@ class Editor extends HookWidget {
           case 'limitExceeded':
             await webViewController.clearFocus();
             if (context.mounted) {
-              await context.showBottomSheet(intercept: true, child: const _LimitBottomSheet());
+              await context.showBottomSheet(intercept: true, child: const LimitBottomSheet());
             }
           case 'useTemplate':
             if (context.mounted) {
@@ -157,156 +160,174 @@ class Editor extends HookWidget {
                   unawaited(scope.webViewController.value?.clearFocus());
                   await context.showBottomSheet(
                     intercept: true,
-                    child: BottomMenu(
-                      items: [
-                        BottomMenuItem(
-                          icon: LucideLightIcons.info,
-                          label: '정보',
-                          onTap: () async {
-                            unawaited(mixpanel.track('open_post_info_modal', properties: {'via': 'editor'}));
+                    child: AppBottomSheet(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          BottomMenuItem(
+                            icon: LucideLightIcons.spell_check,
+                            label: '맞춤법 검사',
+                            onTap: () async {
+                              unawaited(mixpanel.track('spell_check', properties: {'via': 'editor'}));
 
-                            await context.showBottomSheet(
-                              intercept: true,
-                              child: _EditorInfoBottomSheet(
-                                characterCountState: scope.characterCountState,
-                                post: data.post,
-                              ),
-                            );
-                          },
-                        ),
-                        BottomMenuItem(icon: LucideLightIcons.notebook_tabs, label: '작성 노트', onTap: goToNote),
-                        BottomMenuItem(
-                          icon: LucideLightIcons.settings,
-                          label: '본문 설정',
-                          onTap: () async {
-                            await context.showBottomSheet(intercept: true, child: _SettingBottomSheet(scope: scope));
-                          },
-                        ),
-                        BottomMenuItem(
-                          icon: LucideLightIcons.external_link,
-                          label: '사이트에서 열기',
-                          onTap: () async {
-                            unawaited(mixpanel.track('open_post_in_browser', properties: {'via': 'editor'}));
+                              await context.showBottomSheet(
+                                intercept: true,
+                                child: SpellCheckBottomSheet(scope: scope, mixpanel: mixpanel),
+                              );
+                            },
+                          ),
+                          const Gap(16),
+                          HorizontalDivider(color: context.colors.borderDefault),
+                          const Gap(16),
+                          BottomMenuItem(
+                            icon: LucideLightIcons.info,
+                            label: '정보',
+                            onTap: () async {
+                              unawaited(mixpanel.track('open_post_info_modal', properties: {'via': 'editor'}));
 
-                            final url = Uri.parse(data.post.entity.url);
-                            await launchUrl(url, mode: LaunchMode.externalApplication);
-                          },
-                        ),
-                        BottomMenuItem(
-                          icon: LucideLightIcons.blend,
-                          label: '공유하기',
-                          trailing: data.post.entity.visibility == GEntityVisibility.UNLISTED
-                              ? Container(
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: context.colors.borderStrong),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  padding: const Pad(horizontal: 8, vertical: 4),
-                                  child: Text(
-                                    '링크 공개 중',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: context.colors.textDefault,
+                              await context.showBottomSheet(
+                                intercept: true,
+                                child: _EditorInfoBottomSheet(
+                                  characterCountState: scope.characterCountState,
+                                  post: data.post,
+                                ),
+                              );
+                            },
+                          ),
+                          BottomMenuItem(icon: LucideLightIcons.notebook_tabs, label: '작성 노트', onTap: goToNote),
+                          BottomMenuItem(
+                            icon: LucideLightIcons.settings,
+                            label: '본문 설정',
+                            onTap: () async {
+                              await context.showBottomSheet(intercept: true, child: _SettingBottomSheet(scope: scope));
+                            },
+                          ),
+                          BottomMenuItem(
+                            icon: LucideLightIcons.external_link,
+                            label: '사이트에서 열기',
+                            onTap: () async {
+                              unawaited(mixpanel.track('open_post_in_browser', properties: {'via': 'editor'}));
+
+                              final url = Uri.parse(data.post.entity.url);
+                              await launchUrl(url, mode: LaunchMode.externalApplication);
+                            },
+                          ),
+                          BottomMenuItem(
+                            icon: LucideLightIcons.blend,
+                            label: '공유하기',
+                            trailing: data.post.entity.visibility == GEntityVisibility.UNLISTED
+                                ? Container(
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: context.colors.borderStrong),
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
+                                    padding: const Pad(horizontal: 8, vertical: 4),
+                                    child: Text(
+                                      '링크 공개 중',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: context.colors.textDefault,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                            onTap: () async {
+                              unawaited(mixpanel.track('open_post_share_modal', properties: {'via': 'editor'}));
+                              await context.showBottomSheet(intercept: true, child: SharePostBottomSheet(slug: slug));
+                            },
+                          ),
+                          BottomMenuItem(
+                            icon: LucideLightIcons.copy,
+                            label: '복제하기',
+                            onTap: () async {
+                              final res = await client.request(
+                                GEditorScreen_DuplicatePost_MutationReq((b) => b..vars.input.postId = data.post.id),
+                              );
+
+                              unawaited(mixpanel.track('duplicate_post', properties: {'via': 'editor'}));
+
+                              if (context.mounted) {
+                                await context.router.popAndPush(EditorRoute(slug: res.duplicatePost.entity.slug));
+                              }
+                            },
+                          ),
+                          switch (data.post.type) {
+                            GPostType.NORMAL => BottomMenuItem(
+                              icon: LucideLightIcons.shapes,
+                              label: '템플릿으로 전환',
+                              onTap: () async {
+                                await context.showModal(
+                                  child: ConfirmModal(
+                                    title: '템플릿으로 전환',
+                                    message: '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
+                                    confirmText: '전환',
+                                    onConfirm: () async {
+                                      await client.request(
+                                        GEditorScreen_UpdatePostType_MutationReq(
+                                          (b) => b
+                                            ..vars.input.postId = data.post.id
+                                            ..vars.input.type = GPostType.TEMPLATE,
+                                        ),
+                                      );
+                                    },
                                   ),
-                                )
-                              : null,
-                          onTap: () async {
-                            unawaited(mixpanel.track('open_post_share_modal', properties: {'via': 'editor'}));
-                            await context.showBottomSheet(intercept: true, child: SharePostBottomSheet(slug: slug));
+                                );
+                              },
+                            ),
+                            GPostType.TEMPLATE => BottomMenuItem(
+                              icon: LucideLightIcons.shapes,
+                              label: '포스트로 전환',
+                              onTap: () async {
+                                await context.showModal(
+                                  child: ConfirmModal(
+                                    title: '포스트로 전환',
+                                    message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
+                                    confirmText: '전환',
+                                    onConfirm: () async {
+                                      await client.request(
+                                        GEditorScreen_UpdatePostType_MutationReq(
+                                          (b) => b
+                                            ..vars.input.postId = data.post.id
+                                            ..vars.input.type = GPostType.NORMAL,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                            _ => throw UnimplementedError(),
                           },
-                        ),
-                        BottomMenuItem(
-                          icon: LucideLightIcons.copy,
-                          label: '복제하기',
-                          onTap: () async {
-                            final res = await client.request(
-                              GEditorScreen_DuplicatePost_MutationReq((b) => b..vars.input.postId = data.post.id),
-                            );
-
-                            unawaited(mixpanel.track('duplicate_post', properties: {'via': 'editor'}));
-
-                            if (context.mounted) {
-                              await context.router.popAndPush(EditorRoute(slug: res.duplicatePost.entity.slug));
-                            }
-                          },
-                        ),
-                        switch (data.post.type) {
-                          GPostType.NORMAL => BottomMenuItem(
-                            icon: LucideLightIcons.shapes,
-                            label: '템플릿으로 전환',
+                          BottomMenuItem(
+                            icon: LucideLightIcons.trash,
+                            label: '삭제하기',
                             onTap: () async {
                               await context.showModal(
+                                intercept: true,
                                 child: ConfirmModal(
-                                  title: '템플릿으로 전환',
-                                  message: '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
-                                  confirmText: '전환',
+                                  title: '포스트 삭제',
+                                  message: '"${data.post.title}" 포스트를 삭제하시겠어요?',
+                                  confirmText: '삭제하기',
+                                  confirmTextColor: context.colors.textBright,
+                                  confirmBackgroundColor: context.colors.accentDanger,
                                   onConfirm: () async {
                                     await client.request(
-                                      GEditorScreen_UpdatePostType_MutationReq(
-                                        (b) => b
-                                          ..vars.input.postId = data.post.id
-                                          ..vars.input.type = GPostType.TEMPLATE,
-                                      ),
+                                      GEditorScreen_DeletePost_MutationReq((b) => b..vars.input.postId = data.post.id),
                                     );
+
+                                    unawaited(mixpanel.track('delete_post', properties: {'via': 'editor'}));
+
+                                    if (context.mounted) {
+                                      await context.router.maybePop();
+                                    }
                                   },
                                 ),
                               );
                             },
                           ),
-                          GPostType.TEMPLATE => BottomMenuItem(
-                            icon: LucideLightIcons.shapes,
-                            label: '포스트로 전환',
-                            onTap: () async {
-                              await context.showModal(
-                                child: ConfirmModal(
-                                  title: '포스트로 전환',
-                                  message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
-                                  confirmText: '전환',
-                                  onConfirm: () async {
-                                    await client.request(
-                                      GEditorScreen_UpdatePostType_MutationReq(
-                                        (b) => b
-                                          ..vars.input.postId = data.post.id
-                                          ..vars.input.type = GPostType.NORMAL,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              );
-                            },
-                          ),
-                          _ => throw UnimplementedError(),
-                        },
-                        BottomMenuItem(
-                          icon: LucideLightIcons.trash,
-                          label: '삭제하기',
-                          onTap: () async {
-                            await context.showModal(
-                              intercept: true,
-                              child: ConfirmModal(
-                                title: '포스트 삭제',
-                                message: '"${data.post.title}" 포스트를 삭제하시겠어요?',
-                                confirmText: '삭제하기',
-                                confirmTextColor: context.colors.textBright,
-                                confirmBackgroundColor: context.colors.accentDanger,
-                                onConfirm: () async {
-                                  await client.request(
-                                    GEditorScreen_DeletePost_MutationReq((b) => b..vars.input.postId = data.post.id),
-                                  );
-
-                                  unawaited(mixpanel.track('delete_post', properties: {'via': 'editor'}));
-
-                                  if (context.mounted) {
-                                    await context.router.maybePop();
-                                  }
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },
@@ -456,132 +477,6 @@ class _Option extends StatelessWidget {
           trailing,
         ],
       ),
-    );
-  }
-}
-
-class _LimitBottomSheet extends StatelessWidget {
-  const _LimitBottomSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    final List<IconData> icons = [
-      LucideLightIcons.crown,
-      LucideLightIcons.tag,
-      LucideLightIcons.star,
-      LucideLightIcons.key,
-      LucideLightIcons.gift,
-    ];
-
-    return AppBottomSheet(
-      padding: const Pad(horizontal: 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: SizedBox(
-              height: 32,
-              width: 32 + (icons.length - 1) * 22,
-              child: Stack(
-                children: [
-                  for (int i = 0; i < icons.length; i++)
-                    Positioned(
-                      left: i * 22,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: context.colors.surfaceDark,
-                          border: Border.all(color: context.colors.surfaceDefault, width: 2),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        padding: const Pad(all: 6),
-                        child: Icon(icons[i], size: 16, color: context.colors.textBright),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const Gap(16),
-          const Text(
-            '플랜 업그레이드가 필요해요',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const Gap(4),
-          Text(
-            '현재 플랜의 최대 사용량을 초과했어요.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-          ),
-          Text(
-            '이어서 작성하려면 플랜을 업그레이드 해주세요.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-          ),
-          const Gap(16),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: context.colors.borderStrong),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const Pad(all: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('타이피 FULL ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const Gap(12),
-                  HorizontalDivider(color: context.colors.borderStrong),
-                  const Gap(12),
-                  Column(
-                    spacing: 8,
-                    children: fullPlanFeatures
-                        .map((feature) => _FeatureItem(icon: feature.icon, label: feature.label))
-                        .toList(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const Gap(16),
-          Tappable(
-            onTap: () async {
-              await context.router.root.maybePop();
-              if (context.mounted) {
-                await context.router.popAndPush(const EnrollPlanRoute());
-              }
-            },
-            child: Container(
-              decoration: BoxDecoration(color: context.colors.surfaceInverse, borderRadius: BorderRadius.circular(8)),
-              padding: const Pad(vertical: 16),
-              child: Text(
-                '업그레이드',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.colors.textInverse),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeatureItem extends StatelessWidget {
-  const _FeatureItem({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      spacing: 8,
-      children: [
-        Icon(icon, size: 16),
-        Text(label, style: const TextStyle(fontSize: 14)),
-      ],
     );
   }
 }
