@@ -10,6 +10,7 @@
 	</array>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:typie.co</string>
 		<string>webcredentials:typie.co</string>
 		<string>webcredentials:auth.typie.co</string>
 	</array>
