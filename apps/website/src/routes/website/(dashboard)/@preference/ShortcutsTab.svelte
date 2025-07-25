@@ -50,6 +50,7 @@
         { keys: [modKey, 'C'], description: '복사' },
         { keys: [modKey, 'V'], description: '붙여넣기' },
         { keys: [modKey, 'A'], description: '문단 선택 (반복시 전체 선택)' },
+        { keys: [modKey, 'F'], description: '찾기, 바꾸기 열기' },
       ],
     },
     {

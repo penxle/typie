@@ -17,12 +17,25 @@
     disabled?: boolean;
     chevron?: boolean;
     placement?: Placement;
+    opened?: boolean;
+    onOpenChange?: (opened: boolean) => void;
     anchor: Snippet<[{ open: () => void; opened: boolean }]>;
     floating: Snippet<[{ close: () => void }]>;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let { style, size, label, active = false, disabled = false, chevron = false, placement = 'bottom', anchor, floating }: Props = $props();
+  let {
+    style,
+    size,
+    label,
+    active = false,
+    disabled = false,
+    chevron = false,
+    placement = 'bottom',
+    opened: externalOpened,
+    onOpenChange,
+    anchor,
+    floating,
+  }: Props = $props();
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
     placement,
@@ -34,12 +47,24 @@
 
   let opened = $state(false);
 
+  $effect(() => {
+    if (externalOpened === undefined) return;
+
+    if (externalOpened && !opened) {
+      open();
+    } else if (!externalOpened && opened) {
+      close();
+    }
+  });
+
   const open = () => {
     opened = true;
+    onOpenChange?.(true);
   };
 
   const close = () => {
     opened = false;
+    onOpenChange?.(false);
   };
 </script>
 
@@ -65,6 +90,7 @@
       style,
     )}
     aria-pressed={opened}
+    {disabled}
     onclick={open}
     type="button"
     use:anchorAction
@@ -98,6 +124,7 @@
       )}
       aria-label={label}
       aria-pressed={opened}
+      {disabled}
       onclick={open}
       type="button"
       use:anchorAction

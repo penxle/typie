@@ -15,7 +15,6 @@
     onclick?: () => void;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let { style, size, icon, label, active = false, disabled = false, onclick }: Props = $props();
 </script>
 
@@ -41,6 +40,7 @@
       style,
     )}
     aria-pressed={active}
+    {disabled}
     {onclick}
     type="button"
   >
@@ -67,6 +67,7 @@
         style,
       )}
       aria-pressed={active}
+      {disabled}
       {onclick}
       type="button"
     >

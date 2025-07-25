@@ -38,6 +38,8 @@
     }
 
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyP') {
+      if (!app.state.current) return;
+
       event.preventDefault();
 
       app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
@@ -46,6 +48,8 @@
     }
 
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyM') {
+      if (!app.state.current) return;
+
       event.preventDefault();
 
       app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
@@ -55,6 +59,15 @@
       } else {
         mixpanel.track('zen_mode_disabled', { via: 'shortcut' });
       }
+
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.code === 'KeyF') {
+      if (!app.state.current) return;
+
+      event.preventDefault();
+      app.state.findReplaceOpen = true;
 
       return;
     }
