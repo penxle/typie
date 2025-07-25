@@ -488,3 +488,7 @@ new aws.iam.RolePolicy('datadog@monitoring', {
   },
 });
 // spell-checker:enable
+
+export const roles = {
+  actions: githubActionsRole,
+};

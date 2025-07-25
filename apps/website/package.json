@@ -22,6 +22,7 @@
     "@pandacss/dev": "^0.54.0",
     "@portone/browser-sdk": "^0.0.23",
     "@pulumi/aws": "^7.1.0",
+    "@pulumi/kubernetes": "^4.23.0",
     "@pulumi/pulumi": "^3.185.0",
     "@sindresorhus/string-hash": "^2.0.0",
     "@sveltejs/kit": "^2.25.1",

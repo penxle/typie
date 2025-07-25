@@ -7,6 +7,7 @@ out/
 .turbo/
 
 .env.local
+kubeconfig
 
 .svelte-kit/
 .sark/

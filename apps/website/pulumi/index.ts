@@ -1,4 +1,5 @@
 import * as aws from '@pulumi/aws';
+import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as typie from '@typie/pulumi';
 
@@ -6,7 +7,7 @@ const stack = pulumi.getStack();
 const config = new pulumi.Config();
 const ref = new pulumi.StackReference('typie/infrastructure/base');
 
-new typie.Service('website', {
+const app = new typie.App('website', {
   name: 'website',
 
   image: {
@@ -15,8 +16,8 @@ new typie.Service('website', {
   },
 
   resources: {
-    cpu: '1024',
-    memory: '2048',
+    cpu: '1',
+    memory: '2Gi',
   },
 
   autoscale: {
@@ -24,100 +25,86 @@ new typie.Service('website', {
     maxCount: 20,
     averageCpuUtilization: 80,
   },
+});
 
-  domains:
-    stack === 'dev'
-      ? ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev']
-      : ['typie.co', 'auth.typie.co', 'typie.me', '*.typie.me'],
-
-  env: {
-    entries: [
-      'PUBLIC_API_URL',
-      'PUBLIC_AUTH_URL',
-      'PUBLIC_CMS_URL',
-      'PUBLIC_CMS_STAGE',
-      'PUBLIC_MIXPANEL_TOKEN',
-      'PUBLIC_OIDC_CLIENT_ID',
-      'PUBLIC_USERSITE_HOST',
-      'PUBLIC_WEBSITE_URL',
-      'PUBLIC_WS_URL',
-      'PRIVATE_OIDC_CLIENT_SECRET',
-    ],
+const ingress = new k8s.networking.v1.Ingress('website', {
+  metadata: {
+    name: 'website',
+    namespace: app.service.metadata.namespace,
+    annotations: {
+      'alb.ingress.kubernetes.io/group.name': 'public-alb',
+      'alb.ingress.kubernetes.io/group.order': stack === 'prod' ? '20' : '120',
+      'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
+      'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
+      ...(stack === 'prod' && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
+    },
+  },
+  spec: {
+    ingressClassName: 'alb',
+    rules: (stack === 'prod'
+      ? ['typie.co', 'auth.typie.co', 'typie.me', '*.typie.me']
+      : ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev']
+    ).map((host) => ({
+      host,
+      http: {
+        paths: [
+          {
+            path: '/',
+            pathType: 'Prefix',
+            backend: {
+              service: {
+                name: app.service.metadata.name,
+                port: { number: app.service.spec.ports[0].port },
+              },
+            },
+          },
+        ],
+      },
+    })),
   },
 });
 
-if (stack === 'dev') {
-  new aws.lb.ListenerRule('www.typie.dev', {
-    listenerArn: ref.requireOutput('AWS_ELB_PUBLIC_LISTENER_ARN'),
-    conditions: [{ hostHeader: { values: ['www.typie.dev'] } }],
-    actions: [{ type: 'redirect', redirect: { host: 'typie.dev', statusCode: 'HTTP_301' } }],
-  });
-
-  new aws.route53.Record('typie.dev', {
-    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_DEV_ZONE_ID'),
-    name: 'typie.dev',
-    type: 'A',
-    aliases: [
-      {
-        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
-        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
-        evaluateTargetHealth: true,
+new k8s.networking.v1.Ingress('www.website', {
+  metadata: {
+    name: 'www.website',
+    namespace: app.service.metadata.namespace,
+    annotations: {
+      'alb.ingress.kubernetes.io/group.name': 'public-alb',
+      'alb.ingress.kubernetes.io/group.order': stack === 'prod' ? '21' : '121',
+      'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
+      'alb.ingress.kubernetes.io/actions.redirect': pulumi.jsonStringify({
+        type: 'redirect',
+        redirectConfig: {
+          host: stack === 'prod' ? 'typie.co' : 'typie.dev',
+          path: '/',
+          statusCode: 'HTTP_301',
+        },
+      }),
+    },
+  },
+  spec: {
+    ingressClassName: 'alb',
+    rules: (stack === 'prod' ? ['www.typie.co', 'www.typie.me'] : ['www.typie.dev']).map((host) => ({
+      host,
+      http: {
+        paths: [
+          {
+            path: '/',
+            pathType: 'Prefix',
+            backend: {
+              service: {
+                name: 'redirect',
+                port: { name: 'use-annotation' },
+              },
+            },
+          },
+        ],
       },
-    ],
-  });
+    })),
+  },
+});
 
-  new aws.route53.Record('www.typie.dev', {
-    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_DEV_ZONE_ID'),
-    name: 'www.typie.dev',
-    type: 'A',
-    aliases: [
-      {
-        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
-        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
-        evaluateTargetHealth: true,
-      },
-    ],
-  });
-
-  new aws.route53.Record('auth.typie.dev', {
-    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_DEV_ZONE_ID'),
-    name: 'auth.typie.dev',
-    type: 'A',
-    aliases: [
-      {
-        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
-        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
-        evaluateTargetHealth: true,
-      },
-    ],
-  });
-
-  new aws.route53.Record('usersite.typie.dev', {
-    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_DEV_ZONE_ID'),
-    name: 'usersite.typie.dev',
-    type: 'A',
-    aliases: [
-      {
-        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
-        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
-        evaluateTargetHealth: true,
-      },
-    ],
-  });
-
-  new aws.route53.Record('*.usersite.typie.dev', {
-    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_DEV_ZONE_ID'),
-    name: '*.usersite.typie.dev',
-    type: 'A',
-    aliases: [
-      {
-        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
-        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
-        evaluateTargetHealth: true,
-      },
-    ],
-  });
-} else {
+if (stack === 'prod') {
   const typie_co = new aws.cloudfront.Distribution('typie.co', {
     enabled: true,
     aliases: ['typie.co', 'auth.typie.co'],
@@ -126,7 +113,7 @@ if (stack === 'dev') {
     origins: [
       {
         originId: 'alb',
-        domainName: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
+        domainName: ingress.status.loadBalancer.ingress[0].hostname,
         customOriginConfig: {
           httpPort: 80,
           httpsPort: 443,
@@ -172,7 +159,7 @@ if (stack === 'dev') {
     origins: [
       {
         originId: 'alb',
-        domainName: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
+        domainName: ingress.status.loadBalancer.ingress[0].hostname,
         customOriginConfig: {
           httpPort: 80,
           httpsPort: 443,
@@ -210,18 +197,6 @@ if (stack === 'dev') {
     waitForDeployment: false,
   });
 
-  new aws.lb.ListenerRule('www.typie.co', {
-    listenerArn: ref.requireOutput('AWS_ELB_PUBLIC_LISTENER_ARN'),
-    conditions: [{ hostHeader: { values: ['www.typie.co'] } }],
-    actions: [{ type: 'redirect', redirect: { host: 'typie.co', statusCode: 'HTTP_301' } }],
-  });
-
-  new aws.lb.ListenerRule('www.typie.me', {
-    listenerArn: ref.requireOutput('AWS_ELB_PUBLIC_LISTENER_ARN'),
-    conditions: [{ hostHeader: { values: ['www.typie.me'] } }],
-    actions: [{ type: 'redirect', redirect: { host: 'typie.me', statusCode: 'HTTP_301' } }],
-  });
-
   new aws.route53.Record('typie.co', {
     name: 'typie.co',
     type: 'A',
@@ -230,20 +205,7 @@ if (stack === 'dev') {
       {
         name: typie_co.domainName,
         zoneId: typie_co.hostedZoneId,
-        evaluateTargetHealth: false,
-      },
-    ],
-  });
-
-  new aws.route53.Record('www.typie.co', {
-    name: 'www.typie.co',
-    type: 'A',
-    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_CO_ZONE_ID'),
-    aliases: [
-      {
-        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
-        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
-        evaluateTargetHealth: false,
+        evaluateTargetHealth: true,
       },
     ],
   });
@@ -256,7 +218,7 @@ if (stack === 'dev') {
       {
         name: typie_co.domainName,
         zoneId: typie_co.hostedZoneId,
-        evaluateTargetHealth: false,
+        evaluateTargetHealth: true,
       },
     ],
   });
@@ -269,20 +231,7 @@ if (stack === 'dev') {
       {
         name: typie_me.domainName,
         zoneId: typie_me.hostedZoneId,
-        evaluateTargetHealth: false,
-      },
-    ],
-  });
-
-  new aws.route53.Record('www.typie.me', {
-    name: 'www.typie.me',
-    type: 'A',
-    zoneId: ref.requireOutput('AWS_ROUTE53_TYPIE_ME_ZONE_ID'),
-    aliases: [
-      {
-        name: ref.requireOutput('AWS_ELB_PUBLIC_DNS_NAME'),
-        zoneId: ref.requireOutput('AWS_ELB_PUBLIC_ZONE_ID'),
-        evaluateTargetHealth: false,
+        evaluateTargetHealth: true,
       },
     ],
   });
@@ -295,7 +244,7 @@ if (stack === 'dev') {
       {
         name: typie_me.domainName,
         zoneId: typie_me.hostedZoneId,
-        evaluateTargetHealth: false,
+        evaluateTargetHealth: true,
       },
     ],
   });

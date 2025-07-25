@@ -29,8 +29,10 @@ ilike
 indexeddb
 ipaddr
 kakao
+karpenter
 khtml
 konva
+kubeconfig
 lucide
 luthor
 meilisearch
@@ -64,6 +66,7 @@ sindresorhus
 smembers
 srem
 sslmode
+stakater
 stibee
 tini
 tsup
