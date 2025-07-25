@@ -34,14 +34,13 @@
         '타이피 진짜 좋죠 퇴근길에 타이피를 생각해 보세요 집에서 기다리고 있는 마누라 같고 포근하고 말랑하고 달콤한 무언가를 떠올리게 해요',
       url: 'https://x.com/aibo8484/status/1945484259067863163',
     },
-    // {
-    //   avatar: 'https://pbs.twimg.com/profile_images/1947225921330483200/2HCsb7RP_400x400.jpg',
-    //   author: '정오',
-    //   handle: '@1114effect',
-    //   content:
-    //     '타이피 잘 쓰고 있습니다 ^.^ 회지 내야할 행사가 연달아 있어서 매일매일 원고 작업하고 있는데, 모바일로도 나와준 덕분에 집이 아닌 다른 곳에서도 편하게 원고 하고 있어요 ㅎ.ㅎ 앞으로도 승승장구 하시고 오래오래 운영해주시길 바랍니다...…',
-    //   url: 'https://x.com/1114effect/status/1936438693952397378',
-    // },
+    {
+      avatar: 'https://pbs.twimg.com/profile_images/1946559332167962624/8VjxAiKX_400x400.jpg',
+      author: '쀼뀨쀼',
+      handle: '@pp_ggpp',
+      content: '사용 한줄평: 최고 장점은 PC-모바일 동시 작업 가능한 한국어 글쓰기앱 + 포스팅 기능\n평점: ★★★★☆(4.5/5.0)',
+      url: 'https://x.com/pp_ggpp/status/1936411971525775724',
+    },
     {
       avatar: 'https://pbs.twimg.com/profile_images/1912656734738632704/uWHFBpb__400x400.jpg',
       author: '킴쓔',
@@ -74,22 +73,13 @@
         '언젠가 이런 서비스가 오리라 믿고 있었습니다.\n진짜 디테일하게 여러 기능들이 많고요\n써보면서 개인적으로 마음에 들었던 것들 두서 없이 적어보겠습니다\n\n0. 데스크탑/모바일 UI가 통일되어있음\n1. 지금까지 쓴 글자수 확인 가능 (전일/특정 달 글자수 비교 가능)\n2. ★폰트를 직접 추가 가능★',
       url: 'https://x.com/sugobat/status/1937516814310989972',
     },
-    // {
-    //   avatar: 'https://pbs.twimg.com/profile_images/1947870724129230848/TwpuCZC2_400x400.jpg',
-    //   author: '은하',
-    //   handle: '@Eunha_0847D',
-    //   content:
-    //     '진심 글 쓸 때마다 밑에 메모장 켜놓고 메모장용 한글 켜놓고 워드 켜놓고 그거 올렸다 내렸다 어디있었는지 까먹고 딸깍딸깍 난리를 친 사람으로 타이피 쓰고 창 완전 깔끔해졌음 그냥 타이피만 쓰면 됨',
-    //   url: 'https://x.com/Eunha_0847D/status/1937817913509212169',
-    // },
-    // {
-    //   avatar: 'https://pbs.twimg.com/profile_images/1946066127345352713/HoIGDiq7_400x400.jpg',
-    //   author: '제거사',
-    //   handle: '@SPTHX0516',
-    //   content:
-    //     '요즘 타이피 결제해서 글 쓰고 있는데 너무 좋아요...비번 걸어서 공유하는 기능 << 드림하기에 너무 킥이고!!! 글쓰기에 이만큼 최적화된 사이트가 없다보니 콘티 정리나 창작에 유용하게 사용합니다!!! 창작/드림은 무조건 이쪽으로 공유할 것 같아요...^^',
-    //   url: 'https://x.com/SPTHX0516/status/1940294565371813927',
-    // },
+    {
+      avatar: 'https://pbs.twimg.com/profile_images/1907316934905131008/DmV5HFLn_400x400.jpg',
+      author: '마눌고양이',
+      handle: '@Giantsquidbig',
+      content: '타이피 정말 글쓰기 좋은 툴임',
+      url: 'https://x.com/Giantsquidbig/status/1940645747948769482',
+    },
     {
       avatar: 'https://pbs.twimg.com/profile_images/1729053424979951617/8tloydYo_400x400.jpg',
       author: '보미',
