@@ -111,7 +111,7 @@ class Editor extends HookWidget {
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
               'features': ['template'],
-              'editorSettings': {
+              'settings': {
                 'lineHighlightEnabled': pref.lineHighlightEnabled,
                 'typewriterEnabled': pref.typewriterEnabled,
                 'typewriterPosition': pref.typewriterPosition,
@@ -168,7 +168,16 @@ class Editor extends HookWidget {
                             icon: LucideLightIcons.spell_check,
                             label: '맞춤법 검사',
                             onTap: () async {
-                              unawaited(mixpanel.track('spell_check', properties: {'via': 'editor'}));
+                              if (data.me!.subscription == null) {
+                                await context.showBottomSheet(
+                                  intercept: true,
+                                  child: const LimitBottomSheet(type: LimitBottomSheetType.spellCheck),
+                                );
+
+                                return;
+                              }
+
+                              unawaited(mixpanel.track('spellcheck', properties: {'via': 'editor'}));
 
                               await context.showBottomSheet(
                                 intercept: true,

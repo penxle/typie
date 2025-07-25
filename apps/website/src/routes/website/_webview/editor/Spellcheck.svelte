@@ -1,45 +1,22 @@
 <script lang="ts">
   import { Mapping } from '@tiptap/pm/transform';
   import mixpanel from 'mixpanel-browser';
-  import { untrack } from 'svelte';
-  import { fragment, graphql } from '$graphql';
+  import { onMount } from 'svelte';
+  import { graphql } from '$graphql';
   import { createSpellcheckPlugin, decodeHtmlEntities, mapErrors, spellcheckKey, updateErrorPositions } from '$lib/editor/spellcheck';
   import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
-  import type { WebViewEditor_Spellcheck_query } from '$graphql';
   import type { SpellingError } from '$lib/editor/spellcheck';
   import type { Ref } from '$lib/utils';
 
   type Props = {
-    $query: WebViewEditor_Spellcheck_query;
     editor?: Ref<Editor>;
   };
 
-  let { $query: _query, editor }: Props = $props();
-
-  const query = fragment(
-    _query,
-    graphql(`
-      fragment WebViewEditor_Spellcheck_query on Query {
-        me @required {
-          id
-
-          subscription {
-            id
-
-            plan {
-              id
-            }
-          }
-        }
-      }
-    `),
-  );
+  let { editor }: Props = $props();
 
   let spellcheckErrors = $state<SpellingError[]>([]);
-  let spellcheckMapping = $state<Mapping | undefined>();
-
-  const hasSubscription = $derived(!!$query.me.subscription?.plan);
+  let spellcheckMapping = $state<Mapping>();
 
   const checkSpelling = graphql(`
     mutation WebViewEditor_CheckSpelling_Mutation($input: CheckSpellingInput!) {
@@ -83,83 +60,58 @@
     }
   };
 
-  $effect(() => {
-    return untrack(() => {
-      editor?.current.registerPlugin(spellcheckPlugin);
+  onMount(() => {
+    if (!editor?.current) return;
 
-      window.__webview__?.addEventListener('runSpellcheck', async () => {
-        const currentEditor = editor?.current;
-        if (!currentEditor) return;
+    editor.current.registerPlugin(spellcheckPlugin);
 
-        if (!hasSubscription) {
-          window.__webview__?.emitEvent('spellcheckResult', {
-            success: false,
-            needPlanUpgrade: true,
-            errors: [],
-          });
-          return;
-        }
+    window.__webview__?.setProcedure('checkSpelling', async () => {
+      if (!editor?.current) return;
 
-        try {
-          spellcheckMapping = new Mapping();
+      spellcheckMapping = new Mapping();
 
-          const body = currentEditor.getJSON();
-          const errors = await checkSpelling({ body });
+      const body = editor.current.getJSON();
+      const errors = await checkSpelling({ body });
 
-          mixpanel.track('spellcheck', { errors: errors.length });
+      mixpanel.track('spellcheck', { errors: errors.length });
 
-          spellcheckErrors = mapErrors(errors, spellcheckMapping).map((error) => ({
-            ...error,
-            explanation: decodeHtmlEntities(error.explanation),
-          }));
+      spellcheckErrors = mapErrors(errors, spellcheckMapping).map((error) => ({
+        ...error,
+        explanation: decodeHtmlEntities(error.explanation),
+      }));
 
-          const { tr } = currentEditor.state;
-          tr.setMeta(spellcheckKey, spellcheckErrors);
-          tr.setMeta('addToHistory', false);
-          currentEditor.view.dispatch(tr);
+      const { tr } = editor.current.state;
+      tr.setMeta(spellcheckKey, spellcheckErrors);
+      tr.setMeta('addToHistory', false);
+      editor.current.view.dispatch(tr);
 
-          window.__webview__?.emitEvent('spellcheckResult', {
-            success: true,
-            needPlanUpgrade: false,
-            errors: spellcheckErrors,
-          });
-        } catch {
-          window.__webview__?.emitEvent('spellcheckResult', {
-            success: false,
-            needPlanUpgrade: false,
-            errors: [],
-          });
-        }
-      });
+      return {
+        errors: spellcheckErrors,
+      };
+    });
 
-      window.__webview__?.addEventListener('applySpellCorrection', async (data) => {
-        const currentEditor = editor?.current;
-        if (!currentEditor) return;
+    window.__webview__?.addEventListener('applySpellCorrection', async (data) => {
+      if (!editor?.current) return;
 
-        const { from, to, correction } = data;
+      const { from, to, correction } = data;
 
-        currentEditor.chain().focus().setTextSelection({ from, to }).insertContent(correction).run();
+      editor.current.chain().focus().setTextSelection({ from, to }).insertContent(correction).run();
 
-        spellcheckErrors = spellcheckErrors.filter((err) => !(err.from === from && err.to === to));
-
-        if (spellcheckErrors.length === 0) {
-          spellcheckMapping = undefined;
-        }
-      });
-
-      const currentEditor = editor?.current;
-      if (currentEditor) {
-        const handler = ({ transaction }: { transaction: Transaction }) => {
-          handleTransaction({ transaction, editor: currentEditor });
-        };
-
-        currentEditor.on('transaction', handler);
-
-        return () => {
-          currentEditor.off('transaction', handler);
-          editor?.current.unregisterPlugin(spellcheckKey);
-        };
+      spellcheckErrors = spellcheckErrors.filter((err) => !(err.from === from && err.to === to));
+      if (spellcheckErrors.length === 0) {
+        spellcheckMapping = undefined;
       }
     });
+
+    const handler = ({ transaction }: { transaction: Transaction }) => {
+      handleTransaction({ transaction, editor: editor.current });
+    };
+
+    editor.current.on('transaction', handler);
+
+    return () => {
+      editor?.current.off('transaction', handler);
+      editor?.current.unregisterPlugin(spellcheckKey);
+    };
   });
 </script>

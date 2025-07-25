@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
@@ -9,11 +7,10 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/editor/limit.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/widgets/tappable.dart';
-import 'package:typie/widgets/webview.dart';
 
 class SpellCheckBottomSheet extends HookWidget {
   const SpellCheckBottomSheet({required this.scope, required this.mixpanel, super.key});
@@ -27,84 +24,33 @@ class SpellCheckBottomSheet extends HookWidget {
     final errors = useState<List<Map<String, dynamic>>>([]);
     final webViewController = useValueListenable(scope.webViewController);
 
-    useEffect(() {
+    useAsyncEffect(() async {
       if (webViewController == null || isLoading.value) {
         return null;
       }
 
       isLoading.value = true;
 
-      final completer = Completer<void>();
-      StreamSubscription<WebViewEvent>? subscription;
-
-      subscription = webViewController.onEvent.listen((event) async {
-        if (event.name == 'spellcheckResult') {
-          final data = event.data as Map<String, dynamic>;
-
-          if (data['success'] == false) {
-            errors.value = [];
-            isLoading.value = false;
-            unawaited(subscription?.cancel());
-            completer.complete();
-            if (data['needPlanUpgrade'] == true) {
-              if (context.mounted) {
-                // LimitBottomSheet를 먼저 열고 SpellCheckBottomSheet를 닫음
-                await context.showBottomSheet(
-                  intercept: true,
-                  child: const LimitBottomSheet(type: LimitBottomSheetType.spellCheck),
-                );
-                await context.router.root.maybePop();
-              }
-            } else {
-              if (context.mounted) {
-                context.toast(ToastType.error, '맞춤법 검사에 실패했습니다');
-                await context.router.root.maybePop();
-              }
-            }
-          } else {
-            // 정상적인 맞춤법 검사 결과
-            if (data['errors'] != null) {
-              errors.value = List<Map<String, dynamic>>.from(data['errors'] as List);
-            } else {
-              errors.value = [];
-            }
-
-            isLoading.value = false;
-            unawaited(subscription?.cancel());
-            completer.complete();
-
-            unawaited(mixpanel.track('spellcheck', properties: {'errors': errors.value.length}));
-          }
+      try {
+        final result = await webViewController.callProcedure('checkSpelling') as Map<String, dynamic>;
+        if (result['errors'] != null) {
+          errors.value = List<Map<String, dynamic>>.from(result['errors'] as List);
+        } else {
+          errors.value = [];
         }
-      });
-
-      // 맞춤법 검사 요청
-      unawaited(
-        webViewController.emitEvent('runSpellcheck', <String, dynamic>{}).then((_) {
-          // 타임아웃 설정
-          unawaited(
-            Future<void>.delayed(const Duration(seconds: 10)).then((_) {
-              if (!completer.isCompleted) {
-                errors.value = [];
-                isLoading.value = false;
-                unawaited(subscription?.cancel());
-                completer.completeError(Exception('Spellcheck timeout'));
-              }
-            }),
-          );
-        }),
-      );
-
-      return () {
-        if (!completer.isCompleted) {
-          completer.complete();
+      } catch (_) {
+        if (context.mounted) {
+          context.toast(ToastType.error, '맞춤법 검사에 실패했습니다');
+          await context.router.root.maybePop();
         }
-        unawaited(subscription?.cancel());
-      };
+      } finally {
+        isLoading.value = false;
+      }
+
+      return null;
     }, [webViewController]);
 
-    final mediaQuery = MediaQuery.of(context);
-    final bottomPadding = mediaQuery.padding.bottom;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
     return AppBottomSheet(
       includeBottomPadding: false,
@@ -158,16 +104,13 @@ class SpellCheckBottomSheet extends HookWidget {
                         (error) => SpellCheckErrorItem(
                           error: error,
                           onCorrect: (correction) async {
-                            // WebView에 수정 적용 이벤트 전송
-                            final webViewController = scope.webViewController.value;
-                            if (webViewController != null) {
-                              await webViewController.emitEvent('applySpellCorrection', {
+                            if (scope.webViewController.value != null) {
+                              await scope.webViewController.value!.emitEvent('applySpellCorrection', {
                                 'from': error['from'],
                                 'to': error['to'],
                                 'correction': correction,
                               });
 
-                              // 수정된 에러를 목록에서 제거
                               errors.value = errors.value
                                   .where((e) => !(e['from'] == error['from'] && e['to'] == error['to']))
                                   .toList();
@@ -299,6 +242,7 @@ void useSpellCheckErrorHandler(BuildContext context, EditorStateScope scope) {
                 'to': error['to'],
                 'correction': correction,
               });
+
               if (context.mounted) {
                 await context.router.root.maybePop();
               }
