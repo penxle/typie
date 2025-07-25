@@ -386,6 +386,10 @@
         editor?.current.chain().focus().toggleBulletList().run();
       } else if (name === 'ordered_list') {
         editor?.current.chain().focus().toggleOrderedList().run();
+      } else if (name === 'sink_list_item') {
+        editor?.current.chain().focus().sinkListItem('list_item').run();
+      } else if (name === 'lift_list_item') {
+        editor?.current.chain().focus().liftListItem('list_item').run();
       } else if (name === 'code_block') {
         editor?.current.chain().focus().setCodeBlock().run();
       } else if (name === 'html_block') {

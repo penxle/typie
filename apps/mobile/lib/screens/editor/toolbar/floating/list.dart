@@ -29,6 +29,25 @@ class ListFloatingToolbar extends HookWidget {
             await scope.command('ordered_list');
           },
         ),
+        const SizedBox.shrink(),
+        FloatingToolbarButton(
+          icon: LucideLightIcons.indent_increase,
+          isActive:
+              (proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
+              (proseMirrorState?.isNodeActive('ordered_list') ?? false),
+          onTap: () async {
+            await scope.command('sink_list_item');
+          },
+        ),
+        FloatingToolbarButton(
+          icon: LucideLightIcons.indent_decrease,
+          isActive:
+              (proseMirrorState?.isNodeActive('bullet_list') ?? false) ||
+              (proseMirrorState?.isNodeActive('ordered_list') ?? false),
+          onTap: () async {
+            await scope.command('lift_list_item');
+          },
+        ),
       ],
     );
   }
