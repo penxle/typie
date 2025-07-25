@@ -40,6 +40,8 @@ class AppWebView(
 
   private val adapter = Moshi.Builder().build().adapter<Map<String, Any?>>()
 
+  private val pendingCallProcedureResults = mutableMapOf<String, Result>()
+
   init {
     channel.setMethodCallHandler(this)
 
@@ -179,6 +181,46 @@ class AppWebView(
         result.success(null)
       }
 
+      "callProcedure" -> {
+        val name = args["name"] as? String
+        val data = args["data"] as? String
+
+        if (name != null && data != null) {
+          val callId = java.util.UUID.randomUUID().toString()
+          pendingCallProcedureResults[callId] = result
+          
+          webView.evaluateJavascript(
+            """
+              (() => {
+                const callId = "$callId";
+                window.__webview__.callProcedure(
+                  "$name",
+                  JSON.parse("$data")
+                ).then((result) => {
+                  window.webViewHandlers.postMessage(JSON.stringify({
+                    name: 'callProcedureResult',
+                    attrs: { 
+                      callId: callId,
+                      success: true,
+                      result: result
+                    }
+                  }));
+                }).catch((error) => {
+                  window.webViewHandlers.postMessage(JSON.stringify({
+                    name: 'callProcedureResult',
+                    attrs: { 
+                      callId: callId,
+                      success: false,
+                      error: error.toString()
+                    }
+                  }));
+                });
+              })();
+            """, null
+          )
+        }
+      }
+
       "dispose" -> {
         result.success(null)
       }
@@ -197,6 +239,7 @@ class AppWebView(
       """
         (() => {
           const handlers = new WeakMap();
+          const procedures = {};
           window.__webview__ = {
             platform: 'android',
             emitEvent: (name, data) => window.webViewHandlers.postMessage(JSON.stringify({
@@ -214,6 +257,13 @@ class AppWebView(
                 window.removeEventListener('__webview__', handler);
               }
             },
+            setProcedure: (name, fn) => {
+              procedures[name] = fn;
+            },
+            callProcedure: async (name, data) => {
+              const result = await procedures[name]?.(data);
+              return JSON.stringify(result ?? null);
+            }
           };
         })();
       """,
@@ -236,6 +286,25 @@ class AppWebView(
               "data" to attrs["data"],
             )
           )
+        }
+      }
+
+      "callProcedureResult" -> {
+        handler.post {
+          val callId = attrs["callId"] as? String ?: return@post
+          pendingCallProcedureResults[callId]?.let { result ->
+            val success = attrs["success"] as? Boolean ?: false
+            if (success) {
+              result.success(attrs["result"] as? String)
+            } else {
+              result.error(
+                "JS_EXECUTION_ERROR",
+                "JavaScript execution failed",
+                mapOf("error" to (attrs["error"] as? String ?: "Unknown error"))
+              )
+            }
+            pendingCallProcedureResults.remove(callId)
+          }
         }
       }
     }

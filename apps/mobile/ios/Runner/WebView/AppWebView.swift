@@ -123,6 +123,32 @@ class AppWebView: NSObject, FlutterPlatformView {
           """)
         }
         result(nil)
+      
+      case "callProcedure":
+        if let name = args["name"] as? String, let data = args["data"] as? String {
+          webView.callAsyncJavaScript("""
+            return await window.__webview__.callProcedure(
+              "\(name)",
+              JSON.parse("\(data)"),
+            );
+          """, arguments: [:], in: nil, in: .page) { res in
+            switch res {
+            case .success(let value):
+              result(value)
+            case .failure(let error):
+              let nsError = error as NSError
+              result(FlutterError(
+                code: "JS_EXECUTION_ERROR",
+                message: "JavaScript execution failed",
+                details: [
+                  "domain": nsError.domain,
+                  "code": nsError.code,
+                  "description": nsError.localizedDescription
+                ]
+              ))
+            }
+          }
+        }
 
       case "dispose":
         dispose()
@@ -207,6 +233,7 @@ class AppWebView: NSObject, FlutterPlatformView {
     let script = """
       (() => {
         const handlers = new WeakMap();
+        const procedures = {};
         window.__webview__ = {
           platform: 'ios',
           emitEvent: (name, data) => window.webkit.messageHandlers.handler.postMessage({
@@ -224,6 +251,13 @@ class AppWebView: NSObject, FlutterPlatformView {
               window.removeEventListener('__webview__', handler);
             }
           },
+          setProcedure: (name, fn) => {
+            procedures[name] = fn;
+          },
+          callProcedure: async (name, data) => {
+            const result = await procedures[name]?.(data);
+            return JSON.stringify(result ?? null);
+          }
         };
       })();
     """

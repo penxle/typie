@@ -6,6 +6,7 @@ type WebView = {
   emitEvent: (name: string, data?: unknown) => void;
   addEventListener: (name: string, listener: (data: any) => void) => void;
   removeEventListener: (name: string, listener: (data: any) => void) => void;
+  setProcedure: (name: string, handler: (data: any) => unknown | Promise<unknown>) => void;
 };
 
 type NodeView = {
