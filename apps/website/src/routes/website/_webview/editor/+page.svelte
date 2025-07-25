@@ -18,7 +18,7 @@
   import { autosize } from '$lib/actions';
   import { getNodeViewByNodeId, TiptapEditor } from '$lib/tiptap';
   import { clamp } from '$lib/utils';
-  import { css } from '$styled-system/css';
+  import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
   import { handleCaretMovement } from './caret';
@@ -310,6 +310,17 @@
     window.__webview__?.addEventListener('appReady', (data) => {
       features = data.features || [];
       editorSettings = data.editorSettings || {};
+
+      if (editorSettings.typewriterEnabled && editorSettings.typewriterPosition !== undefined) {
+        if (editor) {
+          editor.current.storage.typewriter = { position: editorSettings.typewriterPosition };
+        }
+      } else {
+        if (editor) {
+          editor.current.storage.typewriter = { position: undefined };
+        }
+      }
+
       titleEl?.focus();
     });
 
@@ -485,22 +496,26 @@
 <div
   bind:this={containerEl}
   style:--prosemirror-max-width={`${maxWidth.current}px`}
+  style:--prosemirror-padding-bottom={`${editorSettings.typewriterPosition ? (1 - editorSettings.typewriterPosition) * 100 : 0}vh`}
   style:--prosemirror-color-selection={token.var('colors.border.strong')}
-  class={flex({
-    flexDirection: 'column',
-    alignItems: 'center',
-    paddingTop: '40px',
-    paddingX: '20px',
-    width: '[100dvw]',
-    height: '[100dvh]',
-    overflowX: 'hidden',
-    overflowY: 'scroll',
-    scrollbarWidth: 'none',
-    userSelect: 'text',
-    touchAction: 'pan-y',
-    WebkitTouchCallout: 'none',
-    WebkitOverflowScrolling: 'touch',
-  })}
+  class={cx(
+    'editor',
+    flex({
+      flexDirection: 'column',
+      alignItems: 'center',
+      paddingTop: '40px',
+      paddingX: '20px',
+      width: '[100dvw]',
+      height: '[100dvh]',
+      overflowX: 'hidden',
+      overflowY: 'scroll',
+      scrollbarWidth: 'none',
+      userSelect: 'text',
+      touchAction: 'pan-y',
+      WebkitTouchCallout: 'none',
+      WebkitOverflowScrolling: 'touch',
+    }),
+  )}
 >
   <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
     <textarea
