@@ -108,6 +108,11 @@ class Editor extends HookWidget {
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
               'features': ['template'],
+              'editorSettings': {
+                'lineHighlightEnabled': pref.lineHighlightEnabled,
+                'typewriterEnabled': pref.typewriterEnabled,
+                'typewriterPosition': pref.typewriterPosition,
+              },
             });
           case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
