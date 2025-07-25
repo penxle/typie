@@ -44,6 +44,8 @@
 
         <data android:host="typie.co" />
         <data android:host="auth.typie.co" />
+
+        <data android:pathPattern="/................................" />
       </intent-filter>
     </activity>
 
