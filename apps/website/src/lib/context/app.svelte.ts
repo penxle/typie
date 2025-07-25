@@ -29,6 +29,7 @@ type AppState = {
   shareOpen: string | false;
   statsOpen: boolean;
   upgradeOpen: boolean;
+  findReplaceOpen: boolean;
 
   progress: {
     totalCharacterCount: number;
@@ -65,6 +66,7 @@ export const setupAppContext = (userId: string) => {
     shareOpen: false,
     statsOpen: false,
     upgradeOpen: false,
+    findReplaceOpen: false,
 
     progress: {
       totalCharacterCount: 0,

@@ -31,6 +31,7 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
   import { fragment, graphql } from '$graphql';
+  import { tooltip } from '$lib/actions';
   import { HorizontalDivider, Icon, SegmentButtons, Slider, Switch, Tooltip, VerticalDivider } from '$lib/components';
   import { getAppContext } from '$lib/context/app.svelte';
   import { defaultValues, values } from '$lib/tiptap/values';
@@ -277,18 +278,33 @@
     <div class={css({ flexGrow: '1' })}></div>
 
     {#if editor}
-      <ToolbarDropdownButton disabled={!editor.current} label="찾기" placement="bottom-end" size="large">
-        {#snippet anchor()}
-          <ToolbarIcon icon={SearchIcon} />
-        {/snippet}
+      <div
+        use:tooltip={{
+          message: '찾기, 바꾸기',
+          keys: ['Mod', 'F'],
+        }}
+      >
+        <ToolbarDropdownButton
+          disabled={!editor.current}
+          label="찾기"
+          onOpenChange={(opened) => {
+            app.state.findReplaceOpen = opened;
+          }}
+          opened={app.state.findReplaceOpen}
+          placement="bottom-end"
+          size="large"
+        >
+          {#snippet anchor()}
+            <ToolbarIcon icon={SearchIcon} />
+          {/snippet}
 
-        {#snippet floating({ close })}
-          {#if editor}
-            <ToolbarFloatingFindReplace {close} {editor} />
-          {/if}
-        {/snippet}
-      </ToolbarDropdownButton>
-
+          {#snippet floating({ close })}
+            {#if editor}
+              <ToolbarFloatingFindReplace {close} {editor} />
+            {/if}
+          {/snippet}
+        </ToolbarDropdownButton>
+      </div>
       <Spellcheck {editor} subscription={!!$site?.user.subscription} />
     {/if}
   </div>
