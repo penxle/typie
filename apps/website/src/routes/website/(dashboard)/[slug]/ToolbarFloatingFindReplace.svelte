@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Plugin, PluginKey } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import { onDestroy, onMount, tick } from 'svelte';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
@@ -8,10 +7,10 @@
   import ReplaceAllIcon from '~icons/lucide/replace-all';
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
+  import { searchPluginKey } from '$lib/tiptap/extensions/search';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
-  import type { Transaction } from '@tiptap/pm/state';
   import type { Ref } from '$lib/utils';
 
   type Props = {
@@ -26,10 +25,6 @@
   let replaceText = $state('');
   let currentMatch = $state(0);
   let totalMatches = $state(0);
-
-  const SEARCH_DECORATION_CLASS = 'search-highlight';
-  const CURRENT_SEARCH_DECORATION_CLASS = 'current-search-highlight';
-  const searchPluginKey = new PluginKey('searchPlugin');
 
   const clearDecorations = () => {
     const { state, dispatch } = editor.current.view;
@@ -60,7 +55,11 @@
         const from = pos + index;
         const to = from + findText.length;
 
-        const className = matchIndex === currentMatch ? CURRENT_SEARCH_DECORATION_CLASS : SEARCH_DECORATION_CLASS;
+        const isCurrentMatch = matchIndex === currentMatch;
+        const className = css({
+          backgroundColor: isCurrentMatch ? '[#ff6b00]' : '[#ffd700]',
+          color: isCurrentMatch ? '[#fff]' : '[#000]',
+        });
         decorations.push(Decoration.inline(from, to, { class: className }));
 
         index = text.indexOf(searchText, index + 1);
@@ -124,6 +123,20 @@
     updateDecorations();
   };
 
+  const scrollToSelection = () => {
+    const { state } = editor.current;
+    const { selection } = state;
+    let { node: scrollEl } = editor.current.view.domAtPos(selection.from);
+
+    if (scrollEl?.nodeType === Node.TEXT_NODE) {
+      scrollEl = scrollEl.parentElement as HTMLElement;
+    }
+
+    if (scrollEl instanceof HTMLElement) {
+      scrollEl.scrollIntoView({ block: 'nearest' });
+    }
+  };
+
   type Match = { from: number; to: number; index: number };
 
   const findNext = () => {
@@ -165,10 +178,7 @@
       editor.current.commands.setTextSelection({ from: (match as Match).from, to: (match as Match).to });
       currentMatch = (match as Match).index;
       updateDecorations();
-      // 선택된 텍스트로 스크롤
-      editor.current.view.dom.querySelector(`.${CURRENT_SEARCH_DECORATION_CLASS}`)?.scrollIntoView({
-        block: 'center',
-      });
+      scrollToSelection();
     }
   };
 
@@ -203,10 +213,7 @@
       editor.current.commands.setTextSelection({ from: (lastMatch as Match).from, to: (lastMatch as Match).to });
       currentMatch = (lastMatch as Match).index;
       updateDecorations();
-      // 선택된 텍스트로 스크롤
-      editor.current.view.dom.querySelector(`.${CURRENT_SEARCH_DECORATION_CLASS}`)?.scrollIntoView({
-        block: 'center',
-      });
+      scrollToSelection();
     } else if (totalMatches > 0) {
       // 처음에 있으면 맨 끝으로
       matchIndex = 0;
@@ -227,10 +234,7 @@
         editor.current.commands.setTextSelection({ from: (lastMatch as Match).from, to: (lastMatch as Match).to });
         currentMatch = (lastMatch as Match).index;
         updateDecorations();
-        // 선택된 텍스트로 스크롤
-        editor.current.view.dom.querySelector(`.${CURRENT_SEARCH_DECORATION_CLASS}`)?.scrollIntoView({
-          block: 'center',
-        });
+        scrollToSelection();
       }
     }
   };
@@ -247,10 +251,8 @@
       // 선택된 텍스트 바꾸기
       editor.current.chain().insertContentAt(selection, replaceText).run();
 
-      setTimeout(() => {
-        updateMatches();
-        findNext();
-      }, 50);
+      updateMatches();
+      findNext();
     } else if (currentMatch > 0) {
       // 선택이 없거나 일치하지 않으면 현재 매치로 이동 후 바꾸기
       findNext();
@@ -300,10 +302,7 @@
         from: lastReplacedPos,
         to: lastReplacedPos + replaceText.length,
       });
-
-      editor.current.view.dom.querySelector(`.${CURRENT_SEARCH_DECORATION_CLASS}`)?.scrollIntoView({
-        block: 'center',
-      });
+      scrollToSelection();
     }
 
     updateMatches();
@@ -312,7 +311,7 @@
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       close();
-      editor.current.commands.focus();
+      editor.current.commands.focus(undefined, { scrollIntoView: false });
     }
   };
 
@@ -336,65 +335,19 @@
     }
   };
 
-  // Plugin to handle decorations
-  const searchPlugin = new Plugin({
-    key: searchPluginKey,
-    state: {
-      init() {
-        return { decorations: DecorationSet.empty };
-      },
-      apply(tr: Transaction, value: { decorations: DecorationSet }) {
-        const meta = tr.getMeta(searchPluginKey);
-        if (meta?.decorations) {
-          return { decorations: meta.decorations };
-        }
-        return value;
-      },
-    },
-    props: {
-      decorations(state) {
-        return searchPluginKey.getState(state)?.decorations;
-      },
-    },
-  });
-
   onMount(() => {
     // 다음 틱에서 포커스 설정
     tick().then(() => {
       findInput?.focus();
     });
-
-    // Add the search plugin
-    editor.current.registerPlugin(searchPlugin);
-
-    // Add styles for search highlights
-    const style = document.createElement('style');
-    style.textContent = `
-      .${SEARCH_DECORATION_CLASS} {
-        background-color: #ffd700;
-        color: #000;
-      }
-      .${CURRENT_SEARCH_DECORATION_CLASS} {
-        background-color: #ff6b00;
-        color: #fff;
-      }
-    `;
-    document.head.append(style);
-
-    return () => {
-      style.remove();
-    };
   });
 
   onDestroy(() => {
     clearDecorations();
-    editor.current.unregisterPlugin(searchPluginKey);
   });
 
   $effect(() => {
-    if (findText) {
-      updateMatches();
-    }
+    updateMatches();
   });
 </script>
 

@@ -5,6 +5,7 @@ export * from './drop-cursor';
 export * from './limit';
 export * from './node-id';
 export * from './placeholder';
+export * from './search';
 export * from './selection';
 export * from './syntax-highlight';
 export * from './trailing-node';

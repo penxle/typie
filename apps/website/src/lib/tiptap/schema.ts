@@ -4,6 +4,7 @@ import {
   DropCursor,
   NodeId,
   Placeholder,
+  Search,
   Selection,
   SyntaxHighlight,
   TrailingNode,
@@ -84,6 +85,7 @@ export const editorExtensions = [
   Command,
   DropCursor,
   Placeholder,
+  Search,
   Typewriter,
   Typography,
 
