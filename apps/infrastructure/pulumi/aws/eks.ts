@@ -53,7 +53,7 @@ new aws.eks.AccessEntry('node@eks', {
 
 const launchTemplate = new aws.ec2.LaunchTemplate('eks-system', {
   name: 'eks-system',
-  instanceType: 't4g.medium',
+  instanceType: 't4g.small',
   vpcSecurityGroupIds: [securityGroups.internal.id],
   tagSpecifications: [
     {

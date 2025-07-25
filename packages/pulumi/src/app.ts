@@ -70,11 +70,22 @@ export class App extends pulumi.ComponentResource {
         { parent: this },
       );
 
+      const assoc = new aws.eks.PodIdentityAssociation(
+        `${name}+${namespace}@eks`,
+        {
+          clusterName: 'typie',
+          namespace,
+          roleArn: role.arn,
+          serviceAccount: args.name,
+        },
+        { parent: this },
+      );
+
       serviceAccount = new k8s.core.v1.ServiceAccount(
         name,
         {
           metadata: {
-            name: args.name,
+            name: assoc.serviceAccount,
             namespace,
           },
         },
