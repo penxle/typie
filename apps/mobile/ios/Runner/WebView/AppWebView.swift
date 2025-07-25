@@ -137,14 +137,13 @@ class AppWebView: NSObject, FlutterPlatformView {
               result(value)
             case .failure(let error):
               let nsError = error as NSError
+              let jsMessage = nsError.userInfo["WKJavaScriptExceptionMessage"] as? String
+              let errorMessage = jsMessage ?? nsError.localizedDescription
+              
               result(FlutterError(
                 code: "JS_EXECUTION_ERROR",
-                message: "JavaScript execution failed",
-                details: [
-                  "domain": nsError.domain,
-                  "code": nsError.code,
-                  "description": nsError.localizedDescription
-                ]
+                message: errorMessage,
+                details: nil
               ))
             }
           }

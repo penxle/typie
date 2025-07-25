@@ -211,7 +211,7 @@ class AppWebView(
                     attrs: { 
                       callId: callId,
                       success: false,
-                      error: error.toString()
+                      error: error.message || String(error)
                     }
                   }));
                 });
@@ -297,10 +297,11 @@ class AppWebView(
             if (success) {
               result.success(attrs["result"] as? String)
             } else {
+              val errorMessage = attrs["error"] as? String ?: "Unknown error"
               result.error(
                 "JS_EXECUTION_ERROR",
-                "JavaScript execution failed",
-                mapOf("error" to (attrs["error"] as? String ?: "Unknown error"))
+                errorMessage,
+                null
               )
             }
             pendingCallProcedureResults.remove(callId)

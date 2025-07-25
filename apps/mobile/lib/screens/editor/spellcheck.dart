@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
@@ -33,12 +36,10 @@ class SpellCheckBottomSheet extends HookWidget {
 
       try {
         final result = await webViewController.callProcedure('checkSpelling') as Map<String, dynamic>;
-        if (result['errors'] != null) {
-          errors.value = List<Map<String, dynamic>>.from(result['errors'] as List);
-        } else {
-          errors.value = [];
-        }
-      } catch (_) {
+        errors.value = result['errors'] as List<Map<String, dynamic>>;
+      } catch (err) {
+        unawaited(Sentry.captureException(err));
+
         if (context.mounted) {
           context.toast(ToastType.error, '맞춤법 검사에 실패했습니다');
           await context.router.root.maybePop();
