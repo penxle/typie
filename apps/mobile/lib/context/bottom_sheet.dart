@@ -128,10 +128,11 @@ class _BottomSheet extends HookWidget {
 }
 
 class AppBottomSheet extends StatelessWidget {
-  const AppBottomSheet({required this.child, this.padding, super.key});
+  const AppBottomSheet({required this.child, this.padding, this.includeBottomPadding = true, super.key});
 
   final Widget child;
   final EdgeInsetsGeometry? padding;
+  final bool includeBottomPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +145,7 @@ class AppBottomSheet extends StatelessWidget {
         constraints: BoxConstraints(maxHeight: maxHeight),
         decoration: BoxDecoration(color: context.colors.surfaceSubtle),
         child: Padding(
-          padding: Pad(top: 8, bottom: bottomPadding + 12),
+          padding: Pad(top: 8, bottom: includeBottomPadding ? (bottomPadding + 12) : 0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             spacing: 16,
