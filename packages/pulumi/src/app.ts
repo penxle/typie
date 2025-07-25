@@ -162,6 +162,7 @@ export class App extends pulumi.ComponentResource {
                     { name: 'LISTEN_PORT', value: '3000' },
                     { name: 'PUBLIC_PULUMI_PROJECT', value: project },
                     { name: 'PUBLIC_PULUMI_STACK', value: stack },
+                    { name: 'AWS_REGION', value: 'ap-northeast-2' },
                   ],
                   envFrom: [{ secretRef: { name: es.metadata.name } }],
                   resources: {
