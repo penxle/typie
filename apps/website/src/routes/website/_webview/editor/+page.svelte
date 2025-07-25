@@ -22,6 +22,7 @@
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
   import { handleCaretMovement } from './caret';
+  import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
   import Placeholder from './Placeholder.svelte';
   import { YState } from './state.svelte';
@@ -129,6 +130,11 @@
   let subtitleEl = $state<HTMLTextAreaElement>();
   let editor = $state<Ref<Editor>>();
   let features = $state<string[]>([]);
+  let editorSettings = $state<{
+    lineHighlightEnabled?: boolean;
+    typewriterEnabled?: boolean;
+    typewriterPosition?: number;
+  }>({});
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -302,7 +308,8 @@
     doc.getMap('attrs').observe(setYJSState);
 
     window.__webview__?.addEventListener('appReady', (data) => {
-      features = data.features;
+      features = data.features || [];
+      editorSettings = data.editorSettings || {};
       titleEl?.focus();
     });
 
@@ -588,6 +595,9 @@
 
     {#if editor}
       <Placeholder {editor} isTemplateActive={features.includes('template')} />
+      {#if editorSettings.lineHighlightEnabled}
+        <Highlight {editor} />
+      {/if}
       <Limit {$query} {editor} />
     {/if}
   </div>
