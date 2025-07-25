@@ -36,7 +36,7 @@ class SpellCheckBottomSheet extends HookWidget {
 
       try {
         final result = await webViewController.callProcedure('checkSpelling') as Map<String, dynamic>;
-        errors.value = result['errors'] as List<Map<String, dynamic>>;
+        errors.value = (result['errors'] as List).map((e) => e as Map<String, dynamic>).toList();
       } catch (err) {
         unawaited(Sentry.captureException(err));
 
@@ -232,6 +232,8 @@ void useSpellCheckErrorHandler(BuildContext context, EditorStateScope scope) {
         if (!context.mounted) {
           return;
         }
+
+        await webViewController.clearFocus();
 
         await context.showBottomSheet(
           intercept: true,
