@@ -276,6 +276,9 @@ importers:
       '@pulumi/aws':
         specifier: ^7.1.0
         version: 7.1.0(typescript@5.8.3)
+      '@pulumi/kubernetes':
+        specifier: ^4.23.0
+        version: 4.23.0(typescript@5.8.3)
       '@pulumi/pulumi':
         specifier: ^3.185.0
         version: 3.185.0(typescript@5.8.3)
@@ -308,6 +311,9 @@ importers:
       '@pulumi/aws':
         specifier: ^7.1.0
         version: 7.1.0(typescript@5.8.3)
+      '@pulumi/kubernetes':
+        specifier: ^4.23.0
+        version: 4.23.0(typescript@5.8.3)
       '@pulumi/pulumi':
         specifier: ^3.185.0
         version: 3.185.0(typescript@5.8.3)
@@ -326,6 +332,9 @@ importers:
       '@typie/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
+      dedent:
+        specifier: ^1.6.0
+        version: 1.6.0
       fast-glob:
         specifier: ^3.3.3
         version: 3.3.3
@@ -425,6 +434,9 @@ importers:
       '@pulumi/aws':
         specifier: ^7.1.0
         version: 7.1.0(typescript@5.8.3)
+      '@pulumi/kubernetes':
+        specifier: ^4.23.0
+        version: 4.23.0(typescript@5.8.3)
       '@pulumi/pulumi':
         specifier: ^3.185.0
         version: 3.185.0(typescript@5.8.3)
@@ -733,6 +745,9 @@ importers:
       '@pulumi/command':
         specifier: ^1.1.0
         version: 1.1.0(typescript@5.8.3)
+      '@pulumi/kubernetes':
+        specifier: ^4.23.0
+        version: 4.23.0(typescript@5.8.3)
       '@pulumi/pulumi':
         specifier: ^3.185.0
         version: 3.185.0(typescript@5.8.3)
@@ -3324,6 +3339,9 @@ packages:
 
   '@pulumi/command@1.1.0':
     resolution: {integrity: sha512-ovVec+gXeqpcm76xwYYZvfJym8bG9NRvlBGQWbn0+c0fKQziZIjiv5V+AxTKfb+dLWKe7Otyt206L1IWq41hyw==}
+
+  '@pulumi/kubernetes@4.23.0':
+    resolution: {integrity: sha512-sMNV8cNx+MdvwNXCze3EiYgfRCTilJ9PMq4hqT8lOz7hgX5Un9yyDILJCkrt0wlGlB11Dgbq39mjwCeoImOEgg==}
 
   '@pulumi/pulumi@3.185.0':
     resolution: {integrity: sha512-J8Ha8EDxw503hMmVu1i+qd7atQRJkB6VD0En5ibUgm+B4453AfWclGTHoFcz/QLCneYRQhH+SUS2zy1+sqggdw==}
@@ -8522,6 +8540,10 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
+  shell-quote@1.8.3:
+    resolution: {integrity: sha512-ObmnIF4hXNg1BqhnHmgbDETF8dLPCggZWBjkQfhZpbszZnYur5DUljTcCHii5LC3J5E0yeO/1LIMyH+UvHQgyw==}
+    engines: {node: '>= 0.4'}
+
   shiki@3.8.1:
     resolution: {integrity: sha512-+MYIyjwGPCaegbpBeFN9+oOifI8CKiKG3awI/6h3JeT85c//H2wDW/xCJEGuQ5jPqtbboKNqNy+JyX9PYpGwNg==}
 
@@ -12828,6 +12850,17 @@ snapshots:
   '@pulumi/command@1.1.0(typescript@5.8.3)':
     dependencies:
       '@pulumi/pulumi': 3.185.0(typescript@5.8.3)
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+      - ts-node
+      - typescript
+
+  '@pulumi/kubernetes@4.23.0(typescript@5.8.3)':
+    dependencies:
+      '@pulumi/pulumi': 3.185.0(typescript@5.8.3)
+      glob: 10.4.5
+      shell-quote: 1.8.3
     transitivePeerDependencies:
       - bluebird
       - supports-color
@@ -18768,6 +18801,8 @@ snapshots:
       shebang-regex: 3.0.0
 
   shebang-regex@3.0.0: {}
+
+  shell-quote@1.8.3: {}
 
   shiki@3.8.1:
     dependencies:
