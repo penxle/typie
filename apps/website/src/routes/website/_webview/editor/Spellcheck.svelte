@@ -96,6 +96,27 @@
                   ),
                 );
               },
+              handleDOMEvents: {
+                pointerdown: (view, event) => {
+                  const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                  if (!pos) return false;
+
+                  const error = errors.find((error) => error.from <= pos.pos && error.to >= pos.pos);
+                  if (!error) return false;
+
+                  event.preventDefault();
+
+                  (document.activeElement as HTMLElement)?.blur();
+                  window.__webview__?.emitEvent('spellcheckErrorClick', {
+                    id: error.id,
+                    context: error.context,
+                    corrections: error.corrections,
+                    explanation: error.explanation,
+                  });
+
+                  return true;
+                },
+              },
             },
           }),
         );

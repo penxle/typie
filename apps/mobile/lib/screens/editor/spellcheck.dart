@@ -213,9 +213,8 @@ void useSpellCheckErrorHandler(BuildContext context, EditorStateScope scope) {
           child: SpellCheckErrorBottomSheet(
             error: error,
             onCorrect: (correction) async {
-              await webViewController.emitEvent('applySpellCorrection', {
-                'from': error['from'],
-                'to': error['to'],
+              await webViewController.callProcedure('applySpellcheckCorrection', {
+                'id': error['id'],
                 'correction': correction,
               });
 
