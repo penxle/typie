@@ -499,128 +499,128 @@
   }}
 />
 
-<div
-  style:--prosemirror-max-width={`${maxWidth.current}px`}
-  style:--prosemirror-padding-bottom="80dvh"
-  style:--prosemirror-color-selection={token.var('colors.border.strong')}
-  class={cx(
-    'editor',
-    flex({
-      flexDirection: 'column',
-      alignItems: 'center',
-      paddingTop: '40px',
-      paddingX: '20px',
-      width: '[100dvw]',
-      height: '[100dvh]',
-      overflowX: 'hidden',
-      overflowY: 'scroll',
-      scrollbarWidth: 'none',
-      userSelect: 'text',
-      touchAction: 'pan-y',
-      WebkitTouchCallout: 'none',
-      WebkitOverflowScrolling: 'touch',
-    }),
-  )}
->
-  <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-    <textarea
-      bind:this={titleEl}
-      class={css({
-        width: 'full',
-        fontSize: '20px',
-        fontWeight: 'bold',
-        textAlign: 'center',
-        overflow: 'hidden',
-        resize: 'none',
-      })}
-      autocapitalize="off"
-      autocomplete="off"
-      autocorrect="off"
-      maxlength="100"
-      onkeydown={(e) => {
-        if (e.isComposing) {
-          return;
-        }
+<div class={css({ width: 'full', height: '[100dvh]', overflow: 'hidden' })}>
+  <div
+    style:--prosemirror-max-width={`${maxWidth.current}px`}
+    style:--prosemirror-padding-bottom="80dvh"
+    style:--prosemirror-color-selection={token.var('colors.border.strong')}
+    class={cx(
+      'editor',
+      flex({
+        flexDirection: 'column',
+        alignItems: 'center',
+        paddingTop: '40px',
+        paddingX: '20px',
+        size: 'full',
+        overflowY: 'scroll',
+        scrollbarWidth: 'none',
+        userSelect: 'text',
+        touchAction: 'pan-y',
+        WebkitTouchCallout: 'none',
+        WebkitOverflowScrolling: 'touch',
+      }),
+    )}
+  >
+    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+      <textarea
+        bind:this={titleEl}
+        class={css({
+          width: 'full',
+          fontSize: '20px',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          overflow: 'hidden',
+          resize: 'none',
+        })}
+        autocapitalize="off"
+        autocomplete="off"
+        autocorrect="off"
+        maxlength="100"
+        onkeydown={(e) => {
+          if (e.isComposing) {
+            return;
+          }
 
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          subtitleEl?.focus();
-        }
-      }}
-      placeholder="제목"
-      rows={1}
-      spellcheck="false"
-      bind:value={title.current}
-      use:autosize
-    ></textarea>
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            subtitleEl?.focus();
+          }
+        }}
+        placeholder="제목"
+        rows={1}
+        spellcheck="false"
+        bind:value={title.current}
+        use:autosize
+      ></textarea>
 
-    <textarea
-      bind:this={subtitleEl}
-      class={css({
-        marginTop: '4px',
-        width: 'full',
-        fontSize: '16px',
-        fontWeight: 'medium',
-        textAlign: 'center',
-        overflow: 'hidden',
-        resize: 'none',
-      })}
-      autocapitalize="off"
-      autocomplete="off"
-      autocorrect="off"
-      maxlength="100"
-      onkeydown={(e) => {
-        if (e.isComposing) {
-          return;
-        }
+      <textarea
+        bind:this={subtitleEl}
+        class={css({
+          marginTop: '4px',
+          width: 'full',
+          fontSize: '16px',
+          fontWeight: 'medium',
+          textAlign: 'center',
+          overflow: 'hidden',
+          resize: 'none',
+        })}
+        autocapitalize="off"
+        autocomplete="off"
+        autocorrect="off"
+        maxlength="100"
+        onkeydown={(e) => {
+          if (e.isComposing) {
+            return;
+          }
 
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
-          editor?.current
-            .chain()
-            .focus()
-            .setTextSelection(2)
-            .command(({ tr, dispatch }) => {
-              tr.setStoredMarks(marks);
-              dispatch?.(tr);
-              return true;
-            })
-            .run();
-        }
-      }}
-      placeholder="부제목"
-      rows={1}
-      spellcheck="false"
-      bind:value={subtitle.current}
-      use:autosize
-    ></textarea>
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+            editor?.current
+              .chain()
+              .focus()
+              .setTextSelection(2)
+              .command(({ tr, dispatch }) => {
+                tr.setStoredMarks(marks);
+                dispatch?.(tr);
+                return true;
+              })
+              .run();
+          }
+        }}
+        placeholder="부제목"
+        rows={1}
+        spellcheck="false"
+        bind:value={subtitle.current}
+        use:autosize
+      ></textarea>
 
-    <div class={center()}>
-      <div class={css({ marginY: '40px', width: '120px', height: '1px', backgroundColor: 'interactive.hover' })}></div>
+      <div class={center()}>
+        <div class={css({ marginY: '40px', width: '120px', height: '1px', backgroundColor: 'interactive.hover' })}></div>
+      </div>
     </div>
-  </div>
 
-  <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
-    <TiptapEditor
-      style={css.raw({ size: 'full' })}
-      {awareness}
-      {doc}
-      oncreate={() => {
-        window.__webview__?.emitEvent('webviewReady');
-        setYJSState();
-      }}
-      bind:editor
-    />
+    <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+      <TiptapEditor
+        style={css.raw({ size: 'full' })}
+        {awareness}
+        {doc}
+        oncreate={() => {
+          window.__webview__?.emitEvent('webviewReady');
+          setYJSState();
+        }}
+        bind:editor
+      />
 
-    {#if editor}
-      <Placeholder {editor} isTemplateActive={features.includes('template')} />
-      {#if settings.lineHighlightEnabled}
-        <Highlight {editor} />
+      {#if editor}
+        <Placeholder {editor} isTemplateActive={features.includes('template')} />
+        {#if settings.lineHighlightEnabled}
+          <Highlight {editor} />
+        {/if}
+        <Limit {$query} {editor} />
+        <Spellcheck {editor} />
+        <FindReplace {editor} />
       {/if}
-      <Limit {$query} {editor} />
-      <Spellcheck {editor} />
-      <FindReplace {editor} />
-    {/if}
+    </div>
   </div>
 </div>
