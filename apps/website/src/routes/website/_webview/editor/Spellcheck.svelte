@@ -60,6 +60,27 @@
     }
   };
 
+  const applySpellCorrection = async (data: { from: number; to: number; correction: string }) => {
+    if (!editor?.current) return;
+
+    const { from, to, correction } = data;
+
+    editor.current.chain().setTextSelection({ from, to }).insertContent(correction).run();
+
+    let { node: scrollEl } = editor.current.view.domAtPos(from);
+    if (scrollEl?.nodeType === Node.TEXT_NODE) {
+      scrollEl = scrollEl.parentElement as HTMLElement;
+    }
+    if (scrollEl instanceof HTMLElement) {
+      scrollEl.scrollIntoView({ block: 'center' });
+    }
+
+    spellcheckErrors = spellcheckErrors.filter((err) => !(err.from === from && err.to === to));
+    if (spellcheckErrors.length === 0) {
+      spellcheckMapping = undefined;
+    }
+  };
+
   onMount(() => {
     if (!editor?.current) return;
 
@@ -90,18 +111,7 @@
       };
     });
 
-    window.__webview__?.addEventListener('applySpellCorrection', async (data) => {
-      if (!editor?.current) return;
-
-      const { from, to, correction } = data;
-
-      editor.current.chain().focus().setTextSelection({ from, to }).insertContent(correction).run();
-
-      spellcheckErrors = spellcheckErrors.filter((err) => !(err.from === from && err.to === to));
-      if (spellcheckErrors.length === 0) {
-        spellcheckMapping = undefined;
-      }
-    });
+    window.__webview__?.addEventListener('applySpellCorrection', applySpellCorrection);
 
     const handler = ({ transaction }: { transaction: Transaction }) => {
       handleTransaction({ transaction, editor: editor.current });
@@ -112,6 +122,7 @@
     return () => {
       editor?.current.off('transaction', handler);
       editor?.current.unregisterPlugin(spellcheckKey);
+      window.__webview__?.removeEventListener('applySpellCorrection', applySpellCorrection);
     };
   });
 </script>
