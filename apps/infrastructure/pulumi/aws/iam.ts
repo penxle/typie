@@ -15,8 +15,8 @@ new aws.iam.GroupPolicy('team', {
     Statement: [
       {
         Effect: 'Allow',
-        Action: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:GetParametersByPath', 'ssm:DescribeParameters'],
-        Resource: ['arn:aws:ssm:*:*:parameter/apps/*/local/', 'arn:aws:ssm:*:*:parameter/apps/*/local/*'],
+        Action: ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'],
+        Resource: ['arn:aws:secretsmanager:*:*:secret:/apps/*/local-*'],
       },
       {
         Effect: 'Allow',
