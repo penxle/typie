@@ -77,7 +77,7 @@ export function createFindReplaceManager(editor: Editor): FindReplaceManager {
         );
 
         matchIndex++;
-        index = text.indexOf(searchLower, index + 1);
+        index = text.indexOf(searchLower, index + searchText.length);
       }
     });
 
@@ -128,7 +128,7 @@ export function createFindReplaceManager(editor: Editor): FindReplaceManager {
         }
 
         matchIndex++;
-        index = nodeText.indexOf(searchLower, index + 1);
+        index = nodeText.indexOf(searchLower, index + text.length);
       }
     });
 
