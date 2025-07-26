@@ -61,13 +61,18 @@ export function createFindReplaceManager(editor: Editor): FindReplaceManager {
         const isCurrentMatch = matchIndex === currentIndex;
 
         const className = css({
-          backgroundColor: isCurrentMatch ? '[#ff6b00]' : '[#ffd700]',
-          color: isCurrentMatch ? '[#fff]' : '[#000]',
+          color: '[#000]',
+          backgroundColor: '[#ffd700]',
+          '&[data-current-match="true"]': {
+            color: '[#fff]',
+            backgroundColor: '[#ff6b00]',
+          },
         });
 
         decorations.push(
           Decoration.inline(from, to, {
             class: className,
+            'data-current-match': isCurrentMatch ? 'true' : 'false',
           }),
         );
 
