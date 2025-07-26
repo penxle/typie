@@ -229,9 +229,11 @@
           },
         })}
         onclick={() => {
+          if (!editor?.current) return;
+
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const { id, from, to } = activeError!;
-          editor?.current.chain().setTextSelection({ from, to }).insertContent(correction).focus().run();
+          editor.current.chain().setTextSelection({ from, to }).insertContent(correction).run();
           errors = errors.filter((error) => error.id !== id);
           activeError = undefined;
         }}

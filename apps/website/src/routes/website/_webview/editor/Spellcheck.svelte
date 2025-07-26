@@ -161,7 +161,9 @@
 
       if (from === null || to === null) return;
 
-      editor.current.chain().setTextSelection({ from, to }).insertContent(correction).scrollIntoViewFixed().run();
+      editor.current.chain().setTextSelection({ from, to }).insertContent(correction).run();
+      editor.current.commands.scrollIntoViewFixed({ animate: true, position: 0.1 });
+
       errors = errors.filter((err) => err.id !== id);
     });
   });

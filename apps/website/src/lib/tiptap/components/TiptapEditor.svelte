@@ -103,26 +103,6 @@
       onCreate: () => {
         oncreate?.();
       },
-
-      onFocus: ({ editor }) => {
-        if (window.__webview__) {
-          setTimeout(() => {
-            editor.commands.scrollIntoView();
-          }, 200);
-        }
-      },
-
-      onSelectionUpdate: ({ editor }) => {
-        if (window.__webview__) {
-          setTimeout(() => {
-            editor.commands.scrollIntoView();
-          }, 200);
-        }
-      },
-
-      onUpdate: ({ editor }) => {
-        editor.commands.scrollIntoView();
-      },
     });
 
     editor = new Ref(e);
