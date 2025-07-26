@@ -3,7 +3,6 @@ import { Node } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, Selection as ProseMirrorSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Tip } from '$lib/notification';
-import { searchPluginKey } from '$lib/tiptap/extensions/search';
 import { css, cx } from '$styled-system/css';
 import type { Mappable } from '@tiptap/pm/transform';
 
@@ -54,12 +53,7 @@ export const Selection = Extension.create({
             const decorations: Decoration[] = [];
 
             if (!empty && (isiOS() || window.__webview__?.platform === 'ios')) {
-              const searchState = searchPluginKey.getState(state);
-              const hasSearchDecorations = searchState?.decorations && searchState.decorations.find().length > 0;
-
-              if (!hasSearchDecorations) {
-                decorations.push(Decoration.inline(from, to, { class: cx('selected-text', css({ display: 'contents' })) }));
-              }
+              decorations.push(Decoration.inline(from, to, { class: cx('selected-text', css({ display: 'contents' })) }));
             }
 
             if (this.editor.isEditable && (selection instanceof NodeSelection || selection instanceof MultiNodeSelection)) {

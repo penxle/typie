@@ -494,6 +494,9 @@ importers:
       es-hangul:
         specifier: ^2.3.5
         version: 2.3.5
+      escape-string-regexp:
+        specifier: ^5.0.0
+        version: 5.0.0
       fast-json-stable-stringify:
         specifier: ^2.1.0
         version: 2.1.0

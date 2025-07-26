@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -16,102 +17,61 @@ class FindReplaceBottomSheet extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final findText = useState('');
-    final replaceText = useState('');
-    final currentMatch = useState(0);
-    final totalMatches = useState(0);
-    final findController = useTextEditingController();
-    final replaceController = useTextEditingController();
+    final currentIndex = useState(0);
+    final totalCount = useState(0);
+
+    final findTextController = useTextEditingController();
+    final replaceTextController = useTextEditingController();
+
+    final findText = useListenableSelector(findTextController, () => findTextController.text);
+
     final findFocusNode = useFocusNode();
     final replaceFocusNode = useFocusNode();
+
     final webViewController = useValueListenable(scope.webViewController);
 
     final findHasFocus = useListenableSelector(findFocusNode, () => findFocusNode.hasFocus);
     final replaceHasFocus = useListenableSelector(replaceFocusNode, () => replaceFocusNode.hasFocus);
 
     useEffect(() {
-      findController.addListener(() {
-        findText.value = findController.text;
-      });
-      replaceController.addListener(() {
-        replaceText.value = replaceController.text;
-      });
-
-      return () async {
-        await webViewController?.callProcedure('clearSearchHighlights');
+      return () {
+        unawaited(webViewController?.callProcedure('clearSearch'));
       };
     }, []);
 
-    Future<void> updateMatches() async {
-      if (findText.value.isEmpty) {
-        totalMatches.value = 0;
-        currentMatch.value = 0;
-        await webViewController?.callProcedure('clearSearchHighlights');
-        return;
-      }
-
-      final result =
-          await webViewController?.callProcedure('search', {'text': findText.value}) as Map<String, dynamic>?;
-      if (result != null) {
-        totalMatches.value = result['totalMatches'] as int? ?? 0;
-        currentMatch.value = result['currentMatch'] as int? ?? 0;
-      }
-    }
-
     Future<void> findNext() async {
-      if (findText.value.isEmpty || totalMatches.value == 0) {
-        return;
-      }
-      final result = await webViewController?.callProcedure('findNext') as Map<String, dynamic>?;
-      if (result != null) {
-        currentMatch.value = result['currentMatch'] as int? ?? 0;
-      }
+      final result = await webViewController?.callProcedure('findNext') as Map<String, dynamic>;
+      currentIndex.value = result['currentIndex'] as int;
     }
 
     Future<void> findPrevious() async {
-      if (findText.value.isEmpty || totalMatches.value == 0) {
-        return;
-      }
-      final result = await webViewController?.callProcedure('findPrevious') as Map<String, dynamic>?;
-      if (result != null) {
-        currentMatch.value = result['currentMatch'] as int? ?? 0;
-      }
+      final result = await webViewController?.callProcedure('findPrevious') as Map<String, dynamic>;
+      currentIndex.value = result['currentIndex'] as int;
     }
 
     Future<void> replace() async {
-      if (findText.value.isEmpty || totalMatches.value == 0) {
-        return;
-      }
       final result =
-          await webViewController?.callProcedure('replace', {'replaceText': replaceText.value})
-              as Map<String, dynamic>?;
-      if (result != null && result['success'] == true) {
-        totalMatches.value = result['totalMatches'] as int? ?? 0;
-        currentMatch.value = result['currentMatch'] as int? ?? 0;
-      }
+          await webViewController?.callProcedure('replace', replaceTextController.text) as Map<String, dynamic>;
+
+      currentIndex.value = result['currentIndex'] as int;
+      totalCount.value = result['totalCount'] as int;
     }
 
     Future<void> replaceAll() async {
-      if (findText.value.isEmpty) {
-        return;
-      }
-      final result =
-          await webViewController?.callProcedure('replaceAll', {
-                'findText': findText.value,
-                'replaceText': replaceText.value,
-              })
-              as Map<String, dynamic>?;
-      if (result != null) {
-        totalMatches.value = result['totalMatches'] as int? ?? 0;
-        currentMatch.value = result['currentMatch'] as int? ?? 0;
-      }
+      await webViewController?.callProcedure('replaceAll', replaceTextController.text);
+
+      currentIndex.value = -1;
+      totalCount.value = 0;
     }
 
-    useEffect(() {
-      unawaited(updateMatches());
+    useAsyncEffect(() async {
+      final result = await webViewController?.callProcedure('search', findText) as Map<String, dynamic>;
+
+      currentIndex.value = result['currentIndex'] as int;
+      totalCount.value = result['totalCount'] as int;
 
       return null;
-    }, [findText.value]);
+    }, [findText]);
 
     return AppBottomSheet(
       padding: const Pad(horizontal: 20, vertical: 16),
@@ -139,7 +99,7 @@ class FindReplaceBottomSheet extends HookWidget {
                         children: [
                           Expanded(
                             child: TextField(
-                              controller: findController,
+                              controller: findTextController,
                               focusNode: findFocusNode,
                               decoration: InputDecoration.collapsed(
                                 hintText: '찾기',
@@ -155,9 +115,9 @@ class FindReplaceBottomSheet extends HookWidget {
                               onSubmitted: (_) => findNext(),
                             ),
                           ),
-                          if (findText.value.isNotEmpty)
+                          if (findText.isNotEmpty)
                             Text(
-                              totalMatches.value > 0 ? '${currentMatch.value + 1} / ${totalMatches.value}' : '결과 없음',
+                              totalCount.value > 0 ? '${currentIndex.value + 1} / ${totalCount.value}' : '결과 없음',
                               style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                             ),
                         ],
@@ -176,7 +136,7 @@ class FindReplaceBottomSheet extends HookWidget {
                       child: Padding(
                         padding: const Pad(horizontal: 16),
                         child: TextField(
-                          controller: replaceController,
+                          controller: replaceTextController,
                           focusNode: replaceFocusNode,
                           decoration: InputDecoration.collapsed(
                             hintText: '바꾸기',
@@ -207,18 +167,14 @@ class FindReplaceBottomSheet extends HookWidget {
                     children: [
                       Tappable(
                         onTap: () async {
-                          if (findText.value.isNotEmpty) {
-                            await findPrevious();
-                          }
+                          await findPrevious();
                         },
                         child: Container(
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: findText.value.isNotEmpty
-                                  ? context.colors.borderStrong
-                                  : context.colors.borderDefault,
+                              color: findText.isNotEmpty ? context.colors.borderStrong : context.colors.borderDefault,
                             ),
                             borderRadius: BorderRadius.circular(6),
                           ),
@@ -226,25 +182,21 @@ class FindReplaceBottomSheet extends HookWidget {
                             child: Icon(
                               LucideLightIcons.arrow_up,
                               size: 18,
-                              color: findText.value.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
+                              color: findText.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
                             ),
                           ),
                         ),
                       ),
                       Tappable(
                         onTap: () async {
-                          if (findText.value.isNotEmpty) {
-                            await findNext();
-                          }
+                          await findNext();
                         },
                         child: Container(
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: findText.value.isNotEmpty
-                                  ? context.colors.borderStrong
-                                  : context.colors.borderDefault,
+                              color: findText.isNotEmpty ? context.colors.borderStrong : context.colors.borderDefault,
                             ),
                             borderRadius: BorderRadius.circular(6),
                           ),
@@ -252,7 +204,7 @@ class FindReplaceBottomSheet extends HookWidget {
                             child: Icon(
                               LucideLightIcons.arrow_down,
                               size: 18,
-                              color: findText.value.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
+                              color: findText.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
                             ),
                           ),
                         ),
@@ -268,18 +220,14 @@ class FindReplaceBottomSheet extends HookWidget {
                     children: [
                       Tappable(
                         onTap: () async {
-                          if (findText.value.isNotEmpty) {
-                            await replace();
-                          }
+                          await replace();
                         },
                         child: Container(
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: findText.value.isNotEmpty
-                                  ? context.colors.borderStrong
-                                  : context.colors.borderDefault,
+                              color: findText.isNotEmpty ? context.colors.borderStrong : context.colors.borderDefault,
                             ),
                             borderRadius: BorderRadius.circular(6),
                           ),
@@ -287,25 +235,21 @@ class FindReplaceBottomSheet extends HookWidget {
                             child: Icon(
                               LucideLightIcons.replace,
                               size: 18,
-                              color: findText.value.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
+                              color: findText.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
                             ),
                           ),
                         ),
                       ),
                       Tappable(
                         onTap: () async {
-                          if (findText.value.isNotEmpty) {
-                            await replaceAll();
-                          }
+                          await replaceAll();
                         },
                         child: Container(
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: findText.value.isNotEmpty
-                                  ? context.colors.borderStrong
-                                  : context.colors.borderDefault,
+                              color: findText.isNotEmpty ? context.colors.borderStrong : context.colors.borderDefault,
                             ),
                             borderRadius: BorderRadius.circular(6),
                           ),
@@ -313,7 +257,7 @@ class FindReplaceBottomSheet extends HookWidget {
                             child: Icon(
                               LucideLightIcons.replace_all,
                               size: 18,
-                              color: findText.value.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
+                              color: findText.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
                             ),
                           ),
                         ),
