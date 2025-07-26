@@ -73,7 +73,6 @@
   class={flex({
     gap: '4px',
     padding: '8px',
-    width: '320px',
   })}
   onkeydown={handleKeydown}
   role="dialog"
@@ -82,10 +81,10 @@
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
     <input
       bind:this={findInputEl}
-      id="find-input"
       class={css({
         paddingX: '8px',
         paddingY: '4px',
+        width: '200px',
         height: '30px',
         borderWidth: '1px',
         borderColor: 'border.default',
@@ -100,10 +99,10 @@
       bind:value={findText}
     />
     <input
-      id="replace-input"
       class={css({
         paddingX: '8px',
         paddingY: '4px',
+        width: '200px',
         height: '30px',
         borderWidth: '1px',
         borderColor: 'border.default',
@@ -120,8 +119,8 @@
   </div>
 
   <div class={flex({ flex: '1', flexDirection: 'column', gap: '4px' })}>
-    <div class={flex({ alignItems: 'center', gap: '4px', height: '30px' })}>
-      <div class={css({ flex: '1', fontSize: '12px', color: 'text.subtle' })}>
+    <div class={flex({ alignItems: 'center', height: '30px' })}>
+      <div class={css({ flex: '1', width: '60px', fontSize: '12px', color: 'text.subtle' })}>
         {#if editor.current.extensionStorage.search.matches.length > 0}
           {editor.current.extensionStorage.search.currentIndex + 1} / {editor.current.extensionStorage.search.matches.length}
         {:else}
@@ -184,6 +183,7 @@
         </button>
       </div>
     </div>
+
     <div class={flex({ alignItems: 'center', gap: '4px', height: '30px' })}>
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
         <button
