@@ -95,15 +95,12 @@ class SpellCheckBottomSheet extends HookWidget {
                           error: error,
                           onCorrect: (correction) async {
                             if (scope.webViewController.value != null) {
-                              await scope.webViewController.value!.emitEvent('applySpellCorrection', {
-                                'from': error['from'],
-                                'to': error['to'],
+                              await scope.webViewController.value!.callProcedure('applySpellcheckCorrection', {
+                                'id': error['id'],
                                 'correction': correction,
                               });
 
-                              errors.value = errors.value
-                                  .where((e) => !(e['from'] == error['from'] && e['to'] == error['to']))
-                                  .toList();
+                              errors.value = errors.value.where((e) => e['id'] != error['id']).toList();
                             }
                           },
                         ),
@@ -209,8 +206,6 @@ void useSpellCheckErrorHandler(BuildContext context, EditorStateScope scope) {
         if (!context.mounted) {
           return;
         }
-
-        await webViewController.clearFocus();
 
         await context.showBottomSheet(
           intercept: true,
