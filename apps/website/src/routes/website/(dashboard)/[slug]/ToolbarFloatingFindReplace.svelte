@@ -93,6 +93,7 @@
         fontSize: '14px',
       })}
       aria-label="찾을 텍스트"
+      autocomplete="off"
       onkeydown={handleFindKeydown}
       placeholder="찾기"
       type="text"
@@ -110,6 +111,7 @@
         fontSize: '14px',
       })}
       aria-label="바꿀 텍스트"
+      autocomplete="off"
       onkeydown={handleReplaceKeydown}
       placeholder="바꾸기"
       type="text"
