@@ -60,17 +60,6 @@ class SpellCheckBottomSheet extends HookWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            spacing: 8,
-            children: [
-              Icon(LucideLightIcons.spell_check, size: 20, color: context.colors.textSubtle),
-              Text(
-                '맞춤법 검사',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.colors.textSubtle),
-              ),
-            ],
-          ),
-          const Gap(16),
           if (isLoading.value) ...[
             Padding(
               padding: Pad(vertical: 20, bottom: bottomPadding + 12),
@@ -169,9 +158,13 @@ class SpellCheckErrorItem extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     spacing: 4,
                     children: [
-                      Text(
-                        correction.toString(),
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textDanger),
+                      Flexible(
+                        child: Text(
+                          correction.toString(),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textDanger),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       ),
                       Icon(LucideLightIcons.arrow_right, size: 12, color: context.colors.textDanger),
                     ],
@@ -196,23 +189,7 @@ class SpellCheckErrorBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppBottomSheet(
       padding: const Pad(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            spacing: 8,
-            children: [
-              Icon(LucideLightIcons.spell_check, size: 20, color: context.colors.textSubtle),
-              Text(
-                '맞춤법 검사',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.colors.textSubtle),
-              ),
-            ],
-          ),
-          const Gap(16),
-          SpellCheckErrorItem(error: error, onCorrect: onCorrect),
-        ],
-      ),
+      child: SpellCheckErrorItem(error: error, onCorrect: onCorrect),
     );
   }
 }
@@ -237,6 +214,7 @@ void useSpellCheckErrorHandler(BuildContext context, EditorStateScope scope) {
 
         await context.showBottomSheet(
           intercept: true,
+          overlayOpacity: 0.05,
           child: SpellCheckErrorBottomSheet(
             error: error,
             onCorrect: (correction) async {

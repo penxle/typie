@@ -193,6 +193,7 @@ class Editor extends HookWidget {
 
                               await context.showBottomSheet(
                                 intercept: true,
+                                overlayOpacity: 0.05,
                                 child: SpellCheckBottomSheet(scope: scope, mixpanel: mixpanel),
                               );
                             },
