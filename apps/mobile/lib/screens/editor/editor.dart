@@ -26,6 +26,7 @@ import 'package:typie/screens/editor/__generated__/duplicate_post_mutation.req.g
 import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/update_post_type_mutation.req.gql.dart';
+import 'package:typie/screens/editor/find_replace.dart';
 import 'package:typie/screens/editor/limit.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
@@ -164,6 +165,17 @@ class Editor extends HookWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          BottomMenuItem(
+                            icon: LucideLightIcons.search,
+                            label: '찾기',
+                            onTap: () async {
+                              await context.showBottomSheet(
+                                intercept: true,
+                                overlayOpacity: 0.05,
+                                child: FindReplaceBottomSheet(scope: scope),
+                              );
+                            },
+                          ),
                           BottomMenuItem(
                             icon: LucideLightIcons.spell_check,
                             label: '맞춤법 검사',

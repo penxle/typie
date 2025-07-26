@@ -12,7 +12,11 @@ import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
 
 extension BottomSheetExtension on BuildContext {
-  Future<T?> showBottomSheet<T extends Object?>({required Widget child, bool intercept = false}) {
+  Future<T?> showBottomSheet<T extends Object?>({
+    required Widget child,
+    bool intercept = false,
+    double overlayOpacity = 0.5,
+  }) {
     return router.root.pushWidget(
       child,
       opaque: false,
@@ -37,7 +41,7 @@ extension BottomSheetExtension on BuildContext {
                   child: FadeTransition(
                     opacity: tweenedBackdropOpacity,
                     child: SizedBox.expand(
-                      child: ColoredBox(color: context.colors.overlayDefault.withValues(alpha: 0.5)),
+                      child: ColoredBox(color: context.colors.overlayDefault.withValues(alpha: overlayOpacity)),
                     ),
                   ),
                   onTap: () async {

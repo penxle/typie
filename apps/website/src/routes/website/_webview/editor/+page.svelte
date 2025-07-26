@@ -22,6 +22,7 @@
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
   import { handleCaretMovement } from './caret';
+  import FindReplace from './FindReplace.svelte';
   import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
   import Placeholder from './Placeholder.svelte';
@@ -619,6 +620,7 @@
       {/if}
       <Limit {$query} {editor} />
       <Spellcheck {editor} />
+      <FindReplace {editor} />
     {/if}
   </div>
 </div>
