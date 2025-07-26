@@ -308,33 +308,79 @@
       .join('\n'),
   );
 
+  let syncUpdateTimeout: NodeJS.Timeout | null = null;
+  let pendingUpdate: Uint8Array | null = null;
+
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote' && postId) {
-      await syncPost(
-        {
-          clientId,
-          postId,
-          type: PostSyncType.UPDATE,
-          data: base64.stringify(update),
-        },
-        { transport: 'ws' },
-      );
+      if (pendingUpdate) {
+        pendingUpdate = Y.mergeUpdatesV2([pendingUpdate, update]);
+      } else {
+        pendingUpdate = update;
+      }
+
+      if (syncUpdateTimeout) {
+        clearTimeout(syncUpdateTimeout);
+      }
+
+      syncUpdateTimeout = setTimeout(async () => {
+        if (pendingUpdate) {
+          await syncPost(
+            {
+              clientId,
+              postId,
+              type: PostSyncType.UPDATE,
+              data: base64.stringify(pendingUpdate),
+            },
+            { transport: 'ws' },
+          );
+
+          pendingUpdate = null;
+        }
+      }, 1000);
     }
   });
 
+  let syncAwarenessTimeout: NodeJS.Timeout | null = null;
+  let pendingAwarenessStates: { added: number[]; updated: number[]; removed: number[] } | null = null;
+
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
     if (browser && origin !== 'remote' && postId) {
-      const update = YAwareness.encodeAwarenessUpdate(awareness, [...states.added, ...states.updated, ...states.removed]);
+      if (pendingAwarenessStates) {
+        pendingAwarenessStates = {
+          added: [...new Set([...pendingAwarenessStates.added, ...states.added])],
+          updated: [...new Set([...pendingAwarenessStates.updated, ...states.updated])],
+          removed: [...new Set([...pendingAwarenessStates.removed, ...states.removed])],
+        };
+      } else {
+        pendingAwarenessStates = states;
+      }
 
-      await syncPost(
-        {
-          clientId,
-          postId,
-          type: PostSyncType.AWARENESS,
-          data: base64.stringify(update),
-        },
-        { transport: 'ws' },
-      );
+      if (syncAwarenessTimeout) {
+        clearTimeout(syncAwarenessTimeout);
+      }
+
+      syncAwarenessTimeout = setTimeout(async () => {
+        if (pendingAwarenessStates) {
+          const update = YAwareness.encodeAwarenessUpdate(awareness, [
+            ...pendingAwarenessStates.added,
+            ...pendingAwarenessStates.updated,
+            ...pendingAwarenessStates.removed,
+          ]);
+
+          await syncPost(
+            {
+              clientId,
+              postId,
+              type: PostSyncType.AWARENESS,
+              data: base64.stringify(update),
+            },
+            { transport: 'ws' },
+          );
+
+          pendingAwarenessStates = null;
+        }
+      }, 1000);
     }
   });
 
@@ -523,6 +569,14 @@
 
       clearInterval(forceSyncInterval);
       clearInterval(heartbeatInterval);
+
+      if (syncUpdateTimeout) {
+        clearTimeout(syncUpdateTimeout);
+      }
+
+      if (syncAwarenessTimeout) {
+        clearTimeout(syncAwarenessTimeout);
+      }
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
