@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { GetParametersByPathCommand, SSMClient } from '@aws-sdk/client-ssm';
+import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { program } from 'commander';
 import { execa } from 'execa';
 
@@ -35,39 +35,24 @@ async function getProjectName(): Promise<string> {
   process.exit(1);
 }
 
-async function getParametersFromSSM(projectName: string, stage: string): Promise<Record<string, string>> {
-  const client = new SSMClient({});
-  const prefix = `/apps/${projectName}/${stage}/`;
+async function getSecretsFromSecretsManager(projectName: string, stage: string): Promise<Record<string, string>> {
+  const client = new SecretsManagerClient({});
+  const secretName = `/apps/${projectName}/${stage}`;
 
   try {
-    const parameters: Record<string, string> = {};
-    let nextToken: string | undefined;
+    const command = new GetSecretValueCommand({
+      SecretId: secretName,
+    });
 
-    do {
-      const command = new GetParametersByPathCommand({
-        Path: prefix,
-        Recursive: false,
-        WithDecryption: true,
-        NextToken: nextToken,
-      });
+    const response = await client.send(command);
 
-      const response = await client.send(command);
+    if (response.SecretString) {
+      return JSON.parse(response.SecretString);
+    }
 
-      if (response.Parameters) {
-        for (const param of response.Parameters) {
-          if (param.Name && param.Value) {
-            const envName = param.Name.replace(prefix, '');
-            parameters[envName] = param.Value;
-          }
-        }
-      }
-
-      nextToken = response.NextToken;
-    } while (nextToken);
-
-    return parameters;
+    return {};
   } catch (err) {
-    console.error(`Error fetching parameters from AWS SSM for prefix ${prefix}:`, err);
+    console.error(`Error fetching secrets from AWS Secrets Manager for ${secretName}:`, err);
     return {};
   }
 }
@@ -75,7 +60,7 @@ async function getParametersFromSSM(projectName: string, stage: string): Promise
 async function main() {
   program
     .name('rps')
-    .description('Run commands with AWS Parameter Store environment variables')
+    .description('Run commands with AWS Secrets Manager environment variables')
     .version('1.0.0')
     .option('-s, --stage <stage>', 'Stage name', 'local')
     .argument('[command...]', 'Command to run')
@@ -88,7 +73,7 @@ async function main() {
 
       const projectName = await getProjectName();
 
-      const parameters = await getParametersFromSSM(projectName, options.stage);
+      const parameters = await getSecretsFromSecretsManager(projectName, options.stage);
 
       const env = {
         ...process.env,
