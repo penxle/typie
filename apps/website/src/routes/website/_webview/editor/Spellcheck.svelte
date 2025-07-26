@@ -1,22 +1,35 @@
 <script lang="ts">
-  import { Mapping } from '@tiptap/pm/transform';
+  import { Plugin, PluginKey } from '@tiptap/pm/state';
+  import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import mixpanel from 'mixpanel-browser';
-  import { onMount } from 'svelte';
+  import { nanoid } from 'nanoid';
+  import { onMount, untrack } from 'svelte';
+  import { absolutePositionToRelativePosition, relativePositionToAbsolutePosition, ySyncPluginKey } from 'y-prosemirror';
   import { graphql } from '$graphql';
-  import { createSpellcheckPlugin, decodeHtmlEntities, mapErrors, spellcheckKey, updateErrorPositions } from '$lib/editor/spellcheck';
+  import { css } from '$styled-system/css';
   import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
-  import type { SpellingError } from '$lib/editor/spellcheck';
   import type { Ref } from '$lib/utils';
 
   type Props = {
     editor?: Ref<Editor>;
   };
 
+  type SpellcheckError = {
+    id: string;
+    from: number;
+    to: number;
+    relativeFrom: unknown;
+    relativeTo: unknown;
+    context: string;
+    corrections: string[];
+    explanation: string;
+  };
+
   let { editor }: Props = $props();
 
-  let spellcheckErrors = $state<SpellingError[]>([]);
-  let spellcheckMapping = $state<Mapping>();
+  let mounted = $state(false);
+  let errors = $state<SpellcheckError[]>([]);
 
   const checkSpelling = graphql(`
     mutation WebViewEditor_CheckSpelling_Mutation($input: CheckSpellingInput!) {
@@ -30,99 +43,126 @@
     }
   `);
 
-  const spellcheckPlugin = createSpellcheckPlugin(spellcheckKey, {
-    onErrorClick: (pos) => {
-      const foundError = spellcheckErrors.find((err) => pos >= err.from && pos <= err.to);
-      if (foundError) {
-        window.__webview__?.emitEvent('spellcheckErrorClick', foundError);
+  const handleTransaction = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
+    const { binding } = ySyncPluginKey.getState(editor.view.state);
+
+    if (transaction.docChanged) {
+      errors = errors
+        .map((error) => {
+          const from = relativePositionToAbsolutePosition(binding.doc, binding.type, error.relativeFrom, binding.mapping);
+          const to = relativePositionToAbsolutePosition(binding.doc, binding.type, error.relativeTo, binding.mapping);
+
+          if (from === null || to === null) {
+            return null;
+          }
+
+          return { ...error, from, to };
+        })
+        .filter((error) => error !== null);
+    }
+  };
+
+  $effect(() => {
+    void errors;
+    untrack(() => {
+      if (editor?.current) {
+        editor.current.view.dispatch(editor.current.view.state.tr);
       }
-    },
+    });
   });
 
-  const handleTransaction = ({ transaction, editor }: { transaction: Transaction; editor: Editor }) => {
-    if (transaction.docChanged) {
-      if (spellcheckMapping) {
-        spellcheckMapping.appendMapping(transaction.mapping);
-      } else if (spellcheckErrors.length > 0) {
-        spellcheckMapping = new Mapping();
-        spellcheckMapping.appendMapping(transaction.mapping);
-      } else {
-        return;
-      }
+  $effect(() => {
+    if (mounted) {
+      return untrack(() => {
+        const key = new PluginKey('spellcheck');
 
-      spellcheckErrors = updateErrorPositions(spellcheckErrors, transaction);
+        editor?.current.on('transaction', handleTransaction);
+        editor?.current.registerPlugin(
+          new Plugin({
+            key,
+            props: {
+              decorations: (state) => {
+                return DecorationSet.create(
+                  state.doc,
+                  errors.map((error) =>
+                    Decoration.inline(error.from, error.to, {
+                      class: css({
+                        textDecoration: 'underline',
+                        textDecorationColor: 'text.danger',
+                        textDecorationStyle: 'wavy',
+                        textUnderlineOffset: '2px',
+                      }),
+                    }),
+                  ),
+                );
+              },
+            },
+          }),
+        );
 
-      editor.commands.command(({ tr }) => {
-        tr.setMeta(spellcheckKey, spellcheckErrors);
-        tr.setMeta('addToHistory', false);
-        return true;
+        return () => {
+          editor?.current.unregisterPlugin(key);
+          editor?.current.off('transaction', handleTransaction);
+        };
       });
     }
-  };
+  });
 
-  const applySpellCorrection = async (data: { from: number; to: number; correction: string }) => {
-    if (!editor?.current) return;
-
-    const { from, to, correction } = data;
-
-    editor.current.chain().setTextSelection({ from, to }).insertContent(correction).run();
-
-    let { node: scrollEl } = editor.current.view.domAtPos(from);
-    if (scrollEl?.nodeType === Node.TEXT_NODE) {
-      scrollEl = scrollEl.parentElement as HTMLElement;
+  $effect(() => {
+    if (editor?.current && !mounted) {
+      mounted = true;
     }
-    if (scrollEl instanceof HTMLElement) {
-      scrollEl.scrollIntoView({ block: 'center' });
-    }
-
-    spellcheckErrors = spellcheckErrors.filter((err) => !(err.from === from && err.to === to));
-    if (spellcheckErrors.length === 0) {
-      spellcheckMapping = undefined;
-    }
-  };
+  });
 
   onMount(() => {
-    if (!editor?.current) return;
-
-    editor.current.registerPlugin(spellcheckPlugin);
-
     window.__webview__?.setProcedure('checkSpelling', async () => {
       if (!editor?.current) return;
 
-      spellcheckMapping = new Mapping();
-
       const body = editor.current.getJSON();
-      const errors = await checkSpelling({ body });
+      const resp = await checkSpelling({ body });
 
-      mixpanel.track('spellcheck', { errors: errors.length });
+      mixpanel.track('spellcheck', { errors: resp.length });
 
-      spellcheckErrors = mapErrors(errors, spellcheckMapping).map((error) => ({
+      const { binding } = ySyncPluginKey.getState(editor.current.view.state);
+      errors = resp.map((error) => ({
+        id: nanoid(),
         ...error,
-        explanation: decodeHtmlEntities(error.explanation),
+        relativeFrom: absolutePositionToRelativePosition(error.from, binding.type, binding.mapping),
+        relativeTo: absolutePositionToRelativePosition(error.to, binding.type, binding.mapping),
       }));
 
-      const { tr } = editor.current.state;
-      tr.setMeta(spellcheckKey, spellcheckErrors);
-      tr.setMeta('addToHistory', false);
-      editor.current.view.dispatch(tr);
+      const parser = new DOMParser();
 
       return {
-        errors: spellcheckErrors,
+        errors: errors.map((error) => {
+          const doc = parser.parseFromString(error.explanation, 'text/html');
+          const explanation = doc.documentElement.textContent;
+
+          return {
+            id: error.id,
+            context: error.context,
+            corrections: error.corrections,
+            explanation,
+          };
+        }),
       };
     });
 
-    window.__webview__?.addEventListener('applySpellCorrection', applySpellCorrection);
+    type ApplySpellcheckCorrectionData = { id: string; correction: string };
+    window.__webview__?.setProcedure('applySpellcheckCorrection', async ({ id, correction }: ApplySpellcheckCorrectionData) => {
+      if (!editor?.current) return;
 
-    const handler = ({ transaction }: { transaction: Transaction }) => {
-      handleTransaction({ transaction, editor: editor.current });
-    };
+      const error = errors.find((err) => err.id === id);
+      if (!error) return;
 
-    editor.current.on('transaction', handler);
+      const { binding } = ySyncPluginKey.getState(editor.current.view.state);
+      const from = relativePositionToAbsolutePosition(binding.doc, binding.type, error.relativeFrom, binding.mapping);
+      const to = relativePositionToAbsolutePosition(binding.doc, binding.type, error.relativeTo, binding.mapping);
 
-    return () => {
-      editor?.current.off('transaction', handler);
-      editor?.current.unregisterPlugin(spellcheckKey);
-      window.__webview__?.removeEventListener('applySpellCorrection', applySpellCorrection);
-    };
+      if (from === null || to === null) return;
+
+      editor.current.chain().setTextSelection({ from, to }).insertContent(correction).scrollIntoViewFixed().run();
+      errors = errors.filter((err) => err.id !== id);
+    });
   });
 </script>

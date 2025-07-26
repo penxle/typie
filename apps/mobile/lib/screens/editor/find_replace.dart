@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -106,9 +108,8 @@ class FindReplaceBottomSheet extends HookWidget {
     }
 
     useEffect(() {
-      () async {
-        await updateMatches();
-      }();
+      unawaited(updateMatches());
+
       return null;
     }, [findText.value]);
 

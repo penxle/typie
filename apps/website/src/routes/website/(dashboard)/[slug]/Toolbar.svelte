@@ -305,6 +305,7 @@
           {/snippet}
         </ToolbarDropdownButton>
       </div>
+
       <Spellcheck {editor} subscription={!!$site?.user.subscription} />
     {/if}
   </div>
