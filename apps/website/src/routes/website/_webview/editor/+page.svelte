@@ -501,7 +501,7 @@
 
 <div
   style:--prosemirror-max-width={`${maxWidth.current}px`}
-  style:--prosemirror-padding-bottom={`${settings.typewriterPosition ? (1 - settings.typewriterPosition) * 100 : 0}vh`}
+  style:--prosemirror-padding-bottom="80dvh"
   style:--prosemirror-color-selection={token.var('colors.border.strong')}
   class={cx(
     'editor',

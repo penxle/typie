@@ -1,6 +1,5 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
-import { searchPluginKey } from '$lib/tiptap/extensions/search';
 import { clamp } from '$lib/utils';
 
 declare module '@tiptap/core' {
@@ -31,12 +30,7 @@ export const Typewriter = Extension.create({
       scrollIntoViewFixed:
         (options = {}) =>
         ({ editor, dispatch }) => {
-          const { animate = false } = options;
-
-          const position = editor.storage.typewriter.position;
-          if (position === undefined) {
-            return false;
-          }
+          const { animate = false, position = 0.5 } = options;
 
           if (dispatch) {
             const { from } = editor.state.selection;
@@ -101,14 +95,12 @@ export const Typewriter = Extension.create({
       new Plugin({
         props: {
           handleScrollToSelection: () => {
-            const searchState = searchPluginKey.getState(this.editor.state);
-            const isSearching = searchState?.decorations && searchState.decorations.find().length > 0;
-
-            if (isSearching) {
+            const position = this.editor.storage.typewriter.position;
+            if (position === undefined) {
               return false;
             }
 
-            return this.editor.commands.scrollIntoViewFixed({ animate: false });
+            return this.editor.commands.scrollIntoViewFixed({ animate: false, position });
           },
 
           handleDOMEvents: {
