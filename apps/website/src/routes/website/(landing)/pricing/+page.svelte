@@ -795,13 +795,19 @@
                   backgroundColor: 'white',
                   border: '4px solid',
                   borderColor: 'gray.900',
-                  transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                  transition: {
+                    sm: '[transform 0.15s ease-out, box-shadow 0.15s ease-out]',
+                    lg: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+                  },
                   overflow: 'hidden',
                   boxShadow: '[4px 4px 0 0 #000]',
                   transform: 'translate3d(0, 0, 0)',
+                  willChange: { sm: 'auto', lg: 'transform, box-shadow' },
                   _hover: {
-                    transform: 'translate3d(-2px, -2px, 0)',
-                    boxShadow: '[8px 8px 0 0 #000]',
+                    lg: {
+                      transform: 'translate3d(-2px, -2px, 0)',
+                      boxShadow: '[8px 8px 0 0 #000]',
+                    },
                   },
                   _expanded: {
                     boxShadow: '[8px 8px 0 0 #000]',
@@ -855,7 +861,8 @@
                     justifyContent: 'center',
                     flexShrink: 0,
                     transform: 'rotate(0deg)',
-                    transition: '[transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)]',
+                    transition: '[transform 0.2s ease-out]',
+                    willChange: 'transform',
                     _groupExpanded: {
                       backgroundColor: 'gray.900',
                       transform: 'rotate(180deg)',
@@ -865,6 +872,7 @@
                   <Icon
                     style={css.raw({
                       color: 'gray.900',
+                      transition: '[color 0.2s ease-out]',
                       _groupExpanded: {
                         color: 'white',
                       },
@@ -879,7 +887,8 @@
                 class={css({
                   display: 'grid',
                   gridTemplateRows: '0fr',
-                  transition: '[grid-template-rows 0.15s cubic-bezier(0.4, 0, 0.2, 1)]',
+                  transition: '[grid-template-rows 0.2s ease-out]',
+                  willChange: 'grid-template-rows',
                   _groupExpanded: {
                     gridTemplateRows: '1fr',
                   },
@@ -895,6 +904,8 @@
                       backgroundColor: 'amber.50',
                       borderTop: '4px solid',
                       borderColor: 'gray.900',
+                      paddingX: { sm: '24px', lg: '32px' },
+                      paddingY: { sm: '20px', lg: '24px' },
                     })}
                   >
                     <p
@@ -902,18 +913,7 @@
                         fontSize: '17px',
                         color: 'gray.800',
                         lineHeight: '[1.7]',
-                        paddingX: { sm: '24px', lg: '32px' },
-                        paddingY: { sm: '20px', lg: '24px' },
                         fontWeight: 'medium',
-                        opacity: '0',
-                        transform: 'translate3d(0, -10px, 0)',
-                        transition: '[opacity 0.2s ease-out, transform 0.2s ease-out]',
-                        transitionDelay: '0s',
-                        _groupExpanded: {
-                          opacity: '100',
-                          transform: 'translate3d(0, 0, 0)',
-                          transitionDelay: '0.05s',
-                        },
                       })}
                     >
                       {faq.answer}
