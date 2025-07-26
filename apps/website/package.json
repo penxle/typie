@@ -42,6 +42,7 @@
     "comlink": "^4.4.2",
     "dayjs": "^1.11.13",
     "es-hangul": "^2.3.5",
+    "escape-string-regexp": "^5.0.0",
     "fast-json-stable-stringify": "^2.1.0",
     "focus-trap": "^7.6.5",
     "graphql-request": "^7.2.0",

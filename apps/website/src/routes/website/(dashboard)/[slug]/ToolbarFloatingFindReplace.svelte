@@ -1,16 +1,14 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import ReplaceIcon from '~icons/lucide/replace';
   import ReplaceAllIcon from '~icons/lucide/replace-all';
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { createFindReplaceManager } from '$lib/editor/find-replace';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
-  import type { FindReplaceManager } from '$lib/editor/find-replace';
   import type { Ref } from '$lib/utils';
 
   type Props = {
@@ -20,45 +18,18 @@
 
   let { editor, close }: Props = $props();
 
-  let findInput: HTMLInputElement;
+  let findInputEl: HTMLInputElement;
+
   let findText = $state('');
   let replaceText = $state('');
-  let manager: FindReplaceManager | null = $state(null);
-  let currentMatch = $state(0);
-  let totalMatches = $state(0);
 
-  const updateMatches = () => {
-    if (!manager) return;
+  $effect(() => {
+    void findText;
 
-    const result = manager.search(findText);
-    currentMatch = result.currentIndex;
-    totalMatches = result.results.length;
-  };
-
-  const findNext = () => {
-    if (!manager || totalMatches === 0) return;
-    currentMatch = manager.next();
-  };
-
-  const findPrevious = () => {
-    if (!manager || totalMatches === 0) return;
-    currentMatch = manager.previous();
-  };
-
-  const replace = () => {
-    if (!manager || totalMatches === 0) return;
-    const result = manager.replace(replaceText);
-    if (result.success) {
-      currentMatch = result.currentIndex;
-      totalMatches = manager.getResults().length;
-    }
-  };
-
-  const replaceAll = () => {
-    if (!manager || !findText) return;
-    manager.replaceAll(replaceText);
-    updateMatches();
-  };
+    untrack(() => {
+      editor.current.commands.search(findText);
+    });
+  });
 
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -67,46 +38,34 @@
     }
   };
 
-  const handleKeydownInFindInput = (e: KeyboardEvent) => {
+  const handleFindKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.isComposing) {
       if (e.shiftKey) {
-        findPrevious();
+        editor.current.commands.findPrevious();
       } else {
-        findNext();
+        editor.current.commands.findNext();
       }
     }
   };
 
-  const handleKeydownInReplaceInput = (e: KeyboardEvent) => {
+  const handleReplaceKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.isComposing) {
       if (e.metaKey) {
-        replaceAll();
+        editor.current.commands.replaceAll(replaceText);
       } else {
-        replace();
+        editor.current.commands.replace(replaceText);
       }
     }
   };
 
-  // Create manager when component mounts
-  $effect(() => {
-    if (!manager && editor.current) {
-      manager = createFindReplaceManager(editor.current);
-    }
-  });
-
   onMount(() => {
-    // 다음 틱에서 포커스 설정
     tick().then(() => {
-      findInput?.focus();
+      findInputEl?.focus();
     });
-  });
 
-  onDestroy(() => {
-    manager?.clear();
-  });
-
-  $effect(() => {
-    updateMatches();
+    return () => {
+      editor.current.commands.clearSearch();
+    };
   });
 </script>
 
@@ -122,7 +81,7 @@
 >
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
     <input
-      bind:this={findInput}
+      bind:this={findInputEl}
       id="find-input"
       class={css({
         paddingX: '8px',
@@ -134,7 +93,7 @@
         fontSize: '14px',
       })}
       aria-label="찾을 텍스트"
-      onkeydown={handleKeydownInFindInput}
+      onkeydown={handleFindKeydown}
       placeholder="찾기"
       type="text"
       bind:value={findText}
@@ -151,7 +110,7 @@
         fontSize: '14px',
       })}
       aria-label="바꿀 텍스트"
-      onkeydown={handleKeydownInReplaceInput}
+      onkeydown={handleReplaceKeydown}
       placeholder="바꾸기"
       type="text"
       bind:value={replaceText}
@@ -161,8 +120,8 @@
   <div class={flex({ flex: '1', flexDirection: 'column', gap: '4px' })}>
     <div class={flex({ alignItems: 'center', gap: '4px', height: '30px' })}>
       <div class={css({ flex: '1', fontSize: '12px', color: 'text.subtle' })}>
-        {#if totalMatches > 0}
-          {currentMatch + 1} / {totalMatches}
+        {#if editor.current.extensionStorage.search.matches.length > 0}
+          {editor.current.extensionStorage.search.currentIndex + 1} / {editor.current.extensionStorage.search.matches.length}
         {:else}
           결과 없음
         {/if}
@@ -186,7 +145,7 @@
             },
           })}
           disabled={!findText}
-          onclick={findPrevious}
+          onclick={() => editor.current.commands.findPrevious()}
           type="button"
           use:tooltip={{
             message: '이전 결과 찾기',
@@ -212,7 +171,7 @@
             },
           })}
           disabled={!findText}
-          onclick={findNext}
+          onclick={() => editor.current.commands.findNext()}
           type="button"
           use:tooltip={{
             message: '다음 결과 찾기',
@@ -242,7 +201,7 @@
             },
           })}
           disabled={!findText}
-          onclick={() => replace()}
+          onclick={() => editor.current.commands.replace(replaceText)}
           type="button"
           use:tooltip={{
             message: '바꾸기',
@@ -268,7 +227,7 @@
             },
           })}
           disabled={!findText}
-          onclick={replaceAll}
+          onclick={() => editor.current.commands.replaceAll(replaceText)}
           type="button"
           use:tooltip={{
             message: '모두 바꾸기',
