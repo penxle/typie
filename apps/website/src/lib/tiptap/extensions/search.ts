@@ -79,7 +79,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
     return {
       search:
         (text: string) =>
-        ({ tr, dispatch, chain }) => {
+        ({ tr, dispatch, commands }) => {
           this.storage.text = text;
 
           if (!text) {
@@ -103,12 +103,19 @@ export const Search = Extension.create<unknown, SearchStorage>({
           this.storage.currentIndex = 0;
 
           const match = this.storage.matches[this.storage.currentIndex];
-          return chain().setTextSelection(match.to).scrollIntoView().run();
+          if (!match) return false;
+
+          commands.setTextSelection(match.to);
+          setTimeout(() => {
+            commands.scrollIntoViewFixed();
+          }, 0);
+
+          return true;
         },
 
       findNext:
         () =>
-        ({ chain }) => {
+        ({ commands }) => {
           if (this.storage.matches.length === 0) return false;
 
           this.storage.currentIndex = (this.storage.currentIndex + 1) % this.storage.matches.length;
@@ -116,12 +123,17 @@ export const Search = Extension.create<unknown, SearchStorage>({
           const match = this.storage.matches[this.storage.currentIndex];
           if (!match) return false;
 
-          return chain().setTextSelection(match.to).scrollIntoView().run();
+          commands.setTextSelection(match.to);
+          setTimeout(() => {
+            commands.scrollIntoViewFixed();
+          }, 0);
+
+          return true;
         },
 
       findPrevious:
         () =>
-        ({ chain }) => {
+        ({ commands }) => {
           if (this.storage.matches.length === 0) return false;
 
           this.storage.currentIndex = (this.storage.currentIndex - 1 + this.storage.matches.length) % this.storage.matches.length;
@@ -129,12 +141,17 @@ export const Search = Extension.create<unknown, SearchStorage>({
           const match = this.storage.matches[this.storage.currentIndex];
           if (!match) return false;
 
-          return chain().setTextSelection(match.to).scrollIntoView().run();
+          commands.setTextSelection(match.to);
+          setTimeout(() => {
+            commands.scrollIntoViewFixed();
+          }, 0);
+
+          return true;
         },
 
       replace:
         (replacement: string) =>
-        ({ chain }) => {
+        ({ chain, commands }) => {
           if (this.storage.matches.length === 0) return false;
 
           const match = this.storage.matches[this.storage.currentIndex];
@@ -148,7 +165,12 @@ export const Search = Extension.create<unknown, SearchStorage>({
             this.storage.currentIndex = this.storage.currentIndex % this.storage.matches.length;
           }
 
-          return chain().setTextSelection({ from: match.from, to: match.to }).insertContent(replacement).scrollIntoView().run();
+          chain().setTextSelection({ from: match.from, to: match.to }).insertContent(replacement).run();
+          setTimeout(() => {
+            commands.scrollIntoViewFixed();
+          }, 0);
+
+          return true;
         },
 
       replaceAll:

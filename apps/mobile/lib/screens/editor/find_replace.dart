@@ -73,11 +73,13 @@ class FindReplaceBottomSheet extends HookWidget {
       return null;
     }, [findText]);
 
+    final mediaQuery = MediaQuery.of(context);
+
     return AppBottomSheet(
       padding: const Pad(horizontal: 20, vertical: 16),
       includeBottomPadding: false,
       child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding: Pad(bottom: mediaQuery.padding.bottom + mediaQuery.viewInsets.bottom),
         child: Row(
           spacing: 12,
           children: [
@@ -112,7 +114,11 @@ class FindReplaceBottomSheet extends HookWidget {
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                               cursorColor: context.colors.textDefault,
                               autofocus: true,
-                              onSubmitted: (_) => findNext(),
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: (_) async {
+                                findFocusNode.requestFocus();
+                                await findNext();
+                              },
                             ),
                           ),
                           if (findText.isNotEmpty)
@@ -148,7 +154,11 @@ class FindReplaceBottomSheet extends HookWidget {
                           ),
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                           cursorColor: context.colors.textDefault,
-                          onSubmitted: (_) => replace(),
+                          textInputAction: TextInputAction.go,
+                          onSubmitted: (_) async {
+                            replaceFocusNode.requestFocus();
+                            await replace();
+                          },
                         ),
                       ),
                     ),
