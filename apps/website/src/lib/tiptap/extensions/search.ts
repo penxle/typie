@@ -109,18 +109,26 @@ export const Search = Extension.create<unknown, SearchStorage>({
       findNext:
         () =>
         ({ chain }) => {
+          if (this.storage.matches.length === 0) return false;
+
           this.storage.currentIndex = (this.storage.currentIndex + 1) % this.storage.matches.length;
 
           const match = this.storage.matches[this.storage.currentIndex];
+          if (!match) return false;
+
           return chain().setTextSelection(match.to).scrollIntoView().run();
         },
 
       findPrevious:
         () =>
         ({ chain }) => {
+          if (this.storage.matches.length === 0) return false;
+
           this.storage.currentIndex = (this.storage.currentIndex - 1 + this.storage.matches.length) % this.storage.matches.length;
 
           const match = this.storage.matches[this.storage.currentIndex];
+          if (!match) return false;
+
           return chain().setTextSelection(match.to).scrollIntoView().run();
         },
 
@@ -130,6 +138,8 @@ export const Search = Extension.create<unknown, SearchStorage>({
           if (this.storage.matches.length === 0) return false;
 
           const match = this.storage.matches[this.storage.currentIndex];
+          if (!match) return false;
+
           this.storage.matches.splice(this.storage.currentIndex, 1);
 
           if (this.storage.matches.length === 0) {
