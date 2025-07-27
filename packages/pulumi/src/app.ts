@@ -154,7 +154,6 @@ export class App extends pulumi.ComponentResource {
           name: args.name,
           namespace,
           annotations: {
-            'pulumi.com/patchForce': 'true',
             'reloader.stakater.com/auto': 'true',
           },
         },
