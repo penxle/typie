@@ -46,7 +46,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
   let snapshotUpdated = false;
 
-  await redlock.using([`{lock}:post:${postId}`], 10_000, { retryCount: Infinity }, async (signal) => {
+  await redlock.using([`{lock}:post:${postId}`], 60_000, async (signal) => {
     const updates = await redis.smembers(`post:sync:updates:${postId}`);
     if (updates.length === 0) {
       return;
@@ -274,7 +274,7 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
 type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
-  await redlock.using([`{lock}:post:${postId}`], 30 * 60 * 1000, { retryCount: 5 }, async (signal) => {
+  await redlock.using([`{lock}:post:${postId}`], 60 * 60 * 1000, async (signal) => {
     await db.transaction(async (tx) => {
       const snapshots = await tx
         .select({ id: PostSnapshots.id, createdAt: PostSnapshots.createdAt })
