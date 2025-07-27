@@ -19,7 +19,7 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
 
   let snapshotUpdated = false;
 
-  await redlock.using([`{lock}:canvas:${canvasId}`], 10_000, { retryCount: Infinity }, async (signal) => {
+  await redlock.using([`{lock}:canvas:${canvasId}`], 60_000, async (signal) => {
     const updates = await redis.smembers(`canvas:sync:updates:${canvasId}`);
     if (updates.length === 0) {
       return;
@@ -160,7 +160,7 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
 type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: string) => {
-  await redlock.using([`{lock}:canvas:${canvasId}`], 30 * 60 * 1000, { retryCount: 5 }, async (signal) => {
+  await redlock.using([`{lock}:canvas:${canvasId}`], 60 * 60 * 1000, async (signal) => {
     await db.transaction(async (tx) => {
       const snapshots = await tx
         .select({ id: CanvasSnapshots.id, createdAt: CanvasSnapshots.createdAt })
