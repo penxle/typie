@@ -115,6 +115,16 @@
     const { binding } = ySyncPluginKey.getState(editor.view.state);
 
     if (transaction.docChanged) {
+      const changedRanges: { from: number; to: number }[] = [];
+      transaction.steps.forEach((_step, index) => {
+        const map = transaction.mapping.maps[index];
+        if (map) {
+          map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+            changedRanges.push({ from: newStart, to: newEnd });
+          });
+        }
+      });
+
       errors = errors
         .map((error) => {
           const from = relativePositionToAbsolutePosition(binding.doc, binding.type, error.relativeFrom, binding.mapping);
@@ -122,6 +132,12 @@
 
           if (from === null || to === null) {
             return null;
+          }
+
+          for (const range of changedRanges) {
+            if (from < range.to && to > range.from) {
+              return null;
+            }
           }
 
           return { ...error, from, to };
