@@ -25,13 +25,13 @@
     if (editor.storage.anchors.current[node.attrs.nodeId] === undefined) {
       editor.storage.anchors.current = { ...editor.storage.anchors.current, [node.attrs.nodeId]: null };
 
-      mixpanel.track('anchor_remove');
+      mixpanel.track('anchor_add');
     } else {
       editor.storage.anchors.current = Object.fromEntries(
         Object.entries(editor.storage.anchors.current).filter(([key]) => key !== node.attrs.nodeId),
       );
 
-      mixpanel.track('anchor_add');
+      mixpanel.track('anchor_remove');
     }
   };
 </script>
