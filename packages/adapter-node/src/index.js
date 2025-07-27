@@ -55,6 +55,8 @@ export const node = () => {
         format: 'esm',
         target: 'esnext',
 
+        external: ['@babel/preset-typescript'],
+
         esbuildOptions: (options) => {
           options.chunkNames = 'chunks/[name]-[hash]';
         },
