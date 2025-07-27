@@ -21,6 +21,7 @@
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { token } from '$styled-system/tokens';
+  import Anchor from './Anchor.svelte';
   import { handleCaretMovement } from './caret';
   import FindReplace from './FindReplace.svelte';
   import Highlight from './Highlight.svelte';
@@ -674,6 +675,7 @@
         <Limit {$query} {editor} />
         <Spellcheck {editor} />
         <FindReplace {editor} />
+        <Anchor {doc} {editor} />
       {/if}
     </div>
   </div>
