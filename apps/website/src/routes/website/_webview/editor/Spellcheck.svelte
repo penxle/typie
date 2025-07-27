@@ -106,12 +106,16 @@
 
                   event.preventDefault();
 
+                  const parser = new DOMParser();
+                  const doc = parser.parseFromString(error.explanation, 'text/html');
+                  const explanation = doc.documentElement.textContent;
+
                   (document.activeElement as HTMLElement)?.blur();
                   window.__webview__?.emitEvent('spellcheckErrorClick', {
                     id: error.id,
                     context: error.context,
                     corrections: error.corrections,
-                    explanation: error.explanation,
+                    explanation,
                   });
 
                   return true;
