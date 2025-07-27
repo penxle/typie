@@ -49,7 +49,7 @@
         return {
           nodeId,
           position,
-          name: anchors.current[nodeId] || element.textContent || '(앵커)',
+          name: anchors.current[nodeId] || element.textContent || '(내용 없음)',
         };
       })
       .sort((a, b) => a.position - b.position);
@@ -84,7 +84,7 @@
 
         return {
           nodeId: node.attrs.nodeId,
-          name: element.textContent || '(앵커)',
+          name: element.textContent || '(내용 없음)',
           position,
         };
       }
@@ -120,6 +120,33 @@
       anchors.current = Object.fromEntries(Object.entries(anchors.current).filter(([key]) => key !== nodeId));
 
       mixpanel.track('anchor_remove');
+    });
+
+    window.__webview__?.setProcedure('scrollToTop', () => {
+      if (!editor) return;
+
+      editor.current.chain().setTextSelection(1).run();
+
+      editor.current.commands.scrollIntoViewFixed({
+        animate: true,
+        position: 0.25,
+      });
+
+      mixpanel.track('anchor_scroll_to_top');
+    });
+
+    window.__webview__?.setProcedure('scrollToBottom', () => {
+      if (!editor) return;
+
+      const endPos = editor.current.state.doc.content.size - 2;
+      editor.current.chain().setTextSelection(endPos).run();
+
+      editor.current.commands.scrollIntoViewFixed({
+        animate: true,
+        position: 0.25,
+      });
+
+      mixpanel.track('anchor_scroll_to_bottom');
     });
   });
 </script>

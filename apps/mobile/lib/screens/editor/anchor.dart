@@ -6,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/screens/editor/scope.dart';
@@ -21,35 +22,39 @@ class AnchorBottomSheet extends HookWidget {
     final anchors = useState<List<Map<String, dynamic>>>([]);
     final currentNode = useState<Map<String, dynamic>?>(null);
     final isLoading = useState(true);
+    final proseMirrorState = useValueListenable(scope.proseMirrorState);
     final webViewController = useValueListenable(scope.webViewController);
     final scrollController = useScrollController();
 
     final removedAnchors = useState<List<String>>([]);
     final hasInitiallyScrolled = useState(false);
 
-    useEffect(() {
-      Future<void> loadData() async {
-        try {
-          final results = await Future.wait([
-            webViewController?.callProcedure('getAnchorPositions') ?? Future.value(),
-            webViewController?.callProcedure('getCurrentNode') ?? Future.value(),
-          ]);
+    useAsyncEffect(() async {
+      try {
+        final results = await Future.wait([
+          webViewController?.callProcedure('getAnchorPositions') ?? Future<dynamic>.value(),
+          webViewController?.callProcedure('getCurrentNode') ?? Future<dynamic>.value(),
+        ]);
 
-          if (results[0] != null) {
-            anchors.value = (results[0] as List<dynamic>).cast<Map<String, dynamic>>();
-          }
-
-          if (results[1] != null) {
-            currentNode.value = results[1] as Map<String, dynamic>;
-          }
-        } finally {
-          isLoading.value = false;
+        if (results[0] != null) {
+          anchors.value = (results[0] as List<dynamic>).cast<Map<String, dynamic>>();
         }
+
+        if (results[1] != null) {
+          currentNode.value = results[1] as Map<String, dynamic>;
+        }
+      } finally {
+        isLoading.value = false;
       }
 
-      unawaited(loadData());
       return null;
     }, [webViewController]);
+
+    useAsyncEffect(() async {
+      currentNode.value = await webViewController?.callProcedure('getCurrentNode') as Map<String, dynamic>?;
+
+      return null;
+    }, [proseMirrorState?.currentNode]);
 
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
@@ -63,16 +68,41 @@ class AnchorBottomSheet extends HookWidget {
           ...anchor,
           'isAnchor': true,
           'isCurrent': currentNode.value != null && anchor['nodeId'] == currentNode.value!['nodeId'],
+          'isSpecial': false,
         });
       }
 
       // currentNode 추가 (anchors에 없는 경우만)
       if (currentNode.value != null && !anchors.value.any((a) => a['nodeId'] == currentNode.value!['nodeId'])) {
-        nodes.add({...currentNode.value!, 'isAnchor': false, 'isCurrent': true});
+        nodes.add({...currentNode.value!, 'isAnchor': false, 'isCurrent': true, 'isSpecial': false});
       }
 
-      // position으로 정렬
-      nodes.sort((a, b) => ((a['position'] as num?) ?? 0).compareTo((b['position'] as num?) ?? 0));
+      // position으로 정렬 (최상단, 최하단 제외)
+      final middleNodes = nodes.where((node) => node['nodeId'] != 'top').toList()
+        ..sort((a, b) => ((a['position'] as num?) ?? 0).compareTo((b['position'] as num?) ?? 0));
+
+      nodes
+        ..clear()
+        ..add({
+          'nodeId': 'top',
+          'name': '첫 줄로 가기',
+          'position': 0,
+          'isAnchor': false,
+          'isCurrent': false,
+          'isSpecial': true,
+          'icon': LucideLightIcons.arrow_up_to_line,
+        })
+        ..addAll(middleNodes)
+        ..add({
+          'nodeId': 'bottom',
+          'name': '마지막 줄로 가기',
+          'position': 1,
+          'isAnchor': false,
+          'isCurrent': false,
+          'isSpecial': true,
+          'icon': LucideLightIcons.arrow_down_to_line,
+        });
+
       return nodes;
     }, [anchors.value, currentNode.value]);
 
@@ -142,11 +172,18 @@ class AnchorBottomSheet extends HookWidget {
                   final position = node['position'] as num;
                   final isCurrent = node['isCurrent'] as bool;
                   final isAnchor = node['isAnchor'] as bool;
+                  final isSpecial = node['isSpecial'] as bool? ?? false;
                   final isRemoved = removedAnchors.value.contains(nodeId);
 
                   return Tappable(
                     onTap: () async {
-                      await webViewController?.callProcedure('clickAnchor', nodeId);
+                      if (nodeId == 'top') {
+                        await webViewController?.callProcedure('scrollToTop');
+                      } else if (nodeId == 'bottom') {
+                        await webViewController?.callProcedure('scrollToBottom');
+                      } else {
+                        await webViewController?.callProcedure('clickAnchor', nodeId);
+                      }
                     },
                     child: Container(
                       height: 52,
@@ -159,15 +196,23 @@ class AnchorBottomSheet extends HookWidget {
                         padding: const Pad(horizontal: 12),
                         child: Row(
                           children: [
-                            if (isCurrent)
-                              Icon(LucideLightIcons.navigation, size: 16, color: context.colors.textFaint)
+                            if (isSpecial)
+                              Container(
+                                width: 32,
+                                alignment: Alignment.center,
+                                child: Icon(node['icon'] as IconData, size: 16, color: context.colors.textDefault),
+                              )
                             else
-                              Text(
-                                '${(position * 100).toStringAsFixed(0)}%',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.colors.textFaint,
+                              Container(
+                                width: 32,
+                                alignment: Alignment.center,
+                                child: Text(
+                                  isCurrent ? '현재' : '${(position * 100).toStringAsFixed(0)}%',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colors.textFaint,
+                                  ),
                                 ),
                               ),
                             const Gap(8),
@@ -182,29 +227,31 @@ class AnchorBottomSheet extends HookWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Gap(12),
-                            Tappable(
-                              onTap: () => toggleBookmark(nodeId, isAnchor, isCurrent),
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: context.colors.borderStrong),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Center(
-                                  child: Icon(
-                                    (isAnchor && !isRemoved) ? TypieIcons.bookmark_filled : LucideLightIcons.bookmark,
-                                    size: 18,
-                                    color: (isAnchor && !isRemoved)
-                                        ? context.theme.brightness == Brightness.dark
-                                              ? const Color(0xFFB8860B)
-                                              : const Color(0xFFFACC15)
-                                        : context.colors.textFaint,
+                            if (!isSpecial) ...[
+                              const Gap(12),
+                              Tappable(
+                                onTap: () => toggleBookmark(nodeId, isAnchor, isCurrent),
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: context.colors.borderStrong),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      (isAnchor && !isRemoved) ? TypieIcons.bookmark_filled : LucideLightIcons.plus,
+                                      size: 18,
+                                      color: (isAnchor && !isRemoved)
+                                          ? context.theme.brightness == Brightness.dark
+                                                ? const Color(0xFFB8860B)
+                                                : const Color(0xFFFACC15)
+                                          : context.colors.textFaint,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
