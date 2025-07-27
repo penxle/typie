@@ -49,33 +49,6 @@ export const Search = Extension.create<unknown, SearchStorage>({
   },
 
   addCommands() {
-    const performSearch = (text: string) => {
-      const pattern = new RegExp(escape(text), 'gi');
-      const matches: Match[] = [];
-
-      const { doc } = this.editor.state;
-      const { binding } = ySyncPluginKey.getState(this.editor.view.state);
-
-      doc.descendants((node, pos) => {
-        if (!node.isText || !node.text) return;
-
-        const m = [...node.text.matchAll(pattern)];
-        for (const match of m) {
-          const from = pos + match.index;
-          const to = from + match[0].length;
-
-          matches.push({
-            from,
-            to,
-            relativeFrom: absolutePositionToRelativePosition(from, binding.type, binding.mapping),
-            relativeTo: absolutePositionToRelativePosition(to, binding.type, binding.mapping),
-          });
-        }
-      });
-
-      return { matches };
-    };
-
     return {
       search:
         (text: string) =>
@@ -90,8 +63,30 @@ export const Search = Extension.create<unknown, SearchStorage>({
             return true;
           }
 
-          const result = performSearch(text);
-          if (result.matches.length === 0) {
+          const pattern = new RegExp(escape(text), 'gi');
+          const matches: Match[] = [];
+
+          const { doc } = this.editor.state;
+          const { binding } = ySyncPluginKey.getState(this.editor.view.state);
+
+          doc.descendants((node, pos) => {
+            if (!node.isText || !node.text) return;
+
+            const m = [...node.text.matchAll(pattern)];
+            for (const match of m) {
+              const from = pos + match.index;
+              const to = from + match[0].length;
+
+              matches.push({
+                from,
+                to,
+                relativeFrom: absolutePositionToRelativePosition(from, binding.type, binding.mapping),
+                relativeTo: absolutePositionToRelativePosition(to, binding.type, binding.mapping),
+              });
+            }
+          });
+
+          if (matches.length === 0) {
             this.storage.matches = [];
             this.storage.currentIndex = -1;
             dispatch?.(tr);
@@ -99,16 +94,15 @@ export const Search = Extension.create<unknown, SearchStorage>({
             return true;
           }
 
-          this.storage.matches = result.matches;
-          this.storage.currentIndex = 0;
+          const nearestIndex = matches.findIndex((match) => match.from >= this.editor.state.selection.from);
+
+          this.storage.matches = matches;
+          this.storage.currentIndex = nearestIndex === -1 ? 0 : nearestIndex;
 
           const match = this.storage.matches[this.storage.currentIndex];
           if (!match) return false;
 
-          commands.setTextSelection(match.to);
-          setTimeout(() => {
-            commands.scrollIntoViewFixed();
-          }, 0);
+          commands.scrollIntoViewFixed({ pos: match.from });
 
           return true;
         },
@@ -123,10 +117,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
           const match = this.storage.matches[this.storage.currentIndex];
           if (!match) return false;
 
-          commands.setTextSelection(match.to);
-          setTimeout(() => {
-            commands.scrollIntoViewFixed();
-          }, 0);
+          commands.scrollIntoViewFixed({ pos: match.from });
 
           return true;
         },
@@ -141,17 +132,14 @@ export const Search = Extension.create<unknown, SearchStorage>({
           const match = this.storage.matches[this.storage.currentIndex];
           if (!match) return false;
 
-          commands.setTextSelection(match.to);
-          setTimeout(() => {
-            commands.scrollIntoViewFixed();
-          }, 0);
+          commands.scrollIntoViewFixed({ pos: match.from });
 
           return true;
         },
 
       replace:
         (replacement: string) =>
-        ({ chain, commands }) => {
+        ({ commands, state, tr, dispatch }) => {
           if (this.storage.matches.length === 0) return false;
 
           const match = this.storage.matches[this.storage.currentIndex];
@@ -165,31 +153,33 @@ export const Search = Extension.create<unknown, SearchStorage>({
             this.storage.currentIndex = this.storage.currentIndex % this.storage.matches.length;
           }
 
-          chain().setTextSelection({ from: match.from, to: match.to }).insertContent(replacement).run();
-          setTimeout(() => {
-            commands.scrollIntoViewFixed();
-          }, 0);
+          const marks = state.doc.resolve(match.from).marksAcross(state.doc.resolve(match.to));
+          tr.replaceWith(match.from, match.to, this.editor.schema.text(replacement, marks));
+          dispatch?.(tr);
+
+          commands.scrollIntoViewFixed({ pos: match.from });
 
           return true;
         },
 
       replaceAll:
         (replacement: string) =>
-        ({ chain }) => {
+        ({ state, tr, dispatch }) => {
           if (this.storage.matches.length === 0) return false;
-
-          let command = chain();
 
           let offset = 0;
           for (const match of this.storage.matches) {
-            command = command.setTextSelection({ from: match.from + offset, to: match.to + offset }).insertContent(replacement);
+            const marks = state.doc.resolve(match.from).marksAcross(state.doc.resolve(match.to));
+            tr.replaceWith(match.from + offset, match.to + offset, this.editor.schema.text(replacement, marks));
             offset += replacement.length - (match.to - match.from);
           }
 
           this.storage.matches = [];
           this.storage.currentIndex = -1;
 
-          return command.run();
+          dispatch?.(tr);
+
+          return true;
         },
 
       clearSearch:
