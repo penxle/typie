@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hide } from '@floating-ui/dom';
+  import { hide, shift } from '@floating-ui/dom';
   import { Editor, posToDOMRect } from '@tiptap/core';
   import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -69,6 +69,7 @@
         boundary: document.querySelector('.editor')!,
         padding: 32,
       }),
+      shift({ padding: 8 }),
     ],
   });
 
@@ -206,7 +207,7 @@
 {/if}
 
 {#if activeError}
-  <div class={flex({ alignItems: 'center', gap: '4px', backgroundColor: 'surface.default', zIndex: '10' })} use:floating>
+  <div class={flex({ alignItems: 'center', gap: '4px', zIndex: '10', wrap: 'wrap' })} use:floating>
     {#each activeError.corrections as correction, index (index)}
       <button
         class={flex({
