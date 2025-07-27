@@ -400,6 +400,10 @@ importers:
         version: 5.0.0(encoding@0.1.13)
 
   apps/website:
+    dependencies:
+      '@sentry/sveltekit':
+        specifier: ^9.42.0
+        version: 9.42.0(@sveltejs/kit@2.25.1(@sveltejs/vite-plugin-svelte@6.1.0(svelte@5.36.13)(vite@7.0.5(@types/node@24.0.15)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0)))(svelte@5.36.13)(vite@7.0.5(@types/node@24.0.15)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0)))(encoding@0.1.13)(svelte@5.36.13)(vite@7.0.5(@types/node@24.0.15)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0))
     devDependencies:
       '@ctrl/tinycolor':
         specifier: ^4.1.0
@@ -440,9 +444,6 @@ importers:
       '@pulumi/pulumi':
         specifier: ^3.185.0
         version: 3.185.0(typescript@5.8.3)
-      '@sentry/sveltekit':
-        specifier: ^9.42.0
-        version: 9.42.0(@sveltejs/kit@2.25.1(@sveltejs/vite-plugin-svelte@6.1.0(svelte@5.36.13)(vite@7.0.5(@types/node@24.0.15)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0)))(svelte@5.36.13)(vite@7.0.5(@types/node@24.0.15)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0)))(encoding@0.1.13)(svelte@5.36.13)(vite@7.0.5(@types/node@24.0.15)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0))
       '@sindresorhus/string-hash':
         specifier: ^2.0.0
         version: 2.0.0

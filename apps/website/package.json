@@ -10,6 +10,9 @@
     "lint:svelte": "svelte-check --fail-on-warnings",
     "start": "node dist/index.js"
   },
+  "dependencies": {
+    "@sentry/sveltekit": "^9.42.0"
+  },
   "devDependencies": {
     "@ctrl/tinycolor": "^4.1.0",
     "@floating-ui/dom": "^1.7.2",
@@ -24,7 +27,6 @@
     "@pulumi/aws": "^7.1.0",
     "@pulumi/kubernetes": "^4.23.0",
     "@pulumi/pulumi": "^3.185.0",
-    "@sentry/sveltekit": "^9.42.0",
     "@sindresorhus/string-hash": "^2.0.0",
     "@sveltejs/kit": "^2.25.1",
     "@sveltejs/vite-plugin-svelte": "^6.1.0",
