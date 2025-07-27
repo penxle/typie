@@ -6,7 +6,7 @@ declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     typewriter: {
-      scrollIntoViewFixed: (options?: { animate?: boolean; position?: number }) => ReturnType;
+      scrollIntoViewFixed: (options?: { pos?: number; animate?: boolean; position?: number }) => ReturnType;
     };
   }
 
@@ -30,11 +30,10 @@ export const Typewriter = Extension.create({
       scrollIntoViewFixed:
         (options = {}) =>
         ({ editor, dispatch }) => {
-          const { animate = false, position = 0.5 } = options;
+          const { pos = editor.state.selection.from, animate = false, position = 0.5 } = options;
 
           if (dispatch) {
-            const { from } = editor.state.selection;
-            const coords = editor.view.coordsAtPos(from);
+            const coords = editor.view.coordsAtPos(pos);
             const container = editor.view.dom.closest('.editor');
             if (!container) return true;
 
