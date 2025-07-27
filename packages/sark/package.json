@@ -22,7 +22,7 @@
     "test": "vitest"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.25.1",
+    "@sveltejs/kit": "^2.26.1",
     "@typie/tsconfig": "workspace:*",
     "fast-glob": "^3.3.3",
     "fast-json-stable-stringify": "^2.1.0",
@@ -33,11 +33,11 @@
     "rapidhash-js": "^2.2.0",
     "recast": "^0.23.11",
     "remeda": "^2.26.1",
-    "svelte": "^5.36.13",
-    "ts-pattern": "^5.7.1",
+    "svelte": "^5.37.0",
+    "ts-pattern": "^5.8.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vite": "^7.0.5",
+    "vite": "^7.0.6",
     "vitest": "^3.2.4",
     "wonka": "^6.3.5"
   }

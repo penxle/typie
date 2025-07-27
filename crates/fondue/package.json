@@ -11,7 +11,7 @@
     "build:napi:macos-arm64": "napi build --release --platform --js=false --target=aarch64-apple-darwin out"
   },
   "devDependencies": {
-    "@napi-rs/cli": "^3.0.1"
+    "@napi-rs/cli": "^3.0.4"
   },
   "napi": {
     "name": "fondue"
