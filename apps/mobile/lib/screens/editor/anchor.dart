@@ -198,13 +198,13 @@ class AnchorBottomSheet extends HookWidget {
                           children: [
                             if (isSpecial)
                               Container(
-                                width: 32,
+                                width: 40,
                                 alignment: Alignment.center,
                                 child: Icon(node['icon'] as IconData, size: 16, color: context.colors.textDefault),
                               )
                             else
                               Container(
-                                width: 32,
+                                width: 40,
                                 alignment: Alignment.center,
                                 child: Text(
                                   isCurrent ? '현재' : '${(position * 100).toStringAsFixed(0)}%',
