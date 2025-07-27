@@ -36,6 +36,7 @@
 
   const isActive = (href: string) => {
     if (href === '/admin') {
+      // @ts-expect-error pathname mismatch
       return page.url.pathname === '/admin';
     }
 

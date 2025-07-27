@@ -20,18 +20,18 @@
     "@hono/node-server": "^1.17.1",
     "@logtape/logtape": "^1.0.4",
     "dayjs": "^1.11.13",
-    "hono": "^4.8.5",
+    "hono": "^4.8.9",
     "ipaddr.js": "^2.2.0",
     "remeda": "^2.26.1"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.25.1",
+    "@sveltejs/kit": "^2.26.1",
     "@typie/tsconfig": "workspace:*",
     "postcss": "^8.5.6",
-    "svelte": "^5.36.13",
+    "svelte": "^5.37.0",
     "svgo": "^4.0.0",
     "typescript": "^5.8.3",
-    "vite": "^7.0.5",
+    "vite": "^7.0.6",
     "xmlbuilder2": "^3.1.1"
   }
 }
