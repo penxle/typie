@@ -1,11 +1,18 @@
 import './common';
 
+import * as Sentry from '@sentry/sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { logger, logging } from '@typie/lib/svelte';
 import { GlobalWindow } from 'happy-dom';
+import { env } from '$env/dynamic/public';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 
 globalThis.__happydom__ = { window: new GlobalWindow() };
+
+Sentry.init({
+  dsn: env.PUBLIC_SENTRY_DSN,
+  sendDefaultPii: true,
+});
 
 const log = logger.getChild('http');
 
@@ -39,8 +46,9 @@ const header: Handle = async ({ event, resolve }) => {
   });
 };
 
-export const handle = sequence(logging, theme, header);
-
-export const handleError: HandleServerError = ({ error, status, message }) => {
+const errorHandler: HandleServerError = ({ error, status, message }) => {
   log.error('Server error {*}', { status, message, error });
 };
+
+export const handle = sequence(Sentry.sentryHandle(), logging, theme, header);
+export const handleError = Sentry.handleErrorWithSentry(errorHandler);
