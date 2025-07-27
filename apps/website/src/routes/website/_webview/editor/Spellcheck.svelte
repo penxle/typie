@@ -173,25 +173,46 @@
       };
     });
 
-    type ApplySpellcheckCorrectionData = { id: string; correction: string };
-    window.__webview__?.setProcedure('applySpellcheckCorrection', async ({ id, correction }: ApplySpellcheckCorrectionData) => {
-      if (!editor?.current) return;
+    const getErrorPosition = (errorId: string) => {
+      if (!editor?.current) return null;
 
-      const error = errors.find((err) => err.id === id);
-      if (!error) return;
+      const error = errors.find((err) => err.id === errorId);
+      if (!error) return null;
 
       const { binding } = ySyncPluginKey.getState(editor.current.view.state);
       const from = relativePositionToAbsolutePosition(binding.doc, binding.type, error.relativeFrom, binding.mapping);
       const to = relativePositionToAbsolutePosition(binding.doc, binding.type, error.relativeTo, binding.mapping);
 
-      if (from === null || to === null) return;
+      return { error, from, to };
+    };
 
-      editor.current.chain().setTextSelection({ from, to }).insertContent(correction).run();
+    const scrollToPosition = () => {
       setTimeout(() => {
-        editor.current.commands.scrollIntoViewFixed();
+        editor?.current?.commands.scrollIntoViewFixed({
+          animate: true,
+          position: 0.25,
+        });
       }, 0);
+    };
+
+    type ApplySpellcheckCorrectionData = { id: string; correction: string };
+    window.__webview__?.setProcedure('applySpellcheckCorrection', async ({ id, correction }: ApplySpellcheckCorrectionData) => {
+      const position = getErrorPosition(id);
+      if (!position || position.from === null || position.to === null || !editor?.current) return;
+
+      editor.current.chain().setTextSelection({ from: position.from, to: position.to }).insertContent(correction).run();
+      scrollToPosition();
 
       errors = errors.filter((err) => err.id !== id);
+    });
+
+    type ScrollToSpellcheckErrorData = { id: string };
+    window.__webview__?.setProcedure('scrollToSpellcheckError', async ({ id }: ScrollToSpellcheckErrorData) => {
+      const position = getErrorPosition(id);
+      if (!position || position.from === null || !editor?.current) return;
+
+      editor.current.chain().setTextSelection(position.from).run();
+      scrollToPosition();
     });
   });
 </script>

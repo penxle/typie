@@ -103,6 +103,13 @@ class SpellCheckBottomSheet extends HookWidget {
                               errors.value = errors.value.where((e) => e['id'] != error['id']).toList();
                             }
                           },
+                          onTap: () async {
+                            if (scope.webViewController.value != null) {
+                              await scope.webViewController.value!.callProcedure('scrollToSpellcheckError', {
+                                'id': error['id'],
+                              });
+                            }
+                          },
                         ),
                       )
                       .toList(),
@@ -117,76 +124,85 @@ class SpellCheckBottomSheet extends HookWidget {
 }
 
 class SpellCheckErrorItem extends StatelessWidget {
-  const SpellCheckErrorItem({required this.error, required this.onCorrect, super.key});
+  const SpellCheckErrorItem({required this.error, required this.onCorrect, required this.onTap, super.key});
 
   final Map<String, dynamic> error;
   final void Function(String) onCorrect;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: context.colors.borderStrong),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      padding: const Pad(all: 12),
-      margin: const Pad(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 8,
-        children: [
-          Text(error['context']?.toString() ?? '', style: TextStyle(fontSize: 14, color: context.colors.textDefault)),
-          if (error['explanation'] != null)
-            Text(error['explanation'].toString(), style: TextStyle(fontSize: 12, color: context.colors.textFaint)),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: (error['corrections'] as List? ?? []).map((correction) {
-              return Tappable(
-                onTap: () => onCorrect(correction.toString()),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: context.colors.accentDanger.withValues(alpha: 0.1),
-                    border: Border.all(color: context.colors.borderStrong),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  padding: const Pad(horizontal: 8, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: 4,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          correction.toString(),
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textDanger),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+    return Tappable(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: context.colors.borderStrong),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        padding: const Pad(all: 12),
+        margin: const Pad(bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [
+            Text(error['context']?.toString() ?? '', style: TextStyle(fontSize: 14, color: context.colors.textDefault)),
+            if (error['explanation'] != null)
+              Text(error['explanation'].toString(), style: TextStyle(fontSize: 12, color: context.colors.textFaint)),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: (error['corrections'] as List? ?? []).map((correction) {
+                return Tappable(
+                  onTap: () => onCorrect(correction.toString()),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: context.colors.accentDanger.withValues(alpha: 0.1),
+                      border: Border.all(color: context.colors.borderStrong),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    padding: const Pad(horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 4,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            correction.toString(),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textDanger,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
-                      ),
-                      Icon(LucideLightIcons.arrow_right, size: 12, color: context.colors.textDanger),
-                    ],
+                        Icon(LucideLightIcons.arrow_right, size: 12, color: context.colors.textDanger),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class SpellCheckErrorBottomSheet extends StatelessWidget {
-  const SpellCheckErrorBottomSheet({required this.error, required this.onCorrect, super.key});
+  const SpellCheckErrorBottomSheet({required this.error, required this.onCorrect, required this.onTap, super.key});
 
   final Map<String, dynamic> error;
   final void Function(String correction) onCorrect;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return AppBottomSheet(
       padding: const Pad(horizontal: 20),
-      child: SpellCheckErrorItem(error: error, onCorrect: onCorrect),
+      child: SpellCheckErrorItem(error: error, onCorrect: onCorrect, onTap: onTap),
     );
   }
 }
@@ -221,6 +237,9 @@ void useSpellCheckErrorHandler(BuildContext context, EditorStateScope scope) {
               if (context.mounted) {
                 await context.router.root.maybePop();
               }
+            },
+            onTap: () async {
+              await webViewController.callProcedure('scrollToSpellcheckError', {'id': error['id']});
             },
           ),
         );
