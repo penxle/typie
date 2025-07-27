@@ -284,7 +284,7 @@
             ? element.textContent.length > 20
               ? element.textContent.slice(0, 20) + '...'
               : element.textContent
-            : '(앵커)'),
+            : '(내용 없음)'),
       };
     });
   });

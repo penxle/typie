@@ -170,6 +170,10 @@ class Editor extends HookWidget {
                     }
                   } catch (_) {}
 
+                  if (!context.mounted) {
+                    return;
+                  }
+
                   await context.showBottomSheet(
                     intercept: true,
                     child: AppBottomSheet(
@@ -177,8 +181,19 @@ class Editor extends HookWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           BottomMenuItem(
+                            icon: LucideLightIcons.search,
+                            label: '찾기',
+                            onTap: () async {
+                              await context.showBottomSheet(
+                                intercept: true,
+                                overlayOpacity: 0.05,
+                                child: FindReplaceBottomSheet(scope: scope),
+                              );
+                            },
+                          ),
+                          BottomMenuItem(
                             icon: LucideLightIcons.bookmark,
-                            label: '앵커',
+                            label: '북마크',
                             trailing: anchorCount > 0
                                 ? Container(
                                     decoration: BoxDecoration(
@@ -201,17 +216,6 @@ class Editor extends HookWidget {
                                 intercept: true,
                                 overlayOpacity: 0.05,
                                 child: AnchorBottomSheet(scope: scope),
-                              );
-                            },
-                          ),
-                          BottomMenuItem(
-                            icon: LucideLightIcons.search,
-                            label: '찾기',
-                            onTap: () async {
-                              await context.showBottomSheet(
-                                intercept: true,
-                                overlayOpacity: 0.05,
-                                child: FindReplaceBottomSheet(scope: scope),
                               );
                             },
                           ),
