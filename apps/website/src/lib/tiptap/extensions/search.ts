@@ -102,7 +102,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
           const match = this.storage.matches[this.storage.currentIndex];
           if (!match) return false;
 
-          commands.scrollIntoViewFixed({ pos: match.from });
+          commands.scrollIntoViewFixed({ pos: match.from, position: 0.25 });
 
           return true;
         },
@@ -117,7 +117,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
           const match = this.storage.matches[this.storage.currentIndex];
           if (!match) return false;
 
-          commands.scrollIntoViewFixed({ pos: match.from });
+          commands.scrollIntoViewFixed({ pos: match.from, position: 0.25 });
 
           return true;
         },
@@ -132,7 +132,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
           const match = this.storage.matches[this.storage.currentIndex];
           if (!match) return false;
 
-          commands.scrollIntoViewFixed({ pos: match.from });
+          commands.scrollIntoViewFixed({ pos: match.from, position: 0.25 });
 
           return true;
         },
@@ -157,7 +157,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
           tr.replaceWith(match.from, match.to, this.editor.schema.text(replacement, marks));
           dispatch?.(tr);
 
-          commands.scrollIntoViewFixed({ pos: match.from });
+          commands.scrollIntoViewFixed({ pos: match.from, position: 0.25 });
 
           return true;
         },
