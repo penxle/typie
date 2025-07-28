@@ -6,7 +6,7 @@
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
-  import heroImage from './images/hero.png';
+  import heroImage from './images/hero.webp';
 </script>
 
 <div
