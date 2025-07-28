@@ -3,7 +3,7 @@
   import stringHash from '@sindresorhus/string-hash';
   import { getText } from '@tiptap/core';
   import { Mark } from '@tiptap/pm/model';
-  import { TextSelection } from '@tiptap/pm/state';
+  import { Selection, TextSelection } from '@tiptap/pm/state';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -370,7 +370,53 @@
         }
       }
 
-      titleEl?.focus();
+      if (data.state?.selection) {
+        if (data.state.selection.type === 'element') {
+          if (data.state.selection.element === 'title') {
+            titleEl?.focus();
+          } else if (data.state.selection.element === 'subtitle') {
+            subtitleEl?.focus();
+          }
+        } else {
+          if (editor) {
+            const selection = Selection.fromJSON(editor.current.state.doc, data.state.selection);
+            editor.current.commands.command(({ tr, dispatch }) => {
+              tr.setSelection(selection);
+              dispatch?.(tr);
+              return true;
+            });
+
+            editor.current.commands.focus(null, { scrollIntoView: false });
+
+            let resized = false;
+            let fontLoaded = false;
+            let scrolled = false;
+
+            window.addEventListener('resize', () => {
+              setTimeout(() => {
+                resized = true;
+
+                if (resized && fontLoaded && !scrolled) {
+                  editor?.current.commands.scrollIntoViewFixed({ position: settings.typewriterPosition ?? 0.25 });
+                  scrolled = true;
+                }
+              }, 100);
+            });
+
+            document.fonts.ready.then(() => {
+              fontLoaded = true;
+
+              if (resized && fontLoaded && !scrolled) {
+                editor?.current.commands.scrollIntoViewFixed({ position: settings.typewriterPosition ?? 0.25 });
+                scrolled = true;
+              }
+            });
+          }
+        }
+      } else {
+        editor?.current.commands.setTextSelection(2);
+        titleEl?.focus();
+      }
     });
 
     window.__webview__?.addEventListener('command', (data) => {
@@ -594,6 +640,9 @@
         autocomplete="off"
         autocorrect="off"
         maxlength="100"
+        onfocus={() => {
+          window.__webview__?.emitEvent('focus', { element: 'title' });
+        }}
         onkeydown={(e) => {
           if (e.isComposing) {
             return;
@@ -626,6 +675,9 @@
         autocomplete="off"
         autocorrect="off"
         maxlength="100"
+        onfocus={() => {
+          window.__webview__?.emitEvent('focus', { element: 'subtitle' });
+        }}
         onkeydown={(e) => {
           if (e.isComposing) {
             return;
