@@ -17,10 +17,10 @@
                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                         <subviews>
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="SplashIcon" translatesAutoresizingMaskIntoConstraints="NO" id="gI7-gO-agb">
-                                <rect key="frame" x="176.66666666666666" y="431" width="40" height="40"/>
+                                <rect key="frame" x="164.66666666666666" y="419" width="64" height="64"/>
                                 <constraints>
-                                    <constraint firstAttribute="width" constant="40" id="IKo-t7-8gH"/>
-                                    <constraint firstAttribute="height" constant="40" id="sun-jy-v9L"/>
+                                    <constraint firstAttribute="width" constant="64" id="IKo-t7-8gH"/>
+                                    <constraint firstAttribute="height" constant="64" id="sun-jy-v9L"/>
                                 </constraints>
                             </imageView>
                         </subviews>
@@ -38,6 +38,6 @@
         </scene>
     </scenes>
     <resources>
-        <image name="SplashIcon" width="48" height="48"/>
+        <image name="SplashIcon" width="208" height="148"/>
     </resources>
 </document>
