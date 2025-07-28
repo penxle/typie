@@ -43,7 +43,7 @@
         transform: 'translateY(-2px) rotate(-1deg)',
       },
     })}
-    href="/landing"
+    href="/"
   >
     <WordmarkBlack class={css({ height: { sm: '18px', lg: '22px' } })} />
   </a>
@@ -182,7 +182,7 @@
         paddingX: '24px',
         transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
       })}
-      href="/landing"
+      href="/"
     >
       소개
     </a>
