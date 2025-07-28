@@ -486,6 +486,9 @@
         subtitleEl.setSelectionRange(position, position);
       } else if (editor?.current.isFocused) {
         handleCaretMovement(editor.current.view, direction);
+        setTimeout(() => {
+          editor?.current.commands.scrollIntoView();
+        }, 0);
       }
     });
 
