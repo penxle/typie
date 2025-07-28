@@ -22,7 +22,7 @@ declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     search: {
-      search: (text: string) => ReturnType;
+      search: (text: string, options?: { matchWholeWord?: boolean }) => ReturnType;
       findNext: () => ReturnType;
       findPrevious: () => ReturnType;
       replace: (replacement: string) => ReturnType;
@@ -51,8 +51,10 @@ export const Search = Extension.create<unknown, SearchStorage>({
   addCommands() {
     return {
       search:
-        (text: string) =>
+        (text, options) =>
         ({ tr, dispatch, commands }) => {
+          const { matchWholeWord = false } = options ?? {};
+
           this.storage.text = text;
 
           if (!text) {
@@ -63,7 +65,8 @@ export const Search = Extension.create<unknown, SearchStorage>({
             return true;
           }
 
-          const pattern = new RegExp(escape(text), 'gi');
+          const escaped = escape(text);
+          const pattern = matchWholeWord ? new RegExp(`(?<!\\p{L}|\\p{N})${escaped}(?!\\p{L}|\\p{N})`, 'giu') : new RegExp(escaped, 'gi');
           const matches: Match[] = [];
 
           const { doc } = this.editor.state;
@@ -138,7 +141,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
         },
 
       replace:
-        (replacement: string) =>
+        (replacement) =>
         ({ commands, state, tr, dispatch }) => {
           if (this.storage.matches.length === 0) return false;
 
@@ -163,7 +166,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
         },
 
       replaceAll:
-        (replacement: string) =>
+        (replacement) =>
         ({ state, tr, dispatch }) => {
           if (this.storage.matches.length === 0) return false;
 

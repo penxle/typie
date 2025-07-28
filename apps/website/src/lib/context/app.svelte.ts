@@ -18,6 +18,8 @@ type AppPreference = {
   lineHighlightEnabled: boolean;
 
   zenModeEnabled: boolean;
+
+  searchMatchWholeWord: boolean;
 };
 
 type AppState = {
@@ -90,6 +92,8 @@ export const setupAppContext = (userId: string) => {
       lineHighlightEnabled: true,
 
       zenModeEnabled: false,
+
+      searchMatchWholeWord: false,
     }),
     state: appState,
     timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {

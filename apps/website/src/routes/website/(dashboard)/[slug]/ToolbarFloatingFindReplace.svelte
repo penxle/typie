@@ -4,8 +4,10 @@
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import ReplaceIcon from '~icons/lucide/replace';
   import ReplaceAllIcon from '~icons/lucide/replace-all';
+  import WholeWordIcon from '~icons/lucide/whole-word';
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
@@ -23,11 +25,14 @@
   let findText = $state('');
   let replaceText = $state('');
 
+  const app = getAppContext();
+
   $effect(() => {
     void findText;
+    void app.preference.current.searchMatchWholeWord;
 
     untrack(() => {
-      editor.current.commands.search(findText);
+      editor.current.commands.search(findText, { matchWholeWord: app.preference.current.searchMatchWholeWord });
     });
   });
 
@@ -79,25 +84,58 @@
   tabindex="-1"
 >
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-    <input
-      bind:this={findInputEl}
+    <div
       class={css({
-        paddingX: '8px',
-        paddingY: '4px',
-        width: '200px',
-        height: '30px',
-        borderWidth: '1px',
-        borderColor: 'border.default',
-        borderRadius: '6px',
-        fontSize: '14px',
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
       })}
-      aria-label="찾을 텍스트"
-      autocomplete="off"
-      onkeydown={handleFindKeydown}
-      placeholder="찾기"
-      type="text"
-      bind:value={findText}
-    />
+    >
+      <input
+        bind:this={findInputEl}
+        class={css({
+          paddingLeft: '8px',
+          paddingRight: '32px',
+          paddingY: '4px',
+          width: '200px',
+          height: '30px',
+          borderWidth: '1px',
+          borderColor: 'border.default',
+          borderRadius: '6px',
+          fontSize: '14px',
+        })}
+        aria-label="찾을 텍스트"
+        autocomplete="off"
+        onkeydown={handleFindKeydown}
+        placeholder="찾기"
+        type="text"
+        bind:value={findText}
+      />
+      <button
+        class={css({
+          position: 'absolute',
+          right: '4px',
+          size: '22px',
+          padding: '3px',
+          borderRadius: '4px',
+          color: 'text.faint',
+          backgroundColor: 'transparent',
+          _hover: {
+            backgroundColor: 'surface.muted',
+          },
+          _pressed: {
+            color: 'accent.brand.default',
+            backgroundColor: 'accent.brand.subtle',
+          },
+        })}
+        aria-pressed={app.preference.current.searchMatchWholeWord}
+        onclick={() => (app.preference.current.searchMatchWholeWord = !app.preference.current.searchMatchWholeWord)}
+        type="button"
+        use:tooltip={{ message: '단어 단위로 찾기' }}
+      >
+        <Icon icon={WholeWordIcon} size={16} />
+      </button>
+    </div>
     <input
       class={css({
         paddingX: '8px',
@@ -120,7 +158,7 @@
 
   <div class={flex({ flex: '1', flexDirection: 'column', gap: '4px' })}>
     <div class={flex({ alignItems: 'center', height: '30px' })}>
-      <div class={css({ flex: '1', width: '60px', fontSize: '12px', color: 'text.subtle' })}>
+      <div class={css({ flex: '1', paddingLeft: '4px', width: '60px', fontSize: '12px', fontWeight: 'semibold', color: 'text.subtle' })}>
         {#if editor.current.extensionStorage.search.matches.length > 0}
           {editor.current.extensionStorage.search.currentIndex + 1} / {editor.current.extensionStorage.search.matches.length}
         {:else}
