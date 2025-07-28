@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -91,7 +92,7 @@ class SearchScreen extends HookWidget {
                               ),
                             ),
                             Text(
-                              post.post.updatedAt.fromNow(),
+                              post.post.updatedAt.ago,
                               style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                             ),
                           ],
