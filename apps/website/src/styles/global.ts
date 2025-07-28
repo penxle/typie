@@ -65,6 +65,10 @@ export const globalCss = defineGlobalStyles({
     height: 'auto',
   },
 
+  svg: {
+    display: 'block',
+  },
+
   input: {
     _disabled: {
       opacity: '100',

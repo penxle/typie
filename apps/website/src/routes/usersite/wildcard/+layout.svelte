@@ -8,7 +8,8 @@
   import SunIcon from '~icons/lucide/sun';
   import SunMoonIcon from '~icons/lucide/sun-moon';
   import { page } from '$app/state';
-  import Logo from '$assets/logos/logo.svg?component';
+  import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
+  import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { Button, Icon, Img, Menu, MenuItem } from '$lib/components';
@@ -119,8 +120,9 @@
         backgroundColor: 'surface.default',
       })}
     >
-      <a class={css({ flexShrink: '0', height: '20px' })} href={env.PUBLIC_WEBSITE_URL} rel="noopener noreferrer" target="_blank">
-        <Logo class={css({ height: 'full' })} />
+      <a class={css({ flexShrink: '0', height: '18px' })} href={env.PUBLIC_WEBSITE_URL} rel="noopener noreferrer" target="_blank">
+        <WordmarkBlack class={css({ height: 'full', _dark: { display: 'none' } })} />
+        <WordmarkWhite class={css({ height: 'full', display: 'none', _dark: { display: 'block' } })} />
       </a>
 
       <div class={flex({ flex: '1' })}></div>
