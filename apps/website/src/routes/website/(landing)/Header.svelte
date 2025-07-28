@@ -2,7 +2,7 @@
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import MenuIcon from '~icons/lucide/menu';
   import { afterNavigate } from '$app/navigation';
-  import Wordmark from '$assets/logos/wordmark.svg?component';
+  import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
   import { env } from '$env/dynamic/public';
   import { outsideClick } from '$lib/actions';
   import { Icon } from '$lib/components';
@@ -37,6 +37,7 @@
   <a
     class={css({
       position: 'relative',
+      display: 'block',
       transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
       _hover: {
         transform: 'translateY(-2px) rotate(-1deg)',
@@ -44,7 +45,7 @@
     })}
     href="/landing"
   >
-    <Wordmark class={css({ height: { sm: '24px', lg: '28px' }, color: 'gray.900' })} />
+    <WordmarkBlack class={css({ height: { sm: '18px', lg: '22px' } })} />
   </a>
 
   <div class={flex({ alignItems: 'center', gap: '24px', display: { sm: 'none', lg: 'flex' } })}>

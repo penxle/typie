@@ -1,7 +1,7 @@
 <script lang="ts">
   import GithubIcon from '~icons/simple-icons/github';
   import TwitterIcon from '~icons/simple-icons/twitter';
-  import Wordmark from '$assets/logos/wordmark.svg?component';
+  import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
@@ -37,7 +37,7 @@
     >
       <div>
         <div class={flex({ align: 'center', gap: { sm: '16px', lg: '20px' }, marginBottom: '24px', flexWrap: 'wrap' })}>
-          <Wordmark class={css({ height: { sm: '20px', lg: '24px' }, color: 'white' })} />
+          <WordmarkWhite class={css({ height: { sm: '18px', lg: '20px' } })} />
           <div class={flex({ gap: '12px' })}>
             <a
               class={css({
