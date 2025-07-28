@@ -32,6 +32,9 @@
     {:else}
       <meta content="summary" property="twitter:card" />
     {/if}
+  {:else}
+    <meta content="https://cdn.typie.net/opengraph/default-v2.png" property="og:image" />
+    <meta content="summary_large_image" property="twitter:card" />
   {/if}
   <meta content={page.url.href} property="og:url" />
   <meta content="타이피" property="og:site_name" />
