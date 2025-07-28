@@ -23,6 +23,11 @@
         return;
       }
 
+      if (!editor.current.isFocused) {
+        visible = false;
+        return;
+      }
+
       const coords = editor.current.view.coordsAtPos(selection.anchor);
       const rect = editor.current.view.dom.getBoundingClientRect();
       const padding = 4;
@@ -37,9 +42,13 @@
       handler();
     });
 
+    editor?.current.on('focus', handler);
+    editor?.current.on('blur', handler);
     editor?.current.on('selectionUpdate', handler);
 
     return () => {
+      editor?.current.off('focus', handler);
+      editor?.current.off('blur', handler);
       editor?.current.off('selectionUpdate', handler);
     };
   });
