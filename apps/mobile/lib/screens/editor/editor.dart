@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
@@ -37,6 +38,7 @@ import 'package:typie/screens/editor/toolbar/toolbar.dart';
 import 'package:typie/services/auth.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
+import 'package:typie/services/state.dart';
 import 'package:typie/services/theme.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
@@ -60,6 +62,7 @@ class Editor extends HookWidget {
     final auth = useService<Auth>();
     final keyboard = useService<Keyboard>();
     final pref = useService<Pref>();
+    final state = useService<AppState>();
     final theme = useService<AppTheme>();
     final mixpanel = useService<Mixpanel>();
 
@@ -109,7 +112,6 @@ class Editor extends HookWidget {
       final subscription = webViewController.onEvent.listen((event) async {
         switch (event.name) {
           case 'webviewReady':
-            isReady.value = true;
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
               'features': ['template'],
@@ -118,7 +120,10 @@ class Editor extends HookWidget {
                 'typewriterEnabled': pref.typewriterEnabled,
                 'typewriterPosition': pref.typewriterPosition,
               },
+              'state': {'selection': jsonDecode(state.getSerializedPostSelection(slug) ?? 'null')},
             });
+
+            isReady.value = true;
           case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
           case 'setCharacterCountState':
@@ -134,11 +139,29 @@ class Editor extends HookWidget {
             if (context.mounted) {
               await context.showBottomSheet(intercept: true, child: _TemplateBottomSheet(scope: scope));
             }
+          case 'focus':
+            final element = (event.data as Map<String, dynamic>)['element'] as String;
+            if (element == 'title' || element == 'subtitle') {
+              unawaited(state.setSerializedPostSelection(slug, jsonEncode({'type': 'element', 'element': element})));
+            }
         }
       });
 
       return subscription.cancel;
     }, [webViewController]);
+
+    useOnListenableChange(scope.proseMirrorState, () {
+      if (!isReady.value) {
+        return;
+      }
+
+      final selection = scope.proseMirrorState.value?.selection;
+      if (selection == null) {
+        return;
+      }
+
+      unawaited(state.setSerializedPostSelection(slug, jsonEncode(selection.toJson())));
+    });
 
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceDefault,

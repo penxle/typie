@@ -2,6 +2,7 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import { Mark } from '@tiptap/pm/model';
+  import { Selection } from '@tiptap/pm/state';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
@@ -292,10 +293,10 @@
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
 
-    const { from, to } = editor.current.state.selection;
+    const { selection } = editor.current.state;
 
     const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-    selections[postId] = { from, to, timestamp: dayjs().valueOf() };
+    selections[postId] = { ...selection.toJSON(), timestamp: dayjs().valueOf() };
     localStorage.setItem('typie:selections', JSON.stringify(selections));
   };
 
@@ -483,10 +484,24 @@
 
       const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
       if (postId && selections[postId]) {
-        editor.chain().setTextSelection(selections[postId]).focus(null, { scrollIntoView: false }).run();
-        document.fonts.ready.then(() => {
-          editor.commands.scrollIntoView();
-        });
+        if (selections[postId].type === 'element') {
+          if (selections[postId].element === 'title') {
+            titleEl?.focus();
+          } else if (selections[postId].element === 'subtitle') {
+            subtitleEl?.focus();
+          }
+        } else {
+          const selection = Selection.fromJSON(editor.state.doc, selections[postId]);
+          editor.commands.command(({ tr, dispatch }) => {
+            tr.setSelection(selection);
+            dispatch?.(tr);
+            return true;
+          });
+
+          document.fonts.ready.then(() => {
+            editor.commands.focus();
+          });
+        }
       } else {
         editor.commands.setTextSelection(2);
         titleEl?.focus();
@@ -891,6 +906,13 @@
                   autocapitalize="off"
                   autocomplete="off"
                   maxlength="100"
+                  onfocus={() => {
+                    if (postId) {
+                      const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+                      selections[postId] = { type: 'element', element: 'title', timestamp: dayjs().valueOf() };
+                      localStorage.setItem('typie:selections', JSON.stringify(selections));
+                    }
+                  }}
                   onkeydown={(e) => {
                     if (e.isComposing) {
                       return;
@@ -921,6 +943,13 @@
                   autocapitalize="off"
                   autocomplete="off"
                   maxlength="100"
+                  onfocus={() => {
+                    if (postId) {
+                      const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+                      selections[postId] = { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() };
+                      localStorage.setItem('typie:selections', JSON.stringify(selections));
+                    }
+                  }}
                   onkeydown={(e) => {
                     if (e.isComposing) {
                       return;
