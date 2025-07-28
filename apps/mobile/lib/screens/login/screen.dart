@@ -57,11 +57,13 @@ class LoginScreen extends HookWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SvgImage('logos/full', height: 24),
+                SvgImage('logos/full', height: 32),
                 Gap(24),
-                Text('온전히 생각을 담아내는', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
+                Text('작성, 정리, 공유까지.', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
                 Gap(4),
-                Text('나만의 글쓰기 공간', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                Text('글쓰기의 모든 과정을', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                Gap(4),
+                Text('타이피 하나로 해결해요.', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               ],
             ),
           ),
