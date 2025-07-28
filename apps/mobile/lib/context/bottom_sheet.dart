@@ -116,7 +116,11 @@ class _BottomSheet extends HookWidget {
               key: sheetKey,
               width: double.infinity,
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: context.colors.borderStrong)),
+                border: Border(
+                  top: BorderSide(color: context.colors.borderStrong),
+                  left: BorderSide(color: context.colors.borderStrong),
+                  right: BorderSide(color: context.colors.borderStrong),
+                ),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: ClipRRect(
