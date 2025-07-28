@@ -131,7 +131,7 @@
         aria-pressed={app.preference.current.searchMatchWholeWord}
         onclick={() => (app.preference.current.searchMatchWholeWord = !app.preference.current.searchMatchWholeWord)}
         type="button"
-        use:tooltip={{ message: '단어 단위로 찾기' }}
+        use:tooltip={{ message: '어절 단위로 찾기' }}
       >
         <Icon icon={WholeWordIcon} size={16} />
       </button>
@@ -158,7 +158,7 @@
 
   <div class={flex({ flex: '1', flexDirection: 'column', gap: '4px' })}>
     <div class={flex({ alignItems: 'center', height: '30px' })}>
-      <div class={css({ flex: '1', paddingLeft: '4px', width: '60px', fontSize: '12px', fontWeight: 'semibold', color: 'text.subtle' })}>
+      <div class={css({ flex: '1', paddingLeft: '4px', width: '60px', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
         {#if editor.current.extensionStorage.search.matches.length > 0}
           {editor.current.extensionStorage.search.currentIndex + 1} / {editor.current.extensionStorage.search.matches.length}
         {:else}
