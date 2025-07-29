@@ -2,6 +2,7 @@
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import * as Y from 'yjs';
+  import { clamp } from '$lib/utils';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
@@ -14,6 +15,17 @@
   let { doc, editor }: Props = $props();
 
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
+
+  const getLastNodeOffsetTop = () => {
+    const editorEl = document.querySelector('.editor');
+    if (!editorEl) return null;
+
+    const allNodes = [...editorEl.querySelectorAll('[data-node-id]')];
+    if (allNodes.length === 0) return null;
+
+    const lastNode = allNodes.at(-1) as HTMLElement;
+    return lastNode.offsetTop;
+  };
 
   const anchorElements = $derived.by(() => {
     if (!editor) {
@@ -35,16 +47,13 @@
   const anchorPositions = $derived.by(() => {
     if (!editor || Object.keys(anchorElements).length === 0) return [];
 
-    const editorEl = document.querySelector('.editor');
-    if (!editorEl) return [];
-
-    const totalHeight = editorEl.scrollHeight;
-    if (totalHeight === 0) return [];
+    const lastNodeOffsetTop = getLastNodeOffsetTop();
+    if (!lastNodeOffsetTop) return [];
 
     return Object.entries(anchorElements)
       .map(([nodeId, element]) => {
         const offsetTop = element.offsetTop;
-        const position = Math.min(1, Math.max(0, offsetTop / totalHeight));
+        const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
 
         return {
           nodeId,
@@ -72,15 +81,14 @@
       const node = editor.current.state.doc.nodeAt(targetPos);
 
       if (node && node.attrs.nodeId) {
-        const editorEl = document.querySelector('.editor');
-        if (!editorEl) return null;
-
         const element = document.querySelector(`[data-node-id="${node.attrs.nodeId}"]`);
         if (!element) return null;
 
-        const totalHeight = editorEl.scrollHeight;
+        const lastNodeOffsetTop = getLastNodeOffsetTop();
+        if (!lastNodeOffsetTop) return null;
+
         const offsetTop = (element as HTMLElement).offsetTop;
-        const position = totalHeight > 0 ? Math.min(1, Math.max(0, offsetTop / totalHeight)) : 0;
+        const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
 
         return {
           nodeId: node.attrs.nodeId,
