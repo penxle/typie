@@ -8,6 +8,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:typie/context/loader.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/error.dart';
@@ -49,26 +50,28 @@ class LoginWithEmailScreen extends HookWidget {
           'password': l.string().min(1, message: '비밀번호를 입력해주세요.').required(message: '비밀번호를 입력해주세요.'),
         }),
         onSubmit: (form) async {
-          try {
-            unawaited(mixpanel.track('login_with_email'));
-            unawaited(facebookAppEvents.logCompletedRegistration(registrationMethod: 'email'));
+          await context.runWithLoader(() async {
+            try {
+              unawaited(mixpanel.track('login_with_email'));
+              unawaited(facebookAppEvents.logCompletedRegistration(registrationMethod: 'email'));
 
-            await client.request(
-              GLoginWithEmailScreen_LoginWithEmail_MutationReq(
-                (b) => b
-                  ..vars.input.email = form.data['email'] as String
-                  ..vars.input.password = form.data['password'] as String,
-              ),
-            );
-          } on TypieError catch (e) {
-            if (context.mounted) {
-              context.toast(ToastType.error, switch (e.code) {
-                'invalid_credentials' => '이메일 또는 비밀번호가 올바르지 않아요.',
-                'password_not_set' => '비밀번호가 설정되지 않았어요.',
-                _ => '오류가 발생했어요. 잠시 후 다시 시도해주세요.',
-              }, bottom: 64);
+              await client.request(
+                GLoginWithEmailScreen_LoginWithEmail_MutationReq(
+                  (b) => b
+                    ..vars.input.email = form.data['email'] as String
+                    ..vars.input.password = form.data['password'] as String,
+                ),
+              );
+            } on TypieError catch (e) {
+              if (context.mounted) {
+                context.toast(ToastType.error, switch (e.code) {
+                  'invalid_credentials' => '이메일 또는 비밀번호가 올바르지 않아요.',
+                  'password_not_set' => '비밀번호가 설정되지 않았어요.',
+                  _ => '오류가 발생했어요. 잠시 후 다시 시도해주세요.',
+                }, bottom: 64);
+              }
             }
-          }
+          });
         },
         builder: (context, form) {
           return const AutofillGroup(

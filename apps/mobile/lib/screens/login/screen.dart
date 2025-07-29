@@ -39,15 +39,13 @@ class LoginScreen extends HookWidget {
       unawaited(mixpanel.track('login_with_sso', properties: {'provider': provider.name.toLowerCase()}));
       unawaited(facebookAppEvents.logCompletedRegistration(registrationMethod: provider.name));
 
-      await context.runWithLoader(() async {
-        await client.request(
-          GLoginScreen_AuthorizeSingleSignOn_MutationReq(
-            (b) => b
-              ..vars.input.provider = provider
-              ..vars.input.params = JsonObject(params),
-          ),
-        );
-      });
+      await client.request(
+        GLoginScreen_AuthorizeSingleSignOn_MutationReq(
+          (b) => b
+            ..vars.input.provider = provider
+            ..vars.input.params = JsonObject(params),
+        ),
+      );
     });
 
     return Screen(
@@ -84,6 +82,7 @@ class LoginScreen extends HookWidget {
                   onTap: () async {
                     try {
                       await GoogleSignIn.instance.signOut();
+                      await Future<void>.delayed(const Duration(milliseconds: 100));
                     } catch (_) {
                       // pass
                     }
@@ -106,6 +105,7 @@ class LoginScreen extends HookWidget {
                   onTap: () async {
                     try {
                       await UserApi.instance.logout();
+                      await Future<void>.delayed(const Duration(milliseconds: 100));
                     } catch (_) {
                       // pass
                     }
@@ -198,7 +198,7 @@ class _Button extends StatelessWidget {
     return Tappable(
       onTap: () async {
         try {
-          await onTap();
+          await context.runWithLoader(onTap);
         } catch (_) {
           if (context.mounted) {
             context.toast(ToastType.error, '로그인에 실패했어요. 다시 시도해주세요.');
