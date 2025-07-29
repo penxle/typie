@@ -216,7 +216,7 @@
     </div>
   {/if}
 
-  {#if $user.subscription?.state === SubscriptionState.ACTIVE}
+  {#if $user.subscription?.state === SubscriptionState.ACTIVE || $user.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
     <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
     <button
       class={css({
@@ -233,7 +233,10 @@
       onclick={() => {
         Dialog.confirm({
           title: '정말로 해지하시겠습니까?',
-          message: '해지 후에도 남은 기간 동안 서비스를 이용하실 수 있습니다.',
+          message:
+            $user.subscription?.state === SubscriptionState.ACTIVE
+              ? '해지 후에도 남은 기간 동안 서비스를 이용하실 수 있습니다.'
+              : '해지 즉시 유료 서비스가 중단됩니다.',
           action: 'danger',
           actionLabel: '해지',
           actionHandler: async () => {

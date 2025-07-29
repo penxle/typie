@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, eq, gt, ne } from 'drizzle-orm';
+import { and, eq, gt, inArray, ne } from 'drizzle-orm';
 import { defaultPlanRules } from '@/const';
 import {
   CreditCodes,
@@ -392,13 +392,13 @@ builder.mutationFields((t) => ({
     type: Subscription,
     resolve: async (_, __, ctx) => {
       const activeSubscription = await db
-        .select({ id: Subscriptions.id })
+        .select({ id: Subscriptions.id, state: Subscriptions.state })
         .from(Subscriptions)
         .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
         .where(
           and(
             eq(Subscriptions.userId, ctx.session.userId),
-            eq(Subscriptions.state, SubscriptionState.ACTIVE),
+            inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD]),
             eq(Plans.availability, PlanAvailability.BILLING_KEY),
           ),
         )
@@ -415,9 +415,16 @@ builder.mutationFields((t) => ({
           await tx.delete(Subscriptions).where(eq(Subscriptions.id, willActivateSubscription.id));
         }
 
+        if (activeSubscription.state === SubscriptionState.IN_GRACE_PERIOD) {
+          await tx
+            .update(PaymentInvoices)
+            .set({ state: PaymentInvoiceState.CANCELED })
+            .where(and(eq(PaymentInvoices.subscriptionId, activeSubscription.id), eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE)));
+        }
+
         return await tx
           .update(Subscriptions)
-          .set({ state: SubscriptionState.WILL_EXPIRE })
+          .set({ state: activeSubscription.state === SubscriptionState.ACTIVE ? SubscriptionState.WILL_EXPIRE : SubscriptionState.EXPIRED })
           .where(eq(Subscriptions.id, activeSubscription.id))
           .returning()
           .then(firstOrThrow);
