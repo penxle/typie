@@ -59,6 +59,8 @@
   afterNavigate(async () => {
     if ($query.me.id === $query.entity.user.id && $query.entity.state === EntityState.ACTIVE) {
       await viewEntity({ entityId: $query.entity.id });
+
+      fbq?.('track', 'ViewContent');
     }
   });
 </script>

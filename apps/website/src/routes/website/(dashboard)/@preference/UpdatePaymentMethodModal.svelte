@@ -109,7 +109,9 @@
         expiryDate: data.expiryDate,
         passwordTwoDigits: data.passwordTwoDigits,
       });
+
       mixpanel.track('update_payment_billing_key');
+      fbq?.('track', 'AddPaymentInfo');
 
       if ($user.subscription) {
         open = false;
@@ -123,9 +125,11 @@
           if (interval === PlanInterval.MONTHLY) {
             await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
             mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
+            fbq?.('track', 'Subscribe', { value: '4900.00', currency: 'KRW', predicted_ltv: '4900.00' });
           } else if (interval === PlanInterval.YEARLY) {
             await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
             mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
+            fbq?.('track', 'Subscribe', { value: '49000.00', currency: 'KRW', predicted_ltv: '49000.00' });
           }
 
           open = false;
