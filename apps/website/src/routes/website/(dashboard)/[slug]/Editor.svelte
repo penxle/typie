@@ -203,6 +203,18 @@
     mutation Editor_DeletePost_Mutation($input: DeletePostInput!) {
       deletePost(input: $input) {
         id
+
+        entity {
+          id
+
+          user {
+            id
+
+            recentlyViewedEntities {
+              id
+            }
+          }
+        }
       }
     }
   `);
