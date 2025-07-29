@@ -1,5 +1,6 @@
 import {
   Behavior,
+  Clipboard,
   Command,
   DropCursor,
   NodeId,
@@ -77,6 +78,7 @@ export const baseExtensions = [
   Selection,
   SyntaxHighlight,
   TrailingNode,
+  Clipboard,
 ];
 
 export const editorExtensions = [

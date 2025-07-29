@@ -1,4 +1,5 @@
 export * from './behavior';
+export * from './clipboard';
 export * from './collaboration';
 export * from './command';
 export * from './drop-cursor';
