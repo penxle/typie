@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core';
-import { Plugin } from '@tiptap/pm/state';
+import { Plugin, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import escape from 'escape-string-regexp';
 import { absolutePositionToRelativePosition, relativePositionToAbsolutePosition, ySyncPluginKey } from 'y-prosemirror';
@@ -12,17 +12,22 @@ type Match = {
   relativeTo: unknown;
 };
 
+type SearchOptions = {
+  matchWholeWord?: boolean;
+};
+
 type SearchStorage = {
   text: string;
   currentIndex: number;
   matches: Match[];
+  lastSearchOptions: SearchOptions;
 };
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     search: {
-      search: (text: string, options?: { matchWholeWord?: boolean }) => ReturnType;
+      search: (text: string, options?: SearchOptions) => ReturnType;
       findNext: () => ReturnType;
       findPrevious: () => ReturnType;
       replace: (replacement: string) => ReturnType;
@@ -45,6 +50,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
       text: '',
       currentIndex: 0,
       matches: [],
+      lastSearchOptions: {},
     };
   },
 
@@ -56,6 +62,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
           const { matchWholeWord = false } = options ?? {};
 
           this.storage.text = text;
+          this.storage.lastSearchOptions = options ?? {};
 
           if (!text) {
             this.storage.matches = [];
@@ -158,9 +165,15 @@ export const Search = Extension.create<unknown, SearchStorage>({
 
           const marks = state.doc.resolve(match.from).marksAcross(state.doc.resolve(match.to));
           tr.replaceWith(match.from, match.to, this.editor.schema.text(replacement, marks));
-          dispatch?.(tr);
+          tr.setSelection(TextSelection.create(tr.doc, match.to));
 
           commands.scrollIntoViewFixed({ pos: match.from, position: 0.25 });
+
+          this.editor.once('transaction', () => {
+            this.editor.commands.search(this.storage.text, this.storage.lastSearchOptions);
+          });
+
+          dispatch?.(tr);
 
           return true;
         },
@@ -177,8 +190,9 @@ export const Search = Extension.create<unknown, SearchStorage>({
             offset += replacement.length - (match.to - match.from);
           }
 
-          this.storage.matches = [];
-          this.storage.currentIndex = -1;
+          this.editor.once('transaction', () => {
+            this.editor.commands.search(this.storage.text, this.storage.lastSearchOptions);
+          });
 
           dispatch?.(tr);
 
