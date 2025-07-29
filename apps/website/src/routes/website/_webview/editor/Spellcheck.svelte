@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { posToDOMRect } from '@tiptap/core';
   import { Plugin, PluginKey } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import mixpanel from 'mixpanel-browser';
@@ -114,17 +115,21 @@
               },
               handleDOMEvents: {
                 pointerdown: (view, event) => {
-                  const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                  if (!pos) return false;
+                  const error = errors.find((error) => {
+                    const rect = posToDOMRect(view, error.from, error.to);
 
-                  const error = errors.find((error) => error.from <= pos.pos && error.to >= pos.pos);
+                    return (
+                      rect.left <= event.clientX && rect.right >= event.clientX && rect.top <= event.clientY && rect.bottom >= event.clientY
+                    );
+                  });
                   if (!error) return false;
 
                   event.preventDefault();
 
                   const parser = new DOMParser();
                   const doc = parser.parseFromString(error.explanation, 'text/html');
-                  const explanation = doc.documentElement.textContent;
+                  // eslint-disable-next-line unicorn/prefer-dom-node-text-content
+                  const explanation = doc.documentElement.innerText;
 
                   (document.activeElement as HTMLElement)?.blur();
                   window.__webview__?.emitEvent('spellcheckErrorClick', {
@@ -177,7 +182,8 @@
       return {
         errors: errors.map((error) => {
           const doc = parser.parseFromString(error.explanation, 'text/html');
-          const explanation = doc.documentElement.textContent;
+          // eslint-disable-next-line unicorn/prefer-dom-node-text-content
+          const explanation = doc.documentElement.innerText;
 
           return {
             id: error.id,
