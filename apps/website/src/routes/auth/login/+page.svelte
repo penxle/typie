@@ -77,6 +77,7 @@
     });
 
     mixpanel.track('login_with_sso', { provider });
+    fbq?.('track', 'CompleteRegistration');
 
     location.href = url;
   };

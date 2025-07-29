@@ -17,6 +17,8 @@ type NodeView = {
 declare global {
   import { GlobalWindow } from 'happy-dom';
 
+  var fbq: ((type: 'track', name: string, data?: Record<string, unknown>) => void) | undefined;
+
   var __happydom__: {
     window: GlobalWindow;
   };

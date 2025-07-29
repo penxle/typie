@@ -63,6 +63,7 @@
       });
 
       mixpanel.track('send_sign_up_email');
+      fbq?.('track', 'CompleteRegistration');
 
       emailSent = true;
     },
