@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
+import 'package:collection/collection.dart';
+import 'package:facebook_app_events/facebook_app_events.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
@@ -38,6 +40,8 @@ class EnrollPlanScreen extends HookWidget {
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final mixpanel = useService<Mixpanel>();
+    final facebookAppEvents = useService<FacebookAppEvents>();
+
     final future = useMemoized(_fetchProductMap);
     final productDetailsMap = useFuture(future);
 
@@ -62,7 +66,19 @@ class EnrollPlanScreen extends HookWidget {
               await client.refetch(GEnrollPlanScreen_QueryReq());
               await client.refetch(GProfileScreen_QueryReq());
 
+              final productDetails = productDetailsMap.data?.entries
+                  .firstWhereOrNull((e) => e.value.details.id == purchaseDetails.productID)
+                  ?.value
+                  .details;
+
               unawaited(mixpanel.track('enroll_plan', properties: {'productId': purchaseDetails.productID}));
+              unawaited(
+                facebookAppEvents.logSubscribe(
+                  orderId: purchaseDetails.purchaseID!,
+                  price: productDetails?.rawPrice,
+                  currency: productDetails?.currencyCode,
+                ),
+              );
 
               if (context.mounted) {
                 await context.showModal(
@@ -219,6 +235,7 @@ class _PurchaseButton extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
+    final facebookAppEvents = useService<FacebookAppEvents>();
 
     return Tappable(
       onTap: () {
@@ -227,6 +244,15 @@ class _PurchaseButton extends HookWidget {
         }
 
         unawaited(mixpanel.track('enroll_plan_try', properties: {'productId': product!.details.id}));
+        unawaited(
+          facebookAppEvents.logInitiatedCheckout(
+            contentType: 'product',
+            contentId: product!.details.id,
+            totalPrice: product!.details.rawPrice,
+            currency: product!.details.currencyCode,
+            numItems: 1,
+          ),
+        );
 
         onTap(product!);
       },
