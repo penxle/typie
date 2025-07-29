@@ -244,9 +244,11 @@ type File implements Blob {
 type Folder implements IFolder {
   characterCount: Int!
   entity: Entity!
+  folderCount: Int!
   id: ID!
   maxDescendantFoldersDepth: Int!
   name: String!
+  postCount: Int!
   view: FolderView!
 }
 

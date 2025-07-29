@@ -13,6 +13,8 @@ fragment EntityScreen_Entity_entity on Entity {
       name
       maxDescendantFoldersDepth
       characterCount
+      folderCount
+      postCount
     }
 
     ... on Post {
