@@ -6,7 +6,7 @@
   import SparklesIcon from '~icons/lucide/sparkles';
   import ZapIcon from '~icons/lucide/zap';
   import { browser } from '$app/environment';
-  import { env } from '$env/dynamic/public';
+  import { page } from '$app/state';
   import { Helmet, Icon } from '$lib/components';
   import { PLAN_FEATURES } from '$lib/constants';
   import { comma } from '$lib/utils/number';
@@ -447,7 +447,7 @@
                 },
               }),
             )}
-            href={env.PUBLIC_AUTH_URL}
+            href={page.data.startUrl}
           >
             무료로 시작하기
           </a>
@@ -635,7 +635,7 @@
                 },
               }),
             )}
-            href={env.PUBLIC_AUTH_URL}
+            href={page.data.startUrl}
           >
             <Icon icon={ZapIcon} size={18} />
             지금 시작하기
@@ -1075,7 +1075,7 @@
               },
             }),
           )}
-          href={env.PUBLIC_AUTH_URL}
+          href={page.data.startUrl}
         >
           무료로 시작하기
           <Icon
