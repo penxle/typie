@@ -7,3 +7,11 @@ export const setupMixpanel = () => {
     persistence: 'localStorage',
   });
 };
+
+export const fb = {
+  track: (name: string, data?: Record<string, unknown>) => {
+    if (typeof fbq === 'function') {
+      fbq('track', name, data);
+    }
+  },
+};

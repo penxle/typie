@@ -11,6 +11,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
+  import { fb } from '$lib/analytics';
   import { Button, Helmet, Icon, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { serializeOAuthState } from '$lib/utils';
@@ -77,7 +78,7 @@
     });
 
     mixpanel.track('login_with_sso', { provider });
-    fbq?.('track', 'CompleteRegistration');
+    fb.track('CompleteRegistration');
 
     location.href = url;
   };
