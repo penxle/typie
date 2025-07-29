@@ -918,8 +918,8 @@ class _BottomMenuHeader extends StatelessWidget {
                     canvas: (canvas) => false,
                     orElse: () => false,
                   ))
-                Row(
-                  spacing: 4,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       entity!.visibility == GEntityVisibility.UNLISTED &&
@@ -936,24 +936,27 @@ class _BottomMenuHeader extends StatelessWidget {
                             entity!.visibility == GEntityVisibility.UNLISTED ||
                                 entity!.availability == GEntityAvailability.UNLISTED
                             ? context.colors.accentBrand
-                            : context.colors.textSubtle,
+                            : context.colors.textFaint,
                       ),
                     ),
-                    if (entity!.node.maybeWhen(
-                      folder: (folder) => true,
-                      post: (post) => true,
-                      orElse: () => false,
-                    )) ...[
-                      Icon(LucideLightIcons.dot, size: 14, color: context.colors.textSubtle),
-                      Text(
-                        entity!.node.maybeWhen(
-                          folder: (folder) => '총 ${folder.characterCount.comma}자',
-                          post: (post) => '총 ${post.characterCount.comma}자',
-                          orElse: () => '',
-                        ),
-                        style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                    Text(
+                      entity!.node.maybeWhen(
+                        folder: (folder) {
+                          final parts = <String>[];
+                          if (folder.folderCount > 0) {
+                            parts.add('폴더 ${folder.folderCount.comma}개');
+                          }
+                          if (folder.postCount > 0) {
+                            parts.add('포스트 ${folder.postCount.comma}개');
+                          }
+                          parts.add('총 ${folder.characterCount.comma}자');
+                          return parts.join(' · ');
+                        },
+                        post: (post) => '총 ${post.characterCount.comma}자',
+                        orElse: () => '',
                       ),
-                    ],
+                      style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                    ),
                   ],
                 ),
             ],

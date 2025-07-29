@@ -84,15 +84,8 @@
       folder(id: $folderId) {
         id
         characterCount
-
-        entity {
-          id
-
-          descendants {
-            id
-            type
-          }
-        }
+        folderCount
+        postCount
       }
     }
   `);
@@ -437,17 +430,14 @@
               불러오는 중...
             </span>
           {:else if $info}
-            {@const folders = $info.folder.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
-            {@const posts = $info.folder.entity.descendants.filter((d) => d.type === EntityType.POST).length}
-
             <div class={flex({ alignItems: 'center' })}>
-              {#if folders > 0}
-                <span>폴더 {folders}개</span>
+              {#if $info.folder.folderCount > 0}
+                <span>폴더 {$info.folder.folderCount}개</span>
                 <Icon icon={DotIcon} size={12} />
               {/if}
 
-              {#if posts > 0}
-                <span>포스트 {posts}개</span>
+              {#if $info.folder.postCount > 0}
+                <span>포스트 {$info.folder.postCount}개</span>
               {/if}
             </div>
 
