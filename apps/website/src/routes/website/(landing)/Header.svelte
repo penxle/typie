@@ -2,8 +2,8 @@
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import MenuIcon from '~icons/lucide/menu';
   import { afterNavigate } from '$app/navigation';
+  import { page } from '$app/state';
   import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
-  import { env } from '$env/dynamic/public';
   import { outsideClick } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
@@ -119,7 +119,7 @@
           },
         }),
       )}
-      href={env.PUBLIC_AUTH_URL}
+      href={page.data.startUrl}
     >
       시작하기
       <Icon
@@ -243,7 +243,7 @@
           transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
         }),
       )}
-      href={env.PUBLIC_AUTH_URL}
+      href={page.data.startUrl}
     >
       시작하기
     </a>

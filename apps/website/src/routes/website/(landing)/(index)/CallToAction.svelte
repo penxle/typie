@@ -1,7 +1,7 @@
 <script lang="ts">
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import SparklesIcon from '~icons/lucide/sparkles';
-  import { env } from '$env/dynamic/public';
+  import { page } from '$app/state';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
@@ -141,7 +141,7 @@
               },
             }),
           )}
-          href={env.PUBLIC_AUTH_URL}
+          href={page.data.startUrl}
         >
           시작하기
           <Icon

@@ -2,7 +2,7 @@
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import PenLineIcon from '~icons/lucide/pen-line';
   import ZapIcon from '~icons/lucide/zap';
-  import { env } from '$env/dynamic/public';
+  import { page } from '$app/state';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
@@ -247,7 +247,7 @@
               },
             }),
           )}
-          href={env.PUBLIC_AUTH_URL}
+          href={page.data.startUrl}
         >
           <Icon icon={ZapIcon} size={20} />
           지금 시작하기
