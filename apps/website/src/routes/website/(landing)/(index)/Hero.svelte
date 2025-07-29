@@ -1,7 +1,10 @@
 <script lang="ts">
   import ArrowRightIcon from '~icons/lucide/arrow-right';
+  import GlobeIcon from '~icons/lucide/globe';
   import PenLineIcon from '~icons/lucide/pen-line';
   import ZapIcon from '~icons/lucide/zap';
+  import AppStoreIcon from '~icons/simple-icons/appstore';
+  import GooglePlayIcon from '~icons/simple-icons/googleplay';
   import { page } from '$app/state';
   import { Icon } from '$lib/components';
   import { css, cx } from '$styled-system/css';
@@ -203,7 +206,7 @@
           gap: { sm: '16px', lg: '20px' },
           justifyContent: 'center',
           flexWrap: 'wrap',
-          marginBottom: { sm: '60px', lg: '80px' },
+          marginBottom: { sm: '16px', lg: '24px' },
           opacity: '0',
           transform: 'translate3d(0, 10px, 0)',
           transition: {
@@ -261,6 +264,89 @@
             icon={ArrowRightIcon}
             size={20}
           />
+        </a>
+      </div>
+
+      <div
+        class={css({
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '4px',
+          marginBottom: { sm: '60px', lg: '80px' },
+          opacity: '0',
+          transform: 'translate3d(0, 10px, 0)',
+          transition: {
+            sm: '[opacity 0.4s ease-out 0.65s, transform 0.4s ease-out 0.65s]',
+            lg: '[opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.85s, transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.85s]',
+          },
+          willChange: 'transform, opacity',
+          '.in-view &': {
+            opacity: '100',
+            transform: 'translate3d(0, 0, 0)',
+          },
+        })}
+      >
+        <div
+          class={css({
+            fontSize: { sm: '14px', lg: '16px' },
+            marginRight: '8px',
+            fontWeight: 'medium',
+            color: 'gray.700',
+          })}
+        >
+          지원 플랫폼:
+        </div>
+        <a
+          class={cx(
+            'group',
+            center({
+              size: '32px',
+              transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              _hover: {
+                transform: 'translate3d(0, -2px, 0) scale(1.1)',
+              },
+            }),
+          )}
+          href={page.data.startUrl}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <Icon icon={GlobeIcon} size={24} />
+        </a>
+        <a
+          class={cx(
+            'group',
+            center({
+              size: '32px',
+              transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              _hover: {
+                transform: 'translate3d(0, -2px, 0) scale(1.1)',
+              },
+            }),
+          )}
+          href="https://apps.apple.com/app/id6745595771"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <Icon icon={AppStoreIcon} size={24} />
+        </a>
+        <a
+          class={cx(
+            'group',
+            center({
+              size: '32px',
+              transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+              _hover: {
+                transform: 'translate3d(0, -2px, 0) scale(1.1)',
+              },
+            }),
+          )}
+          href="https://play.google.com/store/apps/details?id=co.typie"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <Icon icon={GooglePlayIcon} size={24} />
         </a>
       </div>
 
