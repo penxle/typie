@@ -61,7 +61,7 @@ const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' 
 const MAX_CHUNK_SIZE = 500;
 const MAX_CONCURRENCY = 100;
 
-const ALLOWED_CHARS = /^[\u{AC00}-\u{D7AF}\u{3131}-\u{318E}A-Za-z0-9\s.,!?:;()[\]"'/\\@#$%&*+=_~`{}<>|^。、「」『』！？…·ㆍ-]$/u;
+const ALLOWED_CHARS = /^[\u{AC00}-\u{D7AF}\u{3131}-\u{318E}A-Za-z0-9\s.,!?:;()[\]"'/\\@#$%&*+=_~`{}<>|^。、「」『』“”‘’！？…·ㆍ-]$/u;
 const SENTENCE_PATTERN = /([.!?。！？]+\s*)/g;
 
 const normalize = (text: string) => {
