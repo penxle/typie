@@ -10,6 +10,7 @@
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { tooltip } from '$lib/actions';
+  import { fb } from '$lib/analytics';
   import { Button, Checkbox, Helmet, Icon, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { serializeOAuthState } from '$lib/utils';
@@ -63,7 +64,7 @@
       });
 
       mixpanel.track('send_sign_up_email');
-      fbq?.('track', 'CompleteRegistration');
+      fb.track('CompleteRegistration');
 
       emailSent = true;
     },

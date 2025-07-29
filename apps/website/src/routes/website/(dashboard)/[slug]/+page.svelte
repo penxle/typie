@@ -3,6 +3,7 @@
   import FileXIcon from '~icons/lucide/file-x';
   import { afterNavigate } from '$app/navigation';
   import { graphql } from '$graphql';
+  import { fb } from '$lib/analytics';
   import { Helmet, Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
@@ -60,7 +61,7 @@
     if ($query.me.id === $query.entity.user.id && $query.entity.state === EntityState.ACTIVE) {
       await viewEntity({ entityId: $query.entity.id });
 
-      fbq?.('track', 'ViewContent');
+      fb.track('ViewContent');
     }
   });
 </script>

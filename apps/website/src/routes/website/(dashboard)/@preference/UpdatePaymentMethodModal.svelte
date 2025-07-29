@@ -8,6 +8,7 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { fragment, graphql } from '$graphql';
+  import { fb } from '$lib/analytics';
   import { Button, Checkbox, HorizontalDivider, Icon, Modal, SegmentButtons, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { Dialog, Toast } from '$lib/notification';
@@ -111,7 +112,7 @@
       });
 
       mixpanel.track('update_payment_billing_key');
-      fbq?.('track', 'AddPaymentInfo');
+      fb.track('AddPaymentInfo');
 
       if ($user.subscription) {
         open = false;
@@ -125,11 +126,11 @@
           if (interval === PlanInterval.MONTHLY) {
             await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
             mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
-            fbq?.('track', 'Subscribe', { value: '4900.00', currency: 'KRW', predicted_ltv: '4900.00' });
+            fb.track('Subscribe', { value: '4900.00', currency: 'KRW', predicted_ltv: '4900.00' });
           } else if (interval === PlanInterval.YEARLY) {
             await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
             mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
-            fbq?.('track', 'Subscribe', { value: '49000.00', currency: 'KRW', predicted_ltv: '49000.00' });
+            fb.track('Subscribe', { value: '49000.00', currency: 'KRW', predicted_ltv: '49000.00' });
           }
 
           open = false;
