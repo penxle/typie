@@ -92,39 +92,6 @@ export const Behavior = Extension.create({
 
           return null;
         },
-        props: {
-          handleDOMEvents: {
-            cut: (view, event) => {
-              event.preventDefault();
-
-              const slice = view.state.selection.content();
-              const { dom, text } = view.serializeForClipboard(slice);
-
-              event.clipboardData?.clearData();
-              event.clipboardData?.setData('text/html', dom.innerHTML);
-              event.clipboardData?.setData('text/plain', text);
-
-              const { tr } = view.state;
-              tr.deleteSelection();
-              view.dispatch(tr);
-
-              return true;
-            },
-
-            copy: (view, event) => {
-              event.preventDefault();
-
-              const slice = view.state.selection.content();
-              const { dom, text } = view.serializeForClipboard(slice);
-
-              event.clipboardData?.clearData();
-              event.clipboardData?.setData('text/html', dom.innerHTML);
-              event.clipboardData?.setData('text/plain', text);
-
-              return true;
-            },
-          },
-        },
       }),
     ];
   },
