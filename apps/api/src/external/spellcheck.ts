@@ -72,9 +72,11 @@ const normalize = (text: string) => {
     const char = text[i];
     const code = text.codePointAt(i) || 0;
 
-    if (code >= 0xd8_00 && code <= 0xdb_ff && i + 1 < text.length) {
+    if (i + 1 < text.length) {
       const nextCode = text.codePointAt(i + 1) || 0;
-      if (nextCode >= 0xdc_00 && nextCode <= 0xdf_ff) {
+      const isSurrogatePair = code >= 0xd8_00 && code <= 0xdb_ff;
+      const isVariationSelector = nextCode >= 0xfe_00 && nextCode <= 0xfe_0f;
+      if (isSurrogatePair || isVariationSelector) {
         removed.push({ pos: i, len: 2 });
         i += 2;
         continue;
@@ -90,21 +92,30 @@ const normalize = (text: string) => {
     }
   }
 
-  const map = (offset: number) => {
-    let adjustment = 0;
+  const map = (offset: number, isLast = false) => {
+    let originalPos = 0;
     let normalizedPos = 0;
 
-    for (let i = 0; i < text.length && normalizedPos < offset; i++) {
-      const r = removed.find((r) => r.pos === i);
-      if (r) {
-        adjustment += r.len;
-        i += r.len - 1;
+    for (let i = 0; i < text.length; ) {
+      const isRemoved = removed.find((r) => r.pos === i);
+
+      if (isRemoved) {
+        if (offset === normalizedPos && isLast) {
+          return originalPos;
+        }
+        originalPos += isRemoved.len;
+        i += isRemoved.len;
       } else {
+        if (normalizedPos === offset) {
+          return originalPos;
+        }
         normalizedPos++;
+        originalPos++;
+        i++;
       }
     }
 
-    return offset + adjustment;
+    return originalPos;
   };
 
   return { text: normalized, map };
@@ -275,7 +286,7 @@ export const check = async (text: string) => {
 
         return errors.map((error) => {
           const start = normalized.map(Number(error.m_nStart));
-          const end = normalized.map(Number(error.m_nEnd));
+          const end = normalized.map(Number(error.m_nEnd), true);
 
           return {
             index: Number(error.nErrorIdx),
