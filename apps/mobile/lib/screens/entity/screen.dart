@@ -949,6 +949,9 @@ class _BottomMenuHeader extends StatelessWidget {
                           if (folder.postCount > 0) {
                             parts.add('포스트 ${folder.postCount.comma}개');
                           }
+                          if (folder.canvasCount > 0) {
+                            parts.add('캔버스 ${folder.canvasCount.comma}개');
+                          }
                           parts.add('총 ${folder.characterCount.comma}자');
                           return parts.join(' · ');
                         },

@@ -15,6 +15,7 @@ fragment EntityScreen_Entity_entity on Entity {
       characterCount
       folderCount
       postCount
+      canvasCount
     }
 
     ... on Post {

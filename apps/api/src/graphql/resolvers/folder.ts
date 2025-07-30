@@ -122,6 +122,30 @@ Folder.implement({
         return Number(rows[0]?.count || 0);
       },
     }),
+
+    canvasCount: t.int({
+      resolve: async (self) => {
+        const rows = await db.execute<{ count: number }>(
+          sql`
+            WITH RECURSIVE descendant_entities AS (
+              SELECT id, type
+              FROM ${Entities}
+              WHERE parent_id = ${self.entityId}
+              AND state = ${EntityState.ACTIVE}
+              UNION ALL
+              SELECT e.id, e.type
+              FROM ${Entities} e
+              JOIN descendant_entities de ON e.parent_id = de.id
+              WHERE e.state = ${EntityState.ACTIVE}
+            )
+            SELECT COUNT(*) AS count
+            FROM descendant_entities
+            WHERE type = ${EntityType.CANVAS}
+          `,
+        );
+        return Number(rows[0]?.count || 0);
+      },
+    }),
   }),
 });
 
