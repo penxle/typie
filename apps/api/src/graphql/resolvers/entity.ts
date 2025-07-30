@@ -7,6 +7,7 @@ import { Canvases, db, Entities, first, firstOrThrow, firstOrThrowWith, Folders,
 import { EntityAvailability, EntityState, EntityType, EntityVisibility, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
+import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
@@ -489,6 +490,83 @@ builder.mutationFields((t) => ({
       await db.update(Entities).set({ viewedAt: dayjs() }).where(eq(Entities.id, input.entityId));
 
       return input.entityId;
+    },
+  }),
+
+  deleteEntities: t.withAuth({ session: true }).fieldWithInput({
+    type: [Entity],
+    input: { entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }) },
+    resolve: async (_, { input }, ctx) => {
+      const entities = await db.execute<{ id: string; site_id: string }>(sql`
+        WITH RECURSIVE sq AS (
+          SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
+          FROM ${Entities}
+          WHERE ${inArray(Entities.id, input.entityIds)}
+          UNION ALL
+          SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
+          FROM ${Entities}
+          JOIN sq ON ${Entities.parentId} = sq.id
+        )
+        SELECT id, site_id
+        FROM sq
+      `);
+
+      if (entities.length === 0) {
+        return [];
+      }
+
+      const siteId = entities[0].site_id;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (entities.some((entity) => entity.site_id !== siteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      return await db.transaction(async (tx) => {
+        const deletedEntities = await tx
+          .update(Entities)
+          .set({
+            state: EntityState.DELETED,
+            deletedAt: dayjs(),
+          })
+          .where(
+            inArray(
+              Entities.id,
+              entities.map(({ id }) => id),
+            ),
+          )
+          .returning();
+
+        pubsub.publish('site:update', siteId, { scope: 'site' });
+        pubsub.publish('site:usage:update', siteId, null);
+
+        const postEntityIds: string[] = [];
+
+        for (const entity of deletedEntities) {
+          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
+          if (entity.type === EntityType.POST) {
+            postEntityIds.push(entity.id);
+          }
+        }
+
+        if (postEntityIds.length > 0) {
+          const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
+
+          for (const post of posts) {
+            await enqueueJob('post:index', post.id, {
+              deduplication: {
+                id: `post:index:${post.id}`,
+              },
+            });
+          }
+        }
+
+        return deletedEntities;
+      });
     },
   }),
 
