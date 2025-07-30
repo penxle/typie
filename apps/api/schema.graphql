@@ -146,6 +146,10 @@ input DeleteCommentInput {
   commentId: ID!
 }
 
+input DeleteEntitiesInput {
+  entityIds: [ID!]!
+}
+
 input DeleteFolderInput {
   folderId: ID!
 }
@@ -397,6 +401,7 @@ type Mutation {
   createWsSession: String!
   deleteCanvas(input: DeleteCanvasInput!): Canvas!
   deleteComment(input: DeleteCommentInput!): Comment!
+  deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deletePost(input: DeletePostInput!): Post!
   deleteUser: Boolean!
