@@ -493,6 +493,138 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  moveEntities: t.withAuth({ session: true }).fieldWithInput({
+    type: [Entity],
+    input: {
+      entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }),
+      parentEntityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES), required: false }),
+      lowerOrder: t.input.string({ required: false }),
+      upperOrder: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entities = await db
+        .select({
+          id: Entities.id,
+          siteId: Entities.siteId,
+          parentId: Entities.parentId,
+          depth: Entities.depth,
+          order: Entities.order,
+        })
+        .from(Entities)
+        .where(and(inArray(Entities.id, input.entityIds), eq(Entities.state, EntityState.ACTIVE)));
+
+      if (entities.length === 0) {
+        return [];
+      }
+
+      const siteId = entities[0].siteId;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (entities.some((entity) => entity.siteId !== siteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      const targetParentId: string | null = input.parentEntityId ?? null;
+      let targetDepth = 0;
+
+      if (targetParentId) {
+        const parentEntity = await db
+          .select({ depth: Entities.depth, siteId: Entities.siteId })
+          .from(Entities)
+          .where(and(eq(Entities.id, targetParentId), eq(Entities.state, EntityState.ACTIVE)))
+          .then(firstOrThrowWith(new NotFoundError()));
+
+        if (parentEntity.siteId !== siteId) {
+          throw new TypieError({ code: 'site_mismatch' });
+        }
+
+        if (input.entityIds.includes(targetParentId)) {
+          throw new TypieError({ code: 'circular_reference' });
+        }
+
+        const hasCycle = await db
+          .execute<{ exists: boolean }>(
+            sql`
+              WITH RECURSIVE sq AS (
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                WHERE ${eq(Entities.id, targetParentId)}
+                UNION ALL
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                JOIN sq ON ${Entities.id} = sq.parent_id
+              )
+              SELECT EXISTS (
+                SELECT 1 FROM sq WHERE ${inArray(sql`id`, input.entityIds)}
+              ) as exists
+            `,
+          )
+          .then(firstOrThrow);
+
+        if (hasCycle.exists) {
+          throw new TypieError({ code: 'circular_reference' });
+        }
+
+        targetDepth = parentEntity.depth + 1;
+      }
+
+      return await db.transaction(async (tx) => {
+        const movedEntities: (typeof Entities.$inferSelect)[] = [];
+
+        let lastOrder = input.lowerOrder ?? null;
+
+        for (const entity of entities) {
+          const depthDelta = targetDepth - entity.depth;
+
+          const order = generateEntityOrder({
+            lower: lastOrder,
+            upper: input.upperOrder ?? null,
+          });
+
+          const movedEntity = await tx
+            .update(Entities)
+            .set({
+              parentId: targetParentId,
+              depth: targetDepth,
+              order,
+            })
+            .where(eq(Entities.id, entity.id))
+            .returning()
+            .then(firstOrThrow);
+
+          movedEntities.push(movedEntity);
+
+          lastOrder = order;
+
+          if (entity.parentId !== targetParentId && depthDelta !== 0) {
+            await tx.execute(sql`
+              WITH RECURSIVE sq AS (
+                SELECT ${Entities.id}, ${Entities.depth}
+                FROM ${Entities}
+                WHERE ${eq(Entities.parentId, entity.id)}
+                UNION ALL
+                SELECT ${Entities.id}, ${Entities.depth}
+                FROM ${Entities}
+                JOIN sq ON ${Entities.parentId} = sq.id
+              )
+              UPDATE ${Entities}
+              SET depth = depth + ${depthDelta}
+              WHERE id IN (SELECT id FROM sq)
+            `);
+          }
+        }
+
+        pubsub.publish('site:update', siteId, { scope: 'site' });
+
+        return movedEntities;
+      });
+    },
+  }),
+
   deleteEntities: t.withAuth({ session: true }).fieldWithInput({
     type: [Entity],
     input: { entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }) },
