@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, or, sql, sum } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
 import { db, Entities, first, firstOrThrow, Fonts, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
@@ -134,18 +135,20 @@ Site.implement({
       },
     }),
 
-    deletedPosts: t.field({
-      type: [Post],
+    deletedEntities: t.field({
+      type: [Entity],
       resolve: async (self) => {
+        const parentEntities = alias(Entities, 'parent_entities');
         return await db
-          .select(getTableColumns(Posts))
-          .from(Posts)
-          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+          .select(getTableColumns(Entities))
+          .from(Entities)
+          .leftJoin(parentEntities, eq(Entities.parentId, parentEntities.id))
           .where(
             and(
               eq(Entities.siteId, self.id),
               eq(Entities.state, EntityState.DELETED),
               gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
+              or(isNull(parentEntities.id), eq(parentEntities.state, EntityState.ACTIVE)),
             ),
           )
           .orderBy(desc(Entities.deletedAt));

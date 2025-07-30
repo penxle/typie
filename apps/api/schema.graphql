@@ -175,6 +175,7 @@ type Entity implements IEntity {
   ancestors: [Entity!]!
   availability: EntityAvailability!
   children: [Entity!]!
+  deletedChildren: [Entity!]!
   depth: Int!
   descendants: [Entity!]!
   id: ID!
@@ -412,6 +413,7 @@ type Mutation {
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
   registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
   removeSiteFont(input: RemoveSiteFontInput!): Site!
@@ -427,7 +429,6 @@ type Mutation {
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   syncCanvas(input: SyncCanvasInput!): Boolean!
   syncPost(input: SyncPostInput!): Boolean!
-  undeletePost(input: UndeletePostInput!): Post!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
@@ -670,6 +671,10 @@ type Query {
   welcome: Welcome!
 }
 
+input RecoverEntityInput {
+  entityId: ID!
+}
+
 input RedeemCreditCodeInput {
   code: String!
 }
@@ -745,7 +750,7 @@ enum SingleSignOnProvider {
 }
 
 type Site implements ISite {
-  deletedPosts: [Post!]!
+  deletedEntities: [Entity!]!
   entities: [Entity!]!
   firstEntity(type: EntityType!): Entity
   fonts: [Font!]!
@@ -832,10 +837,6 @@ input SyncPostInput {
   data: String!
   postId: ID!
   type: PostSyncType!
-}
-
-input UndeletePostInput {
-  postId: ID!
 }
 
 input UnfurlEmbedInput {

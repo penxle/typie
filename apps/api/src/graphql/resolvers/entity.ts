@@ -1,8 +1,9 @@
 import dayjs from 'dayjs';
-import { and, asc, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
-import { Canvases, db, Entities, firstOrThrow, firstOrThrowWith, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
+import { Canvases, db, Entities, first, firstOrThrow, firstOrThrowWith, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
 import { EntityAvailability, EntityState, EntityType, EntityVisibility, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
@@ -84,6 +85,33 @@ Entity.implement({
               .select()
               .from(Entities)
               .where(and(inArray(Entities.parentId, ids), eq(Entities.state, EntityState.ACTIVE)))
+              .orderBy(asc(Entities.order));
+          },
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          key: ({ parentId }) => parentId!,
+        });
+
+        return await loader.load(self.id);
+      },
+    }),
+
+    deletedChildren: t.field({
+      type: [Entity],
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Entity.deletedChildren',
+          many: true,
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(Entities)
+              .where(
+                and(
+                  inArray(Entities.parentId, ids),
+                  eq(Entities.state, EntityState.DELETED),
+                  gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
+                ),
+              )
               .orderBy(asc(Entities.order));
           },
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -461,6 +489,85 @@ builder.mutationFields((t) => ({
       await db.update(Entities).set({ viewedAt: dayjs() }).where(eq(Entities.id, input.entityId));
 
       return input.entityId;
+    },
+  }),
+
+  recoverEntity: t.withAuth({ session: true }).fieldWithInput({
+    type: Entity,
+    input: { entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }) },
+    resolve: async (_, { input }, ctx) => {
+      const ParentEntities = alias(Entities, 'parent_entities');
+
+      const entity = await db
+        .select({
+          id: Entities.id,
+          siteId: Entities.siteId,
+          order: Entities.order,
+          depth: Entities.depth,
+          parentEntity: {
+            id: ParentEntities.id,
+            state: ParentEntities.state,
+            depth: ParentEntities.depth,
+          },
+        })
+        .from(Entities)
+        .leftJoin(ParentEntities, eq(Entities.parentId, ParentEntities.id))
+        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.DELETED)))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+      });
+
+      const isParentActive = entity.parentEntity?.state === EntityState.ACTIVE;
+
+      const rootLastChildOrder = isParentActive
+        ? null
+        : await db
+            .select({ order: Entities.order })
+            .from(Entities)
+            .where(and(eq(Entities.siteId, entity.siteId), eq(Entities.state, EntityState.ACTIVE), isNull(Entities.parentId)))
+            .orderBy(desc(Entities.order))
+            .limit(1)
+            .then(first)
+            .then((result) => result?.order ?? null);
+
+      const depthDelta = isParentActive ? 0 : -entity.depth;
+
+      return await db.transaction(async (tx) => {
+        if (!isParentActive) {
+          await tx
+            .update(Entities)
+            .set({
+              parentId: null,
+              order: generateEntityOrder({ lower: rootLastChildOrder, upper: null }),
+            })
+            .where(eq(Entities.id, entity.id));
+        }
+
+        await tx.execute(sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id}
+            FROM ${Entities}
+            WHERE ${eq(Entities.id, entity.id)}
+            UNION ALL
+            SELECT ${Entities.id}
+            FROM ${Entities}
+            JOIN sq ON ${Entities.parentId} = sq.id
+          )
+          UPDATE ${Entities}
+          SET state = ${EntityState.ACTIVE},
+          deleted_at = null,
+          depth = depth + ${depthDelta}
+          WHERE id IN (SELECT id FROM sq) AND ${gt(Entities.deletedAt, dayjs().subtract(30, 'days'))}
+        `);
+
+        pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+        pubsub.publish('site:usage:update', entity.siteId, null);
+
+        return entity.id;
+      });
     },
   }),
 }));
