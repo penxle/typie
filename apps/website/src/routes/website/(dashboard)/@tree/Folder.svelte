@@ -5,9 +5,10 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import DotIcon from '~icons/lucide/dot';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ExternalLinkIcon from '~icons/lucide/external-link';
+  import FileIcon from '~icons/lucide/file';
+  import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import PencilIcon from '~icons/lucide/pencil-line';
@@ -23,15 +24,22 @@
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Entity from './Entity.svelte';
+  import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
   import { maxDepth } from './utils';
-  import type { DashboardLayout_EntityTree_Folder_entity, DashboardLayout_EntityTree_Folder_folder, List } from '$graphql';
+  import type {
+    DashboardLayout_EntityTree_Folder_entity,
+    DashboardLayout_EntityTree_Folder_folder,
+    DashboardLayout_EntityTree_site,
+    List,
+  } from '$graphql';
 
   type Props = {
     $folder: DashboardLayout_EntityTree_Folder_folder;
     $entities: List<DashboardLayout_EntityTree_Folder_entity>;
+    $site: DashboardLayout_EntityTree_site;
   };
 
-  let { $folder: _folder, $entities: _entities }: Props = $props();
+  let { $folder: _folder, $entities: _entities, $site: _site }: Props = $props();
 
   const folder = fragment(
     _folder,
@@ -144,6 +152,7 @@
 
   const app = getAppContext();
   const active = $derived(app.state.ancestors.includes($folder.entity.id));
+  const selected = $derived(app.state.tree.selectedEntityIds.has($folder.entity.id));
 
   let detailsEl = $state<HTMLDetailsElement>();
   let inputEl = $state<HTMLInputElement>();
@@ -205,7 +214,7 @@
           borderRadius: '6px',
           transition: 'common',
           cursor: 'pointer',
-          _supportHover: { backgroundColor: 'surface.muted' },
+          _supportHover: { backgroundColor: 'surface.subtle' },
           '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
         },
         $folder.entity.depth > 0 && {
@@ -214,6 +223,10 @@
           marginLeft: '-1px',
           paddingLeft: '14px',
           _supportHover: { borderColor: 'border.strong' },
+        },
+        selected && {
+          backgroundColor: 'surface.muted',
+          _supportHover: { backgroundColor: 'surface.muted' },
         },
       ),
     )}
@@ -315,150 +328,157 @@
           </div>
         {/snippet}
 
-        <MenuItem icon={PencilIcon} onclick={() => (editing = true)}>이름 변경</MenuItem>
+        {#if app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has($folder.entity.id)}
+          <MultiEntitiesMenu $site={_site} />
+        {:else}
+          <MenuItem icon={PencilIcon} onclick={() => (editing = true)}>이름 변경</MenuItem>
 
-        <HorizontalDivider color="secondary" />
+          <HorizontalDivider color="secondary" />
 
-        <MenuItem external href={$folder.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+          <MenuItem external href={$folder.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
 
-        <HorizontalDivider color="secondary" />
+          <HorizontalDivider color="secondary" />
 
-        <MenuItem
-          icon={BlendIcon}
-          onclick={() => {
-            app.state.shareOpen = $folder.entity.id;
-            mixpanel.track('open_folder_share_modal');
-          }}
-        >
-          공유 및 게시
-        </MenuItem>
-
-        <HorizontalDivider color="secondary" />
-
-        <MenuItem
-          icon={SquarePenIcon}
-          onclick={async () => {
-            const resp = await createPost({
-              siteId: $folder.entity.site.id,
-              parentEntityId: $folder.entity.id,
-            });
-
-            mixpanel.track('create_child_post');
-
-            await goto(`/${resp.entity.slug}`);
-          }}
-        >
-          하위 포스트 생성
-        </MenuItem>
-
-        <MenuItem
-          icon={LineSquiggleIcon}
-          onclick={async () => {
-            const resp = await createCanvas({
-              siteId: $folder.entity.site.id,
-              parentEntityId: $folder.entity.id,
-            });
-
-            mixpanel.track('create_child_canvas');
-
-            await goto(`/${resp.entity.slug}`);
-          }}
-        >
-          하위 캔버스 생성
-        </MenuItem>
-
-        {#if $folder.entity.depth < maxDepth - 1}
           <MenuItem
-            icon={FolderPlusIcon}
-            onclick={async () => {
-              const resp = await createFolder({
-                siteId: $folder.entity.site.id,
-                parentEntityId: $folder.entity.id,
-                name: '새 폴더',
-              });
-
-              mixpanel.track('create_child_folder');
-
-              open = true;
-              app.state.newFolderId = resp.id;
+            icon={BlendIcon}
+            onclick={() => {
+              app.state.shareOpen = $folder.entity.id;
+              mixpanel.track('open_folder_share_modal');
             }}
           >
-            하위 폴더 생성
+            공유 및 게시
           </MenuItem>
-        {/if}
 
-        <HorizontalDivider color="secondary" />
+          <HorizontalDivider color="secondary" />
 
-        <MenuItem
-          icon={TrashIcon}
-          onclick={async () => {
-            loadingDescendants = true;
-            descendants.load({ entityId: $folder.entity.id }).then(() => {
-              loadingDescendants = false;
-            });
+          <MenuItem
+            icon={SquarePenIcon}
+            onclick={async () => {
+              const resp = await createPost({
+                siteId: $folder.entity.site.id,
+                parentEntityId: $folder.entity.id,
+              });
 
-            Dialog.confirm({
-              title: '폴더 삭제',
-              message: `정말 "${$folder.name}" 폴더를 삭제하시겠어요?`,
-              children: descendantsView,
-              action: 'danger',
-              actionLabel: '삭제',
-              actionHandler: async () => {
-                await deleteFolder({ folderId: $folder.id });
-                mixpanel.track('delete_folder');
-              },
-            });
-          }}
-          variant="danger"
-        >
-          삭제
-        </MenuItem>
+              mixpanel.track('create_child_post');
 
-        <HorizontalDivider color="secondary" />
+              await goto(`/${resp.entity.slug}`);
+            }}
+          >
+            하위 포스트 생성
+          </MenuItem>
 
-        <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
-          <div class={css({ fontWeight: 'medium' })}>
-            {#if $folder.entity.visibility === EntityVisibility.UNLISTED}
-              <span class={css({ color: 'accent.brand.default' })}>링크 조회 가능 폴더</span>
-            {:else}
-              <span>비공개 폴더</span>
-            {/if}
-          </div>
+          <MenuItem
+            icon={LineSquiggleIcon}
+            onclick={async () => {
+              const resp = await createCanvas({
+                siteId: $folder.entity.site.id,
+                parentEntityId: $folder.entity.id,
+              });
 
-          {#if loadingInfo}
-            <span class={flex({ alignItems: 'center', gap: '4px' })}>
-              <RingSpinner style={css.raw({ size: '12px' })} />
-              불러오는 중...
-            </span>
-          {:else if $info}
-            <div class={flex({ alignItems: 'center' })}>
-              {#if $info.folder.folderCount > 0}
-                <span>폴더 {$info.folder.folderCount}개</span>
-                <Icon icon={DotIcon} size={12} />
-              {/if}
+              mixpanel.track('create_child_canvas');
 
-              {#if $info.folder.postCount > 0}
-                <span>포스트 {$info.folder.postCount}개</span>
-                {#if $info.folder.canvasCount > 0}
-                  <Icon icon={DotIcon} size={12} />
-                {/if}
-              {/if}
+              await goto(`/${resp.entity.slug}`);
+            }}
+          >
+            하위 캔버스 생성
+          </MenuItem>
 
-              {#if $info.folder.canvasCount > 0}
-                <span>캔버스 {$info.folder.canvasCount}개</span>
+          {#if $folder.entity.depth < maxDepth - 1}
+            <MenuItem
+              icon={FolderPlusIcon}
+              onclick={async () => {
+                const resp = await createFolder({
+                  siteId: $folder.entity.site.id,
+                  parentEntityId: $folder.entity.id,
+                  name: '새 폴더',
+                });
+
+                mixpanel.track('create_child_folder');
+
+                open = true;
+                app.state.newFolderId = resp.id;
+              }}
+            >
+              하위 폴더 생성
+            </MenuItem>
+          {/if}
+
+          <HorizontalDivider color="secondary" />
+
+          <MenuItem
+            icon={TrashIcon}
+            onclick={async () => {
+              loadingDescendants = true;
+              descendants.load({ entityId: $folder.entity.id }).then(() => {
+                loadingDescendants = false;
+              });
+
+              Dialog.confirm({
+                title: '폴더 삭제',
+                message: `정말 "${$folder.name}" 폴더를 삭제하시겠어요?`,
+                children: descendantsView,
+                action: 'danger',
+                actionLabel: '삭제',
+                actionHandler: async () => {
+                  await deleteFolder({ folderId: $folder.id });
+                  mixpanel.track('delete_folder');
+                },
+              });
+            }}
+            variant="danger"
+          >
+            삭제
+          </MenuItem>
+
+          <HorizontalDivider color="secondary" />
+
+          <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
+            <div class={css({ fontWeight: 'medium' })}>
+              {#if $folder.entity.visibility === EntityVisibility.UNLISTED}
+                <span class={css({ color: 'accent.brand.default' })}>링크 조회 가능 폴더</span>
+              {:else}
+                <span>비공개 폴더</span>
               {/if}
             </div>
 
-            <span>총 {comma($info.folder.characterCount)}자</span>
-          {/if}
-        </div>
+            {#if loadingInfo}
+              <span class={flex({ alignItems: 'center', gap: '4px' })}>
+                <RingSpinner style={css.raw({ size: '12px' })} />
+                불러오는 중...
+              </span>
+            {:else if $info}
+              <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                {#if $info.folder.folderCount > 0}
+                  <div class={center({ gap: '2px' })}>
+                    <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={14} />
+                    {$info.folder.folderCount}
+                  </div>
+                {/if}
+                {#if $info.folder.postCount > 0}
+                  <div class={center({ gap: '2px' })}>
+                    <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
+                    {$info.folder.postCount}
+                  </div>
+                {/if}
+                {#if $info.folder.canvasCount > 0}
+                  <div class={center({ gap: '2px' })}>
+                    <Icon style={css.raw({ color: 'text.disabled' })} icon={LineSquiggleIcon} size={14} />
+                    {$info.folder.canvasCount}
+                  </div>
+                {/if}
+              </div>
+
+              <span>총 {comma($info.folder.characterCount)}자</span>
+            {/if}
+          </div>
+        {/if}
       </Menu>
     {/if}
   </summary>
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
     {#each $entities as entity (entity.id)}
-      <Entity $entity={entity} />
+      <Entity $entity={entity} $site={_site} />
     {:else}
       <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
         폴더가 비어있어요

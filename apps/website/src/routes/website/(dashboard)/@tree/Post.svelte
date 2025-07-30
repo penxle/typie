@@ -17,13 +17,15 @@
   import { comma } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
-  import type { DashboardLayout_EntityTree_Post_post } from '$graphql';
+  import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
+  import type { DashboardLayout_EntityTree_Post_post, DashboardLayout_EntityTree_site } from '$graphql';
 
   type Props = {
     $post: DashboardLayout_EntityTree_Post_post;
+    $site: DashboardLayout_EntityTree_site;
   };
 
-  let { $post: _post }: Props = $props();
+  let { $post: _post, $site: _site }: Props = $props();
 
   const post = fragment(
     _post,
@@ -82,6 +84,7 @@
 
   const app = getAppContext();
   const active = $derived(app.state.current === $post.entity.id);
+  const selected = $derived(app.state.tree.selectedEntityIds.has($post.entity.id));
 
   let element = $state<HTMLAnchorElement>();
 
@@ -105,7 +108,7 @@
         paddingY: '6px',
         borderRadius: '6px',
         transition: 'common',
-        _supportHover: { backgroundColor: 'surface.muted' },
+        _supportHover: { backgroundColor: 'surface.subtle' },
         '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
       },
       $post.entity.depth > 0 && {
@@ -115,8 +118,9 @@
         paddingLeft: '14px',
         _supportHover: { borderColor: 'border.strong' },
       },
-      active && {
+      selected && {
         backgroundColor: 'surface.muted',
+        _supportHover: { backgroundColor: 'surface.muted' },
       },
     ),
   )}
@@ -177,78 +181,82 @@
       </div>
     {/snippet}
 
-    <MenuItem external href={$post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+    {#if app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has($post.entity.id)}
+      <MultiEntitiesMenu $site={_site} />
+    {:else}
+      <MenuItem external href={$post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
 
-    <HorizontalDivider color="secondary" />
+      <HorizontalDivider color="secondary" />
 
-    <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $post.entity.id)}>공유 및 게시</MenuItem>
+      <MenuItem icon={BlendIcon} onclick={() => (app.state.shareOpen = $post.entity.id)}>공유 및 게시</MenuItem>
 
-    <MenuItem
-      icon={CopyIcon}
-      onclick={async () => {
-        try {
-          const resp = await duplicatePost({ postId: $post.id });
-          mixpanel.track('duplicate_post', { via: 'tree' });
-          await goto(`/${resp.entity.slug}`);
-        } catch (err) {
-          const errorMessages: Record<string, string> = {
-            character_count_limit_exceeded: '현재 플랜의 글자 수 제한을 초과했어요.',
-            blob_size_limit_exceeded: '현재 플랜의 파일 크기 제한을 초과했어요.',
-          };
+      <MenuItem
+        icon={CopyIcon}
+        onclick={async () => {
+          try {
+            const resp = await duplicatePost({ postId: $post.id });
+            mixpanel.track('duplicate_post', { via: 'tree' });
+            await goto(`/${resp.entity.slug}`);
+          } catch (err) {
+            const errorMessages: Record<string, string> = {
+              character_count_limit_exceeded: '현재 플랜의 글자 수 제한을 초과했어요.',
+              blob_size_limit_exceeded: '현재 플랜의 파일 크기 제한을 초과했어요.',
+            };
 
-          if (err instanceof TypieError) {
-            const message = errorMessages[err.code] || err.code;
-            Toast.error(message);
+            if (err instanceof TypieError) {
+              const message = errorMessages[err.code] || err.code;
+              Toast.error(message);
+            }
           }
-        }
-      }}
-    >
-      복제
-    </MenuItem>
+        }}
+      >
+        복제
+      </MenuItem>
 
-    <HorizontalDivider color="secondary" />
+      <HorizontalDivider color="secondary" />
 
-    <MenuItem
-      icon={TrashIcon}
-      onclick={async () => {
-        Dialog.confirm({
-          title: '포스트 삭제',
-          message: `정말 "${$post.title}" 포스트를 삭제하시겠어요?`,
-          action: 'danger',
-          actionLabel: '삭제',
-          actionHandler: async () => {
-            await deletePost({ postId: $post.id });
-            mixpanel.track('delete_post', { via: 'tree' });
-            app.state.ancestors = [];
-            app.state.current = undefined;
-          },
-        });
-      }}
-      variant="danger"
-    >
-      삭제
-    </MenuItem>
+      <MenuItem
+        icon={TrashIcon}
+        onclick={async () => {
+          Dialog.confirm({
+            title: '포스트 삭제',
+            message: `정말 "${$post.title}" 포스트를 삭제하시겠어요?`,
+            action: 'danger',
+            actionLabel: '삭제',
+            actionHandler: async () => {
+              await deletePost({ postId: $post.id });
+              mixpanel.track('delete_post', { via: 'tree' });
+              app.state.ancestors = [];
+              app.state.current = undefined;
+            },
+          });
+        }}
+        variant="danger"
+      >
+        삭제
+      </MenuItem>
 
-    <HorizontalDivider color="secondary" />
+      <HorizontalDivider color="secondary" />
 
-    <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
-      <div class={css({ fontWeight: 'medium' })}>
-        {#if $post.entity.visibility === EntityVisibility.UNLISTED || $post.entity.availability === EntityAvailability.UNLISTED}
-          <span class={css({ color: 'accent.brand.default' })}>
-            {#if $post.entity.visibility === EntityVisibility.UNLISTED && $post.entity.availability === EntityAvailability.UNLISTED}
-              링크 조회/편집 가능 포스트
-            {:else if $post.entity.visibility === EntityVisibility.UNLISTED}
-              링크 조회 가능 포스트
-            {:else if $post.entity.availability === EntityAvailability.UNLISTED}
-              링크 편집 가능 포스트
-            {/if}
-          </span>
-        {:else}
-          <span>비공개 포스트</span>
-        {/if}
+      <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
+        <div class={css({ fontWeight: 'medium' })}>
+          {#if $post.entity.visibility === EntityVisibility.UNLISTED || $post.entity.availability === EntityAvailability.UNLISTED}
+            <span class={css({ color: 'accent.brand.default' })}>
+              {#if $post.entity.visibility === EntityVisibility.UNLISTED && $post.entity.availability === EntityAvailability.UNLISTED}
+                링크 조회/편집 가능 포스트
+              {:else if $post.entity.visibility === EntityVisibility.UNLISTED}
+                링크 조회 가능 포스트
+              {:else if $post.entity.availability === EntityAvailability.UNLISTED}
+                링크 편집 가능 포스트
+              {/if}
+            </span>
+          {:else}
+            <span>비공개 포스트</span>
+          {/if}
+        </div>
+
+        <span>총 {comma($post.characterCount)}자</span>
       </div>
-
-      <span>총 {comma($post.characterCount)}자</span>
-    </div>
+    {/if}
   </Menu>
 </a>

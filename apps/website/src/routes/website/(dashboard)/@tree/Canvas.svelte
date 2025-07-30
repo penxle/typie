@@ -12,13 +12,15 @@
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
-  import type { DashboardLayout_EntityTree_Canvas_canvas } from '$graphql';
+  import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
+  import type { DashboardLayout_EntityTree_Canvas_canvas, DashboardLayout_EntityTree_site } from '$graphql';
 
   type Props = {
     $canvas: DashboardLayout_EntityTree_Canvas_canvas;
+    $site: DashboardLayout_EntityTree_site;
   };
 
-  let { $canvas: _canvas }: Props = $props();
+  let { $canvas: _canvas, $site: _site }: Props = $props();
 
   const canvas = fragment(
     _canvas,
@@ -62,6 +64,7 @@
 
   const app = getAppContext();
   const active = $derived(app.state.current === $canvas.entity.id);
+  const selected = $derived(app.state.tree.selectedEntityIds.has($canvas.entity.id));
 
   let element = $state<HTMLAnchorElement>();
 
@@ -85,7 +88,7 @@
         paddingY: '6px',
         borderRadius: '6px',
         transition: 'common',
-        _supportHover: { backgroundColor: 'surface.muted' },
+        _supportHover: { backgroundColor: 'surface.subtle' },
         '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
       },
       $canvas.entity.depth > 0 && {
@@ -95,8 +98,9 @@
         paddingLeft: '14px',
         _supportHover: { borderColor: 'border.strong' },
       },
-      active && {
+      selected && {
         backgroundColor: 'surface.muted',
+        _supportHover: { backgroundColor: 'surface.muted' },
       },
     ),
   )}
@@ -153,38 +157,42 @@
       </div>
     {/snippet}
 
-    <MenuItem
-      icon={CopyIcon}
-      onclick={async () => {
-        const resp = await duplicateCanvas({ canvasId: $canvas.id });
-        mixpanel.track('duplicate_canvas', { via: 'tree' });
-        await goto(`/${resp.entity.slug}`);
-      }}
-    >
-      복제
-    </MenuItem>
+    {#if app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has($canvas.entity.id)}
+      <MultiEntitiesMenu $site={_site} />
+    {:else}
+      <MenuItem
+        icon={CopyIcon}
+        onclick={async () => {
+          const resp = await duplicateCanvas({ canvasId: $canvas.id });
+          mixpanel.track('duplicate_canvas', { via: 'tree' });
+          await goto(`/${resp.entity.slug}`);
+        }}
+      >
+        복제
+      </MenuItem>
 
-    <HorizontalDivider color="secondary" />
+      <HorizontalDivider color="secondary" />
 
-    <MenuItem
-      icon={TrashIcon}
-      onclick={async () => {
-        Dialog.confirm({
-          title: '캔버스 삭제',
-          message: `정말 "${$canvas.title}" 캔버스를 삭제하시겠어요?`,
-          action: 'danger',
-          actionLabel: '삭제',
-          actionHandler: async () => {
-            await deleteCanvas({ canvasId: $canvas.id });
-            mixpanel.track('delete_canvas', { via: 'tree' });
-            app.state.ancestors = [];
-            app.state.current = undefined;
-          },
-        });
-      }}
-      variant="danger"
-    >
-      삭제
-    </MenuItem>
+      <MenuItem
+        icon={TrashIcon}
+        onclick={async () => {
+          Dialog.confirm({
+            title: '캔버스 삭제',
+            message: `정말 "${$canvas.title}" 캔버스를 삭제하시겠어요?`,
+            action: 'danger',
+            actionLabel: '삭제',
+            actionHandler: async () => {
+              await deleteCanvas({ canvasId: $canvas.id });
+              mixpanel.track('delete_canvas', { via: 'tree' });
+              app.state.ancestors = [];
+              app.state.current = undefined;
+            },
+          });
+        }}
+        variant="danger"
+      >
+        삭제
+      </MenuItem>
+    {/if}
   </Menu>
 </a>

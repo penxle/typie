@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
   import { afterNavigate } from '$app/navigation';
   import { graphql } from '$graphql';
   import { fb } from '$lib/analytics';
   import { Helmet, Icon } from '$lib/components';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Canvas from './@canvas/Canvas.svelte';
@@ -55,10 +57,23 @@
     }
   `);
 
+  const app = getAppContext();
   const name = $derived($query.entity.node.__typename === 'Post' ? '포스트' : '캔버스');
+
+  onMount(() => {
+    if ($query.me.id === $query.entity.user.id && $query.entity.state === EntityState.ACTIVE) {
+      app.state.tree.selectedEntityIds.clear();
+      app.state.tree.selectedEntityIds.add($query.entity.id);
+      app.state.tree.lastSelectedEntityId = $query.entity.id;
+    }
+  });
 
   afterNavigate(async () => {
     if ($query.me.id === $query.entity.user.id && $query.entity.state === EntityState.ACTIVE) {
+      app.state.tree.selectedEntityIds.clear();
+      app.state.tree.selectedEntityIds.add($query.entity.id);
+      app.state.tree.lastSelectedEntityId = $query.entity.id;
+
       await viewEntity({ entityId: $query.entity.id });
 
       fb.track('ViewContent');
