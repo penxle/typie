@@ -149,7 +149,28 @@
       transition: 'common',
       _hover: { backgroundColor: 'surface.muted' },
     })}
-    href="https://penxle.channel.io/home"
+    href="/changelog"
+    rel="noopener noreferrer"
+    target="_blank"
+  >
+    업데이트 노트
+  </a>
+
+  <div class={css({ width: 'full', height: '1px', backgroundColor: 'interactive.hover' })}></div>
+
+  <a
+    class={css({
+      paddingX: '16px',
+      paddingY: '12px',
+      width: 'full',
+      fontSize: '14px',
+      fontWeight: 'medium',
+      textAlign: 'center',
+      color: 'text.subtle',
+      transition: 'common',
+      _hover: { backgroundColor: 'surface.muted' },
+    })}
+    href="https://typie.link/help"
     rel="noopener noreferrer"
     target="_blank"
   >
