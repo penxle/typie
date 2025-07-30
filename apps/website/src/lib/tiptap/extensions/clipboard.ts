@@ -14,10 +14,10 @@ const getWrappingNodeId = (selection: Selection) => {
   for (let depth = $from.depth; depth >= 0; depth--) {
     const node = $from.node(depth);
     if (WRAPPING_NODE_NAMES.has(node.type.name)) {
-      const foldStart = $from.before(depth);
-      const foldEnd = $from.after(depth);
+      const nodeStart = $from.before(depth);
+      const nodeEnd = $from.after(depth);
 
-      if ($from.pos > foldStart && $to.pos < foldEnd) {
+      if ($from.pos > nodeStart && $to.pos < nodeEnd) {
         return node.attrs.nodeId;
       }
     }
