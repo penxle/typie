@@ -35,7 +35,7 @@
   import { getAppContext } from '$lib/context';
   import { Dialog, Tip } from '$lib/notification';
   import { getNodeView, TiptapEditor } from '$lib/tiptap';
-  import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
+  import { mmToPx, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Anchor from './Anchor.svelte';
@@ -302,6 +302,18 @@
     });
   });
 
+  const pageLayout = $derived(
+    app.preference.current.experimental_pageLayoutId === 'a4'
+      ? { width: 210, height: 297, margin: 25 }
+      : app.preference.current.experimental_pageLayoutId === 'a5'
+        ? { width: 148, height: 210, margin: 20 }
+        : app.preference.current.experimental_pageLayoutId === 'b5'
+          ? { width: 176, height: 250, margin: 15 }
+          : app.preference.current.experimental_pageLayoutId === 'b6'
+            ? { width: 125, height: 176, margin: 10 }
+            : { width: 210, height: 297, margin: 25 },
+  );
+
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
 
@@ -435,6 +447,18 @@
     }
   });
 
+  $effect(() => {
+    if (app.preference.current.experimental_pageEnabled && pageLayout) {
+      untrack(() => {
+        editor?.current.commands.setPageLayout(pageLayout);
+      });
+    } else {
+      untrack(() => {
+        editor?.current.commands.clearPageLayout();
+      });
+    }
+  });
+
   onMount(() => {
     if (!postId) return;
 
@@ -521,10 +545,6 @@
       } else {
         editor.commands.setTextSelection(2);
         titleEl?.focus();
-      }
-
-      if (app.preference.current.experimental_pageEnabled) {
-        editor.commands.setPageLayout({ width: 210, height: 297, margin: 25 });
       }
     });
 
@@ -915,7 +935,10 @@
           role="none"
         >
           <div
-            style:--prosemirror-max-width={`${maxWidth.current}px`}
+            style:--prosemirror-max-width={app.preference.current.experimental_pageEnabled
+              ? `${mmToPx(pageLayout.width)}px`
+              : `${maxWidth.current}px`}
+            style:--prosemirror-page-margin={app.preference.current.experimental_pageEnabled ? `${mmToPx(pageLayout.margin)}px` : '0'}
             style:--prosemirror-padding-bottom={app.preference.current.experimental_pageEnabled
               ? '0'
               : `${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}

@@ -23,6 +23,7 @@ type AppPreference = {
   searchMatchWholeWord: boolean;
 
   experimental_pageEnabled: boolean;
+  experimental_pageLayoutId?: string;
 };
 
 type AppState = {
