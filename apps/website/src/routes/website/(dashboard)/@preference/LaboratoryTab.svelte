@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mixpanel from 'mixpanel-browser';
   import { fragment, graphql } from '$graphql';
   import { Switch } from '$lib/components';
   import { getAppContext } from '$lib/context/app.svelte';
@@ -39,6 +40,14 @@
       <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>에디터에서 페이지 보기를 활성화합니다.</p>
     </div>
 
-    <Switch bind:checked={app.preference.current.experimental_pageEnabled} />
+    <Switch
+      onchange={() => {
+        mixpanel.track('toggle_experimental_feature', {
+          feature: 'page_view',
+          enabled: app.preference.current.experimental_pageEnabled,
+        });
+      }}
+      bind:checked={app.preference.current.experimental_pageEnabled}
+    />
   </div>
 </div>

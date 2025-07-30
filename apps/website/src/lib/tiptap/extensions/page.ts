@@ -81,25 +81,29 @@ export const Page = Extension.create<unknown, PageStorage>({
       body.forEach((_, offset) => {
         const pos = offset + 1;
 
-        const domNode = view.nodeDOM(pos);
-        if (!domNode || !(domNode instanceof HTMLElement)) {
-          return;
-        }
+        try {
+          const domNode = view.nodeDOM(pos);
+          if (!domNode || !(domNode instanceof HTMLElement)) {
+            return;
+          }
 
-        const rect = domNode.getBoundingClientRect();
-        let nodeHeight = rect.height;
+          const rect = domNode.getBoundingClientRect();
+          let nodeHeight = rect.height;
 
-        if (!firstNode) {
-          nodeHeight += body.attrs.blockGap * 16;
-        }
+          if (!firstNode) {
+            nodeHeight += body.attrs.blockGap * 16;
+          }
 
-        if (MARGIN_PX + pageHeight + nodeHeight > PAGE_HEIGHT_PX - MARGIN_PX) {
-          pages.push({ pos, height: pageHeight });
-          pageHeight = nodeHeight;
-          firstNode = true;
-        } else {
-          pageHeight += nodeHeight;
-          firstNode = false;
+          if (MARGIN_PX + pageHeight + nodeHeight > PAGE_HEIGHT_PX - MARGIN_PX) {
+            pages.push({ pos, height: pageHeight });
+            pageHeight = nodeHeight;
+            firstNode = true;
+          } else {
+            pageHeight += nodeHeight;
+            firstNode = false;
+          }
+        } catch {
+          // pass
         }
       });
 
