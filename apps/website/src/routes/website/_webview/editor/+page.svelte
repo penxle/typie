@@ -617,7 +617,6 @@
         paddingX: '20px',
         size: 'full',
         overflowY: 'scroll',
-        scrollbarWidth: 'none',
         userSelect: 'text',
         touchAction: 'pan-y',
         WebkitTouchCallout: 'none',
