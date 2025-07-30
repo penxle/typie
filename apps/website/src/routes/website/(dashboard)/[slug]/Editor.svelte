@@ -503,12 +503,16 @@
             subtitleEl?.focus();
           }
         } else {
-          const selection = Selection.fromJSON(editor.state.doc, selections[postId]);
-          editor.commands.command(({ tr, dispatch }) => {
-            tr.setSelection(selection);
-            dispatch?.(tr);
-            return true;
-          });
+          try {
+            const selection = Selection.fromJSON(editor.state.doc, selections[postId]);
+            editor.commands.command(({ tr, dispatch }) => {
+              tr.setSelection(selection);
+              dispatch?.(tr);
+              return true;
+            });
+          } catch {
+            // pass
+          }
 
           document.fonts.ready.then(() => {
             editor.commands.focus();

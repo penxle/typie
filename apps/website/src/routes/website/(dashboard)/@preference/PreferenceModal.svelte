@@ -92,16 +92,16 @@
       component: BillingTab,
     },
     {
-      path: '/preference/shortcuts',
-      label: '단축키',
-      icon: KeyboardIcon,
-      component: ShortcutsTab,
-    },
-    {
       path: '/preference/laboratory',
       label: '실험실',
       icon: FlaskConicalIcon,
       component: LaboratoryTab,
+    },
+    {
+      path: '/preference/shortcuts',
+      label: '단축키',
+      icon: KeyboardIcon,
+      component: ShortcutsTab,
     },
   ] satisfies Tab[];
 
