@@ -7,6 +7,11 @@ input AdminEnqueuePostCompactInput {
   postId: String!
 }
 
+input AdminGiveCreditInput {
+  amount: Int!
+  userId: String!
+}
+
 input AdminImpersonateInput {
   userId: String!
 }
@@ -394,6 +399,7 @@ input MoveEntityInput {
 type Mutation {
   addSiteFont(input: AddSiteFontInput!): Site!
   adminEnqueuePostCompact(input: AdminEnqueuePostCompactInput!): Boolean!
+  adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
   adminStopImpersonation: Boolean!
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): String!

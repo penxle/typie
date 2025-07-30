@@ -78,6 +78,12 @@
     await adminImpersonate({ userId: $query.adminUser.id });
     location.href = '/home';
   };
+
+  const adminGiveCredit = graphql(`
+    mutation AdminUserDetail_AdminGiveCredit_Mutation($input: AdminGiveCreditInput!) {
+      adminGiveCredit(input: $input)
+    }
+  `);
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
@@ -534,6 +540,7 @@
               borderColor: 'amber.500',
               paddingX: '12px',
               paddingY: '8px',
+              marginY: '8px',
               fontSize: '12px',
               color: 'amber.500',
               backgroundColor: 'transparent',
@@ -551,6 +558,40 @@
             type="button"
           >
             IMPERSONATE USER
+          </button>
+
+          <button
+            class={css({
+              borderWidth: '1px',
+              borderColor: 'amber.500',
+              paddingX: '12px',
+              paddingY: '8px',
+              marginY: '8px',
+              fontSize: '12px',
+              color: 'amber.500',
+              backgroundColor: 'transparent',
+              width: 'full',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              _hover: {
+                backgroundColor: 'amber.500',
+                color: 'gray.900',
+              },
+            })}
+            onclick={async () => {
+              const amount = Number.parseInt(prompt('Enter the amount of credit to give: ') || '');
+
+              if (!Number.isNaN(amount)) {
+                await adminGiveCredit({ userId: $query.adminUser.id, amount });
+                query.load({ userId: $query.adminUser.id });
+                alert(`${amount} points given to user ${$query.adminUser.name}`);
+              }
+            }}
+            type="button"
+          >
+            GIVE CREDIT
           </button>
         </div>
       </div>

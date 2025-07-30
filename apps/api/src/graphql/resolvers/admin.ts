@@ -1,6 +1,6 @@
-import { and, count, desc, eq, getTableColumns, ilike, or } from 'drizzle-orm';
+import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
 import { redis } from '@/cache';
-import { db, Entities, first, firstOrThrow, Posts, TableCode, Users, UserSessions, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, Posts, TableCode, UserPaymentCredits, Users, UserSessions, validateDbId } from '@/db';
 import { EntityState, PostType, UserRole, UserState } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -208,6 +208,29 @@ builder.mutationFields((t) => ({
       await assertAdminPermission({ sessionId: ctx.session.id });
 
       await enqueueJob('post:compact', input.postId);
+
+      return true;
+    },
+  }),
+
+  adminGiveCredit: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: { userId: t.input.string({ validate: validateDbId(TableCode.USERS) }), amount: t.input.int() },
+    resolve: async (_, { input }, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      await db
+        .insert(UserPaymentCredits)
+        .values({
+          userId: input.userId,
+          amount: input.amount,
+        })
+        .onConflictDoUpdate({
+          target: [UserPaymentCredits.userId],
+          set: {
+            amount: sql`${UserPaymentCredits.amount} + ${input.amount}`,
+          },
+        });
 
       return true;
     },
