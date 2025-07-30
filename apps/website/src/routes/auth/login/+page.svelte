@@ -156,7 +156,7 @@
 
   <div class={flex({ alignItems: 'center', gap: '16px', userSelect: 'none' })}>
     <div class={css({ flex: '1', height: '1px', backgroundColor: 'interactive.hover' })}></div>
-    <span class={css({ fontSize: '14px', color: 'text.faint' })}>간편 로그인</span>
+    <span class={css({ fontSize: '14px', color: 'text.faint' })}>간편하게 시작하기</span>
     <div class={css({ flex: '1', height: '1px', backgroundColor: 'interactive.hover' })}></div>
   </div>
 
