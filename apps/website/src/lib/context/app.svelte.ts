@@ -20,6 +20,8 @@ type AppPreference = {
   zenModeEnabled: boolean;
 
   searchMatchWholeWord: boolean;
+
+  experimental_pageEnabled: boolean;
 };
 
 type AppState = {
@@ -94,6 +96,8 @@ export const setupAppContext = (userId: string) => {
       zenModeEnabled: false,
 
       searchMatchWholeWord: false,
+
+      experimental_pageEnabled: false,
     }),
     state: appState,
     timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {

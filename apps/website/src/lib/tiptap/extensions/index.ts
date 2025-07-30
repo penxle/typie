@@ -5,6 +5,7 @@ export * from './command';
 export * from './drop-cursor';
 export * from './limit';
 export * from './node-id';
+export * from './page';
 export * from './placeholder';
 export * from './search';
 export * from './selection';

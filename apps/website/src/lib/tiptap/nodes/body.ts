@@ -1,4 +1,5 @@
 import { mergeAttributes, Node } from '@tiptap/core';
+import { css, cx } from '$styled-system/css';
 import { defaultValues, values } from '../values';
 
 const paragraphIndents = values.paragraphIndent.map(({ value }) => value);
@@ -42,7 +43,16 @@ export const Body = Node.create({
   renderHTML({ HTMLAttributes }) {
     return [
       'div',
-      mergeAttributes(HTMLAttributes, { class: this.editor?.isEditable ? 'ProseMirror-editable ProseMirror-body' : 'ProseMirror-body' }),
+      mergeAttributes(HTMLAttributes, {
+        class: cx(
+          this.editor?.isEditable ? 'ProseMirror-editable ProseMirror-body' : 'ProseMirror-body',
+          css({
+            backgroundColor: 'surface.default',
+            paddingTop: 'var(--prosemirror-page-margin)',
+            paddingX: 'var(--prosemirror-page-margin)',
+          }),
+        ),
+      }),
       0,
     ];
   },
