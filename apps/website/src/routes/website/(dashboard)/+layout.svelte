@@ -3,6 +3,7 @@
   import qs from 'query-string';
   import { untrack } from 'svelte';
   import Logo from '$assets/logos/logo.svg?component';
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { Button, HorizontalDivider } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
@@ -180,9 +181,29 @@
 
       <HorizontalDivider color="secondary" />
 
-      <Button style={css.raw({ width: 'full' })} external href="https://typie.link" size="lg" type="link" variant="secondary">
-        타이피 앱 다운로드
-      </Button>
+      <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+        <Button style={css.raw({ width: 'full' })} external gradient href="https://typie.link" size="lg" type="link" variant="primary">
+          타이피 앱 바로가기
+        </Button>
+
+        <Button
+          style={css.raw({ width: 'full' })}
+          onclick={() => {
+            mixpanel.track('logout', { via: 'mobile_dashboard' });
+
+            location.href = qs.stringifyUrl({
+              url: `${env.PUBLIC_AUTH_URL}/logout`,
+              query: {
+                redirect_uri: env.PUBLIC_WEBSITE_URL,
+              },
+            });
+          }}
+          size="lg"
+          variant="secondary"
+        >
+          로그아웃
+        </Button>
+      </div>
     </div>
   </div>
 {:else}
