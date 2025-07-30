@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
+import { mmToPx } from '$lib/utils';
 import { css } from '$styled-system/css';
 import type { Node } from '@tiptap/pm/model';
 
@@ -19,6 +20,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     page: {
       setPageLayout: (layout: PageLayout) => ReturnType;
+      clearPageLayout: () => ReturnType;
     };
   }
 
@@ -27,6 +29,8 @@ declare module '@tiptap/core' {
     page: PageStorage;
   }
 }
+
+const key = new PluginKey('page');
 
 export const Page = Extension.create<unknown, PageStorage>({
   name: 'page',
@@ -39,8 +43,20 @@ export const Page = Extension.create<unknown, PageStorage>({
     return {
       setPageLayout:
         ({ width, height, margin }) =>
-        ({ tr, dispatch }) => {
+        ({ tr, dispatch, view, state }) => {
           this.storage.layout = { width, height, margin };
+
+          const pages = calculatePages(this.storage.layout, view, state.doc);
+
+          tr.setMeta(key, pages);
+          dispatch?.(tr);
+
+          return true;
+        },
+      clearPageLayout:
+        () =>
+        ({ tr, dispatch }) => {
+          this.storage.layout = undefined;
 
           dispatch?.(tr);
 
@@ -50,67 +66,7 @@ export const Page = Extension.create<unknown, PageStorage>({
   },
 
   addProseMirrorPlugins() {
-    const key = new PluginKey('page');
     const { storage } = this;
-
-    const el = document.createElement('div');
-    el.style.width = '1mm';
-    el.style.position = 'absolute';
-    el.style.visibility = 'hidden';
-    document.body.append(el);
-
-    const MM_TO_PX = el.getBoundingClientRect().width;
-    el.remove();
-
-    const calculatePages = (layout: PageLayout, view: EditorView, doc: Node) => {
-      const { height, margin } = layout;
-
-      const PAGE_HEIGHT_PX = height * MM_TO_PX;
-      const MARGIN_PX = margin * MM_TO_PX;
-
-      const body = doc.firstChild;
-      if (!body) {
-        return [];
-      }
-
-      const pages: { pos: number; height: number }[] = [];
-
-      let pageHeight = 0;
-      let firstNode = true;
-
-      body.forEach((_, offset) => {
-        const pos = offset + 1;
-
-        try {
-          const domNode = view.nodeDOM(pos);
-          if (!domNode || !(domNode instanceof HTMLElement)) {
-            return;
-          }
-
-          const rect = domNode.getBoundingClientRect();
-          let nodeHeight = rect.height;
-
-          if (!firstNode) {
-            nodeHeight += body.attrs.blockGap * 16;
-          }
-
-          if (MARGIN_PX + pageHeight + nodeHeight > PAGE_HEIGHT_PX - MARGIN_PX) {
-            pages.push({ pos, height: pageHeight });
-            pageHeight = nodeHeight;
-            firstNode = true;
-          } else {
-            pageHeight += nodeHeight;
-            firstNode = false;
-          }
-        } catch {
-          // pass
-        }
-      });
-
-      pages.push({ pos: body.nodeSize - 1, height: pageHeight });
-
-      return pages;
-    };
 
     return [
       new Plugin({
@@ -140,46 +96,41 @@ export const Page = Extension.create<unknown, PageStorage>({
             }
 
             const { height, margin } = storage.layout;
-            const PAGE_HEIGHT_PX = height * MM_TO_PX;
-            const MARGIN_PX = margin * MM_TO_PX;
+            const PAGE_HEIGHT_PX = mmToPx(height);
+            const MARGIN_PX = mmToPx(margin);
 
             const decorations: Decoration[] = [];
 
             for (const [i, { pos, height }] of pages.entries()) {
-              const widget = Decoration.widget(
-                pos,
-                () => {
-                  const elem = document.createElement('div');
+              const widget = Decoration.widget(pos, () => {
+                const element = document.createElement('div');
 
-                  elem.className = css({
-                    position: 'relative',
-                    height: '40px',
-                    backgroundColor: 'surface.muted',
-                    pointerEvents: 'none',
-                    userSelect: 'none',
-                  });
+                element.className = css({
+                  position: 'relative',
+                  height: '40px',
+                  backgroundColor: 'surface.muted',
+                });
 
-                  elem.style.cssText = `margin: ${MARGIN_PX + (PAGE_HEIGHT_PX - MARGIN_PX * 2 - height)}px -${MARGIN_PX}px ${i === pages.length - 1 ? 0 : MARGIN_PX}px -${MARGIN_PX}px`;
+                element.style.cssText = `margin: ${MARGIN_PX + (PAGE_HEIGHT_PX - MARGIN_PX * 2 - height)}px -${MARGIN_PX}px ${i === pages.length - 1 ? 0 : MARGIN_PX}px -${MARGIN_PX}px`;
 
-                  const label = document.createElement('span');
-                  // label.textContent = `Page ${i + 1} / ${height}px (${PAGE_HEIGHT_PX}px)`;
-                  label.textContent = `페이지 ${i + 1} / ${pages.length}`;
-                  label.className = css({
-                    position: 'absolute',
-                    top: '-32px',
-                    right: '20px',
-                    fontSize: '12px',
-                    color: 'text.faint',
-                  });
+                const label = document.createElement('span');
+                label.textContent = `페이지 ${i + 1} / ${pages.length}`;
+                label.className = css({
+                  position: 'absolute',
+                  top: '-32px',
+                  right: '20px',
+                  fontSize: '12px',
+                  color: 'text.faint',
+                  userSelect: 'none',
+                });
+                element.append(label);
 
-                  elem.append(label);
+                const fill = document.createElement('div');
+                fill.className = css({ position: 'absolute', inset: '0' });
+                element.append(fill);
 
-                  return elem;
-                },
-                {
-                  ignoreSelection: true,
-                },
-              );
+                return element;
+              });
 
               decorations.push(widget);
             }
@@ -195,12 +146,6 @@ export const Page = Extension.create<unknown, PageStorage>({
 
             const pages = calculatePages(storage.layout, view, view.state.doc);
             view.dispatch(view.state.tr.setMeta(key, pages));
-
-            const dom = document.querySelector('.editor') as HTMLElement;
-            if (dom) {
-              dom.style.setProperty('--prosemirror-max-width', `${storage.layout.width * MM_TO_PX}px`);
-              dom.style.setProperty('--prosemirror-page-margin', `${storage.layout.margin * MM_TO_PX}px`);
-            }
           };
 
           updateState();
@@ -221,3 +166,53 @@ export const Page = Extension.create<unknown, PageStorage>({
     ];
   },
 });
+
+const calculatePages = (layout: PageLayout, view: EditorView, doc: Node) => {
+  const { height, margin } = layout;
+
+  const PAGE_HEIGHT_PX = mmToPx(height);
+  const MARGIN_PX = mmToPx(margin);
+
+  const body = doc.firstChild;
+  if (!body) {
+    return [];
+  }
+
+  const pages: { pos: number; height: number }[] = [];
+
+  let pageHeight = 0;
+  let firstNode = true;
+
+  body.forEach((_, offset) => {
+    const pos = offset + 1;
+
+    try {
+      const domNode = view.nodeDOM(pos);
+      if (!domNode || !(domNode instanceof HTMLElement)) {
+        return;
+      }
+
+      const rect = domNode.getBoundingClientRect();
+      let nodeHeight = rect.height;
+
+      if (!firstNode) {
+        nodeHeight += body.attrs.blockGap * 16;
+      }
+
+      if (MARGIN_PX + pageHeight + nodeHeight > PAGE_HEIGHT_PX - MARGIN_PX) {
+        pages.push({ pos, height: pageHeight });
+        pageHeight = nodeHeight;
+        firstNode = true;
+      } else {
+        pageHeight += nodeHeight;
+        firstNode = false;
+      }
+    } catch {
+      // pass
+    }
+  });
+
+  pages.push({ pos: body.nodeSize - 1, height: pageHeight });
+
+  return pages;
+};
