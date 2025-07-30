@@ -1,5 +1,6 @@
 <script lang="ts">
   import CreditCardIcon from '~icons/lucide/credit-card';
+  import FlaskConicalIcon from '~icons/lucide/flask-conical';
   import KeyboardIcon from '~icons/lucide/keyboard';
   import PanelTopIcon from '~icons/lucide/panel-top';
   import PencilIcon from '~icons/lucide/pencil';
@@ -15,6 +16,7 @@
   import BillingTab from './BillingTab.svelte';
   import EditorTab from './EditorTab.svelte';
   import IdentityTab from './IdentityTab.svelte';
+  import LaboratoryTab from './LaboratoryTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
   import SiteTab from './SiteTab.svelte';
   import type { Component } from 'svelte';
@@ -49,6 +51,7 @@
         ...DashboardLayout_PreferenceModal_SiteTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
         ...DashboardLayout_PreferenceModal_EditorTab_user
+        ...DashboardLayout_PreferenceModal_LaboratoryTab_user
       }
     `),
   );
@@ -93,6 +96,12 @@
       label: '단축키',
       icon: KeyboardIcon,
       component: ShortcutsTab,
+    },
+    {
+      path: '/preference/laboratory',
+      label: '실험실',
+      icon: FlaskConicalIcon,
+      component: LaboratoryTab,
     },
   ] satisfies Tab[];
 

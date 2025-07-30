@@ -518,6 +518,10 @@
         editor.commands.setTextSelection(2);
         titleEl?.focus();
       }
+
+      if (app.preference.current.experimental_pageEnabled) {
+        editor.commands.setPageLayout({ width: 210, height: 297, margin: 25 });
+      }
     });
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
@@ -884,7 +888,16 @@
           style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
           style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
           style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-          class={flex({ position: 'relative', flexGrow: '1', zIndex: '1', backgroundColor: 'surface.default' })}
+          class={flex({
+            position: 'relative',
+            flexGrow: '1',
+            zIndex: '1',
+            backgroundColor: 'surface.default',
+            '&[data-layout="page"]': {
+              backgroundColor: 'surface.muted',
+            },
+          })}
+          data-layout={app.preference.current.experimental_pageEnabled ? 'page' : 'scroll'}
           onmouseleave={() => {
             showAnchorOutline = false;
           }}
@@ -898,11 +911,13 @@
           role="none"
         >
           <div
+            style:--prosemirror-max-width={`${maxWidth.current}px`}
+            style:--prosemirror-padding-bottom={app.preference.current.experimental_pageEnabled
+              ? '0'
+              : `${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}
             class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}
           >
             <div
-              style:--prosemirror-max-width={`${maxWidth.current}px`}
-              style:--prosemirror-padding-bottom={`${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}
               class={flex({
                 flexDirection: 'column',
                 alignItems: 'center',

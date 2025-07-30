@@ -4,6 +4,7 @@ import {
   Command,
   DropCursor,
   NodeId,
+  Page,
   Placeholder,
   Search,
   Selection,
@@ -75,6 +76,7 @@ export const baseExtensions = [
 
   // extensions
   NodeId,
+  Page,
   Selection,
   SyntaxHighlight,
   TrailingNode,
