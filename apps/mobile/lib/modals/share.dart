@@ -143,22 +143,6 @@ class SharePostBottomSheet extends HookWidget {
                           title: '포스트 상호작용',
                           children: [
                             _Option(
-                              icon: LucideLightIcons.message_square,
-                              label: '댓글',
-                              trailing: HookFormSelect(
-                                name: 'allowComment',
-                                initialValue: data.post.allowComment,
-                                items: const [
-                                  HookFormSelectItem(
-                                    icon: LucideLightIcons.circle_user_round,
-                                    label: '로그인한 이용자',
-                                    value: true,
-                                  ),
-                                  HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
-                                ],
-                              ),
-                            ),
-                            _Option(
                               icon: LucideLightIcons.smile,
                               label: '이모지 반응',
                               trailing: HookFormSelect(

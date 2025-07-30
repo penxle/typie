@@ -5,14 +5,12 @@
   import BanIcon from '~icons/lucide/ban';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
-  import CircleUserRoundIcon from '~icons/lucide/circle-user-round';
   import EyeIcon from '~icons/lucide/eye';
   import EyeOffIcon from '~icons/lucide/eye-off';
   import IdCardIcon from '~icons/lucide/id-card';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
   import LockKeyholeIcon from '~icons/lucide/lock-keyhole';
-  import MessageSquareIcon from '~icons/lucide/message-square';
   import ShieldIcon from '~icons/lucide/shield';
   import SmileIcon from '~icons/lucide/smile';
   import UsersRoundIcon from '~icons/lucide/users-round';
@@ -338,21 +336,6 @@
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
       <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>포스트 상호작용</div>
-
-      <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
-        <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={MessageSquareIcon} />
-          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>댓글</div>
-        </div>
-
-        <Select
-          items={[
-            { icon: CircleUserRoundIcon, label: '로그인한 이용자', value: true },
-            { icon: BanIcon, label: '비허용', value: false },
-          ]}
-          bind:value={form.fields.allowComment}
-        />
-      </div>
 
       <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
