@@ -376,6 +376,13 @@ input MarkNotificationAsReadInput {
   notificationId: ID!
 }
 
+input MoveEntitiesInput {
+  entityIds: [ID!]!
+  lowerOrder: String
+  parentEntityId: ID
+  upperOrder: String
+}
+
 input MoveEntityInput {
   entityId: ID!
   lowerOrder: String
@@ -415,6 +422,7 @@ type Mutation {
   loginWithEmail(input: LoginWithEmailInput!): Boolean!
   markAllNotificationsAsRead: [Notification!]!
   markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
+  moveEntities(input: MoveEntitiesInput!): [Entity!]!
   moveEntity(input: MoveEntityInput!): Entity!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
