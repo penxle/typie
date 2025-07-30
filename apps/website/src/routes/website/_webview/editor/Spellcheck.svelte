@@ -68,7 +68,7 @@
           }
 
           for (const range of changedRanges) {
-            if (from < range.to && to > range.from) {
+            if (from <= range.to && to >= range.from) {
               return null;
             }
           }
