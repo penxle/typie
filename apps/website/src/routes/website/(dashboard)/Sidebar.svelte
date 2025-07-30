@@ -21,7 +21,6 @@
   import { center, flex } from '$styled-system/patterns';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
-  import Announcements from './Announcements.svelte';
   import Notification from './Notification.svelte';
   import Posts from './Posts.svelte';
   import SidebarButton from './SidebarButton.svelte';
@@ -36,6 +35,7 @@
 
   let { $query: _query, $user: _user }: Props = $props();
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = fragment(
     _query,
     graphql(`
@@ -199,7 +199,7 @@
       <SidebarButton as="a" href="/admin" icon={ShieldUserIcon} label="어드민" />
     {/if}
 
-    <Announcements $posts={$query.announcements} />
+    <!-- <Announcements $posts={$query.announcements} /> -->
 
     <!-- <SidebarButton as="a" href="https://help.typie.co" icon={CircleHelpIcon} label="도움말" rel="noopener noreferrer" target="_blank" /> -->
 
