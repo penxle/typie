@@ -86,6 +86,7 @@
         characterCount
         folderCount
         postCount
+        canvasCount
       }
     }
   `);
@@ -438,6 +439,13 @@
 
               {#if $info.folder.postCount > 0}
                 <span>포스트 {$info.folder.postCount}개</span>
+                {#if $info.folder.canvasCount > 0}
+                  <Icon icon={DotIcon} size={12} />
+                {/if}
+              {/if}
+
+              {#if $info.folder.canvasCount > 0}
+                <span>캔버스 {$info.folder.canvasCount}개</span>
               {/if}
             </div>
 
@@ -472,13 +480,19 @@
       })}
     >
       <RingSpinner style={css.raw({ size: '13px', color: 'text.faint' })} />
-      <span class={css({ fontSize: '13px', color: 'text.faint' })}>함께 삭제될 폴더와 포스트 계산중...</span>
+      <span class={css({ fontSize: '13px', color: 'text.faint' })}>함께 삭제될 항목 계산중...</span>
     </div>
   {:else}
     {@const folders = $descendants.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
     {@const posts = $descendants.entity.descendants.filter((d) => d.type === EntityType.POST).length}
+    {@const canvases = $descendants.entity.descendants.filter((d) => d.type === EntityType.CANVAS).length}
 
-    {#if folders > 0 || posts > 0}
+    {#if folders > 0 || posts > 0 || canvases > 0}
+      {@const items = [
+        folders > 0 && `${folders}개의 하위 폴더`,
+        posts > 0 && `${posts}개의 하위 포스트`,
+        canvases > 0 && `${canvases}개의 하위 캔버스`,
+      ].filter(Boolean)}
       <div
         class={flex({
           alignItems: 'center',
@@ -491,13 +505,7 @@
       >
         <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
         <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
-          {#if folders > 0 && posts > 0}
-            {folders}개의 하위 폴더와 {posts}개의 하위 포스트가 함께 삭제돼요
-          {:else if folders > 0}
-            {folders}개의 하위 폴더가 함께 삭제돼요
-          {:else if posts > 0}
-            {posts}개의 하위 포스트가 함께 삭제돼요
-          {/if}
+          {items.join('와 ')}가 함께 삭제돼요
         </span>
       </div>
     {:else}
