@@ -1,4 +1,5 @@
 import { getContext, setContext } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 import { LocalStore, SessionStore } from '../state';
 
 type AppPreference = {
@@ -40,6 +41,11 @@ type AppState = {
     totalBlobSize: number;
   };
 
+  tree: {
+    lastSelectedEntityId?: string;
+    selectedEntityIds: SvelteSet<string>;
+  };
+
   newFolderId?: string;
 };
 
@@ -75,6 +81,10 @@ export const setupAppContext = (userId: string) => {
     progress: {
       totalCharacterCount: 0,
       totalBlobSize: 0,
+    },
+    tree: {
+      lastSelectedEntityId: undefined,
+      selectedEntityIds: new SvelteSet<string>(),
     },
   });
 
