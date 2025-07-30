@@ -146,31 +146,40 @@ export const Page = Extension.create<unknown, PageStorage>({
             const decorations: Decoration[] = [];
 
             for (const [i, { pos, height }] of pages.entries()) {
-              const widget = Decoration.widget(pos, () => {
-                const elem = document.createElement('div');
+              const widget = Decoration.widget(
+                pos,
+                () => {
+                  const elem = document.createElement('div');
 
-                elem.className = css({
-                  position: 'relative',
-                  height: '40px',
-                  backgroundColor: 'surface.muted',
-                });
+                  elem.className = css({
+                    position: 'relative',
+                    height: '40px',
+                    backgroundColor: 'surface.muted',
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                  });
 
-                elem.style.cssText = `margin: ${MARGIN_PX + (PAGE_HEIGHT_PX - MARGIN_PX * 2 - height)}px -${MARGIN_PX}px ${i === pages.length - 1 ? 0 : MARGIN_PX}px -${MARGIN_PX}px`;
+                  elem.style.cssText = `margin: ${MARGIN_PX + (PAGE_HEIGHT_PX - MARGIN_PX * 2 - height)}px -${MARGIN_PX}px ${i === pages.length - 1 ? 0 : MARGIN_PX}px -${MARGIN_PX}px`;
 
-                const label = document.createElement('span');
-                label.textContent = `Page ${i + 1} / ${height}px (${PAGE_HEIGHT_PX}px)`;
-                label.className = css({
-                  position: 'absolute',
-                  top: '-32px',
-                  right: '20px',
-                  fontSize: '12px',
-                  color: 'text.faint',
-                });
+                  const label = document.createElement('span');
+                  // label.textContent = `Page ${i + 1} / ${height}px (${PAGE_HEIGHT_PX}px)`;
+                  label.textContent = `페이지 ${i + 1} / ${pages.length}`;
+                  label.className = css({
+                    position: 'absolute',
+                    top: '-32px',
+                    right: '20px',
+                    fontSize: '12px',
+                    color: 'text.faint',
+                  });
 
-                elem.append(label);
+                  elem.append(label);
 
-                return elem;
-              });
+                  return elem;
+                },
+                {
+                  ignoreSelection: true,
+                },
+              );
 
               decorations.push(widget);
             }
