@@ -4,6 +4,7 @@
   import { fade } from 'svelte/transition';
   import { fragment, graphql } from '$graphql';
   import { portal } from '$lib/actions';
+  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Entity from './Entity.svelte';
@@ -92,12 +93,20 @@
     element: HTMLElement;
     indicator: Partial<Indicator>;
     drop?: Drop;
+    ghost?: {
+      x: number;
+      y: number;
+      offsetX: number;
+      offsetY: number;
+    };
   };
 
   let tree = $state<HTMLElement>();
   let dragging = $state<Dragging | null>(null);
   let pointerType = $state<PointerEvent['pointerType']>('mouse');
   let dragTimeout = $state<NodeJS.Timeout | null>(null);
+
+  const app = getAppContext();
 
   const handlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
     const element = (e.target as HTMLElement).closest<HTMLElement>('[data-id]');
@@ -137,10 +146,31 @@
       return;
     }
 
-    if (!dragging.eligible) {
+    const isPostsPanelVisible = app.state.postsOpen || app.preference.current.postsExpanded === 'open';
+    if (dragging.eligible && !isPostsPanelVisible) {
+      cancelDragging();
+      return;
+    }
+
+    if (dragging.eligible) {
+      dragging.ghost = {
+        x: e.clientX,
+        y: e.clientY,
+        offsetX: dragging.ghost?.offsetX ?? 0,
+        offsetY: dragging.ghost?.offsetY ?? 0,
+      };
+    } else {
       if (Math.abs(dragging.event.clientX - e.clientX) + Math.abs(dragging.event.clientY - e.clientY) > 10) {
         dragging.eligible = true;
         dragging.element.setPointerCapture(e.pointerId);
+
+        const rect = dragging.element.getBoundingClientRect();
+        dragging.ghost = {
+          x: dragging.event.clientX,
+          y: dragging.event.clientY,
+          offsetX: dragging.event.clientX - rect.left,
+          offsetY: dragging.event.clientY - rect.top,
+        };
       } else {
         return;
       }
@@ -276,6 +306,9 @@
       const entityId = dragging.element.dataset.id!;
       const { parentId, lowerOrder, upperOrder } = dragging.drop;
 
+      // NOTE: 기다림 없이 즉시 드래그 해제
+      cancelDragging();
+
       await moveEntity({
         entityId,
         parentEntityId: parentId ?? null,
@@ -285,6 +318,8 @@
       });
 
       mixpanel.track('move_entity', { parentEntityId: parentId ?? null, lowerOrder, upperOrder });
+
+      return;
     }
 
     cancelDragging();
@@ -366,4 +401,22 @@
       transition:fade|global={{ duration: 100 }}
     ></div>
   {/key}
+
+  {#if dragging.ghost}
+    <div
+      style:left={`${dragging.ghost.x - dragging.ghost.offsetX}px`}
+      style:top={`${dragging.ghost.y - dragging.ghost.offsetY}px`}
+      style:width={`${dragging.element.offsetWidth}px`}
+      class={css({
+        position: 'fixed',
+        opacity: '[0.2]',
+        pointerEvents: 'none',
+        zIndex: '[100]',
+      })}
+      use:portal
+    >
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+      {@html dragging.element.outerHTML}
+    </div>
+  {/if}
 {/if}
