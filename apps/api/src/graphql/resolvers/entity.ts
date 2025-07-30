@@ -502,29 +502,35 @@ builder.mutationFields((t) => ({
       upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
-      const entities = await db
-        .select({
-          id: Entities.id,
-          siteId: Entities.siteId,
-          parentId: Entities.parentId,
-          depth: Entities.depth,
-          order: Entities.order,
-        })
-        .from(Entities)
-        .where(and(inArray(Entities.id, input.entityIds), eq(Entities.state, EntityState.ACTIVE)));
+      const entities = await db.execute<{ id: string; site_id: string; depth: number }>(sql`
+        WITH RECURSIVE descendants AS (
+          SELECT ${Entities.id}
+          FROM ${Entities}
+          WHERE ${inArray(Entities.parentId, input.entityIds)}
+          UNION ALL
+          SELECT ${Entities.id}
+          FROM ${Entities}
+          JOIN descendants ON ${Entities.parentId} = descendants.id
+        )
+        SELECT ${Entities.id}, ${Entities.siteId}, ${Entities.depth}
+        FROM ${Entities}
+        WHERE ${inArray(Entities.id, input.entityIds)}
+        AND ${eq(Entities.state, EntityState.ACTIVE)}
+        AND ${Entities.id} NOT IN (SELECT id FROM descendants)
+      `);
 
       if (entities.length === 0) {
         return [];
       }
 
-      const siteId = entities[0].siteId;
+      const siteId = entities[0].site_id;
 
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId,
       });
 
-      if (entities.some((entity) => entity.siteId !== siteId)) {
+      if (entities.some((entity) => entity.site_id !== siteId)) {
         throw new TypieError({ code: 'site_mismatch' });
       }
 
@@ -573,7 +579,7 @@ builder.mutationFields((t) => ({
       }
 
       return await db.transaction(async (tx) => {
-        const movedEntities: (typeof Entities.$inferSelect)[] = [];
+        const movedEntities: (typeof Entities.$inferSelect | string)[] = [];
 
         let lastOrder = input.lowerOrder ?? null;
 
@@ -600,21 +606,28 @@ builder.mutationFields((t) => ({
 
           lastOrder = order;
 
-          if (entity.parentId !== targetParentId && depthDelta !== 0) {
-            await tx.execute(sql`
-              WITH RECURSIVE sq AS (
-                SELECT ${Entities.id}, ${Entities.depth}
-                FROM ${Entities}
-                WHERE ${eq(Entities.parentId, entity.id)}
-                UNION ALL
-                SELECT ${Entities.id}, ${Entities.depth}
-                FROM ${Entities}
-                JOIN sq ON ${Entities.parentId} = sq.id
-              )
-              UPDATE ${Entities}
-              SET depth = depth + ${depthDelta}
-              WHERE id IN (SELECT id FROM sq)
-            `);
+          if (depthDelta !== 0) {
+            movedEntities.push(
+              ...(await tx
+                .execute<{ id: string }>(
+                  sql`
+                    WITH RECURSIVE sq AS (
+                      SELECT ${Entities.id}, ${Entities.depth}
+                      FROM ${Entities}
+                      WHERE ${eq(Entities.parentId, entity.id)}
+                      UNION ALL
+                      SELECT ${Entities.id}, ${Entities.depth}
+                      FROM ${Entities}
+                      JOIN sq ON ${Entities.parentId} = sq.id
+                    )
+                    UPDATE ${Entities}
+                    SET depth = depth + ${depthDelta}
+                    WHERE id IN (SELECT id FROM sq)
+                    RETURNING ${Entities.id}
+                  `,
+                )
+                .then((result) => result.map(({ id }) => id))),
+            );
           }
         }
 
