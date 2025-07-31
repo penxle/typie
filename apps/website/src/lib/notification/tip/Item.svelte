@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { backInOut, linear, sineInOut } from 'svelte/easing';
-  import { Tween } from 'svelte/motion';
+  import { backInOut, sineInOut } from 'svelte/easing';
   import { fade, fly } from 'svelte/transition';
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import XIcon from '~icons/lucide/x';
@@ -18,15 +17,8 @@
   let { tip }: Props = $props();
 
   const dismiss = () => store.update((v) => v.filter((t) => t.id !== tip.id));
-  const progress = new Tween(100, { duration: 10_000, easing: linear });
 
   const tokens = $derived(tip.message.split(/(`[^`]+`)/g).filter(Boolean));
-
-  $effect(() => {
-    if (progress.current === 0) {
-      dismiss();
-    }
-  });
 </script>
 
 <div
@@ -42,7 +34,6 @@
     boxShadow: 'small',
     pointerEvents: 'auto',
   })}
-  onintroend={() => (progress.target = 0)}
   in:fly={{ y: '10px', duration: 400, easing: backInOut }}
   out:fade={{ duration: 400, easing: sineInOut }}
 >
