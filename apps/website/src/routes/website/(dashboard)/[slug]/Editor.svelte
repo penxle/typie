@@ -675,12 +675,16 @@
 
           {#each $query.entity.ancestors as ancestor (ancestor.id)}
             {#if ancestor.node.__typename === 'Folder'}
-              <div class={css({ fontSize: '12px', color: 'text.disabled' })}>{ancestor.node.name}</div>
+              <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>
+                {ancestor.node.name}
+              </div>
               <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
             {/if}
           {/each}
 
-          <div class={css({ flex: 'none', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>{effectiveTitle}</div>
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle', lineClamp: 1 })}>
+            {effectiveTitle}
+          </div>
         </div>
 
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
