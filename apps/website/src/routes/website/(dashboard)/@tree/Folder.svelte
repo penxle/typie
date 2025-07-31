@@ -24,6 +24,7 @@
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Entity from './Entity.svelte';
+  import EntitySelectionIndicator from './EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
   import { maxDepth } from './utils';
   import type {
@@ -214,7 +215,7 @@
           borderRadius: '6px',
           transition: 'common',
           cursor: 'pointer',
-          _supportHover: { backgroundColor: 'surface.subtle' },
+          _supportHover: { backgroundColor: 'surface.muted' },
           '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
         },
         $folder.entity.depth > 0 && {
@@ -225,8 +226,9 @@
           _supportHover: { borderColor: 'border.strong' },
         },
         selected && {
-          backgroundColor: 'surface.muted',
-          _supportHover: { backgroundColor: 'surface.muted' },
+          backgroundColor: 'accent.brand.subtle',
+          _supportHover: { backgroundColor: 'accent.brand.subtle' },
+          '&:has([aria-pressed="true"])': { backgroundColor: 'accent.brand.subtle' },
         },
       ),
     )}
@@ -239,12 +241,7 @@
     }}
     role="treeitem"
   >
-    <div
-      class={css(
-        { flex: 'none', borderRadius: 'full', backgroundColor: 'interactive.hover', size: '4px' },
-        $folder.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
-      )}
-    ></div>
+    <EntitySelectionIndicator entityId={$folder.entity.id} visibility={$folder.entity.visibility} />
 
     <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
 
@@ -422,6 +419,12 @@
                 actionHandler: async () => {
                   await deleteFolder({ folderId: $folder.id });
                   mixpanel.track('delete_folder');
+                  if (app.state.tree.selectedEntityIds.has($folder.entity.id)) {
+                    app.state.tree.selectedEntityIds.delete($folder.entity.id);
+                  }
+                  if (app.state.tree.lastSelectedEntityId === $folder.entity.id) {
+                    app.state.tree.lastSelectedEntityId = undefined;
+                  }
                 },
               });
             }}
@@ -451,19 +454,19 @@
                 {#if $info.folder.folderCount > 0}
                   <div class={center({ gap: '2px' })}>
                     <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={14} />
-                    {$info.folder.folderCount}
+                    {$info.folder.folderCount}개
                   </div>
                 {/if}
                 {#if $info.folder.postCount > 0}
                   <div class={center({ gap: '2px' })}>
                     <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
-                    {$info.folder.postCount}
+                    {$info.folder.postCount}개
                   </div>
                 {/if}
                 {#if $info.folder.canvasCount > 0}
                   <div class={center({ gap: '2px' })}>
                     <Icon style={css.raw({ color: 'text.disabled' })} icon={LineSquiggleIcon} size={14} />
-                    {$info.folder.canvasCount}
+                    {$info.folder.canvasCount}개
                   </div>
                 {/if}
               </div>

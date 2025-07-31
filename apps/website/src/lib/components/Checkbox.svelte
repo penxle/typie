@@ -10,10 +10,11 @@
     checked?: boolean;
     children?: Snippet;
     label?: string;
+    clickPadding?: boolean;
   } & Omit<HTMLInputAttributes, 'size' | 'style'> &
     RecipeVariantProps<typeof recipe>;
 
-  let { size = 'md', style, checked = $bindable(false), children, label, ...rest }: Props = $props();
+  let { size = 'md', style, checked = $bindable(false), children, label, clickPadding = false, ...rest }: Props = $props();
 
   const recipe = cva({
     base: {
@@ -30,6 +31,9 @@
       transition: 'common',
       cursor: 'pointer',
       outline: 'none',
+      _hover: {
+        backgroundColor: 'surface.subtle',
+      },
       _disabled: {
         backgroundColor: 'surface.muted!',
         borderColor: 'border.default!',
@@ -43,6 +47,9 @@
         backgroundColor: 'accent.brand.default',
         _after: {
           opacity: '100',
+        },
+        _hover: {
+          backgroundColor: 'accent.brand.default',
         },
       },
       _after: {
@@ -63,6 +70,16 @@
         sm: { width: '16px', height: '16px', _after: { backgroundSize: '10px' } },
         md: { width: '18px', height: '18px', _after: { backgroundSize: '12px' } },
         lg: { width: '20px', height: '20px', _after: { backgroundSize: '14px' } },
+      },
+      clickPadding: {
+        true: {
+          _before: {
+            content: '""',
+            position: 'absolute',
+            inset: '-8px',
+            display: 'block',
+          },
+        },
       },
     },
   });
@@ -93,7 +110,7 @@
 </script>
 
 <label class={wrapperStyle} for={rest['name'] || rest['id']}>
-  <input class={recipe({ size })} type="checkbox" bind:checked {...rest} />
+  <input class={recipe({ size, clickPadding })} type="checkbox" bind:checked {...rest} />
 
   {#if label}
     <span class={labelRecipe({ size })}>{label}</span>

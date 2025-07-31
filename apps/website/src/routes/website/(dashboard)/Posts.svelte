@@ -294,7 +294,7 @@
     <div
       class={css({
         flexGrow: '1',
-        paddingX: '16px',
+        paddingX: '8px',
         paddingTop: '8px',
         paddingBottom: '32px',
         scrollPaddingY: '16px',
