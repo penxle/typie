@@ -2,7 +2,23 @@
   "images" : [
     {
       "filename" : "SplashIcon.svg",
-      "idiom" : "universal"
+      "idiom" : "universal",
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "light"
+        }
+      ]
+    },
+    {
+      "filename" : "SplashIconDark.svg",
+      "idiom" : "universal",
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ]
     }
   ],
   "info" : {
