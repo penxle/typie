@@ -6,68 +6,13 @@
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$graphql';
   import { HorizontalDivider, Icon, MenuItem } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { Dialog, Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
-  import type { DashboardLayout_EntityTree_MultiEntitiesMenu_site, DashboardLayout_EntityTree_site } from '$graphql';
-
-  type EntityNode = {
-    id: string;
-    node: {
-      __typename: 'Canvas' | 'Folder' | 'Post';
-    };
-    children?: EntityNode[];
-  };
-
-  type Props = {
-    $site: DashboardLayout_EntityTree_site;
-  };
-
-  let { $site: _site }: Props = $props();
-
-  const site = fragment(
-    _site as DashboardLayout_EntityTree_MultiEntitiesMenu_site,
-    graphql(`
-      fragment DashboardLayout_EntityTree_MultiEntitiesMenu_site on Site {
-        id
-
-        entities {
-          id
-
-          node {
-            __typename
-          }
-
-          children {
-            id
-
-            node {
-              __typename
-            }
-
-            children {
-              id
-
-              node {
-                __typename
-              }
-
-              children {
-                id
-
-                node {
-                  __typename
-                }
-              }
-            }
-          }
-        }
-      }
-    `),
-  );
+  import type { TreeEntity } from './types';
 
   const app = getAppContext();
 
@@ -91,25 +36,25 @@
   onMount(async () => {
     const entityIds = new Set(app.state.tree.selectedEntityIds);
 
-    const collect = (entities: EntityNode[]) => {
+    const collect = (entities: TreeEntity[]) => {
       entities.forEach((entity) => {
-        if (entity.node.__typename === 'Folder') {
+        if (entity.type === 'Folder') {
           if (entityIds.has(entity.id)) {
             folderCount++;
           }
 
-          collect(entity.children as EntityNode[]);
+          collect(entity.children ?? []);
         } else if (entityIds.has(entity.id)) {
-          if (entity.node.__typename === 'Post') {
+          if (entity.type === 'Post') {
             postCount++;
-          } else if (entity.node.__typename === 'Canvas') {
+          } else if (entity.type === 'Canvas') {
             canvasCount++;
           }
         }
       });
     };
 
-    collect($site.entities as EntityNode[]);
+    collect(app.state.tree.entities);
   });
 </script>
 

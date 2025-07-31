@@ -1,6 +1,7 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
   import { on } from 'svelte/events';
+  import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
@@ -11,8 +12,8 @@
   import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
-  import SelectedEntitiesBar from './SelectedEntitiesBar.svelte';
   import { getNextElement, getPreviousElement, maxDepth } from './utils';
   import type { MouseEventHandler, PointerEventHandler } from 'svelte/elements';
   import type { DashboardLayout_EntityTree_site } from '$graphql';
@@ -37,8 +38,6 @@
     graphql(`
       fragment DashboardLayout_EntityTree_site on Site {
         id
-
-        ...DashboardLayout_EntityTree_MultiEntitiesMenu_site
 
         entities {
           id
@@ -132,40 +131,28 @@
 
   const app = getAppContext();
 
-  const getAllEntityIds = () => {
-    const ids: string[] = [];
-    const collectIds = (entities: EntityNode[]) => {
-      entities.forEach((entity) => {
-        ids.push(entity.id);
+  $effect(() => {
+    if ($site) {
+      const entityMap = new SvelteMap<string, (typeof app.state.tree.entities)[number]>();
+      const collect = (children: EntityNode[], parentId?: string): typeof app.state.tree.entities => {
+        const entities = children.map((entity) => ({
+          id: entity.id,
+          type: entity.node.__typename,
+          children: entity.children ? collect(entity.children, entity.id) : undefined,
+          parentId,
+        }));
 
-        if (entity.children && tree) {
-          const folderElement = tree.querySelector(`[data-id="${entity.id}"]`) as HTMLDetailsElement;
-          const isOpen = folderElement?.open ?? false;
-
-          if (isOpen) {
-            collectIds(entity.children as EntityNode[]);
-          }
+        for (const entity of entities) {
+          entityMap.set(entity.id, entity);
         }
-      });
-    };
-    collectIds($site.entities as EntityNode[]);
-    return ids;
-  };
 
-  const selectEntityRange = (fromId: string, toId: string, allIds: string[]) => {
-    const fromIndex = allIds.indexOf(fromId);
-    const toIndex = allIds.indexOf(toId);
+        return entities;
+      };
 
-    if (fromIndex === -1 || toIndex === -1) return;
-
-    const startIndex = Math.min(fromIndex, toIndex);
-    const endIndex = Math.max(fromIndex, toIndex);
-
-    for (let i = startIndex; i <= endIndex; i++) {
-      app.state.tree.selectedEntityIds.add(allIds[i]);
+      app.state.tree.entities = collect($site.entities);
+      app.state.tree.entityMap = entityMap;
     }
-    app.state.tree.lastSelectedEntityId = toId;
-  };
+  });
 
   // NOTE: 링크 관련 브라우저 기본 동작 방지
   const handleClick: MouseEventHandler<HTMLDivElement> = (e) => {
@@ -192,20 +179,9 @@
       return;
     }
 
-    const isCheckbox = !!target.closest('[type="checkbox"], [role="checkbox"]');
     const element = target.closest<HTMLElement>('[data-id]');
 
     if (!element) {
-      return;
-    }
-
-    const entityId = element.dataset.id;
-
-    if (entityId && isCheckbox && e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-
-      selectEntityRange(app.state.tree.lastSelectedEntityId ?? entityId, entityId, getAllEntityIds());
       return;
     }
 
@@ -518,7 +494,7 @@
   role="tree"
 >
   {#each $site.entities as entity (entity.id)}
-    <Entity $entity={entity} $site={_site} />
+    <Entity $entity={entity} />
   {:else}
     <div class={center({ flexGrow: '1' })}>
       <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 포스트가 없어요</p>
@@ -526,7 +502,7 @@
   {/each}
 
   {#if app.state.tree.selectedEntityIds.size > 0 && !dragging?.eligible}
-    <SelectedEntitiesBar $site={_site} />
+    <SelectedEntitiesBar />
   {/if}
 </div>
 

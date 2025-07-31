@@ -23,24 +23,18 @@
   import { comma } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
+  import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import Entity from './Entity.svelte';
-  import EntitySelectionIndicator from './EntitySelectionIndicator.svelte';
-  import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
   import { maxDepth } from './utils';
-  import type {
-    DashboardLayout_EntityTree_Folder_entity,
-    DashboardLayout_EntityTree_Folder_folder,
-    DashboardLayout_EntityTree_site,
-    List,
-  } from '$graphql';
+  import type { DashboardLayout_EntityTree_Folder_entity, DashboardLayout_EntityTree_Folder_folder, List } from '$graphql';
 
   type Props = {
     $folder: DashboardLayout_EntityTree_Folder_folder;
     $entities: List<DashboardLayout_EntityTree_Folder_entity>;
-    $site: DashboardLayout_EntityTree_site;
   };
 
-  let { $folder: _folder, $entities: _entities, $site: _site }: Props = $props();
+  let { $folder: _folder, $entities: _entities }: Props = $props();
 
   const folder = fragment(
     _folder,
@@ -326,7 +320,7 @@
         {/snippet}
 
         {#if app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has($folder.entity.id)}
-          <MultiEntitiesMenu $site={_site} />
+          <MultiEntitiesMenu />
         {:else}
           <MenuItem icon={PencilIcon} onclick={() => (editing = true)}>이름 변경</MenuItem>
 
@@ -481,7 +475,7 @@
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
     {#each $entities as entity (entity.id)}
-      <Entity $entity={entity} $site={_site} />
+      <Entity $entity={entity} />
     {:else}
       <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
         폴더가 비어있어요

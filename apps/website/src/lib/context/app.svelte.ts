@@ -1,6 +1,7 @@
 import { getContext, setContext } from 'svelte';
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { LocalStore, SessionStore } from '../state';
+import type { TreeEntity } from '../../routes/website/(dashboard)/@tree/@selection/types';
 
 type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
@@ -43,6 +44,8 @@ type AppState = {
   };
 
   tree: {
+    entities: TreeEntity[];
+    entityMap: SvelteMap<string, TreeEntity>;
     lastSelectedEntityId?: string;
     selectedEntityIds: SvelteSet<string>;
   };
@@ -84,6 +87,8 @@ export const setupAppContext = (userId: string) => {
       totalBlobSize: 0,
     },
     tree: {
+      entities: [],
+      entityMap: new SvelteMap<string, TreeEntity>(),
       lastSelectedEntityId: undefined,
       selectedEntityIds: new SvelteSet<string>(),
     },

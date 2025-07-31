@@ -11,16 +11,15 @@
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
-  import EntitySelectionIndicator from './EntitySelectionIndicator.svelte';
-  import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
-  import type { DashboardLayout_EntityTree_Canvas_canvas, DashboardLayout_EntityTree_site } from '$graphql';
+  import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
+  import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
+  import type { DashboardLayout_EntityTree_Canvas_canvas } from '$graphql';
 
   type Props = {
     $canvas: DashboardLayout_EntityTree_Canvas_canvas;
-    $site: DashboardLayout_EntityTree_site;
   };
 
-  let { $canvas: _canvas, $site: _site }: Props = $props();
+  let { $canvas: _canvas }: Props = $props();
 
   const canvas = fragment(
     _canvas,
@@ -157,7 +156,7 @@
     {/snippet}
 
     {#if app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has($canvas.entity.id)}
-      <MultiEntitiesMenu $site={_site} />
+      <MultiEntitiesMenu />
     {:else}
       <MenuItem
         icon={CopyIcon}

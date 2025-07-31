@@ -8,14 +8,8 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
-  import type { DashboardLayout_EntityTree_site } from '$graphql';
-
-  type Props = {
-    $site: DashboardLayout_EntityTree_site;
-  };
 
   const app = getAppContext();
-  let { $site: _site }: Props = $props();
 </script>
 
 <div
@@ -83,6 +77,6 @@
       </div>
     {/snippet}
 
-    <MultiEntitiesMenu $site={_site} />
+    <MultiEntitiesMenu />
   </Menu>
 </div>
