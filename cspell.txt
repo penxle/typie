@@ -23,6 +23,7 @@ dotum
 eulyoo
 fira
 healthz
+icns
 iconify
 iframely
 ilike
@@ -43,6 +44,7 @@ natgw
 noeviction
 noreferrer
 nori
+nsis
 nums
 observablehq
 oklch
@@ -60,6 +62,7 @@ sadd
 saeeum
 sark
 scard
+serde
 setex
 shiki
 sindresorhus
@@ -68,6 +71,7 @@ srem
 sslmode
 stakater
 stibee
+tauri
 tini
 tsup
 typie
