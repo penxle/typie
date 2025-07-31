@@ -17,16 +17,15 @@
   import { comma } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
-  import EntitySelectionIndicator from './EntitySelectionIndicator.svelte';
-  import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
-  import type { DashboardLayout_EntityTree_Post_post, DashboardLayout_EntityTree_site } from '$graphql';
+  import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
+  import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
+  import type { DashboardLayout_EntityTree_Post_post } from '$graphql';
 
   type Props = {
     $post: DashboardLayout_EntityTree_Post_post;
-    $site: DashboardLayout_EntityTree_site;
   };
 
-  let { $post: _post, $site: _site }: Props = $props();
+  let { $post: _post }: Props = $props();
 
   const post = fragment(
     _post,
@@ -182,7 +181,7 @@
     {/snippet}
 
     {#if app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has($post.entity.id)}
-      <MultiEntitiesMenu $site={_site} />
+      <MultiEntitiesMenu />
     {:else}
       <MenuItem external href={$post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
 

@@ -3,18 +3,13 @@
   import Canvas from './Canvas.svelte';
   import Folder from './Folder.svelte';
   import Post from './Post.svelte';
-  import type {
-    DashboardLayout_EntityTree_Entity_entity,
-    DashboardLayout_EntityTree_Folder_entity,
-    DashboardLayout_EntityTree_site,
-  } from '$graphql';
+  import type { DashboardLayout_EntityTree_Entity_entity, DashboardLayout_EntityTree_Folder_entity } from '$graphql';
 
   type Props = {
     $entity: DashboardLayout_EntityTree_Entity_entity;
-    $site: DashboardLayout_EntityTree_site;
   };
 
-  let { $entity: _entity, $site: _site }: Props = $props();
+  let { $entity: _entity }: Props = $props();
 
   const entity = fragment(
     _entity,
@@ -49,9 +44,9 @@
 </script>
 
 {#if $entity.node.__typename === 'Folder'}
-  <Folder $entities={children} $folder={$entity.node} $site={_site} />
+  <Folder $entities={children} $folder={$entity.node} />
 {:else if $entity.node.__typename === 'Post'}
-  <Post $post={$entity.node} $site={_site} />
+  <Post $post={$entity.node} />
 {:else if $entity.node.__typename === 'Canvas'}
-  <Canvas $canvas={$entity.node} $site={_site} />
+  <Canvas $canvas={$entity.node} />
 {/if}
