@@ -27,6 +27,7 @@
   import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
   import ShapesIcon from '~icons/lucide/shapes';
   import TrashIcon from '~icons/lucide/trash';
+  import XIcon from '~icons/lucide/x';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
@@ -1120,6 +1121,30 @@
             <Anchor name={anchor.name} {editor} element={anchor.element} outline={showAnchorOutline} position={anchor.position} />
           {/each}
         </div>
+
+        {#if app.preference.current.zenModeEnabled}
+          <button
+            class={css({
+              position: 'fixed',
+              top: '18px',
+              right: '18px',
+              zIndex: '1',
+              borderWidth: '1px',
+              borderColor: 'border.strong',
+              borderRadius: '8px',
+              padding: '5px',
+              color: 'text.subtle',
+              backgroundColor: { base: 'surface.default', _hover: 'surface.subtle' },
+            })}
+            onclick={() => {
+              app.preference.current.zenModeEnabled = false;
+              mixpanel.track('zen_mode_disabled', { via: 'close_button' });
+            }}
+            type="button"
+          >
+            <Icon icon={XIcon} />
+          </button>
+        {/if}
 
         {#if app.preference.current.noteExpanded}
           <div
