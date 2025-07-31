@@ -19,8 +19,11 @@ new aws.route53.Record('typie.co|txt', {
   type: 'TXT',
   name: 'typie.co',
   records: [
+    // spell-checker:disable
     'google-site-verification=Q-1ETLmF6p7XkzQM0wpDyF0wCBQREsjK1aZdxR-4ggQ',
     'google-site-verification=hZdtWP44my1tA-wUAvYlOKAAPSp2vHT6M5omQXCRt6o',
+    'facebook-domain-verification=fduiqboyntm5jz4x19bf0pau0ii960',
+    // spell-checker:enable
   ],
   ttl: 300,
 });
