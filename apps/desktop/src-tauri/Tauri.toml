@@ -1,0 +1,25 @@
+productName = "Typie"
+version = "0.0.1"
+identifier = "co.typie"
+
+[build]
+beforeDevCommand = "pnpm dev"
+beforeBuildCommand = "pnpm build"
+devUrl = "http://localhost:5000"
+frontendDist = "../build"
+
+[[app.windows]]
+title = "타이피"
+hiddenTitle = true
+titleBarStyle = "Overlay"
+trafficLightPosition = { x = 16, y = 16 }
+
+[bundle]
+active = true
+targets = ["nsis", "dmg"]
+icon = ["icons/icon.icns"]
+resources = { "resources/" = "./" }
+
+[bundle.macOS.dmg]
+background = "assets/dmg-background.png"
+windowSize = { width = 660, height = 400 }
