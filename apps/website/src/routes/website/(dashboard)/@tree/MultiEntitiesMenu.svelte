@@ -84,8 +84,6 @@
     }
   `);
 
-  const selectedCount = $derived(app.state.tree.selectedEntityIds.size);
-
   let folderCount = $state(0);
   let postCount = $state(0);
   let canvasCount = $state(0);
@@ -116,24 +114,23 @@
 </script>
 
 <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', fontWeight: 'medium' })}>
-  <span>{selectedCount}개 선택됨</span>
   <div class={flex({ alignItems: 'center', gap: '8px' })}>
     {#if folderCount > 0}
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={14} />
-        {folderCount}
+        {folderCount}개
       </div>
     {/if}
     {#if postCount > 0}
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
-        {postCount}
+        {postCount}개
       </div>
     {/if}
     {#if canvasCount > 0}
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={LineSquiggleIcon} size={14} />
-        {canvasCount}
+        {canvasCount}개
       </div>
     {/if}
   </div>

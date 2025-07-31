@@ -12,6 +12,7 @@
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Entity from './Entity.svelte';
+  import SelectedEntitiesBar from './SelectedEntitiesBar.svelte';
   import { getNextElement, getPreviousElement, maxDepth } from './utils';
   import type { MouseEventHandler, PointerEventHandler } from 'svelte/elements';
   import type { DashboardLayout_EntityTree_site } from '$graphql';
@@ -151,20 +152,6 @@
     return ids;
   };
 
-  const toggleEntitySelection = (entityId: string, isMultiSelect = false) => {
-    if (isMultiSelect) {
-      if (app.state.tree.selectedEntityIds.has(entityId)) {
-        app.state.tree.selectedEntityIds.delete(entityId);
-      } else {
-        app.state.tree.selectedEntityIds.add(entityId);
-      }
-    } else {
-      app.state.tree.selectedEntityIds.clear();
-      app.state.tree.selectedEntityIds.add(entityId);
-    }
-    app.state.tree.lastSelectedEntityId = entityId;
-  };
-
   const selectEntityRange = (fromId: string, toId: string, allIds: string[]) => {
     const fromIndex = allIds.indexOf(fromId);
     const toIndex = allIds.indexOf(toId);
@@ -178,11 +165,6 @@
       app.state.tree.selectedEntityIds.add(allIds[i]);
     }
     app.state.tree.lastSelectedEntityId = toId;
-  };
-
-  const clearSelection = () => {
-    app.state.tree.selectedEntityIds.clear();
-    app.state.tree.lastSelectedEntityId = undefined;
   };
 
   // NOTE: 링크 관련 브라우저 기본 동작 방지
@@ -210,6 +192,7 @@
       return;
     }
 
+    const isCheckbox = !!target.closest('[type="checkbox"], [role="checkbox"]');
     const element = target.closest<HTMLElement>('[data-id]');
 
     if (!element) {
@@ -218,28 +201,12 @@
 
     const entityId = element.dataset.id;
 
-    if (entityId && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+    if (entityId && isCheckbox && e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
 
-      if (e.shiftKey && app.state.tree.lastSelectedEntityId) {
-        selectEntityRange(app.state.tree.lastSelectedEntityId, entityId, getAllEntityIds());
-      } else {
-        toggleEntitySelection(entityId, true);
-      }
+      selectEntityRange(app.state.tree.lastSelectedEntityId ?? entityId, entityId, getAllEntityIds());
       return;
-    }
-
-    // NOTE: 이미 선택된 엔티티를 클릭할 때 일단 선택 해제하지 않음. 여러 개 드래그를 가능하도록 함.
-    if (
-      entityId &&
-      !e.shiftKey &&
-      !e.ctrlKey &&
-      !e.metaKey &&
-      (app.state.tree.selectedEntityIds.size <= 1 || !app.state.tree.selectedEntityIds.has(entityId))
-    ) {
-      clearSelection();
-      toggleEntitySelection(entityId, false);
     }
 
     pointerType = e.pointerType;
@@ -438,13 +405,8 @@
       return;
     }
 
-    const entityId = dragging.element.dataset.id;
-
-    // NOTE: 드래그 없이 클릭했을 때 여러 개 선택되어 있다면 선택 해제하고 클릭한 엔티티만 선택
-    if (!dragging.eligible && entityId && app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has(entityId)) {
-      clearSelection();
-      toggleEntitySelection(entityId, false);
-    }
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const entityId = dragging.element.dataset.id!;
 
     if (dragging.eligible) {
       on(window, 'click', (e) => e.preventDefault(), { capture: true, once: true });
@@ -456,7 +418,9 @@
       // NOTE: 기다림 없이 즉시 드래그 해제
       cancelDragging();
 
-      const selectedIds = [...app.state.tree.selectedEntityIds];
+      const isMultipleDrag = app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has(entityId);
+      const selectedIds = isMultipleDrag ? [...app.state.tree.selectedEntityIds] : [entityId];
+
       await moveEntities({
         entityIds: selectedIds,
         parentEntityId: parentId ?? null,
@@ -560,6 +524,10 @@
       <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 포스트가 없어요</p>
     </div>
   {/each}
+
+  {#if app.state.tree.selectedEntityIds.size > 0 && !dragging?.eligible}
+    <SelectedEntitiesBar $site={_site} />
+  {/if}
 </div>
 
 {#if dragging?.eligible}

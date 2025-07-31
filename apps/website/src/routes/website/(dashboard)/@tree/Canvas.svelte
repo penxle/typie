@@ -1,6 +1,5 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
-  import { EntityVisibility } from '@/enums';
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
@@ -12,6 +11,7 @@
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
+  import EntitySelectionIndicator from './EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
   import type { DashboardLayout_EntityTree_Canvas_canvas, DashboardLayout_EntityTree_site } from '$graphql';
 
@@ -88,7 +88,7 @@
         paddingY: '6px',
         borderRadius: '6px',
         transition: 'common',
-        _supportHover: { backgroundColor: 'surface.subtle' },
+        _supportHover: { backgroundColor: 'surface.muted' },
         '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
       },
       $canvas.entity.depth > 0 && {
@@ -98,9 +98,13 @@
         paddingLeft: '14px',
         _supportHover: { borderColor: 'border.strong' },
       },
-      selected && {
+      active && {
         backgroundColor: 'surface.muted',
-        _supportHover: { backgroundColor: 'surface.muted' },
+      },
+      selected && {
+        backgroundColor: 'accent.brand.subtle',
+        _supportHover: { backgroundColor: 'accent.brand.subtle' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'accent.brand.subtle' },
       },
     ),
   )}
@@ -113,12 +117,7 @@
   href="/{$canvas.entity.slug}"
   role="treeitem"
 >
-  <div
-    class={css(
-      { flex: 'none', borderRadius: 'full', backgroundColor: 'interactive.hover', size: '4px' },
-      $canvas.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
-    )}
-  ></div>
+  <EntitySelectionIndicator entityId={$canvas.entity.id} visibility={$canvas.entity.visibility} />
 
   <Icon style={css.raw({ color: 'text.faint' })} icon={LineSquiggleIcon} size={14} />
 
@@ -186,6 +185,12 @@
               mixpanel.track('delete_canvas', { via: 'tree' });
               app.state.ancestors = [];
               app.state.current = undefined;
+              if (app.state.tree.selectedEntityIds.has($canvas.entity.id)) {
+                app.state.tree.selectedEntityIds.delete($canvas.entity.id);
+              }
+              if (app.state.tree.lastSelectedEntityId === $canvas.entity.id) {
+                app.state.tree.lastSelectedEntityId = undefined;
+              }
             },
           });
         }}

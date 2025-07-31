@@ -17,6 +17,7 @@
   import { comma } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
+  import EntitySelectionIndicator from './EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
   import type { DashboardLayout_EntityTree_Post_post, DashboardLayout_EntityTree_site } from '$graphql';
 
@@ -108,7 +109,7 @@
         paddingY: '6px',
         borderRadius: '6px',
         transition: 'common',
-        _supportHover: { backgroundColor: 'surface.subtle' },
+        _supportHover: { backgroundColor: 'surface.muted' },
         '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
       },
       $post.entity.depth > 0 && {
@@ -118,9 +119,13 @@
         paddingLeft: '14px',
         _supportHover: { borderColor: 'border.strong' },
       },
-      selected && {
+      active && {
         backgroundColor: 'surface.muted',
-        _supportHover: { backgroundColor: 'surface.muted' },
+      },
+      selected && {
+        backgroundColor: 'accent.brand.subtle',
+        _supportHover: { backgroundColor: 'accent.brand.subtle' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'accent.brand.subtle' },
       },
     ),
   )}
@@ -133,12 +138,7 @@
   href="/{$post.entity.slug}"
   role="treeitem"
 >
-  <div
-    class={css(
-      { flex: 'none', borderRadius: 'full', backgroundColor: 'interactive.hover', size: '4px' },
-      $post.entity.visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
-    )}
-  ></div>
+  <EntitySelectionIndicator entityId={$post.entity.id} visibility={$post.entity.visibility} />
 
   {#if $post.type === PostType.NORMAL}
     <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
@@ -228,6 +228,12 @@
               mixpanel.track('delete_post', { via: 'tree' });
               app.state.ancestors = [];
               app.state.current = undefined;
+              if (app.state.tree.selectedEntityIds.has($post.entity.id)) {
+                app.state.tree.selectedEntityIds.delete($post.entity.id);
+              }
+              if (app.state.tree.lastSelectedEntityId === $post.entity.id) {
+                app.state.tree.lastSelectedEntityId = undefined;
+              }
             },
           });
         }}
