@@ -1141,6 +1141,10 @@
               mixpanel.track('zen_mode_disabled', { via: 'close_button' });
             }}
             type="button"
+            use:tooltip={{
+              message: '집중 모드 끄기',
+              keys: ['Esc'],
+            }}
           >
             <Icon icon={XIcon} />
           </button>
