@@ -88,6 +88,110 @@ class _TrashList extends HookWidget {
     final mixpanel = useService<Mixpanel>();
     final primaryScrollController = PrimaryScrollController.of(context);
 
+    String getEntityTitle(GTrashScreen_Entity_entity entity) {
+      return entity.node.when(
+        folder: (folder) => folder.name,
+        post: (post) => post.title,
+        canvas: (canvas) => canvas.title,
+        orElse: () => '',
+      );
+    }
+
+    String getEntityType(GTrashScreen_Entity_entity entity) {
+      return entity.node.when(folder: (_) => '폴더', post: (_) => '포스트', canvas: (_) => '캔버스', orElse: () => '');
+    }
+
+    String getEntityTypename(GTrashScreen_Entity_entity entity) {
+      return entity.node.G__typename.toLowerCase();
+    }
+
+    Future<void> recoverEntity(
+      GTrashScreen_Entity_entity entity, {
+      String via = 'trash',
+      bool shouldPop = false,
+    }) async {
+      final title = getEntityTitle(entity);
+      final type = getEntityType(entity);
+      final typename = getEntityTypename(entity);
+      try {
+        await client.request(GTrashScreen_RecoverEntity_MutationReq((b) => b..vars.input.entityId = entity.id));
+
+        unawaited(mixpanel.track('recover_entity', properties: {'via': via, 'type': typename.toLowerCase()}));
+
+        if (context.mounted) {
+          context.toast(ToastType.success, '"$title" $type가 복원되었어요.');
+          if (shouldPop) {
+            await context.router.maybePop();
+          }
+        }
+      } catch (e) {
+        if (context.mounted) {
+          context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
+        }
+      }
+    }
+
+    Future<void> purgeEntity(GTrashScreen_Entity_entity entity, {String via = 'trash', bool shouldPop = false}) async {
+      final title = getEntityTitle(entity);
+      final type = getEntityType(entity);
+      final typename = getEntityTypename(entity);
+      await context.showModal(
+        child: ConfirmModal(
+          title: '$type 영구 삭제',
+          message: '영구 삭제한 $type는 복원할 수 없어요. 정말 삭제하시겠어요?',
+          confirmText: '삭제',
+          confirmTextColor: context.colors.textBright,
+          confirmBackgroundColor: context.colors.accentDanger,
+          onConfirm: () async {
+            try {
+              await client.request(
+                GTrashScreen_PurgeEntities_MutationReq((b) => b..vars.input.entityIds.add(entity.id)),
+              );
+
+              unawaited(mixpanel.track('purge_entity', properties: {'via': via, 'type': typename.toLowerCase()}));
+
+              if (context.mounted) {
+                context.toast(ToastType.success, '"$title" $type가 영구 삭제되었어요.');
+                if (shouldPop) {
+                  await context.router.maybePop();
+                }
+              }
+            } catch (e) {
+              if (context.mounted) {
+                context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
+              }
+            }
+          },
+        ),
+      );
+    }
+
+    Future<void> showEntityMenu(GTrashScreen_Entity_entity entity) async {
+      await context.showBottomSheet(
+        child: BottomMenu(
+          header: _BottomMenuHeader(entity: entity),
+          items: [
+            BottomMenuItem(
+              label: '복원',
+              icon: LucideLightIcons.undo_2,
+              onTap: () async {
+                await recoverEntity(entity);
+              },
+            ),
+            BottomMenuItem(
+              label: '영구 삭제',
+              icon: LucideLightIcons.trash_2,
+              iconColor: context.colors.textDanger,
+              labelColor: context.colors.textDanger,
+              onTap: () async {
+                await purgeEntity(entity);
+              },
+            ),
+          ],
+        ),
+      );
+    }
+
     return Screen(
       heading: Heading(
         titleWidget: Row(
@@ -111,6 +215,24 @@ class _TrashList extends HookWidget {
                 child: BottomMenu(
                   header: _BottomMenuHeader(entity: entity),
                   items: [
+                    if (entity != null) ...[
+                      BottomMenuItem(
+                        label: '복원',
+                        icon: LucideLightIcons.undo_2,
+                        onTap: () async {
+                          await recoverEntity(entity!, via: 'trash_menu', shouldPop: true);
+                        },
+                      ),
+                      BottomMenuItem(
+                        label: '영구 삭제',
+                        icon: LucideLightIcons.trash_2,
+                        iconColor: context.colors.textDanger,
+                        labelColor: context.colors.textDanger,
+                        onTap: () async {
+                          await purgeEntity(entity!, via: 'trash_menu', shouldPop: true);
+                        },
+                      ),
+                    ],
                     BottomMenuItem(
                       label: entity == null ? '휴지통 비우기' : '폴더 비우기',
                       icon: LucideLightIcons.brush_cleaning,
@@ -183,20 +305,6 @@ class _TrashList extends HookWidget {
               controller: primaryScrollController,
               padding: const Pad(horizontal: 20, vertical: 14),
               children: entities.map((entity) {
-                final typename = entity.node.G__typename;
-                final title = entity.node.when(
-                  folder: (folder) => folder.name,
-                  post: (post) => post.title,
-                  canvas: (canvas) => canvas.title,
-                  orElse: () => throw UnimplementedError(),
-                );
-                final type = entity.node.when(
-                  folder: (_) => '폴더',
-                  post: (_) => '포스트',
-                  canvas: (_) => '캔버스',
-                  orElse: () => throw UnimplementedError(),
-                );
-
                 return Padding(
                   padding: const Pad(vertical: 6),
                   child: GestureDetector(
@@ -205,85 +313,27 @@ class _TrashList extends HookWidget {
                         folder: (folder) async {
                           await context.router.push(TrashRoute(entityId: entity.id));
                         },
-                        post: (_) {},
-                        canvas: (_) {},
+                        post: (_) async {
+                          await showEntityMenu(entity);
+                        },
+                        canvas: (_) async {
+                          await showEntityMenu(entity);
+                        },
                         orElse: () => throw UnimplementedError(),
                       );
                     },
                     onLongPress: () async {
-                      await context.showBottomSheet(
-                        child: BottomMenu(
-                          header: _BottomMenuHeader(entity: entity),
-                          items: [
-                            BottomMenuItem(
-                              label: '복원',
-                              icon: LucideLightIcons.undo_2,
-                              onTap: () async {
-                                try {
-                                  await client.request(
-                                    GTrashScreen_RecoverEntity_MutationReq((b) => b..vars.input.entityId = entity.id),
-                                  );
-
-                                  unawaited(
-                                    mixpanel.track(
-                                      'recover_entity',
-                                      properties: {'via': 'trash', 'type': typename.toLowerCase()},
-                                    ),
-                                  );
-
-                                  if (context.mounted) {
-                                    context.toast(ToastType.success, '"$title" $type가 복원되었어요.');
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
-                                  }
-                                }
-                              },
-                            ),
-                            BottomMenuItem(
-                              label: '영구 삭제',
-                              icon: LucideLightIcons.trash_2,
-                              iconColor: context.colors.textDanger,
-                              labelColor: context.colors.textDanger,
-                              onTap: () async {
-                                await context.showModal(
-                                  child: ConfirmModal(
-                                    title: '$type 영구 삭제',
-                                    message: '영구 삭제한 $type는 복원할 수 없어요. 정말 삭제하시겠어요?',
-                                    confirmText: '삭제',
-                                    confirmTextColor: context.colors.textBright,
-                                    confirmBackgroundColor: context.colors.accentDanger,
-                                    onConfirm: () async {
-                                      try {
-                                        await client.request(
-                                          GTrashScreen_PurgeEntities_MutationReq(
-                                            (b) => b..vars.input.entityIds.add(entity.id),
-                                          ),
-                                        );
-
-                                        unawaited(
-                                          mixpanel.track(
-                                            'purge_entity',
-                                            properties: {'via': 'trash', 'type': typename.toLowerCase()},
-                                          ),
-                                        );
-
-                                        if (context.mounted) {
-                                          context.toast(ToastType.success, '"$title" $type가 영구 삭제되었어요.');
-                                        }
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
-                                        }
-                                      }
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
+                      await entity.node.when(
+                        folder: (folder) async {
+                          await showEntityMenu(entity);
+                        },
+                        post: (_) async {
+                          await showEntityMenu(entity);
+                        },
+                        canvas: (_) async {
+                          await showEntityMenu(entity);
+                        },
+                        orElse: () => throw UnimplementedError(),
                       );
                     },
                     child: IntrinsicHeight(
@@ -442,8 +492,33 @@ class _BottomMenuHeader extends StatelessWidget {
         ),
         if (entity != null)
           Padding(
-            padding: const Pad(left: 36, top: 4),
-            child: Text('삭제됨', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+            padding: const Pad(left: 36),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 4,
+              children: [
+                Row(
+                  children: [
+                    Text('휴지통', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                    ...?entity?.ancestors
+                        .map(
+                          (ancestor) => [
+                            const Icon(LucideLightIcons.chevron_right, size: 14),
+                            Text(
+                              ancestor.node.when(
+                                folder: (folder) => folder.name,
+                                orElse: () => throw UnimplementedError(),
+                              ),
+                              style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                            ),
+                          ],
+                        )
+                        .expand((e) => e),
+                  ],
+                ),
+                Text('삭제됨', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+              ],
+            ),
           ),
       ],
     );

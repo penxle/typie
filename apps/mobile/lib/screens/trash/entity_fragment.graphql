@@ -5,6 +5,16 @@ fragment TrashScreen_Entity_entity on Entity {
   depth
   url
 
+  ancestors {
+    id
+    node {
+      ... on Folder {
+        id
+        name
+      }
+    }
+  }
+
   node {
     ... on Folder {
       id
