@@ -124,7 +124,7 @@ class _TrashList extends HookWidget {
             await context.router.maybePop();
           }
         }
-      } catch (e) {
+      } catch (_) {
         if (context.mounted) {
           context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
         }
@@ -156,7 +156,7 @@ class _TrashList extends HookWidget {
                   await context.router.maybePop();
                 }
               }
-            } catch (e) {
+            } catch (_) {
               if (context.mounted) {
                 context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
               }
@@ -277,7 +277,7 @@ class _TrashList extends HookWidget {
                                 if (context.mounted) {
                                   context.toast(ToastType.success, '휴지통을 비웠어요');
                                 }
-                              } catch (e) {
+                              } catch (_) {
                                 if (context.mounted) {
                                   context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
                                 }
