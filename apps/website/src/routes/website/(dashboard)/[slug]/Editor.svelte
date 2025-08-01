@@ -22,6 +22,7 @@
   import ElipsisIcon from '~icons/lucide/ellipsis';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderIcon from '~icons/lucide/folder';
+  import InfoIcon from '~icons/lucide/info';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import PanelRightCloseIcon from '~icons/lucide/panel-right-close';
   import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
@@ -207,6 +208,13 @@
 
         entity {
           id
+
+          site {
+            id
+            ...DashboardLayout_EntityTree_site
+            ...DashboardLayout_Trash_site
+            ...DashboardLayout_PlanUsageWidget_site
+          }
 
           user {
             id
@@ -836,6 +844,7 @@
                     Dialog.confirm({
                       title: '포스트 삭제',
                       message: `정말 "${title}" 포스트를 삭제하시겠어요?`,
+                      children: deleteDetailsView,
                       action: 'danger',
                       actionLabel: '삭제',
                       actionHandler: async () => {
@@ -852,6 +861,23 @@
                 삭제
               </MenuItem>
             </Menu>
+            {#snippet deleteDetailsView()}
+              <div
+                class={flex({
+                  alignItems: 'center',
+                  gap: '6px',
+                  borderRadius: '8px',
+                  paddingX: '12px',
+                  paddingY: '8px',
+                  backgroundColor: 'surface.subtle',
+                })}
+              >
+                <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
+                <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>
+                  삭제 후 30일 동안 휴지통에 보관돼요
+                </span>
+              </div>
+            {/snippet}
           {/if}
 
           <button

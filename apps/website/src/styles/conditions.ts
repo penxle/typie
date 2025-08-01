@@ -7,5 +7,6 @@ export const conditions = {
     supportHover: ['@media (hover: hover) and (pointer: fine)', '&:hover'],
     active: ['@media (hover: hover) and (pointer: fine)', '&:active'],
     dark: '[data-theme="dark"] &',
+    hoverAfter: ['@media (hover: hover) and (pointer: fine)', '&:hover::after'],
   },
 };

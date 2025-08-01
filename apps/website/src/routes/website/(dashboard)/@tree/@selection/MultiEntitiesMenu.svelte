@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
+  import InfoIcon from '~icons/lucide/info';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
@@ -25,6 +26,7 @@
         site {
           id
           ...DashboardLayout_EntityTree_site
+          ...DashboardLayout_Trash_site
           ...DashboardLayout_PlanUsageWidget_site
         }
       }
@@ -148,19 +150,17 @@
     </span>
   </div>
 
-  {#if folderCount > 0}
-    <div
-      class={flex({
-        alignItems: 'center',
-        gap: '6px',
-        borderRadius: '8px',
-        paddingX: '12px',
-        paddingY: '8px',
-        backgroundColor: 'surface.subtle',
-      })}
-    >
-      <Icon style={css.raw({ color: 'text.muted' })} icon={TriangleAlertIcon} size={14} />
-      <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>폴더를 삭제하면 하위 항목도 함께 삭제됩니다</span>
-    </div>
-  {/if}
+  <div
+    class={flex({
+      alignItems: 'center',
+      gap: '6px',
+      borderRadius: '8px',
+      paddingX: '12px',
+      paddingY: '8px',
+      backgroundColor: 'surface.subtle',
+    })}
+  >
+    <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
+    <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
+  </div>
 {/snippet}
