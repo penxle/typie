@@ -61,7 +61,7 @@
   })}
   role="tree"
 >
-  {#each $site.deletedEntities as entity (entity.id)}
+  {#if $site.deletedEntities.length > 0}
     <div
       class={flex({
         flexDirection: 'column',
@@ -72,11 +72,13 @@
         overflowY: 'auto',
       })}
     >
-      <TrashEntity $entity={entity} />
+      {#each $site.deletedEntities as entity (entity.id)}
+        <TrashEntity $entity={entity} />
+      {/each}
     </div>
   {:else}
     <div class={center({ flexGrow: '1' })}>
       <p class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.disabled' })}>휴지통이 비어있어요</p>
     </div>
-  {/each}
+  {/if}
 </div>
