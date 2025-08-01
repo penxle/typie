@@ -153,7 +153,10 @@
           backgroundColor: 'surface.subtle',
         },
       })}
-      onclick={() => (app.state.trashOpen = !app.state.trashOpen)}
+      onclick={() => {
+        app.state.trashOpen = !app.state.trashOpen;
+        mixpanel.track('toggle_trash', { via: 'trash', open: app.state.trashOpen });
+      }}
       type="button"
     >
       <Icon
@@ -208,7 +211,7 @@
             actionHandler: async () => {
               try {
                 await purgeEntities({ entityIds });
-                mixpanel.track('purge_all_entities', { via: 'trash', count: entityIds.length });
+                mixpanel.track('empty_trash', { via: 'trash', count: entityIds.length });
                 Toast.success('휴지통을 비웠어요');
               } catch {
                 Toast.error('휴지통 비우기에 실패했어요');
