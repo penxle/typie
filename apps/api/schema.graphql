@@ -212,6 +212,7 @@ union EntityNode = Canvas | Folder | Post
 enum EntityState {
   ACTIVE
   DELETED
+  PURGED
 }
 
 enum EntityType {
@@ -433,6 +434,7 @@ type Mutation {
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  purgeEntities(input: PurgeEntitiesInput!): Site!
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
   registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
@@ -664,6 +666,10 @@ enum PreorderPaymentState {
   COMPLETED
   FAILED
   PENDING
+}
+
+input PurgeEntitiesInput {
+  entityIds: [ID!]!
 }
 
 type Query {

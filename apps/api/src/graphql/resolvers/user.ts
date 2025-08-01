@@ -439,7 +439,7 @@ builder.mutationFields((t) => ({
       await db.transaction(async (tx) => {
         await tx
           .update(Entities)
-          .set({ state: EntityState.DELETED })
+          .set({ state: EntityState.PURGED, purgedAt: dayjs() })
           .where(
             inArray(
               Entities.id,

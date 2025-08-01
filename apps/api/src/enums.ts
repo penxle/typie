@@ -20,6 +20,7 @@ export type EntityState = keyof typeof EntityState;
 export const EntityState = {
   ACTIVE: 'ACTIVE',
   DELETED: 'DELETED',
+  PURGED: 'PURGED',
 } as const;
 
 export type EntityType = keyof typeof EntityType;
