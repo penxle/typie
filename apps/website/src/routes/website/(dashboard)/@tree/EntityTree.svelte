@@ -14,6 +14,7 @@
   import { center, flex } from '$styled-system/patterns';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
+  import { setupTreeContext } from './state.svelte';
   import { getNextElement, getPreviousElement, maxDepth } from './utils';
   import type { MouseEventHandler, PointerEventHandler } from 'svelte/elements';
   import type { DashboardLayout_EntityTree_site } from '$graphql';
@@ -130,11 +131,16 @@
   let dragTimeout = $state<NodeJS.Timeout | null>(null);
 
   const app = getAppContext();
+  const treeState = setupTreeContext();
+
+  $effect(() => {
+    treeState.element = tree;
+  });
 
   $effect(() => {
     if ($site) {
-      const entityMap = new SvelteMap<string, (typeof app.state.tree.entities)[number]>();
-      const collect = (children: EntityNode[], parentId?: string): typeof app.state.tree.entities => {
+      const entityMap = new SvelteMap<string, (typeof treeState.entities)[number]>();
+      const collect = (children: EntityNode[], parentId?: string): typeof treeState.entities => {
         const entities = children.map((entity) => ({
           id: entity.id,
           type: entity.node.__typename,
@@ -149,8 +155,8 @@
         return entities;
       };
 
-      app.state.tree.entities = collect($site.entities);
-      app.state.tree.entityMap = entityMap;
+      treeState.entities = collect($site.entities);
+      treeState.entityMap = entityMap;
     }
   });
 
@@ -254,11 +260,11 @@
     }
 
     const entityId = dragging.element.dataset.id;
-    const isMultipleDrag = entityId && app.state.tree.selectedEntityIds.has(entityId) && app.state.tree.selectedEntityIds.size > 1;
+    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && treeState.selectedEntityIds.size > 1;
 
     let isCycle = false;
     if (isMultipleDrag) {
-      for (const selectedId of app.state.tree.selectedEntityIds) {
+      for (const selectedId of treeState.selectedEntityIds) {
         const selectedElement = tree?.querySelector(`[data-id="${selectedId}"]`);
         if (selectedElement?.contains(targetElement)) {
           isCycle = true;
@@ -394,8 +400,8 @@
       // NOTE: 기다림 없이 즉시 드래그 해제
       cancelDragging();
 
-      const isMultipleDrag = app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has(entityId);
-      const selectedIds = isMultipleDrag ? [...app.state.tree.selectedEntityIds] : [entityId];
+      const isMultipleDrag = treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(entityId);
+      const selectedIds = isMultipleDrag ? [...treeState.selectedEntityIds] : [entityId];
 
       await moveEntities({
         entityIds: selectedIds,
@@ -435,7 +441,7 @@
       folder: 0,
     };
 
-    const entityIds = new Set(app.state.tree.selectedEntityIds);
+    const entityIds = new Set(treeState.selectedEntityIds);
 
     const collect = (entities: EntityNode[]) => {
       entities.forEach((entity) => {
@@ -501,7 +507,7 @@
     </div>
   {/each}
 
-  {#if app.state.tree.selectedEntityIds.size > 0 && !dragging?.eligible}
+  {#if treeState.selectedEntityIds.size > 0 && !dragging?.eligible}
     <SelectedEntitiesBar />
   {/if}
 </div>
@@ -529,7 +535,7 @@
 
   {#if dragging.ghost}
     {@const entityId = dragging.element.dataset.id}
-    {@const isMultipleDrag = entityId && app.state.tree.selectedEntityIds.has(entityId) && app.state.tree.selectedEntityIds.size > 1}
+    {@const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && treeState.selectedEntityIds.size > 1}
     {#if isMultipleDrag}
       <div
         style:left={`${dragging.ghost.x + 8}px`}

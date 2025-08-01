@@ -19,6 +19,7 @@
   import { center } from '$styled-system/patterns';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
+  import { getTreeContext } from './state.svelte';
   import type { DashboardLayout_EntityTree_Post_post } from '$graphql';
 
   type Props = {
@@ -83,8 +84,9 @@
   `);
 
   const app = getAppContext();
+  const treeState = getTreeContext();
   const active = $derived(app.state.current === $post.entity.id);
-  const selected = $derived(app.state.tree.selectedEntityIds.has($post.entity.id));
+  const selected = $derived(treeState.selectedEntityIds.has($post.entity.id));
 
   let element = $state<HTMLAnchorElement>();
 
@@ -180,7 +182,7 @@
       </div>
     {/snippet}
 
-    {#if app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has($post.entity.id)}
+    {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($post.entity.id)}
       <MultiEntitiesMenu />
     {:else}
       <MenuItem external href={$post.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
@@ -227,11 +229,11 @@
               mixpanel.track('delete_post', { via: 'tree' });
               app.state.ancestors = [];
               app.state.current = undefined;
-              if (app.state.tree.selectedEntityIds.has($post.entity.id)) {
-                app.state.tree.selectedEntityIds.delete($post.entity.id);
+              if (treeState.selectedEntityIds.has($post.entity.id)) {
+                treeState.selectedEntityIds.delete($post.entity.id);
               }
-              if (app.state.tree.lastSelectedEntityId === $post.entity.id) {
-                app.state.tree.lastSelectedEntityId = undefined;
+              if (treeState.lastSelectedEntityId === $post.entity.id) {
+                treeState.lastSelectedEntityId = undefined;
               }
             },
           });

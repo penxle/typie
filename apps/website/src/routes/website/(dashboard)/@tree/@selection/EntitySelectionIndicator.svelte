@@ -1,8 +1,8 @@
 <script lang="ts">
   import { EntityVisibility } from '@/enums';
   import { Checkbox } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
+  import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
 
   type Props = {
@@ -12,13 +12,11 @@
 
   let { entityId, visibility }: Props = $props();
 
-  let element: HTMLDivElement;
-
-  const app = getAppContext();
-  const selected = $derived(app.state.tree.selectedEntityIds.has(entityId));
+  const treeState = getTreeContext();
+  const selected = $derived(treeState.selectedEntityIds.has(entityId));
 
   const someDescendants = (entityId: string, someFn: (entity: TreeEntity) => boolean) => {
-    for (const child of app.state.tree.entityMap.get(entityId)?.children ?? []) {
+    for (const child of treeState.entityMap.get(entityId)?.children ?? []) {
       if (someFn(child)) {
         return true;
       }
@@ -32,17 +30,17 @@
   };
 
   const descendants = (entityId: string, fn: (entity: TreeEntity) => void) => {
-    for (const child of app.state.tree.entityMap.get(entityId)?.children ?? []) {
+    for (const child of treeState.entityMap.get(entityId)?.children ?? []) {
       fn(child);
       descendants(child.id, fn);
     }
   };
 
   const select = (entityId: string, origin = true) => {
-    app.state.tree.selectedEntityIds.add(entityId);
+    treeState.selectedEntityIds.add(entityId);
 
     if (origin) {
-      app.state.tree.lastSelectedEntityId = entityId;
+      treeState.lastSelectedEntityId = entityId;
     }
 
     descendants(entityId, (entity) => {
@@ -51,30 +49,30 @@
   };
 
   const deselect = (entityId: string) => {
-    app.state.tree.selectedEntityIds.delete(entityId);
+    treeState.selectedEntityIds.delete(entityId);
 
     // NOTE: 모든 자손이 선택되어 있지 않으면 모든 자손을 선택 해제
     if (
       !someDescendants(entityId, (entity) => {
-        return !app.state.tree.selectedEntityIds.has(entity.id);
+        return !treeState.selectedEntityIds.has(entity.id);
       })
     ) {
       descendants(entityId, (entity) => {
-        app.state.tree.selectedEntityIds.delete(entity.id);
+        treeState.selectedEntityIds.delete(entity.id);
       });
     }
 
     // NOTE: 모든 부모를 선택 해제
-    let parentId = app.state.tree.entityMap.get(entityId)?.parentId;
+    let parentId = treeState.entityMap.get(entityId)?.parentId;
     while (parentId) {
-      app.state.tree.selectedEntityIds.delete(parentId);
-      parentId = app.state.tree.entityMap.get(parentId)?.parentId;
+      treeState.selectedEntityIds.delete(parentId);
+      parentId = treeState.entityMap.get(parentId)?.parentId;
     }
   };
 
   const getAllEntityIds = () => {
     const ids: string[] = [];
-    const tree = element.closest<HTMLElement>('[role="tree"]');
+    const tree = treeState.element;
     const collectIds = (entities: TreeEntity[]) => {
       entities.forEach((entity) => {
         ids.push(entity.id);
@@ -89,12 +87,12 @@
         }
       });
     };
-    collectIds(app.state.tree.entities);
+    collectIds(treeState.entities);
     return ids;
   };
 
   const selectEntityRange = () => {
-    const fromId = app.state.tree.lastSelectedEntityId ?? entityId;
+    const fromId = treeState.lastSelectedEntityId ?? entityId;
     const toId = entityId;
     const allIds = getAllEntityIds();
 
@@ -109,12 +107,15 @@
     for (let i = startIndex; i <= endIndex; i++) {
       select(allIds[i], false);
     }
-    app.state.tree.lastSelectedEntityId = toId;
+    treeState.lastSelectedEntityId = toId;
   };
 
   const handleToggle = (e: MouseEvent) => {
     e.stopPropagation();
     if (e.shiftKey) {
+      if (selected) {
+        e.preventDefault();
+      }
       selectEntityRange();
     } else {
       if (selected) {
@@ -126,7 +127,7 @@
   };
 </script>
 
-<div bind:this={element} class={css({ position: 'relative', flex: 'none', size: '16px' })}>
+<div class={css({ position: 'relative', flex: 'none', size: '16px' })}>
   <div
     class={css(
       {

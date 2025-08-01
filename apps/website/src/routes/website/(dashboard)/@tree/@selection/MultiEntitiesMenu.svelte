@@ -12,9 +12,11 @@
   import { Dialog, Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
 
   const app = getAppContext();
+  const treeState = getTreeContext();
 
   const deleteEntities = graphql(`
     mutation DashboardLayout_EntityTree_MultiEntitiesMenu_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
@@ -34,7 +36,7 @@
   let canvasCount = $state(0);
 
   onMount(async () => {
-    const entityIds = new Set(app.state.tree.selectedEntityIds);
+    const entityIds = new Set(treeState.selectedEntityIds);
 
     const collect = (entities: TreeEntity[]) => {
       entities.forEach((entity) => {
@@ -54,7 +56,7 @@
       });
     };
 
-    collect(app.state.tree.entities);
+    collect(treeState.entities);
   });
 </script>
 
@@ -94,7 +96,7 @@
       actionLabel: '삭제',
       actionHandler: async () => {
         try {
-          const entityIds = [...app.state.tree.selectedEntityIds];
+          const entityIds = [...treeState.selectedEntityIds];
 
           await deleteEntities({ entityIds });
 
@@ -103,8 +105,8 @@
             via: 'tree',
           });
 
-          app.state.tree.selectedEntityIds.clear();
-          app.state.tree.lastSelectedEntityId = undefined;
+          treeState.selectedEntityIds.clear();
+          treeState.lastSelectedEntityId = undefined;
 
           if (app.state.current && entityIds.includes(app.state.current)) {
             app.state.ancestors = [];

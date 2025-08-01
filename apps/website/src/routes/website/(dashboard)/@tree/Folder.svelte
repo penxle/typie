@@ -26,6 +26,7 @@
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import Entity from './Entity.svelte';
+  import { getTreeContext } from './state.svelte';
   import { maxDepth } from './utils';
   import type { DashboardLayout_EntityTree_Folder_entity, DashboardLayout_EntityTree_Folder_folder, List } from '$graphql';
 
@@ -146,8 +147,9 @@
   `);
 
   const app = getAppContext();
+  const treeState = getTreeContext();
   const active = $derived(app.state.ancestors.includes($folder.entity.id));
-  const selected = $derived(app.state.tree.selectedEntityIds.has($folder.entity.id));
+  const selected = $derived(treeState.selectedEntityIds.has($folder.entity.id));
 
   let detailsEl = $state<HTMLDetailsElement>();
   let inputEl = $state<HTMLInputElement>();
@@ -319,7 +321,7 @@
           </div>
         {/snippet}
 
-        {#if app.state.tree.selectedEntityIds.size > 1 && app.state.tree.selectedEntityIds.has($folder.entity.id)}
+        {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($folder.entity.id)}
           <MultiEntitiesMenu />
         {:else}
           <MenuItem icon={PencilIcon} onclick={() => (editing = true)}>이름 변경</MenuItem>
@@ -413,11 +415,11 @@
                 actionHandler: async () => {
                   await deleteFolder({ folderId: $folder.id });
                   mixpanel.track('delete_folder');
-                  if (app.state.tree.selectedEntityIds.has($folder.entity.id)) {
-                    app.state.tree.selectedEntityIds.delete($folder.entity.id);
+                  if (treeState.selectedEntityIds.has($folder.entity.id)) {
+                    treeState.selectedEntityIds.delete($folder.entity.id);
                   }
-                  if (app.state.tree.lastSelectedEntityId === $folder.entity.id) {
-                    app.state.tree.lastSelectedEntityId = undefined;
+                  if (treeState.lastSelectedEntityId === $folder.entity.id) {
+                    treeState.lastSelectedEntityId = undefined;
                   }
                 },
               });
