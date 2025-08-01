@@ -13,6 +13,7 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.req.gql.dart';
+import 'package:typie/screens/profile/activity_grid.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -29,7 +30,8 @@ class ProfileScreen extends StatelessWidget {
       child: GraphQLOperation(
         operation: GProfileScreen_QueryReq(),
         builder: (context, client, data) {
-          return Container(
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const Pad(all: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -81,6 +83,22 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ),
                       Text(data.me!.email, style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+                    ],
+                  ),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: context.colors.borderStrong),
+                    borderRadius: BorderRadius.circular(8),
+                    color: context.colors.surfaceDefault,
+                  ),
+                  padding: const Pad(all: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 12,
+                    children: [
+                      const Text('나의 글쓰기 활동', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                      ActivityGrid(characterCountChanges: data.me?.characterCountChanges.toList() ?? []),
                     ],
                   ),
                 ),
