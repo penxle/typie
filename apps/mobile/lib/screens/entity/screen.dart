@@ -896,85 +896,85 @@ class _BottomMenuHeader extends StatelessWidget {
             ),
           ],
         ),
-        Padding(
-          padding: const Pad(left: 36),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 4,
-            children: [
-              Row(
-                children: [
-                  Text('내 포스트', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-                  ...?entity?.ancestors
-                      .map(
-                        (ancestor) => [
-                          const Icon(LucideLightIcons.chevron_right, size: 14),
-                          Text(
-                            ancestor.node.when(
-                              folder: (folder) => folder.name,
-                              orElse: () => throw UnimplementedError(),
-                            ),
-                            style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                          ),
-                        ],
-                      )
-                      .flattened,
-                ],
-              ),
-              if (entity != null &&
-                  entity!.node.when(
-                    folder: (folder) => true,
-                    post: (post) => true,
-                    canvas: (canvas) => false,
-                    orElse: () => false,
-                  ))
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        if (entity != null)
+          Padding(
+            padding: const Pad(left: 36),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 4,
+              children: [
+                Row(
                   children: [
-                    Text(
-                      entity!.visibility == GEntityVisibility.UNLISTED &&
-                              entity!.availability == GEntityAvailability.UNLISTED
-                          ? '링크 조회/편집 가능'
-                          : entity!.visibility == GEntityVisibility.UNLISTED
-                          ? '링크 조회 가능'
-                          : entity!.availability == GEntityAvailability.UNLISTED
-                          ? '링크 편집 가능'
-                          : '비공개',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color:
-                            entity!.visibility == GEntityVisibility.UNLISTED ||
-                                entity!.availability == GEntityAvailability.UNLISTED
-                            ? context.colors.accentBrand
-                            : context.colors.textFaint,
-                      ),
-                    ),
-                    Text(
-                      entity!.node.maybeWhen(
-                        folder: (folder) {
-                          final parts = <String>[];
-                          if (folder.folderCount > 0) {
-                            parts.add('폴더 ${folder.folderCount.comma}개');
-                          }
-                          if (folder.postCount > 0) {
-                            parts.add('포스트 ${folder.postCount.comma}개');
-                          }
-                          if (folder.canvasCount > 0) {
-                            parts.add('캔버스 ${folder.canvasCount.comma}개');
-                          }
-                          parts.add('총 ${folder.characterCount.comma}자');
-                          return parts.join(' · ');
-                        },
-                        post: (post) => '총 ${post.characterCount.comma}자',
-                        orElse: () => '',
-                      ),
-                      style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                    ),
+                    Text('내 포스트', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                    ...?entity?.ancestors
+                        .map(
+                          (ancestor) => [
+                            const Icon(LucideLightIcons.chevron_right, size: 14),
+                            Text(
+                              ancestor.node.when(
+                                folder: (folder) => folder.name,
+                                orElse: () => throw UnimplementedError(),
+                              ),
+                              style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                            ),
+                          ],
+                        )
+                        .flattened,
                   ],
                 ),
-            ],
+                if (entity!.node.when(
+                  folder: (folder) => true,
+                  post: (post) => true,
+                  canvas: (canvas) => false,
+                  orElse: () => false,
+                ))
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entity!.visibility == GEntityVisibility.UNLISTED &&
+                                entity!.availability == GEntityAvailability.UNLISTED
+                            ? '링크 조회/편집 가능'
+                            : entity!.visibility == GEntityVisibility.UNLISTED
+                            ? '링크 조회 가능'
+                            : entity!.availability == GEntityAvailability.UNLISTED
+                            ? '링크 편집 가능'
+                            : '비공개',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color:
+                              entity!.visibility == GEntityVisibility.UNLISTED ||
+                                  entity!.availability == GEntityAvailability.UNLISTED
+                              ? context.colors.accentBrand
+                              : context.colors.textFaint,
+                        ),
+                      ),
+                      Text(
+                        entity!.node.maybeWhen(
+                          folder: (folder) {
+                            final parts = <String>[];
+                            if (folder.folderCount > 0) {
+                              parts.add('폴더 ${folder.folderCount.comma}개');
+                            }
+                            if (folder.postCount > 0) {
+                              parts.add('포스트 ${folder.postCount.comma}개');
+                            }
+                            if (folder.canvasCount > 0) {
+                              parts.add('캔버스 ${folder.canvasCount.comma}개');
+                            }
+                            parts.add('총 ${folder.characterCount.comma}자');
+                            return parts.join(' · ');
+                          },
+                          post: (post) => '총 ${post.characterCount.comma}자',
+                          orElse: () => '',
+                        ),
+                        style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
