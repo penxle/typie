@@ -17,5 +17,10 @@ query ProfileScreen_Query {
         name
       }
     }
+
+    characterCountChanges {
+      date
+      additions
+    }
   }
 }

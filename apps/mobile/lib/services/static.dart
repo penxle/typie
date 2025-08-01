@@ -36,5 +36,5 @@ Future<void> configureStaticServices() async {
     clientSecret: Env.naverClientSecret,
   );
 
-  await Jiffy.setLocale('ko');
+  await Jiffy.setLocale('ko', startOfWeek: StartOfWeek.sunday);
 }
