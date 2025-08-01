@@ -53,7 +53,7 @@ export const Selection = Extension.create({
             const decorations: Decoration[] = [];
 
             if (!empty && (isiOS() || window.__webview__?.platform === 'ios')) {
-              decorations.push(Decoration.inline(from, to, { class: cx('selected-text', css({ display: 'contents' })) }));
+              decorations.push(Decoration.inline(from, to, { class: cx('selected-text') }));
             }
 
             if (this.editor.isEditable && (selection instanceof NodeSelection || selection instanceof MultiNodeSelection)) {
