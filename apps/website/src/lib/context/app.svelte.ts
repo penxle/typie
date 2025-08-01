@@ -6,6 +6,7 @@ type AppPreference = {
   postsWidth: number;
   panelExpanded: boolean;
   noteExpanded: boolean;
+  trashHeight: number;
 
   focusDuration: number;
   restDuration: number;
@@ -30,6 +31,7 @@ type AppState = {
   current?: string;
 
   postsOpen: boolean;
+  trashOpen: boolean;
   commandPaletteOpen: boolean;
   shareOpen: string | false;
   statsOpen: boolean;
@@ -67,6 +69,7 @@ export const setupAppContext = (userId: string) => {
   const appState = $state<AppState>({
     ancestors: [],
     postsOpen: false,
+    trashOpen: false,
     commandPaletteOpen: false,
     shareOpen: false,
     statsOpen: false,
@@ -85,6 +88,7 @@ export const setupAppContext = (userId: string) => {
       postsWidth: 240,
       panelExpanded: true,
       noteExpanded: false,
+      trashHeight: 300,
 
       focusDuration: 30,
       restDuration: 10,

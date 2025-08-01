@@ -10,6 +10,7 @@
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import InfoIcon from '~icons/lucide/info';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import PencilIcon from '~icons/lucide/pencil-line';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -142,6 +143,17 @@
     mutation DashboardLayout_EntityTree_Folder_DeleteFolder_Mutation($input: DeleteFolderInput!) {
       deleteFolder(input: $input) {
         id
+
+        entity {
+          id
+
+          site {
+            id
+            ...DashboardLayout_EntityTree_site
+            ...DashboardLayout_Trash_site
+            ...DashboardLayout_PlanUsageWidget_site
+          }
+        }
       }
     }
   `);
@@ -542,5 +554,19 @@
         <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.success' })}>비어있는 폴더에요</span>
       </div>
     {/if}
+
+    <div
+      class={flex({
+        alignItems: 'center',
+        gap: '6px',
+        borderRadius: '8px',
+        paddingX: '12px',
+        paddingY: '8px',
+        backgroundColor: 'surface.subtle',
+      })}
+    >
+      <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
+      <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
+    </div>
   {/if}
 {/snippet}

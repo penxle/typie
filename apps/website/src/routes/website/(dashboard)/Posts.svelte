@@ -10,8 +10,10 @@
   import { portal, tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
+  import { clamp } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import Trash from './@trash/Trash.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';
   import type { DashboardLayout_Posts_site, DashboardLayout_Posts_user } from '$graphql';
@@ -43,6 +45,7 @@
 
         ...DashboardLayout_EntityTree_site
         ...DashboardLayout_PlanUsageWidget_site
+        ...DashboardLayout_Trash_site
       }
     `),
   );
@@ -91,7 +94,8 @@
   };
 
   let resizer = $state<Resizer | null>(null);
-  let newWidth = $derived(Math.min(Math.max((app.preference.current.postsWidth ?? 240) + (resizer?.deltaX ?? 0), 240), 480));
+  let newWidth = $derived(clamp((app.preference.current.postsWidth ?? 240) + (resizer?.deltaX ?? 0), 240, 480));
+  let containerElement = $state<HTMLElement | null>(null);
 </script>
 
 {#if app.state.postsOpen && !app.preference.current.postsExpanded}
@@ -151,6 +155,7 @@
   }}
 >
   <div
+    bind:this={containerElement}
     class={css(
       {
         display: 'flex',
@@ -304,6 +309,7 @@
       <EntityTree {$site} />
     </div>
 
+    <Trash {$site} {containerElement} />
     <PlanUsageWidget {$site} {$user} />
   </div>
 
@@ -315,18 +321,16 @@
       zIndex: '2',
       width: '12px',
       height: 'full',
-      _hover: {
-        cursor: 'col-resize',
-        _after: {
-          content: '""',
-          display: 'block',
-          borderRightRadius: '4px',
-          marginLeft: '4px',
-          height: 'full',
-          width: '2px',
-          backgroundColor: 'border.strong',
-          opacity: '50',
-        },
+      cursor: 'col-resize',
+      _hoverAfter: {
+        content: '""',
+        display: 'block',
+        borderRightRadius: '4px',
+        marginLeft: '4px',
+        height: 'full',
+        width: '2px',
+        backgroundColor: 'border.strong',
+        opacity: '50',
       },
     })}
     onpointerdowncapture={(e) => {

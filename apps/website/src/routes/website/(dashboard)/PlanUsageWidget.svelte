@@ -86,7 +86,7 @@
       position: 'sticky',
       bottom: '0',
       borderTopWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.default',
       paddingX: '12px',
       paddingTop: '12px',
       paddingBottom: '20px',

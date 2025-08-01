@@ -2,6 +2,7 @@
   import mixpanel from 'mixpanel-browser';
   import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
+  import InfoIcon from '~icons/lucide/info';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
@@ -10,7 +11,7 @@
   import { getAppContext } from '$lib/context';
   import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
+  import { center, flex } from '$styled-system/patterns';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import { getTreeContext } from './state.svelte';
@@ -58,6 +59,18 @@
     mutation DashboardLayout_EntityTree_Canvas_DeleteCanvas_Mutation($input: DeleteCanvasInput!) {
       deleteCanvas(input: $input) {
         id
+
+        entity {
+          id
+
+          site {
+            id
+
+            ...DashboardLayout_EntityTree_site
+            ...DashboardLayout_Trash_site
+            ...DashboardLayout_PlanUsageWidget_site
+          }
+        }
       }
     }
   `);
@@ -179,6 +192,7 @@
           Dialog.confirm({
             title: '캔버스 삭제',
             message: `정말 "${$canvas.title}" 캔버스를 삭제하시겠어요?`,
+            children: deleteDetailsView,
             action: 'danger',
             actionLabel: '삭제',
             actionHandler: async () => {
@@ -201,4 +215,20 @@
       </MenuItem>
     {/if}
   </Menu>
+
+  {#snippet deleteDetailsView()}
+    <div
+      class={flex({
+        alignItems: 'center',
+        gap: '6px',
+        borderRadius: '8px',
+        paddingX: '12px',
+        paddingY: '8px',
+        backgroundColor: 'surface.subtle',
+      })}
+    >
+      <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
+      <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
+    </div>
+  {/snippet}
 </a>

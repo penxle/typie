@@ -10,6 +10,7 @@
   import { portal } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
+  import { Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
@@ -91,6 +92,20 @@
               __typename
             }
           }
+        }
+      }
+    }
+  `);
+
+  const deleteEntities = graphql(`
+    mutation DashboardLayout_EntityTree_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
+      deleteEntities(input: $input) {
+        id
+        site {
+          id
+          ...DashboardLayout_EntityTree_site
+          ...DashboardLayout_Trash_site
+          ...DashboardLayout_PlanUsageWidget_site
         }
       }
     }
@@ -252,6 +267,21 @@
       }
     }
 
+    const trashElement = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-type="trash"]');
+    if (trashElement) {
+      const rect = trashElement.getBoundingClientRect();
+      dragging.indicator = {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+        opacity: 0.5,
+        transform: undefined,
+      };
+      dragging.drop = { parentId: 'trash' };
+      return;
+    }
+
     const targetElement =
       document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-id]') ??
       document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
@@ -402,6 +432,27 @@
 
       const isMultipleDrag = treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(entityId);
       const selectedIds = isMultipleDrag ? [...treeState.selectedEntityIds] : [entityId];
+
+      if (parentId === 'trash') {
+        try {
+          await deleteEntities({ entityIds: selectedIds });
+
+          mixpanel.track('delete_entities', { totalCount: selectedIds.length, via: 'drag_and_drop' });
+
+          treeState.selectedEntityIds.clear();
+          treeState.lastSelectedEntityId = undefined;
+
+          if (app.state.current && selectedIds.includes(app.state.current)) {
+            app.state.ancestors = [];
+            app.state.current = undefined;
+          }
+
+          Toast.success(`${selectedIds.length}개의 항목이 삭제되었어요`);
+        } catch {
+          Toast.error('삭제 중 오류가 발생했습니다');
+        }
+        return;
+      }
 
       await moveEntities({
         entityIds: selectedIds,
