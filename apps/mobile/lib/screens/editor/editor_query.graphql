@@ -17,6 +17,7 @@ query EditorScreen_Query($slug: String!, $siteId: ID!) {
     entity {
       id
       visibility
+      slug
       url
 
       site {

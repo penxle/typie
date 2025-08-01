@@ -438,7 +438,8 @@ class Editor extends HookWidget {
                       child: Stack(
                         children: [
                           WebView(
-                            initialUrl: '${Env.websiteUrl}/_webview/editor?siteId=${pref.siteId}&slug=$slug',
+                            initialUrl:
+                                '${Env.websiteUrl}/_webview/editor?siteId=${data.post.entity.site.id}&slug=${data.post.entity.slug}',
                             initialCookies: [
                               Cookie('typie-at', (auth.value as Authenticated).accessToken),
                               Cookie('typie-th', switch (theme.mode) {
