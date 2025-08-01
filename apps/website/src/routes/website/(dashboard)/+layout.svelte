@@ -53,6 +53,7 @@
           id
 
           ...DashboardLayout_EntityTree_site
+          ...DashboardLayout_Trash_site
         }
 
         ... on Entity {
