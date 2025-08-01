@@ -4,12 +4,12 @@
   import XIcon from '~icons/lucide/x';
   import { tooltip } from '$lib/actions';
   import { Icon, Menu } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import { getTreeContext } from '../state.svelte';
   import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
 
-  const app = getAppContext();
+  const treeState = getTreeContext();
 </script>
 
 <div
@@ -36,7 +36,7 @@
 >
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <div class={flex({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>
-      <span class={css({ color: 'text.subtle' })}>{app.state.tree.selectedEntityIds.size}</span>
+      <span class={css({ color: 'text.subtle' })}>{treeState.selectedEntityIds.size}</span>
       <span>개 선택됨</span>
     </div>
     <button
@@ -50,8 +50,8 @@
         },
       })}
       onclick={() => {
-        app.state.tree.selectedEntityIds.clear();
-        app.state.tree.lastSelectedEntityId = undefined;
+        treeState.selectedEntityIds.clear();
+        treeState.lastSelectedEntityId = undefined;
       }}
       type="button"
       use:tooltip={{ message: '선택 해제' }}
