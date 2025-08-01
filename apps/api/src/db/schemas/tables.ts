@@ -216,6 +216,7 @@ export const Entities = pgTable(
     availability: E._EntityAvailability('availability').notNull().default('PRIVATE'),
     viewedAt: datetime('viewed_at'),
     deletedAt: datetime('deleted_at'),
+    purgedAt: datetime('purged_at'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),

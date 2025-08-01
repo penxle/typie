@@ -148,6 +148,13 @@
       "when": 1752819882779,
       "tag": "0020_bizarre_jean_grey",
       "breakpoints": false
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1754027623539,
+      "tag": "0021_pretty_captain_universe",
+      "breakpoints": false
     }
   ]
 }

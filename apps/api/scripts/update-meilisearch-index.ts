@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db, Entities, PostContents, Posts } from '@/db';
 import { EntityState } from '@/enums';
 import { meilisearch } from '@/search';
@@ -61,7 +61,7 @@ const processDeletedPostsInChunks = async (): Promise<number> => {
       .select({ id: Posts.id })
       .from(Posts)
       .innerJoin(Entities, eq(Entities.id, Posts.entityId))
-      .where(eq(Entities.state, EntityState.DELETED))
+      .where(inArray(Entities.state, [EntityState.DELETED, EntityState.PURGED]))
       .orderBy(Posts.id)
       .limit(CHUNK_SIZE)
       .offset(offset);

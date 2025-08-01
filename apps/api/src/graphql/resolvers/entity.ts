@@ -793,4 +793,41 @@ builder.mutationFields((t) => ({
       });
     },
   }),
+
+  purgeEntities: t.withAuth({ session: true }).fieldWithInput({
+    type: Site,
+    input: { entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }) },
+    resolve: async (_, { input }, ctx) => {
+      const entities = await db.select().from(Entities).where(inArray(Entities.id, input.entityIds));
+
+      if (entities.length === 0) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const siteId = entities[0].siteId;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (entities.some((entity) => entity.state !== EntityState.DELETED || entity.siteId !== siteId)) {
+        throw new TypieError({ code: 'invalid_state' });
+      }
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(Entities)
+          .set({
+            state: EntityState.PURGED,
+            purgedAt: dayjs(),
+          })
+          .where(inArray(Entities.id, input.entityIds));
+      });
+
+      pubsub.publish('site:update', siteId, { scope: 'site' });
+
+      return siteId;
+    },
+  }),
 }));
