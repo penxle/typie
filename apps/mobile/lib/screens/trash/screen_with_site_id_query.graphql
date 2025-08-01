@@ -1,0 +1,12 @@
+# import "./entity_fragment.graphql"
+
+query TrashScreen_WithSiteId_Query($siteId: ID!) {
+  site(siteId: $siteId) {
+    id
+
+    deletedEntities {
+      id
+      ...TrashScreen_Entity_entity
+    }
+  }
+}

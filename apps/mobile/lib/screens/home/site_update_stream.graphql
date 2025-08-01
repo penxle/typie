@@ -1,4 +1,5 @@
 # import '../entity/entity_fragment.graphql'
+# import '../trash/entity_fragment.graphql'
 
 subscription HomeScreen_SiteUpdateStream_Subscription($siteId: ID!) {
   siteUpdateStream(siteId: $siteId) {
@@ -20,6 +21,26 @@ subscription HomeScreen_SiteUpdateStream_Subscription($siteId: ID!) {
             children {
               id
               ...EntityScreen_Entity_entity
+            }
+          }
+        }
+      }
+
+      deletedEntities {
+        id
+        ...TrashScreen_Entity_entity
+
+        deletedChildren {
+          id
+          ...TrashScreen_Entity_entity
+
+          deletedChildren {
+            id
+            ...TrashScreen_Entity_entity
+
+            deletedChildren {
+              id
+              ...TrashScreen_Entity_entity
             }
           }
         }

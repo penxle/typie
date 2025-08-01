@@ -1,0 +1,27 @@
+fragment TrashScreen_Entity_entity on Entity {
+  id
+  slug
+  order
+  depth
+  url
+
+  node {
+    ... on Folder {
+      id
+      name
+    }
+
+    ... on Post {
+      id
+      title
+      type
+      excerpt
+      updatedAt
+    }
+
+    ... on Canvas {
+      id
+      title
+    }
+  }
+}

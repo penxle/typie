@@ -1,0 +1,5 @@
+mutation TrashScreen_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
+  purgeEntities(input: $input) {
+    id
+  }
+}

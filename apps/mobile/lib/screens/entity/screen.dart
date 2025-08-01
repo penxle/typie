@@ -333,6 +333,16 @@ class _EntityList extends HookWidget {
                               },
                             ),
                           ],
+                          if (entity == null) ...[
+                            const BottomMenuSeparator(),
+                            BottomMenuItem(
+                              icon: LucideLightIcons.trash_2,
+                              label: '휴지통',
+                              onTap: () async {
+                                await context.router.push(TrashRoute());
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     );
