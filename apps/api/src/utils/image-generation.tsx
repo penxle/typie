@@ -417,7 +417,7 @@ export async function generateActivityImage(userId: string): Promise<Buffer> {
           color: gray[400],
         }}
       >
-        <span>TYPIE &mdash; 나만의 글쓰기 공간</span>
+        <span>TYPIE &mdash; 작가를 위한 글쓰기 도구</span>
         <span style={{ fontFamily: 'DeepMindSans' }}>https://typie.co</span>
       </div>
     </div>
