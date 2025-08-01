@@ -1,11 +1,10 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
-  import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import { sineInOut } from 'svelte/easing';
+  import { fade } from 'svelte/transition';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import InfoIcon from '~icons/lucide/info';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { fragment, graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { Dialog, Toast } from '$lib/notification';
@@ -141,14 +140,13 @@
     <button
       class={flex({
         alignItems: 'center',
-        paddingX: '10px',
-        paddingY: '6px',
+        paddingX: '12px',
+        paddingY: '8px',
         gap: '4px',
         flexGrow: '1',
-        fontSize: '12px',
-        fontWeight: 'medium',
-        color: 'text.subtle',
+        color: 'text.faint',
         transition: 'common',
+        transitionProperty: 'background-color',
         cursor: 'pointer',
         userSelect: 'none',
         _hover: {
@@ -158,15 +156,21 @@
       onclick={() => (app.state.trashOpen = !app.state.trashOpen)}
       type="button"
     >
-      <Icon icon={app.state.trashOpen ? ChevronRightIcon : ChevronDownIcon} size={16} />
+      <Icon
+        style={css.raw({
+          transitionProperty: 'transform',
+          transform: app.state.trashOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+        })}
+        icon={ChevronRightIcon}
+        size={16}
+      />
+
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
         <Icon icon={Trash2Icon} size={12} />
-        <span class={css({ flexGrow: '1', textAlign: 'left' })}>휴지통</span>
-        <div use:tooltip={{ message: '삭제 후 30일 동안 보관돼요', placement: 'top' }}>
-          <Icon icon={InfoIcon} size={12} />
-        </div>
+        <span class={css({ flexGrow: '1', textAlign: 'left', fontSize: '13px', fontWeight: 'medium' })}>휴지통</span>
       </div>
     </button>
+
     {#if app.state.trashOpen}
       <button
         class={center({
@@ -174,25 +178,28 @@
           top: '0',
           bottom: '0',
           marginY: 'auto',
-          right: '10px',
+          right: '12px',
           borderRadius: '4px',
           height: '24px',
           paddingX: '8px',
           paddingY: '4px',
           color: 'text.faint',
-          transition: 'common',
-          fontSize: '12px',
+          fontSize: '13px',
           fontWeight: 'medium',
           userSelect: 'none',
+          transition: 'common',
+          transitionProperty: 'color, background-color',
           _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
         })}
-        onclick={(e: MouseEvent) => {
+        onclick={(e) => {
           e.stopPropagation();
+
           const entityIds = $site.deletedEntities.map((entity) => entity.id);
           if (entityIds.length === 0) {
             Toast.success('휴지통이 비어있어요');
             return;
           }
+
           Dialog.confirm({
             title: '휴지통 비우기',
             message: `휴지통에 있는 ${entityIds.length}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요.`,
@@ -210,52 +217,29 @@
           });
         }}
         type="button"
+        transition:fade={{ duration: 150, easing: sineInOut }}
       >
         비우기
       </button>
     {/if}
   </div>
 
-  {#if app.state.trashOpen}
-    <div
-      style:--height={`${newHeight}px`}
-      class={css({
-        display: 'flex',
-        flexDirection: 'column',
-        height: 'var(--height)',
-        borderTopWidth: '1px',
-        borderColor: 'border.subtle',
-        backgroundColor: 'surface.subtle',
-        overflow: 'hidden',
-      })}
-    >
-      <div
-        class={flex({
-          flexDirection: 'column',
-          flexGrow: '1',
-          paddingX: '8px',
-          paddingTop: '8px',
-          paddingBottom: '32px',
-          overflowY: 'auto',
-        })}
-      >
-        <!-- <p
-          class={css({
-            fontSize: '12px',
-            fontWeight: 'medium',
-            color: 'text.disabled',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px',
-            paddingX: '8px',
-            paddingBottom: '4px',
-          })}
-        >
-          <Icon style={css.raw({ color: 'text.disabled' })} icon={TriangleAlertIcon} size={12} />
-          <span>삭제 후 30일 동안 보관돼요</span>
-        </p> -->
-        <TrashTree {$site} />
-      </div>
-    </div>
-  {/if}
+  <div
+    style:--height={`${app.state.trashOpen ? newHeight : 0}px`}
+    class={css({
+      display: 'flex',
+      flexDirection: 'column',
+      height: 'var(--height)',
+      borderTopWidth: '1px',
+      borderColor: 'border.subtle',
+      backgroundColor: 'surface.default',
+      overflow: 'hidden',
+      opacity: app.state.trashOpen ? '100' : '0',
+      transitionDuration: '150ms',
+      transitionTimingFunction: 'ease',
+      transitionProperty: resizer ? 'none' : 'height, opacity',
+    })}
+  >
+    <TrashTree {$site} />
+  </div>
 </div>

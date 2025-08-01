@@ -1,7 +1,5 @@
 <script lang="ts">
-  import TrashIcon from '~icons/lucide/trash';
   import { fragment, graphql } from '$graphql';
-  import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import TrashEntity from './TrashEntity.svelte';
@@ -64,19 +62,21 @@
   role="tree"
 >
   {#each $site.deletedEntities as entity (entity.id)}
-    <TrashEntity $entity={entity} />
+    <div
+      class={flex({
+        flexDirection: 'column',
+        flexGrow: '1',
+        paddingX: '8px',
+        paddingTop: '8px',
+        paddingBottom: '32px',
+        overflowY: 'auto',
+      })}
+    >
+      <TrashEntity $entity={entity} />
+    </div>
   {:else}
     <div class={center({ flexGrow: '1' })}>
-      <div
-        class={flex({
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '16px',
-        })}
-      >
-        <Icon style={css.raw({ color: 'text.disabled' })} icon={TrashIcon} size={32} />
-        <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>휴지통이 비어있어요</p>
-      </div>
+      <p class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.disabled' })}>휴지통이 비어있어요</p>
     </div>
   {/each}
 </div>
