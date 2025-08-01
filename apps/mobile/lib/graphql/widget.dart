@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
+import 'package:auto_route/auto_route.dart';
 import 'package:ferry/ferry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -74,6 +75,22 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
                 child: const Text('다시 시도하기', style: TextStyle(fontSize: 15)),
               ),
             ),
+            if (context.router.canPop()) ...[
+              const Gap(8),
+              Tappable(
+                onTap: () async {
+                  await context.router.maybePop();
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: context.colors.borderStrong),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const Pad(horizontal: 16, vertical: 8),
+                  child: const Text('뒤로 가기', style: TextStyle(fontSize: 15)),
+                ),
+              ),
+            ],
           ],
         ),
       );

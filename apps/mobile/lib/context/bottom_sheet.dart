@@ -234,7 +234,7 @@ class BottomMenu extends StatelessWidget {
   const BottomMenu({this.header, required this.items, super.key});
 
   final Widget? header;
-  final List<BottomMenuItem> items;
+  final List<Widget> items;
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +251,18 @@ class BottomMenu extends StatelessWidget {
           ...items,
         ],
       ),
+    );
+  }
+}
+
+class BottomMenuSeparator extends StatelessWidget {
+  const BottomMenuSeparator({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const Pad(vertical: 8),
+      child: HorizontalDivider(color: context.colors.borderDefault),
     );
   }
 }

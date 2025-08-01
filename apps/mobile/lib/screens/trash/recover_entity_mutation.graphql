@@ -1,0 +1,5 @@
+mutation TrashScreen_RecoverEntity_Mutation($input: RecoverEntityInput!) {
+  recoverEntity(input: $input) {
+    id
+  }
+}

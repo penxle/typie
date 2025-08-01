@@ -1,0 +1,13 @@
+# import "./entity_fragment.graphql"
+
+query TrashScreen_WithEntityId_Query($entityId: ID!) {
+  entity(entityId: $entityId) {
+    id
+    ...TrashScreen_Entity_entity
+
+    deletedChildren {
+      id
+      ...TrashScreen_Entity_entity
+    }
+  }
+}
