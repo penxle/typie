@@ -1,0 +1,13 @@
+mutation CanvasScreen_DeleteCanvas_Mutation($input: DeleteCanvasInput!) {
+  deleteCanvas(input: $input) {
+    id
+
+    entity {
+      id
+
+      site {
+        id
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+query CanvasScreen_Query($slug: String!) {
+  entity(slug: $slug) {
+    id
+    slug
+    url
+
+    site {
+      id
+    }
+
+    node {
+      ... on Canvas {
+        id
+        title
+        update
+      }
+    }
+  }
+}

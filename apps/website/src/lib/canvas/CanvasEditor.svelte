@@ -12,9 +12,10 @@
     style?: SystemStyleObject;
     doc?: Y.Doc;
     awareness?: YAwareness.Awareness;
+    readonly?: boolean;
   };
 
-  let { canvas = $bindable(), doc, awareness, style }: Props = $props();
+  let { canvas = $bindable(), doc, awareness, style, readonly = false }: Props = $props();
 
   let element: HTMLDivElement;
 
@@ -33,6 +34,11 @@
     if (!element) return;
 
     canvas = new Canvas(element, doc, awareness);
+
+    // NOTE: readonly 모드일 때는 pan 도구만 사용
+    if (readonly && canvas) {
+      canvas.state.tool = 'pan';
+    }
 
     return () => {
       canvas?.destroy();
