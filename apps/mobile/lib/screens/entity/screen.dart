@@ -386,7 +386,7 @@ class _EntityList extends HookWidget {
                           entities[index].node.when(
                             folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
                             post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
-                            canvas: (canvas) => context.toast(ToastType.error, '캔버스는 아직 앱에서 열 수 없어요'),
+                            canvas: (canvas) => context.router.push(CanvasRoute(slug: entities[index].slug)),
                             orElse: () => throw UnimplementedError(),
                           );
                         },
