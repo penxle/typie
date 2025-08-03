@@ -34,18 +34,22 @@
 <div
   class={flex({
     position: 'absolute',
-    bottom: '20px',
-    right: '20px',
+    bottom: '40px',
+    right: '40px',
     alignItems: 'center',
     gap: '6px',
     zIndex: '10',
+    userSelect: 'none',
+    touchAction: 'none',
+    WebkitTouchCallout: 'none',
+    WebkitOverflowScrolling: 'touch',
   })}
 >
   <button
     class={center({
       borderWidth: '1px',
       borderRadius: '6px',
-      size: '28px',
+      size: '36px',
       color: 'text.subtle',
       backgroundColor: 'surface.default',
       transition: 'common',
@@ -63,7 +67,7 @@
   <span
     class={css({
       width: '60px',
-      fontSize: '12px',
+      fontSize: '18px',
       fontWeight: 'medium',
       color: 'text.subtle',
       textAlign: 'center',
@@ -76,7 +80,7 @@
     class={center({
       borderWidth: '1px',
       borderRadius: '6px',
-      size: '28px',
+      size: '36px',
       color: 'text.subtle',
       backgroundColor: 'surface.default',
       transition: 'common',
