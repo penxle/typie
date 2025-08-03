@@ -52,6 +52,8 @@
     mutation DashboardLayout_PreferenceModal_BillingTab_ScheduleSubscriptionCancellation_Mutation {
       scheduleSubscriptionCancellation {
         id
+        state
+        expiresAt
       }
     }
   `);
