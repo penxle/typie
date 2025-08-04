@@ -164,7 +164,7 @@
       }
 
       syncUpdateTimeout = setTimeout(async () => {
-        if (pendingUpdate) {
+        if (pendingUpdate && canvasId) {
           await syncCanvas(
             {
               clientId,
@@ -201,7 +201,7 @@
       }
 
       syncAwarenessTimeout = setTimeout(async () => {
-        if (pendingAwarenessStates) {
+        if (pendingAwarenessStates && canvasId) {
           const update = YAwareness.encodeAwarenessUpdate(awareness, [
             ...pendingAwarenessStates.added,
             ...pendingAwarenessStates.updated,
