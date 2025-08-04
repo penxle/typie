@@ -23,8 +23,14 @@
       return;
     }
 
-    const { state } = editor.current;
+    const { state, view } = editor.current;
     const { tr } = state;
+    const originalSelection = state.selection;
+
+    if (view.composing) {
+      view.dom.blur();
+      view.focus();
+    }
 
     const map = TableMap.get(tableNode);
     const lastRowIndex = map.height - 1;
@@ -34,15 +40,22 @@
     }
 
     const tableStart = tablePos + 1;
-
     const cellPos = map.positionAt(lastRowIndex, 0, tableNode);
     const cellResolvedPos = tr.doc.resolve(tableStart + cellPos);
 
-    editor.current.commands.setTextSelection(cellResolvedPos.pos);
-
-    const result = editor.current.commands.addRowAfter();
-
-    return result;
+    return editor.current
+      .chain()
+      .focus()
+      .setTextSelection(cellResolvedPos.pos)
+      .addRowAfter()
+      .command(({ tr, dispatch }) => {
+        tr.setSelection(originalSelection.map(tr.doc, tr.mapping));
+        if (dispatch) {
+          dispatch(tr);
+        }
+        return true;
+      })
+      .run();
   }
 
   function addColumnAtEnd(tableNode: Node) {
@@ -50,8 +63,14 @@
       return;
     }
 
-    const { state } = editor.current;
+    const { state, view } = editor.current;
     const { tr } = state;
+    const originalSelection = state.selection;
+
+    if (view.composing) {
+      view.dom.blur();
+      view.focus();
+    }
 
     const map = TableMap.get(tableNode);
     const lastColumnIndex = map.width - 1;
@@ -61,15 +80,22 @@
     }
 
     const tableStart = tablePos + 1;
-
     const cellPos = map.positionAt(0, lastColumnIndex, tableNode);
     const cellResolvedPos = tr.doc.resolve(tableStart + cellPos);
 
-    editor.current.commands.setTextSelection(cellResolvedPos.pos);
-
-    const result = editor.current.commands.addColumnAfter();
-
-    return result;
+    return editor.current
+      .chain()
+      .focus()
+      .setTextSelection(cellResolvedPos.pos)
+      .addColumnAfter()
+      .command(({ tr, dispatch }) => {
+        tr.setSelection(originalSelection.map(tr.doc, tr.mapping));
+        if (dispatch) {
+          dispatch(tr);
+        }
+        return true;
+      })
+      .run();
   }
 </script>
 
