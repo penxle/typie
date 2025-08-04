@@ -39,10 +39,6 @@
     alignItems: 'center',
     gap: '6px',
     zIndex: '10',
-    userSelect: 'none',
-    touchAction: 'none',
-    WebkitTouchCallout: 'none',
-    WebkitOverflowScrolling: 'touch',
   })}
 >
   <button
