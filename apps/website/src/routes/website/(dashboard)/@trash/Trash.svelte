@@ -236,7 +236,7 @@
       borderTopWidth: '1px',
       borderColor: 'border.subtle',
       backgroundColor: 'surface.default',
-      overflow: 'hidden',
+      overflowY: 'auto',
       opacity: app.state.trashOpen ? '100' : '0',
       transitionDuration: '150ms',
       transitionTimingFunction: 'ease',
