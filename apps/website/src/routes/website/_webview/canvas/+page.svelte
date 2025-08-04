@@ -2,8 +2,10 @@
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import * as Y from 'yjs';
+  import EyeIcon from '~icons/lucide/eye';
   import { graphql } from '$graphql';
   import { Canvas, CanvasEditor } from '$lib/canvas';
+  import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import Zoom from './Zoom.svelte';
 
@@ -60,14 +62,22 @@
   });
 </script>
 
-<div class={css({ position: 'relative', width: 'full', height: '[100dvh]', overflow: 'hidden', backgroundColor: 'surface.subtle' })}>
+<div
+  class={css({
+    position: 'relative',
+    width: 'full',
+    height: '[100dvh]',
+    overflow: 'hidden',
+    backgroundColor: 'surface.subtle',
+    userSelect: 'none',
+    touchAction: 'none',
+    WebkitTouchCallout: 'none',
+    WebkitOverflowScrolling: 'touch',
+  })}
+>
   <div
     class={css({
       size: 'full',
-      userSelect: 'none',
-      touchAction: 'none',
-      WebkitTouchCallout: 'none',
-      WebkitOverflowScrolling: 'touch',
     })}
   >
     <CanvasEditor style={css.raw({ width: 'full', height: 'full' })} {doc} readonly bind:canvas />
@@ -76,4 +86,29 @@
   {#if canvas}
     <Zoom {canvas} />
   {/if}
+
+  <button
+    class={css({
+      position: 'absolute',
+      left: '40px',
+      bottom: '40px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '5px',
+      paddingX: '12px',
+      paddingY: '8px',
+      backgroundColor: 'surface.default',
+      borderRadius: '6px',
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: 'border.default',
+    })}
+    onclick={() => {
+      window.__webview__?.emitEvent('readOnlyBadgeClick');
+    }}
+    type="button"
+  >
+    <Icon style={css.raw({ color: 'text.subtle' })} icon={EyeIcon} size={16} />
+    <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>보기 전용</span>
+  </button>
 </div>

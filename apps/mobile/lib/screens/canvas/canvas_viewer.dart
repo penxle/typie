@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/env.dart';
 import 'package:typie/hooks/service.dart';
@@ -33,8 +32,13 @@ class CanvasViewer extends HookWidget {
       }
 
       final subscription = webViewController.onEvent.listen((event) {
-        if (event.name == 'webviewReady') {
-          isReady.value = true;
+        switch (event.name) {
+          case 'webviewReady':
+            isReady.value = true;
+          case 'readOnlyBadgeClick':
+            if (context.mounted) {
+              context.toast(ToastType.notification, '아직 캔버스는 앱에서 편집할 수 없어요', bottom: 64);
+            }
         }
       });
 
@@ -61,38 +65,6 @@ class CanvasViewer extends HookWidget {
           ),
         ),
         if (!isReady.value) const Center(child: CircularProgressIndicator()),
-        if (isReady.value)
-          Positioned(
-            left: 40,
-            bottom: 40,
-            child: GestureDetector(
-              onTap: () {
-                context.toast(ToastType.notification, '아직 캔버스는 앱에서 편집할 수 없어요', bottom: 64);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: context.colors.surfaceDefault.withValues(alpha: 0.95),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: context.colors.borderDefault),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 6, offset: const Offset(0, 2)),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 5,
-                  children: [
-                    Icon(Icons.visibility_outlined, size: 16, color: context.colors.textSubtle),
-                    Text(
-                      '보기 전용',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }
