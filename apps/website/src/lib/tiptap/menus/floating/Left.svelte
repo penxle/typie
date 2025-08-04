@@ -51,6 +51,11 @@
     event.dataTransfer.clearData();
     event.dataTransfer.effectAllowed = 'move';
 
+    const domNode = editor.view.nodeDOM(pos) as HTMLElement;
+    if (domNode) {
+      event.dataTransfer.setDragImage(domNode, 0, 0);
+    }
+
     editor.chain().setNodeSelection(pos).focus().run();
 
     editor.view.dragging = {
