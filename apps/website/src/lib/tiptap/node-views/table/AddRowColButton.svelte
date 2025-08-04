@@ -154,11 +154,11 @@
     css({
       position: 'absolute',
       zIndex: '10',
-      top: '20px',
+      top: '0',
       right: '0',
       bottom: '0',
       width: '23px',
-      height: '[calc(100% - 20px)]',
+      height: 'full',
       translate: 'auto',
       translateX: 'full',
       paddingLeft: '5px',
