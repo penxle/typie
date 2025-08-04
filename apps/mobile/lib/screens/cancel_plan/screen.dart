@@ -64,7 +64,7 @@ class CancelPlanScreen extends HookWidget {
               ),
               const Gap(8),
               Text(
-                '지금 해지하더라도 ${data.me!.subscription!.expiresAt.toLocal().subtract(days: 1).yyyyMMddKorean}까지는 계속해서 ${data.me!.subscription!.plan.name} 혜택을 이용할 수 있어요.',
+                '지금 해지하더라도 ${data.me!.subscription!.expiresAt.toLocal().yyyyMMddKorean}까지는 계속해서 ${data.me!.subscription!.plan.name} 혜택을 이용할 수 있어요.',
                 style: TextStyle(fontSize: 14, color: context.colors.textFaint),
               ),
               const Gap(24),

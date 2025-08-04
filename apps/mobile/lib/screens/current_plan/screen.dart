@@ -60,10 +60,16 @@ class CurrentPlanScreen extends StatelessWidget {
                         '이용권 가격: ${data.me!.subscription!.plan.fee.comma}원',
                         style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                       ),
-                      Text(
-                        '다음 결제일: ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}',
-                        style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                      ),
+                      if (data.me!.subscription!.state == GSubscriptionState.ACTIVE)
+                        Text(
+                          '다음 결제일: ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}',
+                          style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                        ),
+                      if (data.me!.subscription!.state == GSubscriptionState.WILL_EXPIRE)
+                        Text(
+                          '해지 예정일: ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}',
+                          style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                        ),
                     ],
                   ),
                 ),

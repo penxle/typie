@@ -378,12 +378,12 @@ class _EntityList extends HookWidget {
                       key: Key(entities[index].id),
                       padding: const Pad(vertical: 6),
                       child: GestureDetector(
-                        onTap: () {
+                        onTap: () async {
                           if (isReordering.value) {
                             return;
                           }
 
-                          entities[index].node.when(
+                          await entities[index].node.when(
                             folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
                             post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
                             canvas: (canvas) => context.router.push(CanvasRoute(slug: entities[index].slug)),

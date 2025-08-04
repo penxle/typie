@@ -17,7 +17,6 @@ import 'package:typie/context/loader.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
-import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -38,67 +37,11 @@ class EnrollPlanScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final client = useService<GraphQLClient>();
     final mixpanel = useService<Mixpanel>();
     final facebookAppEvents = useService<FacebookAppEvents>();
 
     final future = useMemoized(_fetchProductMap);
     final productDetailsMap = useFuture(future);
-
-    useEffect(() {
-      final subscription = InAppPurchase.instance.purchaseStream.listen((purchaseDetailsList) async {
-        for (final purchaseDetails in purchaseDetailsList) {
-          try {
-            if (purchaseDetails.status == PurchaseStatus.purchased ||
-                purchaseDetails.status == PurchaseStatus.restored) {
-              await client.request(
-                GEnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_MutationReq(
-                  (b) => b
-                    ..vars.input.store = Platform.isIOS
-                        ? GInAppPurchaseStore.APP_STORE
-                        : GInAppPurchaseStore.GOOGLE_PLAY
-                    ..vars.input.data = Platform.isIOS
-                        ? purchaseDetails.purchaseID
-                        : purchaseDetails.verificationData.serverVerificationData,
-                ),
-              );
-
-              await client.refetch(GEnrollPlanScreen_QueryReq());
-              await client.refetch(GProfileScreen_QueryReq());
-
-              final productDetails = productDetailsMap.data?.entries
-                  .firstWhereOrNull((e) => e.value.details.id == purchaseDetails.productID)
-                  ?.value
-                  .details;
-
-              unawaited(mixpanel.track('enroll_plan', properties: {'productId': purchaseDetails.productID}));
-              unawaited(
-                facebookAppEvents.logSubscribe(
-                  orderId: purchaseDetails.purchaseID!,
-                  price: productDetails?.rawPrice,
-                  currency: productDetails?.currencyCode,
-                ),
-              );
-
-              if (context.mounted) {
-                await context.showModal(
-                  child: const AlertModal(title: '구독이 완료되었어요', message: '타이피의 모든 기능을 이용해보세요!'),
-                );
-              }
-            }
-          } catch (err) {
-            await Sentry.captureException(err);
-            log.e('EnrollPlanScreen', error: err);
-          } finally {
-            if (purchaseDetails.pendingCompletePurchase) {
-              await InAppPurchase.instance.completePurchase(purchaseDetails);
-            }
-          }
-        }
-      });
-
-      return subscription.cancel;
-    }, []);
 
     return Screen(
       heading: const Heading(title: '이용권 구매/변경'),
@@ -106,6 +49,69 @@ class EnrollPlanScreen extends HookWidget {
       child: GraphQLOperation(
         operation: GEnrollPlanScreen_QueryReq(),
         builder: (context, client, data) {
+          useEffect(() {
+            final originalSubscriptionId = data.me!.subscription?.id;
+            final originalPlanId = data.me!.subscription?.plan.id;
+
+            final subscription = InAppPurchase.instance.purchaseStream.listen((purchaseDetailsList) async {
+              for (final purchaseDetails in purchaseDetailsList) {
+                try {
+                  if (purchaseDetails.status == PurchaseStatus.purchased ||
+                      purchaseDetails.status == PurchaseStatus.restored) {
+                    final resp = await client.request(
+                      GEnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_MutationReq(
+                        (b) => b
+                          ..vars.input.store = Platform.isIOS
+                              ? GInAppPurchaseStore.APP_STORE
+                              : GInAppPurchaseStore.GOOGLE_PLAY
+                          ..vars.input.data = Platform.isIOS
+                              ? purchaseDetails.purchaseID
+                              : purchaseDetails.verificationData.serverVerificationData,
+                      ),
+                    );
+
+                    await client.refetch(GEnrollPlanScreen_QueryReq());
+                    await client.refetch(GProfileScreen_QueryReq());
+
+                    if (resp.subscribeOrChangePlanWithInAppPurchase.id == originalSubscriptionId &&
+                        resp.subscribeOrChangePlanWithInAppPurchase.plan.id == originalPlanId) {
+                      return;
+                    }
+
+                    final productDetails = productDetailsMap.data?.entries
+                        .firstWhereOrNull((e) => e.value.details.id == purchaseDetails.productID)
+                        ?.value
+                        .details;
+
+                    unawaited(mixpanel.track('enroll_plan', properties: {'productId': purchaseDetails.productID}));
+                    unawaited(
+                      facebookAppEvents.logSubscribe(
+                        orderId: purchaseDetails.purchaseID!,
+                        price: productDetails?.rawPrice,
+                        currency: productDetails?.currencyCode,
+                      ),
+                    );
+
+                    if (context.mounted) {
+                      await context.showModal(
+                        child: const AlertModal(title: '구독이 완료되었어요', message: '타이피의 모든 기능을 이용해보세요!'),
+                      );
+                    }
+                  }
+                } catch (err) {
+                  await Sentry.captureException(err);
+                  log.e('EnrollPlanScreen', error: err);
+                } finally {
+                  if (purchaseDetails.pendingCompletePurchase) {
+                    await InAppPurchase.instance.completePurchase(purchaseDetails);
+                  }
+                }
+              }
+            });
+
+            return subscription.cancel;
+          }, []);
+
           return Column(
             spacing: 12,
             children: [
