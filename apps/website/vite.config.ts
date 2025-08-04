@@ -19,6 +19,11 @@ export default defineConfig({
     sark(),
     sveltekit(),
   ],
+  resolve: {
+    alias: {
+      'cld3-asm': 'cld3-asm/dist/cjs/index.js',
+    },
+  },
   server: {
     port: 4000,
     strictPort: true,
