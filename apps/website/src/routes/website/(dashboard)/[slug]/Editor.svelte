@@ -980,11 +980,18 @@
                 flexDirection: 'column',
                 alignItems: 'center',
                 paddingTop: '60px',
-                paddingX: '80px',
                 size: 'full',
               })}
             >
-              <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+              <div
+                class={flex({
+                  flexDirection: 'column',
+                  width: 'full',
+                  maxWidth: 'var(--prosemirror-max-width)',
+                  paddingX: '80px',
+                  boxSizing: 'content-box',
+                })}
+              >
                 <textarea
                   bind:this={titleEl}
                   class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
@@ -1072,7 +1079,7 @@
 
               <div class={css({ position: 'relative', flexGrow: '1', width: 'full', zIndex: '0' })}>
                 <TiptapEditor
-                  style={css.raw({ size: 'full' })}
+                  style={css.raw({ size: 'full', paddingX: '80px' })}
                   {awareness}
                   {doc}
                   oncreate={() => {

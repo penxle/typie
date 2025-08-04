@@ -220,7 +220,12 @@ export const FloatingMenu = Extension.create({
         props: {
           handleDOMEvents: {
             mousemove: (view, event) => {
-              const left = view.dom.getBoundingClientRect().left;
+              const body = view.dom.querySelector('.ProseMirror-body');
+              if (!body) {
+                return false;
+              }
+
+              const left = body.getBoundingClientRect().left;
 
               const posAtCoords = view.posAtCoords({ left, top: event.clientY });
               if (!posAtCoords) {
