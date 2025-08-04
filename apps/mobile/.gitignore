@@ -55,3 +55,6 @@ app.*.map.json
 **/__generated__/**
 
 **/udids.txt
+
+android/app/src/main/assets/airbridge.json
+android/app/src/main/assets/libraryinfo.json

@@ -7,6 +7,7 @@ environment:
   sdk: ^3.8.0
 
 dependencies:
+  airbridge_flutter_sdk: ^4.7.0
   assorted_layout_widgets: ^11.0.0
   auto_route: ^10.0.1
   back_button_interceptor: ^8.0.4
@@ -18,7 +19,6 @@ dependencies:
   dio: ^5.8.0+1
   dio_http2_adapter: ^2.6.0
   envied: ^1.1.1
-  facebook_app_events: ^0.20.1
   ferry: ^0.16.1+2
   ferry_flutter: ^0.9.1-dev.4
   file_picker: ^10.1.9

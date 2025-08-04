@@ -1,4 +1,8 @@
 PODS:
+  - airbridge-ios-sdk (4.7.0)
+  - airbridge_flutter_sdk (4.7.0):
+    - airbridge-ios-sdk (= 4.7.0)
+    - Flutter
   - Alamofire (5.10.2)
   - AppAuth (2.0.0):
     - AppAuth/Core (= 2.0.0)
@@ -43,15 +47,6 @@ PODS:
   - DKPhotoGallery/Resource (0.0.19):
     - SDWebImage
     - SwiftyGif
-  - facebook_app_events (0.20.0):
-    - FBSDKCoreKit (~> 18.0)
-    - Flutter
-  - FBAEMKit (18.0.0):
-    - FBSDKCoreKit_Basics (= 18.0.0)
-  - FBSDKCoreKit (18.0.0):
-    - FBAEMKit (= 18.0.0)
-    - FBSDKCoreKit_Basics (= 18.0.0)
-  - FBSDKCoreKit_Basics (18.0.0)
   - file_picker (0.0.1):
     - DKImagePickerController/PhotoGallery
     - Flutter
@@ -247,8 +242,8 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
+  - airbridge_flutter_sdk (from `.symlinks/plugins/airbridge_flutter_sdk/ios`)
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
-  - facebook_app_events (from `.symlinks/plugins/facebook_app_events/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - firebase_analytics (from `.symlinks/plugins/firebase_analytics/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
@@ -274,14 +269,12 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - airbridge-ios-sdk
     - Alamofire
     - AppAuth
     - AppCheckCore
     - DKImagePickerController
     - DKPhotoGallery
-    - FBAEMKit
-    - FBSDKCoreKit
-    - FBSDKCoreKit_Basics
     - Firebase
     - FirebaseAnalytics
     - FirebaseCore
@@ -304,10 +297,10 @@ SPEC REPOS:
     - SwiftyGif
 
 EXTERNAL SOURCES:
+  airbridge_flutter_sdk:
+    :path: ".symlinks/plugins/airbridge_flutter_sdk/ios"
   device_info_plus:
     :path: ".symlinks/plugins/device_info_plus/ios"
-  facebook_app_events:
-    :path: ".symlinks/plugins/facebook_app_events/ios"
   file_picker:
     :path: ".symlinks/plugins/file_picker/ios"
   firebase_analytics:
@@ -354,16 +347,14 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
 
 SPEC CHECKSUMS:
+  airbridge-ios-sdk: f0f227bfde8baf7b85f956b4772e32a3a2821c5a
+  airbridge_flutter_sdk: 6ebbe21611ad479eb75ddff2f3881df4c28f0d2f
   Alamofire: 7193b3b92c74a07f85569e1a6c4f4237291e7496
   AppAuth: 1c1a8afa7e12f2ec3a294d9882dfa5ab7d3cb063
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60
-  facebook_app_events: cfa07e73912a052992b5f218f79a19a66a99bf1a
-  FBAEMKit: e34530df538b8eb8aeb53c35867715ba6c63ef0c
-  FBSDKCoreKit: d3f479a69127acebb1c6aad91c1a33907bcf6c2f
-  FBSDKCoreKit_Basics: 017b6dc2a1862024815a8229e75661e627ac1e29
   file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
   Firebase: d99ac19b909cd2c548339c2241ecd0d1599ab02e
   firebase_analytics: 0e25ca1d4001ccedd40b4e5b74c0ec34e18f6425
@@ -407,6 +398,6 @@ SPEC CHECKSUMS:
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
 
-PODFILE CHECKSUM: 7d77d2ff57399c5ce1bdfc31c3beafcb39837cf9
+PODFILE CHECKSUM: eff858191f2ababb09ab0778d0eb6d6328a9148f
 
 COCOAPODS: 1.16.2

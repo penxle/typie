@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:airbridge_flutter_sdk/airbridge_flutter_sdk.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -67,6 +68,13 @@ Future<void> _registerToken(GraphQLClient client) async {
     await client.request(
       GPushNotificationProvider_RegisterPushNotificationToken_MutationReq((b) => b..vars.input.token = token),
     );
+
+    if (Platform.isIOS) {
+      final token = await FirebaseMessaging.instance.getAPNSToken();
+      Airbridge.registerPushToken(token!);
+    } else {
+      Airbridge.registerPushToken(token);
+    }
   } catch (_) {
     // pass
   }
