@@ -983,98 +983,92 @@
                 size: 'full',
               })}
             >
-              <div
-                class={flex({
-                  flexDirection: 'column',
-                  width: 'full',
-                  maxWidth: 'var(--prosemirror-max-width)',
-                  paddingX: '80px',
-                  boxSizing: 'content-box',
-                })}
-              >
-                <textarea
-                  bind:this={titleEl}
-                  class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-                  autocapitalize="off"
-                  autocomplete="off"
-                  maxlength="100"
-                  onfocus={() => {
-                    if (postId) {
-                      const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-                      selections[postId] = { type: 'element', element: 'title', timestamp: dayjs().valueOf() };
-                      localStorage.setItem('typie:selections', JSON.stringify(selections));
-                    }
-                  }}
-                  onkeydown={(e) => {
-                    if (e.isComposing) {
-                      return;
-                    }
+              <div class={center({ width: 'full', paddingX: '80px' })}>
+                <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+                  <textarea
+                    bind:this={titleEl}
+                    class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                    autocapitalize="off"
+                    autocomplete="off"
+                    maxlength="100"
+                    onfocus={() => {
+                      if (postId) {
+                        const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+                        selections[postId] = { type: 'element', element: 'title', timestamp: dayjs().valueOf() };
+                        localStorage.setItem('typie:selections', JSON.stringify(selections));
+                      }
+                    }}
+                    onkeydown={(e) => {
+                      if (e.isComposing) {
+                        return;
+                      }
 
-                    if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
-                      e.preventDefault();
-                      subtitleEl?.focus();
-                    }
-                  }}
-                  placeholder="제목을 입력하세요"
-                  rows={1}
-                  spellcheck="false"
-                  bind:value={title.current}
-                  use:autosize
-                ></textarea>
+                      if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
+                        e.preventDefault();
+                        subtitleEl?.focus();
+                      }
+                    }}
+                    placeholder="제목을 입력하세요"
+                    rows={1}
+                    spellcheck="false"
+                    bind:value={title.current}
+                    use:autosize
+                  ></textarea>
 
-                <textarea
-                  bind:this={subtitleEl}
-                  class={css({
-                    marginTop: '4px',
-                    width: 'full',
-                    fontSize: '16px',
-                    fontWeight: 'medium',
-                    overflow: 'hidden',
-                    resize: 'none',
-                  })}
-                  autocapitalize="off"
-                  autocomplete="off"
-                  maxlength="100"
-                  onfocus={() => {
-                    if (postId) {
-                      const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-                      selections[postId] = { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() };
-                      localStorage.setItem('typie:selections', JSON.stringify(selections));
-                    }
-                  }}
-                  onkeydown={(e) => {
-                    if (e.isComposing) {
-                      return;
-                    }
+                  <textarea
+                    bind:this={subtitleEl}
+                    class={css({
+                      marginTop: '4px',
+                      width: 'full',
+                      fontSize: '16px',
+                      fontWeight: 'medium',
+                      overflow: 'hidden',
+                      resize: 'none',
+                    })}
+                    autocapitalize="off"
+                    autocomplete="off"
+                    maxlength="100"
+                    onfocus={() => {
+                      if (postId) {
+                        const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+                        selections[postId] = { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() };
+                        localStorage.setItem('typie:selections', JSON.stringify(selections));
+                      }
+                    }}
+                    onkeydown={(e) => {
+                      if (e.isComposing) {
+                        return;
+                      }
 
-                    if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !subtitleEl?.value)) {
-                      e.preventDefault();
-                      titleEl?.focus();
-                    }
+                      if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !subtitleEl?.value)) {
+                        e.preventDefault();
+                        titleEl?.focus();
+                      }
 
-                    if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
-                      e.preventDefault();
-                      const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
-                      editor?.current
-                        .chain()
-                        .focus()
-                        .setTextSelection(2)
-                        .command(({ tr, dispatch }) => {
-                          tr.setStoredMarks(marks);
-                          dispatch?.(tr);
-                          return true;
-                        })
-                        .run();
-                    }
-                  }}
-                  placeholder="부제목을 입력하세요"
-                  rows={1}
-                  spellcheck="false"
-                  bind:value={subtitle.current}
-                  use:autosize
-                ></textarea>
+                      if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
+                        e.preventDefault();
+                        const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+                        editor?.current
+                          .chain()
+                          .focus()
+                          .setTextSelection(2)
+                          .command(({ tr, dispatch }) => {
+                            tr.setStoredMarks(marks);
+                            dispatch?.(tr);
+                            return true;
+                          })
+                          .run();
+                      }
+                    }}
+                    placeholder="부제목을 입력하세요"
+                    rows={1}
+                    spellcheck="false"
+                    bind:value={subtitle.current}
+                    use:autosize
+                  ></textarea>
 
-                <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+                  <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+                </div>
               </div>
 
               <div class={css({ position: 'relative', flexGrow: '1', width: 'full', zIndex: '0' })}>
