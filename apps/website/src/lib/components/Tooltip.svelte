@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shift } from '@floating-ui/dom';
   import { writable } from 'svelte/store';
   import { scale } from 'svelte/transition';
   import { css } from '$styled-system/css';
@@ -25,6 +26,7 @@
   const { anchor, floating, arrow } = createFloatingActions({
     placement,
     offset: offset ?? 6,
+    middleware: [shift({ padding: 16 })],
     arrow: true,
   });
 </script>
@@ -37,6 +39,7 @@
   <div
     class={css(
       {
+        maxWidth: '400px',
         borderRadius: '4px',
         paddingX: '8px',
         paddingY: '4px',
@@ -47,6 +50,7 @@
         boxShadow: 'medium',
         zIndex: 'tooltip',
         pointerEvents: 'none',
+        wordBreak: 'keep-all',
       },
       tooltipStyle,
     )}
