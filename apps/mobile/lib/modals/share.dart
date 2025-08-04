@@ -46,7 +46,6 @@ class SharePostBottomSheet extends HookWidget {
               final visibility = form.data['visibility'] as GEntityVisibility;
               final contentRating = form.data['contentRating'] as GPostContentRating;
               final hasPassword = form.data['hasPassword'] as bool;
-              final allowComment = form.data['allowComment'] as bool;
               final allowReaction = form.data['allowReaction'] as bool;
               final protectContent = form.data['protectContent'] as bool;
 
@@ -57,7 +56,6 @@ class SharePostBottomSheet extends HookWidget {
                     ..vars.input.visibility = visibility
                     ..vars.input.contentRating = contentRating
                     ..vars.input.password = hasPassword ? form.data['password'] as String? : null
-                    ..vars.input.allowComment = allowComment
                     ..vars.input.allowReaction = allowReaction
                     ..vars.input.protectContent = protectContent,
                 ),
@@ -70,7 +68,6 @@ class SharePostBottomSheet extends HookWidget {
                     'visibility': visibility.name,
                     'hasPassword': hasPassword,
                     'contentRating': contentRating.name,
-                    'allowComment': allowComment,
                     'allowReaction': allowReaction,
                     'protectContent': protectContent,
                   },

@@ -749,7 +749,7 @@ builder.mutationFields((t) => ({
       visibility: t.input.field({ type: EntityVisibility }),
       password: t.input.string({ required: false }),
       contentRating: t.input.field({ type: PostContentRating }),
-      allowComment: t.input.boolean(),
+      allowComment: t.input.boolean({ required: false }),
       allowReaction: t.input.boolean(),
       protectContent: t.input.boolean(),
     },
@@ -780,7 +780,7 @@ builder.mutationFields((t) => ({
           .set({
             password: input.password || null,
             contentRating: input.contentRating,
-            allowComment: input.allowComment,
+            allowComment: input.allowComment ?? true,
             allowReaction: input.allowReaction,
             protectContent: input.protectContent,
           })
