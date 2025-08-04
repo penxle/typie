@@ -358,7 +358,7 @@
       }
 
       syncUpdateTimeout = setTimeout(async () => {
-        if (pendingUpdate) {
+        if (pendingUpdate && postId) {
           await syncPost(
             {
               clientId,
@@ -395,7 +395,7 @@
       }
 
       syncAwarenessTimeout = setTimeout(async () => {
-        if (pendingAwarenessStates) {
+        if (pendingAwarenessStates && postId) {
           const update = YAwareness.encodeAwarenessUpdate(awareness, [
             ...pendingAwarenessStates.added,
             ...pendingAwarenessStates.updated,
