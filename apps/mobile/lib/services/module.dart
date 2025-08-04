@@ -2,7 +2,6 @@
 
 import 'package:dio/dio.dart';
 import 'package:dio_http2_adapter/dio_http2_adapter.dart';
-import 'package:facebook_app_events/facebook_app_events.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -24,9 +23,6 @@ abstract class RegisterModule {
   @preResolve
   @singleton
   Future<Mixpanel> get mixpanel => Mixpanel.init(Env.mixpanelToken, trackAutomaticEvents: false);
-
-  @singleton
-  FacebookAppEvents get facebookAppEvents => FacebookAppEvents();
 
   @singleton
   Dio get dio => kDebugMode

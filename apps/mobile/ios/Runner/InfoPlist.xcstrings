@@ -54,6 +54,24 @@
           }
         }
       }
+    },
+    "NSUserTrackingUsageDescription" : {
+      "comment" : "Privacy - Tracking Usage Description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "We use your data to show you more relevant ads and improve your experience across apps and websites."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보다 관련성 높은 광고를 제공하고 앱과 웹사이트 전반에서 사용자 경험을 개선하기 위해 데이터를 사용합니다."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

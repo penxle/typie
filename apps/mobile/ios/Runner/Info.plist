@@ -64,6 +64,8 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow access to your photo library to add post images and update your profile picture.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>We use your data to show you more relevant ads and improve your experience across apps and websites.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
@@ -75,10 +77,6 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
-	<key>FacebookAppID</key>
-	<string>1615687345766597</string>
-	<key>FacebookClientToken</key>
-	<string>69b9317712b46304456e9304b56a86a0</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
