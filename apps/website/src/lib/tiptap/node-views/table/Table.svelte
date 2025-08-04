@@ -2,6 +2,7 @@
   import { mergeAttributes } from '@tiptap/core';
   import { TableMap } from '@tiptap/pm/tables';
   import { onMount, tick } from 'svelte';
+  import { createFloatingActions, portal } from '$lib/actions';
   import { css } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
   import { TiptapNodeViewBubbleMenu } from '../../components';
@@ -156,22 +157,19 @@
 
 <NodeView style={css.raw({ position: 'relative' })} {...HTMLAttributes}>
   <div
-    class={css(
-      {
-        overflowX: 'auto',
-        overflowY: 'hidden',
-      },
-      editor?.current.isEditable && {
-        marginTop: '-20px',
-        paddingTop: '20px',
-        marginLeft: '-20px',
-        paddingLeft: '20px',
-      },
-    )}
+    class={css({
+      overflowX: 'auto',
+      overflowY: 'hidden',
+    })}
   >
     <table
       style:--table-border-style={attrs.borderStyle}
-      onpointerleave={() => {
+      onpointerleave={(e) => {
+        const relatedTarget = e.relatedTarget as HTMLElement | null;
+        if (relatedTarget?.closest('[data-floating-row-handle], [data-floating-col-handle]')) {
+          return;
+        }
+
         hoveredRowIndex = null;
         hoveredColumnIndex = null;
       }}
@@ -205,6 +203,10 @@
           role="rowgroup"
         >
           {#each rowElems as row, i (i)}
+            {@const { anchor, floating } = createFloatingActions({
+              placement: 'left',
+              offset: -9,
+            })}
             <div
               style:height={`${row.clientHeight}px`}
               style:top={`${row.offsetTop}px`}
@@ -212,21 +214,26 @@
                 position: 'absolute',
                 left: '0',
                 translate: 'auto',
-                translateX: '-1/2',
-                zIndex: '10',
                 width: '18px',
                 height: '24px',
                 pointerEvents: hoveredRowIndex === i || focusedRowIndex === i ? 'auto' : 'none',
               })}
               role="row"
+              use:anchor
             >
-              <RowHandle {editor} {focusedRowIndex} {getPos} {hasSpan} {hoveredRowIndex} {i} tableNode={node} />
+              <div class={css({ zIndex: '10' })} data-floating-row-handle use:floating use:portal>
+                <RowHandle {editor} {focusedRowIndex} {getPos} {hasSpan} {hoveredRowIndex} {i} tableNode={node} />
+              </div>
             </div>
           {/each}
         </div>
         {#if colgroupRendered}
           <!-- svelte-ignore node_invalid_placement_ssr -->
           {#each colElems as col, i (i)}
+            {@const { anchor, floating } = createFloatingActions({
+              placement: 'top',
+              offset: -12,
+            })}
             <div
               style:left={`${col.offsetLeft}px`}
               style:width={`${col.offsetWidth}px`}
@@ -234,8 +241,6 @@
                 position: 'absolute',
                 top: '0',
                 translate: 'auto',
-                translateY: '-1/2',
-                zIndex: '10',
                 width: '24px',
                 height: '18px',
                 pointerEvents: hoveredColumnIndex === i || focusedColumnIndex === i ? 'auto' : 'none',
@@ -244,8 +249,11 @@
                 },
               })}
               contenteditable={false}
+              use:anchor
             >
-              <ColHandle {editor} {focusedColumnIndex} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
+              <div class={css({ zIndex: '10' })} data-floating-col-handle use:floating use:portal>
+                <ColHandle {editor} {focusedColumnIndex} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
+              </div>
             </div>
           {/each}
         {/if}
