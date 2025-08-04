@@ -5,6 +5,7 @@ query CurrentPlanScreen_Query {
 
     subscription {
       id
+      state
       startsAt
       expiresAt
 

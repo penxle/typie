@@ -1,5 +1,9 @@
 mutation EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation($input: SubscribeOrChangePlanWithInAppPurchaseInput!) {
   subscribeOrChangePlanWithInAppPurchase(input: $input) {
     id
+
+    plan {
+      id
+    }
   }
 }
