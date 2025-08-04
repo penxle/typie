@@ -538,7 +538,7 @@
               <Icon icon={hit.icon} size={16} />
             </div>
 
-            <span class={css({ fontSize: '14px', fontWeight: 'medium' })}>{hit.title}</span>
+            <span class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>{hit.title}</span>
           {/if}
         </button>
       {/each}
