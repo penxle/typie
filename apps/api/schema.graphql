@@ -901,7 +901,7 @@ input UpdatePasswordInput {
 }
 
 input UpdatePostOptionInput {
-  allowComment: Boolean!
+  allowComment: Boolean
   allowReaction: Boolean!
   availability: EntityAvailability
   contentRating: PostContentRating!
