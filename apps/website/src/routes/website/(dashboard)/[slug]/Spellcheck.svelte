@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { hide, shift } from '@floating-ui/dom';
-  import { Editor, posToDOMRect } from '@tiptap/core';
+  import { hide, inline, shift } from '@floating-ui/dom';
+  import { Editor } from '@tiptap/core';
   import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import mixpanel from 'mixpanel-browser';
@@ -18,7 +18,6 @@
   import { center, flex } from '$styled-system/patterns';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
-  import type { VirtualElement } from '@floating-ui/dom';
   import type { Ref } from '$lib/utils';
 
   type Props = {
@@ -63,6 +62,7 @@
     placement: 'top',
     offset: 4,
     middleware: [
+      inline(),
       hide({
         strategy: 'escaped',
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -182,6 +182,7 @@
                         textDecorationStyle: 'wavy',
                         textUnderlineOffset: '2px',
                       }),
+                      'data-spellcheck-error': error.id,
                     }),
                   ),
                 );
@@ -199,15 +200,12 @@
   });
 
   $effect(() => {
-    if (activeError) {
-      const element: VirtualElement = {
-        getBoundingClientRect: () => {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          return posToDOMRect(editor!.current.view, activeError!.from, activeError!.to);
-        },
-      };
+    if (activeError && editor?.current) {
+      const element = document.querySelector(`[data-spellcheck-error="${activeError.id}"]`);
 
-      anchor(element);
+      if (element instanceof HTMLElement) {
+        anchor(element);
+      }
     }
   });
 </script>
