@@ -769,25 +769,41 @@ builder.mutationFields((t) => ({
             .where(eq(Entities.id, entity.id));
         }
 
-        await tx.execute(sql`
-          WITH RECURSIVE sq AS (
-            SELECT ${Entities.id}
-            FROM ${Entities}
-            WHERE ${eq(Entities.id, entity.id)}
-            UNION ALL
-            SELECT ${Entities.id}
-            FROM ${Entities}
-            JOIN sq ON ${Entities.parentId} = sq.id
-          )
-          UPDATE ${Entities}
-          SET state = ${EntityState.ACTIVE},
-          deleted_at = null,
-          depth = depth + ${depthDelta}
-          WHERE id IN (SELECT id FROM sq) AND ${gt(Entities.deletedAt, dayjs().subtract(30, 'days'))}
-        `);
+        const updatedEntities = await tx.execute<{ id: string; type: EntityType }>(
+          sql`
+            WITH RECURSIVE sq AS (
+              SELECT ${Entities.id}
+              FROM ${Entities}
+              WHERE ${eq(Entities.id, entity.id)}
+              UNION ALL
+              SELECT ${Entities.id}
+              FROM ${Entities}
+              JOIN sq ON ${Entities.parentId} = sq.id
+            )
+            UPDATE ${Entities}
+            SET state = ${EntityState.ACTIVE},
+            deleted_at = null,
+            depth = depth + ${depthDelta}
+            WHERE id IN (SELECT id FROM sq) AND ${gt(Entities.deletedAt, dayjs().subtract(30, 'days'))}
+            RETURNING ${Entities.id}, ${Entities.type}
+          `,
+        );
 
         pubsub.publish('site:update', entity.siteId, { scope: 'site' });
         pubsub.publish('site:usage:update', entity.siteId, null);
+
+        const postEntityIds = updatedEntities.filter(({ type }) => type === EntityType.POST).map(({ id }) => id);
+
+        if (postEntityIds.length > 0) {
+          const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
+          for (const post of posts) {
+            await enqueueJob('post:index', post.id, {
+              deduplication: {
+                id: `post:index:${post.id}`,
+              },
+            });
+          }
+        }
 
         return entity.id;
       });
