@@ -84,7 +84,7 @@
 </script>
 
 {#if emptyBody}
-  <div class={center({ position: 'absolute', top: '0', insetX: '0', flexGrow: '1', pointerEvents: 'none' })}>
+  <div class={center({ position: 'absolute', top: '0', insetX: '0', flexGrow: '1', pointerEvents: 'none', paddingX: '80px' })}>
     <div
       style:padding-left={`${paragraphIndent}em`}
       class={flex({
