@@ -11,7 +11,6 @@
   },
   "devDependencies": {
     "@pulumi/aws": "^7.2.0",
-    "@pulumi/command": "^1.1.0",
     "@pulumi/kubernetes": "^4.23.0",
     "@pulumi/pulumi": "^3.187.0",
     "@typie/tsconfig": "workspace:*",

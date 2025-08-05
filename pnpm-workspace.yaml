@@ -3,15 +3,6 @@ packages:
   - crates/*
   - packages/*
 
-ignoredBuiltDependencies:
-  - '@firebase/util'
-  - '@pulumi/kubernetes'
-  - es5-ext
-  - msgpackr-extract
-  - protobufjs
-  - svelte-preprocess
-  - ttf2woff2
-
 includeWorkspaceRoot: true
 
 onlyBuiltDependencies:
