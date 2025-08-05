@@ -218,6 +218,11 @@ export class Canvas {
 
     this.#pointers.set(e.pointerId, pos);
 
+    if (this.#pointers.size === 2) {
+      this.setOperation(ops.pinch, e);
+      return;
+    }
+
     if (e.evt.target instanceof Element) {
       e.evt.target.setPointerCapture(e.evt.pointerId);
     }

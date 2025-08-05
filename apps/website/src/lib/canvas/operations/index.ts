@@ -4,6 +4,7 @@ export { ellipse } from './ellipse';
 export { line } from './line';
 export { move } from './move';
 export { pan } from './pan';
+export { pinch } from './pinch';
 export { rectangle } from './rectangle';
 export { createResizeOperation } from './resize';
 export { select } from './select';
