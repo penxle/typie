@@ -11,6 +11,7 @@ import 'package:typie/screens/editor/toolbar/floating/horizontal_rule.dart';
 import 'package:typie/screens/editor/toolbar/floating/html.dart';
 import 'package:typie/screens/editor/toolbar/floating/image.dart';
 import 'package:typie/screens/editor/toolbar/floating/list.dart';
+import 'package:typie/screens/editor/toolbar/floating/table.dart';
 
 class EditorFloatingToolbar extends HookWidget {
   const EditorFloatingToolbar({super.key});
@@ -46,6 +47,10 @@ class EditorFloatingToolbar extends HookWidget {
 
     if (proseMirrorState.isNodeActive('html_block')) {
       return const HtmlFloatingToolbar();
+    }
+
+    if (proseMirrorState.isNodeActive('table')) {
+      return const TableFloatingToolbar();
     }
 
     return switch (proseMirrorState.currentNode?.type) {
