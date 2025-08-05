@@ -135,6 +135,7 @@ class TextToolbar extends HookWidget {
             onTap: () async {
               // NOTE: Android에서 모달 열리면 범위 selection이 취소되므로 저장해서 씀
               final selection = proseMirrorState?.selection;
+              final initialValue = (proseMirrorState?.getMarkAttributes('link')?['href'] ?? '') as String;
 
               await context.showModal(
                 intercept: true,
@@ -144,13 +145,13 @@ class TextToolbar extends HookWidget {
                   },
                   builder: (context, form) {
                     return ConfirmModal(
-                      title: '링크 삽입',
-                      confirmText: '삽입',
+                      title: initialValue.isEmpty ? '링크 삽입' : '링크 수정',
+                      confirmText: initialValue.isEmpty ? '삽입' : '수정',
                       onConfirm: () async {
                         await form.submit();
                       },
                       child: HookFormTextField.collapsed(
-                        initialValue: (proseMirrorState?.getMarkAttributes('link')?['href'] ?? '') as String,
+                        initialValue: initialValue,
                         name: 'url',
                         placeholder: 'https://...',
                         style: const TextStyle(fontSize: 16),
@@ -170,6 +171,7 @@ class TextToolbar extends HookWidget {
             onTap: () async {
               // NOTE: Android에서 모달 열리면 범위 selection이 취소되므로 저장해서 씀
               final selection = proseMirrorState?.selection;
+              final initialValue = (proseMirrorState?.getMarkAttributes('ruby')?['text'] ?? '') as String;
 
               await context.showModal(
                 intercept: true,
@@ -179,13 +181,13 @@ class TextToolbar extends HookWidget {
                   },
                   builder: (context, form) {
                     return ConfirmModal(
-                      title: '루비 삽입',
-                      confirmText: '삽입',
+                      title: initialValue.isEmpty ? '루비 삽입' : '루비 수정',
+                      confirmText: initialValue.isEmpty ? '삽입' : '수정',
                       onConfirm: () async {
                         await form.submit();
                       },
                       child: HookFormTextField.collapsed(
-                        initialValue: (proseMirrorState?.getMarkAttributes('ruby')?['text'] ?? '') as String,
+                        initialValue: initialValue,
                         name: 'text',
                         placeholder: '텍스트 위에 들어갈 문구',
                         style: const TextStyle(fontSize: 16),
