@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hide } from '@floating-ui/dom';
   import { mergeAttributes } from '@tiptap/core';
   import { TableMap } from '@tiptap/pm/tables';
   import { onMount, tick } from 'svelte';
@@ -52,6 +53,7 @@
   const colElems = $derived(_colElems.filter(Boolean)); // 열 삭제에 대응
 
   let rowElems = $state<HTMLElement[]>([]);
+  let tableElement = $state<HTMLTableElement>();
 
   async function getRows(tableNode: Node) {
     if (!editor || !tableNode) {
@@ -147,6 +149,47 @@
     }
   }
 
+  let tableSize = $state({ width: 0, height: 0 });
+
+  const rowPositions = $derived.by(() => {
+    if (rowElems.length === 0 || !tableElement) return [];
+
+    void tableSize.height;
+
+    return rowElems.map((row) => ({
+      top: row.offsetTop,
+      height: row.clientHeight,
+    }));
+  });
+
+  const colPositions = $derived.by(() => {
+    if (colElems.length === 0 || !tableElement) return [];
+
+    void tableSize.width;
+
+    return colElems.map((col) => ({
+      left: col.offsetLeft,
+      width: col.offsetWidth,
+    }));
+  });
+
+  $effect(() => {
+    if (tableElement) {
+      const resizeObserver = new ResizeObserver(([entry]) => {
+        tableSize = {
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        };
+      });
+
+      resizeObserver.observe(tableElement);
+
+      return () => {
+        resizeObserver.disconnect();
+      };
+    }
+  });
+
   onMount(() => {
     if (window.__webview__) {
       document.addEventListener('selectionchange', handleSelectionChange);
@@ -163,6 +206,7 @@
     })}
   >
     <table
+      bind:this={tableElement}
       style:--table-border-style={attrs.borderStyle}
       onpointerleave={(e) => {
         const relatedTarget = e.relatedTarget as HTMLElement | null;
@@ -202,14 +246,15 @@
           contenteditable={false}
           role="rowgroup"
         >
-          {#each rowElems as row, i (i)}
+          {#each rowPositions as pos, i (i)}
             {@const { anchor, floating } = createFloatingActions({
               placement: 'left',
               offset: -9,
+              middleware: [hide()],
             })}
             <div
-              style:height={`${row.clientHeight}px`}
-              style:top={`${row.offsetTop}px`}
+              style:height={`${pos.height}px`}
+              style:top={`${pos.top}px`}
               class={center({
                 position: 'absolute',
                 left: '0',
@@ -227,16 +272,17 @@
             </div>
           {/each}
         </div>
-        {#if colgroupRendered}
+        {#if colgroupRendered && colPositions.length > 0}
           <!-- svelte-ignore node_invalid_placement_ssr -->
-          {#each colElems as col, i (i)}
+          {#each colPositions as pos, i (i)}
             {@const { anchor, floating } = createFloatingActions({
               placement: 'top',
               offset: -12,
+              middleware: [hide()],
             })}
             <div
-              style:left={`${col.offsetLeft}px`}
-              style:width={`${col.offsetWidth}px`}
+              style:left={`${pos.left}px`}
+              style:width={`${pos.width}px`}
               class={center({
                 position: 'absolute',
                 top: '0',
