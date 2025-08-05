@@ -10,7 +10,7 @@ export type NodeWithDepth = {
 export function traverseNodesUpward(selection: Selection, callback: (nodeInfo: NodeWithDepth) => boolean | undefined): void {
   const { $from } = selection;
 
-  for (let depth = $from.depth; depth >= 0; depth--) {
+  for (let depth = $from.depth; depth > 0; depth--) {
     const node = $from.node(depth);
     const pos = $from.before(depth);
 
