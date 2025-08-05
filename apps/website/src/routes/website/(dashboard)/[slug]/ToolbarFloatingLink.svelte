@@ -84,7 +84,7 @@
 <form class={flex({ alignItems: 'center', gap: '4px', padding: '4px' })} onsubmit={form.handleSubmit}>
   <TextInput autofocus placeholder="https://..." size="sm" bind:value={form.fields.url} />
 
-  <Button size="sm" type="submit">삽입</Button>
+  <Button size="sm" type="submit">{editor.current.isActive('link') ? '수정' : '삽입'}</Button>
 
   {#if editor.current.isActive('link')}
     <Button

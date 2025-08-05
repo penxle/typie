@@ -57,7 +57,7 @@
 <form class={flex({ alignItems: 'center', gap: '4px', padding: '4px' })} onsubmit={form.handleSubmit}>
   <TextInput autofocus placeholder="텍스트 위에 들어갈 문구" size="sm" bind:value={form.fields.ruby} />
 
-  <Button size="sm" type="submit">삽입</Button>
+  <Button size="sm" type="submit">{editor.current.isActive('ruby') ? '수정' : '삽입'}</Button>
 
   {#if editor.current.isActive('ruby')}
     <Button

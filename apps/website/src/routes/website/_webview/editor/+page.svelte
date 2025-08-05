@@ -450,16 +450,40 @@
           editor?.current.chain().focus().setTextBackgroundColor(attrs.textBackgroundColor).run();
         }
       } else if (name === 'link') {
+        if (!editor) return;
+
+        const { selection, doc } = editor.current.state;
+        const { from, to } = attrs.selection || selection;
+
         if (attrs.selection) {
-          editor?.current.chain().setTextSelection({ from: attrs.selection.from, to: attrs.selection.to }).setLink(attrs.url).run();
+          editor.current.chain().setTextSelection({ from, to }).run();
+        }
+
+        const marks = doc.resolve(from).marks();
+        const hasLinkMark = marks.some((mark) => mark.type.name === 'link');
+
+        if (hasLinkMark) {
+          editor.current.chain().focus().updateLink(attrs.url).run();
         } else {
-          editor?.current.chain().focus().setLink(attrs.url).run();
+          editor.current.chain().focus().setLink(attrs.url).run();
         }
       } else if (name === 'ruby') {
+        if (!editor) return;
+
+        const { selection, doc } = editor.current.state;
+        const { from, to } = attrs.selection || selection;
+
         if (attrs.selection) {
-          editor?.current.chain().setTextSelection({ from: attrs.selection.from, to: attrs.selection.to }).setRuby(attrs.text).run();
+          editor.current.chain().setTextSelection({ from, to }).run();
+        }
+
+        const marks = doc.resolve(from).marks();
+        const hasRubyMark = marks.some((mark) => mark.type.name === 'ruby');
+
+        if (hasRubyMark) {
+          editor.current.chain().focus().updateRuby(attrs.text).run();
         } else {
-          editor?.current.chain().focus().setRuby(attrs.text).run();
+          editor.current.chain().focus().setRuby(attrs.text).run();
         }
       } else if (name === 'paragraph') {
         if (attrs.textAlign !== undefined) {
