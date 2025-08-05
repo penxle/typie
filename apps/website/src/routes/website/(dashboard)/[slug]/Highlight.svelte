@@ -61,6 +61,6 @@
   <div
     style:top={`${top}px`}
     style:height={`${height}px`}
-    class={css({ position: 'absolute', insetX: '-80px', backgroundColor: 'surface.subtle', zIndex: '[-1]' })}
+    class={css({ position: 'absolute', left: '0', width: 'full', backgroundColor: 'surface.subtle', zIndex: '[-1]' })}
   ></div>
 {/if}
