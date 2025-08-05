@@ -73,6 +73,21 @@ export const Behavior = Extension.create({
 
         return true;
       },
+
+      ArrowLeft: ({ editor }) => {
+        const { selection, doc } = editor.state;
+        const { $from } = selection;
+
+        if ($from.pos > 1) {
+          const nodeBefore = doc.resolve($from.pos - 1).nodeBefore;
+
+          if (nodeBefore?.type.name === 'table') {
+            return editor.commands.setTextSelection($from.pos - 4);
+          }
+        }
+
+        return false;
+      },
     };
   },
 
