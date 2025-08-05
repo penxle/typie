@@ -232,7 +232,7 @@
       })}
     >
       <colgroup>
-        {#each cols as col, i (col)}
+        {#each cols as col, i (i)}
           <col bind:this={_colElems[i]} {...col[1]} />
         {/each}
       </colgroup>
