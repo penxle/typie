@@ -42,7 +42,7 @@ export const generateRandomAvatar = async () => {
   const markup = renderToStaticMarkup(element);
   const rendered = await renderAsync(markup);
 
-  return new File([rendered.asPng()], 'avatar.png', { type: 'image/png' });
+  return new File([new Uint8Array(rendered.asPng())], 'avatar.png', { type: 'image/png' });
 };
 
 const loadFonts = async <T extends string>(names: T[]) => {

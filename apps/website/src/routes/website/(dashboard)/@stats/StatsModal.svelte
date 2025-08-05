@@ -40,7 +40,7 @@
 
   const copyActivityImage = async () => {
     const b64 = await generateActivityImage();
-    const blob = new Blob([base64.parse(b64)], { type: 'image/png' });
+    const blob = new Blob([new Uint8Array(base64.parse(b64))], { type: 'image/png' });
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 
     Toast.success('이미지가 클립보드에 복사되었어요.');

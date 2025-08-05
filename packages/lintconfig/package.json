@@ -20,7 +20,7 @@
     "prettier-plugin-packagejson": "^2.5.19",
     "prettier-plugin-sh": "^0.18.0",
     "prettier-plugin-svelte": "^3.4.0",
-    "typescript-eslint": "^8.38.0"
+    "typescript-eslint": "^8.39.0"
   },
   "peerDependencies": {
     "eslint": "^9.27.0",
