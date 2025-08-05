@@ -1,7 +1,6 @@
 import { findChildrenInRange, findParentNodeClosestToPos, isNodeActive, mergeAttributes, Node } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { closest } from '$lib/utils';
-import { css } from '$styled-system/css';
 import { defaultValues, values } from '../values';
 import type { NodeType, ResolvedPos } from '@tiptap/pm/model';
 
@@ -81,11 +80,7 @@ export const Paragraph = Node.create({
     return [
       'p',
       mergeAttributes(HTMLAttributes, {
-        class: css(
-          (node.attrs.textAlign === 'left' || node.attrs.textAlign === 'justify') && {
-            textIndent: 'var(--prosemirror-paragraph-indent)',
-          },
-        ),
+        class: node.attrs.textAlign === 'left' || node.attrs.textAlign === 'justify' ? 'paragraph-indent' : undefined,
       }),
       !this.editor?.isEditable && node.content.size === 0 ? ['br', { class: 'ProseMirror-trailingBreak' }] : 0,
     ];

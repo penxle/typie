@@ -52,6 +52,9 @@ export const Body = Node.create({
               paddingTop: 'var(--prosemirror-page-margin)',
               paddingX: 'var(--prosemirror-page-margin)',
             },
+            '& > .paragraph-indent, & > .selected-node > .paragraph-indent': {
+              textIndent: 'var(--prosemirror-paragraph-indent)',
+            },
           }),
         ),
       }),
