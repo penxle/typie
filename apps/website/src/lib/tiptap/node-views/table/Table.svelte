@@ -166,6 +166,7 @@
     if (colElems.length === 0 || !tableElement) return [];
 
     void tableSize.width;
+    void cols;
 
     return colElems.map((col) => ({
       left: col.offsetLeft,
