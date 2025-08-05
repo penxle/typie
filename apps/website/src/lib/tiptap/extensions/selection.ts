@@ -79,19 +79,22 @@ export const Selection = Extension.create({
                 decorations.push(
                   Decoration.node(pos, pos + node.nodeSize, {
                     nodeName: 'div',
-                    class: css({
-                      '& > *': {
-                        position: 'relative',
-                        _after: {
-                          content: '""',
-                          position: 'absolute',
-                          inset: '0',
-                          borderRadius: '4px',
-                          backgroundColor: '[var(--prosemirror-color-selection)/20]',
-                          pointerEvents: 'none',
+                    class: cx(
+                      'selected-node',
+                      css({
+                        '& > *': {
+                          position: 'relative',
+                          _after: {
+                            content: '""',
+                            position: 'absolute',
+                            inset: '0',
+                            borderRadius: '4px',
+                            backgroundColor: '[var(--prosemirror-color-selection)/20]',
+                            pointerEvents: 'none',
+                          },
                         },
-                      },
-                    }),
+                      }),
+                    ),
                   }),
                 );
 
