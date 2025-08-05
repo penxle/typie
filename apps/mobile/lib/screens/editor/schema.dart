@@ -127,7 +127,12 @@ abstract class ProseMirrorNode with _$ProseMirrorNode {
 @Freezed(unionKey: 'type')
 sealed class ProseMirrorSelection with _$ProseMirrorSelection {
   const factory ProseMirrorSelection.all() = ProseMirrorAllSelection;
-  const factory ProseMirrorSelection.text({required int anchor, required int head}) = ProseMirrorTextSelection;
+  const factory ProseMirrorSelection.text({
+    required int anchor,
+    required int head,
+    required int from,
+    required int to,
+  }) = ProseMirrorTextSelection;
   const factory ProseMirrorSelection.node({required int anchor}) = ProseMirrorNodeSelection;
   const factory ProseMirrorSelection.multinode({required int anchor, required int head}) =
       ProseMirrorMultiNodeSelection;

@@ -324,7 +324,11 @@
           .map(([pos, node]) => ({ pos, type: node?.type.name, attrs: node?.attrs })),
         marks: anchor.marks().map((mark) => mark.toJSON()),
         storedMarks: editor.state.storedMarks?.map((mark) => mark.toJSON()),
-        selection: editor.state.selection.toJSON(),
+        selection: {
+          ...editor.state.selection.toJSON(),
+          from: editor.state.selection.from,
+          to: editor.state.selection.to,
+        },
       });
 
       const text = getText(editor.state.doc, {
@@ -446,9 +450,17 @@
           editor?.current.chain().focus().setTextBackgroundColor(attrs.textBackgroundColor).run();
         }
       } else if (name === 'link') {
-        editor?.current.chain().focus().setLink(attrs.url).run();
+        if (attrs.selection) {
+          editor?.current.chain().setTextSelection({ from: attrs.selection.from, to: attrs.selection.to }).setLink(attrs.url).run();
+        } else {
+          editor?.current.chain().focus().setLink(attrs.url).run();
+        }
       } else if (name === 'ruby') {
-        editor?.current.chain().focus().setRuby(attrs.text).run();
+        if (attrs.selection) {
+          editor?.current.chain().setTextSelection({ from: attrs.selection.from, to: attrs.selection.to }).setRuby(attrs.text).run();
+        } else {
+          editor?.current.chain().focus().setRuby(attrs.text).run();
+        }
       } else if (name === 'paragraph') {
         if (attrs.textAlign !== undefined) {
           editor?.current.chain().focus().setParagraphTextAlign(attrs.textAlign).run();
