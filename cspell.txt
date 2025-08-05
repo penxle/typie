@@ -37,6 +37,7 @@ kubeconfig
 lucide
 luthor
 meilisearch
+msgpackr
 myeongjo
 nanum
 napi

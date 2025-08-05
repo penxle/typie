@@ -30,6 +30,16 @@
   "pnpm": {
     "overrides": {
       "rollup": "4.44.2"
-    }
+    },
+    "ignoredBuiltDependencies": [
+      "@firebase/util",
+      "@pulumi/kubernetes",
+      "@sentry/cli",
+      "es5-ext",
+      "msgpackr-extract",
+      "protobufjs",
+      "svelte-preprocess",
+      "ttf2woff2"
+    ]
   }
 }

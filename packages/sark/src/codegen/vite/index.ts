@@ -3,7 +3,6 @@ import { getAllArtifacts, getArtifacts, getSchema } from '../artifact';
 import { writeArtifactAssets, writeMiscAssets, writePublicAssets, writeTypeAssets } from '../codegen/writer';
 import { transformGraphQL, transformLoad } from './transform';
 import type * as graphql from 'graphql';
-import type { PreprocessorGroup } from 'svelte/compiler';
 import type { Plugin } from 'vite';
 import type { Artifact } from '../../types';
 
@@ -27,25 +26,6 @@ export const sark = (options?: SarkOptions): Plugin => {
     await writePublicAssets(resolvedOutDir, artifacts);
     await writeTypeAssets(resolvedOutDir, projectDir, artifacts);
     await writeMiscAssets(resolvedOutDir);
-  };
-
-  const sveltePreprocess: PreprocessorGroup = {
-    name: '@typie/sark',
-    script: ({ content, attributes }) => {
-      if (attributes.lang !== 'ts') {
-        return;
-      }
-
-      const transformed = transformGraphQL(artifacts, content);
-      if (!transformed) {
-        return;
-      }
-
-      return {
-        code: transformed,
-        map: { mappings: '' },
-      };
-    },
   };
 
   return {
@@ -91,6 +71,20 @@ export const sark = (options?: SarkOptions): Plugin => {
     },
 
     transform(code, id) {
+      if (id.endsWith('.svelte')) {
+        const scriptMatch = code.match(/<script\s+lang="ts"[^>]*>([\s\S]*?)<\/script>/);
+        if (scriptMatch) {
+          const scriptContent = scriptMatch[1];
+          const transformed = transformGraphQL(artifacts, scriptContent);
+          if (transformed) {
+            return {
+              code: code.replace(scriptMatch[1], transformed),
+              map: { mappings: '' },
+            };
+          }
+        }
+      }
+
       const transformed = transformLoad(artifacts, code, id);
       if (!transformed) {
         return;
@@ -101,7 +95,5 @@ export const sark = (options?: SarkOptions): Plugin => {
         map: { mappings: '' },
       };
     },
-
-    api: { sveltePreprocess },
   };
 };
