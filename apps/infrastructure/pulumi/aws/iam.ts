@@ -16,7 +16,7 @@ new aws.iam.GroupPolicy('team', {
       {
         Effect: 'Allow',
         Action: ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'],
-        Resource: ['arn:aws:secretsmanager:*:*:secret:/apps/*/local-*'],
+        Resource: ['arn:aws:secretsmanager:*:*:secret:/apps/*/local-*', 'arn:aws:secretsmanager:*:*:secret:/apps/*/dev-*'],
       },
       {
         Effect: 'Allow',
