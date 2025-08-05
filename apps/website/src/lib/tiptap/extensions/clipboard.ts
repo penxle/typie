@@ -1,49 +1,43 @@
 import { Extension } from '@tiptap/core';
 import { Fragment, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
-import { Blockquote, Fold } from '../node-views';
-import type { Node } from '@tiptap/pm/model';
+import { findNodeUpward } from '../lib/node-utils';
+import { Blockquote, Callout, Fold } from '../node-views';
 import type { Selection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 
-const WRAPPING_NODE_NAMES = new Set([Fold.name, Blockquote.name]);
+const WRAPPING_NODE_NAMES = new Set([Fold.name, Blockquote.name, Callout.name]);
 
 const getWrappingNodeId = (selection: Selection) => {
   const { $from, $to } = selection;
 
-  for (let depth = $from.depth; depth >= 0; depth--) {
-    const node = $from.node(depth);
+  const result = findNodeUpward(selection, ({ node, depth }) => {
     if (WRAPPING_NODE_NAMES.has(node.type.name)) {
       const nodeStart = $from.before(depth);
       const nodeEnd = $from.after(depth);
 
-      if ($from.pos > nodeStart && $to.pos < nodeEnd) {
-        return node.attrs.nodeId;
-      }
+      return $from.pos > nodeStart && $to.pos < nodeEnd;
     }
-  }
-
-  return null;
-};
-
-const unwrapNodes = (fragment: Fragment, nodeId: string): Fragment => {
-  const nodes: Node[] = [];
-
-  fragment.forEach((node) => {
-    if (WRAPPING_NODE_NAMES.has(node.type.name) && node.attrs.nodeId === nodeId) {
-      const unwrappedContent = node.content;
-      unwrappedContent.forEach((child) => {
-        nodes.push(child);
-      });
-    } else if (node.content.size > 0) {
-      const unwrappedContent = unwrapNodes(node.content, nodeId);
-      nodes.push(node.copy(unwrappedContent));
-    } else {
-      nodes.push(node);
-    }
+    return false;
   });
 
-  return Fragment.from(nodes);
+  return result?.node.attrs.nodeId || null;
+};
+
+const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
+  const unwrappedNodes = fragment.content.flatMap((node) => {
+    if (WRAPPING_NODE_NAMES.has(node.type.name) && node.attrs.nodeId === nodeId) {
+      return node.content.content;
+    }
+
+    if (node.content.size === 0) {
+      return [node];
+    }
+
+    return [node.copy(unwrapNodeById(node.content, nodeId))];
+  });
+
+  return Fragment.from(unwrappedNodes);
 };
 
 const copy = (view: EditorView, event: ClipboardEvent) => {
@@ -55,7 +49,7 @@ const copy = (view: EditorView, event: ClipboardEvent) => {
 
   const wrappingNodeId = getWrappingNodeId(selection);
   if (wrappingNodeId) {
-    const unwrappedFragment = unwrapNodes(slice.content, wrappingNodeId);
+    const unwrappedFragment = unwrapNodeById(slice.content, wrappingNodeId);
     slice = new Slice(unwrappedFragment, slice.openStart, slice.openEnd);
   }
 

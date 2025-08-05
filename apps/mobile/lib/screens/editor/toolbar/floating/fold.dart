@@ -3,18 +3,15 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/buttons/floating.dart';
-import 'package:typie/services/keyboard.dart';
 
-class BlockquoteFloatingToolbar extends HookWidget {
-  const BlockquoteFloatingToolbar({super.key});
+class FoldFloatingToolbar extends HookWidget {
+  const FoldFloatingToolbar({super.key});
 
   @override
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
-    final webViewController = useValueListenable(scope.webViewController);
-    final keyboardType = useValueListenable(scope.keyboardType);
     final proseMirrorState = useValueListenable(scope.proseMirrorState);
-    final selected = proseMirrorState?.currentNode?.type == 'blockquote';
+    final selected = proseMirrorState?.currentNode?.type == 'fold';
 
     return Row(
       spacing: 8,
@@ -29,24 +26,15 @@ class BlockquoteFloatingToolbar extends HookWidget {
             ]
           : [
               FloatingToolbarButton(
-                icon: LucideLightIcons.quote,
-                onTap: () async {
-                  scope.bottomToolbarMode.value = BottomToolbarMode.blockquote;
-                  if (keyboardType == KeyboardType.software) {
-                    await webViewController?.clearFocus();
-                  }
-                },
-              ),
-              FloatingToolbarButton(
                 icon: LucideLightIcons.text_select,
                 onTap: () async {
-                  await scope.command('unwrap_node', attrs: {'nodeType': 'blockquote'});
+                  await scope.command('unwrap_node', attrs: {'nodeType': 'fold'});
                 },
               ),
               FloatingToolbarButton(
                 icon: LucideLightIcons.grip_vertical,
                 onTap: () async {
-                  await scope.command('select_upward_node', attrs: {'nodeType': 'blockquote'});
+                  await scope.command('select_upward_node', attrs: {'nodeType': 'fold'});
                 },
               ),
             ],

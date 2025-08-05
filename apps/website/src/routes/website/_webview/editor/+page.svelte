@@ -529,6 +529,19 @@
         editor?.current.chain().focus().redo().run();
       } else if (name === 'delete') {
         editor?.current.chain().focus().deleteSelection().run();
+      } else if (name === 'select_upward_node') {
+        if (!editor || !attrs || !attrs.nodeType) return;
+
+        editor.current.chain().focus().selectUpwardNode(attrs.nodeType).run();
+      } else if (name === 'unwrap_node') {
+        if (!editor || !attrs || !attrs.nodeType) return;
+
+        editor.current.chain().focus().unwrapNode(attrs.nodeType).run();
+      } else if (name === 'update_node_attribute') {
+        if (!editor || !attrs || !attrs.nodeType) return;
+
+        const { nodeType, ...rest } = attrs;
+        editor.current.chain().focus().updateAttributes(nodeType, rest).run();
       } else if (name === 'max_width') {
         maxWidth.current = attrs.maxWidth;
       } else if (name === 'body') {
