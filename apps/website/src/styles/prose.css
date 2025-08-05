@@ -44,7 +44,8 @@
     }
   }
 
-  :is(ul, ol) :is(ul, ol) li:first-child {
+  :is(ul, ol) :is(ul, ol) li:first-child,
+  :is(ul, ol) .selected-node:not(:first-child) li:first-child {
     margin-top: 4px;
   }
 }
