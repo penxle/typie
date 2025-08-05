@@ -13,3 +13,4 @@ export * from './syntax-highlight';
 export * from './trailing-node';
 export * from './typewriter';
 export * from './typography';
+export * from './wrapping-node';
