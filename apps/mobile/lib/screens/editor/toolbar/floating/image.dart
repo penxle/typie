@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -35,7 +36,12 @@ class ImageFloatingToolbar extends HookWidget {
                 return;
               }
 
-              final result = await FilePicker.platform.pickFiles(type: FileType.image);
+              final result = await FilePicker.platform.pickFiles(type: FileType.image).catchError((e) {
+                if (context.mounted) {
+                  context.toast(ToastType.error, '이미지를 선택할 수 없습니다');
+                }
+                return null;
+              });
               if (result == null) {
                 return;
               }
