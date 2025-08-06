@@ -91,7 +91,7 @@ export const Behavior = Extension.create({
           const nodeBefore = doc.resolve($from.pos - 1).nodeBefore;
 
           if (nodeBefore?.type.name === Table.name) {
-            return editor.commands.setTextSelection($from.pos - 4);
+            return editor.commands.setTextSelection($from.pos - 5);
           }
         }
 
