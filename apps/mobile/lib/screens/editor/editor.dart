@@ -142,7 +142,17 @@ class Editor extends HookWidget {
           case 'focus':
             final element = (event.data as Map<String, dynamic>)['element'] as String;
             if (element == 'title' || element == 'subtitle') {
-              unawaited(state.setSerializedPostSelection(slug, jsonEncode({'type': 'element', 'element': element})));
+              unawaited(
+                state.setSerializedPostSelection(slug, jsonEncode({'type': 'element', 'element': element})).catchError((
+                  Object e,
+                ) {
+                  if (e is FileSystemException && e.osError?.errorCode == 28) {
+                    // NOTE: 용량 부족 시 무시, 포커스 저장 안 함
+                    return null;
+                  }
+                  return Future<void>.error(e);
+                }),
+              );
             }
         }
       });
@@ -160,7 +170,15 @@ class Editor extends HookWidget {
         return;
       }
 
-      unawaited(state.setSerializedPostSelection(slug, jsonEncode(selection.toJson())));
+      unawaited(
+        state.setSerializedPostSelection(slug, jsonEncode(selection.toJson())).catchError((Object e) {
+          if (e is FileSystemException && e.osError?.errorCode == 28) {
+            // NOTE: 용량 부족 시 무시, 포커스 저장 안 함
+            return null;
+          }
+          return Future<void>.error(e);
+        }),
+      );
     });
 
     return GraphQLOperation(
