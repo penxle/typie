@@ -1,10 +1,13 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
-  import PlusIcon from '~icons/lucide/plus';
+  import TextSelectIcon from '~icons/lucide/text-select';
+  import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
+  import { WRAPPING_NODE_NAMES } from '../../extensions/wrapping-node';
+  import { Blockquote, Callout, Fold } from '../../node-views';
   import type { Editor } from '@tiptap/core';
 
   type Props = {
@@ -14,24 +17,24 @@
 
   let { editor, pos }: Props = $props();
 
-  const handlePlusClick = () => {
-    const node = editor.state.doc.nodeAt(pos);
-    if (!node) {
-      return;
-    }
+  const unwrapLabels = {
+    [Blockquote.name]: '인용구 해제',
+    [Callout.name]: '콜아웃 해제',
+    [Fold.name]: '폴드 해제',
+  };
 
-    if (node.type.name === 'paragraph' && node.childCount === 0) {
-      editor
-        .chain()
-        .focus(pos + 1)
-        .run();
-    } else {
-      editor
-        .chain()
-        .insertContentAt(pos + node.nodeSize, { type: 'paragraph' })
-        .focus(pos + node.nodeSize + 1)
-        .run();
-    }
+  const node = $derived(editor.state.doc.nodeAt(pos));
+  const showUnwrap = $derived(node && WRAPPING_NODE_NAMES.includes(node.type.name));
+  const unwrapTooltip = $derived(node ? unwrapLabels[node.type.name] || '' : '');
+
+  const handleUnwrapClick = () => {
+    if (!node) return;
+    editor
+      .chain()
+      .focus()
+      .setNodeSelection(pos + 1) // NOTE: 현재 노드 내부에서 unwrap 실행되도록 +1
+      .unwrapNode(node.type.name)
+      .run();
   };
 
   const handleGripClick = () => {
@@ -66,13 +69,16 @@
 </script>
 
 <div class={flex({ align: 'center' })} transition:fade={{ duration: 100 }}>
-  <button
-    class={css({ borderRadius: '6px', padding: '2px', color: 'text.faint', _hover: { backgroundColor: 'interactive.hover' } })}
-    onclick={handlePlusClick}
-    type="button"
-  >
-    <Icon icon={PlusIcon} size={18} />
-  </button>
+  {#if showUnwrap}
+    <button
+      class={css({ borderRadius: '6px', padding: '2px', color: 'text.faint', _hover: { backgroundColor: 'interactive.hover' } })}
+      onclick={handleUnwrapClick}
+      type="button"
+      use:tooltip={{ message: unwrapTooltip, placement: 'top' }}
+    >
+      <Icon icon={TextSelectIcon} size={18} />
+    </button>
+  {/if}
 
   <button
     class={css({ borderRadius: '6px', padding: '2px', color: 'text.faint', _hover: { backgroundColor: 'interactive.hover' } })}
@@ -80,6 +86,7 @@
     onclick={handleGripClick}
     ondragstart={handleDragStart}
     type="button"
+    use:tooltip={{ message: '선택 또는 드래그하여 이동', placement: 'top' }}
   >
     <Icon icon={GripVerticalIcon} size={18} />
   </button>

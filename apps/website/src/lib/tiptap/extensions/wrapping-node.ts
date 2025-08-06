@@ -1,6 +1,9 @@
 import { Extension } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { findNodeUpward } from '../lib/node-utils';
+import { Blockquote, Callout, Fold } from '../node-views';
+
+export const WRAPPING_NODE_NAMES = [Blockquote.name, Callout.name, Fold.name];
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions

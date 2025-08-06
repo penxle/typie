@@ -2,17 +2,15 @@ import { Extension } from '@tiptap/core';
 import { Fragment, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { findNodeUpward } from '../lib/node-utils';
-import { Blockquote, Callout, Fold } from '../node-views';
+import { WRAPPING_NODE_NAMES } from './wrapping-node';
 import type { Selection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-
-const WRAPPING_NODE_NAMES = new Set([Fold.name, Blockquote.name, Callout.name]);
 
 const getWrappingNodeId = (selection: Selection) => {
   const { $from, $to } = selection;
 
   const result = findNodeUpward(selection, ({ node, depth }) => {
-    if (WRAPPING_NODE_NAMES.has(node.type.name)) {
+    if (WRAPPING_NODE_NAMES.includes(node.type.name)) {
       const nodeStart = $from.before(depth);
       const nodeEnd = $from.after(depth);
 
@@ -26,7 +24,7 @@ const getWrappingNodeId = (selection: Selection) => {
 
 const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
   const unwrappedNodes = fragment.content.flatMap((node) => {
-    if (WRAPPING_NODE_NAMES.has(node.type.name) && node.attrs.nodeId === nodeId) {
+    if (WRAPPING_NODE_NAMES.includes(node.type.name) && node.attrs.nodeId === nodeId) {
       return node.content.content;
     }
 
