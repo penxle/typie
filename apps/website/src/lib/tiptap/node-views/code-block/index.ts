@@ -33,12 +33,14 @@ export const CodeBlock = createNodeView(Component, {
     return {
       setCodeBlock:
         () =>
-        ({ can, commands }) => {
+        ({ can, chain }) => {
           if (!can().isNodeAllowed(this.name)) {
             return false;
           }
 
-          return commands.insertNode(this.type.create());
+          return chain()
+            .first(({ commands }) => [() => commands.insertNodeWithSelection(this.name), () => commands.insertNode(this.type.create())])
+            .run();
         },
     };
   },

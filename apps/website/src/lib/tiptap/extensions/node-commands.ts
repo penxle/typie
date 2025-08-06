@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core';
-import { NodeSelection } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { findNodeUpward } from '../lib/node-utils';
 import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../node-views';
 
@@ -17,6 +17,7 @@ declare module '@tiptap/core' {
       selectUpwardNode: (nodeType: string) => ReturnType;
       selectNodeBackwardByTypes: (nodeTypes: string[]) => ReturnType;
       convertNodeToParagraphAtStart: (nodeTypes: string[]) => ReturnType;
+      insertNodeWithSelection: (nodeType: string) => ReturnType;
     };
   }
 }
@@ -97,6 +98,39 @@ export const NodeCommands = Extension.create({
           }
 
           return false;
+        },
+
+      insertNodeWithSelection:
+        (nodeType: string) =>
+        ({ state, chain }) => {
+          const { selection } = state;
+          const { $from, $to } = selection;
+
+          const selectedText = state.doc.textBetween($from.pos, $to.pos, '\n', (node) => {
+            if (node.type.name === 'hard_break') {
+              return '\n';
+            }
+            return '';
+          });
+          if (selection.empty || !selectedText) return false;
+
+          const node = state.schema.nodes[nodeType];
+
+          if (!node || !node.spec.content?.includes('text')) {
+            // NOTE: implementation error지만 무시
+            return false;
+          }
+
+          return chain()
+            .deleteSelection()
+            .insertNode(node.create(null, state.schema.text(selectedText)))
+            .command(({ tr, state }) => {
+              const { $from } = state.selection;
+              const pos = $from.pos + 1;
+              tr.setSelection(TextSelection.create(state.doc, pos, pos + selectedText.length));
+              return true;
+            })
+            .run();
         },
     };
   },
