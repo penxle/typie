@@ -455,6 +455,7 @@ type Mutation {
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateEmail(input: UpdateEmailInput!): Boolean!
+  updateEntitiesVisibility(input: UpdateEntitiesVisibilityInput!): [Entity!]!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
   updatePassword(input: UpdatePasswordInput!): User!
@@ -883,6 +884,11 @@ input UpdateBillingKeyInput {
 
 input UpdateEmailInput {
   code: String!
+}
+
+input UpdateEntitiesVisibilityInput {
+  entityIds: [ID!]!
+  visibility: EntityVisibility!
 }
 
 input UpdateFolderOptionInput {
