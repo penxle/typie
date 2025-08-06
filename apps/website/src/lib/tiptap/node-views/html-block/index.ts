@@ -1,3 +1,4 @@
+import { TextSelection } from '@tiptap/pm/state';
 import { createNodeView } from '../../lib';
 import Component from './Component.svelte';
 
@@ -25,12 +26,28 @@ export const HtmlBlock = createNodeView(Component, {
     return {
       setHtmlBlock:
         () =>
-        ({ can, commands }) => {
+        ({ can, chain }) => {
           if (!can().isNodeAllowed(this.name)) {
             return false;
           }
 
-          return commands.insertNode(this.type.create());
+          return chain()
+            .first(({ chain, commands }) => [
+              () => commands.insertNodeWithSelection(this.name),
+              () => {
+                return chain()
+                  .insertNode(this.type.create())
+                  .command(({ tr, state }) => {
+                    // NOTE: 노드 삽입 후 내부로 커서 이동 (어째선지 code_block에서는 필요 없음)
+                    const { $from } = state.selection;
+                    const pos = $from.pos + 1;
+                    tr.setSelection(TextSelection.create(state.doc, pos));
+                    return true;
+                  })
+                  .run();
+              },
+            ])
+            .run();
         },
     };
   },
