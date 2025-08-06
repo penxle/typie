@@ -110,6 +110,11 @@ export const FloatingMenu = Extension.create({
               return;
             }
 
+            // NOTE: ul, ol은 marginLeft가 있어서 조정해야 함
+            const computedStyle = window.getComputedStyle(nodeDOM);
+            const marginLeft = Number.parseFloat(computedStyle.marginLeft) || 0;
+            const leftOffset = 16 + marginLeft;
+
             remove();
 
             leftDom = document.createElement('div');
@@ -160,7 +165,7 @@ export const FloatingMenu = Extension.create({
 
               const { x, y, middlewareData } = await computePosition(nodeDOM, leftDom, {
                 placement: 'left-start',
-                middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
+                middleware: [offset(leftOffset), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
               });
 
               leftDom.style.left = `${x}px`;
@@ -236,7 +241,7 @@ export const FloatingMenu = Extension.create({
                 return false;
               }
 
-              const pos = posAtCoords.inside === -1 ? posAtCoords.pos : posAtCoords.inside;
+              const pos = posAtCoords.inside <= 0 ? posAtCoords.pos : posAtCoords.inside;
               const resolvedPos = view.state.doc.resolve(pos);
               const newPos = resolvedPos.before(2) ?? null;
 
