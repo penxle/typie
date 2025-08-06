@@ -537,6 +537,10 @@
         if (!editor || !attrs || !attrs.nodeType) return;
 
         editor.current.chain().focus().unwrapNode(attrs.nodeType).run();
+      } else if (name === 'set_node') {
+        if (!editor || !attrs || !attrs.nodeType) return;
+
+        editor.current.chain().focus().setNode(attrs.nodeType).run();
       } else if (name === 'update_node_attribute') {
         if (!editor || !attrs || !attrs.nodeType) return;
 

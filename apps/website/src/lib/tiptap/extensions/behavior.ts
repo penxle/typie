@@ -1,7 +1,10 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
+import { Table } from '../node-views';
+import { TEXT_NODE_TYPES, WRAPPING_NODE_NAMES } from './node-commands';
 
 const arrayOrNull = <T>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
+const NODE_TYPES_TO_SELECT_ON_BACKSPACE = [...WRAPPING_NODE_NAMES, Table.name, ...TEXT_NODE_TYPES];
 
 export const Behavior = Extension.create({
   name: 'behavior',
@@ -17,7 +20,13 @@ export const Behavior = Extension.create({
 
         return editor
           .chain()
-          .first(({ commands }) => [commands.deleteSelection, commands.joinBackward, commands.selectNodeBackward])
+          .first(({ commands }) => [
+            commands.deleteSelection,
+            () => commands.convertNodeToParagraphAtStart(TEXT_NODE_TYPES),
+            () => commands.selectNodeBackwardByTypes(NODE_TYPES_TO_SELECT_ON_BACKSPACE),
+            commands.joinBackward,
+            commands.selectNodeBackward,
+          ])
           .command(({ tr, dispatch }) => {
             tr.setStoredMarks(marks);
             dispatch?.(tr);
@@ -81,7 +90,7 @@ export const Behavior = Extension.create({
         if ($from.pos > 1) {
           const nodeBefore = doc.resolve($from.pos - 1).nodeBefore;
 
-          if (nodeBefore?.type.name === 'table') {
+          if (nodeBefore?.type.name === Table.name) {
             return editor.commands.setTextSelection($from.pos - 4);
           }
         }

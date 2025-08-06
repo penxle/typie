@@ -4,6 +4,7 @@ import { NodeSelection, Plugin, Selection as ProseMirrorSelection } from '@tipta
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Tip } from '$lib/notification';
 import { css, cx } from '$styled-system/css';
+import { TEXT_NODE_TYPES } from './node-commands';
 import type { Mappable } from '@tiptap/pm/transform';
 
 export const Selection = Extension.create({
@@ -17,6 +18,21 @@ export const Selection = Extension.create({
         }
 
         const { selection } = editor.state;
+        const { $from } = selection;
+
+        if (TEXT_NODE_TYPES.includes($from.parent.type.name)) {
+          const parentStart = $from.start();
+          const parentEnd = $from.end();
+
+          if (selection.from !== parentStart || selection.to !== parentEnd) {
+            // NOTE: 모든 텍스트가 선택되어 있지 않으면 전체 텍스트 내용 선택
+            editor.commands.setTextSelection({
+              from: parentStart,
+              to: parentEnd,
+            });
+            return true;
+          }
+        }
 
         if (selection instanceof NodeSelection || selection instanceof MultiNodeSelection) {
           return editor.commands.command(({ state, tr, dispatch }) => {

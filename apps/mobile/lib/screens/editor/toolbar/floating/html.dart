@@ -26,6 +26,12 @@ class HtmlFloatingToolbar extends HookWidget {
             ]
           : [
               FloatingToolbarButton(
+                icon: LucideLightIcons.text_select,
+                onTap: () async {
+                  await scope.command('set_node', attrs: {'nodeType': 'paragraph'});
+                },
+              ),
+              FloatingToolbarButton(
                 icon: LucideLightIcons.grip_vertical,
                 onTap: () async {
                   await scope.command('select_upward_node', attrs: {'nodeType': 'html_block'});
