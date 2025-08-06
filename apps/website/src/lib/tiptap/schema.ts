@@ -3,6 +3,7 @@ import {
   Clipboard,
   Command,
   DropCursor,
+  NodeCommands,
   NodeId,
   Page,
   Placeholder,
@@ -12,7 +13,6 @@ import {
   TrailingNode,
   Typewriter,
   Typography,
-  WrappingNode,
 } from './extensions';
 import { Bold, Italic, Link, Ruby, Strike, TextStyle, Underline } from './marks';
 import { FloatingMenu, SlashMenu } from './menus';
@@ -81,7 +81,6 @@ export const baseExtensions = [
   Selection,
   SyntaxHighlight,
   TrailingNode,
-  WrappingNode,
   Clipboard,
 ];
 
@@ -89,6 +88,7 @@ export const editorExtensions = [
   // extensions
   Behavior,
   Command,
+  NodeCommands,
   DropCursor,
   Placeholder,
   Search,

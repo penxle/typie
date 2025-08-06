@@ -2,7 +2,7 @@ import { Extension } from '@tiptap/core';
 import { Fragment, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { findNodeUpward } from '../lib/node-utils';
-import { WRAPPING_NODE_NAMES } from './wrapping-node';
+import { WRAPPING_NODE_NAMES } from './node-commands';
 import type { Selection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 

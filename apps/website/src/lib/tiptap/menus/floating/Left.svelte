@@ -6,8 +6,8 @@
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
-  import { WRAPPING_NODE_NAMES } from '../../extensions/wrapping-node';
-  import { Blockquote, Callout, Fold } from '../../node-views';
+  import { TEXT_NODE_TYPES, WRAPPING_NODE_NAMES } from '../../extensions/node-commands';
+  import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../../node-views';
   import type { Editor } from '@tiptap/core';
 
   type Props = {
@@ -21,20 +21,29 @@
     [Blockquote.name]: '인용구 해제',
     [Callout.name]: '콜아웃 해제',
     [Fold.name]: '폴드 해제',
+    [CodeBlock.name]: '코드 해제',
+    [HtmlBlock.name]: 'HTML 해제',
   };
 
   const node = $derived(editor.state.doc.nodeAt(pos));
-  const showUnwrap = $derived(node && WRAPPING_NODE_NAMES.includes(node.type.name));
+  const isWrappingNode = $derived(node && WRAPPING_NODE_NAMES.includes(node.type.name));
+  const isTextNode = $derived(node && TEXT_NODE_TYPES.includes(node.type.name));
+  const showUnwrap = $derived(isWrappingNode || isTextNode);
   const unwrapTooltip = $derived(node ? unwrapLabels[node.type.name] || '' : '');
 
   const handleUnwrapClick = () => {
     if (!node) return;
-    editor
-      .chain()
-      .focus()
-      .setNodeSelection(pos + 1) // NOTE: 현재 노드 내부에서 unwrap 실행되도록 +1
-      .unwrapNode(node.type.name)
-      .run();
+
+    if (isWrappingNode) {
+      editor
+        .chain()
+        .focus()
+        .setNodeSelection(pos + 1) // NOTE: 현재 노드 내부에서 unwrap 실행되도록 +1
+        .unwrapNode(node.type.name)
+        .run();
+    } else if (isTextNode) {
+      editor.chain().focus().setNodeSelection(pos).setNode('paragraph').run();
+    }
   };
 
   const handleGripClick = () => {
