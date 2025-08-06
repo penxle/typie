@@ -201,7 +201,7 @@ export const FloatingMenu = Extension.create({
                 return;
               }
 
-              if (state.pos !== prev.pos) {
+              if (state.pos !== prev.pos || !view.state.doc.eq(prevState.doc)) {
                 updateFloatingMenu(view, state.pos);
               }
             },
