@@ -791,6 +791,81 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  updatePostsOption: t.withAuth({ session: true }).fieldWithInput({
+    type: [Post],
+    input: {
+      postIds: t.input.idList({ validate: { items: validateDbId(TableCode.POSTS) } }),
+      availability: t.input.field({ type: EntityAvailability, required: false }),
+      visibility: t.input.field({ type: EntityVisibility, required: false }),
+      contentRating: t.input.field({ type: PostContentRating, required: false }),
+      allowReaction: t.input.boolean({ required: false }),
+      protectContent: t.input.boolean({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const posts = await db
+        .select({
+          id: Posts.id,
+          siteId: Entities.siteId,
+          entityId: Entities.id,
+        })
+        .from(Posts)
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(and(eq(Entities.state, EntityState.ACTIVE), inArray(Posts.id, input.postIds)));
+
+      if (posts.length === 0) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const siteId = posts[0].siteId;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (posts.some((post) => post.siteId !== siteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      const updatedPostIds = await db.transaction(async (tx) => {
+        if (!!input.availability || !!input.visibility) {
+          await tx
+            .update(Entities)
+            .set({
+              availability: input.availability ?? undefined,
+              visibility: input.visibility ?? undefined,
+            })
+            .where(
+              inArray(
+                Entities.id,
+                posts.map((post) => post.entityId),
+              ),
+            );
+        }
+
+        if (!!input.contentRating || !!input.allowReaction || !!input.protectContent) {
+          return await tx
+            .update(Posts)
+            .set({
+              contentRating: input.contentRating ?? undefined,
+              allowReaction: input.allowReaction ?? undefined,
+              protectContent: input.protectContent ?? undefined,
+            })
+            .where(inArray(Posts.id, input.postIds));
+        }
+
+        return posts.map((post) => post.id);
+      });
+
+      pubsub.publish('site:update', siteId, { scope: 'site' });
+      for (const post of posts) {
+        pubsub.publish('site:update', siteId, { scope: 'entity', entityId: post.entityId });
+      }
+
+      return updatedPostIds;
+    },
+  }),
+
   updatePostType: t.withAuth({ session: true }).fieldWithInput({
     type: Post,
     input: {
