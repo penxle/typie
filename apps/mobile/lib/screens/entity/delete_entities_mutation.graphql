@@ -1,0 +1,5 @@
+mutation EntityScreen_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
+  deleteEntities(input: $input) {
+    id
+  }
+}

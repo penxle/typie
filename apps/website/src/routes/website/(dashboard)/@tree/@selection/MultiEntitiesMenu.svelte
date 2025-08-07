@@ -117,7 +117,7 @@
   }}
   variant="danger"
 >
-  일괄 삭제
+  삭제
 </MenuItem>
 
 {#snippet deleteDetailsView()}

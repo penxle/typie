@@ -12,7 +12,6 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
-import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
@@ -36,12 +35,13 @@ import 'package:typie/screens/entity/__generated__/rename_folder_mutation.req.gq
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_site_id_query.req.gql.dart';
+import 'package:typie/screens/entity/move_entity_modal.dart';
+import 'package:typie/screens/entity/selected_entities_bar.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
-import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/vertical_divider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -119,6 +119,8 @@ class _EntityList extends HookWidget {
 
     final isReordering = useState(false);
     final isRenaming = useState(false);
+    final isSelecting = useState(false);
+    final selectedItems = useState<Set<String>>({});
 
     useEffect(() {
       void listener() {
@@ -205,7 +207,7 @@ class _EntityList extends HookWidget {
                   )
                 : null,
             actions: [
-              if (!isRenaming.value && !isReordering.value)
+              if (!isRenaming.value && !isReordering.value && !isSelecting.value)
                 HeadingAction(
                   icon: LucideLightIcons.ellipsis,
                   onTap: () async {
@@ -213,6 +215,15 @@ class _EntityList extends HookWidget {
                       child: BottomMenu(
                         header: _BottomMenuHeader(entity: entity),
                         items: [
+                          if (entities.isNotEmpty)
+                            BottomMenuItem(
+                              icon: LucideLightIcons.square_check,
+                              label: '여러 항목 선택',
+                              onTap: () {
+                                isSelecting.value = true;
+                                selectedItems.value = {};
+                              },
+                            ),
                           if (entity != null) ...[
                             BottomMenuItem(
                               icon: LucideLightIcons.folder_symlink,
@@ -220,7 +231,10 @@ class _EntityList extends HookWidget {
                               onTap: () async {
                                 unawaited(mixpanel.track('move_entity_try', properties: {'via': 'entity_menu'}));
 
-                                await context.showBottomSheet(intercept: true, child: _MoveEntityModal(entity!));
+                                await context.showBottomSheet(
+                                  intercept: true,
+                                  child: MoveEntityModal.single(entity: entity!, via: 'entity_menu'),
+                                );
                               },
                             ),
                             BottomMenuItem(
@@ -348,6 +362,14 @@ class _EntityList extends HookWidget {
                     );
                   },
                 )
+              else if (isSelecting.value)
+                HeadingAction(
+                  icon: LucideLightIcons.x,
+                  onTap: () {
+                    isSelecting.value = false;
+                    selectedItems.value = {};
+                  },
+                )
               else
                 HeadingAction(
                   icon: LucideLightIcons.check,
@@ -361,17 +383,20 @@ class _EntityList extends HookWidget {
                 ),
             ],
           ),
-          child: entities.isEmpty
-              ? Center(
+          child: Stack(
+            children: [
+              if (entities.isEmpty)
+                Center(
                   child: Text(
                     '폴더가 비어있어요',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
                   ),
                 )
-              : ReorderableList(
+              else
+                ReorderableList(
                   controller: primaryScrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const Pad(horizontal: 20, vertical: 14),
+                  padding: Pad(horizontal: 20, top: 14, bottom: isSelecting.value ? 90 : 14),
                   itemCount: entities.length,
                   itemBuilder: (context, index) {
                     return Padding(
@@ -380,6 +405,17 @@ class _EntityList extends HookWidget {
                       child: GestureDetector(
                         onTap: () async {
                           if (isReordering.value) {
+                            return;
+                          }
+
+                          if (isSelecting.value) {
+                            final currentSelection = Set<String>.from(selectedItems.value);
+                            if (currentSelection.contains(entities[index].id)) {
+                              currentSelection.remove(entities[index].id);
+                            } else {
+                              currentSelection.add(entities[index].id);
+                            }
+                            selectedItems.value = currentSelection;
                             return;
                           }
 
@@ -400,6 +436,15 @@ class _EntityList extends HookWidget {
                               child: BottomMenu(
                                 header: _BottomMenuHeader(entity: entities[index]),
                                 items: [
+                                  if (!isSelecting.value)
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.square_check,
+                                      label: '여러 항목 선택',
+                                      onTap: () {
+                                        isSelecting.value = true;
+                                        selectedItems.value = {entities[index].id};
+                                      },
+                                    ),
                                   BottomMenuItem(
                                     icon: LucideLightIcons.folder_symlink,
                                     label: '다른 폴더로 옮기기',
@@ -410,7 +455,10 @@ class _EntityList extends HookWidget {
 
                                       await context.showBottomSheet(
                                         intercept: true,
-                                        child: _MoveEntityModal(entities[index]),
+                                        child: MoveEntityModal.single(
+                                          entity: entities[index],
+                                          via: 'entity_folder_menu',
+                                        ),
                                       );
                                     },
                                   ),
@@ -526,6 +574,15 @@ class _EntityList extends HookWidget {
                               child: BottomMenu(
                                 header: _BottomMenuHeader(entity: entities[index]),
                                 items: [
+                                  if (!isSelecting.value)
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.square_check,
+                                      label: '여러 항목 선택',
+                                      onTap: () {
+                                        isSelecting.value = true;
+                                        selectedItems.value = {entities[index].id};
+                                      },
+                                    ),
                                   BottomMenuItem(
                                     icon: LucideLightIcons.file_symlink,
                                     label: '다른 폴더로 옮기기',
@@ -536,7 +593,7 @@ class _EntityList extends HookWidget {
 
                                       await context.showBottomSheet(
                                         intercept: true,
-                                        child: _MoveEntityModal(entities[index]),
+                                        child: MoveEntityModal.single(entity: entities[index], via: 'entity_post_menu'),
                                       );
                                     },
                                   ),
@@ -616,6 +673,15 @@ class _EntityList extends HookWidget {
                               child: BottomMenu(
                                 header: _BottomMenuHeader(entity: entities[index]),
                                 items: [
+                                  if (!isSelecting.value)
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.square_check,
+                                      label: '여러 항목 선택',
+                                      onTap: () {
+                                        isSelecting.value = true;
+                                        selectedItems.value = {entities[index].id};
+                                      },
+                                    ),
                                   BottomMenuItem(
                                     icon: LucideLightIcons.file_symlink,
                                     label: '다른 폴더로 옮기기',
@@ -626,7 +692,10 @@ class _EntityList extends HookWidget {
 
                                       await context.showBottomSheet(
                                         intercept: true,
-                                        child: _MoveEntityModal(entities[index]),
+                                        child: MoveEntityModal.single(
+                                          entity: entities[index],
+                                          via: 'entity_canvas_menu',
+                                        ),
                                       );
                                     },
                                   ),
@@ -671,7 +740,9 @@ class _EntityList extends HookWidget {
                             decoration: BoxDecoration(
                               border: Border.all(color: context.colors.borderStrong),
                               borderRadius: const BorderRadius.all(Radius.circular(8)),
-                              color: context.colors.surfaceDefault,
+                              color: isSelecting.value && selectedItems.value.contains(entities[index].id)
+                                  ? context.colors.accentBrand.withValues(alpha: 0.1)
+                                  : context.colors.surfaceDefault,
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -684,6 +755,23 @@ class _EntityList extends HookWidget {
                                       child: Padding(
                                         padding: Pad(all: 12),
                                         child: Icon(LucideLightIcons.grip_vertical, size: 20),
+                                      ),
+                                    ),
+                                  ),
+                                  AppVerticalDivider(color: context.colors.borderStrong),
+                                ] else if (isSelecting.value) ...[
+                                  Listener(
+                                    behavior: HitTestBehavior.opaque,
+                                    child: Padding(
+                                      padding: const Pad(all: 12),
+                                      child: Icon(
+                                        selectedItems.value.contains(entities[index].id)
+                                            ? LucideLightIcons.square_check
+                                            : LucideLightIcons.square,
+                                        size: 20,
+                                        color: selectedItems.value.contains(entities[index].id)
+                                            ? context.colors.textDefault
+                                            : context.colors.textSubtle,
                                       ),
                                     ),
                                   ),
@@ -760,6 +848,21 @@ class _EntityList extends HookWidget {
                     await HapticFeedback.lightImpact();
                   },
                 ),
+              if (isSelecting.value)
+                SelectedEntitiesBar(
+                  isVisible: selectedItems.value.isNotEmpty,
+                  selectedItems: selectedItems.value,
+                  entities: entities,
+                  onClearSelection: () {
+                    selectedItems.value = {};
+                  },
+                  onExitSelectionMode: () {
+                    isSelecting.value = false;
+                    selectedItems.value = {};
+                  },
+                ),
+            ],
+          ),
         );
       },
     );
@@ -976,254 +1079,6 @@ class _BottomMenuHeader extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _MoveEntityModal extends HookWidget {
-  const _MoveEntityModal(this.entity);
-
-  final GEntityScreen_Entity_entity entity;
-
-  @override
-  Widget build(BuildContext context) {
-    final pref = useService<Pref>();
-    final client = useService<GraphQLClient>();
-    final mixpanel = useService<Mixpanel>();
-    final scrollController = useScrollController();
-
-    final loading = useState(false);
-    final entities = useState<List<GEntityScreen_Entity_entity>?>(null);
-    final currentEntity = useState<GEntityScreen_WithEntityId_QueryData_entity?>(null);
-
-    Future<void> fetchData(String? id) async {
-      loading.value = true;
-
-      if (id != null) {
-        final res = await client.request(GEntityScreen_WithEntityId_QueryReq((b) => b..vars.entityId = id));
-        currentEntity.value = res.entity;
-        entities.value = res.entity.children.toList();
-      } else {
-        final res = await client.request(GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId));
-        currentEntity.value = null;
-        entities.value = res.site.entities.toList();
-      }
-      loading.value = false;
-    }
-
-    useEffect(() {
-      unawaited(fetchData(null));
-
-      return null;
-    }, []);
-
-    useEffect(() {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (scrollController.hasClients) {
-          await scrollController.animateTo(
-            scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-
-      return null;
-    }, [currentEntity.value]);
-
-    return AppFullBottomSheet(
-      title: '다른 폴더로 옮기기',
-      child: Stack(
-        children: [
-          Positioned(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              controller: scrollController,
-              child: Row(
-                spacing: 4,
-                children: [
-                  const Icon(LucideLightIcons.folder_open, size: 18),
-                  const Gap(4),
-                  Tappable(
-                    onTap: () async {
-                      if (currentEntity.value != null) {
-                        await fetchData(null);
-                      }
-                    },
-                    child: Text(
-                      '내 포스트',
-                      style: TextStyle(fontWeight: currentEntity.value == null ? FontWeight.w600 : null),
-                    ),
-                  ),
-                  if (currentEntity.value != null) ...[
-                    ...currentEntity.value!.ancestors
-                        .map(
-                          (ancestor) => [
-                            const Icon(LucideLightIcons.chevron_right, size: 14),
-                            Tappable(
-                              onTap: () async {
-                                await fetchData(ancestor.id);
-                              },
-                              child: Text(
-                                ancestor.node.when(
-                                  folder: (folder) => folder.name,
-                                  orElse: () => throw UnimplementedError(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                        .expand((e) => e),
-                    const Icon(LucideLightIcons.chevron_right, size: 14),
-                    Text(
-                      currentEntity.value!.node.maybeWhen(
-                        folder: (folder) => folder.name,
-                        orElse: () => throw UnimplementedError(),
-                      ),
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const Pad(top: 40, bottom: 20),
-            child: (loading.value && entities.value == null)
-                ? const Center(child: CircularProgressIndicator())
-                : entities.value!.where((element) => element.node.G__typename == 'Folder').isEmpty
-                ? Center(
-                    child: Text('하위 폴더가 없어요', style: TextStyle(fontSize: 15, color: context.colors.textFaint)),
-                  )
-                : ListView.builder(
-                    itemCount: entities.value!.length,
-                    itemBuilder: (context, index) {
-                      if (entities.value![index].node.G__typename != 'Folder') {
-                        return const SizedBox.shrink();
-                      }
-
-                      return ListTile(
-                        contentPadding: Pad.zero,
-                        onTap: () async {
-                          if (entity.id == entities.value![index].id) {
-                            return;
-                          }
-
-                          if (currentEntity.value?.id != entities.value![index].id) {
-                            await fetchData(entities.value![index].id);
-                          }
-                        },
-                        title: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: context.colors.borderStrong),
-                            borderRadius: const BorderRadius.all(Radius.circular(8)),
-                            color: entity.id == entities.value![index].id
-                                ? context.colors.surfaceMuted
-                                : context.colors.surfaceDefault,
-                          ),
-                          padding: const Pad(vertical: 12, horizontal: 16),
-                          child: entities.value![index].node.maybeWhen(
-                            folder: (folder) => _Folder(
-                              entities.value![index],
-                              color: entity.id == entities.value![index].id ? context.colors.textFaint : null,
-                            ),
-                            orElse: () => const SizedBox.shrink(),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              decoration: BoxDecoration(color: context.colors.surfaceDefault),
-              padding: const Pad(horizontal: 20, vertical: 4),
-              child: Row(
-                spacing: 8,
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: context.colors.surfaceMuted,
-                        borderRadius: const BorderRadius.all(Radius.circular(999)),
-                      ),
-                      padding: const Pad(vertical: 12),
-                      child: Tappable(
-                        onTap: () async {
-                          await context.router.maybePop();
-                        },
-                        child: const Text(
-                          '취소',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: entity.node.maybeWhen(
-                          folder: (folder) =>
-                              (currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
-                                      (folder.maxDescendantFoldersDepth - entity.depth) >
-                                  (maxDepth - 1)
-                              ? context.colors.surfaceMuted
-                              : context.colors.surfaceInverse,
-                          orElse: () => context.colors.surfaceInverse,
-                        ),
-                        borderRadius: const BorderRadius.all(Radius.circular(999)),
-                      ),
-                      padding: const Pad(vertical: 12),
-                      child: Tappable(
-                        onTap: () async {
-                          entity.node.maybeWhen(
-                            folder: (folder) {
-                              if ((currentEntity.value == null ? 0 : currentEntity.value!.depth + 1) +
-                                      (folder.maxDescendantFoldersDepth - entity.depth) >
-                                  (maxDepth - 1)) {
-                                context.toast(ToastType.error, '폴더의 최대 깊이를 초과했어요');
-                                return;
-                              }
-                            },
-                            orElse: () {},
-                          );
-
-                          await client.request(
-                            GEntityScreen_MoveEntity_MutationReq(
-                              (b) => b
-                                ..vars.input.entityId = entity.id
-                                ..vars.input.parentEntityId = currentEntity.value?.id
-                                ..vars.input.lowerOrder = entities.value!.isNotEmpty
-                                    ? entities.value![entities.value!.length - 1].order
-                                    : null
-                                ..vars.input.treatEmptyParentIdAsRoot = true,
-                            ),
-                          );
-
-                          unawaited(mixpanel.track('move_entity', properties: {'via': 'modal'}));
-
-                          if (context.mounted) {
-                            await context.router.maybePop();
-                          }
-                        },
-                        child: Text(
-                          '옮기기',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontWeight: FontWeight.w500, color: context.colors.textInverse),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
