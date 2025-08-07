@@ -28,18 +28,29 @@
   const anchorPositions = $derived.by(() => {
     if (!editor || Object.keys(anchorElements).length === 0) return [];
 
-    return calculateAnchorPositions(anchorElements, anchors.current).map(({ nodeId, position, name }) => ({
+    return calculateAnchorPositions(anchorElements, anchors.current).map(({ nodeId, position, name, excerpt }) => ({
       nodeId,
       position,
       name,
+      excerpt,
     }));
   });
 
   onMount(() => {
+    // @deprecated
     window.__webview__?.setProcedure('getAnchorPositions', () => {
+      return anchorPositions.map(({ nodeId, position, name, excerpt }) => ({
+        nodeId,
+        position,
+        name: name ?? excerpt,
+      }));
+    });
+
+    window.__webview__?.setProcedure('getAnchorPositionsV2', () => {
       return anchorPositions;
     });
 
+    // @deprecated
     window.__webview__?.setProcedure('getCurrentNode', () => {
       if (!editor) return null;
 
@@ -64,6 +75,42 @@
         return {
           nodeId: node.attrs.nodeId,
           name: element.textContent || '(내용 없음)',
+          position,
+        };
+      }
+
+      return null;
+    });
+
+    window.__webview__?.setProcedure('getCurrentNodeV2', () => {
+      if (!editor) return null;
+
+      const { from } = editor.current.state.selection;
+      const resolvedPos = editor.current.state.doc.resolve(from);
+
+      let targetPos = from;
+      targetPos = resolvedPos.before(2);
+
+      const node = editor.current.state.doc.nodeAt(targetPos);
+
+      if (node && node.attrs.nodeId) {
+        const element = document.querySelector(`[data-node-id="${node.attrs.nodeId}"]`);
+        if (!element) return null;
+
+        const lastNodeOffsetTop = getLastNodeOffsetTop();
+        if (lastNodeOffsetTop === null) return null;
+
+        const offsetTop = (element as HTMLElement).offsetTop;
+        const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
+
+        return {
+          nodeId: node.attrs.nodeId,
+          name: null,
+          excerpt: element.textContent
+            ? element.textContent.length > 20
+              ? element.textContent.slice(0, 20) + '...'
+              : element.textContent
+            : '(내용 없음)',
           position,
         };
       }

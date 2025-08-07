@@ -30,7 +30,7 @@
 
 {#each anchorPositions as anchor (anchor.nodeId)}
   <Anchor
-    name={anchor.name}
+    name={anchor.name ?? anchor.excerpt}
     {editor}
     element={anchor.element}
     nodeId={anchor.nodeId}

@@ -205,7 +205,7 @@ class Editor extends HookWidget {
                   var anchorCount = 0;
 
                   try {
-                    final anchors = await scope.webViewController.value?.callProcedure('getAnchorPositions');
+                    final anchors = await scope.webViewController.value?.callProcedure('getAnchorPositionsV2');
                     if (anchors != null) {
                       anchorCount = (anchors as List<dynamic>).length;
                     }
