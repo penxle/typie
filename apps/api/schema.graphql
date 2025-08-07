@@ -266,8 +266,10 @@ type Folder implements IFolder {
 
 type FolderView implements IFolder {
   entity: EntityView!
+  folderCount: Int!
   id: ID!
   name: String!
+  postCount: Int!
 }
 
 type Font implements Blob {

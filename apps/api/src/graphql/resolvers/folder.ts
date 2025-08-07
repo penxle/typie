@@ -154,6 +154,56 @@ FolderView.implement({
   interfaces: [IFolder],
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
+
+    folderCount: t.int({
+      resolve: async (self) => {
+        const rows = await db.execute<{ count: number }>(
+          sql`
+            WITH RECURSIVE descendant_entities AS (
+              SELECT id, type, visibility
+              FROM ${Entities}
+              WHERE parent_id = ${self.entityId}
+              AND state = ${EntityState.ACTIVE}
+              UNION ALL
+              SELECT e.id, e.type, e.visibility
+              FROM ${Entities} e
+              JOIN descendant_entities de ON e.parent_id = de.id
+              WHERE e.state = ${EntityState.ACTIVE}
+            )
+            SELECT COUNT(*) AS count
+            FROM descendant_entities
+            WHERE type = ${EntityType.FOLDER}
+            AND visibility = ${EntityVisibility.UNLISTED}
+          `,
+        );
+        return Number(rows[0]?.count || 0);
+      },
+    }),
+
+    postCount: t.int({
+      resolve: async (self) => {
+        const rows = await db.execute<{ count: number }>(
+          sql`
+            WITH RECURSIVE descendant_entities AS (
+              SELECT id, type, visibility
+              FROM ${Entities}
+              WHERE parent_id = ${self.entityId}
+              AND state = ${EntityState.ACTIVE}
+              UNION ALL
+              SELECT e.id, e.type, e.visibility
+              FROM ${Entities} e
+              JOIN descendant_entities de ON e.parent_id = de.id
+              WHERE e.state = ${EntityState.ACTIVE}
+            )
+            SELECT COUNT(*) AS count
+            FROM descendant_entities
+            WHERE type = ${EntityType.POST}
+            AND visibility = ${EntityVisibility.UNLISTED}
+          `,
+        );
+        return Number(rows[0]?.count || 0);
+      },
+    }),
   }),
 });
 

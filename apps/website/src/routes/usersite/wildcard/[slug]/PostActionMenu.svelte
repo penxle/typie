@@ -2,6 +2,8 @@
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
+  import MessageSquareWarningIcon from '~icons/lucide/message-square-warning';
+  import PencilLineIcon from '~icons/lucide/pencil-line';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
   import { Button, Icon, Menu, MenuItem, Modal } from '$lib/components';
@@ -80,9 +82,9 @@
     {/snippet}
 
     {#if $entityView.node.availableActions.includes('EDIT')}
-      <MenuItem external href={`${env.PUBLIC_WEBSITE_URL}/${$entityView.slug}`} type="link">포스트 수정</MenuItem>
+      <MenuItem external href={`${env.PUBLIC_WEBSITE_URL}/${$entityView.slug}`} icon={PencilLineIcon} type="link">포스트 수정</MenuItem>
     {:else}
-      <MenuItem onclick={() => (reportPostOpen = true)}>포스트 신고</MenuItem>
+      <MenuItem icon={MessageSquareWarningIcon} onclick={() => (reportPostOpen = true)}>포스트 신고</MenuItem>
     {/if}
   </Menu>
 
