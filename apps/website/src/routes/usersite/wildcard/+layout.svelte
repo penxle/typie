@@ -3,6 +3,8 @@
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import CheckIcon from '~icons/lucide/check';
+  import HouseIcon from '~icons/lucide/house';
+  import LogOutIcon from '~icons/lucide/log-out';
   import MonitorIcon from '~icons/lucide/monitor';
   import MoonIcon from '~icons/lucide/moon';
   import SunIcon from '~icons/lucide/sun';
@@ -193,8 +195,9 @@
               {/if}
             {/snippet}
 
-            <MenuItem href={`${env.PUBLIC_WEBSITE_URL}/home`} type="link">내 홈으로</MenuItem>
+            <MenuItem href={`${env.PUBLIC_WEBSITE_URL}/home`} icon={HouseIcon} type="link">내 홈으로</MenuItem>
             <MenuItem
+              icon={LogOutIcon}
               onclick={() => {
                 mixpanel.track('logout', { via: 'header' });
 

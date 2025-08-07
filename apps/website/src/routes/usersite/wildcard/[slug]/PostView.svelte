@@ -18,9 +18,10 @@
   import { TiptapRenderer } from '$lib/tiptap';
   import { comma, serializeOAuthState } from '$lib/utils';
   import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
+  import { flex } from '$styled-system/patterns';
   import EmojiReaction from './EmojiReaction.svelte';
   import PostActionMenu from './PostActionMenu.svelte';
+  import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { Optional, UsersiteWildcardSlugPage_PostView_entityView, UsersiteWildcardSlugPage_PostView_user } from '$graphql';
 
@@ -260,7 +261,7 @@
         alignItems: 'center',
         flexGrow: '1',
         paddingX: '20px',
-        paddingBottom: '80px',
+        paddingBottom: { base: '60px', lg: '80px' },
         width: 'full',
         maxWidth: '1200px',
         backgroundColor: 'surface.default',
@@ -281,31 +282,33 @@
 
       <div
         class={css({
-          paddingTop: $entityView.node.coverImage ? '0' : '50px',
+          paddingTop: $entityView.node.coverImage ? '0' : { base: '24px', md: '48px' },
           width: 'full',
           maxWidth: 'var(--prosemirror-max-width)',
         })}
       >
         <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-          <div class={flex({ alignItems: 'center', gap: '6px' })}>
+          <div class={flex({ alignItems: 'center', gap: '4px', wrap: 'wrap', marginBottom: { base: '4px', lg: '8px' } })}>
             {#each $entityView.ancestors as ancestor (ancestor.id)}
               {#if ancestor.node.__typename === 'FolderView'}
-                <a class={css({ fontSize: '14px', color: 'text.disabled' })} href={ancestor.url}>{ancestor.node.name}</a>
-                <div class={css({ fontSize: '14px', color: 'text.disabled' })}>/</div>
+                <a class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.disabled' })} href={ancestor.url}>
+                  {ancestor.node.name}
+                </a>
+                <div class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.disabled' })}>/</div>
               {/if}
             {/each}
 
             {#if $entityView.ancestors.length > 0}
-              <div class={css({ fontSize: '14px' })}>{$entityView.node.title}</div>
+              <div class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.subtle' })}>{$entityView.node.title}</div>
             {/if}
           </div>
 
-          <div class={css({ marginTop: '12px', fontSize: '28px', fontWeight: 'bold' })}>
+          <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
             {$entityView.node.title}
           </div>
 
           {#if $entityView.node.subtitle}
-            <div class={css({ marginTop: '4px', fontSize: '16px', fontWeight: 'medium' })}>
+            <div class={css({ marginTop: '4px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
               {$entityView.node.subtitle}
             </div>
           {/if}
@@ -368,63 +371,39 @@
         {:else if $entityView.node.body.__typename === 'PostViewBodyUnavailable'}
           <div class={css({ marginTop: '42px', fontSize: '16px', fontWeight: 'medium' })}>
             {#if $entityView.node.body.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
-              <div class={flex({ direction: 'column', align: 'center' })}>
-                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'surface.muted', color: 'text.subtle' })}>
-                  <Icon icon={ShieldAlertIcon} size={20} />
-                </div>
-                <p class={css({ marginTop: '10px', marginBottom: '2px', fontSize: '18px', fontWeight: 'semibold' })}>연령제한글</p>
-                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'text.muted' })}>본인 인증이 필요한 글이에요</p>
-
+              <PostViewBodyUnavailable description="본인 인증이 필요한 글이에요" icon={ShieldAlertIcon} title="연령제한글">
                 {#if $user}
-                  <Button
-                    style={css.raw({ width: 'full', maxWidth: '280px', height: '38px', borderRadius: '6px' })}
-                    onclick={handleVerification}
-                  >
-                    본인 인증
-                  </Button>
+                  <Button style={css.raw({ width: 'full' })} onclick={handleVerification} variant="secondary">본인 인증</Button>
                 {:else}
-                  <Button
-                    style={css.raw({ width: 'full', maxWidth: '280px', height: '38px', borderRadius: '6px' })}
-                    external
-                    href={authorizeUrl}
-                    type="link"
-                  >
+                  <Button style={css.raw({ width: 'full' })} external href={authorizeUrl} type="link" variant="secondary">
                     로그인 후 본인 인증하기
                   </Button>
                 {/if}
-              </div>
+              </PostViewBodyUnavailable>
             {:else if $entityView.node.body.reason === 'REQUIRE_MINIMUM_AGE'}
-              <div class={flex({ direction: 'column', align: 'center' })}>
-                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'surface.muted', color: 'text.subtle' })}>
-                  <Icon icon={ShieldAlertIcon} size={20} />
-                </div>
-
-                <p class={css({ marginTop: '10px', marginBottom: '2px', fontSize: '18px', fontWeight: 'semibold' })}>연령제한글</p>
-                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'text.muted', textAlign: 'center' })}>
-                  이 글은 연령 기준에 따라 현재 계정으로는 열람이 제한되어 있어요
-                </p>
-              </div>
+              <PostViewBodyUnavailable
+                description="이 글은 연령 기준에 따라 현재 계정으로는 열람이 제한되어 있어요"
+                icon={ShieldAlertIcon}
+                title="연령제한글"
+              />
             {:else if $entityView.node.body.reason === 'REQUIRE_PASSWORD'}
-              <form class={flex({ direction: 'column', align: 'center' })} onsubmit={form.handleSubmit}>
-                <div class={center({ borderRadius: '8px', size: '40px', backgroundColor: 'surface.muted', color: 'text.subtle' })}>
-                  <Icon icon={LockIcon} size={20} />
-                </div>
-                <p class={css({ marginTop: '10px', marginBottom: '2px', fontSize: '18px', fontWeight: 'semibold' })}>비밀글</p>
-                <p class={css({ marginBottom: '20px', fontSize: '14px', color: 'text.muted' })}>해당 내용은 비밀번호 입력이 필요해요</p>
+              <form onsubmit={form.handleSubmit}>
+                <PostViewBodyUnavailable description="해당 내용은 비밀번호 입력이 필요해요" icon={LockIcon} title="비밀글">
+                  <div class={flex({ direction: 'column', gap: '4px' })}>
+                    <TextInput
+                      id="password"
+                      style={css.raw({ width: 'full', height: '36px' })}
+                      placeholder="비밀번호를 입력하세요"
+                      bind:value={form.fields.password}
+                    />
 
-                <div class={flex({ direction: 'column', align: 'center', gap: '12px', width: 'full', maxWidth: '280px' })}>
-                  <TextInput
-                    id="password"
-                    style={css.raw({ width: 'full' })}
-                    placeholder="비밀번호를 입력하세요"
-                    bind:value={form.fields.password}
-                  />
-                  {#if form.errors.password}
-                    <p class={css({ color: 'text.danger', fontSize: '14px' })}>{form.errors.password}</p>
-                  {/if}
+                    {#if form.errors.password}
+                      <p class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.password}</p>
+                    {/if}
+                  </div>
 
-                  <Button style={css.raw({ width: 'full', height: '38px', borderRadius: '6px' })} size="lg" type="submit">확인</Button>
-                </div>
+                  <Button style={css.raw({ marginTop: '8px', width: 'full' })} type="submit">확인</Button>
+                </PostViewBodyUnavailable>
               </form>
             {:else}
               {$entityView.node.body.reason}

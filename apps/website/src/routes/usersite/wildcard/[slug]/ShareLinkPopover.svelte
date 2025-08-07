@@ -53,7 +53,7 @@
   type="button"
   use:anchor
 >
-  <Icon icon={ShareIcon} size={16} />
+  <Icon icon={ShareIcon} size={14} />
 </button>
 
 {#if open}
@@ -80,12 +80,12 @@
     class={css({
       display: 'flex',
       flexDirection: 'column',
-      gap: '12px',
+      gap: '8px',
       borderColor: 'border.default',
-      paddingX: '18px',
+      paddingX: '12px',
       backgroundColor: 'surface.default',
       width: 'full',
-      boxShadow: 'small',
+      boxShadow: 'medium',
       zIndex: '50',
       lgDown: {
         position: '[fixed!]',
@@ -94,14 +94,14 @@
         left: '[0!]',
         right: '[0!]',
         borderTopWidth: '1px',
-        borderTopRadius: '8px',
+        borderTopRadius: '4px',
       },
-      lg: { borderWidth: '1px', borderRadius: '8px', maxWidth: '360px' },
+      lg: { borderWidth: '1px', borderRadius: '6px', maxWidth: '320px' },
     })}
     use:floating
     transition:fade={{ duration: 100 }}
   >
-    <div class={css({ position: 'relative', marginY: '14px', fontWeight: 'medium', textAlign: 'center' })}>
+    <div class={css({ position: 'relative', marginY: '12px', fontSize: '14px', fontWeight: 'medium', textAlign: 'center' })}>
       공유하기
 
       <button
@@ -113,6 +113,7 @@
           translateY: '-1/2',
           borderRadius: '4px',
           padding: '2px',
+          color: 'text.faint',
           _hover: { backgroundColor: 'interactive.hover' },
         })}
         onclick={() => (open = false)}
@@ -126,35 +127,35 @@
       <div>
         <a
           class={center({
-            borderRadius: '12px',
+            borderRadius: '6px',
             backgroundColor: 'surface.muted',
-            size: '60px',
+            size: '48px',
             _hover: { backgroundColor: 'interactive.hover' },
           })}
           href={`https://x.com/intent/post?text=${href}`}
           rel="noopener noreferrer"
           target="_blank"
         >
-          <Icon style={css.raw({ color: '[#1D9BF0]' })} icon={TwitterIcon} size={24} />
+          <Icon style={css.raw({ color: '[#1D9BF0]' })} icon={TwitterIcon} size={20} />
         </a>
-        <p class={css({ marginTop: '6px', fontSize: '14px', textAlign: 'center', color: 'text.subtle' })}>트위터</p>
+        <p class={css({ marginTop: '4px', fontSize: '12px', textAlign: 'center', color: 'text.muted' })}>트위터</p>
       </div>
 
       <div>
         <a
           class={center({
-            borderRadius: '12px',
+            borderRadius: '6px',
             backgroundColor: 'surface.muted',
-            size: '60px',
+            size: '48px',
             _hover: { backgroundColor: 'interactive.hover' },
           })}
           href={`https://share.planet.moe/share?text=${href}`}
           rel="noopener noreferrer"
           target="_blank"
         >
-          <Icon style={css.raw({ color: '[#6364FF]' })} icon={MastodonIcon} size={24} />
+          <Icon style={css.raw({ color: '[#6364FF]' })} icon={MastodonIcon} size={20} />
         </a>
-        <p class={css({ marginTop: '6px', fontSize: '14px', textAlign: 'center', color: 'text.subtle' })}>마스토돈</p>
+        <p class={css({ marginTop: '4px', fontSize: '12px', textAlign: 'center', color: 'text.muted' })}>마스토돈</p>
       </div>
     </div>
 
@@ -166,12 +167,13 @@
           gap: '4px',
           borderWidth: '1px',
           borderRadius: '6px',
-          marginY: '16px',
-          paddingX: '12px',
+          marginY: '12px',
+          paddingLeft: '12px',
+          paddingRight: '8px',
           height: '36px',
           backgroundColor: 'surface.subtle',
           _hover: {
-            borderColor: { base: 'brand.200', _dark: 'dark.brand.800' },
+            borderColor: 'border.strong',
           },
         }),
       )}
@@ -185,11 +187,11 @@
       />
 
       <button
-        class={center({
-          borderRadius: '6px',
-          size: '20px',
+        class={css({
+          borderRadius: '4px',
+          padding: '3px',
           color: 'text.faint',
-          _hover: { color: 'text.subtle', backgroundColor: 'interactive.hover' },
+          _hover: { backgroundColor: 'interactive.hover' },
         })}
         onclick={handleCopyLink}
         type="button"

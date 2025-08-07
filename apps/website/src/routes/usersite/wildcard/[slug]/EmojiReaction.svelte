@@ -1,6 +1,8 @@
 <script lang="ts">
   import mixpanel from 'mixpanel-browser';
   import { fade } from 'svelte/transition';
+  import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import ChevronUpIcon from '~icons/lucide/chevron-up';
   import SmilePlusIcon from '~icons/lucide/smile-plus';
   import { fragment, graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
@@ -50,6 +52,7 @@
   `);
 
   let open = $state(false);
+  let showAll = $state(false);
 
   const { anchor, floating } = createFloatingActions({
     placement: 'top',
@@ -58,6 +61,7 @@
       open = false;
     },
   });
+  const MAX_REACTIONS = 100;
 </script>
 
 {#if $postView.allowReaction}
@@ -77,12 +81,11 @@
     <ul
       class={grid({
         columns: 5,
-        gap: '8px',
+        gap: '6px',
         borderWidth: '1px',
         borderColor: 'border.subtle',
-        borderRadius: '8px',
-        paddingX: '8px',
-        paddingY: '6px',
+        borderRadius: '6px',
+        padding: '4px',
         backgroundColor: 'surface.default',
         boxShadow: 'small',
       })}
@@ -92,7 +95,7 @@
       {#each Object.keys(emojis) as emoji (emoji)}
         <li>
           <button
-            class={center({ borderRadius: '4px', padding: '3px', size: 'full', _supportHover: { backgroundColor: 'surface.muted' } })}
+            class={center({ borderRadius: '4px', padding: '5px', size: 'full', _supportHover: { backgroundColor: 'surface.muted' } })}
             onclick={async () => {
               await createPostReaction({ postId: $postView.id, emoji });
               mixpanel.track('create_post_reaction', { emoji });
@@ -107,8 +110,27 @@
   {/if}
 
   <ul class={flex({ align: 'center', gap: '4px', wrap: 'wrap', marginTop: '4px' })}>
-    {#each $postView.reactions as reaction (reaction.id)}
+    {#each showAll ? $postView.reactions : $postView.reactions.slice(0, MAX_REACTIONS) as reaction (reaction.id)}
       <Emoji emoji={reaction.emoji} />
     {/each}
+
+    {#if $postView.reactions.length > MAX_REACTIONS}
+      <li>
+        <button
+          class={flex({ align: 'center', gap: '2px', fontSize: '13px', color: 'text.muted' })}
+          onclick={() => (showAll = !showAll)}
+          type="button"
+        >
+          {#if showAll}
+            <Icon icon={ChevronUpIcon} size={12} />
+            접기
+          {:else}
+            ...
+            <Icon icon={ChevronDownIcon} size={12} />
+            {$postView.reactions.length - MAX_REACTIONS}
+          {/if}
+        </button>
+      </li>
+    {/if}
   </ul>
 {/if}
