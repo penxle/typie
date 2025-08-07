@@ -16,7 +16,7 @@
     name: string;
     nodeId: string;
     editor: Ref<Editor> | undefined;
-    updateAnchorName: (nodeId: string, name: string) => void;
+    updateAnchorName: (nodeId: string, name: string | null) => void;
     outline?: boolean;
   };
 
@@ -72,6 +72,9 @@
       if (nameDraft.trim()) {
         updateAnchorName(nodeId, nameDraft.trim());
         mixpanel.track('anchor_rename');
+      } else {
+        updateAnchorName(nodeId, null);
+        mixpanel.track('anchor_reset');
       }
       isEditing = false;
     } else {
