@@ -66,7 +66,7 @@ class MultiEntitiesMenu extends HookWidget {
             await context.showModal(
               child: ConfirmModal(
                 title: '선택한 항목 삭제',
-                message: '선택한 ${selectedItems.length}개 항목을 삭제하시겠어요?',
+                message: '선택한 ${selectedItems.length}개 항목을 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
                 confirmText: '삭제하기',
                 confirmTextColor: context.colors.textBright,
                 confirmBackgroundColor: context.colors.accentDanger,

@@ -413,7 +413,7 @@ class Editor extends HookWidget {
                                 intercept: true,
                                 child: ConfirmModal(
                                   title: '포스트 삭제',
-                                  message: '"${data.post.title}" 포스트를 삭제하시겠어요?',
+                                  message: '"${data.post.title}" 포스트를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
                                   confirmText: '삭제하기',
                                   confirmTextColor: context.colors.textBright,
                                   confirmBackgroundColor: context.colors.accentDanger,
