@@ -51,6 +51,15 @@
       <Icon icon={editor.storage.anchors.current[node.attrs.nodeId] === undefined ? BookmarkIcon : BookmarkFilledIcon} size={18} />
     </button>
 
-    {editor.storage.anchors.current[node.attrs.nodeId]}
+    <div
+      class={css({
+        backgroundColor: 'white/80',
+        borderRadius: '4px',
+        fontSize: '12px',
+        color: 'text.subtle',
+      })}
+    >
+      {editor.storage.anchors.current[node.attrs.nodeId]}
+    </div>
   </div>
 {/if}
