@@ -102,7 +102,7 @@ class CanvasScreen extends HookWidget {
                               intercept: true,
                               child: ConfirmModal(
                                 title: '캔버스 삭제',
-                                message: '"${canvas.title}" 캔버스를 삭제하시겠어요?',
+                                message: '"${canvas.title}" 캔버스를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
                                 confirmText: '삭제하기',
                                 confirmTextColor: context.colors.textBright,
                                 confirmBackgroundColor: context.colors.accentDanger,
