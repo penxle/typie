@@ -28,6 +28,7 @@ import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.
 import 'package:typie/screens/entity/__generated__/delete_canvas_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.dart';
+import 'package:typie/screens/entity/__generated__/duplicate_canvas_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/duplicate_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/move_entity_mutation.req.gql.dart';
@@ -712,6 +713,21 @@ class _EntityList extends HookWidget {
                                           entity: entities[index],
                                           via: 'entity_canvas_menu',
                                         ),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.copy,
+                                    label: '복제하기',
+                                    onTap: () async {
+                                      await client.request(
+                                        GEntityScreen_DuplicateCanvas_MutationReq(
+                                          (b) => b..vars.input.canvasId = canvas.id,
+                                        ),
+                                      );
+
+                                      unawaited(
+                                        mixpanel.track('duplicate_canvas', properties: {'via': 'entity_canvas_menu'}),
                                       );
                                     },
                                   ),
