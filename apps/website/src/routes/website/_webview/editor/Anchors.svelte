@@ -95,6 +95,12 @@
       mixpanel.track('anchor_add');
     });
 
+    window.__webview__?.setProcedure('addAnchorWithName', ({ nodeId, name }: { nodeId: string; name: string | null }) => {
+      anchors.current = { ...anchors.current, [nodeId]: name };
+
+      mixpanel.track('anchor_add');
+    });
+
     window.__webview__?.setProcedure('removeAnchor', (nodeId: string) => {
       anchors.current = Object.fromEntries(Object.entries(anchors.current).filter(([key]) => key !== nodeId));
 
@@ -126,6 +132,19 @@
       });
 
       mixpanel.track('anchor_scroll_to_bottom');
+    });
+
+    window.__webview__?.setProcedure('updateAnchorName', ({ nodeId, name }: { nodeId: string; name: string }) => {
+      const trimmedName = name.trim();
+      const finalName = trimmedName || null;
+
+      anchors.current = { ...anchors.current, [nodeId]: finalName };
+
+      if (finalName) {
+        mixpanel.track('anchor_rename');
+      } else {
+        mixpanel.track('anchor_reset');
+      }
     });
   });
 </script>
