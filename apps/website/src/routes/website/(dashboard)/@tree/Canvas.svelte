@@ -1,17 +1,12 @@
 <script lang="ts">
-  import mixpanel from 'mixpanel-browser';
-  import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
-  import InfoIcon from '~icons/lucide/info';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
-  import TrashIcon from '~icons/lucide/trash';
-  import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
-  import { HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
+  import { Icon, Menu } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { Dialog } from '$lib/notification';
   import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
+  import { center } from '$styled-system/patterns';
+  import CanvasMenu from '../@context-menu/CanvasMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import { getTreeContext } from './state.svelte';
@@ -41,39 +36,6 @@
       }
     `),
   );
-
-  const duplicateCanvas = graphql(`
-    mutation DashboardLayout_EntityTree_Canvas_DuplicateCanvas_Mutation($input: DuplicateCanvasInput!) {
-      duplicateCanvas(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
-  const deleteCanvas = graphql(`
-    mutation DashboardLayout_EntityTree_Canvas_DeleteCanvas_Mutation($input: DeleteCanvasInput!) {
-      deleteCanvas(input: $input) {
-        id
-
-        entity {
-          id
-
-          site {
-            id
-
-            ...DashboardLayout_EntityTree_site
-            ...DashboardLayout_Trash_site
-            ...DashboardLayout_PlanUsageWidget_site
-          }
-        }
-      }
-    }
-  `);
 
   const app = getAppContext();
   const treeState = getTreeContext();
@@ -173,62 +135,7 @@
     {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($canvas.entity.id)}
       <MultiEntitiesMenu />
     {:else}
-      <MenuItem
-        icon={CopyIcon}
-        onclick={async () => {
-          const resp = await duplicateCanvas({ canvasId: $canvas.id });
-          mixpanel.track('duplicate_canvas', { via: 'tree' });
-          await goto(`/${resp.entity.slug}`);
-        }}
-      >
-        복제
-      </MenuItem>
-
-      <HorizontalDivider color="secondary" />
-
-      <MenuItem
-        icon={TrashIcon}
-        onclick={async () => {
-          Dialog.confirm({
-            title: '캔버스 삭제',
-            message: `정말 "${$canvas.title}" 캔버스를 삭제하시겠어요?`,
-            children: deleteDetailsView,
-            action: 'danger',
-            actionLabel: '삭제',
-            actionHandler: async () => {
-              await deleteCanvas({ canvasId: $canvas.id });
-              mixpanel.track('delete_canvas', { via: 'tree' });
-              app.state.ancestors = [];
-              app.state.current = undefined;
-              if (treeState.selectedEntityIds.has($canvas.entity.id)) {
-                treeState.selectedEntityIds.delete($canvas.entity.id);
-              }
-              if (treeState.lastSelectedEntityId === $canvas.entity.id) {
-                treeState.lastSelectedEntityId = undefined;
-              }
-            },
-          });
-        }}
-        variant="danger"
-      >
-        삭제
-      </MenuItem>
+      <CanvasMenu canvas={$canvas} via="tree" />
     {/if}
   </Menu>
-
-  {#snippet deleteDetailsView()}
-    <div
-      class={flex({
-        alignItems: 'center',
-        gap: '6px',
-        borderRadius: '8px',
-        paddingX: '12px',
-        paddingY: '8px',
-        backgroundColor: 'surface.subtle',
-      })}
-    >
-      <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
-      <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
-    </div>
-  {/snippet}
 </a>

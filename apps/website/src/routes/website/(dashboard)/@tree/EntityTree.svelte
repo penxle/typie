@@ -175,6 +175,26 @@
     }
   });
 
+  $effect(() => {
+    if (!treeState.entityMap) return;
+
+    const validEntityIds = new Set(treeState.entityMap.keys());
+
+    const invalidSelectedIds = treeState.selectedEntityIds.difference(validEntityIds);
+    for (const entityId of invalidSelectedIds) {
+      treeState.selectedEntityIds.delete(entityId);
+    }
+
+    if (treeState.lastSelectedEntityId && !validEntityIds.has(treeState.lastSelectedEntityId)) {
+      treeState.lastSelectedEntityId = undefined;
+    }
+
+    if (app.state.current && !validEntityIds.has(app.state.current)) {
+      app.state.ancestors = [];
+      app.state.current = undefined;
+    }
+  });
+
   // NOTE: 링크 관련 브라우저 기본 동작 방지
   const handleClick: MouseEventHandler<HTMLDivElement> = (e) => {
     const element = (e.target as HTMLElement).closest<HTMLElement>('[data-id]');
@@ -441,11 +461,6 @@
 
           treeState.selectedEntityIds.clear();
           treeState.lastSelectedEntityId = undefined;
-
-          if (app.state.current && selectedIds.includes(app.state.current)) {
-            app.state.ancestors = [];
-            app.state.current = undefined;
-          }
 
           Toast.success(`${selectedIds.length}개의 항목이 삭제되었어요`);
         } catch {

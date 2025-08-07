@@ -14,20 +14,14 @@
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostSyncType, PostType, UserRole } from '@/enums';
-  import BlendIcon from '~icons/lucide/blend';
+  import { PostSyncType, UserRole } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import IconClockFading from '~icons/lucide/clock-fading';
-  import CopyIcon from '~icons/lucide/copy';
   import ElipsisIcon from '~icons/lucide/ellipsis';
-  import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderIcon from '~icons/lucide/folder';
-  import InfoIcon from '~icons/lucide/info';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import PanelRightCloseIcon from '~icons/lucide/panel-right-close';
   import PanelRightOpenIcon from '~icons/lucide/panel-right-open';
-  import ShapesIcon from '~icons/lucide/shapes';
-  import TrashIcon from '~icons/lucide/trash';
   import XIcon from '~icons/lucide/x';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
@@ -35,11 +29,12 @@
   import { autosize, tooltip } from '$lib/actions';
   import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { Dialog, Tip } from '$lib/notification';
+  import { Tip } from '$lib/notification';
   import { getNodeView, TiptapEditor } from '$lib/tiptap';
   import { clamp, mmToPx, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
+  import PostMenu from '../@context-menu/PostMenu.svelte';
   import Anchor from './Anchor.svelte';
   import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
@@ -77,6 +72,8 @@
           id
           slug
           url
+          visibility
+          availability
 
           parent {
             id
@@ -164,67 +161,6 @@
   const syncPost = graphql(`
     mutation Editor_SyncPost_Mutation($input: SyncPostInput!) {
       syncPost(input: $input)
-    }
-  `);
-
-  const duplicatePost = graphql(`
-    mutation Editor_DuplicatePost_Mutation($input: DuplicatePostInput!) {
-      duplicatePost(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
-  const updatePostType = graphql(`
-    mutation Editor_UpdatePostType_Mutation($input: UpdatePostTypeInput!) {
-      updatePostType(input: $input) {
-        id
-        type
-
-        entity {
-          id
-
-          site {
-            id
-
-            templates {
-              id
-            }
-          }
-        }
-      }
-    }
-  `);
-
-  const deletePost = graphql(`
-    mutation Editor_DeletePost_Mutation($input: DeletePostInput!) {
-      deletePost(input: $input) {
-        id
-
-        entity {
-          id
-
-          site {
-            id
-            ...DashboardLayout_EntityTree_site
-            ...DashboardLayout_Trash_site
-            ...DashboardLayout_PlanUsageWidget_site
-          }
-
-          user {
-            id
-
-            recentlyViewedEntities {
-              id
-            }
-          }
-        }
-      }
     }
   `);
 
@@ -753,76 +689,8 @@
                 </button>
               {/snippet}
 
-              <MenuItem external href={$query.entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
-
-              <HorizontalDivider color="secondary" />
-
-              <MenuItem
-                icon={BlendIcon}
-                onclick={() => {
-                  app.state.shareOpen = $query.entity.id;
-                  mixpanel.track('open_post_share_modal', { via: 'editor' });
-                }}
-              >
-                공유 및 게시
-              </MenuItem>
-
-              <MenuItem
-                icon={CopyIcon}
-                onclick={async () => {
-                  if ($query.entity.node.__typename === 'Post') {
-                    const postId = $query.entity.node.id;
-
-                    const resp = await duplicatePost({ postId });
-                    mixpanel.track('duplicate_post', { via: 'editor' });
-                    await goto(`/${resp.entity.slug}`);
-                  }
-                }}
-              >
-                복제
-              </MenuItem>
-
-              {#if $query.entity.node.type === PostType.NORMAL}
-                <MenuItem
-                  icon={ShapesIcon}
-                  onclick={() => {
-                    Dialog.confirm({
-                      title: '템플릿으로 전환',
-                      message:
-                        '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
-                      actionLabel: '전환',
-                      actionHandler: async () => {
-                        if ($query.entity.node.__typename === 'Post') {
-                          const postId = $query.entity.node.id;
-
-                          await updatePostType({ postId, type: PostType.TEMPLATE });
-                        }
-                      },
-                    });
-                  }}
-                >
-                  템플릿으로 전환
-                </MenuItem>
-              {:else if $query.entity.node.type === PostType.TEMPLATE}
-                <MenuItem
-                  icon={ShapesIcon}
-                  onclick={() => {
-                    Dialog.confirm({
-                      title: '포스트로 전환',
-                      message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
-                      actionLabel: '전환',
-                      actionHandler: async () => {
-                        if ($query.entity.node.__typename === 'Post') {
-                          const postId = $query.entity.node.id;
-
-                          await updatePostType({ postId, type: PostType.NORMAL });
-                        }
-                      },
-                    });
-                  }}
-                >
-                  포스트로 전환
-                </MenuItem>
+              {#if $query.entity.node.__typename === 'Post'}
+                <PostMenu entity={$query.entity} post={$query.entity.node} via="editor" />
               {/if}
 
               <HorizontalDivider color="secondary" />
@@ -841,53 +709,7 @@
                   {/if}
                 </MenuItem>
               {/if}
-
-              <HorizontalDivider color="secondary" />
-
-              <MenuItem
-                icon={TrashIcon}
-                onclick={() => {
-                  if ($query.entity.node.__typename === 'Post') {
-                    const postId = $query.entity.node.id;
-                    const title = $query.entity.node.title;
-
-                    Dialog.confirm({
-                      title: '포스트 삭제',
-                      message: `정말 "${title}" 포스트를 삭제하시겠어요?`,
-                      children: deleteDetailsView,
-                      action: 'danger',
-                      actionLabel: '삭제',
-                      actionHandler: async () => {
-                        await deletePost({ postId });
-                        mixpanel.track('delete_post', { via: 'editor' });
-                        app.state.ancestors = [];
-                        app.state.current = undefined;
-                      },
-                    });
-                  }
-                }}
-                variant="danger"
-              >
-                삭제
-              </MenuItem>
             </Menu>
-            {#snippet deleteDetailsView()}
-              <div
-                class={flex({
-                  alignItems: 'center',
-                  gap: '6px',
-                  borderRadius: '8px',
-                  paddingX: '12px',
-                  paddingY: '8px',
-                  backgroundColor: 'surface.subtle',
-                })}
-              >
-                <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
-                <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>
-                  삭제 후 30일 동안 휴지통에 보관돼요
-                </span>
-              </div>
-            {/snippet}
           {/if}
 
           <button
