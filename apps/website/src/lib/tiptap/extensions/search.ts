@@ -165,7 +165,7 @@ export const Search = Extension.create<unknown, SearchStorage>({
 
           const marks = state.doc.resolve(match.from).marksAcross(state.doc.resolve(match.to));
           tr.replaceWith(match.from, match.to, this.editor.schema.text(replacement, marks));
-          tr.setSelection(TextSelection.create(tr.doc, match.to));
+          tr.setSelection(TextSelection.create(tr.doc, match.from + replacement.length));
 
           commands.scrollIntoViewFixed({ pos: match.from, position: 0.25 });
 
