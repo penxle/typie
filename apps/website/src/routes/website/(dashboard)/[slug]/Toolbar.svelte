@@ -96,6 +96,9 @@
       borderBottomWidth: '1px',
       borderColor: 'border.subtle',
       paddingY: '8px',
+      position: 'relative',
+      zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor',
+      backgroundColor: 'surface.default',
     },
     style,
   )}

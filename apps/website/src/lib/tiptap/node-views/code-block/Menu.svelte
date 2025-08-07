@@ -184,7 +184,7 @@
       maxHeight: '360px',
       overflowY: 'auto',
       scrollbar: 'hidden',
-      zIndex: '50',
+      zIndex: 'editor',
       boxShadow: 'small',
     })}
     role="menu"

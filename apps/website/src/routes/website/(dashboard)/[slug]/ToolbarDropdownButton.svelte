@@ -151,7 +151,7 @@
       borderColor: 'border.subtle',
       borderBottomRadius: '4px',
       backgroundColor: 'surface.default',
-      zIndex: '50',
+      zIndex: 'overEditor',
       boxShadow: 'small',
       overflow: 'hidden',
     })}

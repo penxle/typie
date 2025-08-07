@@ -37,7 +37,7 @@
     color: 'text.bright',
     backgroundColor: 'surface.dark',
     boxShadow: 'medium',
-    zIndex: '50',
+    zIndex: 'tooltip',
     pointerEvents: 'none',
   })}
   role="tooltip"

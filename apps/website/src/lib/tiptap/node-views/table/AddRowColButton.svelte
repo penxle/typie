@@ -104,7 +104,6 @@
     'group',
     css({
       position: 'absolute',
-      zIndex: '10',
       left: '0',
       bottom: '0',
       right: '0',
@@ -153,7 +152,6 @@
     'group',
     css({
       position: 'absolute',
-      zIndex: '10',
       top: '0',
       right: '0',
       bottom: '0',
@@ -204,7 +202,6 @@
     'group',
     css({
       position: 'absolute',
-      zIndex: '10',
       right: '0',
       bottom: '0',
       size: '23px',

@@ -90,7 +90,6 @@
         top: '-6px',
         left: '0',
         right: '0',
-        zIndex: '2',
         height: '12px',
         cursor: 'row-resize',
         _hoverAfter: {

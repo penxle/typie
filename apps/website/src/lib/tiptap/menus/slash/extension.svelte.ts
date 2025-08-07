@@ -6,6 +6,7 @@ import { matchSorter } from 'match-sorter';
 import { mount, unmount } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 import { css } from '$styled-system/css';
+import { token } from '$styled-system/tokens';
 import Component from './Component.svelte';
 import { menuItems } from './items';
 import type { VirtualElement } from '@floating-ui/dom';
@@ -177,7 +178,7 @@ export const SlashMenu = Extension.create({
                   dom.style.left = `${x}px`;
                   dom.style.top = `${y}px`;
                   dom.style.visibility = middlewareData.hide?.referenceHidden ? 'hidden' : 'visible';
-                  dom.style.zIndex = '30';
+                  dom.style.zIndex = token('zIndex.editor');
                 });
               }
 

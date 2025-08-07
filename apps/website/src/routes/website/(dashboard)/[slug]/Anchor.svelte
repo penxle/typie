@@ -3,7 +3,7 @@
   import { fly } from 'svelte/transition';
   import IconCheck from '~icons/lucide/check';
   import IconEdit from '~icons/lucide/pen';
-  import { tooltip } from '$lib/actions';
+  import { createFloatingActions, tooltip } from '$lib/actions';
   import Icon from '$lib/components/Icon.svelte';
   import { css, cx } from '$styled-system/css';
   import { center } from '$styled-system/patterns';
@@ -31,6 +31,10 @@
     if (isEditing && inputEl) {
       inputEl.select();
     }
+  });
+
+  $effect(() => {
+    nameDraft = name;
   });
 
   const handleClick = () => {
@@ -84,26 +88,28 @@
       nameDraft = name;
     }
   };
+
+  const { anchor, floating } = createFloatingActions({
+    placement: 'left',
+    offset: 8,
+    disableAutoUpdate: false,
+  });
 </script>
 
-<div
-  style:top={`calc(12px + ${position} * (100% - 24px))`}
-  class={cx(
-    'group',
-    center({
-      position: 'absolute',
-      right: '8px',
-      gap: '8px',
-      zIndex: '10',
-      translate: 'auto',
-      translateY: '-1/2',
-    }),
-  )}
-  {onmouseenter}
-  {onmouseleave}
-  role="none"
->
-  {#if show || outline}
+{#if show || outline}
+  <div
+    class={cx(
+      'group',
+      center({
+        gap: '8px',
+        zIndex: 'overEditor',
+      }),
+    )}
+    {onmouseenter}
+    {onmouseleave}
+    role="none"
+    use:floating
+  >
     <label
       class={center({
         gap: '4px',
@@ -168,23 +174,32 @@
         </button>
       {/if}
     </label>
-  {/if}
+  </div>
+{/if}
 
-  <button
-    class={css({
-      width: '16px',
-      height: '2px',
-      borderRadius: 'full',
-      backgroundColor: { base: 'gray.300', _dark: 'gray.600' },
-      opacity: '80',
-      transition: 'all',
-      _groupHover: {
-        height: '4px',
-        opacity: '100',
-      },
-    })}
-    aria-label={name}
-    onclick={handleClick}
-    type="button"
-  ></button>
-</div>
+<button
+  style:top={`calc(12px + ${position} * (100% - 24px))`}
+  class={css({
+    position: 'absolute',
+    right: '8px',
+    width: '16px',
+    height: '2px',
+    borderRadius: 'full',
+    backgroundColor: { base: 'gray.300', _dark: 'gray.600' },
+    opacity: '80',
+    transition: 'all',
+    translate: 'auto',
+    translateY: '-1/2',
+    zIndex: 'overEditor',
+    _hover: {
+      height: '4px',
+      opacity: '100',
+    },
+  })}
+  aria-label={name}
+  onclick={handleClick}
+  {onmouseenter}
+  {onmouseleave}
+  type="button"
+  use:anchor
+></button>

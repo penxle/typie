@@ -100,7 +100,7 @@
 
 {#if app.state.postsOpen && !app.preference.current.postsExpanded}
   <div
-    class={css({ position: 'fixed', inset: '0', zIndex: '40' })}
+    class={css({ position: 'fixed', inset: '0', zIndex: 'underPanel' })}
     onclick={() => (app.state.postsOpen = false)}
     role="none"
     use:portal
@@ -136,7 +136,7 @@
           width: app.state.postsOpen ? 'var(--fixed-width, 0)' : '0',
           maxWidth: app.state.postsOpen ? 'var(--max-width)' : '0',
           opacity: app.state.postsOpen ? '100' : '0',
-          zIndex: '50',
+          zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'panel',
           transitionProperty: 'left, opacity, position, margin-block',
           overflow: 'var(--overflow)',
         },
@@ -318,7 +318,7 @@
       position: 'absolute',
       top: '0',
       right: '-6px',
-      zIndex: '2',
+      zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'panel',
       width: '12px',
       height: 'full',
       cursor: 'col-resize',

@@ -146,7 +146,7 @@
           }}
           src={inflightUrl}
         />
-        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50', zIndex: '1' })}>
+        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50', zIndex: 'editor' })}>
           <RingSpinner style={css.raw({ size: '24px', color: 'text.disabled' })} />
         </div>
       {/if}
@@ -166,7 +166,7 @@
             backgroundColor: '[#363839/70]',
             opacity: '0',
             transition: 'opacity',
-            zIndex: '2',
+            zIndex: 'editor',
             _hover: { backgroundColor: '[#363839/40]' },
             _groupHover: { opacity: '100' },
           })}
@@ -183,7 +183,7 @@
             bottom: '0',
             left: '10px',
             alignItems: 'center',
-            zIndex: '2',
+            zIndex: 'editor',
             pointerEvents: 'none',
           })}
         >
@@ -219,7 +219,7 @@
             bottom: '0',
             right: '10px',
             alignItems: 'center',
-            zIndex: '2',
+            zIndex: 'editor',
             pointerEvents: 'none',
           })}
         >
@@ -316,7 +316,7 @@
       width: '380px',
       backgroundColor: 'surface.default',
       boxShadow: 'small',
-      zIndex: '1',
+      zIndex: 'editor',
     })}
     use:floating
   >

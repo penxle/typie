@@ -75,7 +75,7 @@
         paddingX: '14px',
         paddingY: '8px',
         backgroundColor: 'surface.default',
-        zIndex: '2',
+        zIndex: 'editor',
       })}
     >
       {@render children()}

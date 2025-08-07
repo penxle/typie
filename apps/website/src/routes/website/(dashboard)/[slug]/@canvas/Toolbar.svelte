@@ -33,7 +33,7 @@
     boxShadow: 'small',
     translate: 'auto',
     translateX: '-1/2',
-    zIndex: '10',
+    zIndex: 'overEditor',
   })}
 >
   <ToolbarButton

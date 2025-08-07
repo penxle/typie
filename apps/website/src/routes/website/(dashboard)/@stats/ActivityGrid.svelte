@@ -187,7 +187,7 @@
       paddingY: '6px',
       color: 'text.bright',
       backgroundColor: 'surface.dark',
-      zIndex: '50',
+      zIndex: 'modal',
     })}
     use:floating
     in:fade={{ duration: 100, delay: 100 }}
