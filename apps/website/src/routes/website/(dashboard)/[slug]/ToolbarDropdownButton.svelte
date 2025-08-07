@@ -1,10 +1,9 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import { createFloatingActions } from '$lib/actions';
+  import { createFloatingActions, tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { css } from '$styled-system/css';
-  import ToolbarTooltip from './ToolbarTooltip.svelte';
   import type { Placement } from '@floating-ui/dom';
   import type { Snippet } from 'svelte';
   import type { SystemStyleObject } from '$styled-system/types';
@@ -99,51 +98,50 @@
     <span class={css({ fontSize: '11px' })}>{label}</span>
   </button>
 {:else if size === 'small'}
-  <ToolbarTooltip {label}>
-    <button
-      class={css(
-        {
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: '2px',
-          borderRadius: '4px',
-          paddingX: chevron ? '4px' : '0',
-          width: chevron ? 'fit' : '24px',
-          height: '24px',
-          textAlign: 'left',
-          color: active ? 'text.brand' : 'text.subtle',
-          transition: 'common',
-          _enabled: {
-            _hover: { color: 'text.brand' },
-            _pressed: { color: 'text.brand' },
-          },
-          _disabled: { opacity: '50' },
+  <button
+    class={css(
+      {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '2px',
+        borderRadius: '4px',
+        paddingX: chevron ? '4px' : '0',
+        width: chevron ? 'fit' : '24px',
+        height: '24px',
+        textAlign: 'left',
+        color: active ? 'text.brand' : 'text.subtle',
+        transition: 'common',
+        _enabled: {
+          _hover: { color: 'text.brand' },
+          _pressed: { color: 'text.brand' },
         },
-        style,
-      )}
-      aria-label={label}
-      aria-pressed={opened}
-      {disabled}
-      onclick={open}
-      type="button"
-      use:anchorAction
-    >
-      {@render anchor({ open, opened })}
+        _disabled: { opacity: '50' },
+      },
+      style,
+    )}
+    aria-label={label}
+    aria-pressed={opened}
+    {disabled}
+    onclick={open}
+    type="button"
+    use:anchorAction
+    use:tooltip={{ message: label, delay: 1000, arrow: false }}
+  >
+    {@render anchor({ open, opened })}
 
-      {#if chevron}
-        <Icon
-          style={css.raw({
-            color: 'text.faint',
-            transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
-            transitionDuration: '150ms',
-          })}
-          icon={ChevronDownIcon}
-          size={16}
-        />
-      {/if}
-    </button>
-  </ToolbarTooltip>
+    {#if chevron}
+      <Icon
+        style={css.raw({
+          color: 'text.faint',
+          transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
+          transitionDuration: '150ms',
+        })}
+        icon={ChevronDownIcon}
+        size={16}
+      />
+    {/if}
+  </button>
 {/if}
 
 {#if opened}

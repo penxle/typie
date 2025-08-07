@@ -504,6 +504,7 @@
         active={editor?.current.isActive('bold')}
         disabled={!editor?.current.can().toggleBold()}
         icon={BoldIcon}
+        keys={['Mod', 'B']}
         label="굵게"
         onclick={() => {
           editor?.current.chain().focus().toggleBold().run();
@@ -515,6 +516,7 @@
         active={editor?.current.isActive('italic')}
         disabled={!editor?.current.can().toggleItalic()}
         icon={ItalicIcon}
+        keys={['Mod', 'I']}
         label="기울임"
         onclick={() => {
           editor?.current.chain().focus().toggleItalic().run();
@@ -526,6 +528,7 @@
         active={editor?.current.isActive('strike')}
         disabled={!editor?.current.can().toggleStrike()}
         icon={StrikethroughIcon}
+        keys={['Mod', 'Shift', 'S']}
         label="취소선"
         onclick={() => {
           editor?.current.chain().focus().toggleStrike().run();
@@ -537,6 +540,7 @@
         active={editor?.current.isActive('underline')}
         disabled={!editor?.current.can().toggleUnderline()}
         icon={UnderlineIcon}
+        keys={['Mod', 'U']}
         label="밑줄"
         onclick={() => {
           editor?.current.chain().focus().toggleUnderline().run();
