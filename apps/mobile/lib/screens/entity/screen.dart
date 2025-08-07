@@ -36,6 +36,7 @@ import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.d
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_site_id_query.req.gql.dart';
 import 'package:typie/screens/entity/move_entity_modal.dart';
+import 'package:typie/screens/entity/multi_entities_menu.dart';
 import 'package:typie/screens/entity/selected_entities_bar.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/widgets/forms/form.dart';
@@ -428,6 +429,21 @@ class _EntityList extends HookWidget {
                         },
                         onLongPress: () async {
                           if (isReordering.value) {
+                            return;
+                          }
+
+                          if (isSelecting.value && selectedItems.value.contains(entities[index].id)) {
+                            await context.showBottomSheet(
+                              child: MultiEntitiesMenu(
+                                selectedItems: selectedItems.value,
+                                entities: entities,
+                                onExitSelectionMode: () {
+                                  isSelecting.value = false;
+                                  selectedItems.value = {};
+                                },
+                                via: 'entity_long_press',
+                              ),
+                            );
                             return;
                           }
 
