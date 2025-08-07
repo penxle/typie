@@ -2,7 +2,6 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import dayjs from 'dayjs';
-  import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
   import { onMount, tick } from 'svelte';
@@ -11,21 +10,17 @@
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { CanvasSyncType } from '@/enums';
-  import CopyIcon from '~icons/lucide/copy';
   import ElipsisIcon from '~icons/lucide/ellipsis';
-  import InfoIcon from '~icons/lucide/info';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
-  import TrashIcon from '~icons/lucide/trash';
   import { browser } from '$app/environment';
-  import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { tooltip } from '$lib/actions';
   import { Canvas, CanvasEditor } from '$lib/canvas';
-  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
+  import { Helmet, Icon, Menu } from '$lib/components';
   import { getAppContext, getThemeContext } from '$lib/context';
-  import { Dialog } from '$lib/notification';
   import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
+  import { center } from '$styled-system/patterns';
+  import CanvasMenu from '../../@context-menu/CanvasMenu.svelte';
   import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -79,38 +74,6 @@
       }
     `),
   );
-
-  const duplicateCanvas = graphql(`
-    mutation Canvas_DuplicateCanvas_Mutation($input: DuplicateCanvasInput!) {
-      duplicateCanvas(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
-  const deleteCanvas = graphql(`
-    mutation Canvas_DeleteCanvas_Mutation($input: DeleteCanvasInput!) {
-      deleteCanvas(input: $input) {
-        id
-
-        entity {
-          id
-
-          site {
-            id
-            ...DashboardLayout_EntityTree_site
-            ...DashboardLayout_Trash_site
-            ...DashboardLayout_PlanUsageWidget_site
-          }
-        }
-      }
-    }
-  `);
 
   const syncCanvas = graphql(`
     mutation DashboardSlugPage_Canvas_SyncCanvas_Mutation($input: SyncCanvasInput!) {
@@ -446,64 +409,10 @@
         </button>
       {/snippet}
 
-      <MenuItem
-        icon={CopyIcon}
-        onclick={async () => {
-          if (!canvasId) return;
-
-          const resp = await duplicateCanvas({ canvasId });
-          mixpanel.track('duplicate_canvas', { via: 'editor' });
-          await goto(`/${resp.entity.slug}`);
-        }}
-      >
-        복제
-      </MenuItem>
-
-      <HorizontalDivider color="secondary" />
-
-      <MenuItem
-        icon={TrashIcon}
-        onclick={() => {
-          if ($query.entity.node.__typename === 'Canvas') {
-            const canvasId = $query.entity.node.id;
-            const title = $query.entity.node.title;
-
-            Dialog.confirm({
-              title: '캔버스 삭제',
-              message: `정말 "${title}" 캔버스를 삭제하시겠어요?`,
-              children: deleteDetailsView,
-              action: 'danger',
-              actionLabel: '삭제',
-              actionHandler: async () => {
-                await deleteCanvas({ canvasId });
-                mixpanel.track('delete_canvas', { via: 'editor' });
-                app.state.ancestors = [];
-                app.state.current = undefined;
-              },
-            });
-          }
-        }}
-        variant="danger"
-      >
-        삭제
-      </MenuItem>
+      {#if $query.entity.node.__typename === 'Canvas'}
+        <CanvasMenu canvas={$query.entity.node} via="editor" />
+      {/if}
     </Menu>
-
-    {#snippet deleteDetailsView()}
-      <div
-        class={flex({
-          alignItems: 'center',
-          gap: '6px',
-          borderRadius: '8px',
-          paddingX: '12px',
-          paddingY: '8px',
-          backgroundColor: 'surface.subtle',
-        })}
-      >
-        <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
-      </div>
-    {/snippet}
   </div>
 
   {#if canvas}

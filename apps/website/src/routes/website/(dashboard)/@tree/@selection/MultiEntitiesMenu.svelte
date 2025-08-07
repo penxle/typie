@@ -9,14 +9,12 @@
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { graphql } from '$graphql';
   import { HorizontalDivider, Icon, MenuItem } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import { Dialog, Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
 
-  const app = getAppContext();
   const treeState = getTreeContext();
 
   const deleteEntities = graphql(`
@@ -109,11 +107,6 @@
 
           treeState.selectedEntityIds.clear();
           treeState.lastSelectedEntityId = undefined;
-
-          if (app.state.current && entityIds.includes(app.state.current)) {
-            app.state.ancestors = [];
-            app.state.current = undefined;
-          }
 
           Toast.success(`${entityIds.length}개의 항목이 삭제되었어요`);
         } catch {
