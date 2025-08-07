@@ -52,17 +52,6 @@
 
         handleKeyDown: onkeydown,
 
-        clipboardTextSerializer: (content) => {
-          const text = content.content.textBetween(0, content.content.size, '\n', (node) => {
-            if (node.type.name === 'hard_break') {
-              return '\n';
-            }
-
-            return '';
-          });
-          return text.replaceAll(/\n{3,}/g, '\n\n');
-        },
-
         handleDrop: (view, event) => {
           if (event.dataTransfer?.files?.length) {
             const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.anchor;
