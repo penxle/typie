@@ -17,9 +17,11 @@
     setFullWidth?: boolean;
     disableAutoUpdate?: boolean;
     onopen?: () => void;
+    onclose?: () => void;
     button?: Snippet<[{ open: boolean }]>;
     action?: Snippet;
     children?: Snippet<[{ close: () => void }]>;
+    contextMenuPosition?: { x: number; y: number } | null;
   };
 
   let {
@@ -31,9 +33,11 @@
     setFullWidth = false,
     disableAutoUpdate = false,
     onopen,
+    onclose,
     button,
     action,
     children,
+    contextMenuPosition = null,
   }: Props = $props();
 
   let buttonEl = $state<HTMLButtonElement>();
@@ -57,6 +61,12 @@
 
   afterNavigate(() => {
     open = false;
+  });
+
+  $effect(() => {
+    if (!open && onclose) {
+      onclose();
+    }
   });
 
   const getMenuItems = () => {
@@ -127,22 +137,35 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<button
-  bind:this={buttonEl}
-  class={css(style)}
-  aria-expanded={open}
-  onclick={(e) => {
-    e.preventDefault();
-    open = !open;
-    if (open) {
-      onopen?.();
-    }
-  }}
-  type="button"
-  use:anchor
->
-  {@render button?.({ open })}
-</button>
+{#if contextMenuPosition}
+  <div
+    style:left={`${contextMenuPosition.x}px`}
+    style:top={`${contextMenuPosition.y}px`}
+    class={css({
+      position: 'fixed',
+      size: '0',
+      pointerEvents: 'none',
+    })}
+    use:anchor
+  ></div>
+{:else if button}
+  <button
+    bind:this={buttonEl}
+    class={css(style)}
+    aria-expanded={open}
+    onclick={(e) => {
+      e.preventDefault();
+      open = !open;
+      if (open) {
+        onopen?.();
+      }
+    }}
+    type="button"
+    use:anchor
+  >
+    {@render button?.({ open })}
+  </button>
+{/if}
 
 {#if open}
   <div class={css({ position: 'fixed', inset: '0', zIndex: 'menu' })} onclick={close} role="none" use:portal></div>
