@@ -164,7 +164,11 @@
             outline: 'none',
           })}
           maxlength={20}
-          onblur={handleEditClick}
+          onblur={(e) => {
+            if (isEditing) {
+              handleEditClick(e);
+            }
+          }}
           onclick={(e) => e.stopPropagation()}
           onkeydown={handleKeydown}
           type="text"
