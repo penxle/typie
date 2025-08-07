@@ -61,11 +61,10 @@
     class={css({
       position: 'fixed',
       inset: '0',
-      zIndex: '1',
+      zIndex: 'overEditor',
       lgDown: {
         backgroundColor: 'gray.900/30',
         transition: 'opacity',
-        zIndex: '50',
       },
     })}
     onclick={() => (open = false)}
@@ -86,7 +85,7 @@
       backgroundColor: 'surface.default',
       width: 'full',
       boxShadow: 'medium',
-      zIndex: '50',
+      zIndex: 'overEditor',
       lgDown: {
         position: '[fixed!]',
         top: '[initial!]',

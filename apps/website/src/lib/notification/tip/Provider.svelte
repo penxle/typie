@@ -10,7 +10,7 @@
     direction: 'column',
     gap: '8px',
     position: 'fixed',
-    zIndex: '[1000]',
+    zIndex: 'tip',
     right: '20px',
     bottom: '55px',
     width: '300px',

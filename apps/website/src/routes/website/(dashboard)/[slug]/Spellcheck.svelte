@@ -221,7 +221,7 @@
 {/if}
 
 {#if activeError}
-  <div class={flex({ alignItems: 'center', gap: '4px', zIndex: '10', wrap: 'wrap' })} use:floating>
+  <div class={flex({ alignItems: 'center', gap: '4px', zIndex: 'overEditor', wrap: 'wrap' })} use:floating>
     {#each activeError.corrections as correction, index (index)}
       <button
         class={flex({

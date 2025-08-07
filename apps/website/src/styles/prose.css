@@ -69,7 +69,6 @@
     top: -1px;
     bottom: -1px;
     width: 4px;
-    z-index: 5;
     background-color: var(--prosemirror-color-selection);
     cursor: ew-resize;
     cursor: col-resize;

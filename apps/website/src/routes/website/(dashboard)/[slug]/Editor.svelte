@@ -770,6 +770,7 @@
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div
+          id="editor-container"
           style:position={app.preference.current.zenModeEnabled ? 'fixed' : 'relative'}
           style:top={app.preference.current.zenModeEnabled ? '0' : 'auto'}
           style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
@@ -778,7 +779,7 @@
           class={flex({
             position: 'relative',
             flexGrow: '1',
-            zIndex: '1',
+            zIndex: 'editor',
             backgroundColor: 'surface.default',
             '&[data-layout="page"]': {
               backgroundColor: 'surface.muted',
@@ -903,7 +904,7 @@
                 </div>
               </div>
 
-              <div class={css({ position: 'relative', flexGrow: '1', width: 'full', zIndex: '0' })}>
+              <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
                 <TiptapEditor
                   style={css.raw({ size: 'full', paddingX: '80px' })}
                   {awareness}
@@ -970,7 +971,7 @@
             </div>
 
             {#if showTimeline}
-              <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default', zIndex: '1' })}>
+              <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default' })}>
                 <Timeline $post={$query.entity.node} {doc} />
               </div>
             {/if}
@@ -999,7 +1000,7 @@
               position: 'fixed',
               top: '18px',
               right: '18px',
-              zIndex: '1',
+              zIndex: 'editor',
               borderWidth: '1px',
               borderColor: 'border.strong',
               borderRadius: '8px',

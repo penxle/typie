@@ -267,7 +267,7 @@
               role="row"
               use:anchor
             >
-              <div class={css({ zIndex: '10' })} data-floating-row-handle use:floating use:portal>
+              <div class={css({ zIndex: 'editor' })} data-floating-row-handle use:floating use:portal>
                 <RowHandle {editor} {focusedRowIndex} {getPos} {hasSpan} {hoveredRowIndex} {i} tableNode={node} />
               </div>
             </div>
@@ -298,7 +298,7 @@
               contenteditable={false}
               use:anchor
             >
-              <div class={css({ zIndex: '10' })} data-floating-col-handle use:floating use:portal>
+              <div class={css({ zIndex: 'editor' })} data-floating-col-handle use:floating use:portal>
                 <ColHandle {editor} {focusedColumnIndex} {getPos} {hasSpan} {hoveredColumnIndex} {i} tableNode={node} />
               </div>
             </div>

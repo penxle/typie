@@ -51,7 +51,7 @@
       boxShadow: 'small',
       translate: 'auto',
       translateY: '-1/2',
-      zIndex: '10',
+      zIndex: 'panel',
     })}
   >
     {#if effectiveSections.includes('backgroundColor')}

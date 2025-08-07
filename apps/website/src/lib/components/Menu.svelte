@@ -145,7 +145,7 @@
 </button>
 
 {#if open}
-  <div class={css({ position: 'fixed', inset: '0', zIndex: '50' })} onclick={close} role="none" use:portal></div>
+  <div class={css({ position: 'fixed', inset: '0', zIndex: 'menu' })} onclick={close} role="none" use:portal></div>
 
   <ul
     bind:this={menuEl}
@@ -162,7 +162,7 @@
         backgroundColor: 'surface.default',
         boxShadow: 'small',
         overflowY: 'auto',
-        zIndex: '50',
+        zIndex: 'menu',
       },
       action && { paddingBottom: '0' },
       listStyle,

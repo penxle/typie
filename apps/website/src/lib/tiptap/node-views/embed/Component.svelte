@@ -251,7 +251,7 @@
       width: '380px',
       backgroundColor: 'surface.default',
       boxShadow: 'small',
-      zIndex: '1',
+      zIndex: 'editor',
     })}
     onsubmit={(e) => {
       e.preventDefault();

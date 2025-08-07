@@ -605,7 +605,7 @@
         borderRadius: '2px',
         backgroundColor: 'accent.brand.subtle',
         pointerEvents: 'none',
-        zIndex: '50',
+        zIndex: 'panel',
       })}
       use:portal
       transition:fade|global={{ duration: 100 }}
@@ -633,7 +633,7 @@
           fontSize: '14px',
           fontWeight: 'bold',
           pointerEvents: 'none',
-          zIndex: '[100]',
+          zIndex: 'overPanel',
         })}
         use:portal
       >
@@ -665,7 +665,7 @@
           position: 'fixed',
           opacity: '[0.2]',
           pointerEvents: 'none',
-          zIndex: '[100]',
+          zIndex: 'overPanel',
         })}
         use:portal
       >
