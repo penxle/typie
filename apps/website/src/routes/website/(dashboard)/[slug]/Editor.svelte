@@ -37,7 +37,7 @@
   import { getAppContext } from '$lib/context';
   import { Dialog, Tip } from '$lib/notification';
   import { getNodeView, TiptapEditor } from '$lib/tiptap';
-  import { mmToPx, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
+  import { clamp, mmToPx, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import Anchor from './Anchor.svelte';
@@ -283,32 +283,42 @@
     return elements;
   });
 
+  const getLastNodeOffsetTop = () => {
+    const editorEl = document.querySelector('.editor');
+    if (!editorEl) return null;
+
+    const allNodes = [...editorEl.querySelectorAll('[data-node-id]')];
+    if (allNodes.length === 0) return null;
+
+    const lastNode = allNodes.at(-1) as HTMLElement;
+    return lastNode.offsetTop;
+  };
+
   const anchorPositions = $derived.by(() => {
     if (!editor || Object.keys(anchorElements).length === 0) return [];
 
-    const editorEl = document.querySelector('.editor');
-    if (!editorEl) return [];
+    const lastNodeOffsetTop = getLastNodeOffsetTop();
+    if (!lastNodeOffsetTop) return [];
 
-    const totalHeight = editorEl.scrollHeight;
-    if (totalHeight === 0) return [];
+    return Object.entries(anchorElements)
+      .map(([nodeId, element]) => {
+        const offsetTop = element.offsetTop;
+        const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
 
-    return Object.entries(anchorElements).map(([nodeId, element]) => {
-      const offsetTop = element.offsetTop;
-      const position = Math.min(1, Math.max(0, offsetTop / totalHeight));
-
-      return {
-        nodeId,
-        element,
-        position,
-        name:
-          anchors.current[nodeId] ||
-          (element.textContent
-            ? element.textContent.length > 20
-              ? element.textContent.slice(0, 20) + '...'
-              : element.textContent
-            : '(내용 없음)'),
-      };
-    });
+        return {
+          nodeId,
+          element,
+          position,
+          name:
+            anchors.current[nodeId] ||
+            (element.textContent
+              ? element.textContent.length > 20
+                ? element.textContent.slice(0, 20) + '...'
+                : element.textContent
+              : '(내용 없음)'),
+        };
+      })
+      .sort((a, b) => a.position - b.position);
   });
 
   const pageLayout = $derived(
@@ -1145,7 +1155,19 @@
           </div>
 
           {#each anchorPositions as anchor (anchor.nodeId)}
-            <Anchor name={anchor.name} {editor} element={anchor.element} outline={showAnchorOutline} position={anchor.position} />
+            <Anchor
+              name={anchor.name}
+              {editor}
+              element={anchor.element}
+              nodeId={anchor.nodeId}
+              outline={showAnchorOutline}
+              position={anchor.position}
+              updateAnchorName={(nodeId, name) => {
+                const newAnchors = { ...anchors.current };
+                newAnchors[nodeId] = name;
+                anchors.current = newAnchors;
+              }}
+            />
           {/each}
         </div>
 
