@@ -2,7 +2,7 @@ import { getContext, setContext } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { TreeEntity } from './@selection/types';
 
-type TreeState = {
+export type TreeState = {
   entities: TreeEntity[];
   entityMap: SvelteMap<string, TreeEntity>;
   lastSelectedEntityId?: string;

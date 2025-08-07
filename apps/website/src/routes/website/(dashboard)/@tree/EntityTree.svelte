@@ -225,6 +225,11 @@
   };
 
   const handlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
+    // NOTE: 우클릭 무시
+    if (e.button === 2) {
+      return;
+    }
+
     const target = e.target as HTMLElement;
 
     const isMenuRelated = target.closest('[aria-pressed]') || target.closest('[role="menu"]') || target.closest('[role="menuitem"]');

@@ -2,6 +2,7 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { fragment, graphql } from '$graphql';
+  import { contextMenu } from '$lib/actions/context-menu';
   import { Icon, Menu } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { css, cx } from '$styled-system/css';
@@ -66,6 +67,7 @@
         transition: 'common',
         _supportHover: { backgroundColor: 'surface.muted' },
         '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
+        '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
       },
       $canvas.entity.depth > 0 && {
         borderLeftWidth: '1px',
@@ -81,6 +83,7 @@
         backgroundColor: 'accent.brand.subtle',
         _supportHover: { backgroundColor: 'accent.brand.subtle' },
         '&:has([aria-pressed="true"])': { backgroundColor: 'accent.brand.subtle' },
+        '&[data-context-menu-open="true"]': { backgroundColor: 'accent.brand.subtle' },
       },
     ),
   )}
@@ -92,6 +95,7 @@
   draggable="false"
   href="/{$canvas.entity.slug}"
   role="treeitem"
+  use:contextMenu={{ content: contextMenuContent }}
 >
   <EntitySelectionIndicator entityId={$canvas.entity.id} visibility={$canvas.entity.visibility} />
 
@@ -132,10 +136,14 @@
       </div>
     {/snippet}
 
-    {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($canvas.entity.id)}
-      <MultiEntitiesMenu />
-    {:else}
-      <CanvasMenu canvas={$canvas} via="tree" />
-    {/if}
+    {@render contextMenuContent()}
   </Menu>
 </a>
+
+{#snippet contextMenuContent()}
+  {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($canvas.entity.id)}
+    <MultiEntitiesMenu {treeState} />
+  {:else}
+    <CanvasMenu canvas={$canvas} via="tree" />
+  {/if}
+{/snippet}

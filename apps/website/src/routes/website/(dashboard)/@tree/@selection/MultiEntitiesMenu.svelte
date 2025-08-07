@@ -12,10 +12,14 @@
   import { Dialog, Toast } from '$lib/notification';
   import { css } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
-  import { getTreeContext } from '../state.svelte';
+  import type { TreeState } from '../state.svelte';
   import type { TreeEntity } from './types';
 
-  const treeState = getTreeContext();
+  type Props = {
+    treeState: TreeState;
+  };
+
+  let { treeState }: Props = $props();
 
   const deleteEntities = graphql(`
     mutation DashboardLayout_EntityTree_MultiEntitiesMenu_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
