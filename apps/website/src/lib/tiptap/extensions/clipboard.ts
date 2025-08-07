@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
-import { Fragment, Slice } from '@tiptap/pm/model';
+import { DOMParser, Fragment, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
+import { handleHTML } from 'zeed-dom';
 import { findNodeUpward } from '../lib/node-utils';
 import { WRAPPING_NODE_NAMES } from './node-commands';
 import type { Selection } from '@tiptap/pm/state';
@@ -40,9 +41,6 @@ const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
 
 const copy = (view: EditorView, event: ClipboardEvent) => {
   const { selection } = view.state;
-
-  event.preventDefault();
-
   let slice = selection.content();
 
   const wrappingNodeId = getWrappingNodeId(selection);
@@ -53,11 +51,25 @@ const copy = (view: EditorView, event: ClipboardEvent) => {
 
   const { dom, text } = view.serializeForClipboard(slice);
 
-  event.clipboardData?.clearData();
-  event.clipboardData?.setData('text/html', dom.innerHTML);
-  event.clipboardData?.setData('text/plain', text);
+  const html = handleHTML(dom.innerHTML, (document) => {
+    const body = document.querySelector('.ProseMirror-body');
+    if (body) {
+      body.replaceWith(...body.children);
+    }
 
-  return true;
+    const paragraphs = document.querySelectorAll('p');
+
+    for (const paragraph of paragraphs) {
+      if (!paragraph.textContent) {
+        paragraph.replaceChildren(document.createElement('br'));
+      }
+    }
+  });
+
+  event.clipboardData?.clearData();
+  event.clipboardData?.setData('text/html', html);
+  event.clipboardData?.setData('text/plain', text);
+  event.clipboardData?.setData('application/x-pm-html', dom.innerHTML);
 };
 
 export const Clipboard = Extension.create({
@@ -67,8 +79,38 @@ export const Clipboard = Extension.create({
     return [
       new Plugin({
         props: {
+          clipboardTextParser: (text, context, __, view) => {
+            const parser = DOMParser.fromSchema(view.state.schema);
+            const dom = document.createElement('div');
+
+            for (const line of text.split('\n')) {
+              const p = document.createElement('p');
+              p.textContent = line;
+              dom.append(p);
+            }
+
+            return parser.parseSlice(dom, {
+              context,
+              preserveWhitespace: 'full',
+            });
+          },
+
+          clipboardTextSerializer: (content) => {
+            const text = content.content.textBetween(0, content.content.size, '\n', (node) => {
+              if (node.type.name === 'hard_break') {
+                return '\n';
+              }
+
+              return '';
+            });
+
+            return text;
+          },
+
           handleDOMEvents: {
             cut: (view, event) => {
+              event.preventDefault();
+
               copy(view, event);
 
               const { tr } = view.state;
@@ -77,7 +119,25 @@ export const Clipboard = Extension.create({
 
               return true;
             },
-            copy: (view, event) => copy(view, event),
+            copy: (view, event) => {
+              event.preventDefault();
+
+              copy(view, event);
+
+              return true;
+            },
+            paste: (view, event) => {
+              const html = event.clipboardData?.getData('application/x-pm-html');
+              if (html) {
+                event.preventDefault();
+
+                view.pasteHTML(html);
+
+                return true;
+              }
+
+              return false;
+            },
           },
         },
       }),
