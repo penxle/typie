@@ -35,8 +35,8 @@ class AnchorBottomSheet extends HookWidget {
     useAsyncEffect(() async {
       try {
         final results = await Future.wait([
-          webViewController?.callProcedure('getAnchorPositions') ?? Future<dynamic>.value(),
-          webViewController?.callProcedure('getCurrentNode') ?? Future<dynamic>.value(),
+          webViewController?.callProcedure('getAnchorPositionsV2') ?? Future<dynamic>.value(),
+          webViewController?.callProcedure('getCurrentNodeV2') ?? Future<dynamic>.value(),
         ]);
 
         if (results[0] != null) {
@@ -54,7 +54,7 @@ class AnchorBottomSheet extends HookWidget {
     }, [webViewController]);
 
     useAsyncEffect(() async {
-      currentNode.value = await webViewController?.callProcedure('getCurrentNode') as Map<String, dynamic>?;
+      currentNode.value = await webViewController?.callProcedure('getCurrentNodeV2') as Map<String, dynamic>?;
 
       return null;
     }, [proseMirrorState?.currentNode]);
@@ -89,6 +89,7 @@ class AnchorBottomSheet extends HookWidget {
         ..add({
           'nodeId': 'top',
           'name': '첫 줄로 가기',
+          'excerpt': '',
           'position': 0,
           'isAnchor': false,
           'isCurrent': false,
@@ -99,6 +100,7 @@ class AnchorBottomSheet extends HookWidget {
         ..add({
           'nodeId': 'bottom',
           'name': '마지막 줄로 가기',
+          'excerpt': '',
           'position': 1,
           'isAnchor': false,
           'isCurrent': false,
@@ -171,21 +173,16 @@ class AnchorBottomSheet extends HookWidget {
       if (newName != null && newName != currentName) {
         await webViewController?.callProcedure('updateAnchorName', {'nodeId': nodeId, 'name': newName});
 
-        final updatedAnchors = await webViewController?.callProcedure('getAnchorPositions');
+        final updatedAnchors = await webViewController?.callProcedure('getAnchorPositionsV2');
         if (updatedAnchors != null) {
           anchors.value = (updatedAnchors as List<dynamic>).cast<Map<String, dynamic>>();
         }
       }
     }
 
-    Future<void> toggleBookmark(String nodeId, bool isAnchor, bool isCurrent, String name) async {
+    Future<void> toggleBookmark(String nodeId, bool isAnchor, bool isCurrent, String? name) async {
       if (!isAnchor || removedAnchors.value.contains(nodeId)) {
-        if (removedAnchors.value.contains(nodeId)) {
-          // NOTE: 삭제했던 북마크를 다시 추가하는 경우에는 이름을 유지해야 함
-          await webViewController?.callProcedure('addAnchorWithName', {'nodeId': nodeId, 'name': name});
-        } else {
-          await webViewController?.callProcedure('addAnchor', nodeId);
-        }
+        await webViewController?.callProcedure('addAnchorWithName', {'nodeId': nodeId, 'name': name});
 
         removedAnchors.value = removedAnchors.value.where((id) => id != nodeId).toList();
 
@@ -217,7 +214,8 @@ class AnchorBottomSheet extends HookWidget {
                 itemBuilder: (context, index) {
                   final node = allNodes[index];
                   final nodeId = node['nodeId'] as String;
-                  final name = node['name'] as String;
+                  final name = node['name'] as String?;
+                  final excerpt = node['excerpt'] as String;
                   final position = node['position'] as num;
                   final isCurrent = node['isCurrent'] as bool;
                   final isAnchor = node['isAnchor'] as bool;
@@ -267,7 +265,7 @@ class AnchorBottomSheet extends HookWidget {
                             const Gap(8),
                             Expanded(
                               child: Text(
-                                name,
+                                name ?? excerpt,
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
@@ -280,7 +278,7 @@ class AnchorBottomSheet extends HookWidget {
                               const Gap(12),
                               if (isAnchor && !isRemoved) ...[
                                 Tappable(
-                                  onTap: () => editAnchorName(nodeId, name),
+                                  onTap: () => editAnchorName(nodeId, name ?? excerpt),
                                   child: Container(
                                     width: 36,
                                     height: 36,

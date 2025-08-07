@@ -28,7 +28,8 @@ export type AnchorPosition = {
   nodeId: string;
   element: HTMLElement;
   position: number;
-  name: string;
+  name: string | null;
+  excerpt: string;
 };
 
 export const calculateAnchorPositions = (
@@ -47,13 +48,12 @@ export const calculateAnchorPositions = (
         nodeId,
         element,
         position,
-        name:
-          anchors[nodeId] ||
-          (element.textContent
-            ? element.textContent.length > 20
-              ? element.textContent.slice(0, 20) + '...'
-              : element.textContent
-            : '(내용 없음)'),
+        name: anchors[nodeId],
+        excerpt: element.textContent
+          ? element.textContent.length > 20
+            ? element.textContent.slice(0, 20) + '...'
+            : element.textContent
+          : '(내용 없음)',
       };
     })
     .sort((a, b) => a.position - b.position);
