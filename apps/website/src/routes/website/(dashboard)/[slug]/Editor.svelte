@@ -31,11 +31,11 @@
   import { getAppContext } from '$lib/context';
   import { Tip } from '$lib/notification';
   import { getNodeView, TiptapEditor } from '$lib/tiptap';
-  import { clamp, mmToPx, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
+  import { mmToPx, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
   import PostMenu from '../@context-menu/PostMenu.svelte';
-  import Anchor from './Anchor.svelte';
+  import Anchors from './@anchor/Anchors.svelte';
   import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
@@ -201,61 +201,6 @@
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
-
-  const anchorElements = $derived.by(() => {
-    if (!editor) {
-      return {};
-    }
-
-    const elements: Record<string, HTMLElement> = {};
-
-    for (const nodeId of Object.keys(anchors.current)) {
-      const element = document.querySelector(`[data-node-id="${nodeId}"]`);
-      if (element) {
-        elements[nodeId] = element as HTMLElement;
-      }
-    }
-
-    return elements;
-  });
-
-  const getLastNodeOffsetTop = () => {
-    const editorEl = document.querySelector('.editor');
-    if (!editorEl) return null;
-
-    const allNodes = [...editorEl.querySelectorAll('[data-node-id]')];
-    if (allNodes.length === 0) return null;
-
-    const lastNode = allNodes.at(-1) as HTMLElement;
-    return lastNode.offsetTop;
-  };
-
-  const anchorPositions = $derived.by(() => {
-    if (!editor || Object.keys(anchorElements).length === 0) return [];
-
-    const lastNodeOffsetTop = getLastNodeOffsetTop();
-    if (lastNodeOffsetTop === null) return [];
-
-    return Object.entries(anchorElements)
-      .map(([nodeId, element]) => {
-        const offsetTop = element.offsetTop;
-        const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
-
-        return {
-          nodeId,
-          element,
-          position,
-          name:
-            anchors.current[nodeId] ||
-            (element.textContent
-              ? element.textContent.length > 20
-                ? element.textContent.slice(0, 20) + '...'
-                : element.textContent
-              : '(내용 없음)'),
-        };
-      })
-      .sort((a, b) => a.position - b.position);
-  });
 
   const pageLayout = $derived(
     app.preference.current.experimental_pageLayoutId === 'a4'
@@ -977,21 +922,16 @@
             {/if}
           </div>
 
-          {#each anchorPositions as anchor (anchor.nodeId)}
-            <Anchor
-              name={anchor.name}
-              {editor}
-              element={anchor.element}
-              nodeId={anchor.nodeId}
-              outline={showAnchorOutline}
-              position={anchor.position}
-              updateAnchorName={(nodeId, name) => {
-                const newAnchors = { ...anchors.current };
-                newAnchors[nodeId] = name;
-                anchors.current = newAnchors;
-              }}
-            />
-          {/each}
+          <Anchors
+            anchors={anchors.current}
+            {editor}
+            showOutline={showAnchorOutline}
+            updateAnchorName={(nodeId, name) => {
+              const newAnchors = { ...anchors.current };
+              newAnchors[nodeId] = name;
+              anchors.current = newAnchors;
+            }}
+          />
         </div>
 
         {#if app.preference.current.zenModeEnabled}

@@ -2,6 +2,7 @@
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import * as Y from 'yjs';
+  import { calculateAnchorPositions, getAnchorElements, getLastNodeOffsetTop } from '$lib/anchor';
   import { clamp } from '$lib/utils';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
@@ -16,52 +17,22 @@
 
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
 
-  const getLastNodeOffsetTop = () => {
-    const editorEl = document.querySelector('.editor');
-    if (!editorEl) return null;
-
-    const allNodes = [...editorEl.querySelectorAll('[data-node-id]')];
-    if (allNodes.length === 0) return null;
-
-    const lastNode = allNodes.at(-1) as HTMLElement;
-    return lastNode.offsetTop;
-  };
-
   const anchorElements = $derived.by(() => {
     if (!editor) {
       return {};
     }
 
-    const elements: Record<string, HTMLElement> = {};
-
-    for (const nodeId of Object.keys(anchors.current)) {
-      const element = document.querySelector(`[data-node-id="${nodeId}"]`);
-      if (element) {
-        elements[nodeId] = element as HTMLElement;
-      }
-    }
-
-    return elements;
+    return getAnchorElements(Object.keys(anchors.current));
   });
 
   const anchorPositions = $derived.by(() => {
     if (!editor || Object.keys(anchorElements).length === 0) return [];
 
-    const lastNodeOffsetTop = getLastNodeOffsetTop();
-    if (lastNodeOffsetTop === null) return [];
-
-    return Object.entries(anchorElements)
-      .map(([nodeId, element]) => {
-        const offsetTop = element.offsetTop;
-        const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
-
-        return {
-          nodeId,
-          position,
-          name: anchors.current[nodeId] || element.textContent || '(내용 없음)',
-        };
-      })
-      .sort((a, b) => a.position - b.position);
+    return calculateAnchorPositions(anchorElements, anchors.current).map(({ nodeId, position, name }) => ({
+      nodeId,
+      position,
+      name,
+    }));
   });
 
   onMount(() => {
@@ -85,7 +56,7 @@
         if (!element) return null;
 
         const lastNodeOffsetTop = getLastNodeOffsetTop();
-        if (!lastNodeOffsetTop) return null;
+        if (lastNodeOffsetTop === null) return null;
 
         const offsetTop = (element as HTMLElement).offsetTop;
         const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
