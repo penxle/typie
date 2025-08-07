@@ -61,8 +61,9 @@
   };
 
   const onmouseleave = () => {
-    show = false;
-    isEditing = false;
+    if (!isEditing) {
+      show = false;
+    }
   };
 
   const handleEditClick = (e: Event) => {
@@ -163,6 +164,7 @@
             outline: 'none',
           })}
           maxlength={20}
+          onblur={handleEditClick}
           onclick={(e) => e.stopPropagation()}
           onkeydown={handleKeydown}
           type="text"
