@@ -57,6 +57,7 @@
         borderRadius: '4px',
         fontSize: '12px',
         color: 'text.subtle',
+        truncate: true,
       })}
     >
       {editor.storage.anchors.current[node.attrs.nodeId]}

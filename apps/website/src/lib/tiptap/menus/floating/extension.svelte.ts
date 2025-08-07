@@ -181,9 +181,15 @@ export const FloatingMenu = Extension.create({
 
               const { x, y, middlewareData } = await computePosition(nodeDOM, rightDom, {
                 placement: 'right-start',
-                middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
+                middleware: [offset(16), hide({ padding: 16, strategy: 'escaped' })],
               });
 
+              const viewportWidth = window.innerWidth;
+              const spaceToRight = viewportWidth - x;
+              const padding = 16;
+              const maxWidth = Math.max(spaceToRight - padding, 0);
+
+              rightDom.style.maxWidth = `${maxWidth}px`;
               rightDom.style.left = `${x}px`;
               rightDom.style.top = `${y}px`;
               rightDom.style.visibility = middlewareData.hide?.escaped ? 'hidden' : 'visible';
