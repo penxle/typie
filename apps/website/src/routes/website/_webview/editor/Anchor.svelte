@@ -48,7 +48,7 @@
     if (!editor || Object.keys(anchorElements).length === 0) return [];
 
     const lastNodeOffsetTop = getLastNodeOffsetTop();
-    if (!lastNodeOffsetTop) return [];
+    if (lastNodeOffsetTop === null) return [];
 
     return Object.entries(anchorElements)
       .map(([nodeId, element]) => {
