@@ -1,0 +1,10 @@
+mutation EntityScreen_DuplicateCanvas_Mutation($input: DuplicateCanvasInput!) {
+  duplicateCanvas(input: $input) {
+    id
+
+    entity {
+      id
+      slug
+    }
+  }
+}
