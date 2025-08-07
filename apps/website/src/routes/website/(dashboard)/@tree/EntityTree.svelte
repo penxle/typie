@@ -81,6 +81,19 @@
       moveEntities(input: $input) {
         id
 
+        ancestors {
+          id
+
+          node {
+            __typename
+
+            ... on Folder {
+              id
+              name
+            }
+          }
+        }
+
         parent {
           id
 
