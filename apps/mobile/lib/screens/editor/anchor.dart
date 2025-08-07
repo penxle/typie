@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/screens/editor/scope.dart';
+import 'package:typie/widgets/forms/form.dart';
+import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class AnchorBottomSheet extends HookWidget {
@@ -135,9 +138,55 @@ class AnchorBottomSheet extends HookWidget {
       return null;
     }, [isLoading.value, currentNode.value, allNodes]);
 
-    Future<void> toggleBookmark(String nodeId, bool isAnchor, bool isCurrent) async {
+    Future<void> editAnchorName(String nodeId, String currentName) async {
+      String? newName;
+
+      await context.showModal(
+        intercept: true,
+        child: HookForm(
+          onSubmit: (form) async {
+            newName = form.data['name'] as String;
+          },
+          builder: (context, form) {
+            return ConfirmModal(
+              title: '북마크 편집',
+              confirmText: '저장',
+              onConfirm: () async {
+                await form.submit();
+              },
+              child: HookFormTextField.collapsed(
+                initialValue: currentName,
+                name: 'name',
+                placeholder: '북마크 이름',
+                autofocus: true,
+                style: const TextStyle(fontSize: 16),
+                submitOnEnter: false,
+                keyboardType: TextInputType.text,
+              ),
+            );
+          },
+        ),
+      );
+
+      if (newName != null && newName != currentName) {
+        await webViewController?.callProcedure('updateAnchorName', {'nodeId': nodeId, 'name': newName});
+
+        final updatedAnchors = await webViewController?.callProcedure('getAnchorPositions');
+        if (updatedAnchors != null) {
+          anchors.value = (updatedAnchors as List<dynamic>).cast<Map<String, dynamic>>();
+        }
+      }
+    }
+
+    Future<void> toggleBookmark(String nodeId, bool isAnchor, bool isCurrent, String name) async {
       if (!isAnchor || removedAnchors.value.contains(nodeId)) {
-        await webViewController?.callProcedure('addAnchor', nodeId);
+        if (removedAnchors.value.contains(nodeId)) {
+          // NOTE: 삭제했던 북마크를 다시 추가하는 경우에는 이름을 유지해야 함
+          await webViewController?.callProcedure('addAnchorWithName', {'nodeId': nodeId, 'name': name});
+        } else {
+          await webViewController?.callProcedure('addAnchor', nodeId);
+        }
+
         removedAnchors.value = removedAnchors.value.where((id) => id != nodeId).toList();
 
         if (isCurrent && !isAnchor) {
@@ -229,8 +278,25 @@ class AnchorBottomSheet extends HookWidget {
                             ),
                             if (!isSpecial) ...[
                               const Gap(12),
+                              if (isAnchor && !isRemoved) ...[
+                                Tappable(
+                                  onTap: () => editAnchorName(nodeId, name),
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: context.colors.borderStrong),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Center(
+                                      child: Icon(LucideLightIcons.pen, size: 18, color: context.colors.textFaint),
+                                    ),
+                                  ),
+                                ),
+                                const Gap(8),
+                              ],
                               Tappable(
-                                onTap: () => toggleBookmark(nodeId, isAnchor, isCurrent),
+                                onTap: () => toggleBookmark(nodeId, isAnchor, isCurrent, name),
                                 child: Container(
                                   width: 36,
                                   height: 36,
