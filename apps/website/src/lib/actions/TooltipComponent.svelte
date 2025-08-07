@@ -9,7 +9,7 @@
     trailing?: string;
     keys?: [...ModifierKey[], string];
     floating: FloatingAction;
-    arrow: ArrowAction;
+    arrow?: ArrowAction;
   };
 
   type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
@@ -74,12 +74,14 @@
     </div>
   {/if}
 
-  <div
-    class={css({
-      borderTopLeftRadius: '2px',
-      size: '8px',
-      backgroundColor: 'surface.dark',
-    })}
-    use:arrow
-  ></div>
+  {#if arrow}
+    <div
+      class={css({
+        borderTopLeftRadius: '2px',
+        size: '8px',
+        backgroundColor: 'surface.dark',
+      })}
+      use:arrow
+    ></div>
+  {/if}
 </div>

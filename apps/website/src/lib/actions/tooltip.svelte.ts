@@ -8,7 +8,7 @@ import type { Action } from 'svelte/action';
 
 type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
 
-type Parameter = {
+export type TooltipParameter = {
   message: string;
   trailing?: string;
   placement?: Placement;
@@ -17,11 +17,14 @@ type Parameter = {
   delay?: number;
   keepOnClick?: boolean;
   force?: boolean;
+  arrow?: boolean;
 };
+
+type Parameter = TooltipParameter;
 
 export const tooltip: Action<HTMLElement, Parameter> = (
   element,
-  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false, force = false, keys }: Parameter,
+  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false, force = false, arrow = true, keys }: Parameter,
 ) => {
   let show = $state(false);
   let forceShow = $state(force);
@@ -41,10 +44,14 @@ export const tooltip: Action<HTMLElement, Parameter> = (
 
   let timer = $state<NodeJS.Timeout>();
 
-  const { anchor, floating, arrow } = createFloatingActions({
+  const {
+    anchor,
+    floating,
+    arrow: arrowAction,
+  } = createFloatingActions({
     placement,
     offset,
-    arrow: true,
+    arrow,
   });
 
   const props = $state({
@@ -52,7 +59,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (
     trailing,
     keys,
     floating,
-    arrow,
+    arrow: arrow ? arrowAction : undefined,
   });
 
   $effect(() => {
