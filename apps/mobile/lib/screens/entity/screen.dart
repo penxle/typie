@@ -902,6 +902,7 @@ class _EntityList extends HookWidget {
 }
 
 class _Folder extends StatelessWidget {
+  // ignore: unused_element_parameter for future usage
   const _Folder(this.entity, {this.color});
 
   final GEntityScreen_Entity_entity entity;
