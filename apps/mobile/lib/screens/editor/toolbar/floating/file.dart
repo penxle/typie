@@ -63,25 +63,29 @@ class FileFloatingToolbar extends HookWidget {
               });
 
               final fileNodePairs = <(File, String)>[(allFiles.first, nodeId)];
+              final restFiles = allFiles.sublist(1);
+              final restFileInfo = allFileInfo.sublist(1);
 
               // NOTE: 두 번째 이후 파일 노드들 삽입
-              if (allFiles.length > 1) {
-                final fileNodesList = <Map<String, dynamic>>[];
-                for (var i = 1; i < allFiles.length; i++) {
-                  final fileInfo = allFileInfo[i];
-                  fileNodesList.add({'inflightName': fileInfo.name, 'inflightSize': fileInfo.size});
-                }
-
+              if (restFiles.isNotEmpty) {
                 final insertedNodeIds = await scope.webViewController.value?.callProcedure('insertNodes', {
-                  'nodes': fileNodesList.map((attrs) => {'type': 'file', 'attrs': attrs}).toList(),
+                  'nodes': List.generate(restFiles.length, (i) => {'type': 'file'}).toList(),
                 });
 
                 if (insertedNodeIds != null && insertedNodeIds is List) {
-                  final validNodeIds = insertedNodeIds.whereType<String>().toList();
-                  for (var i = 0; i < validNodeIds.length; i++) {
-                    if (i + 1 < allFiles.length) {
-                      fileNodePairs.add((allFiles[i + 1], validNodeIds[i]));
+                  for (var i = 0; i < insertedNodeIds.length && i < restFiles.length; i++) {
+                    final nodeId = insertedNodeIds[i] as String?;
+                    if (nodeId == null) {
+                      continue;
                     }
+                    fileNodePairs.add((restFiles[i], nodeId));
+
+                    final fileInfo = restFileInfo[i];
+                    await scope.webViewController.value?.emitEvent('nodeview', {
+                      'nodeId': nodeId,
+                      'name': 'inflight',
+                      'detail': {'name': fileInfo.name, 'size': fileInfo.size},
+                    });
                   }
                 }
               }
