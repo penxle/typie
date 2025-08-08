@@ -1,6 +1,5 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -8,7 +7,7 @@ import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart
 import 'package:typie/screens/entity/multi_entities_menu.dart';
 import 'package:typie/widgets/tappable.dart';
 
-class SelectedEntitiesBar extends HookWidget {
+class SelectedEntitiesBar extends StatelessWidget {
   const SelectedEntitiesBar({
     super.key,
     required this.selectedItems,
