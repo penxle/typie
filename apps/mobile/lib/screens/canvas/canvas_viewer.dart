@@ -37,7 +37,7 @@ class CanvasViewer extends HookWidget {
             isReady.value = true;
           case 'readOnlyBadgeClick':
             if (context.mounted) {
-              context.toast(ToastType.notification, '아직 캔버스는 앱에서 편집할 수 없어요', bottom: 64);
+              context.toast(ToastType.notification, '캔버스는 앱에서 편집할 수 없어요', bottom: 64);
             }
         }
       });
