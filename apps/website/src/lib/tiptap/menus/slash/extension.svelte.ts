@@ -5,6 +5,7 @@ import { disassemble } from 'es-hangul';
 import { matchSorter } from 'match-sorter';
 import { mount, unmount } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
+import { ySyncPluginKey } from 'y-prosemirror';
 import { css } from '$styled-system/css';
 import { token } from '$styled-system/tokens';
 import Component from './Component.svelte';
@@ -49,7 +50,7 @@ export const SlashMenu = Extension.create({
               return prev;
             }
 
-            if (tr.getMeta('y-sync$') || tr.getMeta('y-origin')) {
+            if (tr.getMeta(ySyncPluginKey)) {
               return { active: false };
             }
 

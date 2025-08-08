@@ -2,6 +2,7 @@ import { combineTransactionSteps, Extension, findChildren, findChildrenInRange, 
 import { Fragment, Node as ProseMirrorNode, Slice } from '@tiptap/pm/model';
 import { Plugin, Transaction } from '@tiptap/pm/state';
 import { nanoid } from 'nanoid';
+import { ySyncPluginKey } from 'y-prosemirror';
 
 const generateId = () => nanoid(32);
 const types = [
@@ -79,7 +80,7 @@ export const NodeId = Extension.create({
       new Plugin({
         appendTransaction: (transactions, oldState, newState) => {
           const docChanged = transactions.some((tr) => tr.docChanged) && !oldState.doc.eq(newState.doc);
-          const ySync = transactions.find((tr) => tr.getMeta('y-sync$'));
+          const ySync = transactions.find((tr) => tr.getMeta(ySyncPluginKey));
 
           if (!docChanged || ySync) {
             return;
