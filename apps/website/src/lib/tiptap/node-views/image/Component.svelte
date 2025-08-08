@@ -1,31 +1,82 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ImageIcon from '~icons/lucide/image';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { createFloatingActions } from '$lib/actions';
   import { Button, Icon, Img, Menu, MenuItem, RingSpinner } from '$lib/components';
+  import { Toast } from '$lib/notification';
   import { uploadBlobAsImage } from '$lib/utils';
   import { css, cx } from '$styled-system/css';
   import { center, flex } from '$styled-system/patterns';
-  import { NodeView } from '../../lib';
+  import { getNodeView, NodeView } from '../../lib';
   import Enlarge from './Enlarge.svelte';
   import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
 
-  let { node, editor, selected, updateAttributes, deleteNode, HTMLAttributes }: Props = $props();
+  let { node, editor, selected, updateAttributes, deleteNode, getPos, HTMLAttributes }: Props = $props();
+
+  let pendingFiles = $state<File[]>([]);
+  let inflightUrl = $state<string>();
 
   let attrs = $state(node.attrs);
   $effect(() => {
     attrs = node.attrs;
   });
 
+  $effect(() => {
+    if (pendingFiles.length > 0) {
+      processPendingFiles();
+    }
+  });
+
+  const processPendingFiles = async () => {
+    if (pendingFiles.length === 0) return;
+
+    const [firstFile, ...restFiles] = pendingFiles;
+    pendingFiles = [];
+
+    const objectUrl = URL.createObjectURL(firstFile);
+    inflightUrl = objectUrl;
+
+    try {
+      if (restFiles.length > 0 && editor?.current) {
+        const currentPos = getPos();
+        if (currentPos !== undefined) {
+          const insertPos = currentPos + node.nodeSize;
+          editor.current
+            .chain()
+            .insertContentAt(insertPos, {
+              type: 'image',
+            })
+            .focus()
+            .run();
+
+          await tick();
+          const nextNodeView = getNodeView(editor.current.view, insertPos);
+          if (nextNodeView?.handle) {
+            nextNodeView.handle(new CustomEvent('pending-files', { detail: { files: restFiles } }));
+          }
+        }
+      }
+
+      const uploadedAttrs = await uploadBlobAsImage(firstFile);
+      inflightUrl = undefined;
+      updateAttributes(uploadedAttrs);
+    } catch {
+      inflightUrl = undefined;
+      Toast.error(`${firstFile.name} 이미지 업로드에 실패했습니다.`);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+
   let pickerOpened = $state(false);
   $effect(() => {
     pickerOpened = selected;
   });
 
-  let inflightUrl = $state<string>();
   let enlarged = $state(false);
 
   const { anchor, floating } = createFloatingActions({
@@ -40,23 +91,17 @@
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = 'image/*';
+    picker.multiple = true;
 
     picker.addEventListener('change', async () => {
       pickerOpened = false;
 
-      const file = picker.files?.[0];
-      if (!file) {
+      const files = picker.files;
+      if (!files || files.length === 0) {
         return;
       }
 
-      inflightUrl = URL.createObjectURL(file);
-      try {
-        const attrs = await uploadBlobAsImage(file);
-        updateAttributes(attrs);
-      } finally {
-        URL.revokeObjectURL(inflightUrl);
-        inflightUrl = undefined;
-      }
+      pendingFiles = [...files];
     });
 
     picker.click();
@@ -70,6 +115,8 @@
       updateAttributes(event.detail.attrs);
     } else if (event.type === 'error') {
       inflightUrl = undefined;
+    } else if (event.type === 'pending-files') {
+      pendingFiles = event.detail.files;
     }
   };
 
@@ -116,6 +163,14 @@
     target.releasePointerCapture(event.pointerId);
     updateAttributes({ proportion });
   };
+
+  $effect(() => {
+    return () => {
+      if (inflightUrl && inflightUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(inflightUrl);
+      }
+    };
+  });
 </script>
 
 <NodeView style={css.raw({ display: 'flex', justifyContent: 'center' })} {...HTMLAttributes}>
