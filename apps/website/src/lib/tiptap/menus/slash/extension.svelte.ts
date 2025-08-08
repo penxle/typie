@@ -49,6 +49,10 @@ export const SlashMenu = Extension.create({
               return prev;
             }
 
+            if (tr.getMeta('y-sync$') || tr.getMeta('y-origin')) {
+              return { active: false };
+            }
+
             const { $anchor: anchor, empty } = state.selection;
             if (!empty) {
               return { active: false };
