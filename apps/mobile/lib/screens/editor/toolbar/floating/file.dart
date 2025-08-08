@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -36,49 +35,95 @@ class FileFloatingToolbar extends HookWidget {
                 return;
               }
 
-              final result = await FilePicker.platform.pickFiles().catchError((e) {
+              final result = await FilePicker.platform.pickFiles(allowMultiple: true).catchError((err) {
                 if (context.mounted) {
                   context.toast(ToastType.error, '파일을 선택할 수 없습니다');
                 }
                 return null;
               });
-              if (result == null) {
+
+              if (result == null || result.files.isEmpty) {
                 return;
               }
 
-              final pickedFile = result.files.firstOrNull;
-              if (pickedFile == null) {
+              // NOTE: 일부 플랫폼/설정에서 path가 null일 수 있음
+              final platformFiles = result.files.where((f) => f.path != null).toList();
+              if (platformFiles.isEmpty) {
                 return;
               }
+              final allFiles = platformFiles.map((f) => File(f.path!)).toList();
+              final allFileInfo = platformFiles;
 
-              final file = File(pickedFile.path!);
-
+              // NOTE: 첫 번째 파일은 현재 노드 업데이트
+              final firstFileInfo = allFileInfo.first;
               await scope.webViewController.value?.emitEvent('nodeview', {
                 'nodeId': nodeId,
                 'name': 'inflight',
-                'detail': {'name': pickedFile.name, 'size': pickedFile.size},
+                'detail': {'name': firstFileInfo.name, 'size': firstFileInfo.size},
               });
 
-              try {
-                final path = await blob.upload(file);
-                final result = await client.request(
-                  GEditorScreen_PersistBlobAsFile_MutationReq((b) => b..vars.input.path = path),
-                );
+              final fileNodePairs = <(File, String)>[(allFiles.first, nodeId)];
 
-                await scope.webViewController.value?.emitEvent('nodeview', {
-                  'nodeId': nodeId,
-                  'name': 'success',
-                  'detail': {
-                    'attrs': {
-                      'id': result.persistBlobAsFile.id,
-                      'url': result.persistBlobAsFile.url,
-                      'name': result.persistBlobAsFile.name,
-                      'size': result.persistBlobAsFile.size,
-                    },
-                  },
+              // NOTE: 두 번째 이후 파일 노드들 삽입
+              if (allFiles.length > 1) {
+                final fileNodesList = <Map<String, dynamic>>[];
+                for (var i = 1; i < allFiles.length; i++) {
+                  final fileInfo = allFileInfo[i];
+                  fileNodesList.add({'inflightName': fileInfo.name, 'inflightSize': fileInfo.size});
+                }
+
+                final insertedNodeIds = await scope.webViewController.value?.callProcedure('insertNodes', {
+                  'nodes': fileNodesList.map((attrs) => {'type': 'file', 'attrs': attrs}).toList(),
                 });
-              } catch (_) {
-                await scope.webViewController.value?.emitEvent('nodeview', {'nodeId': nodeId, 'name': 'error'});
+
+                if (insertedNodeIds != null && insertedNodeIds is List) {
+                  final validNodeIds = insertedNodeIds.whereType<String>().toList();
+                  for (var i = 0; i < validNodeIds.length; i++) {
+                    if (i + 1 < allFiles.length) {
+                      fileNodePairs.add((allFiles[i + 1], validNodeIds[i]));
+                    }
+                  }
+                }
+              }
+
+              var failureCount = 0;
+
+              // NOTE: 모든 파일 업로드
+              await Future.wait(
+                fileNodePairs.map((pair) async {
+                  final (file, targetNodeId) = pair;
+
+                  try {
+                    final path = await blob.upload(file);
+                    final result = await client.request(
+                      GEditorScreen_PersistBlobAsFile_MutationReq((b) => b..vars.input.path = path),
+                    );
+
+                    await scope.webViewController.value?.emitEvent('nodeview', {
+                      'nodeId': targetNodeId,
+                      'name': 'success',
+                      'detail': {
+                        'attrs': {
+                          'id': result.persistBlobAsFile.id,
+                          'url': result.persistBlobAsFile.url,
+                          'name': result.persistBlobAsFile.name,
+                          'size': result.persistBlobAsFile.size,
+                        },
+                      },
+                    });
+                  } catch (err) {
+                    failureCount++;
+                    await scope.webViewController.value?.emitEvent('nodeview', {
+                      'nodeId': targetNodeId,
+                      'name': 'error',
+                    });
+                  }
+                }),
+              );
+
+              if (failureCount > 0 && context.mounted) {
+                final errorMessage = failureCount == fileNodePairs.length ? '파일 업로드에 실패했습니다' : '일부 파일 업로드에 실패했습니다';
+                context.toast(ToastType.error, errorMessage);
               }
             },
           ),
