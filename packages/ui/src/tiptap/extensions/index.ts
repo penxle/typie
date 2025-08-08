@@ -3,6 +3,7 @@ export * from './clipboard';
 export * from './collaboration';
 export * from './command';
 export * from './drop-cursor';
+export * from './ios-selection';
 export * from './node-commands';
 export * from './node-id';
 export * from './page';

@@ -1,6 +1,6 @@
 import { TinyColor } from '@ctrl/tinycolor';
 import { Extension } from '@tiptap/core';
-import { css } from '@typie/styled-system/css';
+import { css, cx } from '@typie/styled-system/css';
 import { defaultValues, values } from '../values';
 
 const colors = Object.fromEntries(values.textColor.map(({ value, color }) => [value, color]));
@@ -52,11 +52,14 @@ export const TextColor = Extension.create({
               if (textColor === 'white') {
                 return {
                   style: `color: ${colors[textColor]};`,
-                  class: css({
-                    '& .selected-text': {
-                      color: 'text.default',
-                    },
-                  }),
+                  class: cx(
+                    'low-contrast-text',
+                    css({
+                      '& .ios-selection': {
+                        color: 'text.faint',
+                      },
+                    }),
+                  ),
                 };
               } else {
                 return {
