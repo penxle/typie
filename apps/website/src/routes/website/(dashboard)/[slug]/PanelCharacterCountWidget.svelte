@@ -1,15 +1,19 @@
 <script lang="ts">
   import { getText, getTextBetween } from '@tiptap/core';
+  import { loadModule } from 'cld3-asm';
+  import stringWidth from 'string-width';
   import { fly } from 'svelte/transition';
   import { textSerializers } from '@/pm/serializer';
   import IconChevronRight from '~icons/lucide/chevron-right';
+  import IconInfo from '~icons/lucide/info';
   import IconType from '~icons/lucide/type';
-  import { Icon } from '$lib/components';
-  import { comma } from '$lib/utils';
+  import { Icon, Tooltip } from '$lib/components';
+  import { comma, debounce } from '$lib/utils';
   import { css } from '$styled-system/css';
   import { flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
+  import type { CldFactory } from 'cld3-asm';
   import type { Ref } from '$lib/utils';
 
   type Props = {
@@ -23,13 +27,49 @@
   let doc = $state('');
   let selection = $state('');
 
+  let isCJK = $state(
+    typeof window !== 'undefined' && navigator?.language
+      ? ['ko', 'ja', 'zh'].some((lang) => navigator.language.toLowerCase().startsWith(lang))
+      : true, // NOTE: CJK를 기본값으로 함
+  );
+  let cld3Factory: CldFactory | null = null;
+
   const docCountWithWhitespace = $derived([...doc.replaceAll(/\s+/g, ' ').trim()].length);
   const docCountWithoutWhitespace = $derived([...doc.replaceAll(/\s/g, '').trim()].length);
   const docCountWithoutWhitespaceAndPunctuation = $derived([...doc.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
+  const docVisualWidth = $derived(stringWidth(doc, { ambiguousIsNarrow: !isCJK }));
 
   const selectionCountWithWhitespace = $derived([...selection.replaceAll(/\s+/g, ' ').trim()].length);
   const selectionCountWithoutWhitespace = $derived([...selection.replaceAll(/\s/g, '').trim()].length);
   const selectionCountWithoutWhitespaceAndPunctuation = $derived([...selection.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
+  const selectionVisualWidth = $derived(stringWidth(selection, { ambiguousIsNarrow: !isCJK }));
+
+  const detectLanguage = debounce(async (text: string) => {
+    try {
+      if (!cld3Factory) {
+        cld3Factory = await loadModule();
+      }
+
+      const sampleLength = Math.min(text.length, 1000);
+      const identifier = cld3Factory.create(0, sampleLength);
+      const result = identifier.findLanguage(text.slice(0, sampleLength));
+
+      if (result) {
+        const lang = result.language;
+        isCJK = ['ko', 'zh', 'ja'].includes(lang);
+      }
+
+      identifier.dispose();
+    } catch {
+      // ignore
+    }
+  }, 500);
+
+  $effect(() => {
+    if (doc) {
+      detectLanguage(doc);
+    }
+  });
 
   const handler = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
     if (transaction.docChanged) {
@@ -105,6 +145,26 @@
             {comma(selectionCountWithoutWhitespaceAndPunctuation)}자 /
           {/if}
           {comma(docCountWithoutWhitespaceAndPunctuation)}자
+        </dd>
+      </dl>
+
+      <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
+        <dt class={flex({ alignItems: 'center', gap: '4px', color: 'text.faint' })}>
+          전각 기준
+          <Tooltip
+            message="한글, 한자 등은 1자, 영어와 숫자는 0.5자로 계산됩니다. 일부 특수기호는 환경에 따라 다르게 계산됩니다. (현재 로케일: {isCJK
+              ? 'CJK'
+              : 'non-CJK'})"
+            placement="bottom-end"
+          >
+            <Icon style={css.raw({ color: 'text.faint' })} icon={IconInfo} size={12} />
+          </Tooltip>
+        </dt>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+          {#if selection}
+            {comma(selectionVisualWidth / 2)}자 /
+          {/if}
+          {comma(docVisualWidth / 2)}자
         </dd>
       </dl>
     </div>
