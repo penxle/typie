@@ -2,6 +2,8 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
+  import { Helmet, RingSpinner } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import { TypieError } from '@/errors';
@@ -9,8 +11,6 @@
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
-  import { Helmet, RingSpinner } from '$lib/components';
-  import { Toast } from '$lib/notification';
 
   const verifyPersonalIdentity = graphql(`
     mutation UsersiteWildcardIdentityPage_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {

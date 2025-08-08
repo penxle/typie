@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { Icon } from '$lib/components';
+  import { Icon } from '@typie/ui/components';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component } from 'svelte';
 

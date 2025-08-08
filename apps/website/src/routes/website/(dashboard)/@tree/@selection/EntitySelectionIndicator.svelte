@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { Checkbox } from '@typie/ui/components';
   import { EntityVisibility } from '@/enums';
-  import { Checkbox } from '$lib/components';
   import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
 

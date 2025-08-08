@@ -1,10 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
   import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
-  import { Icon } from '$lib/components';
-  import type { Canvas } from '$lib/canvas';
+  import type { Canvas } from '@typie/ui/canvas';
 
   type Props = {
     canvas: Canvas;

@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { fragment, graphql } from '$graphql';
-  import { getAppContext } from '$lib/context/app.svelte';
   import type { DashboardLayout_Shortcuts_query } from '$graphql';
 
   type Props = {

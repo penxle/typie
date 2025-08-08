@@ -2,11 +2,11 @@
   import { getTextBetween, isMarkActive } from '@tiptap/core';
   import { TextSelection } from '@tiptap/pm/state';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, TextInput } from '@typie/ui/components';
+  import { createForm } from '@typie/ui/form';
   import { z } from 'zod';
-  import { Button, TextInput } from '$lib/components';
-  import { createForm } from '$lib/form';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   type Props = {
     editor: Ref<Editor>;

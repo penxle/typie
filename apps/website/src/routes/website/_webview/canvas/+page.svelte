@@ -1,12 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { Canvas, CanvasEditor } from '@typie/ui/canvas';
+  import { Icon } from '@typie/ui/components';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import * as Y from 'yjs';
   import EyeIcon from '~icons/lucide/eye';
   import { graphql } from '$graphql';
-  import { Canvas, CanvasEditor } from '$lib/canvas';
-  import { Icon } from '$lib/components';
   import Zoom from './Zoom.svelte';
 
   const query = graphql(`

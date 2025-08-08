@@ -2,15 +2,15 @@
   import { getText, getTextBetween } from '@tiptap/core';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
+  import { comma } from '@typie/ui/utils';
   import { fly } from 'svelte/transition';
   import { textSerializers } from '@/pm/serializer';
   import IconChevronRight from '~icons/lucide/chevron-right';
   import IconType from '~icons/lucide/type';
-  import { Icon } from '$lib/components';
-  import { comma } from '$lib/utils';
   import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   type Props = {
     editor?: Ref<Editor>;

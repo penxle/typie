@@ -1,6 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { portal, tooltip } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
@@ -9,10 +13,6 @@
   import SquarePenIcon from '~icons/lucide/square-pen';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
-  import { portal, tooltip } from '$lib/actions';
-  import { Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
-  import { clamp } from '$lib/utils';
   import Trash from './@trash/Trash.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';

@@ -10,7 +10,7 @@
   import { graphql } from '$graphql';
   import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   type Props = {
     editor?: Ref<Editor>;

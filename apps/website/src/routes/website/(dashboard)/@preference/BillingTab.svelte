@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
+  import { Button, Icon } from '@typie/ui/components';
+  import { PLAN_FEATURES } from '@typie/ui/constants';
+  import { Dialog } from '@typie/ui/notification';
+  import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { SubscriptionState } from '@/enums';
   import { fragment, graphql } from '$graphql';
-  import { Button, Icon } from '$lib/components';
-  import { PLAN_FEATURES } from '$lib/constants';
-  import { Dialog } from '$lib/notification';
-  import { comma } from '$lib/utils';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
   import type { DashboardLayout_PreferenceModal_BillingTab_user } from '$graphql';

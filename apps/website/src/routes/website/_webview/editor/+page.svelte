@@ -7,6 +7,9 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
+  import { autosize } from '@typie/ui/actions';
+  import { getNodeViewByNodeId, TiptapEditor } from '@typie/ui/tiptap';
+  import { clamp } from '@typie/ui/utils';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -18,9 +21,6 @@
   import { textSerializers } from '@/pm/serializer';
   import { browser } from '$app/environment';
   import { graphql } from '$graphql';
-  import { autosize } from '$lib/actions';
-  import { getNodeViewByNodeId, TiptapEditor } from '$lib/tiptap';
-  import { clamp } from '$lib/utils';
   import Anchors from './Anchors.svelte';
   import { handleCaretMovement } from './caret';
   import FindReplace from './FindReplace.svelte';
@@ -30,7 +30,7 @@
   import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   const query = graphql(`
     query WebViewEditorPage_Query($slug: String!, $siteId: ID!) {

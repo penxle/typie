@@ -1,8 +1,8 @@
 <script lang="ts">
   import '../app.css';
 
-  import { setupThemeContext } from '$lib/context';
-  import { NotificationProvider } from '$lib/notification';
+  import { setupThemeContext } from '@typie/ui/context';
+  import { NotificationProvider } from '@typie/ui/notification';
 
   let { children } = $props();
 

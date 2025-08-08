@@ -1,6 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { createFloatingActions, portal } from '@typie/ui/actions';
+  import { Icon, RingSpinner } from '@typie/ui/components';
+  import { TiptapEditor } from '@typie/ui/tiptap';
+  import { clamp, Ref } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { base64 } from 'rfc4648';
   import { untrack } from 'svelte';
@@ -8,10 +12,6 @@
   import * as Y from 'yjs';
   import IconClockFading from '~icons/lucide/clock-fading';
   import { fragment, graphql } from '$graphql';
-  import { createFloatingActions, portal } from '$lib/actions';
-  import { Icon, RingSpinner } from '$lib/components';
-  import { TiptapEditor } from '$lib/tiptap';
-  import { clamp, Ref } from '$lib/utils';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PointerEventHandler } from 'svelte/elements';

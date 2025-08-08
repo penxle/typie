@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import GlobeIcon from '~icons/lucide/globe';
   import PenLineIcon from '~icons/lucide/pen-line';
@@ -8,7 +9,6 @@
   import AppStoreIcon from '~icons/simple-icons/appstore';
   import GooglePlayIcon from '~icons/simple-icons/googleplay';
   import { page } from '$app/state';
-  import { Icon } from '$lib/components';
   import heroImage from './images/hero.webp';
 </script>
 

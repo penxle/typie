@@ -1,4 +1,4 @@
-import { ADMIN_ITEMS_PER_PAGE } from '$lib/constants';
+import { ADMIN_ITEMS_PER_PAGE } from '@typie/ui/constants';
 import type { AdminUsers_Query_Variables } from './$graphql';
 
 export const _AdminUsers_Query_Variables: AdminUsers_Query_Variables = ({ url }) => {

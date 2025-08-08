@@ -1,10 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Button } from '@typie/ui/components';
+  import { Grain } from '@typie/ui/effects';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
-  import { Button } from '$lib/components';
-  import { Grain } from '$lib/effects';
 
   let error = $derived(page.error);
   const seed = Math.floor(Math.random() * 1000);

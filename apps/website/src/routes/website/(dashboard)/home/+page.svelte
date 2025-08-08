@@ -1,11 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Button, Helmet, Icon } from '@typie/ui/components';
   import mixpanel from 'mixpanel-browser';
   import FilePenIcon from '~icons/lucide/file-pen';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
-  import { Button, Helmet, Icon } from '$lib/components';
 
   const query = graphql(`
     query HomePage_Query {

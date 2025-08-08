@@ -3,6 +3,10 @@
   import stringHash from '@sindresorhus/string-hash';
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { Canvas, CanvasEditor } from '@typie/ui/canvas';
+  import { Helmet, Icon, Menu } from '@typie/ui/components';
+  import { getAppContext, getThemeContext } from '@typie/ui/context';
   import dayjs from 'dayjs';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -16,10 +20,6 @@
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
-  import { Canvas, CanvasEditor } from '$lib/canvas';
-  import { Helmet, Icon, Menu } from '$lib/components';
-  import { getAppContext, getThemeContext } from '$lib/context';
   import CanvasMenu from '../../@context-menu/CanvasMenu.svelte';
   import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';

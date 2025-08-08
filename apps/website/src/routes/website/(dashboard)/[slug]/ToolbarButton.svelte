@@ -1,10 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { tooltip } from '$lib/actions';
+  import { tooltip } from '@typie/ui/actions';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { TooltipParameter } from '@typie/ui/actions';
   import type { Component } from 'svelte';
-  import type { TooltipParameter } from '$lib/actions';
 
   type Props = {
     style?: SystemStyleObject;

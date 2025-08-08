@@ -1,6 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, Helmet, TextInput } from '@typie/ui/components';
+  import { createForm, FormError } from '@typie/ui/form';
+  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
@@ -8,9 +11,6 @@
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
-  import { Button, Helmet, TextInput } from '$lib/components';
-  import { createForm, FormError } from '$lib/form';
-  import { Toast } from '$lib/notification';
 
   const resetPassword = graphql(`
     mutation ResetPasswordPage_ResetPassword_Mutation($input: ResetPasswordInput!) {

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, Modal } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { Toast } from '@typie/ui/notification';
   import { base64 } from 'rfc4648';
   import { graphql } from '$graphql';
-  import { Button, Modal } from '$lib/components';
-  import { getAppContext } from '$lib/context';
-  import { Toast } from '$lib/notification';
   import ActivityGrid from './ActivityGrid.svelte';
 
   const query = graphql(`

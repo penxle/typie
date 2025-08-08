@@ -1,11 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
+  import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import ArrowLeftIcon from '~icons/lucide/arrow-left';
   import { graphql } from '$graphql';
   import { AdminIcon, AdminModal } from '$lib/components/admin';
-  import { comma } from '$lib/utils';
 
   let impersonateModalOpen = $state(false);
 

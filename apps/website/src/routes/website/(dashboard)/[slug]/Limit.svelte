@@ -8,8 +8,8 @@
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
+  import type { Ref } from '@typie/ui/utils';
   import type { Editor_Limit_query, Editor_Limit_site } from '$graphql';
-  import type { Ref } from '$lib/utils';
 
   type Props = {
     editor?: Ref<Editor>;

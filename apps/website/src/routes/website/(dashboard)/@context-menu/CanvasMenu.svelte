@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
+  import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import CopyIcon from '~icons/lucide/copy';
   import InfoIcon from '~icons/lucide/info';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
-  import { HorizontalDivider, Icon, MenuItem } from '$lib/components';
-  import { Dialog } from '$lib/notification';
 
   type Props = {
     canvas: {

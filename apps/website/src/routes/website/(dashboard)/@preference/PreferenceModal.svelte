@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Icon, Modal } from '@typie/ui/components';
   import CreditCardIcon from '~icons/lucide/credit-card';
   import FlaskConicalIcon from '~icons/lucide/flask-conical';
   import KeyboardIcon from '~icons/lucide/keyboard';
@@ -11,7 +12,6 @@
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { fragment, graphql } from '$graphql';
-  import { Icon, Modal } from '$lib/components';
   import AccountTab from './AccountTab.svelte';
   import BillingTab from './BillingTab.svelte';
   import EditorTab from './EditorTab.svelte';

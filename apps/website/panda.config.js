@@ -5,7 +5,7 @@ const prod = process.env.NODE_ENV === 'production';
 
 export default defineConfig({
   importMap: '@typie/styled-system',
-  include: ['./src/**/*.{js,ts,svelte}'],
+  include: ['./src/**/*.{js,ts,svelte}', '../../packages/ui/src/**/*.{js,ts,svelte}'],
 
   eject: true,
   presets: [preset],

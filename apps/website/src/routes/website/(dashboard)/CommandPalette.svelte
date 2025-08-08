@@ -1,6 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Icon, Modal } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import dayjs from 'dayjs';
   import { disassemble } from 'es-hangul';
   import { matchSorter } from 'match-sorter';
@@ -21,8 +23,6 @@
   import XIcon from '~icons/lucide/x';
   import { beforeNavigate, goto, pushState } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
-  import { Icon, Modal } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import type { Component } from 'svelte';
   import type { DashboardLayout_CommandPalette_user } from '$graphql';
 

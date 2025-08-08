@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
+import { serializeOAuthState } from '@typie/ui/utils';
 import qs from 'query-string';
 import { env } from '$env/dynamic/public';
-import { serializeOAuthState } from '$lib/utils';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async () => {

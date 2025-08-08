@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex, grid } from '@typie/styled-system/patterns';
+  import { createFloatingActions } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
   import mixpanel from 'mixpanel-browser';
   import { fade } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import SmilePlusIcon from '~icons/lucide/smile-plus';
   import { fragment, graphql } from '$graphql';
-  import { createFloatingActions } from '$lib/actions';
-  import { Icon } from '$lib/components';
   import { emojis } from './emoji';
   import Emoji from './Emoji.svelte';
   import type { UsersiteWildcardSlugPage_EmojiReaction_postView } from '$graphql';

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { center } from '@typie/styled-system/patterns';
-  import { tooltip } from '$lib/actions';
-  import { Icon } from '$lib/components';
+  import { tooltip } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component } from 'svelte';
   import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';

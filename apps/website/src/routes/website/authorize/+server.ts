@@ -1,9 +1,9 @@
 import { redirect } from '@sveltejs/kit';
+import { deserializeOAuthState } from '@typie/ui/utils';
 import dayjs from 'dayjs';
 import { dev } from '$app/environment';
 import { env as privateEnv } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
-import { deserializeOAuthState } from '$lib/utils';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, cookies }) => {

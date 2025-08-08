@@ -2,12 +2,12 @@
   import * as PortOne from '@portone/browser-sdk/v2';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { TypieError } from '@/errors';
   import { fragment, graphql } from '$graphql';
-  import { Button } from '$lib/components';
-  import { Toast } from '$lib/notification';
   import type { DashboardLayout_PreferenceModal_IdentityTab_user } from '$graphql';
 
   type Props = {

@@ -1,6 +1,9 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Button, Icon, Switch, TextInput } from '@typie/ui/components';
+  import { createForm } from '@typie/ui/form';
+  import { Dialog } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
@@ -9,9 +12,7 @@
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';
   import { fragment, graphql } from '$graphql';
-  import { Button, Icon, LoadableImg, Switch, TextInput } from '$lib/components';
-  import { createForm } from '$lib/form';
-  import { Dialog } from '$lib/notification';
+  import { LoadableImg } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
   import UpdateEmailModal from './UpdateEmailModal.svelte';
   import UpdatePasswordModal from './UpdatePasswordModal.svelte';

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
+  import { contextMenu } from '@typie/ui/actions';
+  import { Icon, Menu } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { PostType } from '@/enums';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import ShapesIcon from '~icons/lucide/shapes';
   import { fragment, graphql } from '$graphql';
-  import { contextMenu } from '$lib/actions/context-menu';
-  import { Icon, Menu } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';

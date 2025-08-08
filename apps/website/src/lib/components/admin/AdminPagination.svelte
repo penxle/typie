@@ -1,10 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { ADMIN_ITEMS_PER_PAGE } from '@typie/ui/constants';
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import { AdminIcon } from '$lib/components/admin';
-  import { ADMIN_ITEMS_PER_PAGE } from '$lib/constants';
 
   type Props = {
     pageNumber: number;

@@ -1,13 +1,13 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { portal, tooltip } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import BellIcon from '~icons/lucide/bell';
   import CheckCheckIcon from '~icons/lucide/check-check';
   import { fragment, graphql } from '$graphql';
-  import { portal, tooltip } from '$lib/actions';
-  import { Icon } from '$lib/components';
   import SidebarButton from './SidebarButton.svelte';
   import type { DashboardLayout_Notification_user } from '$graphql';
 

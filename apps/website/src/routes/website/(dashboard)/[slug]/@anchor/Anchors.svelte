@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { calculateAnchorPositions, getAnchorElements } from '$lib/anchor';
+  import { calculateAnchorPositions, getAnchorElements } from '@typie/ui/anchor';
   import Anchor from './Anchor.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   type Props = {
     anchors: Record<string, string | null>;
