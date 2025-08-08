@@ -217,15 +217,6 @@ class _EntityList extends HookWidget {
                       child: BottomMenu(
                         header: _BottomMenuHeader(entity: entity),
                         items: [
-                          if (entities.isNotEmpty)
-                            BottomMenuItem(
-                              icon: LucideLightIcons.square_check,
-                              label: '여러 항목 선택',
-                              onTap: () {
-                                isSelecting.value = true;
-                                selectedItems.value = {};
-                              },
-                            ),
                           if (entity != null) ...[
                             BottomMenuItem(
                               icon: LucideLightIcons.folder_symlink,
@@ -263,6 +254,7 @@ class _EntityList extends HookWidget {
                                 );
                               },
                             ),
+                            const BottomMenuSeparator(),
                           ],
                           BottomMenuItem(
                             icon: LucideLightIcons.square_pen,
@@ -304,7 +296,16 @@ class _EntityList extends HookWidget {
                                 }
                               },
                             ),
-                          if (entities.length > 1)
+                          const BottomMenuSeparator(),
+                          if (entities.isNotEmpty) ...[
+                            BottomMenuItem(
+                              icon: LucideLightIcons.square_check,
+                              label: '여러 항목 선택하기',
+                              onTap: () {
+                                isSelecting.value = true;
+                                selectedItems.value = {};
+                              },
+                            ),
                             BottomMenuItem(
                               icon: LucideLightIcons.chevrons_up_down,
                               label: '순서 변경하기',
@@ -312,6 +313,8 @@ class _EntityList extends HookWidget {
                                 isReordering.value = true;
                               },
                             ),
+                            const BottomMenuSeparator(),
+                          ],
                           if (entity != null) ...[
                             BottomMenuItem(
                               icon: LucideLightIcons.pen_line,
@@ -349,8 +352,7 @@ class _EntityList extends HookWidget {
                               },
                             ),
                           ],
-                          if (entity == null) ...[
-                            const BottomMenuSeparator(),
+                          if (entity == null)
                             BottomMenuItem(
                               icon: LucideLightIcons.trash_2,
                               label: '휴지통',
@@ -358,7 +360,6 @@ class _EntityList extends HookWidget {
                                 await context.router.push(TrashRoute());
                               },
                             ),
-                          ],
                         ],
                       ),
                     );
@@ -453,15 +454,6 @@ class _EntityList extends HookWidget {
                               child: BottomMenu(
                                 header: _BottomMenuHeader(entity: entities[index]),
                                 items: [
-                                  if (!isSelecting.value)
-                                    BottomMenuItem(
-                                      icon: LucideLightIcons.square_check,
-                                      label: '여러 항목 선택',
-                                      onTap: () {
-                                        isSelecting.value = true;
-                                        selectedItems.value = {entities[index].id};
-                                      },
-                                    ),
                                   BottomMenuItem(
                                     icon: LucideLightIcons.folder_symlink,
                                     label: '다른 폴더로 옮기기',
@@ -511,6 +503,7 @@ class _EntityList extends HookWidget {
                                       );
                                     },
                                   ),
+                                  const BottomMenuSeparator(),
                                   BottomMenuItem(
                                     icon: LucideLightIcons.square_pen,
                                     label: '하위 포스트 만들기',
@@ -555,6 +548,25 @@ class _EntityList extends HookWidget {
                                         }
                                       },
                                     ),
+                                  const BottomMenuSeparator(),
+                                  if (!isSelecting.value && !isReordering.value) ...[
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.square_check,
+                                      label: '여러 항목 선택하기',
+                                      onTap: () {
+                                        isSelecting.value = true;
+                                        selectedItems.value = {entities[index].id};
+                                      },
+                                    ),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.chevrons_up_down,
+                                      label: '순서 변경하기',
+                                      onTap: () {
+                                        isReordering.value = true;
+                                      },
+                                    ),
+                                    const BottomMenuSeparator(),
+                                  ],
                                   BottomMenuItem(
                                     icon: LucideLightIcons.trash_2,
                                     label: '삭제하기',
@@ -591,15 +603,6 @@ class _EntityList extends HookWidget {
                               child: BottomMenu(
                                 header: _BottomMenuHeader(entity: entities[index]),
                                 items: [
-                                  if (!isSelecting.value)
-                                    BottomMenuItem(
-                                      icon: LucideLightIcons.square_check,
-                                      label: '여러 항목 선택',
-                                      onTap: () {
-                                        isSelecting.value = true;
-                                        selectedItems.value = {entities[index].id};
-                                      },
-                                    ),
                                   BottomMenuItem(
                                     icon: LucideLightIcons.file_symlink,
                                     label: '다른 폴더로 옮기기',
@@ -656,6 +659,25 @@ class _EntityList extends HookWidget {
                                       );
                                     },
                                   ),
+                                  const BottomMenuSeparator(),
+                                  if (!isSelecting.value && !isReordering.value) ...[
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.square_check,
+                                      label: '여러 항목 선택하기',
+                                      onTap: () {
+                                        isSelecting.value = true;
+                                        selectedItems.value = {entities[index].id};
+                                      },
+                                    ),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.chevrons_up_down,
+                                      label: '순서 변경하기',
+                                      onTap: () {
+                                        isReordering.value = true;
+                                      },
+                                    ),
+                                    const BottomMenuSeparator(),
+                                  ],
                                   BottomMenuItem(
                                     icon: LucideLightIcons.trash_2,
                                     label: '삭제하기',
@@ -690,15 +712,6 @@ class _EntityList extends HookWidget {
                               child: BottomMenu(
                                 header: _BottomMenuHeader(entity: entities[index]),
                                 items: [
-                                  if (!isSelecting.value)
-                                    BottomMenuItem(
-                                      icon: LucideLightIcons.square_check,
-                                      label: '여러 항목 선택',
-                                      onTap: () {
-                                        isSelecting.value = true;
-                                        selectedItems.value = {entities[index].id};
-                                      },
-                                    ),
                                   BottomMenuItem(
                                     icon: LucideLightIcons.file_symlink,
                                     label: '다른 폴더로 옮기기',
@@ -731,6 +744,25 @@ class _EntityList extends HookWidget {
                                       );
                                     },
                                   ),
+                                  const BottomMenuSeparator(),
+                                  if (!isSelecting.value && !isReordering.value) ...[
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.square_check,
+                                      label: '여러 항목 선택하기',
+                                      onTap: () {
+                                        isSelecting.value = true;
+                                        selectedItems.value = {entities[index].id};
+                                      },
+                                    ),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.chevrons_up_down,
+                                      label: '순서 변경하기',
+                                      onTap: () {
+                                        isReordering.value = true;
+                                      },
+                                    ),
+                                    const BottomMenuSeparator(),
+                                  ],
                                   BottomMenuItem(
                                     icon: LucideLightIcons.trash_2,
                                     label: '삭제하기',
