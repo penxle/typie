@@ -16,6 +16,7 @@ extension BottomSheetExtension on BuildContext {
     required Widget child,
     bool intercept = false,
     double overlayOpacity = 0.5,
+    void Function(double)? onHeightCalculated,
   }) {
     return router.root.pushWidget(
       child,
@@ -56,7 +57,10 @@ extension BottomSheetExtension on BuildContext {
                 alignment: Alignment.bottomCenter,
                 child: ResponsiveContainer(
                   alignment: Alignment.bottomCenter,
-                  child: SlideTransition(position: tweenedSlide, child: child),
+                  child: SlideTransition(
+                    position: tweenedSlide,
+                    child: _BottomSheet(onHeightCalculated: onHeightCalculated, child: child),
+                  ),
                 ),
               ),
             ),
@@ -68,14 +72,25 @@ extension BottomSheetExtension on BuildContext {
 }
 
 class _BottomSheet extends HookWidget {
-  const _BottomSheet({required this.child});
+  const _BottomSheet({required this.child, this.onHeightCalculated});
 
   final Widget child;
+  final void Function(double)? onHeightCalculated;
 
   @override
   Widget build(BuildContext context) {
     final sheetKey = useMemoized(GlobalKey.new);
     final controller = useAnimationController(upperBound: double.infinity, duration: const Duration(milliseconds: 300));
+
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final renderBox = sheetKey.currentContext?.findRenderObject() as RenderBox?;
+        if (renderBox != null && onHeightCalculated != null) {
+          onHeightCalculated!(renderBox.size.height);
+        }
+      });
+      return null;
+    }, []);
 
     return GestureDetector(
       onVerticalDragStart: (details) {
@@ -148,29 +163,27 @@ class AppBottomSheet extends StatelessWidget {
     final maxHeight = (mediaQuery.size.height - mediaQuery.padding.top) * 0.9;
     final bottomPadding = mediaQuery.padding.bottom;
 
-    return _BottomSheet(
-      child: Container(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        decoration: BoxDecoration(color: context.colors.surfaceSubtle),
-        child: Padding(
-          padding: Pad(top: 8, bottom: includeBottomPadding ? (bottomPadding + 12) : 0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            spacing: 16,
-            children: [
-              SizedBox(
-                width: 60,
-                height: 4,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: context.colors.borderDefault,
-                    borderRadius: const BorderRadius.all(Radius.circular(999)),
-                  ),
+    return Container(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      decoration: BoxDecoration(color: context.colors.surfaceSubtle),
+      child: Padding(
+        padding: Pad(top: 8, bottom: includeBottomPadding ? (bottomPadding + 12) : 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 16,
+          children: [
+            SizedBox(
+              width: 60,
+              height: 4,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: context.colors.borderDefault,
+                  borderRadius: const BorderRadius.all(Radius.circular(999)),
                 ),
               ),
-              if (padding == null) child else Padding(padding: padding!, child: child),
-            ],
-          ),
+            ),
+            if (padding == null) child else Padding(padding: padding!, child: child),
+          ],
         ),
       ),
     );
@@ -192,39 +205,37 @@ class AppFullBottomSheet extends StatelessWidget {
         : double.infinity;
     final bottomPadding = mediaQuery.padding.bottom;
 
-    return _BottomSheet(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              height: 52,
-              decoration: BoxDecoration(
-                color: context.colors.surfaceDefault,
-                border: Border(bottom: BorderSide(color: context.colors.borderDefault)),
-              ),
-              padding: const Pad(horizontal: 8),
-              child: NavigationToolbar(
-                leading: Tappable(
-                  padding: const Pad(horizontal: 4),
-                  onTap: () async {
-                    await context.router.maybePop();
-                  },
-                  child: Icon(LucideLightIcons.x, size: 24, color: context.colors.textDefault),
-                ),
-                middle: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-              ),
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 52,
+            decoration: BoxDecoration(
+              color: context.colors.surfaceDefault,
+              border: Border(bottom: BorderSide(color: context.colors.borderDefault)),
             ),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(color: context.colors.surfaceDefault),
-                padding: padding ?? Pad(top: 20, bottom: bottomPadding + 12, horizontal: 20),
-                child: child,
+            padding: const Pad(horizontal: 8),
+            child: NavigationToolbar(
+              leading: Tappable(
+                padding: const Pad(horizontal: 4),
+                onTap: () async {
+                  await context.router.maybePop();
+                },
+                child: Icon(LucideLightIcons.x, size: 24, color: context.colors.textDefault),
               ),
+              middle: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
             ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(color: context.colors.surfaceDefault),
+              padding: padding ?? Pad(top: 20, bottom: bottomPadding + 12, horizontal: 20),
+              child: child,
+            ),
+          ),
+        ],
       ),
     );
   }

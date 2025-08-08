@@ -1,5 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -7,7 +8,7 @@ import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart
 import 'package:typie/screens/entity/multi_entities_menu.dart';
 import 'package:typie/widgets/tappable.dart';
 
-class SelectedEntitiesBar extends StatelessWidget {
+class SelectedEntitiesBar extends HookWidget {
   const SelectedEntitiesBar({
     super.key,
     required this.selectedItems,
@@ -22,15 +23,18 @@ class SelectedEntitiesBar extends StatelessWidget {
   final VoidCallback onClearSelection;
   final VoidCallback onExitSelectionMode;
   final bool isVisible;
+  final offset = 20.0;
 
   @override
   Widget build(BuildContext context) {
+    final bottomPosition = useState(offset);
+
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeInOut,
       left: 0,
       right: 0,
-      bottom: isVisible ? 20 : 10,
+      bottom: isVisible ? bottomPosition.value : offset - 10,
       child: AnimatedOpacity(
         opacity: isVisible ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 200),
@@ -71,6 +75,10 @@ class SelectedEntitiesBar extends StatelessWidget {
                   Tappable(
                     onTap: () async {
                       await context.showBottomSheet(
+                        onHeightCalculated: (height) {
+                          const tabBarHeight = 86.0; // NOTE: magic number; 하단 내비게이션 바 높이
+                          bottomPosition.value = height - tabBarHeight + offset;
+                        },
                         child: MultiEntitiesMenu(
                           selectedItems: selectedItems,
                           entities: entities,
@@ -78,6 +86,8 @@ class SelectedEntitiesBar extends StatelessWidget {
                           via: 'selected_entities_bar',
                         ),
                       );
+
+                      bottomPosition.value = offset;
                     },
                     child: Container(
                       padding: const Pad(all: 6),
