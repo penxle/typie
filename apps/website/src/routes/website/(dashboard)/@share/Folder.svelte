@@ -1,6 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { Button, HorizontalDivider, Icon, RingSpinner, Select } from '@typie/ui/components';
+  import { createForm } from '@typie/ui/form';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { EntityVisibility } from '@/enums';
@@ -10,9 +13,6 @@
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
   import { fragment, graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
-  import { Button, HorizontalDivider, Icon, RingSpinner, Select } from '$lib/components';
-  import { createForm } from '$lib/form';
   import type { DashboardLayout_Share_Folder_folder } from '$graphql';
 
   type Props = {

@@ -1,6 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { getThemeContext } from '@typie/ui/context';
+  import { serializeOAuthState } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount } from 'svelte';
@@ -16,12 +19,10 @@
   import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Button, Icon, Img, Menu, MenuItem } from '$lib/components';
+  import { Img } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
-  import { getThemeContext } from '$lib/context';
-  import { serializeOAuthState } from '$lib/utils';
+  import type { Theme } from '@typie/ui/context';
   import type { Component, Snippet } from 'svelte';
-  import type { Theme } from '$lib/context';
 
   type Props = {
     children: Snippet;

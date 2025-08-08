@@ -1,6 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, Checkbox, HorizontalDivider, Icon, Modal, SegmentButtons, TextInput } from '@typie/ui/components';
+  import { createForm, FormError } from '@typie/ui/form';
+  import { Dialog, Toast } from '@typie/ui/notification';
+  import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { PlanId } from '@/const';
@@ -11,10 +15,6 @@
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { fragment, graphql } from '$graphql';
   import { fb } from '$lib/analytics';
-  import { Button, Checkbox, HorizontalDivider, Icon, Modal, SegmentButtons, TextInput } from '$lib/components';
-  import { createForm, FormError } from '$lib/form';
-  import { Dialog, Toast } from '$lib/notification';
-  import { comma } from '$lib/utils';
   import type { DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user } from '$graphql';
 
   type Props = {

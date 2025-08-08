@@ -2,6 +2,11 @@
   import * as PortOne from '@portone/browser-sdk/v2';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, ContentProtect, Helmet, HorizontalDivider, Icon, TextInput } from '@typie/ui/components';
+  import { createForm, FormError } from '@typie/ui/form';
+  import { Toast } from '@typie/ui/notification';
+  import { TiptapRenderer } from '@typie/ui/tiptap';
+  import { comma, serializeOAuthState } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import qs from 'query-string';
@@ -14,11 +19,7 @@
   import { page } from '$app/state';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
-  import { Button, ContentProtect, Helmet, HorizontalDivider, Icon, Img, TextInput } from '$lib/components';
-  import { createForm, FormError } from '$lib/form';
-  import { Toast } from '$lib/notification';
-  import { TiptapRenderer } from '$lib/tiptap';
-  import { comma, serializeOAuthState } from '$lib/utils';
+  import { Img } from '$lib/components';
   import EmojiReaction from './EmojiReaction.svelte';
   import PostActionMenu from './PostActionMenu.svelte';
   import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';

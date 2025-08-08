@@ -1,6 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { fly } from 'svelte/transition';
   import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
@@ -15,10 +19,6 @@
   import FaviconDark from '$assets/logos/favicon-dark.svg?component';
   import FaviconLight from '$assets/logos/favicon-light.svg?component';
   import { fragment, graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
-  import { Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
-  import { Dialog } from '$lib/notification';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
   import Notification from './Notification.svelte';

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getSchema } from '@tiptap/core';
-  import { baseExtensions } from '$lib/tiptap';
+  import { baseExtensions } from '@typie/ui/tiptap';
 
   const schema = getSchema(baseExtensions);
   const spec = {

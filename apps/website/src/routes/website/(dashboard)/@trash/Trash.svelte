@@ -1,16 +1,16 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { Dialog, Toast } from '@typie/ui/notification';
+  import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { sineInOut } from 'svelte/easing';
   import { fade } from 'svelte/transition';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { fragment, graphql } from '$graphql';
-  import { Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
-  import { Dialog, Toast } from '$lib/notification';
-  import { clamp } from '$lib/utils';
   import TrashTree from './TrashTree.svelte';
   import type { DashboardLayout_Trash_site } from '$graphql';
 

@@ -1,17 +1,17 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { onMount, tick, untrack } from 'svelte';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import ReplaceIcon from '~icons/lucide/replace';
   import ReplaceAllIcon from '~icons/lucide/replace-all';
   import WholeWordIcon from '~icons/lucide/whole-word';
-  import { tooltip } from '$lib/actions';
-  import { Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   type Props = {
     editor: Ref<Editor>;

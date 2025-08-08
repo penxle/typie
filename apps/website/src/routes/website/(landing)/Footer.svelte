@@ -1,10 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
   import GithubIcon from '~icons/simple-icons/github';
   import TwitterIcon from '~icons/simple-icons/twitter';
   import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
-  import { Icon } from '$lib/components';
 </script>
 
 <footer

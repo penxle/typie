@@ -1,13 +1,13 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { outsideClick } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import MenuIcon from '~icons/lucide/menu';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
-  import { outsideClick } from '$lib/actions';
-  import { Icon } from '$lib/components';
 
   let mobileMenuOpen = false;
 

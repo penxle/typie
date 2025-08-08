@@ -2,6 +2,10 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
+  import { tooltip } from '@typie/ui/actions';
+  import { HorizontalDivider, Icon, SegmentButtons, Slider, Switch, Tooltip, VerticalDivider } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { defaultValues, values } from '@typie/ui/tiptap';
   import mixpanel from 'mixpanel-browser';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
@@ -34,10 +38,6 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
   import { fragment, graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
-  import { HorizontalDivider, Icon, SegmentButtons, Slider, Switch, Tooltip, VerticalDivider } from '$lib/components';
-  import { getAppContext } from '$lib/context/app.svelte';
-  import { defaultValues, values } from '$lib/tiptap/values';
   import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
@@ -51,9 +51,9 @@
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
   import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
   import type { Editor_Toolbar_site, Optional } from '$graphql';
-  import type { Ref } from '$lib/utils';
 
   type Props = {
     $site?: Optional<Editor_Toolbar_site>;

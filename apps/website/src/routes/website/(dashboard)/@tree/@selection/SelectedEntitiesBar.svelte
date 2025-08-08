@@ -1,11 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { Icon, Menu } from '@typie/ui/components';
   import { fade } from 'svelte/transition';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import XIcon from '~icons/lucide/x';
-  import { tooltip } from '$lib/actions';
-  import { Icon, Menu } from '$lib/components';
   import { getTreeContext } from '../state.svelte';
   import MultiEntitiesMenu from './MultiEntitiesMenu.svelte';
 

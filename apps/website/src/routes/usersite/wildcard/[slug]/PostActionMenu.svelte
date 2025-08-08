@@ -1,5 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { Button, Icon, Menu, MenuItem, Modal } from '@typie/ui/components';
+  import { createForm } from '@typie/ui/form';
+  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
@@ -7,9 +10,6 @@
   import PencilLineIcon from '~icons/lucide/pencil-line';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
-  import { Button, Icon, Menu, MenuItem, Modal } from '$lib/components';
-  import { createForm } from '$lib/form';
-  import { Toast } from '$lib/notification';
   import type { UsersiteWildcardSlugPage_PostActionMenu_entityView } from '$graphql';
 
   type Props = {

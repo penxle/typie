@@ -1,11 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Helmet, Icon } from '@typie/ui/components';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import { fragment, graphql } from '$graphql';
-  import { Helmet, Icon } from '$lib/components';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { UsersiteWildcardSlugPage_FolderView_entityView } from '$graphql';
 

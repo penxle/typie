@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Icon } from '$lib/components';
+  import { Icon } from '@typie/ui/components';
   import { emojis } from './emoji';
 
   type Props = {

@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { Helmet } from '@typie/ui/components';
   import { graphql } from '$graphql';
-  import { Helmet } from '$lib/components';
   import CallToAction from './CallToAction.svelte';
   import Features from './Features.svelte';
   import Hero from './Hero.svelte';

@@ -1,21 +1,21 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { HorizontalDivider, Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import { fragment, graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
-  import { HorizontalDivider, Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import PanelCharacterCountChangeWidget from './PanelCharacterCountChangeWidget.svelte';
   import PanelCharacterCountWidget from './PanelCharacterCountWidget.svelte';
   import PanelNote from './PanelNote.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
   import type { Editor_Panel_post, Editor_Panel_user } from '$graphql';
-  import type { Ref } from '$lib/utils';
 
   type Props = {
     $post: Editor_Panel_post;

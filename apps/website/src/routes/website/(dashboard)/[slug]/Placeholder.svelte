@@ -2,16 +2,16 @@
   import { Mark } from '@tiptap/pm/model';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
+  import { isBodyEmpty } from '@typie/ui/tiptap';
   import * as Y from 'yjs';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import ShapesIcon from '~icons/lucide/shapes';
   import { fragment, graphql } from '$graphql';
-  import { HorizontalDivider, Icon, Modal } from '$lib/components';
-  import { isBodyEmpty } from '$lib/tiptap';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { Ref } from '@typie/ui/utils';
   import type { Editor_Placeholder_site } from '$graphql';
-  import type { Ref } from '$lib/utils';
 
   type Props = {
     $site: Editor_Placeholder_site;

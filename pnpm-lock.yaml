@@ -606,7 +606,7 @@ importers:
         version: 4.3.1(picomatch@4.0.3)(svelte@5.37.3)(typescript@5.9.2)
       svelte-preprocess:
         specifier: ^6.0.3
-        version: 6.0.3(@babel/core@7.28.0)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.3)(yaml@2.8.0))(postcss@8.4.49)(svelte@5.37.3)(typescript@5.9.2)
+        version: 6.0.3(@babel/core@7.28.0)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.0))(postcss@8.5.6)(svelte@5.37.3)(typescript@5.9.2)
       svelte-sonner:
         specifier: ^1.0.5
         version: 1.0.5(svelte@5.37.3)
@@ -900,9 +900,132 @@ importers:
 
   packages/ui:
     devDependencies:
+      '@ctrl/tinycolor':
+        specifier: ^4.1.0
+        version: 4.1.0
+      '@floating-ui/dom':
+        specifier: ^1.7.3
+        version: 1.7.3
+      '@pandacss/dev':
+        specifier: ^1.0.0
+        version: 1.0.0(jsdom@26.1.0(canvas@3.1.2))(typescript@5.9.2)
+      '@sveltejs/kit':
+        specifier: ^2.27.0
+        version: 2.27.0(@sveltejs/vite-plugin-svelte@6.1.0(svelte@5.37.3)(vite@7.0.6(@types/node@24.2.0)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0)))(svelte@5.37.3)(vite@7.0.6(@types/node@24.2.0)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^6.1.0
+        version: 6.1.0(svelte@5.37.3)(vite@7.0.6(@types/node@24.2.0)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.0))
+      '@tiptap/core':
+        specifier: ^3.0.9
+        version: 3.0.9(@tiptap/pm@3.0.9)
+      '@tiptap/html':
+        specifier: ^3.0.9
+        version: 3.0.9(@tiptap/core@3.0.9(@tiptap/pm@3.0.9))(@tiptap/pm@3.0.9)(happy-dom@18.0.1)
+      '@tiptap/pm':
+        specifier: ^3.0.9
+        version: 3.0.9
+      '@types/node':
+        specifier: ^24.2.0
+        version: 24.2.0
+      '@types/textarea-caret':
+        specifier: ^3.0.4
+        version: 3.0.4
       '@typie/styled-system':
         specifier: workspace:*
         version: link:../styled-system
+      '@typie/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      body-scroll-lock-upgrade:
+        specifier: ^1.1.0
+        version: 1.1.0
+      dayjs:
+        specifier: ^1.11.13
+        version: 1.11.13
+      es-hangul:
+        specifier: ^2.3.5
+        version: 2.3.5
+      escape-string-regexp:
+        specifier: ^5.0.0
+        version: 5.0.0
+      focus-trap:
+        specifier: ^7.6.5
+        version: 7.6.5
+      happy-dom:
+        specifier: ^18.0.1
+        version: 18.0.1
+      konva:
+        specifier: ^9.3.22
+        version: 9.3.22
+      linkifyjs:
+        specifier: ^4.3.2
+        version: 4.3.2
+      match-sorter:
+        specifier: ^8.1.0
+        version: 8.1.0
+      mixpanel-browser:
+        specifier: ^2.67.0
+        version: 2.67.0
+      nanoid:
+        specifier: ^5.1.5
+        version: 5.1.5
+      query-string:
+        specifier: ^9.2.2
+        version: 9.2.2
+      remeda:
+        specifier: ^2.28.0
+        version: 2.28.0
+      rfc4648:
+        specifier: ^1.5.4
+        version: 1.5.4
+      roughjs:
+        specifier: ^4.6.6
+        version: 4.6.6
+      shiki:
+        specifier: ^3.9.2
+        version: 3.9.2
+      svelte:
+        specifier: ^5.37.3
+        version: 5.37.3
+      svelte-check:
+        specifier: ^4.3.1
+        version: 4.3.1(picomatch@4.0.3)(svelte@5.37.3)(typescript@5.9.2)
+      svelte-sonner:
+        specifier: ^1.0.5
+        version: 1.0.5(svelte@5.37.3)
+      textarea-caret:
+        specifier: ^3.1.0
+        version: 3.1.0
+      thumbhash:
+        specifier: ^0.1.1
+        version: 0.1.1
+      ts-pattern:
+        specifier: ^5.8.0
+        version: 5.8.0
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      universal-cookie:
+        specifier: ^8.0.1
+        version: 8.0.1
+      unplugin-icons:
+        specifier: ^22.2.0
+        version: 22.2.0(@vue/compiler-sfc@3.4.19)(svelte@5.37.3)
+      y-prosemirror:
+        specifier: ^1.3.7
+        version: 1.3.7(prosemirror-model@1.25.2)(prosemirror-state@1.4.3)(prosemirror-view@1.40.1)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)
+      y-protocols:
+        specifier: ^1.0.6
+        version: 1.0.6(yjs@13.6.27)
+      yjs:
+        specifier: ^13.6.27
+        version: 13.6.27
+      zeed-dom:
+        specifier: ^0.17.7
+        version: 0.17.7
+      zod:
+        specifier: ^4.0.14
+        version: 4.0.14
 
 packages:
 
@@ -18811,16 +18934,6 @@ snapshots:
     optionalDependencies:
       postcss: 8.5.6
 
-  postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.3)(yaml@2.8.0):
-    dependencies:
-      lilconfig: 3.1.3
-    optionalDependencies:
-      jiti: 2.4.2
-      postcss: 8.4.49
-      tsx: 4.20.3
-      yaml: 2.8.0
-    optional: true
-
   postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.0):
     dependencies:
       lilconfig: 3.1.3
@@ -19893,13 +20006,13 @@ snapshots:
     optionalDependencies:
       svelte: 5.37.3
 
-  svelte-preprocess@6.0.3(@babel/core@7.28.0)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.3)(yaml@2.8.0))(postcss@8.4.49)(svelte@5.37.3)(typescript@5.9.2):
+  svelte-preprocess@6.0.3(@babel/core@7.28.0)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.0))(postcss@8.5.6)(svelte@5.37.3)(typescript@5.9.2):
     dependencies:
       svelte: 5.37.3
     optionalDependencies:
       '@babel/core': 7.28.0
-      postcss: 8.4.49
-      postcss-load-config: 6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.3)(yaml@2.8.0)
+      postcss: 8.5.6
+      postcss-load-config: 6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.0)
       typescript: 5.9.2
 
   svelte-sonner@1.0.5(svelte@5.37.3):

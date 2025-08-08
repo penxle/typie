@@ -1,6 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import FileIcon from '~icons/lucide/file';
@@ -10,8 +12,6 @@
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { graphql } from '$graphql';
-  import { HorizontalDivider, Icon, MenuItem } from '$lib/components';
-  import { Dialog, Toast } from '$lib/notification';
   import type { TreeState } from '../state.svelte';
   import type { TreeEntity } from './types';
 

@@ -1,6 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { Dialog, Toast } from '@typie/ui/notification';
+  import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
   import { TypieError } from '@/errors';
@@ -12,10 +16,6 @@
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
-  import { HorizontalDivider, Icon, MenuItem } from '$lib/components';
-  import { getAppContext } from '$lib/context';
-  import { Dialog, Toast } from '$lib/notification';
-  import { comma } from '$lib/utils';
 
   type Props = {
     post: {

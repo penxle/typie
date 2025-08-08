@@ -5,6 +5,12 @@
   import { Selection } from '@tiptap/pm/state';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { autosize, tooltip } from '@typie/ui/actions';
+  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { Tip } from '@typie/ui/notification';
+  import { getNodeView, TiptapEditor } from '@typie/ui/tiptap';
+  import { mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
@@ -28,12 +34,7 @@
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
-  import { autosize, tooltip } from '$lib/actions';
-  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '$lib/components';
-  import { getAppContext } from '$lib/context';
-  import { Tip } from '$lib/notification';
-  import { getNodeView, TiptapEditor } from '$lib/tiptap';
-  import { mmToPx, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
+  import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import Anchors from './@anchor/Anchors.svelte';
   import Highlight from './Highlight.svelte';
@@ -45,8 +46,8 @@
   import Timeline from './Timeline.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { Ref } from '@typie/ui/utils';
   import type { Editor_query } from '$graphql';
-  import type { Ref } from '$lib/utils';
 
   type Props = {
     $query: Editor_query;

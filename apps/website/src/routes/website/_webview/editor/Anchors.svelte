@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { calculateAnchorPositions, getAnchorElements, getLastNodeOffsetTop } from '@typie/ui/anchor';
+  import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import * as Y from 'yjs';
-  import { calculateAnchorPositions, getAnchorElements, getLastNodeOffsetTop } from '$lib/anchor';
-  import { clamp } from '$lib/utils';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   type Props = {
     doc: Y.Doc;

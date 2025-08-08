@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { onMount } from 'svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   type Props = {
     editor: Ref<Editor>;

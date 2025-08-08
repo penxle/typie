@@ -1,16 +1,16 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { getThemeContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import CheckIcon from '~icons/lucide/check';
   import MonitorIcon from '~icons/lucide/monitor';
   import MoonIcon from '~icons/lucide/moon';
   import SunIcon from '~icons/lucide/sun';
   import SunMoonIcon from '~icons/lucide/sun-moon';
-  import { Icon, Menu, MenuItem } from '$lib/components';
-  import { getThemeContext } from '$lib/context';
   import SidebarButton from './SidebarButton.svelte';
+  import type { Theme } from '@typie/ui/context';
   import type { Component } from 'svelte';
-  import type { Theme } from '$lib/context';
 
   const themes: Record<Theme, { icon: Component; label: string }> = {
     auto: { icon: MonitorIcon, label: '시스템 설정' },

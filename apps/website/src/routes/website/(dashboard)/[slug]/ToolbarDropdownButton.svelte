@@ -1,9 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { createFloatingActions, tooltip } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import { createFloatingActions, tooltip } from '$lib/actions';
-  import { Icon } from '$lib/components';
   import type { Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';

@@ -2,10 +2,10 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
-  import { values } from '$lib/canvas';
-  import { getThemeContext } from '$lib/context';
+  import { values } from '@typie/ui/canvas';
+  import { getThemeContext } from '@typie/ui/context';
   import PanelButton from './PanelButton.svelte';
-  import type { Canvas, Shapes } from '$lib/canvas';
+  import type { Canvas, Shapes } from '@typie/ui/canvas';
 
   type Props = {
     canvas: Canvas;

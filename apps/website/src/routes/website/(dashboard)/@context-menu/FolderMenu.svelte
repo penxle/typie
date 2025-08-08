@@ -1,6 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { HorizontalDivider, Icon, MenuItem, RingSpinner } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { Dialog } from '@typie/ui/notification';
+  import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { EntityType, EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
@@ -17,10 +21,6 @@
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
-  import { HorizontalDivider, Icon, MenuItem, RingSpinner } from '$lib/components';
-  import { getAppContext } from '$lib/context';
-  import { Dialog } from '$lib/notification';
-  import { comma } from '$lib/utils';
   import { maxDepth } from '../@tree/utils';
 
   type Props = {

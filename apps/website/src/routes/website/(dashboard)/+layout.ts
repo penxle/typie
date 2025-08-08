@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
+import { serializeOAuthState } from '@typie/ui/utils';
 import qs from 'query-string';
 import { env } from '$env/dynamic/public';
-import { serializeOAuthState } from '$lib/utils';
 import type { DashboardLayout_Query_AfterLoad } from './$graphql';
 
 export const _DashboardLayout_Query_AfterLoad: DashboardLayout_Query_AfterLoad = ({ query, event }) => {

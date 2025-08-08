@@ -1,6 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { Button, Checkbox, Helmet, Icon, TextInput } from '@typie/ui/components';
+  import { createForm, FormError } from '@typie/ui/form';
+  import { serializeOAuthState } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
@@ -11,11 +15,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
   import { fb } from '$lib/analytics';
-  import { Button, Checkbox, Helmet, Icon, TextInput } from '$lib/components';
-  import { createForm, FormError } from '$lib/form';
-  import { serializeOAuthState } from '$lib/utils';
 
   const query = graphql(`
     query SignUpPage_Query {

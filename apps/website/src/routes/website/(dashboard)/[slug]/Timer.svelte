@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { createFloatingActions } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { onDestroy } from 'svelte';
   import AlarmClockIcon from '~icons/lucide/alarm-clock';
   import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
   import XIcon from '~icons/lucide/x';
-  import { createFloatingActions } from '$lib/actions';
-  import { Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
 
   const app = getAppContext();
 

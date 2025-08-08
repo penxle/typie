@@ -7,8 +7,8 @@
   import { fragment, graphql } from '$graphql';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
+  import type { Ref } from '@typie/ui/utils';
   import type { WebViewEditor_Limit_query } from '$graphql';
-  import type { Ref } from '$lib/utils';
 
   type Props = {
     $query: WebViewEditor_Limit_query;

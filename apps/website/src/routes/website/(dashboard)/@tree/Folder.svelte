@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { contextMenu } from '@typie/ui/actions';
+  import { Icon, Menu } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import { fragment, graphql } from '$graphql';
-  import { contextMenu } from '$lib/actions/context-menu';
-  import { Icon, Menu } from '$lib/components';
-  import { getAppContext } from '$lib/context';
   import FolderMenu from '../@context-menu/FolderMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';

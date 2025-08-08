@@ -5,6 +5,9 @@
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { createFloatingActions } from '@typie/ui/actions';
+  import { Icon, RingSpinner, Tooltip } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { untrack } from 'svelte';
@@ -13,12 +16,9 @@
   import CircleHelpIcon from '~icons/lucide/circle-help';
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import { graphql } from '$graphql';
-  import { createFloatingActions } from '$lib/actions';
-  import { Icon, RingSpinner, Tooltip } from '$lib/components';
-  import { Toast } from '$lib/notification';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
-  import type { Ref } from '$lib/utils';
+  import type { Ref } from '@typie/ui/utils';
 
   type Props = {
     editor?: Ref<Editor>;

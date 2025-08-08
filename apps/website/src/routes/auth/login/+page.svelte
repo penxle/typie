@@ -1,6 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Button, Helmet, Icon, TextInput } from '@typie/ui/components';
+  import { createForm, FormError } from '@typie/ui/form';
+  import { serializeOAuthState } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { z } from 'zod';
@@ -14,9 +17,6 @@
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { fb } from '$lib/analytics';
-  import { Button, Helmet, Icon, TextInput } from '$lib/components';
-  import { createForm, FormError } from '$lib/form';
-  import { serializeOAuthState } from '$lib/utils';
 
   const loginWithEmail = graphql(`
     mutation LoginPage_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {

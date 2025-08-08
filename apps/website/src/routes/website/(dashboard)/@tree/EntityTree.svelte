@@ -1,6 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { portal } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
@@ -9,10 +13,6 @@
   import FolderIcon from '~icons/lucide/folder';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { fragment, graphql } from '$graphql';
-  import { portal } from '$lib/actions';
-  import { Icon } from '$lib/components';
-  import { getAppContext } from '$lib/context';
-  import { Toast } from '$lib/notification';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { setupTreeContext } from './state.svelte';

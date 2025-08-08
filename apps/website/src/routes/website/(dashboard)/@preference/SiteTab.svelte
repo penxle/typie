@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, TextInput } from '@typie/ui/components';
+  import { createForm, FormError } from '@typie/ui/form';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { siteSchema } from '@/validation';
   import { fragment, graphql } from '$graphql';
-  import { Button, TextInput } from '$lib/components';
-  import { createForm, FormError } from '$lib/form';
-  import { Dialog, Toast } from '$lib/notification';
   import type { DashboardLayout_PreferenceModal_SiteTab_user } from '$graphql';
 
   type Props = {

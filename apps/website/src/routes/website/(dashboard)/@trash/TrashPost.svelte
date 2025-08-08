@@ -1,6 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { Icon } from '@typie/ui/components';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
@@ -8,9 +11,6 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
   import { fragment, graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
-  import { Icon } from '$lib/components';
-  import { Dialog, Toast } from '$lib/notification';
   import type { DashboardLayout_TrashTree_TrashPost_post } from '$graphql';
 
   type Props = {

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Helmet, RingSpinner } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
-  import { Helmet, RingSpinner } from '$lib/components';
-  import { Toast } from '$lib/notification';
 
   const updateEmail = graphql(`
     mutation UpdateEmailPage_UpdateEmail_Mutation($input: UpdateEmailInput!) {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { Icon } from '$lib/components';
+  import { Icon } from '@typie/ui/components';
   import type { Component, Snippet } from 'svelte';
 
   type Props = {

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
+  import { comma } from '@typie/ui/utils';
   import { fly } from 'svelte/transition';
   import IconChevronRight from '~icons/lucide/chevron-right';
   import GoalIcon from '~icons/lucide/goal';
   import TrendingDownIcon from '~icons/lucide/trending-down';
   import TrendingUpIcon from '~icons/lucide/trending-up';
   import { fragment, graphql } from '$graphql';
-  import { Icon } from '$lib/components';
-  import { comma } from '$lib/utils';
   import type { Editor_Panel_CharacterCountChangeWidget_post } from '$graphql';
 
   type Props = {

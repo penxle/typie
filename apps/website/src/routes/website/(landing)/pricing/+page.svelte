@@ -2,6 +2,9 @@
   import NumberFlow from '@number-flow/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Helmet, Icon } from '@typie/ui/components';
+  import { PLAN_FEATURES } from '@typie/ui/constants';
+  import { comma } from '@typie/ui/utils';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -9,9 +12,6 @@
   import ZapIcon from '~icons/lucide/zap';
   import { browser } from '$app/environment';
   import { page } from '$app/state';
-  import { Helmet, Icon } from '$lib/components';
-  import { PLAN_FEATURES } from '$lib/constants';
-  import { comma } from '$lib/utils/number';
 
   let selectedInterval = $state<'monthly' | 'yearly'>('monthly');
   let expandedIndex = $state<number | null>(null);

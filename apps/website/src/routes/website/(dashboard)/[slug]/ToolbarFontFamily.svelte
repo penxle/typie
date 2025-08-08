@@ -1,24 +1,24 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
+  import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
+  import { Dialog } from '@typie/ui/notification';
+  import { defaultValues, values } from '@typie/ui/tiptap';
   import { TypieError } from '@/errors';
   import GemIcon from '~icons/lucide/gem';
   import InfoIcon from '~icons/lucide/info';
   import PlusIcon from '~icons/lucide/plus';
   import TypeIcon from '~icons/lucide/type';
   import { fragment, graphql } from '$graphql';
-  import { tooltip } from '$lib/actions';
-  import { Button, HorizontalDivider, Icon, Modal } from '$lib/components';
-  import { Dialog } from '$lib/notification';
-  import { defaultValues, values } from '$lib/tiptap/values';
   import { uploadBlob } from '$lib/utils';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { Ref } from '@typie/ui/utils';
   import type { Editor_Toolbar_FontFamily_site, Optional } from '$graphql';
-  import type { Ref } from '$lib/utils';
 
   type Props = {
     $site: Optional<Editor_Toolbar_FontFamily_site>;

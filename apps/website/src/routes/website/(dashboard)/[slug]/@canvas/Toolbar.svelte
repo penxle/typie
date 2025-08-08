@@ -10,7 +10,7 @@
   import SquareIcon from '~icons/lucide/square';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import ToolbarButton from './ToolbarButton.svelte';
-  import type { Canvas } from '$lib/canvas';
+  import type { Canvas } from '@typie/ui/canvas';
 
   type Props = {
     canvas: Canvas;

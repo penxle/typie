@@ -1,6 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { Helmet, RingSpinner } from '@typie/ui/components';
+  import { deserializeOAuthState } from '@typie/ui/utils';
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import { match } from 'ts-pattern';
@@ -9,8 +11,6 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
-  import { Helmet, RingSpinner } from '$lib/components';
-  import { deserializeOAuthState } from '$lib/utils';
 
   const authorizeSingleSignOn = graphql(`
     mutation SSOProviderPage_AuthorizeSingleSignOn_Mutation($input: AuthorizeSingleSignOnInput!) {
