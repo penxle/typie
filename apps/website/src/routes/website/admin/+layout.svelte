@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import FileTextIcon from '~icons/lucide/file-text';
   import HomeIcon from '~icons/lucide/home';
   import UsersIcon from '~icons/lucide/users';
   import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { AdminIcon, AdminImpersonateBanner } from '$lib/components/admin';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
 
   let { children } = $props();
 

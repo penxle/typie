@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { matchSorter } from 'match-sorter';
   import { bundledLanguagesInfo } from 'shiki';
   import { tick } from 'svelte';
@@ -8,8 +10,6 @@
   import IconSearch from '~icons/lucide/search';
   import { createFloatingActions } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import type { NodeViewProps } from '../../lib';
 
   type Props = {

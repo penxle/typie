@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import mixpanel from 'mixpanel-browser';
   import CheckIcon from '~icons/lucide/check';
   import MonitorIcon from '~icons/lucide/monitor';
@@ -7,7 +8,6 @@
   import SunMoonIcon from '~icons/lucide/sun-moon';
   import { Icon, Menu, MenuItem } from '$lib/components';
   import { getThemeContext } from '$lib/context';
-  import { css } from '$styled-system/css';
   import SidebarButton from './SidebarButton.svelte';
   import type { Component } from 'svelte';
   import type { Theme } from '$lib/context';

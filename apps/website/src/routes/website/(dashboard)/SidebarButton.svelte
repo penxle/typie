@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { center } from '$styled-system/patterns';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component } from 'svelte';
   import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
 

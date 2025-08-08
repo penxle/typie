@@ -2,8 +2,8 @@ import { Extension, isiOS } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, Selection as ProseMirrorSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { css, cx } from '@typie/styled-system/css';
 import { Tip } from '$lib/notification';
-import { css, cx } from '$styled-system/css';
 import { TEXT_NODE_TYPES } from './node-commands';
 import type { Mappable } from '@tiptap/pm/transform';
 

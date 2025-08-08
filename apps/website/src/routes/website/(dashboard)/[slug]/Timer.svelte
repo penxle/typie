@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { onDestroy } from 'svelte';
   import AlarmClockIcon from '~icons/lucide/alarm-clock';
   import MinusIcon from '~icons/lucide/minus';
@@ -7,8 +9,6 @@
   import { createFloatingActions } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
 
   const app = getAppContext();
 

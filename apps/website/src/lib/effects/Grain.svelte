@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { base64 } from 'rfc4648';
   import { encode } from '$lib/utils';
-  import { css } from '$styled-system/css';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { createFloatingActions, tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
   import type { Placement } from '@floating-ui/dom';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

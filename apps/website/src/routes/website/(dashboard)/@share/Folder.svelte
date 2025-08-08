@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { EntityVisibility } from '@/enums';
@@ -11,8 +13,6 @@
   import { tooltip } from '$lib/actions';
   import { Button, HorizontalDivider, Icon, RingSpinner, Select } from '$lib/components';
   import { createForm } from '$lib/form';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_Share_Folder_folder } from '$graphql';
 
   type Props = {

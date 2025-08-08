@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
@@ -14,8 +16,6 @@
   import { Button, Checkbox, Helmet, Icon, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { serializeOAuthState } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
 
   const query = graphql(`
     query SignUpPage_Query {

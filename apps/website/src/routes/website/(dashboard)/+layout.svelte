@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { untrack } from 'svelte';
@@ -9,9 +12,6 @@
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { setupAppContext } from '$lib/context';
   import { isMobileDevice } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
-  import { token } from '$styled-system/tokens';
   import ShareModal from './@share/ShareModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import Shortcuts from './Shortcuts.svelte';

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
-  import { token } from '$styled-system/tokens';
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
   import type { Snippet } from 'svelte';
 
   type Props = {

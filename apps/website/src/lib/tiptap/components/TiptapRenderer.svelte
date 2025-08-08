@@ -1,12 +1,12 @@
 <script lang="ts">
   import { Editor, Extension } from '@tiptap/core';
+  import { css, cx } from '@typie/styled-system/css';
   import { onMount } from 'svelte';
   import { Ref } from '$lib/utils';
-  import { css, cx } from '$styled-system/css';
   import { renderHTML } from '../lib/html';
   import { baseExtensions } from '../schema';
   import type { JSONContent } from '@tiptap/core';
-  import type { SystemStyleObject } from '$styled-system/types';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

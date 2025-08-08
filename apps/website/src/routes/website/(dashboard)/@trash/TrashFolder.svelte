@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -9,8 +11,6 @@
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { Dialog, Toast } from '$lib/notification';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import TrashEntity from './TrashEntity.svelte';
   import type { DashboardLayout_TrashTree_TrashFolder_entity, DashboardLayout_TrashTree_TrashFolder_folder, List } from '$graphql';
 

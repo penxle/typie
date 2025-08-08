@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
   import { fragment, graphql } from '$graphql';
   import { Helmet, Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import Editor from './Editor.svelte';
   import type { DashboardSlugPage_Post_query } from '$graphql';
 

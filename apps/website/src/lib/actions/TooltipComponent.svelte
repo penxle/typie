@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { scale } from 'svelte/transition';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import type { ArrowAction, FloatingAction } from './floating.svelte';
 
   type Props = {

@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { bundledLanguagesInfo } from 'shiki';
   import IconCheck from '~icons/lucide/check';
   import IconCopy from '~icons/lucide/copy';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import Menu from './Menu.svelte';
   import type { NodeViewProps } from '../../lib';

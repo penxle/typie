@@ -1,6 +1,6 @@
 import { TinyColor } from '@ctrl/tinycolor';
 import { Extension } from '@tiptap/core';
-import { css } from '$styled-system/css';
+import { css } from '@typie/styled-system/css';
 import { defaultValues, values } from '../values';
 
 const colors = Object.fromEntries(values.textColor.map(({ value, color }) => [value, color]));

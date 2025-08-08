@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
@@ -7,8 +9,6 @@
   import { tooltip } from '$lib/actions';
   import { HorizontalDivider, Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import PanelCharacterCountChangeWidget from './PanelCharacterCountChangeWidget.svelte';
   import PanelCharacterCountWidget from './PanelCharacterCountWidget.svelte';
   import PanelNote from './PanelNote.svelte';

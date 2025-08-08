@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import { cubicOut } from 'svelte/easing';
   import { Tween } from 'svelte/motion';
   import XIcon from '~icons/lucide/x';
   import { portal, scrollLock } from '$lib/actions';
   import { ContentProtect, Icon, Img } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import type { NodeViewProps } from '../../lib';
 
   type Props = {

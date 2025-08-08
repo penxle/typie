@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { css } from '$styled-system/css';
+  import { css } from '@typie/styled-system/css';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

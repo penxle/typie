@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
@@ -11,8 +13,6 @@
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { Toast } from '$lib/notification';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { setupTreeContext } from './state.svelte';

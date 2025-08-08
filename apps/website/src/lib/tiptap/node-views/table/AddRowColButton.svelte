@@ -1,9 +1,9 @@
 <script lang="ts">
   import { TableMap } from '@tiptap/pm/tables';
+  import { css, cx } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import PlusIcon from '~icons/lucide/plus';
   import { Icon } from '$lib/components';
-  import { css, cx } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
   import type { Ref } from '$lib/utils';

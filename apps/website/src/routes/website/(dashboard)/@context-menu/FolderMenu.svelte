@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { EntityType, EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
@@ -19,8 +21,6 @@
   import { getAppContext } from '$lib/context';
   import { Dialog } from '$lib/notification';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import { maxDepth } from '../@tree/utils';
 
   type Props = {

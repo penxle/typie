@@ -1,12 +1,12 @@
 <script generics="T" lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { Icon, Menu, MenuItem } from '$lib/components';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

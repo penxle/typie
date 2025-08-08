@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { onMount } from 'svelte';
   import { match } from 'ts-pattern';
-  import { css } from '$styled-system/css';
   import { Canvas } from './class.svelte.ts';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type * as YAwareness from 'y-protocols/awareness';
   import type * as Y from 'yjs';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     canvas?: Canvas;

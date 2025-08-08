@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import GiftIcon from '~icons/lucide/gift';
   import { fragment, graphql } from '$graphql';
   import { HorizontalDivider, Icon, Modal } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { TiptapRenderer } from '$lib/tiptap';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import SidebarButton from './SidebarButton.svelte';
   import type { DashboardLayout_Announcements_postView, List } from '$graphql';
 

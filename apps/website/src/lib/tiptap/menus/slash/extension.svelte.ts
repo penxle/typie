@@ -1,13 +1,13 @@
 import { autoUpdate, computePosition, flip, hide } from '@floating-ui/dom';
 import { Extension, posToDOMRect } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { css } from '@typie/styled-system/css';
+import { token } from '@typie/styled-system/tokens';
 import { disassemble } from 'es-hangul';
 import { matchSorter } from 'match-sorter';
 import { mount, unmount } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 import { ySyncPluginKey } from 'y-prosemirror';
-import { css } from '$styled-system/css';
-import { token } from '$styled-system/tokens';
 import Component from './Component.svelte';
 import { menuItems } from './items';
 import type { VirtualElement } from '@floating-ui/dom';

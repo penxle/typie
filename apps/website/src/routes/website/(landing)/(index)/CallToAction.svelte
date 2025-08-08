@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import SparklesIcon from '~icons/lucide/sparkles';
   import { page } from '$app/state';
   import { Icon } from '$lib/components';
-  import { css, cx } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
 </script>
 
 <section

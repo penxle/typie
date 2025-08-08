@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { css, cva, cx } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
+  import { css, cva, cx } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import RingSpinner from './RingSpinner.svelte';
+  import type { RecipeVariantProps, SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
-  import type { RecipeVariantProps, SystemStyleObject } from '$styled-system/types';
 
   type RecipeProps = RecipeVariantProps<typeof recipe>;
   type BaseProps = {

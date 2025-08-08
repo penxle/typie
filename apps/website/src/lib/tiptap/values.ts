@@ -1,8 +1,8 @@
+import { token } from '@typie/styled-system/tokens';
 import IconAlignCenter from '~icons/lucide/align-center';
 import IconAlignJustify from '~icons/lucide/align-justify';
 import IconAlignLeft from '~icons/lucide/align-left';
 import IconAlignRight from '~icons/lucide/align-right';
-import { token } from '$styled-system/tokens';
 import BlockquoteLeftLine from './assets/blockquote/left-line.svelte';
 import BlockquoteLeftQuote from './assets/blockquote/left-quote.svelte';
 import HorizontalRuleCircle from './assets/horizontal-rule/circle.svelte';

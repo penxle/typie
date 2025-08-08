@@ -2,10 +2,10 @@
   import { hide } from '@floating-ui/dom';
   import { mergeAttributes } from '@tiptap/core';
   import { TableMap } from '@tiptap/pm/tables';
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import { onMount, tick } from 'svelte';
   import { createFloatingActions, portal } from '$lib/actions';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import { TiptapNodeViewBubbleMenu } from '../../components';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import AddRowColButton from './AddRowColButton.svelte';

@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { flex } from '@typie/styled-system/patterns';
   import { portal } from '$lib/actions';
-  import { flex } from '$styled-system/patterns';
   import Item from './Item.svelte';
   import { store } from './store';
 </script>

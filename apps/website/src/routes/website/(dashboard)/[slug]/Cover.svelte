@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import IconTrash2 from '~icons/lucide/trash-2';
   import { graphql } from '$graphql';
   import { Button, Icon, Img, RingSpinner } from '$lib/components';
   import { uploadBlob } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import { YState } from './state.svelte';
   import type * as Y from 'yjs';
 

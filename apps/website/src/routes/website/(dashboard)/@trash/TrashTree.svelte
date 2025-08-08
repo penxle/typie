@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { fragment, graphql } from '$graphql';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import TrashEntity from './TrashEntity.svelte';
   import type { DashboardLayout_TrashTree_site } from '$graphql';
 

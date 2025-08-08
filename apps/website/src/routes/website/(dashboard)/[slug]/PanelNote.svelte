@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import ExpandIcon from '~icons/lucide/expand';
   import Minimize2Icon from '~icons/lucide/minimize-2';
   import NotebookTabsIcon from '~icons/lucide/notebook-tabs';
   import { textAreaScrollPadding, tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import { YState } from './state.svelte';
   import type * as Y from 'yjs';
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
   import { TypieError } from '@/errors';
@@ -14,8 +16,6 @@
   import { getAppContext } from '$lib/context';
   import { Dialog, Toast } from '$lib/notification';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
 
   type Props = {
     post: {

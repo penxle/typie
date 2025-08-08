@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import { PostType } from '@/enums';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
@@ -7,8 +9,6 @@
   import { contextMenu } from '$lib/actions/context-menu';
   import { Icon, Menu } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css, cx } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';

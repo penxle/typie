@@ -10,7 +10,6 @@ export default {
     alias: {
       '@/*': '../api/src/*',
       '$assets/*': './src/assets/*',
-      '$styled-system/*': './styled-system/*',
       $graphql: './.sark',
     },
     files: {

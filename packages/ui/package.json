@@ -1,0 +1,12 @@
+{
+  "name": "@typie/ui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./styles.css": "./styles/index.css"
+  },
+  "devDependencies": {
+    "@typie/styled-system": "workspace:*"
+  }
+}

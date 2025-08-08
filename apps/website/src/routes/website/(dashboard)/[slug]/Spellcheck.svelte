@@ -3,6 +3,8 @@
   import { Editor } from '@tiptap/core';
   import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { untrack } from 'svelte';
@@ -14,8 +16,6 @@
   import { createFloatingActions } from '$lib/actions';
   import { Icon, RingSpinner, Tooltip } from '$lib/components';
   import { Toast } from '$lib/notification';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import type { Ref } from '$lib/utils';

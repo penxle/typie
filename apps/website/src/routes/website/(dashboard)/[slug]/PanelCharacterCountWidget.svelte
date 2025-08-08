@@ -1,13 +1,13 @@
 <script lang="ts">
   import { getText, getTextBetween } from '@tiptap/core';
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { fly } from 'svelte/transition';
   import { textSerializers } from '@/pm/serializer';
   import IconChevronRight from '~icons/lucide/chevron-right';
   import IconType from '~icons/lucide/type';
   import { Icon } from '$lib/components';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
   import type { Ref } from '$lib/utils';

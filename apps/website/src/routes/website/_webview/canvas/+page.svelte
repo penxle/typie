@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import * as Y from 'yjs';
@@ -6,7 +7,6 @@
   import { graphql } from '$graphql';
   import { Canvas, CanvasEditor } from '$lib/canvas';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
   import Zoom from './Zoom.svelte';
 
   const query = graphql(`

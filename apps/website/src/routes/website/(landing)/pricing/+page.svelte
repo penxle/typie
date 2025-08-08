@@ -1,5 +1,7 @@
 <script lang="ts">
   import NumberFlow from '@number-flow/svelte';
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -10,8 +12,6 @@
   import { Helmet, Icon } from '$lib/components';
   import { PLAN_FEATURES } from '$lib/constants';
   import { comma } from '$lib/utils/number';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
 
   let selectedInterval = $state<'monthly' | 'yearly'>('monthly');
   let expandedIndex = $state<number | null>(null);

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import { disassemble } from 'es-hangul';
   import { matchSorter } from 'match-sorter';
@@ -21,8 +23,6 @@
   import { fragment, graphql } from '$graphql';
   import { Icon, Modal } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import type { Component } from 'svelte';
   import type { DashboardLayout_CommandPalette_user } from '$graphql';
 

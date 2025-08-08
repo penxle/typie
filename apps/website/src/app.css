@@ -1,5 +1,3 @@
-@layer reset, base, theme, prose, tokens, recipes, utilities, view-transition;
+@layer reset, base, ui, tokens, recipes, utilities;
 
-@import url(./styles/theme.css) layer(theme);
-@import url(./styles/prose.css) layer(prose);
-@import url(./styles/view-transition.css) layer(view-transition);
+@import url(@typie/ui/styles.css) layer(ui);

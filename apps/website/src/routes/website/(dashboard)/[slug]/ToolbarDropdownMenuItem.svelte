@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
   import CheckIcon from '~icons/lucide/check';
   import { Icon } from '$lib/components';
-  import { css, cx } from '$styled-system/css';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { fly } from 'svelte/transition';
   import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
@@ -17,8 +19,6 @@
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { Dialog } from '$lib/notification';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
   import Notification from './Notification.svelte';

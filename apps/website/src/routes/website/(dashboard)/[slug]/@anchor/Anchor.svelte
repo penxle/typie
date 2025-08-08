@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { fly } from 'svelte/transition';
   import IconCheck from '~icons/lucide/check';
   import IconEdit from '~icons/lucide/pen';
   import { createFloatingActions, tooltip } from '$lib/actions';
   import Icon from '$lib/components/Icon.svelte';
-  import { css, cx } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
 

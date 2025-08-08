@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
@@ -11,8 +13,6 @@
   import { createForm } from '$lib/form';
   import { Dialog } from '$lib/notification';
   import { uploadBlobAsImage } from '$lib/utils';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import UpdateEmailModal from './UpdateEmailModal.svelte';
   import UpdatePasswordModal from './UpdatePasswordModal.svelte';
   import type { DashboardLayout_PreferenceModal_AccountTab_user } from '$graphql';

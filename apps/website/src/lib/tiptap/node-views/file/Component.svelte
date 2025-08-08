@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { tick } from 'svelte';
   import ArrowDownToLineIcon from '~icons/lucide/arrow-down-to-line';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -8,8 +10,6 @@
   import { Button, Icon, Menu, MenuItem, RingSpinner, VerticalDivider } from '$lib/components';
   import { Toast } from '$lib/notification';
   import { formatBytes, uploadBlobAsFile } from '$lib/utils';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import { getNodeView, NodeView } from '../../lib';
   import type { NodeViewProps } from '../../lib';
 

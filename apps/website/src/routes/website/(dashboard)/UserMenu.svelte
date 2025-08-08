@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { pushState } from '$app/navigation';
@@ -6,8 +8,6 @@
   import { fragment, graphql } from '$graphql';
   import { tooltip } from '$lib/actions';
   import { Img, Modal } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import type { DashboardLayout_UserMenu_user } from '$graphql';
 
   type Props = {

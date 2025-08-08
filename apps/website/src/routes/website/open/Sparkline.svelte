@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Plot from '@observablehq/plot';
-  import { css } from '$styled-system/css';
+  import { css } from '@typie/styled-system/css';
 
   type SparklineProps = {
     data: { date: string; value: number }[];

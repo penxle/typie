@@ -4,6 +4,9 @@
   import { getText } from '@tiptap/core';
   import { Mark } from '@tiptap/pm/model';
   import { NodeSelection, Selection, TextSelection } from '@tiptap/pm/state';
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -18,9 +21,6 @@
   import { autosize } from '$lib/actions';
   import { getNodeViewByNodeId, TiptapEditor } from '$lib/tiptap';
   import { clamp } from '$lib/utils';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
-  import { token } from '$styled-system/tokens';
   import Anchors from './Anchors.svelte';
   import { handleCaretMovement } from './caret';
   import FindReplace from './FindReplace.svelte';

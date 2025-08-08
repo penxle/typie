@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
@@ -9,7 +10,6 @@
   import { Button, Icon, Menu, MenuItem, Modal } from '$lib/components';
   import { createForm } from '$lib/form';
   import { Toast } from '$lib/notification';
-  import { css } from '$styled-system/css';
   import type { UsersiteWildcardSlugPage_PostActionMenu_entityView } from '$graphql';
 
   type Props = {

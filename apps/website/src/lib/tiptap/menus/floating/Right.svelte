@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { fade } from 'svelte/transition';
   import BookmarkIcon from '~icons/lucide/bookmark';
   import BookmarkFilledIcon from '~icons/typie/bookmark-filled';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
 
   type Props = {

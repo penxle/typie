@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { tooltip } from '$lib/actions';
-  import { css } from '$styled-system/css';
 
   type Props = {
     min?: number;

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CircleIcon from '~icons/lucide/circle';
   import HandIcon from '~icons/lucide/hand';
@@ -7,8 +9,6 @@
   import PencilIcon from '~icons/lucide/pencil';
   import SquareIcon from '~icons/lucide/square';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import ToolbarButton from './ToolbarButton.svelte';
   import type { Canvas } from '$lib/canvas';
 

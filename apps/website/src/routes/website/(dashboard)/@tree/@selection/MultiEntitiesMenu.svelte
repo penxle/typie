@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import FileIcon from '~icons/lucide/file';
@@ -10,8 +12,6 @@
   import { graphql } from '$graphql';
   import { HorizontalDivider, Icon, MenuItem } from '$lib/components';
   import { Dialog, Toast } from '$lib/notification';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import type { TreeState } from '../state.svelte';
   import type { TreeEntity } from './types';
 

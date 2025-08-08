@@ -1,9 +1,9 @@
 <script lang="ts">
   import { hide } from '@floating-ui/dom';
   import { Editor, posToDOMRect } from '@tiptap/core';
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '$lib/actions';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import type { VirtualElement } from '@floating-ui/dom';
   import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
   import type { Snippet } from 'svelte';

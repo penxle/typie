@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { fade } from 'svelte/transition';
   import CheckIcon from '~icons/lucide/check';
   import CopyIcon from '~icons/lucide/copy';
@@ -8,8 +10,6 @@
   import TwitterIcon from '~icons/simple-icons/twitter';
   import { createFloatingActions, portal } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
 
   type Props = {
     href: string;

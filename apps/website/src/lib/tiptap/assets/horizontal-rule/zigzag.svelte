@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { css } from '$styled-system/css';
+  import { css } from '@typie/styled-system/css';
 </script>
 
 <svg class={css({ color: 'text.subtle', height: '12px' })} viewBox="0 0 48 9" xmlns="http://www.w3.org/2000/svg">

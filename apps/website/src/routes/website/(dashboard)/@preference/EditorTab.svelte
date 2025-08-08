@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { fragment, graphql } from '$graphql';
   import { Slider, Switch } from '$lib/components';
   import { getAppContext } from '$lib/context/app.svelte';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_PreferenceModal_EditorTab_user } from '$graphql';
 
   type Props = {

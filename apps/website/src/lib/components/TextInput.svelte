@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { css, cva } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { css, cva } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import Icon from './Icon.svelte';
+  import type { RecipeVariantProps, SystemStyleObject } from '@typie/styled-system/types';
   import type { Component, Snippet } from 'svelte';
   import type { HTMLInputAttributes } from 'svelte/elements';
-  import type { RecipeVariantProps, SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

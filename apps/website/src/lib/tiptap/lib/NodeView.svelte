@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { getContext } from 'svelte';
-  import { css } from '$styled-system/css';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { DragEventHandler } from 'svelte/elements';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     as?: keyof HTMLElementTagNameMap;

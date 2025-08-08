@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { onMount } from 'svelte';
-  import { css } from '$styled-system/css';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
 

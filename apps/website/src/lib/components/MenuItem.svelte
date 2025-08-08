@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { css, cx, sva } from '@typie/styled-system/css';
   import { getContext } from 'svelte';
-  import { css, cx, sva } from '$styled-system/css';
   import Icon from './Icon.svelte';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component, Snippet } from 'svelte';
   import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type BaseProps = {
     style?: SystemStyleObject;

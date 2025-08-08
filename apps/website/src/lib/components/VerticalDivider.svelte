@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { css, cva } from '$styled-system/css';
-  import type { RecipeVariant, SystemStyleObject } from '$styled-system/types';
+  import { css, cva } from '@typie/styled-system/css';
+  import type { RecipeVariant, SystemStyleObject } from '@typie/styled-system/types';
 
   type Variants = RecipeVariant<typeof recipe>;
 

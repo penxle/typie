@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -7,8 +9,6 @@
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { Dialog, Toast } from '$lib/notification';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import type { DashboardLayout_TrashTree_TrashCanvas_canvas } from '$graphql';
 
   type Props = {

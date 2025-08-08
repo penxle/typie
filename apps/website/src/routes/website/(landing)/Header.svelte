@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import MenuIcon from '~icons/lucide/menu';
   import { afterNavigate } from '$app/navigation';
@@ -6,8 +8,6 @@
   import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
   import { outsideClick } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
 
   let mobileMenuOpen = false;
 

@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
   import CircleCheckIcon from '~icons/lucide/circle-check';
   import InfoIcon from '~icons/lucide/info';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
-  import { token } from '$styled-system/tokens';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import { values } from '../../values';
   import type { NodeViewProps } from '../../lib';
