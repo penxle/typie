@@ -3,7 +3,7 @@
   import stringHash from '@sindresorhus/string-hash';
   import { getText } from '@tiptap/core';
   import { Mark } from '@tiptap/pm/model';
-  import { Selection, TextSelection } from '@tiptap/pm/state';
+  import { NodeSelection, Selection, TextSelection } from '@tiptap/pm/state';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -558,6 +558,55 @@
       } else if (name === 'note') {
         note.current = attrs.note;
       }
+    });
+
+    window.__webview__?.setProcedure('insertNodes', (params) => {
+      const currentEditor = editor?.current;
+      if (!currentEditor) return [];
+
+      const nodes = params?.nodes || [];
+      if (nodes.length === 0) return [];
+
+      const insertedPositions: number[] = [];
+
+      currentEditor
+        .chain()
+        .focus()
+        .command(({ tr, state: commandState }) => {
+          const { selection } = commandState;
+          let insertPos = selection.to;
+
+          nodes.forEach((nodeData: { type: string; attrs?: Record<string, unknown> }) => {
+            const nodeType = commandState.schema.nodes[nodeData.type];
+            if (!nodeType) {
+              throw new Error(`Implementation Error: Unknown node type: ${nodeData.type}`);
+            }
+
+            const node = nodeType.create(nodeData.attrs || {});
+
+            if (insertPos <= tr.doc.content.size) {
+              tr.insert(insertPos, node);
+              insertedPositions.push(insertPos);
+              insertPos += node.nodeSize;
+            }
+          });
+
+          if (insertedPositions.length > 0) {
+            // eslint-disable-next-line unicorn/prefer-at
+            const lastNodePos = insertedPositions[insertedPositions.length - 1];
+            if (lastNodePos !== undefined) {
+              const nodeSelection = NodeSelection.create(tr.doc, lastNodePos);
+              tr.setSelection(nodeSelection);
+            }
+          }
+          return true;
+        })
+        .run();
+
+      return insertedPositions
+        .map((pos) => currentEditor.state.doc.nodeAt(pos))
+        .filter((node) => node && node.attrs.nodeId)
+        .map((node) => node?.attrs.nodeId as string);
     });
 
     window.__webview__?.addEventListener('nodeview', (data) => {
