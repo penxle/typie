@@ -337,7 +337,7 @@ class _TrashList extends HookWidget {
                       );
                     },
                     child: IntrinsicHeight(
-                      child: DecoratedBox(
+                      child: Container(
                         decoration: BoxDecoration(
                           border: Border.all(color: context.colors.borderStrong),
                           borderRadius: const BorderRadius.all(Radius.circular(8)),
