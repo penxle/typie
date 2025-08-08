@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import type { NodeViewProps } from '../../lib';
 

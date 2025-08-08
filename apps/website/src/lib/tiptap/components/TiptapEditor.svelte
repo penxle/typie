@@ -1,14 +1,14 @@
 <script lang="ts">
   import { Editor, Extension } from '@tiptap/core';
+  import { css } from '@typie/styled-system/css';
   import { onMount } from 'svelte';
   import { Ref } from '$lib/utils';
-  import { css } from '$styled-system/css';
   import { Collaboration } from '../extensions';
   import { baseExtensions, editorExtensions } from '../schema';
   import type { EditorView } from '@tiptap/pm/view';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type * as YAwareness from 'y-protocols/awareness';
   import type * as Y from 'yjs';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

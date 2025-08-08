@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex, grid } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import ArrowLeftIcon from '~icons/lucide/arrow-left';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -7,8 +9,6 @@
   import { graphql } from '$graphql';
   import { AdminIcon } from '$lib/components/admin';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex, grid } from '$styled-system/patterns';
 
   const query = graphql(`
     query AdminPost_Query($postId: String!) {

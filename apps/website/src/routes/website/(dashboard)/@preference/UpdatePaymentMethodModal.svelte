@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { PlanId } from '@/const';
@@ -13,8 +15,6 @@
   import { createForm, FormError } from '$lib/form';
   import { Dialog, Toast } from '$lib/notification';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user } from '$graphql';
 
   type Props = {

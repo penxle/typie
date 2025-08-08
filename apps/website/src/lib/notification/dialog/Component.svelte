@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { Button, Modal } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import { store } from './store';
   import type { AllDialog } from './store';
 

@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { setContext, tick } from 'svelte';
   import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
   import { createFloatingActions, focusTrap, portal } from '$lib/actions';
-  import { css } from '$styled-system/css';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     open?: boolean;

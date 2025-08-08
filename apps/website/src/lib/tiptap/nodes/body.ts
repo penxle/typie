@@ -1,5 +1,5 @@
 import { mergeAttributes, Node } from '@tiptap/core';
-import { css, cx } from '$styled-system/css';
+import { css, cx } from '@typie/styled-system/css';
 import { defaultValues, values } from '../values';
 
 const paragraphIndents = values.paragraphIndent.map(({ value }) => value);

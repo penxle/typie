@@ -1,9 +1,9 @@
 <script lang="ts">
   import { TextSelection } from '@tiptap/pm/state';
+  import { flex } from '@typie/styled-system/patterns';
   import { z } from 'zod';
   import { Button, TextInput } from '$lib/components';
   import { createForm } from '$lib/form';
-  import { flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
@@ -7,8 +9,6 @@
   import { Button, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
   import { Dialog, Toast } from '$lib/notification';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_PreferenceModal_SiteTab_user } from '$graphql';
 
   type Props = {

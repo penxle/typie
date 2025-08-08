@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { onMount, tick, untrack } from 'svelte';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
@@ -8,8 +10,6 @@
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
 

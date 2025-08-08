@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import Component from '../sonner/Component.svelte';
 
   type Props = {

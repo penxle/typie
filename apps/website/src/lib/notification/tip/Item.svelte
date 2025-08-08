@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { backInOut, sineInOut } from 'svelte/easing';
   import { fade, fly } from 'svelte/transition';
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import XIcon from '~icons/lucide/x';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import Shortcut from './Shortcut.svelte';
   import { store } from './store';
   import type { Tip } from './store';

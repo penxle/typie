@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex, grid } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { fade } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -7,8 +9,6 @@
   import { fragment, graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center, flex, grid } from '$styled-system/patterns';
   import { emojis } from './emoji';
   import Emoji from './Emoji.svelte';
   import type { UsersiteWildcardSlugPage_EmojiReaction_postView } from '$graphql';

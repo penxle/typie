@@ -1,8 +1,8 @@
 import { autoUpdate, computePosition, flip, hide, offset } from '@floating-ui/dom';
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { css } from '@typie/styled-system/css';
 import { mount, unmount } from 'svelte';
-import { css } from '$styled-system/css';
 import Left from './Left.svelte';
 import Right from './Right.svelte';
 import type { EditorView } from '@tiptap/pm/view';

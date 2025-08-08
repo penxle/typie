@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
@@ -11,8 +13,6 @@
   import { Icon } from '$lib/components';
   import { getAppContext } from '$lib/context';
   import { clamp } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import Trash from './@trash/Trash.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';

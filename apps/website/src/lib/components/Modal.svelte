@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import { sineOut } from 'svelte/easing';
   import { fade, fly } from 'svelte/transition';
   import { focusTrap, portal } from '$lib/actions';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import RingSpinner from './RingSpinner.svelte';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     open: boolean;

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount } from 'svelte';
@@ -18,8 +20,6 @@
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { getThemeContext } from '$lib/context';
   import { serializeOAuthState } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { Component, Snippet } from 'svelte';
   import type { Theme } from '$lib/context';
 

@@ -1,8 +1,8 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
+import { css } from '@typie/styled-system/css';
 import { mmToPx } from '$lib/utils';
-import { css } from '$styled-system/css';
 import type { Node } from '@tiptap/pm/model';
 
 type PageLayout = {

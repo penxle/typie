@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { graphql } from '$graphql';
   import { Modal } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css } from '$styled-system/css';
   import Folder from './Folder.svelte';
   import Post from './Post.svelte';
 

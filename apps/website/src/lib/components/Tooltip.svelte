@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { writable } from 'svelte/store';
   import { scale } from 'svelte/transition';
-  import { css } from '$styled-system/css';
   import { createFloatingActions, hover } from '../actions';
   import type { Placement } from '@floating-ui/dom';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     message?: string | Snippet;

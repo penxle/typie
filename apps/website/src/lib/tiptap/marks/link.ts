@@ -1,7 +1,7 @@
 import { combineTransactionSteps, findChildrenInRange, getChangedRanges, getMarksBetween, Mark, mergeAttributes } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
+import { css } from '@typie/styled-system/css';
 import { find } from 'linkifyjs';
-import { css } from '$styled-system/css';
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions

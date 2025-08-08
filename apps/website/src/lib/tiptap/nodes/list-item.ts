@@ -1,7 +1,7 @@
 import { getNodeAtPosition, isAtEndOfNode, isAtStartOfNode, isNodeActive, mergeAttributes, Node } from '@tiptap/core';
 import { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { EditorState } from '@tiptap/pm/state';
-import { css } from '$styled-system/css';
+import { css } from '@typie/styled-system/css';
 
 const findListItemPos = (state: EditorState) => {
   const { $from } = state.selection;

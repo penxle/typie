@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { css, cva } from '$styled-system/css';
+  import { css, cva } from '@typie/styled-system/css';
+  import type { RecipeVariantProps } from '@typie/styled-system/css';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { HTMLInputAttributes } from 'svelte/elements';
-  import type { RecipeVariantProps } from '$styled-system/css';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

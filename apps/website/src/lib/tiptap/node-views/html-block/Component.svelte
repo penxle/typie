@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import IconCodeXml from '~icons/lucide/code-xml';
   import IconGlobe from '~icons/lucide/globe';
   import IconPanelTop from '~icons/lucide/panel-top';
   import IconRotateCw from '~icons/lucide/rotate-cw';
   import { browser } from '$app/environment';
   import { Icon, RingSpinner } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import { transform } from './utils';
   import type { NodeViewProps } from '../../lib';

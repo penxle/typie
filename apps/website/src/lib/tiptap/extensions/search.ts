@@ -1,9 +1,9 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { css } from '@typie/styled-system/css';
 import escape from 'escape-string-regexp';
 import { absolutePositionToRelativePosition, relativePositionToAbsolutePosition, ySyncPluginKey } from 'y-prosemirror';
-import { css } from '$styled-system/css';
 
 type Match = {
   from: number;

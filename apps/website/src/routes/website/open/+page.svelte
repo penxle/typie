@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex, grid } from '@typie/styled-system/patterns';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
   import { Helmet } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { flex, grid } from '$styled-system/patterns';
   import SmallStatCard from './SmallStatCard.svelte';
   import StatCard from './StatCard.svelte';
 

@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { defaultPlanRules } from '@/const';
   import { pushState } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { getAppContext } from '$lib/context';
   import { comma, formatBytes } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_PlanUsageWidget_site, DashboardLayout_PlanUsageWidget_user } from '$graphql';
 
   type Props = {

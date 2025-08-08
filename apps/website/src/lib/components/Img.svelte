@@ -1,14 +1,14 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import qs from 'query-string';
   import { base64 } from 'rfc4648';
   import { tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { thumbHashToDataURL } from 'thumbhash';
   import { fragment, graphql } from '$graphql';
-  import { css } from '$styled-system/css';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { HTMLImgAttributes } from 'svelte/elements';
   import type { Img_image } from '$graphql';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Size = 16 | 24 | 32 | 48 | 64 | 96 | 128 | 256 | 512 | 1024 | 'full';
 

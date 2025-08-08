@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { center } from '$styled-system/patterns';
+  import { center } from '@typie/styled-system/patterns';
   import { NodeView } from '../../lib';
   import { defaultValues, values } from '../../values';
   import type { NodeViewProps } from '../../lib';

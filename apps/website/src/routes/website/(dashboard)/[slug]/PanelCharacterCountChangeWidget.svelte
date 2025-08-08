@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { fly } from 'svelte/transition';
   import IconChevronRight from '~icons/lucide/chevron-right';
   import GoalIcon from '~icons/lucide/goal';
@@ -7,8 +9,6 @@
   import { fragment, graphql } from '$graphql';
   import { Icon } from '$lib/components';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { Editor_Panel_CharacterCountChangeWidget_post } from '$graphql';
 
   type Props = {

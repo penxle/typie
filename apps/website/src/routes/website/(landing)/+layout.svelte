@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { afterNavigate } from '$app/navigation';
-  import { css } from '$styled-system/css';
   import Footer from './Footer.svelte';
   import Header from './Header.svelte';
 

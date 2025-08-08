@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { fragment, graphql } from '$graphql';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { DashboardLayout_PreferenceModal_ShortcutsTab_user } from '$graphql';
 
   type Props = {

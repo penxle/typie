@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { css, cva } from '$styled-system/css';
+  import { css, cva } from '@typie/styled-system/css';
+  import type { RecipeVariant, SystemStyleObject } from '@typie/styled-system/types';
   import type { Component } from 'svelte';
   import type { SVGAttributes } from 'svelte/elements';
-  import type { RecipeVariant, SystemStyleObject } from '$styled-system/types';
 
   type Variants = RecipeVariant<typeof recipe>;
 

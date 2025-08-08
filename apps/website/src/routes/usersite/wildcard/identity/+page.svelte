@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import { TypieError } from '@/errors';
@@ -8,9 +11,6 @@
   import { graphql } from '$graphql';
   import { Helmet, RingSpinner } from '$lib/components';
   import { Toast } from '$lib/notification';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
-  import { token } from '$styled-system/tokens';
 
   const verifyPersonalIdentity = graphql(`
     mutation UsersiteWildcardIdentityPage_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {

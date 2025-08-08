@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
@@ -7,8 +9,6 @@
   import { graphql } from '$graphql';
   import { Helmet, RingSpinner } from '$lib/components';
   import { deserializeOAuthState } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
 
   const authorizeSignUpEmail = graphql(`
     mutation EmailPage_AuthorizeSignUpEmail_Mutation($input: AuthorizeSignUpEmailInput!) {

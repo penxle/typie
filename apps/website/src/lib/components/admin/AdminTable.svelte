@@ -1,5 +1,5 @@
 <script generics="ColumnKey extends `$${string}`, T extends Record<string, unknown>" lang="ts">
-  import { css } from '$styled-system/css';
+  import { css } from '@typie/styled-system/css';
   import type { Snippet } from 'svelte';
 
   type Column = {

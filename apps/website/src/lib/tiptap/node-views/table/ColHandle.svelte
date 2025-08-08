@@ -1,5 +1,7 @@
 <script lang="ts">
   import { CellSelection, TableMap } from '@tiptap/pm/tables';
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import ArrowLeftToLineIcon from '~icons/lucide/arrow-left-to-line';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -7,8 +9,6 @@
   import MoveRightIcon from '~icons/lucide/move-right';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { Icon, Menu, MenuItem, Tooltip } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
   import type { Ref } from '$lib/utils';

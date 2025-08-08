@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import { base64 } from 'rfc4648';
   import { untrack } from 'svelte';
@@ -10,8 +12,6 @@
   import { Icon, RingSpinner } from '$lib/components';
   import { TiptapEditor } from '$lib/tiptap';
   import { clamp, Ref } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PointerEventHandler } from 'svelte/elements';

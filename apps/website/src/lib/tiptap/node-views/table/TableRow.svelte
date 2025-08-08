@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { css } from '$styled-system/css';
+  import { css } from '@typie/styled-system/css';
   import { NodeView, NodeViewContentEditable } from '../../lib';
   import type { NodeViewProps } from '../../lib';
 

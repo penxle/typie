@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { graphql } from '$graphql';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
 
   const query = graphql(`
     query AdminHome_Query {

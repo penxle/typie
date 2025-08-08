@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex, grid } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import { fade } from 'svelte/transition';
   import { fragment, graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { center, flex, grid } from '$styled-system/patterns';
   import type { DashboardLayout_Stats_ActivityGrid_user } from '$graphql';
 
   type Level = 0 | 1 | 2 | 3 | 4 | 5;

@@ -1,8 +1,8 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { css } from '@typie/styled-system/css';
 import { match } from 'ts-pattern';
-import { css } from '$styled-system/css';
 import { isBodyEmpty } from '../lib';
 import type { EditorState } from '@tiptap/pm/state';
 

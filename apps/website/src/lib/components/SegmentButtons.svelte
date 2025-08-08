@@ -1,7 +1,7 @@
 <script generics="T" lang="ts">
-  import { css, sva } from '$styled-system/css';
-  import type { RecipeVariant } from '$styled-system/css';
-  import type { SystemStyleObject } from '$styled-system/types';
+  import { css, sva } from '@typie/styled-system/css';
+  import type { RecipeVariant } from '@typie/styled-system/css';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
 
   type Props = {
     style?: SystemStyleObject;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { css } from '$styled-system/css';
+  import { css } from '@typie/styled-system/css';
 </script>
 
 <svg class={css({ flexShrink: '0', size: '16px', color: 'text.default' })} viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">

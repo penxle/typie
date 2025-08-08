@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import type { Canvas } from '$lib/canvas';
 
   type Props = {

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import BookMarkedIcon from '~icons/lucide/book-marked';
   import CalendarDaysIcon from '~icons/lucide/calendar-days';
   import CodeIcon from '~icons/lucide/code';
@@ -16,8 +18,6 @@
   import TableIcon from '~icons/lucide/table';
   import UsersRoundIcon from '~icons/lucide/users-round';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
 </script>
 
 <section

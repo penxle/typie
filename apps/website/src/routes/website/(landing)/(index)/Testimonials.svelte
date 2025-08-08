@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
 
   type Testimonial = {
     avatar: string;

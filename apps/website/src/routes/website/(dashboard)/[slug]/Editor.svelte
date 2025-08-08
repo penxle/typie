@@ -3,6 +3,8 @@
   import stringHash from '@sindresorhus/string-hash';
   import { Mark } from '@tiptap/pm/model';
   import { Selection } from '@tiptap/pm/state';
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
@@ -32,8 +34,6 @@
   import { Tip } from '$lib/notification';
   import { getNodeView, TiptapEditor } from '$lib/tiptap';
   import { mmToPx, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import Anchors from './@anchor/Anchors.svelte';
   import Highlight from './Highlight.svelte';

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
@@ -9,8 +11,6 @@
   import { graphql } from '$graphql';
   import { Button, Helmet, Icon, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
 
   const sendPasswordResetEmail = graphql(`
     mutation ForgotPasswordPage_SendPasswordResetEmail_Mutation($input: SendPasswordResetEmailInput!) {

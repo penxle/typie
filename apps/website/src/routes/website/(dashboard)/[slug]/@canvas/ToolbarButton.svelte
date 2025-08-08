@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import type { Component } from 'svelte';
 
   type Props = {

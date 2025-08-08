@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { sineInOut } from 'svelte/easing';
   import { fade } from 'svelte/transition';
@@ -9,8 +11,6 @@
   import { getAppContext } from '$lib/context';
   import { Dialog, Toast } from '$lib/notification';
   import { clamp } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import TrashTree from './TrashTree.svelte';
   import type { DashboardLayout_Trash_site } from '$graphql';
 

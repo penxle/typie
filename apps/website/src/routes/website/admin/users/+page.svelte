@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import SearchIcon from '~icons/lucide/search';
   import { graphql } from '$graphql';
   import { AdminIcon, AdminPagination, AdminTable } from '$lib/components/admin';
   import { QueryString, QueryStringNumber } from '$lib/state';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
 
   const searchQuery = new QueryString('search', '', { debounce: 300 });
   const pageNumber = new QueryStringNumber('page', 1);

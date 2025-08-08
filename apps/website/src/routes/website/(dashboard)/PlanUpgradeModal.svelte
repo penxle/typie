@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CrownIcon from '~icons/lucide/crown';
   import GiftIcon from '~icons/lucide/gift';
@@ -8,8 +10,6 @@
   import { pushState } from '$app/navigation';
   import { Button, HorizontalDivider, Icon, Modal } from '$lib/components';
   import { PLAN_FEATURES } from '$lib/constants';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { Snippet } from 'svelte';
 
   type Props = {

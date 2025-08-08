@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { fade } from 'svelte/transition';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import TextSelectIcon from '~icons/lucide/text-select';
   import { tooltip } from '$lib/actions';
   import { Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import { TEXT_NODE_TYPES, WRAPPING_NODE_NAMES } from '../../extensions/node-commands';
   import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../../node-views';
   import type { Editor } from '@tiptap/core';

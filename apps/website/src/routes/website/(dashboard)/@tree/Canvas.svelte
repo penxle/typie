@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { fragment, graphql } from '$graphql';
   import { contextMenu } from '$lib/actions/context-menu';
   import { Icon, Menu } from '$lib/components';
   import { getAppContext } from '$lib/context';
-  import { css, cx } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import CanvasMenu from '../@context-menu/CanvasMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';

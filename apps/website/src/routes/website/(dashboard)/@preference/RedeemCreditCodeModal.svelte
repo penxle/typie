@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
@@ -6,8 +8,6 @@
   import { graphql } from '$graphql';
   import { Button, Modal, TextInput } from '$lib/components';
   import { createForm, FormError } from '$lib/form';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
 
   type Props = {
     open: boolean;

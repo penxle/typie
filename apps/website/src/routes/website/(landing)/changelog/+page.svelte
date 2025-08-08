@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import { marked } from 'marked';
   import CalendarIcon from '~icons/lucide/calendar';
@@ -7,8 +9,6 @@
   import CircleFadingArrowUpIcon from '~icons/lucide/circle-fading-arrow-up';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import { Helmet, Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
 
   let { data } = $props();
 </script>

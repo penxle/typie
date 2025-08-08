@@ -1,5 +1,7 @@
 <script lang="ts">
   import * as PortOne from '@portone/browser-sdk/v2';
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import qs from 'query-string';
@@ -17,8 +19,6 @@
   import { Toast } from '$lib/notification';
   import { TiptapRenderer } from '$lib/tiptap';
   import { comma, serializeOAuthState } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import EmojiReaction from './EmojiReaction.svelte';
   import PostActionMenu from './PostActionMenu.svelte';
   import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';

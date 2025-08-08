@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { onMount, tick } from 'svelte';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileUpIcon from '~icons/lucide/file-up';
@@ -6,8 +8,6 @@
   import { graphql } from '$graphql';
   import { createFloatingActions } from '$lib/actions';
   import { Button, Icon, Menu, MenuItem, RingSpinner, TextInput } from '$lib/components';
-  import { css, cx } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import { NodeView } from '../../lib';
   import type { NodeViewProps } from '../../lib';
 

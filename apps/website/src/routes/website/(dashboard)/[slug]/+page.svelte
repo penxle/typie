@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
   import { afterNavigate } from '$app/navigation';
   import { graphql } from '$graphql';
   import { fb } from '$lib/analytics';
   import { Helmet, Icon } from '$lib/components';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import Canvas from './@canvas/Canvas.svelte';
   import Editor from './Editor.svelte';
 

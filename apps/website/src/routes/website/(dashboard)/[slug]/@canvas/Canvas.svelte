@@ -1,6 +1,8 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
+  import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -18,8 +20,6 @@
   import { Canvas, CanvasEditor } from '$lib/canvas';
   import { Helmet, Icon, Menu } from '$lib/components';
   import { getAppContext, getThemeContext } from '$lib/context';
-  import { css } from '$styled-system/css';
-  import { center } from '$styled-system/patterns';
   import CanvasMenu from '../../@context-menu/CanvasMenu.svelte';
   import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';

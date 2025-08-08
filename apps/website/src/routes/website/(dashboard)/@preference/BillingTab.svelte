@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex, grid } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { SubscriptionState } from '@/enums';
@@ -7,8 +9,6 @@
   import { PLAN_FEATURES } from '$lib/constants';
   import { Dialog } from '$lib/notification';
   import { comma } from '$lib/utils';
-  import { css } from '$styled-system/css';
-  import { flex, grid } from '$styled-system/patterns';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
   import type { DashboardLayout_PreferenceModal_BillingTab_user } from '$graphql';

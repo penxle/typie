@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import ShapesIcon from '~icons/lucide/shapes';
   import { Icon } from '$lib/components';
   import { isBodyEmpty } from '$lib/tiptap';
-  import { css } from '$styled-system/css';
-  import { center, flex } from '$styled-system/patterns';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '$lib/utils';
 

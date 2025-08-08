@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core';
+import { css } from '@typie/styled-system/css';
 import { redo, undo, yCursorPlugin, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from 'y-prosemirror';
-import { css } from '$styled-system/css';
 import type { EditorView } from '@tiptap/pm/view';
 import type * as YAwareness from 'y-protocols/awareness';
 import type * as Y from 'yjs';

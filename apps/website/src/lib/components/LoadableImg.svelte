@@ -1,8 +1,8 @@
 <script lang="ts">
   import { graphql } from '$graphql';
   import Img from './Img.svelte';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { ComponentProps } from 'svelte';
-  import type { SystemStyleObject } from '$styled-system/types';
 
   type Size = ComponentProps<typeof Img>['size'];
 

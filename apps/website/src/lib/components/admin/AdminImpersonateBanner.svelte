@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import AlertTriangleIcon from '~icons/lucide/alert-triangle';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import { fragment, graphql } from '$graphql';
   import { AdminIcon, AdminModal } from '$lib/components/admin';
-  import { css } from '$styled-system/css';
-  import { flex } from '$styled-system/patterns';
   import type { AdminImpersonateBanner_query } from '$graphql';
 
   type Props = {
