@@ -60,7 +60,7 @@ class MultiEntitiesMenu extends HookWidget {
           },
         ),
         BottomMenuItem(
-          icon: LucideLightIcons.trash,
+          icon: LucideLightIcons.trash_2,
           label: '삭제하기',
           onTap: () async {
             await context.showModal(
