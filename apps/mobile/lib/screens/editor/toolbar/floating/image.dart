@@ -68,27 +68,30 @@ class ImageFloatingToolbar extends HookWidget {
               });
 
               final fileNodePairs = <(File, String)>[(allFiles.first, nodeId)];
+              final restFiles = allFiles.sublist(1);
 
               // NOTE: 두 번째 이후 이미지 노드들 삽입
-              if (allFiles.length > 1) {
-                final imageAttributesList = <Map<String, dynamic>>[];
-                for (var i = 1; i < allFiles.length; i++) {
-                  final file = allFiles[i];
-                  final mimetype = await blob.mime(file);
-                  final url = file.uri.replace(scheme: 'picker', queryParameters: {'type': mimetype}).toString();
-                  imageAttributesList.add({'inflightUrl': url});
-                }
-
+              if (restFiles.isNotEmpty) {
                 final insertedNodeIds = await scope.webViewController.value?.callProcedure('insertNodes', {
-                  'nodes': imageAttributesList.map((attrs) => {'type': 'image', 'attrs': attrs}).toList(),
+                  'nodes': List.generate(restFiles.length, (i) => {'type': 'image'}).toList(),
                 });
 
                 if (insertedNodeIds != null && insertedNodeIds is List) {
-                  final validNodeIds = insertedNodeIds.whereType<String>().toList();
-                  for (var i = 0; i < validNodeIds.length; i++) {
-                    if (i + 1 < allFiles.length) {
-                      fileNodePairs.add((allFiles[i + 1], validNodeIds[i]));
+                  for (var i = 0; i < insertedNodeIds.length && i < restFiles.length; i++) {
+                    final nodeId = insertedNodeIds[i] as String?;
+                    if (nodeId == null) {
+                      continue;
                     }
+                    fileNodePairs.add((restFiles[i], nodeId));
+
+                    final file = restFiles[i];
+                    final mimetype = await blob.mime(file);
+                    final url = file.uri.replace(scheme: 'picker', queryParameters: {'type': mimetype}).toString();
+                    await scope.webViewController.value?.emitEvent('nodeview', {
+                      'nodeId': insertedNodeIds[i],
+                      'name': 'inflight',
+                      'detail': {'url': url},
+                    });
                   }
                 }
               }

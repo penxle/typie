@@ -603,10 +603,8 @@
         })
         .run();
 
-      return insertedPositions
-        .map((pos) => currentEditor.state.doc.nodeAt(pos))
-        .filter((node) => node && node.attrs.nodeId)
-        .map((node) => node?.attrs.nodeId as string);
+      // (string | null)[]
+      return insertedPositions.map((pos) => currentEditor.state.doc.nodeAt(pos)).map((node) => node?.attrs.nodeId ?? null);
     });
 
     window.__webview__?.addEventListener('nodeview', (data) => {
