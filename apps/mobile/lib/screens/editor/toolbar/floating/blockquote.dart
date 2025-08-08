@@ -13,7 +13,7 @@ class BlockquoteFloatingToolbar extends HookWidget {
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
     final keyboardType = useValueListenable(scope.keyboardType);
-    final proseMirrorState = useValueListenable(scope.proseMirrorState);
+    final proseMirrorState = useValueListenable(scope.localProseMirrorState);
     final selected = proseMirrorState?.currentNode?.type == 'blockquote';
 
     return Row(

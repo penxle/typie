@@ -126,6 +126,8 @@ class Editor extends HookWidget {
             isReady.value = true;
           case 'setProseMirrorState':
             scope.proseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
+          case 'setLocalProseMirrorState':
+            scope.localProseMirrorState.value = ProseMirrorState.fromJson(event.data as Map<String, dynamic>);
           case 'setCharacterCountState':
             scope.characterCountState.value = CharacterCountState.fromJson(event.data as Map<String, dynamic>);
           case 'setYJSState':

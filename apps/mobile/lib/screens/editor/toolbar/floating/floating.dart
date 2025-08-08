@@ -19,7 +19,7 @@ class EditorFloatingToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
-    final proseMirrorState = useValueListenable(scope.proseMirrorState);
+    final proseMirrorState = useValueListenable(scope.localProseMirrorState);
 
     if (proseMirrorState == null) {
       return const SizedBox.shrink();

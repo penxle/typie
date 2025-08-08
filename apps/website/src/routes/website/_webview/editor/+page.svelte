@@ -9,6 +9,7 @@
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import { IndexeddbPersistence } from 'y-indexeddb';
+  import { ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostSyncType } from '@/enums';
@@ -30,6 +31,7 @@
   import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { Transaction } from '@tiptap/pm/state';
   import type { Ref } from '$lib/utils';
 
   const query = graphql(`
@@ -313,11 +315,11 @@
 
     const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
 
-    const handler = ({ editor }: { editor: Editor }) => {
+    const handler = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
       const { doc, selection, storedMarks: storedMarks_ } = editor.state;
       const { $anchor: anchor } = selection;
 
-      window.__webview__?.emitEvent('setProseMirrorState', {
+      const stateData = {
         nodes: Array.from({ length: anchor.depth + 1 }, (_, i) => anchor.before(i + 1))
           .map((pos) => [pos, doc.nodeAt(pos)] as const)
           .filter(([, node]) => !!node && !node.isText)
@@ -329,7 +331,14 @@
           from: editor.state.selection.from,
           to: editor.state.selection.to,
         },
-      });
+      };
+
+      window.__webview__?.emitEvent('setProseMirrorState', stateData);
+
+      const isLocalChange = !transaction.getMeta(ySyncPluginKey);
+      if (isLocalChange) {
+        window.__webview__?.emitEvent('setLocalProseMirrorState', stateData);
+      }
 
       const text = getText(editor.state.doc, {
         blockSeparator: '\n',

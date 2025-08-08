@@ -26,6 +26,7 @@ class EditorStateScope extends InheritedWidget {
     required this.data,
     required this.webViewController,
     required this.proseMirrorState,
+    required this.localProseMirrorState,
     required this.characterCountState,
     required this.yjsState,
     required this.keyboardHeight,
@@ -40,6 +41,7 @@ class EditorStateScope extends InheritedWidget {
   final ValueNotifier<GEditorScreen_QueryData?> data;
   final ValueNotifier<WebViewController?> webViewController;
   final ValueNotifier<ProseMirrorState?> proseMirrorState;
+  final ValueNotifier<ProseMirrorState?> localProseMirrorState;
   final ValueNotifier<CharacterCountState?> characterCountState;
   final ValueNotifier<YJSState?> yjsState;
   final ValueNotifier<double> keyboardHeight;
