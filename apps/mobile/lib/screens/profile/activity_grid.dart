@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:jiffy/jiffy.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/context/toast.dart';
+import 'package:typie/extensions/num.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.data.gql.dart';
 import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/tappable.dart';
 
 class ActivityGrid extends HookWidget {
   const ActivityGrid({super.key, required this.characterCountChanges});
@@ -101,12 +104,22 @@ class ActivityGrid extends HookWidget {
                       padding: EdgeInsets.only(bottom: day < 6 ? cellGap : 0),
                       child: weeks[week][day].level == -1
                           ? const SizedBox(width: cellSize, height: cellSize)
-                          : Container(
-                              width: cellSize,
-                              height: cellSize,
-                              decoration: BoxDecoration(
-                                color: _getColorByLevel(context, weeks[week][day].level),
-                                borderRadius: BorderRadius.circular(2),
+                          : Tappable(
+                              onTap: () {
+                                final activity = weeks[week][day];
+                                final date = activity.date.format(pattern: 'yyyy년 M월 d일');
+                                final message = activity.additions > 0
+                                    ? '$date에 ${activity.additions.comma}자를 작성했어요'
+                                    : '$date에는 작성한 글이 없어요';
+                                context.toast(ToastType.success, message);
+                              },
+                              child: Container(
+                                width: cellSize,
+                                height: cellSize,
+                                decoration: BoxDecoration(
+                                  color: _getColorByLevel(context, weeks[week][day].level),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
                               ),
                             ),
                     ),
