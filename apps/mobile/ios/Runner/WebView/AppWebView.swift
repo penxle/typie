@@ -127,14 +127,38 @@ class AppWebView: NSObject, FlutterPlatformView {
       case "callProcedure":
         if let name = args["name"] as? String, let data = args["data"] as? String {
           webView.callAsyncJavaScript("""
-            return await window.__webview__.callProcedure(
-              "\(name)",
-              JSON.parse("\(data)"),
-            );
+            try {
+              const result = await window.__webview__.callProcedure(
+                "\(name)",
+                JSON.parse("\(data)"),
+              );
+              return { success: true, result: result };
+            } catch (error) {
+              return { 
+                success: false, 
+                message: error.message || error.toString(),
+                stack: error.stack || ''
+              };
+            }
           """, arguments: [:], in: nil, in: .page) { res in
             switch res {
             case .success(let value):
-              result(value)
+              if let dict = value as? [String: Any],
+                 let success = dict["success"] as? Bool {
+                if success {
+                  result(dict["result"])
+                } else {
+                  let errorMessage = dict["message"] as? String ?? "Unknown error"
+                  let stack = dict["stack"] as? String
+                  result(FlutterError(
+                    code: "JS_EXECUTION_ERROR",
+                    message: errorMessage,
+                    details: stack
+                  ))
+                }
+              } else {
+                result(value)
+              }
             case .failure(let error):
               let nsError = error as NSError
               let jsMessage = nsError.userInfo["WKJavaScriptExceptionMessage"] as? String
@@ -254,7 +278,11 @@ class AppWebView: NSObject, FlutterPlatformView {
             procedures[name] = fn;
           },
           callProcedure: async (name, data) => {
-            const result = await procedures[name]?.(data);
+            const fn = procedures[name];
+            if (!fn) {
+              throw new Error(`Procedure '${name}' not found`);
+            }
+            const result = await fn(data);
             return JSON.stringify(result ?? null);
           }
         };
