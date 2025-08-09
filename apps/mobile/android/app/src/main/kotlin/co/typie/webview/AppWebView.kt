@@ -191,12 +191,13 @@ class AppWebView(
           
           webView.evaluateJavascript(
             """
-              (() => {
+              (async () => {
                 const callId = "$callId";
-                window.__webview__.callProcedure(
+                try {
+                  const result = await window.__webview__.callProcedure(
                   "$name",
                   JSON.parse("$data")
-                ).then((result) => {
+                  );
                   window.webViewHandlers.postMessage(JSON.stringify({
                     name: 'callProcedureResult',
                     attrs: { 
@@ -205,19 +206,22 @@ class AppWebView(
                       result: result
                     }
                   }));
-                }).catch((error) => {
+                } catch (error) {
                   window.webViewHandlers.postMessage(JSON.stringify({
                     name: 'callProcedureResult',
                     attrs: { 
                       callId: callId,
                       success: false,
-                      error: error.message || String(error)
+                      message: error.message || error.toString(),
+                      stack: error.stack || ''
                     }
                   }));
-                });
+                }
               })();
             """, null
           )
+        } else {
+          result.error("INVALID_ARGUMENTS", "Name and data are required", null)
         }
       }
 
@@ -261,7 +265,11 @@ class AppWebView(
               procedures[name] = fn;
             },
             callProcedure: async (name, data) => {
-              const result = await procedures[name]?.(data);
+              const fn = procedures[name];
+              if (!fn) {
+                throw new Error('Procedure not found: ' + name);
+              }
+              const result = await fn(data);
               return JSON.stringify(result ?? null);
             }
           };
@@ -297,11 +305,12 @@ class AppWebView(
             if (success) {
               result.success(attrs["result"] as? String)
             } else {
-              val errorMessage = attrs["error"] as? String ?: "Unknown error"
+              val errorMessage = attrs["message"] as? String ?: "Unknown error"
+              val stack = attrs["stack"] as? String
               result.error(
                 "JS_EXECUTION_ERROR",
                 errorMessage,
-                null
+                stack
               )
             }
             pendingCallProcedureResults.remove(callId)
