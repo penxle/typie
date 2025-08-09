@@ -534,7 +534,9 @@
             count.folder++;
           }
 
-          collect(entity.children as EntityNode[]);
+          if (entity.children) {
+            collect(entity.children);
+          }
         } else if (entityIds.has(entity.id)) {
           if (entity.node.__typename === 'Post') {
             count.post++;
