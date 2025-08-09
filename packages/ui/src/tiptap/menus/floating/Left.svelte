@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Slice } from '@tiptap/pm/model';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { fade } from 'svelte/transition';
@@ -6,6 +7,7 @@
   import TextSelectIcon from '~icons/lucide/text-select';
   import { tooltip } from '../../../actions';
   import { Icon } from '../../../components';
+  import { getWrappingNodeId, unwrapNodeById } from '../../extensions/clipboard';
   import { TEXT_NODE_TYPES, WRAPPING_NODE_NAMES } from '../../extensions/node-commands';
   import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../../node-views';
   import type { Editor } from '@tiptap/core';
@@ -110,8 +112,16 @@
       event.dataTransfer.setDragImage(domNode, 0, 0);
     }
 
+    let slice = editor.state.selection.content();
+    const wrappingNodeId = getWrappingNodeId(editor.state.selection);
+
+    if (wrappingNodeId) {
+      const unwrappedFragment = unwrapNodeById(slice.content, wrappingNodeId);
+      slice = new Slice(unwrappedFragment, slice.openStart, slice.openEnd);
+    }
+
     editor.view.dragging = {
-      slice: editor.state.selection.content(),
+      slice,
       move: true,
     };
   };

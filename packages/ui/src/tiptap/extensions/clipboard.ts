@@ -7,7 +7,7 @@ import { WRAPPING_NODE_NAMES } from './node-commands';
 import type { Selection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 
-const getWrappingNodeId = (selection: Selection) => {
+export const getWrappingNodeId = (selection: Selection) => {
   const { $from, $to } = selection;
 
   const result = findNodeUpward(selection, ({ node, depth }) => {
@@ -23,7 +23,7 @@ const getWrappingNodeId = (selection: Selection) => {
   return result?.node.attrs.nodeId || null;
 };
 
-const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
+export const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
   const unwrappedNodes = fragment.content.flatMap((node) => {
     if (WRAPPING_NODE_NAMES.includes(node.type.name) && node.attrs.nodeId === nodeId) {
       return node.content.content;
