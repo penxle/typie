@@ -846,4 +846,42 @@ builder.mutationFields((t) => ({
       return siteId;
     },
   }),
+
+  updateEntitiesVisibility: t.withAuth({ session: true }).fieldWithInput({
+    type: [Entity],
+    input: {
+      entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }),
+      visibility: t.input.field({ type: EntityVisibility }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entities = await db.select({ siteId: Entities.siteId }).from(Entities).where(inArray(Entities.id, input.entityIds));
+
+      if (entities.length === 0) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const siteId = entities[0].siteId;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (entities.some((entity) => entity.siteId !== siteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      return await db.transaction(async (tx) => {
+        const updatedEntities = await tx
+          .update(Entities)
+          .set({ visibility: input.visibility })
+          .where(inArray(Entities.id, input.entityIds))
+          .returning();
+
+        pubsub.publish('site:update', siteId, { scope: 'site' });
+
+        return updatedEntities;
+      });
+    },
+  }),
 }));
