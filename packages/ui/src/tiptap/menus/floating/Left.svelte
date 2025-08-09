@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Slice } from '@tiptap/pm/model';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { fade } from 'svelte/transition';
@@ -6,7 +7,8 @@
   import TextSelectIcon from '~icons/lucide/text-select';
   import { tooltip } from '../../../actions';
   import { Icon } from '../../../components';
-  import { TEXT_NODE_TYPES, WRAPPING_NODE_NAMES } from '../../extensions/node-commands';
+  import { getAncestorWrappingNodeIds, unwrapWrappingNodes } from '../../extensions/clipboard';
+  import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from '../../extensions/node-commands';
   import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../../node-views';
   import type { Editor } from '@tiptap/core';
 
@@ -26,31 +28,68 @@
   };
 
   const node = $derived(editor.state.doc.nodeAt(pos));
-  const isWrappingNode = $derived(node && WRAPPING_NODE_NAMES.includes(node.type.name));
+  const isWrappingNode = $derived(node && WRAPPING_NODE_TYPES.includes(node.type.name));
   const isTextNode = $derived(node && TEXT_NODE_TYPES.includes(node.type.name));
-  const showUnwrap = $derived(isWrappingNode || isTextNode);
-  const unwrapTooltip = $derived(node ? unwrapLabels[node.type.name] || '' : '');
+  const parentWithFullContentSelected = $derived.by(() => {
+    const { from, to } = editor.state.selection;
+    if (from === to) return null;
+
+    const fromPos = editor.state.doc.resolve(from);
+    const toPos = editor.state.doc.resolve(to);
+
+    const fromParentPos = fromPos.before(fromPos.depth);
+    const toParentPos = toPos.before(toPos.depth);
+    if (fromParentPos !== toParentPos) return null;
+
+    const parent = fromPos.parent;
+
+    if (!WRAPPING_NODE_TYPES.includes(parent.type.name) && !TEXT_NODE_TYPES.includes(parent.type.name)) {
+      return null;
+    }
+
+    const parentPos = fromParentPos;
+    const contentStart = parentPos + 1;
+    const contentEnd = parentPos + parent.nodeSize - 1;
+
+    if (from <= contentStart && to >= contentEnd) {
+      return parent;
+    }
+
+    return null;
+  });
+
+  const showUnwrap = $derived(isWrappingNode || isTextNode || !!parentWithFullContentSelected);
+  const unwrapTooltip = $derived.by(() => {
+    const targetNode = parentWithFullContentSelected || node;
+    if (targetNode) return unwrapLabels[targetNode.type.name] || '';
+    return '';
+  });
 
   const handleUnwrapClick = () => {
-    if (!node) return;
+    const targetNode = parentWithFullContentSelected || node;
+    if (!targetNode) return;
 
-    if (isWrappingNode) {
-      editor
-        .chain()
-        .focus()
-        .setNodeSelection(pos + 1) // NOTE: 현재 노드 내부에서 unwrap 실행되도록 +1
-        .unwrapNode(node.type.name)
-        .run();
-    } else if (isTextNode) {
-      editor.chain().focus().setNodeSelection(pos).setNode('paragraph').run();
+    const isTargetWrapping = WRAPPING_NODE_TYPES.includes(targetNode.type.name);
+    const isTargetText = TEXT_NODE_TYPES.includes(targetNode.type.name);
+
+    if (isTargetWrapping) {
+      const targetPos = parentWithFullContentSelected
+        ? editor.state.selection.from + 1 // 선택 영역 내부로 이동
+        : pos + 1; // 노드 내부로 이동
+
+      editor.chain().focus().setTextSelection(targetPos).unwrapNode(targetNode.type.name).run();
+    } else if (isTargetText) {
+      const targetPos = parentWithFullContentSelected
+        ? editor.state.doc.resolve(editor.state.selection.from).before(editor.state.doc.resolve(editor.state.selection.from).depth)
+        : pos;
+
+      editor.chain().focus().setNodeSelection(targetPos).setNode('paragraph').run();
     }
   };
 
-  const handleGripClick = () => {
+  const updateSelectionIfNeeded = () => {
     const node = editor.state.doc.nodeAt(pos);
-    if (!node) {
-      return;
-    }
+    if (!node) return false;
 
     const { from, to } = editor.state.selection;
     const nodeEnd = pos + node.nodeSize;
@@ -60,6 +99,12 @@
     if (!isSelectionOverlapping) {
       editor.chain().setNodeSelection(pos).focus().run();
     }
+
+    return { node, isSelectionOverlapping };
+  };
+
+  const handleGripClick = () => {
+    updateSelectionIfNeeded();
   };
 
   const handleDragStart = (event: DragEvent) => {
@@ -70,50 +115,69 @@
     event.dataTransfer.clearData();
     event.dataTransfer.effectAllowed = 'move';
 
-    const node = editor.state.doc.nodeAt(pos);
-    if (!node) {
+    const result = updateSelectionIfNeeded();
+    if (!result) {
       return;
     }
 
-    const { from, to } = editor.state.selection;
-    const nodeEnd = pos + node.nodeSize;
-
-    const isSelectionOverlapping = from < nodeEnd && to > pos && from !== to;
-    // NOTE: 이 노드가 현재 selection을 포함하는 경우 selection 유지
-    if (!isSelectionOverlapping) {
-      editor.chain().setNodeSelection(pos).focus().run();
-    }
-
-    // 드래그 이미지 설정
-    const domNode = editor.view.nodeDOM(pos) as HTMLElement;
-    if (!domNode) return;
+    const { isSelectionOverlapping } = result;
 
     if (isSelectionOverlapping) {
-      // 텍스트 선택이 있는 경우, 선택 영역의 DOM 복사본을 드래그 이미지로 사용
+      // NOTE: 텍스트 선택이 있는 경우, 선택 영역의 DOM 복사본을 드래그 이미지로 사용
       const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const contents = range.cloneContents();
+      if (!selection || selection.rangeCount === 0) return;
 
-        const dragImage = document.createElement('div');
-        dragImage.append(contents);
-        document.body.append(dragImage);
+      const range = selection.getRangeAt(0);
+      const contents = range.cloneContents();
 
-        event.dataTransfer.setDragImage(dragImage, 20, 20);
-        setTimeout(() => dragImage.remove(), 0);
-      } else {
-        // fallback: 노드 전체를 드래그 이미지로 사용
-        event.dataTransfer.setDragImage(domNode, 0, 0);
-      }
+      const dragImage = document.createElement('div');
+      dragImage.style.position = 'absolute';
+      dragImage.style.top = '0';
+      dragImage.style.left = '-9999px';
+      dragImage.append(contents);
+      document.body.append(dragImage);
+
+      event.dataTransfer.setDragImage(dragImage, 20, 20);
+
+      const cleanup = () => dragImage.remove();
+      setTimeout(cleanup, 0);
+      editor.view.dom.addEventListener('dragend', cleanup, { once: true });
     } else {
-      // 노드 전체 선택인 경우
+      const domNode = editor.view.nodeDOM(pos);
+      if (!(domNode instanceof HTMLElement)) return;
       event.dataTransfer.setDragImage(domNode, 0, 0);
     }
 
+    let slice = editor.state.selection.content();
+
+    // NOTE: 텍스트 노드 내부의 텍스트를 선택한 경우, 텍스트만 추출
+    const { from } = editor.state.selection;
+    const fromPos = editor.state.doc.resolve(from);
+    const parent = fromPos.parent;
+
+    // NOTE: cut, copy 할 때와 다르게 드래그 할 때는 재귀적으로 wrapping node 제거해 줘야 함
+    const wrappingNodeIds = getAncestorWrappingNodeIds(editor.state.selection);
+
+    if (TEXT_NODE_TYPES.includes(parent.type.name)) {
+      const textContent = slice.content.textBetween(0, slice.content.size, '\n');
+      const schema = editor.state.schema;
+      const paragraph = schema.nodes.paragraph.create(null, schema.text(textContent));
+      slice = new Slice(paragraph.content, 0, 0);
+    } else if (wrappingNodeIds.size > 0) {
+      const unwrappedFragment = unwrapWrappingNodes(slice.content, wrappingNodeIds);
+      slice = new Slice(unwrappedFragment, 0, 0);
+    }
+
     editor.view.dragging = {
-      slice: editor.state.selection.content(),
+      slice,
       move: true,
     };
+  };
+
+  const handleDragEnd = () => {
+    if (editor.view.dragging) {
+      editor.view.dragging = null;
+    }
   };
 </script>
 
@@ -133,6 +197,7 @@
     class={css({ borderRadius: '6px', padding: '2px', color: 'text.faint', _hover: { backgroundColor: 'interactive.hover' } })}
     draggable="true"
     onclick={handleGripClick}
+    ondragend={handleDragEnd}
     ondragstart={handleDragStart}
     type="button"
     use:tooltip={{ message: '선택 또는 드래그하여 이동', placement: 'top' }}

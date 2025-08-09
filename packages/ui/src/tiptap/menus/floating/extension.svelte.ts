@@ -1,10 +1,11 @@
 import { autoUpdate, computePosition, flip, hide, offset } from '@floating-ui/dom';
-import { Extension } from '@tiptap/core';
+import { Extension, posToDOMRect } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { css } from '@typie/styled-system/css';
 import { mount, unmount } from 'svelte';
 import Left from './Left.svelte';
 import Right from './Right.svelte';
+import type { VirtualElement } from '@floating-ui/dom';
 import type { EditorView } from '@tiptap/pm/view';
 
 type State = { pos: number | null };
@@ -117,12 +118,18 @@ export const FloatingMenu = Extension.create({
 
             remove();
 
+            // NOTE: 이 노드가 현재 selection을 포함하는지 확인
+            const node = view.state.doc.nodeAt(pos);
+            const { from, to } = view.state.selection;
+            const nodeEnd = pos + (node?.nodeSize ?? 0);
+            const isSelectionOverlapping = node && from < nodeEnd && to > pos && from !== to;
+
             leftDom = document.createElement('div');
             leftComponent = mount(Left, {
               target: leftDom,
               props: {
                 editor: this.editor,
-                pos,
+                pos: isSelectionOverlapping ? from : pos,
               },
             });
 
@@ -163,7 +170,23 @@ export const FloatingMenu = Extension.create({
                 return;
               }
 
-              const { x, y, middlewareData } = await computePosition(nodeDOM, leftDom, {
+              let referenceElement: Element | VirtualElement = nodeDOM;
+              if (isSelectionOverlapping) {
+                const virtualElement: VirtualElement = {
+                  getBoundingClientRect: () => {
+                    const selectionRect = posToDOMRect(view, from, to);
+                    const nodeRect = nodeDOM.getBoundingClientRect();
+                    return {
+                      ...selectionRect,
+                      left: nodeRect.left,
+                    };
+                  },
+                  contextElement: nodeDOM,
+                };
+                referenceElement = virtualElement;
+              }
+
+              const { x, y, middlewareData } = await computePosition(referenceElement, leftDom, {
                 placement: 'left-start',
                 middleware: [offset(leftOffset), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
               });
@@ -207,7 +230,9 @@ export const FloatingMenu = Extension.create({
                 return;
               }
 
-              if (state.pos !== prev.pos || !view.state.doc.eq(prevState.doc)) {
+              // NOTE: 선택 영역이 변경되었거나 문서가 변경된 경우 업데이트
+              const selectionChanged = !view.state.selection.eq(prevState.selection);
+              if (state.pos !== prev.pos || !view.state.doc.eq(prevState.doc) || selectionChanged) {
                 updateFloatingMenu(view, state.pos);
               }
             },
