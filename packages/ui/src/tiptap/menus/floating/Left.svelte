@@ -52,7 +52,14 @@
       return;
     }
 
-    editor.chain().setNodeSelection(pos).focus().run();
+    const { from, to } = editor.state.selection;
+    const nodeEnd = pos + node.nodeSize;
+
+    const isSelectionOverlapping = from < nodeEnd && to > pos && from !== to;
+    // NOTE: 이 노드가 현재 selection을 포함하는 경우 selection 유지
+    if (!isSelectionOverlapping) {
+      editor.chain().setNodeSelection(pos).focus().run();
+    }
   };
 
   const handleDragStart = (event: DragEvent) => {
@@ -63,12 +70,45 @@
     event.dataTransfer.clearData();
     event.dataTransfer.effectAllowed = 'move';
 
-    const domNode = editor.view.nodeDOM(pos) as HTMLElement;
-    if (domNode) {
-      event.dataTransfer.setDragImage(domNode, 0, 0);
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node) {
+      return;
     }
 
-    editor.chain().setNodeSelection(pos).focus().run();
+    const { from, to } = editor.state.selection;
+    const nodeEnd = pos + node.nodeSize;
+
+    const isSelectionOverlapping = from < nodeEnd && to > pos && from !== to;
+    // NOTE: 이 노드가 현재 selection을 포함하는 경우 selection 유지
+    if (!isSelectionOverlapping) {
+      editor.chain().setNodeSelection(pos).focus().run();
+    }
+
+    // 드래그 이미지 설정
+    const domNode = editor.view.nodeDOM(pos) as HTMLElement;
+    if (!domNode) return;
+
+    if (isSelectionOverlapping) {
+      // 텍스트 선택이 있는 경우, 선택 영역의 DOM 복사본을 드래그 이미지로 사용
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const contents = range.cloneContents();
+
+        const dragImage = document.createElement('div');
+        dragImage.append(contents);
+        document.body.append(dragImage);
+
+        event.dataTransfer.setDragImage(dragImage, 20, 20);
+        setTimeout(() => dragImage.remove(), 0);
+      } else {
+        // fallback: 노드 전체를 드래그 이미지로 사용
+        event.dataTransfer.setDragImage(domNode, 0, 0);
+      }
+    } else {
+      // 노드 전체 선택인 경우
+      event.dataTransfer.setDragImage(domNode, 0, 0);
+    }
 
     editor.view.dragging = {
       slice: editor.state.selection.content(),
