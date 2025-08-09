@@ -163,9 +163,14 @@ export const Search = Extension.create<unknown, SearchStorage>({
             this.storage.currentIndex = this.storage.currentIndex % this.storage.matches.length;
           }
 
-          const marks = state.doc.resolve(match.from).marksAcross(state.doc.resolve(match.to));
-          tr.replaceWith(match.from, match.to, this.editor.schema.text(replacement, marks));
-          tr.setSelection(TextSelection.create(tr.doc, match.from + replacement.length));
+          if (replacement === '') {
+            tr.delete(match.from, match.to);
+            tr.setSelection(TextSelection.create(tr.doc, match.from));
+          } else {
+            const marks = state.doc.resolve(match.from).marksAcross(state.doc.resolve(match.to));
+            tr.replaceWith(match.from, match.to, this.editor.schema.text(replacement, marks));
+            tr.setSelection(TextSelection.create(tr.doc, match.from + replacement.length));
+          }
 
           commands.scrollIntoViewFixed({ pos: match.from, position: 0.25 });
 
@@ -185,9 +190,14 @@ export const Search = Extension.create<unknown, SearchStorage>({
 
           let offset = 0;
           for (const match of this.storage.matches) {
-            const marks = state.doc.resolve(match.from).marksAcross(state.doc.resolve(match.to));
-            tr.replaceWith(match.from + offset, match.to + offset, this.editor.schema.text(replacement, marks));
-            offset += replacement.length - (match.to - match.from);
+            if (replacement === '') {
+              tr.delete(match.from + offset, match.to + offset);
+              offset -= match.to - match.from;
+            } else {
+              const marks = state.doc.resolve(match.from).marksAcross(state.doc.resolve(match.to));
+              tr.replaceWith(match.from + offset, match.to + offset, this.editor.schema.text(replacement, marks));
+              offset += replacement.length - (match.to - match.from);
+            }
           }
 
           this.editor.once('transaction', () => {
