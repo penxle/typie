@@ -164,6 +164,7 @@ class AnchorBottomSheet extends HookWidget {
                 style: const TextStyle(fontSize: 16),
                 submitOnEnter: false,
                 keyboardType: TextInputType.text,
+                maxLength: 20,
               ),
             );
           },
