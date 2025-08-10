@@ -1,5 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/theme.dart';
@@ -22,6 +23,7 @@ class HookFormTextField extends HookWidget {
     this.autofillHints,
     this.initialValue,
     this.submitOnEnter = true,
+    this.maxLength,
   });
 
   const factory HookFormTextField.collapsed({
@@ -35,6 +37,7 @@ class HookFormTextField extends HookWidget {
     TextInputType? keyboardType,
     TextInputAction textInputAction,
     bool submitOnEnter,
+    int? maxLength,
     Key? key,
   }) = _HookFormCollapsedTextField;
 
@@ -50,6 +53,7 @@ class HookFormTextField extends HookWidget {
   final List<String>? autofillHints;
   final String? initialValue;
   final bool submitOnEnter;
+  final int? maxLength;
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +148,9 @@ class HookFormTextField extends HookWidget {
             keyboardType: keyboardType,
             textInputAction: textInputAction,
             autofillHints: autofillHints,
+            maxLength: maxLength,
+            maxLengthEnforcement: MaxLengthEnforcement.enforced,
+            buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
             decoration: InputDecoration.collapsed(
               hintText: placeholder,
               hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
@@ -177,6 +184,7 @@ class _HookFormCollapsedTextField extends HookFormTextField {
     super.keyboardType,
     super.textInputAction = TextInputAction.done,
     super.submitOnEnter = true,
+    super.maxLength,
     super.key,
   }) : super(label: '');
 
@@ -220,6 +228,9 @@ class _HookFormCollapsedTextField extends HookFormTextField {
           keyboardType: keyboardType,
           textInputAction: textInputAction,
           style: style,
+          maxLength: maxLength,
+          maxLengthEnforcement: MaxLengthEnforcement.enforced,
+          buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
           decoration: InputDecoration.collapsed(
             hintText: placeholder,
             hintStyle: style.copyWith(color: context.colors.textDisabled),
