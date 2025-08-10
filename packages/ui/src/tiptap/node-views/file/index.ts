@@ -8,9 +8,14 @@ declare module '@tiptap/core' {
       setFile: () => ReturnType;
     };
   }
+
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface Storage {
+    uploadBlobAsFile: (file: File) => Promise<Record<string, unknown>>;
+  }
 }
 
-export const File = createNodeView(Component, {
+export const File = createNodeView<unknown, Storage>(Component, {
   name: 'file',
   group: 'block',
 

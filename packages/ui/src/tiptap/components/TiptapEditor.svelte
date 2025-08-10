@@ -5,6 +5,7 @@
   import { Ref } from '../../utils';
   import { Collaboration } from '../extensions';
   import { baseExtensions, editorExtensions } from '../schema';
+  import type { Storage } from '@tiptap/core';
   import type { EditorView } from '@tiptap/pm/view';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type * as YAwareness from 'y-protocols/awareness';
@@ -15,6 +16,7 @@
     editor?: Ref<Editor>;
     doc?: Y.Doc;
     awareness?: YAwareness.Awareness;
+    storage?: Partial<Storage>;
     extensions?: Extension[];
     editable?: boolean;
     onkeydown?: (view: EditorView, event: KeyboardEvent) => void;
@@ -22,7 +24,7 @@
     onfile?: (event: { pos: number; file: File }) => void;
   };
 
-  let { style, editor = $bindable(), doc, awareness, extensions, editable = true, onkeydown, oncreate, onfile }: Props = $props();
+  let { style, editor = $bindable(), doc, awareness, storage, extensions, editable = true, onkeydown, oncreate, onfile }: Props = $props();
 
   let element = $state<HTMLDivElement>();
 
@@ -95,6 +97,10 @@
     });
 
     editor = new Ref(e);
+
+    if (storage) {
+      Object.assign(e.storage, storage);
+    }
 
     return () => {
       editor?.current.destroy();

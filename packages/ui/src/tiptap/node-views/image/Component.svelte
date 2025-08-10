@@ -60,9 +60,10 @@
         }
       }
 
-      // const uploadedAttrs = await uploadBlobAsImage(firstFile);
-      // inflightUrl = undefined;
-      // updateAttributes(uploadedAttrs);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const uploadedAttrs = await editor!.current.storage.uploadBlobAsImage(firstFile);
+      inflightUrl = undefined;
+      updateAttributes(uploadedAttrs);
     } catch {
       inflightUrl = undefined;
       Toast.error(`${firstFile.name} 이미지 업로드에 실패했습니다.`);

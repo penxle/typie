@@ -8,9 +8,14 @@ declare module '@tiptap/core' {
       setEmbed: (attrs?: Record<string, unknown>) => ReturnType;
     };
   }
+
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface Storage {
+    unfurlEmbed: (url: string) => Promise<Record<string, unknown>>;
+  }
 }
 
-export const Embed = createNodeView(Component, {
+export const Embed = createNodeView<unknown, Storage>(Component, {
   name: 'embed',
   group: 'block',
   draggable: true,
