@@ -1,10 +1,10 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { Table } from '../node-views';
-import { TEXT_NODE_TYPES, WRAPPING_NODE_NAMES } from './node-commands';
+import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from './node-commands';
 
 const arrayOrNull = <T>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
-const NODE_TYPES_TO_SELECT_ON_BACKSPACE = [...WRAPPING_NODE_NAMES, Table.name, ...TEXT_NODE_TYPES];
+const NODE_TYPES_TO_SELECT_ON_BACKSPACE = [...WRAPPING_NODE_TYPES, Table.name, ...TEXT_NODE_TYPES];
 
 export const Behavior = Extension.create({
   name: 'behavior',
