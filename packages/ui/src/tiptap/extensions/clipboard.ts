@@ -3,7 +3,7 @@ import { DOMParser, Fragment, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { handleHTML } from 'zeed-dom';
 import { findNodeUpward } from '../lib/node-utils';
-import { WRAPPING_NODE_NAMES } from './node-commands';
+import { WRAPPING_NODE_TYPES } from './node-commands';
 import type { Selection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 
@@ -11,7 +11,7 @@ export const getWrappingNodeId = (selection: Selection) => {
   const { $from, $to } = selection;
 
   const result = findNodeUpward(selection, ({ node, depth }) => {
-    if (WRAPPING_NODE_NAMES.includes(node.type.name)) {
+    if (WRAPPING_NODE_TYPES.includes(node.type.name)) {
       const nodeStart = $from.before(depth);
       const nodeEnd = $from.after(depth);
 
@@ -25,7 +25,7 @@ export const getWrappingNodeId = (selection: Selection) => {
 
 export const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
   const unwrappedNodes = fragment.content.flatMap((node) => {
-    if (WRAPPING_NODE_NAMES.includes(node.type.name) && node.attrs.nodeId === nodeId) {
+    if (WRAPPING_NODE_TYPES.includes(node.type.name) && node.attrs.nodeId === nodeId) {
       return node.content.content;
     }
 

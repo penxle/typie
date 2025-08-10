@@ -8,7 +8,7 @@
   import { tooltip } from '../../../actions';
   import { Icon } from '../../../components';
   import { getWrappingNodeId, unwrapNodeById } from '../../extensions/clipboard';
-  import { TEXT_NODE_TYPES, WRAPPING_NODE_NAMES } from '../../extensions/node-commands';
+  import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from '../../extensions/node-commands';
   import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../../node-views';
   import type { Editor } from '@tiptap/core';
 
@@ -28,7 +28,7 @@
   };
 
   const node = $derived(editor.state.doc.nodeAt(pos));
-  const isWrappingNode = $derived(node && WRAPPING_NODE_NAMES.includes(node.type.name));
+  const isWrappingNode = $derived(node && WRAPPING_NODE_TYPES.includes(node.type.name));
   const isTextNode = $derived(node && TEXT_NODE_TYPES.includes(node.type.name));
   const showUnwrap = $derived(isWrappingNode || isTextNode);
   const unwrapTooltip = $derived(node ? unwrapLabels[node.type.name] || '' : '');
@@ -48,11 +48,9 @@
     }
   };
 
-  const handleGripClick = () => {
+  const updateSelectionIfNeeded = () => {
     const node = editor.state.doc.nodeAt(pos);
-    if (!node) {
-      return;
-    }
+    if (!node) return false;
 
     const { from, to } = editor.state.selection;
     const nodeEnd = pos + node.nodeSize;
@@ -62,6 +60,12 @@
     if (!isSelectionOverlapping) {
       editor.chain().setNodeSelection(pos).focus().run();
     }
+
+    return { node, isSelectionOverlapping };
+  };
+
+  const handleGripClick = () => {
+    updateSelectionIfNeeded();
   };
 
   const handleDragStart = (event: DragEvent) => {
@@ -72,43 +76,36 @@
     event.dataTransfer.clearData();
     event.dataTransfer.effectAllowed = 'move';
 
-    const node = editor.state.doc.nodeAt(pos);
-    if (!node) {
+    const result = updateSelectionIfNeeded();
+    if (!result) {
       return;
     }
 
-    const { from, to } = editor.state.selection;
-    const nodeEnd = pos + node.nodeSize;
-
-    const isSelectionOverlapping = from < nodeEnd && to > pos && from !== to;
-    // NOTE: 이 노드가 현재 selection을 포함하는 경우 selection 유지
-    if (!isSelectionOverlapping) {
-      editor.chain().setNodeSelection(pos).focus().run();
-    }
-
-    // 드래그 이미지 설정
-    const domNode = editor.view.nodeDOM(pos) as HTMLElement;
-    if (!domNode) return;
+    const { isSelectionOverlapping } = result;
 
     if (isSelectionOverlapping) {
-      // 텍스트 선택이 있는 경우, 선택 영역의 DOM 복사본을 드래그 이미지로 사용
+      // NOTE: 텍스트 선택이 있는 경우, 선택 영역의 DOM 복사본을 드래그 이미지로 사용
       const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const contents = range.cloneContents();
+      if (!selection || selection.rangeCount === 0) return;
 
-        const dragImage = document.createElement('div');
-        dragImage.append(contents);
-        document.body.append(dragImage);
+      const range = selection.getRangeAt(0);
+      const contents = range.cloneContents();
 
-        event.dataTransfer.setDragImage(dragImage, 20, 20);
-        setTimeout(() => dragImage.remove(), 0);
-      } else {
-        // fallback: 노드 전체를 드래그 이미지로 사용
-        event.dataTransfer.setDragImage(domNode, 0, 0);
-      }
+      const dragImage = document.createElement('div');
+      dragImage.style.position = 'absolute';
+      dragImage.style.top = '0';
+      dragImage.style.left = '-9999px';
+      dragImage.append(contents);
+      document.body.append(dragImage);
+
+      event.dataTransfer.setDragImage(dragImage, 20, 20);
+
+      const cleanup = () => dragImage.remove();
+      setTimeout(cleanup, 0);
+      editor.view.dom.addEventListener('dragend', cleanup, { once: true });
     } else {
-      // 노드 전체 선택인 경우
+      const domNode = editor.view.nodeDOM(pos);
+      if (!(domNode instanceof HTMLElement)) return;
       event.dataTransfer.setDragImage(domNode, 0, 0);
     }
 
@@ -124,6 +121,12 @@
       slice,
       move: true,
     };
+  };
+
+  const handleDragEnd = () => {
+    if (editor.view.dragging) {
+      editor.view.dragging = null;
+    }
   };
 </script>
 
@@ -143,6 +146,7 @@
     class={css({ borderRadius: '6px', padding: '2px', color: 'text.faint', _hover: { backgroundColor: 'interactive.hover' } })}
     draggable="true"
     onclick={handleGripClick}
+    ondragend={handleDragEnd}
     ondragstart={handleDragStart}
     type="button"
     use:tooltip={{ message: '선택 또는 드래그하여 이동', placement: 'top' }}

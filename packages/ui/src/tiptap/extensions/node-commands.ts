@@ -3,8 +3,8 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { findNodeUpward } from '../lib/node-utils';
 import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../node-views';
 
-// NOTE: lift, unwrap 가능한 defining: true인 노드들 (list_item 제외)
-export const WRAPPING_NODE_NAMES = [Blockquote.name, Callout.name, Fold.name];
+// NOTE: unwrap 가능한 defining: true인 노드들 (list_item 제외)
+export const WRAPPING_NODE_TYPES = [Blockquote.name, Callout.name, Fold.name];
 
 // NOTE: content: text* 인 노드들
 export const TEXT_NODE_TYPES = [CodeBlock.name, HtmlBlock.name];
@@ -29,7 +29,7 @@ export const NodeCommands = Extension.create({
     return {
       unwrapNode:
         (nodeType: string) =>
-        ({ state, commands }) => {
+        ({ state, tr, dispatch }) => {
           const result = findNodeUpward(state.selection, ({ node, depth }) => {
             if (depth === 0 || node.type.name === 'doc') return false;
 
@@ -37,8 +37,15 @@ export const NodeCommands = Extension.create({
             return true;
           });
 
-          if (result) {
-            return commands.lift(result.node.type.name);
+          if (result && dispatch && WRAPPING_NODE_TYPES.includes(result.node.type.name)) {
+            const { $from } = state.selection;
+            const nodeStart = $from.before(result.depth);
+            const nodeEnd = $from.after(result.depth);
+            const unwrappedContent = result.node.content;
+
+            tr.replaceWith(nodeStart, nodeEnd, unwrappedContent);
+            dispatch(tr);
+            return true;
           }
 
           return false;
