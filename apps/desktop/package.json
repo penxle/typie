@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@tauri-apps/api": "^2.7.0"
+    "@tauri-apps/api": "^2.7.0",
+    "@tauri-apps/plugin-deep-link": "^2.4.1"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.60",
