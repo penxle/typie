@@ -52,10 +52,9 @@
 
     inflight = true;
     try {
-      // const attrs = await unfurlEmbed({
-      //   url: /^[^:]+:\/\//.test(inflightUrl) ? inflightUrl : `https://${inflightUrl}`,
-      // });
-      // updateAttributes(attrs);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const attrs = await editor!.current.storage.unfurlEmbed(/^[^:]+:\/\//.test(inflightUrl) ? inflightUrl : `https://${inflightUrl}`);
+      updateAttributes(attrs);
     } finally {
       inflight = false;
     }

@@ -34,7 +34,7 @@
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
-  import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
+  import { unfurlEmbed, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import Anchors from './@anchor/Anchors.svelte';
   import Highlight from './Highlight.svelte';
@@ -903,6 +903,17 @@
                       e.preventDefault();
                       subtitleEl?.focus();
                     }
+                  }}
+                  storage={{
+                    uploadBlobAsImage: (file) => {
+                      return uploadBlobAsImage(file);
+                    },
+                    uploadBlobAsFile: (file) => {
+                      return uploadBlobAsFile(file);
+                    },
+                    unfurlEmbed: (url) => {
+                      return unfurlEmbed({ url });
+                    },
                   }}
                   bind:editor
                 />

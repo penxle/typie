@@ -21,6 +21,7 @@
   import { textSerializers } from '@/pm/serializer';
   import { browser } from '$app/environment';
   import { graphql } from '$graphql';
+  import { unfurlEmbed, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import Anchors from './Anchors.svelte';
   import { handleCaretMovement } from './caret';
   import FindReplace from './FindReplace.svelte';
@@ -817,6 +818,17 @@
         oncreate={() => {
           window.__webview__?.emitEvent('webviewReady');
           setYJSState();
+        }}
+        storage={{
+          uploadBlobAsImage: (file) => {
+            return uploadBlobAsImage(file);
+          },
+          uploadBlobAsFile: (file) => {
+            return uploadBlobAsFile(file);
+          },
+          unfurlEmbed: (url) => {
+            return unfurlEmbed({ url });
+          },
         }}
         bind:editor
       />
