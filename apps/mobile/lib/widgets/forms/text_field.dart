@@ -1,5 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/theme.dart';
@@ -148,6 +149,7 @@ class HookFormTextField extends HookWidget {
             textInputAction: textInputAction,
             autofillHints: autofillHints,
             maxLength: maxLength,
+            maxLengthEnforcement: MaxLengthEnforcement.enforced,
             buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
             decoration: InputDecoration.collapsed(
               hintText: placeholder,
@@ -227,6 +229,7 @@ class _HookFormCollapsedTextField extends HookFormTextField {
           textInputAction: textInputAction,
           style: style,
           maxLength: maxLength,
+          maxLengthEnforcement: MaxLengthEnforcement.enforced,
           buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
           decoration: InputDecoration.collapsed(
             hintText: placeholder,
