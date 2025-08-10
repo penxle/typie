@@ -3,10 +3,14 @@ import { Extension, posToDOMRect } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { css } from '@typie/styled-system/css';
 import { mount, unmount } from 'svelte';
+import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from '../../extensions/node-commands';
 import Left from './Left.svelte';
 import Right from './Right.svelte';
 import type { VirtualElement } from '@floating-ui/dom';
 import type { EditorView } from '@tiptap/pm/view';
+
+const LIST_NODE_TYPES = ['bullet_list', 'ordered_list'];
+const FLOATING_NODE_TYPES = new Set([...WRAPPING_NODE_TYPES, ...TEXT_NODE_TYPES, ...LIST_NODE_TYPES]);
 
 type State = { pos: number | null };
 
@@ -100,21 +104,15 @@ export const FloatingMenu = Extension.create({
               return;
             }
 
-            const resolvedPos = view.state.doc.resolve(pos);
-            if (resolvedPos.depth !== 1) {
-              remove();
-              return;
-            }
-
             const nodeDOM = view.nodeDOM(pos) as HTMLElement | null;
             if (!nodeDOM) {
               return;
             }
 
-            // NOTE: ul, ol은 marginLeft가 있어서 조정해야 함
-            const computedStyle = window.getComputedStyle(nodeDOM);
-            const marginLeft = Number.parseFloat(computedStyle.marginLeft) || 0;
-            const leftOffset = 16 + marginLeft;
+            const body = view.dom.querySelector('.ProseMirror-body');
+            if (!body) {
+              return;
+            }
 
             remove();
 
@@ -170,25 +168,26 @@ export const FloatingMenu = Extension.create({
                 return;
               }
 
-              let referenceElement: Element | VirtualElement = nodeDOM;
-              if (isSelectionOverlapping) {
-                const virtualElement: VirtualElement = {
-                  getBoundingClientRect: () => {
-                    const selectionRect = posToDOMRect(view, from, to);
-                    const nodeRect = nodeDOM.getBoundingClientRect();
-                    return {
-                      ...selectionRect,
-                      left: nodeRect.left,
-                    };
-                  },
-                  contextElement: nodeDOM,
-                };
-                referenceElement = virtualElement;
-              }
+              const bodyRect = (body as HTMLElement).getBoundingClientRect();
+              const referenceElement: VirtualElement = {
+                getBoundingClientRect: () => {
+                  let rect: DOMRect;
+                  if (isSelectionOverlapping) {
+                    rect = posToDOMRect(view, from, to);
+                  } else {
+                    rect = posToDOMRect(view, pos, nodeEnd);
+                  }
+                  return {
+                    ...rect,
+                    left: bodyRect.left,
+                  };
+                },
+                contextElement: nodeDOM,
+              };
 
               const { x, y, middlewareData } = await computePosition(referenceElement, leftDom, {
                 placement: 'left-start',
-                middleware: [offset(leftOffset), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
+                middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
               });
 
               leftDom.style.left = `${x}px`;
@@ -202,7 +201,23 @@ export const FloatingMenu = Extension.create({
                 return;
               }
 
-              const { x, y, middlewareData } = await computePosition(nodeDOM, rightDom, {
+              const bodyRect = (body as HTMLElement).getBoundingClientRect();
+              const nodeRect = posToDOMRect(view, pos, nodeEnd);
+
+              const referenceElement: VirtualElement = {
+                getBoundingClientRect: () => {
+                  return {
+                    ...nodeRect,
+                    width: 1,
+                    left: bodyRect.right - 1,
+                    right: bodyRect.right,
+                    x: bodyRect.right - 1,
+                  };
+                },
+                contextElement: nodeDOM,
+              };
+
+              const { x, y, middlewareData } = await computePosition(referenceElement, rightDom, {
                 placement: 'right-start',
                 middleware: [offset(16), hide({ padding: 16, strategy: 'escaped' })],
               });
@@ -262,8 +277,9 @@ export const FloatingMenu = Extension.create({
               }
 
               const left = body.getBoundingClientRect().left;
+              const width = body.getBoundingClientRect().width;
 
-              const posAtCoords = view.posAtCoords({ left, top: event.clientY });
+              const posAtCoords = view.posAtCoords({ left: left + width / 2, top: event.clientY });
               if (!posAtCoords) {
                 const updateFn = (view as ViewWithUpdate).__updateFloatingMenu;
                 if (updateFn) {
@@ -274,7 +290,32 @@ export const FloatingMenu = Extension.create({
 
               const pos = posAtCoords.inside <= 0 ? posAtCoords.pos : posAtCoords.inside;
               const resolvedPos = view.state.doc.resolve(pos);
-              const newPos = resolvedPos.before(2) ?? null;
+
+              let newPos: number | null = null;
+
+              const currentNode = view.state.doc.nodeAt(pos);
+              if (currentNode) {
+                const nodeType = currentNode.type.name;
+                if (FLOATING_NODE_TYPES.has(nodeType)) {
+                  newPos = pos;
+                }
+              }
+
+              if (newPos === null) {
+                for (let depth = resolvedPos.depth; depth > 2; depth--) {
+                  const node = resolvedPos.node(depth);
+                  const nodeType = node.type.name;
+
+                  if (FLOATING_NODE_TYPES.has(nodeType)) {
+                    newPos = resolvedPos.before(depth);
+                    break;
+                  }
+                }
+              }
+
+              if (newPos === null) {
+                newPos = resolvedPos.before(2);
+              }
 
               const updateFn = (view as ViewWithUpdate).__updateFloatingMenu;
               if (updateFn) {
