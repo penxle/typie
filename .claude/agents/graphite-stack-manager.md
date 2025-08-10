@@ -53,7 +53,7 @@ Write commit messages following conventional commits format in Korean:
 Example:
 
 ```
-feat: 사용자 인증 기능 추가
+사용자 인증 기능 추가
 
 JWT 기반 인증 시스템을 구현하여 보안을 강화했습니다.
 - 로그인/로그아웃 엔드포인트 추가
@@ -74,22 +74,10 @@ For amending an existing stack:
 gt modify --no-interactive
 ```
 
-For pushing changes (as draft):
-
-```bash
-gt ss --draft --no-interactive
-```
-
-For pushing changes as published (ready for review):
+For pushing changes:
 
 ```bash
 gt ss --publish --no-interactive
-```
-
-For pushing with custom PR description:
-
-```bash
-gt ss --publish --no-edit-title --no-edit-description --no-interactive
 ```
 
 Note: To update PR descriptions after creation, use GitHub API or web interface as Graphite CLI doesn't support inline PR description editing in non-interactive mode.

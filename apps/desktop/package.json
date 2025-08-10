@@ -3,19 +3,18 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "scripts": {
-    "build": "vite build",
-    "dev": "vite dev"
-  },
   "dependencies": {
     "@tauri-apps/api": "^2.7.0"
   },
   "devDependencies": {
+    "@pandacss/dev": "^1.0.0",
     "@sveltejs/adapter-static": "^3.0.8",
     "@sveltejs/kit": "^2.27.0",
     "@sveltejs/vite-plugin-svelte": "^6.1.0",
     "@tauri-apps/cli": "^2.7.1",
+    "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
+    "@typie/ui": "workspace:*",
     "svelte": "^5.37.3",
     "svelte-check": "^4.3.1",
     "typescript": "^5.9.2",

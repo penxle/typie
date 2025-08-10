@@ -1,27 +1,17 @@
 <script lang="ts">
   import '../app.css';
 
+  import { css } from '@typie/styled-system/css';
+
   let { children } = $props();
 </script>
 
-<div class="app">
-  <div class="titlebar" data-tauri-drag-region></div>
+<div class={css({ position: 'relative', width: '[100vw]', height: '[100vh]', paddingTop: '36px' })}>
+  <div
+    style:-webkit-app-region="drag"
+    class={css({ position: 'fixed', top: '0', left: '0', right: '0', height: '36px' })}
+    data-tauri-drag-region
+  ></div>
 
   {@render children()}
 </div>
-
-<style>
-  .app {
-    position: relative;
-    height: 100%;
-  }
-
-  .titlebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 36px;
-    -webkit-app-region: drag;
-  }
-</style>
