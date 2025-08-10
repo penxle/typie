@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, Selection as ProseMirrorSelection } from '@tiptap/pm/state';
+import { CellSelection } from '@tiptap/pm/tables';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { css, cx } from '@typie/styled-system/css';
 import { Tip } from '../../notification';
@@ -20,6 +21,23 @@ export const Selection = Extension.create({
         const { selection } = editor.state;
         const { $from } = selection;
         const { from, to } = selection;
+
+        if (selection instanceof CellSelection) {
+          let tableDepth = $from.depth;
+          while (tableDepth >= 2 && $from.node(tableDepth).type.name !== 'table') {
+            tableDepth--;
+          }
+
+          if (tableDepth >= 2 && $from.node(tableDepth).type.name === 'table') {
+            const tablePos = $from.before(tableDepth);
+            return editor.commands.command(({ state, tr, dispatch }) => {
+              const s = NodeSelection.create(state.doc, tablePos);
+              tr.setSelection(s);
+              dispatch?.(tr);
+              return true;
+            });
+          }
+        }
 
         // NOTE: TEXT_NODE_TYPES (CodeBlock, HtmlBlock) 특별 처리
         if (TEXT_NODE_TYPES.includes($from.parent.type.name)) {
