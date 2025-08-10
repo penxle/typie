@@ -81,6 +81,7 @@ unplugin
 unstub
 unsubscriber
 vcpu
+vite
 wonka
 xact
 xcarchive

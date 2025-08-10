@@ -1,20 +1,3 @@
-:root {
-  user-select: none;
-  -webkit-user-select: none;
+@layer reset, base, ui, tokens, recipes, utilities;
 
-  margin: 0;
-  padding: 0;
-
-  width: 100%;
-  height: 100%;
-
-  font-family: 'Pretendard', sans-serif;
-}
-
-body {
-  margin: 0;
-  padding: 0;
-
-  width: 100%;
-  height: 100%;
-}
+@import url(@typie/ui/styles.css) layer(ui);

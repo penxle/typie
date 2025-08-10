@@ -1,13 +1,7 @@
-<main class="container">
+<script lang="ts">
+  import { center } from '@typie/styled-system/patterns';
+</script>
+
+<main class={center({ height: 'full' })}>
   <p>짠</p>
 </main>
-
-<style>
-  .container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-  }
-</style>

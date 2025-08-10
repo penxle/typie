@@ -3,8 +3,8 @@ version = "0.0.1"
 identifier = "co.typie"
 
 [build]
-beforeDevCommand = "pnpm dev"
-beforeBuildCommand = "pnpm build"
+beforeDevCommand = "pnpm vite dev"
+beforeBuildCommand = "pnpm vite build"
 devUrl = "http://localhost:5000"
 frontendDist = "../build"
 
