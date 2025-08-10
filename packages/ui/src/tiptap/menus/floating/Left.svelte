@@ -37,6 +37,8 @@
     const fromPos = editor.state.doc.resolve(from);
     const toPos = editor.state.doc.resolve(to);
 
+    if (fromPos.depth < 2 || toPos.depth < 2) return null;
+
     const fromParentPos = fromPos.before(fromPos.depth);
     const toParentPos = toPos.before(toPos.depth);
     if (fromParentPos !== toParentPos) return null;
