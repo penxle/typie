@@ -52,8 +52,11 @@ class UpdateProfileScreen extends HookWidget {
           return HookForm(
             form: form,
             schema: l.schema({
-              'name': l.string().min(1, message: '이름을 입력해주세요.')
-                ..max(20, message: '이름은 20자를 넘을 수 없어요').required(message: '이름을 입력해주세요.'),
+              'name': l
+                  .string()
+                  .min(1, message: '닉네임을 입력해주세요')
+                  .max(20, message: '닉네임은 20자를 넘을 수 없어요')
+                  .required(message: '닉네임을 입력해주세요'),
               'avatarId': l.string(),
             }),
             onSubmit: (form) async {
