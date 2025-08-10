@@ -3,15 +3,15 @@ import { DOMParser, Fragment, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { handleHTML } from 'zeed-dom';
 import { findNodeUpward } from '../lib/node-utils';
-import { WRAPPING_NODE_NAMES } from './node-commands';
+import { WRAPPING_NODE_TYPES } from './node-commands';
 import type { Selection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 
-const getWrappingNodeId = (selection: Selection) => {
+export const getWrappingNodeId = (selection: Selection) => {
   const { $from, $to } = selection;
 
   const result = findNodeUpward(selection, ({ node, depth }) => {
-    if (WRAPPING_NODE_NAMES.includes(node.type.name)) {
+    if (WRAPPING_NODE_TYPES.includes(node.type.name)) {
       const nodeStart = $from.before(depth);
       const nodeEnd = $from.after(depth);
 
@@ -23,9 +23,28 @@ const getWrappingNodeId = (selection: Selection) => {
   return result?.node.attrs.nodeId || null;
 };
 
-const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
+export const getAncestorWrappingNodeIds = (selection: Selection): Set<string> => {
+  const { $from, $to } = selection;
+  const nodeIds = new Set<string>();
+
+  for (let depth = 1; depth <= $from.depth; depth++) {
+    const node = $from.node(depth);
+    if (WRAPPING_NODE_TYPES.includes(node.type.name)) {
+      const nodeStart = $from.before(depth);
+      const nodeEnd = $from.after(depth);
+
+      if ($from.pos > nodeStart && $to.pos < nodeEnd) {
+        nodeIds.add(node.attrs.nodeId);
+      }
+    }
+  }
+
+  return nodeIds;
+};
+
+export const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
   const unwrappedNodes = fragment.content.flatMap((node) => {
-    if (WRAPPING_NODE_NAMES.includes(node.type.name) && node.attrs.nodeId === nodeId) {
+    if (WRAPPING_NODE_TYPES.includes(node.type.name) && node.attrs.nodeId === nodeId) {
       return node.content.content;
     }
 
@@ -34,6 +53,22 @@ const unwrapNodeById = (fragment: Fragment, nodeId: string): Fragment => {
     }
 
     return [node.copy(unwrapNodeById(node.content, nodeId))];
+  });
+
+  return Fragment.from(unwrappedNodes);
+};
+
+export const unwrapWrappingNodes = (fragment: Fragment, nodeIds: Set<string>): Fragment => {
+  const unwrappedNodes = fragment.content.flatMap((node) => {
+    if (WRAPPING_NODE_TYPES.includes(node.type.name) && nodeIds.has(node.attrs.nodeId)) {
+      return unwrapWrappingNodes(Fragment.from(node.content.content), nodeIds).content;
+    }
+
+    if (node.content.size > 0) {
+      return [node.copy(unwrapWrappingNodes(node.content, nodeIds))];
+    }
+
+    return [node];
   });
 
   return Fragment.from(unwrappedNodes);

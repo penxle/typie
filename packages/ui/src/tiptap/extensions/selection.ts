@@ -4,7 +4,7 @@ import { NodeSelection, Plugin, Selection as ProseMirrorSelection } from '@tipta
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { css, cx } from '@typie/styled-system/css';
 import { Tip } from '../../notification';
-import { TEXT_NODE_TYPES } from './node-commands';
+import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from './node-commands';
 import type { Mappable } from '@tiptap/pm/transform';
 
 export const Selection = Extension.create({
@@ -19,38 +19,89 @@ export const Selection = Extension.create({
 
         const { selection } = editor.state;
         const { $from } = selection;
+        const { from, to } = selection;
 
+        // NOTE: TEXT_NODE_TYPES (CodeBlock, HtmlBlock) 특별 처리
         if (TEXT_NODE_TYPES.includes($from.parent.type.name)) {
-          const parentStart = $from.start();
-          const parentEnd = $from.end();
+          const blockStart = $from.start();
+          const blockEnd = $from.end();
+          const isEmpty = blockStart === blockEnd;
+          const isFullySelected = from === blockStart && to === blockEnd;
 
-          if (selection.from !== parentStart || selection.to !== parentEnd) {
-            // NOTE: 모든 텍스트가 선택되어 있지 않으면 전체 텍스트 내용 선택
-            editor.commands.setTextSelection({
-              from: parentStart,
-              to: parentEnd,
+          if (isFullySelected || isEmpty) {
+            return editor.commands.command(({ state, tr, dispatch }) => {
+              const s = NodeSelection.create(state.doc, $from.before($from.depth));
+              tr.setSelection(s);
+              dispatch?.(tr);
+              return true;
             });
-            return true;
+          }
+
+          if (from === to || from > blockStart || to < blockEnd) {
+            return editor.commands.setTextSelection({ from: blockStart, to: blockEnd });
           }
         }
 
-        if (selection instanceof NodeSelection || selection instanceof MultiNodeSelection) {
-          return editor.commands.command(({ state, tr, dispatch }) => {
-            const s = MultiNodeSelection.create(state.doc, 1, state.doc.content.size);
-            tr.setSelection(s);
-            dispatch?.(tr);
+        let depth = $from.depth;
+        while (depth >= 1) {
+          const node = $from.node(depth);
+          const nodeStart = $from.before(depth);
+          const nodeEnd = $from.after(depth);
+          const isWrappingNode = WRAPPING_NODE_TYPES.includes(node.type.name);
 
-            return true;
-          });
+          if (isWrappingNode) {
+            const innerStart = nodeStart + 1;
+            const innerEnd = nodeEnd - 1;
+            const isInnerFullySelected = from === innerStart && to === innerEnd;
+
+            if (isInnerFullySelected) {
+              return editor.commands.command(({ state, tr, dispatch }) => {
+                const s = NodeSelection.create(state.doc, nodeStart);
+                tr.setSelection(s);
+                dispatch?.(tr);
+                return true;
+              });
+            }
+
+            if (selection instanceof NodeSelection && !isInnerFullySelected) {
+              return editor.commands.command(({ state, tr, dispatch }) => {
+                const s = MultiNodeSelection.create(state.doc, innerStart, innerEnd);
+                tr.setSelection(s);
+                dispatch?.(tr);
+                return true;
+              });
+            }
+          }
+
+          const needsExpansion = from > nodeStart || to < nodeEnd;
+          if (needsExpansion) {
+            if (depth === 1) {
+              return editor.commands.command(({ state, tr, dispatch }) => {
+                const s = MultiNodeSelection.create(state.doc, 1, state.doc.content.size);
+                tr.setSelection(s);
+                dispatch?.(tr);
+                return true;
+              });
+            }
+
+            return editor.commands.command(({ state, tr, dispatch }) => {
+              const s = NodeSelection.create(state.doc, nodeStart);
+              tr.setSelection(s);
+              dispatch?.(tr);
+
+              Tip.show('editor.shortcut.expand-selection', '`Mod-A`를 계속 누르면 선택 영역이 확장되어요.');
+
+              return true;
+            });
+          }
+
+          depth--;
         }
 
-        Tip.show('editor.shortcut.select-all', '`Mod-A` 키를 한번 더 눌러 본문 전체를 선택할 수 있어요.');
-
         return editor.commands.command(({ state, tr, dispatch }) => {
-          const s = MultiNodeSelection.create(state.doc, selection.$from.before(), selection.$to.after());
+          const s = MultiNodeSelection.create(state.doc, 1, state.doc.content.size);
           tr.setSelection(s);
           dispatch?.(tr);
-
           return true;
         });
       },
