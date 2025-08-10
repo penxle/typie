@@ -120,14 +120,14 @@ export const FloatingMenu = Extension.create({
             const node = view.state.doc.nodeAt(pos);
             const { from, to } = view.state.selection;
             const nodeEnd = pos + (node?.nodeSize ?? 0);
-            const isSelectionOverlapping = node && from < nodeEnd && to > pos && from !== to;
+            const isSelectionOverlapping = node && from < nodeEnd && to > pos && from !== to && !(from === pos && to === nodeEnd);
 
             leftDom = document.createElement('div');
             leftComponent = mount(Left, {
               target: leftDom,
               props: {
                 editor: this.editor,
-                pos: isSelectionOverlapping ? from : pos,
+                pos,
               },
             });
 
@@ -238,6 +238,10 @@ export const FloatingMenu = Extension.create({
 
           return {
             update: (view, prevState) => {
+              if (view.dragging) {
+                return;
+              }
+
               const state = pluginKey.getState(view.state);
               const prev = pluginKey.getState(prevState);
 
