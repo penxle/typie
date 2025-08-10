@@ -23,3 +23,6 @@ resources = { "resources/" = "./" }
 [bundle.macOS.dmg]
 background = "assets/dmg-background.png"
 windowSize = { width = 660, height = 400 }
+
+[plugins.deep-link.desktop]
+schemes = ["typie"]
