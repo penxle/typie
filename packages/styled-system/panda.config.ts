@@ -1,8 +1,6 @@
 import { defineConfig } from '@pandacss/dev';
 import { preset } from './src';
 
-const prod = process.env.NODE_ENV === 'production';
-
 export default defineConfig({
   outExtension: 'js',
 
@@ -13,6 +11,6 @@ export default defineConfig({
   strictTokens: true,
 
   separator: '-',
-  hash: prod,
-  minify: prod,
+  hash: true,
+  minify: true,
 });
