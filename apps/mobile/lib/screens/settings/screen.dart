@@ -74,6 +74,13 @@ class SettingsScreen extends HookWidget {
                         await context.router.push(const UpdateProfileRoute());
                       },
                     ),
+                    const _Divider(),
+                    _Item(
+                      label: '연결된 SNS 계정',
+                      onTap: () async {
+                        await context.router.push(const SocialAccountsRoute());
+                      },
+                    ),
                   ],
                 ),
                 _Section(
