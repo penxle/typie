@@ -318,6 +318,28 @@
       const { doc, selection, storedMarks: storedMarks_ } = editor.state;
       const { $anchor: anchor, $head: head, empty, from, to } = selection;
 
+      // NOTE: tiptap core isNodeActive에서 사용하는 것과 동일하게 nodeRanges를 구함
+      const getNodeRanges = () => {
+        const nodeRanges: { type: string; attrs?: Record<string, unknown>; from: number; to: number }[] = [];
+        doc.nodesBetween(from, to, (node, pos) => {
+          if (node.isText) {
+            return;
+          }
+
+          const relativeFrom = Math.max(from, pos);
+          const relativeTo = Math.min(to, pos + node.nodeSize);
+
+          nodeRanges.push({
+            type: node.type.name,
+            attrs: node.attrs,
+            from: relativeFrom,
+            to: relativeTo,
+          });
+        });
+
+        return nodeRanges;
+      };
+
       // NOTE: tiptap core getMarkAttributes에서 사용하는 것과 동일하게 marks를 구함
       const getMarks = () => {
         const marks = [];
@@ -339,6 +361,7 @@
           .map((pos) => [pos, doc.nodeAt(pos)] as const)
           .filter(([, node]) => !!node && !node.isText)
           .map(([pos, node]) => ({ pos, type: node?.type.name, attrs: node?.attrs })),
+        nodeRanges: getNodeRanges(),
         marks: getMarks().map((mark) => mark.toJSON()),
         storedMarks: editor.state.storedMarks?.map((mark) => mark.toJSON()),
         selection: {
