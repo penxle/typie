@@ -8,7 +8,8 @@ import type { Exchange, GraphQLOperation, Operation, OperationContext, Operation
 
 export type ClientOptions = {
   url: string;
-  fetchOptions?: RequestInit;
+  fetchFn?: typeof globalThis.fetch;
+  fetchOptions?: RequestInit | (() => Promise<RequestInit>);
   exchanges: Exchange[];
   onError?: (error: unknown, event: LoadEvent) => void | Promise<void>;
 };
@@ -25,7 +26,8 @@ export class SarkClient {
   id = nanoid();
 
   private url: string;
-  private fetchOptions: RequestInit;
+  private fetchFn: typeof globalThis.fetch | undefined;
+  private fetchOptions: RequestInit | (() => Promise<RequestInit>);
   private onError?: (error: unknown, event: LoadEvent) => void | Promise<void>;
 
   private operations$: Subject<Operation>;
@@ -33,7 +35,8 @@ export class SarkClient {
 
   constructor(options: ClientOptions) {
     this.url = options.url;
-    this.fetchOptions = options.fetchOptions || {};
+    this.fetchFn = options.fetchFn;
+    this.fetchOptions = options.fetchOptions ?? {};
     this.onError = options.onError;
 
     const composedExchange = composeExchanges(options.exchanges);
@@ -61,8 +64,9 @@ export class SarkClient {
       variables,
       context: {
         url: context?.url ?? this.url,
-        fetch: context?.fetch,
-        fetchOptions: { ...this.fetchOptions, ...context?.fetchOptions },
+        fetch: this.fetchFn ?? context?.fetch,
+        fetchOptions: { ...(typeof this.fetchOptions === 'object' ? this.fetchOptions : {}), ...context?.fetchOptions },
+        fetchOptionsFn: typeof this.fetchOptions === 'function' ? this.fetchOptions : undefined,
         requestPolicy: context?.requestPolicy ?? 'cache-first',
         transport: context?.transport ?? 'fetch',
         extensions: context?.extensions,
