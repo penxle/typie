@@ -8,6 +8,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { PUBLIC_AUTH_URL, PUBLIC_OIDC_CLIENT_ID, PUBLIC_OIDC_CLIENT_SECRET } from '$env/static/public';
+  import { store } from '$lib/store';
 
   const login = async () => {
     try {
@@ -37,8 +38,8 @@
         await goto('/auth/login');
       }
 
-      message(data.access_token);
-      await goto('/auth/login'); // TODO: 로그인 토큰 저장하기
+      await store.set('access_token', data.access_token);
+      await goto('/');
     } catch (err) {
       message(String(err));
       await goto('/auth/login');

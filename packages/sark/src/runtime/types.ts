@@ -35,6 +35,7 @@ export type OperationContext = {
   url: string;
   fetch?: typeof globalThis.fetch;
   fetchOptions?: RequestInit;
+  fetchOptionsFn?: () => Promise<RequestInit>;
   requestPolicy: 'cache-only' | 'network-only' | 'cache-first';
   transport: 'fetch' | 'sse' | 'ws';
   extensions?: Record<string, unknown>;

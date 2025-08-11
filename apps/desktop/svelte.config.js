@@ -16,5 +16,14 @@ export default {
     paths: { relative: false },
     csrf: { checkOrigin: false },
     output: { preloadStrategy: 'preload-mjs' },
+    typescript: {
+      config: (config) => ({
+        ...config,
+        compilerOptions: {
+          ...config.compilerOptions,
+          rootDirs: [...config.compilerOptions.rootDirs, '../.sark/types'],
+        },
+      }),
+    },
   },
 };
