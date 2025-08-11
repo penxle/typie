@@ -284,7 +284,7 @@ export const FloatingMenu = Extension.create({
               const width = body.getBoundingClientRect().width;
 
               const posAtCoords = view.posAtCoords({ left: left + width / 2, top: event.clientY });
-              if (!posAtCoords) {
+              if (!posAtCoords || posAtCoords.inside <= 0) {
                 const updateFn = (view as ViewWithUpdate).__updateFloatingMenu;
                 if (updateFn) {
                   updateFn(view, null);
@@ -292,7 +292,8 @@ export const FloatingMenu = Extension.create({
                 return false;
               }
 
-              const pos = posAtCoords.inside <= 0 ? posAtCoords.pos : posAtCoords.inside;
+              const pos = posAtCoords.inside;
+
               const resolvedPos = view.state.doc.resolve(pos);
 
               let newPos: number | null = null;
