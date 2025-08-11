@@ -316,14 +316,30 @@
 
     const handler = ({ editor }: { editor: Editor }) => {
       const { doc, selection, storedMarks: storedMarks_ } = editor.state;
-      const { $anchor: anchor } = selection;
+      const { $anchor: anchor, $head: head, empty, from, to } = selection;
+
+      // NOTE: tiptap core getMarkAttributes에서 사용하는 것과 동일하게 marks를 구함
+      const getMarks = () => {
+        const marks = [];
+        if (empty) {
+          if (storedMarks_) {
+            marks.push(...storedMarks_);
+          }
+          marks.push(...head.marks());
+        } else {
+          doc.nodesBetween(from, to, (node) => {
+            marks.push(...node.marks);
+          });
+        }
+        return marks;
+      };
 
       window.__webview__?.emitEvent('setProseMirrorState', {
         nodes: Array.from({ length: anchor.depth + 1 }, (_, i) => anchor.before(i + 1))
           .map((pos) => [pos, doc.nodeAt(pos)] as const)
           .filter(([, node]) => !!node && !node.isText)
           .map(([pos, node]) => ({ pos, type: node?.type.name, attrs: node?.attrs })),
-        marks: anchor.marks().map((mark) => mark.toJSON()),
+        marks: getMarks().map((mark) => mark.toJSON()),
         storedMarks: editor.state.storedMarks?.map((mark) => mark.toJSON()),
         selection: {
           ...editor.state.selection.toJSON(),
