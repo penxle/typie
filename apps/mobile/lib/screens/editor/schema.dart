@@ -8,6 +8,7 @@ part 'schema.g.dart';
 abstract class ProseMirrorState with _$ProseMirrorState {
   const factory ProseMirrorState({
     required List<ProseMirrorNode> nodes,
+    required List<ProseMirrorNodeRange> nodeRanges,
     required List<ProseMirrorMark> marks,
     required ProseMirrorSelection selection,
     List<ProseMirrorMark>? storedMarks,
@@ -79,26 +80,40 @@ abstract class ProseMirrorState with _$ProseMirrorState {
   }
 
   bool isNodeActive(String type, {Map<String, dynamic>? attrs}) {
-    final node = nodes.firstWhereOrNull((node) => node.type == type);
-    if (node == null) {
-      return false;
-    }
+    final from = selection is ProseMirrorTextSelection ? (selection as ProseMirrorTextSelection).from : 0;
+    final to = selection is ProseMirrorTextSelection ? (selection as ProseMirrorTextSelection).to : 0;
+    final empty = from == to;
 
-    if (attrs == null || attrs.isEmpty) {
-      return true;
-    }
-
-    if (node.attrs == null) {
-      return false;
-    }
-
-    for (final entry in attrs.entries) {
-      if (!node.attrs!.containsKey(entry.key) || node.attrs![entry.key] != entry.value) {
+    final matchedNodeRanges = nodeRanges.where((nodeRange) {
+      if (nodeRange.type != type) {
         return false;
       }
+
+      if (attrs == null || attrs.isEmpty) {
+        return true;
+      }
+
+      if (nodeRange.attrs == null) {
+        return false;
+      }
+
+      for (final entry in attrs.entries) {
+        if (!nodeRange.attrs!.containsKey(entry.key) || nodeRange.attrs![entry.key] != entry.value) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
+
+    if (empty) {
+      return matchedNodeRanges.isNotEmpty;
     }
 
-    return true;
+    final selectionRange = to - from;
+    final range = matchedNodeRanges.fold(0, (sum, nodeRange) => sum + nodeRange.to - nodeRange.from);
+
+    return range >= selectionRange;
   }
 
   Map<String, dynamic>? getNodeAttributes(String type) {
@@ -122,6 +137,17 @@ abstract class ProseMirrorNode with _$ProseMirrorNode {
   const factory ProseMirrorNode({required int pos, required String type, required Map<String, dynamic>? attrs}) =
       _ProseMirrorNode;
   factory ProseMirrorNode.fromJson(Map<String, dynamic> json) => _$ProseMirrorNodeFromJson(json);
+}
+
+@freezed
+abstract class ProseMirrorNodeRange with _$ProseMirrorNodeRange {
+  const factory ProseMirrorNodeRange({
+    required String type,
+    required Map<String, dynamic>? attrs,
+    required int from,
+    required int to,
+  }) = _ProseMirrorNodeRange;
+  factory ProseMirrorNodeRange.fromJson(Map<String, dynamic> json) => _$ProseMirrorNodeRangeFromJson(json);
 }
 
 @Freezed(unionKey: 'type')
