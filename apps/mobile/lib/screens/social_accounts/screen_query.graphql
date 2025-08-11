@@ -1,0 +1,10 @@
+query SocialAccountsScreen_Query {
+  me {
+    id
+    singleSignOns {
+      id
+      provider
+      email
+    }
+  }
+}
