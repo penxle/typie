@@ -102,35 +102,39 @@ export const Page = Extension.create<unknown, PageStorage>({
             const decorations: Decoration[] = [];
 
             for (const [i, { pos, height }] of pages.entries()) {
-              const widget = Decoration.widget(pos, () => {
-                const element = document.createElement('div');
+              const widget = Decoration.widget(
+                pos,
+                () => {
+                  const element = document.createElement('div');
 
-                element.className = css({
-                  position: 'relative',
-                  height: '40px',
-                  backgroundColor: 'surface.muted',
-                });
+                  element.className = css({
+                    position: 'relative',
+                    height: '40px',
+                    backgroundColor: 'surface.muted',
+                  });
 
-                element.style.cssText = `margin: ${MARGIN_PX + (PAGE_HEIGHT_PX - MARGIN_PX * 2 - height)}px -${MARGIN_PX}px ${i === pages.length - 1 ? 0 : MARGIN_PX}px -${MARGIN_PX}px`;
+                  element.style.cssText = `margin: ${MARGIN_PX + (PAGE_HEIGHT_PX - MARGIN_PX * 2 - height)}px -${MARGIN_PX}px ${i === pages.length - 1 ? 0 : MARGIN_PX}px -${MARGIN_PX}px`;
 
-                const label = document.createElement('span');
-                label.textContent = `페이지 ${i + 1} / ${pages.length}`;
-                label.className = css({
-                  position: 'absolute',
-                  top: '-32px',
-                  right: '20px',
-                  fontSize: '12px',
-                  color: 'text.faint',
-                  userSelect: 'none',
-                });
-                element.append(label);
+                  const label = document.createElement('span');
+                  label.textContent = `페이지 ${i + 1} / ${pages.length}`;
+                  label.className = css({
+                    position: 'absolute',
+                    top: '-32px',
+                    right: '20px',
+                    fontSize: '12px',
+                    color: 'text.faint',
+                    userSelect: 'none',
+                  });
+                  element.append(label);
 
-                const fill = document.createElement('div');
-                fill.className = css({ position: 'absolute', inset: '0' });
-                element.append(fill);
+                  const fill = document.createElement('div');
+                  fill.className = css({ position: 'absolute', inset: '0' });
+                  element.append(fill);
 
-                return element;
-              });
+                  return element;
+                },
+                { side: -1 },
+              );
 
               decorations.push(widget);
             }
