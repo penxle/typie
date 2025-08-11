@@ -38,6 +38,7 @@
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import Anchors from './@anchor/Anchors.svelte';
   import Highlight from './Highlight.svelte';
+  import InEditorBody from './InEditorBody.svelte';
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
   import PanelNote from './PanelNote.svelte';
@@ -919,7 +920,9 @@
                 />
 
                 {#if editor && mounted}
-                  <Placeholder $site={$query.entity.site} {doc} {editor} />
+                  <InEditorBody {editor}>
+                    <Placeholder $site={$query.entity.site} {doc} {editor} />
+                  </InEditorBody>
                   {#if app.preference.current.lineHighlightEnabled}
                     <Highlight {editor} />
                   {/if}
