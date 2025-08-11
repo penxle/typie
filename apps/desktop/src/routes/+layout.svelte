@@ -4,12 +4,14 @@
   import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
   import { css } from '@typie/styled-system/css';
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
 
   let { children } = $props();
 
   onMount(() => {
     onOpenUrl((urls) => {
-      console.log('Deep links received:', urls);
+      const url = new URL(urls[0]);
+      goto(`${url.pathname}${url.search}`);
     });
   });
 </script>

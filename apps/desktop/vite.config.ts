@@ -22,10 +22,10 @@ export default defineConfig({
     sveltekit(),
   ],
   server: {
-    port: 5000,
+    port: 5100,
     strictPort: true,
     host: host || false,
-    hmr: host ? { protocol: 'ws', host, port: 5001 } : undefined,
+    hmr: host ? { protocol: 'ws', host, port: 5101 } : undefined,
     watch: {
       ignored: ['**/src-tauri/**'],
     },
