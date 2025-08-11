@@ -94,7 +94,7 @@
     const { from, to } = editor.state.selection;
     const nodeEnd = pos + node.nodeSize;
 
-    const isSelectionOverlapping = from < nodeEnd && to > pos && from !== to;
+    const isSelectionOverlapping = from < nodeEnd && to > pos && from !== to && !(from === pos && to === nodeEnd);
     // NOTE: 이 노드가 현재 selection을 포함하는 경우 selection 유지
     if (!isSelectionOverlapping) {
       editor.chain().setNodeSelection(pos).focus().run();
@@ -115,8 +115,14 @@
     event.dataTransfer.clearData();
     event.dataTransfer.effectAllowed = 'move';
 
+    editor.view.dragging = {
+      slice: editor.state.selection.content(),
+      move: true,
+    };
+
     const result = updateSelectionIfNeeded();
     if (!result) {
+      editor.view.dragging = null;
       return;
     }
 
@@ -148,6 +154,7 @@
       event.dataTransfer.setDragImage(domNode, 0, 0);
     }
 
+    // NOTE: 선택이 업데이트된 후 slice를 다시 가져옴
     let slice = editor.state.selection.content();
 
     // NOTE: 텍스트 노드 내부의 텍스트를 선택한 경우, 텍스트만 추출
@@ -168,10 +175,7 @@
       slice = new Slice(unwrappedFragment, 0, 0);
     }
 
-    editor.view.dragging = {
-      slice,
-      move: true,
-    };
+    editor.view.dragging.slice = slice;
   };
 
   const handleDragEnd = () => {
