@@ -8,5 +8,13 @@ export default {
     adapter: adapter({
       fallback: 'index.html',
     }),
+    alias: {
+      '@/*': '../api/src/*',
+      '$assets/*': './src/assets/*',
+      $graphql: './.sark',
+    },
+    paths: { relative: false },
+    csrf: { checkOrigin: false },
+    output: { preloadStrategy: 'preload-mjs' },
   },
 };

@@ -292,7 +292,10 @@ const validateClient = ({ clientId, clientSecret, redirectUri }: ValidateClientP
   }
 
   const url = new URL(redirectUri);
-  if ((url.origin === env.WEBSITE_URL || pattern.test(url.origin)) && url.pathname === '/authorize') {
+  if (
+    ((url.origin === env.WEBSITE_URL || pattern.test(url.origin)) && url.pathname === '/authorize') ||
+    (url.protocol === 'typie' && url.pathname === '/auth/callback')
+  ) {
     return true;
   }
 

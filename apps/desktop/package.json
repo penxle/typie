@@ -5,7 +5,10 @@
   "type": "module",
   "dependencies": {
     "@tauri-apps/api": "^2.7.0",
-    "@tauri-apps/plugin-deep-link": "^2.4.1"
+    "@tauri-apps/plugin-deep-link": "^2.4.1",
+    "@tauri-apps/plugin-dialog": "^2.3.2",
+    "@tauri-apps/plugin-http": "^2.5.1",
+    "@tauri-apps/plugin-opener": "^2.4.0"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.62",
@@ -19,6 +22,7 @@
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
+    "query-string": "^9.2.2",
     "svelte": "^5.38.0",
     "svelte-check": "^4.3.1",
     "typescript": "^5.9.2",
