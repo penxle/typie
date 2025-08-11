@@ -62,7 +62,7 @@ class MoveEntityModal extends HookWidget {
     int getMaxSelectedFolderDepth() {
       if (!isMultiple) {
         return singleEntity!.node.maybeWhen(
-          folder: (folder) => folder.maxDescendantFoldersDepth - singleEntity!.depth,
+          folder: (folder) => folder.maxDescendantFoldersDepth - singleEntity!.depth + 1,
           orElse: () => 0,
         );
       }
@@ -71,7 +71,7 @@ class MoveEntityModal extends HookWidget {
       for (final entity in entities!) {
         entity.node.maybeWhen(
           folder: (folder) {
-            final internalDepth = folder.maxDescendantFoldersDepth - entity.depth;
+            final internalDepth = folder.maxDescendantFoldersDepth - entity.depth + 1;
             if (internalDepth > maxSelectedDepth) {
               maxSelectedDepth = internalDepth;
             }
@@ -85,7 +85,7 @@ class MoveEntityModal extends HookWidget {
     bool canMoveToCurrentLocation() {
       final targetDepth = (currentEntity.value?.depth ?? -1) + 1;
       final maxInternalDepth = getMaxSelectedFolderDepth();
-      return targetDepth + maxInternalDepth <= maxDepth - 1;
+      return targetDepth + maxInternalDepth <= maxDepth;
     }
 
     Future<void> fetchData(String? id) async {
