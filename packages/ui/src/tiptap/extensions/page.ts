@@ -5,13 +5,13 @@ import { css } from '@typie/styled-system/css';
 import { mmToPx } from '../../utils';
 import type { Node } from '@tiptap/pm/model';
 
-type PageLayout = {
+export type PageLayout = {
   width: number;
   height: number;
   margin: number;
 };
 
-type PageStorage = {
+export type PageStorage = {
   layout?: PageLayout;
 };
 
@@ -75,14 +75,15 @@ export const Page = Extension.create<unknown, PageStorage>({
           init(): { pos: number; height: number }[] {
             return [];
           },
-          apply(tr, pages) {
-            if (tr.docChanged) {
-              return [];
-            }
-
+          apply(tr, pages, oldState, newState) {
             const meta = tr.getMeta(key);
             if (meta) {
               return meta;
+            }
+
+            // NOTE: 제자리 드래그의 경우 docChanged는 true이지만 실제 문서는 동일함
+            if (!oldState.doc.eq(newState.doc)) {
+              return [];
             }
 
             return pages;
@@ -112,6 +113,7 @@ export const Page = Extension.create<unknown, PageStorage>({
                     height: '40px',
                     backgroundColor: 'surface.muted',
                   });
+                  element.dataset.pageGap = 'true';
 
                   element.style.cssText = `margin: ${MARGIN_PX + (PAGE_HEIGHT_PX - MARGIN_PX * 2 - height)}px -${MARGIN_PX}px ${i === pages.length - 1 ? 0 : MARGIN_PX}px -${MARGIN_PX}px`;
 

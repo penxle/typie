@@ -145,6 +145,10 @@
       const range = selection.getRangeAt(0);
       const contents = range.cloneContents();
 
+      // NOTE: ProseMirror widget (페이지 라벨, 갭 등) 제외
+      const widgets = contents.querySelectorAll('.ProseMirror-widget');
+      widgets.forEach((widget) => widget.remove());
+
       const dragImage = document.createElement('div');
       dragImage.style.position = 'absolute';
       dragImage.style.top = '0';
