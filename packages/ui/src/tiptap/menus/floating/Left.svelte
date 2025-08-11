@@ -67,6 +67,16 @@
     return '';
   });
 
+  const isSelectionOverlapping = $derived.by(() => {
+    const currentNode = editor.state.doc.nodeAt(pos);
+    if (!currentNode) return false;
+
+    const { from, to } = editor.state.selection;
+    const nodeEnd = pos + currentNode.nodeSize;
+
+    return from < nodeEnd && to > pos && from !== to;
+  });
+
   const handleUnwrapClick = () => {
     const targetNode = parentWithFullContentSelected || node;
     if (!targetNode) return;
@@ -96,13 +106,13 @@
     const { from, to } = editor.state.selection;
     const nodeEnd = pos + node.nodeSize;
 
-    const isSelectionOverlapping = from < nodeEnd && to > pos && from !== to && !(from === pos && to === nodeEnd);
-    // NOTE: 이 노드가 현재 selection을 포함하는 경우 selection 유지
-    if (!isSelectionOverlapping) {
+    const isNodeSelection = from === pos && to === nodeEnd;
+    // NOTE: 이 노드가 현재 selection을 포함하거나 노드 자체 선택인 경우 selection 유지
+    if (!isSelectionOverlapping && !isNodeSelection) {
       editor.chain().setNodeSelection(pos).focus().run();
     }
 
-    return { node, isSelectionOverlapping };
+    return true;
   };
 
   const handleGripClick = () => {
@@ -122,13 +132,10 @@
       move: true,
     };
 
-    const result = updateSelectionIfNeeded();
-    if (!result) {
+    if (!updateSelectionIfNeeded()) {
       editor.view.dragging = null;
       return;
     }
-
-    const { isSelectionOverlapping } = result;
 
     if (isSelectionOverlapping) {
       // NOTE: 텍스트 선택이 있는 경우, 선택 영역의 DOM 복사본을 드래그 이미지로 사용
@@ -206,7 +213,7 @@
     ondragend={handleDragEnd}
     ondragstart={handleDragStart}
     type="button"
-    use:tooltip={{ message: '선택 또는 드래그하여 이동', placement: 'top' }}
+    use:tooltip={{ message: isSelectionOverlapping ? '드래그하여 선택 영역 이동' : '선택 또는 드래그하여 이동', placement: 'top' }}
   >
     <Icon icon={GripVerticalIcon} size={18} />
   </button>
