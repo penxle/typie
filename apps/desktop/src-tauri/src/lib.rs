@@ -19,6 +19,9 @@ pub fn run() {
         .set_focus();
     }))
     .plugin(tauri_plugin_deep_link::init())
+    .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_http::init())
+    .plugin(tauri_plugin_opener::init())
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
     .run(|app, event| match event {
