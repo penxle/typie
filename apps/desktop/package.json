@@ -8,21 +8,21 @@
     "@tauri-apps/plugin-deep-link": "^2.4.1"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.60",
-    "@pandacss/dev": "^1.0.0",
-    "@sveltejs/adapter-static": "^3.0.8",
-    "@sveltejs/kit": "^2.27.0",
-    "@sveltejs/vite-plugin-svelte": "^6.1.0",
+    "@iconify-json/lucide": "^1.2.62",
+    "@pandacss/dev": "^1.0.1",
+    "@sveltejs/adapter-static": "^3.0.9",
+    "@sveltejs/kit": "^2.27.3",
+    "@sveltejs/vite-plugin-svelte": "^6.1.1",
     "@tauri-apps/cli": "^2.7.1",
     "@typie/lib": "workspace:*",
     "@typie/sark": "workspace:*",
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
-    "svelte": "^5.37.3",
+    "svelte": "^5.38.0",
     "svelte-check": "^4.3.1",
     "typescript": "^5.9.2",
     "unplugin-icons": "^22.2.0",
-    "vite": "^7.0.6"
+    "vite": "^7.1.1"
   }
 }

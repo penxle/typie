@@ -26,13 +26,13 @@
   "devDependencies": {
     "@ctrl/tinycolor": "^4.1.0",
     "@floating-ui/dom": "^1.7.3",
-    "@pandacss/dev": "^1.0.0",
-    "@sveltejs/kit": "^2.27.0",
-    "@sveltejs/vite-plugin-svelte": "^6.1.0",
-    "@tiptap/core": "^3.0.9",
-    "@tiptap/html": "^3.0.9",
-    "@tiptap/pm": "^3.0.9",
-    "@types/node": "^24.2.0",
+    "@pandacss/dev": "^1.0.1",
+    "@sveltejs/kit": "^2.27.3",
+    "@sveltejs/vite-plugin-svelte": "^6.1.1",
+    "@tiptap/core": "^3.1.0",
+    "@tiptap/html": "^3.1.0",
+    "@tiptap/pm": "^3.1.0",
+    "@types/node": "^24.2.1",
     "@types/textarea-caret": "^3.0.4",
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
@@ -48,11 +48,11 @@
     "mixpanel-browser": "^2.67.0",
     "nanoid": "^5.1.5",
     "query-string": "^9.2.2",
-    "remeda": "^2.28.0",
+    "remeda": "^2.30.0",
     "rfc4648": "^1.5.4",
     "roughjs": "^4.6.6",
     "shiki": "^3.9.2",
-    "svelte": "^5.37.3",
+    "svelte": "^5.38.0",
     "svelte-check": "^4.3.1",
     "svelte-sonner": "^1.0.5",
     "textarea-caret": "^3.1.0",
@@ -65,6 +65,6 @@
     "y-protocols": "^1.0.6",
     "yjs": "^13.6.27",
     "zeed-dom": "^0.17.7",
-    "zod": "^4.0.14"
+    "zod": "^4.0.17"
   }
 }
