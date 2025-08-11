@@ -84,37 +84,36 @@
 </script>
 
 {#if emptyBody}
-  <div class={center({ position: 'absolute', top: '0', insetX: '0', flexGrow: '1', pointerEvents: 'none', paddingX: '80px' })}>
-    <div
-      style:padding-left={`${paragraphIndent}em`}
-      class={flex({
-        flexDirection: 'column',
-        gap: '4px',
-        width: 'full',
-        maxWidth: 'var(--prosemirror-max-width)',
-        color: 'text.disabled',
-        lineHeight: '[1.6]',
-      })}
-    >
-      <div class={css({ fontFamily: 'ui' })}>내용을 입력하거나 /를 입력해 블록 삽입하기...</div>
+  <div
+    style:padding-left={`${paragraphIndent}em`}
+    class={flex({
+      flexDirection: 'column',
+      gap: '4px',
+      width: 'full',
+      maxWidth: 'var(--prosemirror-max-width)',
+      color: 'text.disabled',
+      lineHeight: '[1.6]',
+      pointerEvents: 'none',
+    })}
+  >
+    <div class={css({ fontFamily: 'ui' })}>내용을 입력하거나 /를 입력해 블록 삽입하기...</div>
 
-      <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <div>혹은</div>
-        <button
-          class={flex({
-            alignItems: 'center',
-            gap: '4px',
-            transition: 'common',
-            pointerEvents: 'auto',
-            _hover: { color: 'text.faint' },
-          })}
-          onclick={() => (open = true)}
-          type="button"
-        >
-          <Icon icon={ShapesIcon} size={16} />
-          <div>템플릿 사용하기</div>
-        </button>
-      </div>
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      <div>혹은</div>
+      <button
+        class={flex({
+          alignItems: 'center',
+          gap: '4px',
+          transition: 'common',
+          pointerEvents: 'auto',
+          _hover: { color: 'text.faint' },
+        })}
+        onclick={() => (open = true)}
+        type="button"
+      >
+        <Icon icon={ShapesIcon} size={16} />
+        <div>템플릿 사용하기</div>
+      </button>
     </div>
   </div>
 {/if}
