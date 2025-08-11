@@ -6,12 +6,12 @@
     "rps": "./index.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.859.0",
+    "@aws-sdk/client-secrets-manager": "^3.864.0",
     "commander": "^14.0.0",
     "execa": "^9.6.0"
   },
   "devDependencies": {
-    "@types/node": "^24.2.0",
+    "@types/node": "^24.2.1",
     "@typie/tsconfig": "workspace:*"
   },
   "engines": {
