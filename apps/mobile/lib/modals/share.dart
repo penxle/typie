@@ -300,7 +300,7 @@ class ShareFolderBottomSheet extends HookWidget {
                       );
 
                       if (context.mounted) {
-                        context.toast(ToastType.success, '하위 폴더 및 포스트에도 동일한 설정이 적용되었어요');
+                        context.toast(ToastType.success, '하위 요소에도 동일한 설정이 적용되었어요');
                         await context.router.maybePop();
                       }
                     },
