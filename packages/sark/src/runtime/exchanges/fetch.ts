@@ -12,11 +12,15 @@ async function* makeRequest(operation: GraphQLOperation): AsyncIterable<Operatio
   const fetchFn = operation.context.fetch ?? globalThis.fetch;
 
   try {
+    const fetchOptions = operation.context.fetchOptionsFn ? await operation.context.fetchOptionsFn() : {};
+
     const resp = await fetchFn(operation.context.url, {
+      ...fetchOptions,
       ...operation.context.fetchOptions,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...fetchOptions?.headers,
         ...operation.context.fetchOptions?.headers,
       },
       body: JSON.stringify({

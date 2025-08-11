@@ -323,6 +323,9 @@ importers:
       '@tauri-apps/plugin-opener':
         specifier: ^2.4.0
         version: 2.4.0
+      '@tauri-apps/plugin-store':
+        specifier: ^2.3.0
+        version: 2.3.0
     devDependencies:
       '@iconify-json/lucide':
         specifier: ^1.2.62
@@ -357,6 +360,9 @@ importers:
       '@typie/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      ky:
+        specifier: ^1.8.2
+        version: 1.8.2
       query-string:
         specifier: ^9.2.2
         version: 9.2.2
@@ -4557,6 +4563,9 @@ packages:
 
   '@tauri-apps/plugin-opener@2.4.0':
     resolution: {integrity: sha512-43VyN8JJtvKWJY72WI/KNZszTpDpzHULFxQs0CJBIYUdCRowQ6Q1feWTDb979N7nldqSuDOaBupZ6wz2nvuWwQ==}
+
+  '@tauri-apps/plugin-store@2.3.0':
+    resolution: {integrity: sha512-mre8er0nXPhyEWQzWCpUd+UnEoBQYcoA5JYlwpwOV9wcxKqlXTGfminpKsE37ic8NUb2BIZqf0QQ9/U3ib2+/A==}
 
   '@tiptap/core@3.1.0':
     resolution: {integrity: sha512-GDxoCrA+ggdzhUcelcWWVsMcmoOYXWmpjIviYXZTyHR/fds8G/mNjG0ZpFqXNmFnZ7Rs16bAsSX2tjDZ9MyTFg==}
@@ -14570,6 +14579,10 @@ snapshots:
       '@tauri-apps/api': 2.7.0
 
   '@tauri-apps/plugin-opener@2.4.0':
+    dependencies:
+      '@tauri-apps/api': 2.7.0
+
+  '@tauri-apps/plugin-store@2.3.0':
     dependencies:
       '@tauri-apps/api': 2.7.0
 

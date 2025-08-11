@@ -12,6 +12,7 @@
     "deep-link:default",
     "dialog:default",
     "opener:default",
+    "store:default",
     {
       "identifier": "http:default",
       "allow": [
