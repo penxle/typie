@@ -1,6 +1,25 @@
 import * as aws from '@pulumi/aws';
 import * as pulumi from '@pulumi/pulumi';
 
+const app = new aws.s3.Bucket('app', {
+  bucket: 'typie-app',
+});
+
+new aws.s3.BucketPolicy('app', {
+  bucket: app.bucket,
+  policy: {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Principal: { Service: 'cloudfront.amazonaws.com' },
+        Action: ['s3:GetObject'],
+        Resource: [pulumi.interpolate`${app.arn}/*`],
+      },
+    ],
+  },
+});
+
 const cdn = new aws.s3.Bucket('cdn', {
   bucket: 'typie-cdn',
 });
@@ -87,9 +106,11 @@ const misc = new aws.s3.Bucket('misc', {
   bucket: 'typie-misc',
 });
 
-export const buckets = { cdn, usercontents, uploads, misc };
+export const buckets = { app, cdn, usercontents, uploads, misc };
 
 export const outputs = {
+  AWS_S3_BUCKET_APP_ARN: app.arn,
+  AWS_S3_BUCKET_CDN_ARN: cdn.arn,
   AWS_S3_BUCKET_USERCONTENTS_ARN: usercontents.arn,
   AWS_S3_BUCKET_UPLOADS_ARN: uploads.arn,
   AWS_S3_BUCKET_MISC_ARN: misc.arn,

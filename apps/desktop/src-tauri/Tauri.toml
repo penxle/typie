@@ -1,5 +1,5 @@
 productName = "Typie"
-version = "0.0.1"
+version = "0.0.2"
 identifier = "co.typie"
 
 [build]
@@ -16,9 +16,10 @@ trafficLightPosition = { x = 16, y = 16 }
 
 [bundle]
 active = true
-targets = ["nsis", "dmg"]
+targets = ["nsis", "dmg", "app"]
 icon = ["icons/icon.icns"]
 resources = { "resources/" = "./" }
+createUpdaterArtifacts = true
 
 [bundle.macOS.dmg]
 background = "assets/dmg-background.png"
@@ -26,3 +27,7 @@ windowSize = { width = 660, height = 400 }
 
 [plugins.deep-link.desktop]
 schemes = ["typie"]
+
+[plugins.updater]
+pubkey = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEzMUE1NThDRUQ3MjdFNkQKUldSdGZuTHRqRlVhb3poU3dNUjZzWU9vMnRRaUkrR3FoeGNlaDdIRVJ3MGcrWkFPLy9KY1BmUHYK"
+endpoints = ["https://app.typie.net/updates/version.json"]
