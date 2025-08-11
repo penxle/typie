@@ -145,6 +145,45 @@ const staticResponseHeadersPolicy = new aws.cloudfront.ResponseHeadersPolicy('st
   },
 });
 
+const app = new aws.cloudfront.Distribution('app', {
+  enabled: true,
+  aliases: ['app.typie.net'],
+  httpVersion: 'http2and3',
+
+  origins: [
+    {
+      originId: 'app',
+      domainName: buckets.app.bucketRegionalDomainName,
+      originAccessControlId: s3OriginAccessControl.id,
+    },
+  ],
+
+  defaultCacheBehavior: {
+    targetOriginId: 'app',
+    compress: true,
+    viewerProtocolPolicy: 'redirect-to-https',
+    allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+    cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
+    cachePolicyId: staticCachePolicy.id,
+    originRequestPolicyId: staticOriginRequestPolicy.id,
+    responseHeadersPolicyId: staticResponseHeadersPolicy.id,
+  },
+
+  restrictions: {
+    geoRestriction: {
+      restrictionType: 'none',
+    },
+  },
+
+  viewerCertificate: {
+    acmCertificateArn: certificates.typie_net.arn,
+    sslSupportMethod: 'sni-only',
+    minimumProtocolVersion: 'TLSv1.2_2021',
+  },
+
+  waitForDeployment: false,
+});
+
 const cdn = new aws.cloudfront.Distribution('cdn', {
   enabled: true,
   aliases: ['cdn.typie.net'],
@@ -241,6 +280,19 @@ const usercontents = new aws.cloudfront.Distribution('usercontents', {
   },
 
   waitForDeployment: false,
+});
+
+new aws.route53.Record('app.typie.net', {
+  zoneId: zones.typie_net.zoneId,
+  type: 'A',
+  name: 'app.typie.net',
+  aliases: [
+    {
+      name: app.domainName,
+      zoneId: app.hostedZoneId,
+      evaluateTargetHealth: false,
+    },
+  ],
 });
 
 new aws.route53.Record('cdn.typie.net', {
