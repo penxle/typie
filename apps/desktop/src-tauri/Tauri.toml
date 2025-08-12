@@ -17,7 +17,7 @@ trafficLightPosition = { x = 16, y = 16 }
 [bundle]
 active = true
 targets = ["nsis", "dmg", "app"]
-icon = ["icons/icon.icns"]
+icon = ["icons/icon.icns", "icons/icon.ico"]
 resources = { "resources/" = "./" }
 createUpdaterArtifacts = true
 
