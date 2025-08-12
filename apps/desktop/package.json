@@ -26,6 +26,7 @@
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
     "ky": "^1.8.2",
+    "nanoid": "^5.1.5",
     "query-string": "^9.2.2",
     "svelte": "^5.38.0",
     "svelte-check": "^4.3.1",
