@@ -369,6 +369,9 @@ importers:
       ky:
         specifier: ^1.8.2
         version: 1.8.2
+      nanoid:
+        specifier: ^5.1.5
+        version: 5.1.5
       query-string:
         specifier: ^9.2.2
         version: 9.2.2
