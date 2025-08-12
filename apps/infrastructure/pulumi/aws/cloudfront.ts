@@ -169,6 +169,20 @@ const app = new aws.cloudfront.Distribution('app', {
     responseHeadersPolicyId: staticResponseHeadersPolicy.id,
   },
 
+  orderedCacheBehaviors: [
+    {
+      targetOriginId: 'app',
+      compress: true,
+      pathPattern: '*.json',
+      viewerProtocolPolicy: 'redirect-to-https',
+      allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+      cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
+      cachePolicyId: dynamicCachePolicy.id,
+      originRequestPolicyId: staticOriginRequestPolicy.id,
+      responseHeadersPolicyId: dynamicResponseHeadersPolicy.id,
+    },
+  ],
+
   restrictions: {
     geoRestriction: {
       restrictionType: 'none',
