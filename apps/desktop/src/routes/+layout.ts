@@ -24,8 +24,8 @@ export const load = async () => {
 
               return;
             }
-          } catch {
-            await message('지금은 업데이트를 확인할 수 없어요.\n나중에 다시 시도해주세요.', {
+          } catch (err) {
+            await message(`지금은 업데이트를 확인할 수 없어요.\n나중에 다시 시도해주세요.\n오류: ${err}`, {
               kind: 'error',
               title: '업데이트 확인 실패',
               okLabel: '확인',
