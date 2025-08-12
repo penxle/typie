@@ -5,6 +5,7 @@
   import { confirm } from '@tauri-apps/plugin-dialog';
   import { relaunch } from '@tauri-apps/plugin-process';
   import { check } from '@tauri-apps/plugin-updater';
+  import { setupThemeContext } from '@typie/ui/context';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
 
@@ -39,6 +40,8 @@
 
     checkForUpdates();
   });
+
+  setupThemeContext();
 </script>
 
 {@render children()}

@@ -16,7 +16,8 @@ class TabState {
   tabs = $state<Tab[]>([]);
 
   get active() {
-    return this.tabs.find((tab) => tab.active);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    return this.tabs.find((tab) => tab.active)!;
   }
 
   add<T extends TabProps>(component: TabComponent<T>, props: Omit<T, 'tabId'>) {

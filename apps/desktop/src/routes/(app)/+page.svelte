@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { setupAppContext } from '@typie/ui/context';
   import { onMount } from 'svelte';
   import { graphql } from '$graphql';
   import Home from './@pages/Home.svelte';
@@ -8,11 +9,12 @@
   import TabBar from './TabBar.svelte';
   import { tabState } from './tabs.svelte';
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = graphql(`
     query App_Query {
-      me {
+      me @required {
         id
+
+        ...Sidebar_user
       }
     }
   `);
@@ -22,15 +24,17 @@
       tabState.add(Home, {});
     }
   });
+
+  setupAppContext($query.me.id);
 </script>
 
 <div class={flex({ position: 'relative', width: '[100vw]', height: '[100vh]', backgroundColor: 'surface.subtle' })}>
-  <Sidebar />
+  <Sidebar $user={$query.me} />
 
-  <div class={flex({ flexDirection: 'column', flexGrow: '1' })}>
+  <div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full' })}>
     <TabBar />
 
-    <div class={css({ flexGrow: '1', position: 'relative', marginRight: '8px', marginBottom: '8px' })}>
+    <div class={css({ flexGrow: '1', position: 'relative', marginRight: '8px', marginBottom: '8px', overflow: 'hidden' })}>
       {#each tabState.tabs as tab (tab.id)}
         <div
           class={css({
@@ -39,7 +43,7 @@
             borderRadius: '4px',
             backgroundColor: 'surface.default',
             boxShadow: '[0 3px 6px -2px {colors.shadow.default/3}, 0 1px 1px {colors.shadow.default/5}]',
-            overflowY: 'auto',
+            overflow: 'hidden',
           })}
           hidden={!tab.active}
         >
