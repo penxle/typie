@@ -1,5 +1,5 @@
 productName = "Typie"
-version = "0.0.3"
+version = "0.0.4"
 identifier = "co.typie"
 
 [build]
@@ -9,6 +9,8 @@ devUrl = "http://localhost:5100"
 frontendDist = "../build"
 
 [[app.windows]]
+width = 1280
+height = 720
 title = "타이피"
 hiddenTitle = true
 titleBarStyle = "Overlay"

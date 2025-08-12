@@ -333,12 +333,48 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
     devDependencies:
+      '@ctrl/tinycolor':
+        specifier: ^4.1.0
+        version: 4.1.0
+      '@floating-ui/dom':
+        specifier: ^1.7.3
+        version: 1.7.3
+      '@hono/node-server':
+        specifier: ^1.18.1
+        version: 1.18.1(hono@4.9.0)
       '@iconify-json/lucide':
         specifier: ^1.2.62
         version: 1.2.62
+      '@iconify-json/simple-icons':
+        specifier: ^1.2.47
+        version: 1.2.47
+      '@iconify-json/twemoji':
+        specifier: ^1.2.2
+        version: 1.2.2
+      '@number-flow/svelte':
+        specifier: ^0.3.9
+        version: 0.3.9(svelte@5.38.0)
+      '@observablehq/plot':
+        specifier: ^0.6.17
+        version: 0.6.17
       '@pandacss/dev':
         specifier: ^1.0.1
         version: 1.0.1(jsdom@26.1.0(canvas@3.1.2))(typescript@5.9.2)
+      '@portone/browser-sdk':
+        specifier: ^0.0.24
+        version: 0.0.24
+      '@pulumi/aws':
+        specifier: ^7.3.1
+        version: 7.3.1(typescript@5.9.2)
+      '@pulumi/kubernetes':
+        specifier: ^4.23.0
+        version: 4.23.0(typescript@5.9.2)
+      '@pulumi/pulumi':
+        specifier: ^3.188.0
+        version: 3.188.0(typescript@5.9.2)
+      '@sindresorhus/string-hash':
+        specifier: ^2.0.0
+        version: 2.0.0
       '@sveltejs/adapter-static':
         specifier: ^3.0.9
         version: 3.0.9(@sveltejs/kit@2.27.3(@sveltejs/vite-plugin-svelte@6.1.1(svelte@5.38.0)(vite@7.1.1(@types/node@24.2.1)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.38.0)(vite@7.1.1(@types/node@24.2.1)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.1)))
@@ -351,9 +387,33 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2.7.1
         version: 2.7.1
+      '@tiptap/core':
+        specifier: ^3.1.0
+        version: 3.1.0(@tiptap/pm@3.1.0)
+      '@tiptap/html':
+        specifier: ^3.1.0
+        version: 3.1.0(@tiptap/core@3.1.0(@tiptap/pm@3.1.0))(@tiptap/pm@3.1.0)(happy-dom@18.0.1)
+      '@tiptap/pm':
+        specifier: ^3.1.0
+        version: 3.1.0
+      '@types/node':
+        specifier: ^24.2.1
+        version: 24.2.1
+      '@types/textarea-caret':
+        specifier: ^3.0.4
+        version: 3.0.4
+      '@typie/adapter-node':
+        specifier: workspace:*
+        version: link:../../packages/adapter-node
       '@typie/lib':
         specifier: workspace:*
         version: link:../../packages/lib
+      '@typie/pulumi':
+        specifier: workspace:*
+        version: link:../../packages/pulumi
+      '@typie/rps':
+        specifier: workspace:*
+        version: link:../../packages/rps
       '@typie/sark':
         specifier: workspace:*
         version: link:../../packages/sark
@@ -366,30 +426,138 @@ importers:
       '@typie/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      autoprefixer:
+        specifier: ^10.4.21
+        version: 10.4.21(postcss@8.4.49)
+      body-scroll-lock-upgrade:
+        specifier: ^1.1.0
+        version: 1.1.0
+      comlink:
+        specifier: ^4.4.2
+        version: 4.4.2
+      dayjs:
+        specifier: ^1.11.13
+        version: 1.11.13
+      es-hangul:
+        specifier: ^2.3.5
+        version: 2.3.5
+      escape-string-regexp:
+        specifier: ^5.0.0
+        version: 5.0.0
+      fast-json-stable-stringify:
+        specifier: ^2.1.0
+        version: 2.1.0
+      focus-trap:
+        specifier: ^7.6.5
+        version: 7.6.5
+      graphql-request:
+        specifier: ^7.2.0
+        version: 7.2.0(graphql@16.11.0)
+      graphql-ws:
+        specifier: ^6.0.6
+        version: 6.0.6(graphql@16.11.0)(ws@8.18.3)
+      happy-dom:
+        specifier: ^18.0.1
+        version: 18.0.1
+      hono:
+        specifier: ^4.9.0
+        version: 4.9.0
+      konva:
+        specifier: ^9.3.22
+        version: 9.3.22
       ky:
         specifier: ^1.8.2
         version: 1.8.2
+      linkifyjs:
+        specifier: ^4.3.2
+        version: 4.3.2
+      marked:
+        specifier: ^16.1.2
+        version: 16.1.2
+      match-sorter:
+        specifier: ^8.1.0
+        version: 8.1.0
+      mixpanel-browser:
+        specifier: ^2.67.0
+        version: 2.67.0
+      motion:
+        specifier: ^12.23.12
+        version: 12.23.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       nanoid:
         specifier: ^5.1.5
         version: 5.1.5
       query-string:
         specifier: ^9.2.2
         version: 9.2.2
+      remeda:
+        specifier: ^2.30.0
+        version: 2.30.0
+      rfc4648:
+        specifier: ^1.5.4
+        version: 1.5.4
+      roughjs:
+        specifier: ^4.6.6
+        version: 4.6.6
+      shiki:
+        specifier: ^3.9.2
+        version: 3.9.2
       svelte:
         specifier: ^5.38.0
         version: 5.38.0
       svelte-check:
         specifier: ^4.3.1
         version: 4.3.1(picomatch@4.0.3)(svelte@5.38.0)(typescript@5.9.2)
+      svelte-preprocess:
+        specifier: ^6.0.3
+        version: 6.0.3(@babel/core@7.28.0)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.3)(yaml@2.8.1))(postcss@8.4.49)(svelte@5.38.0)(typescript@5.9.2)
+      svelte-sonner:
+        specifier: ^1.0.5
+        version: 1.0.5(svelte@5.38.0)
+      textarea-caret:
+        specifier: ^3.1.0
+        version: 3.1.0
+      thumbhash:
+        specifier: ^0.1.1
+        version: 0.1.1
+      ts-pattern:
+        specifier: ^5.8.0
+        version: 5.8.0
+      tsx:
+        specifier: ^4.20.3
+        version: 4.20.3
+      type-fest:
+        specifier: ^4.41.0
+        version: 4.41.0
       typescript:
         specifier: ^5.9.2
         version: 5.9.2
+      universal-cookie:
+        specifier: ^8.0.1
+        version: 8.0.1
       unplugin-icons:
         specifier: ^22.2.0
         version: 22.2.0(@vue/compiler-sfc@3.4.19)(svelte@5.38.0)
       vite:
         specifier: ^7.1.1
         version: 7.1.1(@types/node@24.2.1)(jiti@2.4.2)(lightningcss@1.25.1)(tsx@4.20.3)(yaml@2.8.1)
+      y-indexeddb:
+        specifier: ^9.0.12
+        version: 9.0.12(yjs@13.6.27)
+      y-prosemirror:
+        specifier: ^1.3.7
+        version: 1.3.7(prosemirror-model@1.25.3)(prosemirror-state@1.4.3)(prosemirror-view@1.40.1)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)
+      y-protocols:
+        specifier: ^1.0.6
+        version: 1.0.6(yjs@13.6.27)
+      yjs:
+        specifier: ^13.6.27
+        version: 13.6.27
+      zeed-dom:
+        specifier: ^0.17.7
+        version: 0.17.7
+      zod:
+        specifier: ^4.0.17
+        version: 4.0.17
 
   apps/infrastructure:
     devDependencies:
@@ -5111,6 +5279,13 @@ packages:
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
+  autoprefixer@10.4.21:
+    resolution: {integrity: sha512-O+A6LWV5LDHSJD3LjHYoNi4VLsj/Whi7k6zG12xTYaU4cQ8oxQGckXNX8cRHK5yOZ/ppVHe0ZBXGzSV9jXdVbQ==}
+    engines: {node: ^10 || ^12 || >=14}
+    hasBin: true
+    peerDependencies:
+      postcss: ^8.1.0
+
   available-typed-arrays@1.0.7:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
     engines: {node: '>= 0.4'}
@@ -6579,6 +6754,9 @@ packages:
 
   forwarded-parse@2.1.2:
     resolution: {integrity: sha512-alTFZZQDKMporBH77856pXgzhEzaUVmLCDk+egLgIgHst3Tpndzz8MnKe+GzRJRfvVdn69HhpW7cmXzvtLvJAw==}
+
+  fraction.js@4.3.7:
+    resolution: {integrity: sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==}
 
   fractional-indexing-jittered@1.0.0:
     resolution: {integrity: sha512-0tLU0FOedVY7lrvN4LK0DVj6FTuYM0pWDpN97/8UTZE2lx1+OwX8+2uL7IOWc2PmktYTHQjMT6FvZZ3SGCdZdg==}
@@ -8098,6 +8276,10 @@ packages:
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
+    engines: {node: '>=0.10.0'}
+
+  normalize-range@0.1.2:
+    resolution: {integrity: sha512-bdok/XvKII3nUpklnV6P2hxtMNrCboOjAcyBuQnWEhO665FwrSNRxU+AqpsyvO6LgGYPspN+lu5CLtw4jPRKNA==}
     engines: {node: '>=0.10.0'}
 
   normalize-url@6.1.0:
@@ -14667,7 +14849,7 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 22.17.1
+      '@types/node': 24.2.1
 
   '@types/cacheable-request@6.0.3':
     dependencies:
@@ -14701,7 +14883,7 @@ snapshots:
 
   '@types/express-serve-static-core@4.19.6':
     dependencies:
-      '@types/node': 22.17.1
+      '@types/node': 24.2.1
       '@types/qs': 6.14.0
       '@types/range-parser': 1.2.7
       '@types/send': 0.17.5
@@ -14730,7 +14912,7 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 22.17.1
+      '@types/node': 24.2.1
 
   '@types/jsrsasign@10.5.15': {}
 
@@ -14764,7 +14946,7 @@ snapshots:
 
   '@types/node-fetch@2.6.13':
     dependencies:
-      '@types/node': 22.17.1
+      '@types/node': 24.2.1
       form-data: 4.0.4
 
   '@types/node@16.9.1': {}
@@ -14808,7 +14990,7 @@ snapshots:
   '@types/request@2.48.13':
     dependencies:
       '@types/caseless': 0.12.5
-      '@types/node': 22.17.1
+      '@types/node': 24.2.1
       '@types/tough-cookie': 4.0.5
       form-data: 2.5.5
     optional: true
@@ -14824,12 +15006,12 @@ snapshots:
   '@types/send@0.17.5':
     dependencies:
       '@types/mime': 1.3.5
-      '@types/node': 22.17.1
+      '@types/node': 24.2.1
 
   '@types/serve-static@1.15.8':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 22.17.1
+      '@types/node': 24.2.1
       '@types/send': 0.17.5
 
   '@types/shimmer@1.2.0': {}
@@ -15260,6 +15442,16 @@ snapshots:
 
   asynckit@0.4.0: {}
 
+  autoprefixer@10.4.21(postcss@8.4.49):
+    dependencies:
+      browserslist: 4.25.2
+      caniuse-lite: 1.0.30001734
+      fraction.js: 4.3.7
+      normalize-range: 0.1.2
+      picocolors: 1.1.1
+      postcss: 8.4.49
+      postcss-value-parser: 4.2.0
+
   available-typed-arrays@1.0.7:
     dependencies:
       possible-typed-array-names: 1.1.0
@@ -15468,7 +15660,7 @@ snapshots:
 
   caniuse-api@3.0.0:
     dependencies:
-      browserslist: 4.23.3
+      browserslist: 4.25.2
       caniuse-lite: 1.0.30001734
       lodash.memoize: 4.1.2
       lodash.uniq: 4.5.0
@@ -16932,6 +17124,8 @@ snapshots:
       fetch-blob: 3.2.0
 
   forwarded-parse@2.1.2: {}
+
+  fraction.js@4.3.7: {}
 
   fractional-indexing-jittered@1.0.0: {}
 
@@ -18568,6 +18762,8 @@ snapshots:
 
   normalize-path@3.0.0: {}
 
+  normalize-range@0.1.2: {}
+
   normalize-url@6.1.0: {}
 
   npm-bundled@3.0.1:
@@ -19037,6 +19233,16 @@ snapshots:
     optionalDependencies:
       postcss: 8.5.6
 
+  postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.3)(yaml@2.8.1):
+    dependencies:
+      lilconfig: 3.1.3
+    optionalDependencies:
+      jiti: 2.4.2
+      postcss: 8.4.49
+      tsx: 4.20.3
+      yaml: 2.8.1
+    optional: true
+
   postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.1):
     dependencies:
       lilconfig: 3.1.3
@@ -19048,7 +19254,7 @@ snapshots:
 
   postcss-merge-rules@7.0.4(postcss@8.4.49):
     dependencies:
-      browserslist: 4.23.3
+      browserslist: 4.25.2
       caniuse-api: 3.0.0
       cssnano-utils: 5.0.1(postcss@8.4.49)
       postcss: 8.4.49
@@ -19308,7 +19514,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 22.17.1
+      '@types/node': 24.2.1
       long: 5.3.2
 
   proxy-from-env@1.1.0: {}
@@ -20108,6 +20314,15 @@ snapshots:
       postcss-selector-parser: 7.1.0
     optionalDependencies:
       svelte: 5.38.0
+
+  svelte-preprocess@6.0.3(@babel/core@7.28.0)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.3)(yaml@2.8.1))(postcss@8.4.49)(svelte@5.38.0)(typescript@5.9.2):
+    dependencies:
+      svelte: 5.38.0
+    optionalDependencies:
+      '@babel/core': 7.28.0
+      postcss: 8.4.49
+      postcss-load-config: 6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.3)(yaml@2.8.1)
+      typescript: 5.9.2
 
   svelte-preprocess@6.0.3(@babel/core@7.28.0)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.1))(postcss@8.5.6)(svelte@5.38.0)(typescript@5.9.2):
     dependencies:
