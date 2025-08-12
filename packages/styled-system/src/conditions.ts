@@ -8,5 +8,6 @@ export const conditions = {
     active: ['@media (hover: hover) and (pointer: fine)', '&:active'],
     dark: '[data-theme="dark"] &',
     hoverAfter: ['@media (hover: hover) and (pointer: fine)', '&:hover::after'],
+    groupSelected: '.group:is([aria-selected=true], [data-selected]) &',
   },
 };
