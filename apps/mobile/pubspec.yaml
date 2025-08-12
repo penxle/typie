@@ -22,9 +22,9 @@ dependencies:
   ferry: ^0.16.1+2
   ferry_flutter: ^0.9.1-dev.4
   file_picker: ^10.1.9
-  firebase_analytics: ^11.5.0
-  firebase_core: ^3.13.0
-  firebase_messaging: ^15.2.5
+  firebase_analytics: ^12.0.0
+  firebase_core: ^4.0.0
+  firebase_messaging: ^16.0.0
   flutter:
     sdk: flutter
   flutter_hooks: ^0.21.2
