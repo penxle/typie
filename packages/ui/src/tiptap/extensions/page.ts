@@ -3,6 +3,7 @@ import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
 import { css } from '@typie/styled-system/css';
 import { token } from '@typie/styled-system/tokens';
+import { tick } from 'svelte';
 import { mmToPx } from '../../utils';
 
 const GAP_HEIGHT = 40;
@@ -134,7 +135,10 @@ export const Page = Extension.create<unknown, PageStorage>({
           return {
             update(view, prevState) {
               if (!prevState.doc.eq(view.state.doc)) {
-                updateState();
+                // NOTE: 이미지 컴포넌트 높이 제한 조정 후 페이지 계산할 수 있도록
+                tick().then(() => {
+                  updateState();
+                });
               }
             },
           };
