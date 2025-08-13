@@ -8,6 +8,8 @@
   import { createFloatingActions } from '../../../actions';
   import { Button, Icon, Img, Menu, MenuItem, RingSpinner } from '../../../components';
   import { Toast } from '../../../notification';
+  import { clamp } from '../../../utils/number';
+  import { mmToPx } from '../../../utils/unit';
   import { getNodeView, NodeView } from '../../lib';
   import Enlarge from './Enlarge.svelte';
   import type { NodeViewProps } from '../../lib';
@@ -24,9 +26,18 @@
     attrs = node.attrs;
   });
 
+  const pageLayout = $derived(editor?.current.storage.page?.layout);
+  const maxContentHeight = $derived(pageLayout ? mmToPx(pageLayout.height - pageLayout.margin * 2) : undefined);
+
   $effect(() => {
     if (pendingFiles.length > 0) {
       processPendingFiles();
+    }
+  });
+
+  $effect(() => {
+    if (maxContentHeight && (attrs.id || inflightUrl)) {
+      checkAndAdjustProportion();
     }
   });
 
@@ -123,6 +134,36 @@
   let containerEl = $state<HTMLDivElement>();
   let proportion = $state(node.attrs.proportion);
 
+  const calculateConstrainedProportion = (proposedProportion: number): number => {
+    if (!maxContentHeight || !containerEl) return proposedProportion;
+
+    const imgElement = containerEl.querySelector('img') as HTMLImageElement;
+    if (!imgElement) return proposedProportion;
+
+    const parentWidth = containerEl.parentElement?.clientWidth || 0;
+    const proposedWidth = parentWidth * proposedProportion;
+
+    const currentRect = imgElement.getBoundingClientRect();
+    const aspectRatio = currentRect.width / currentRect.height;
+    const proposedHeight = proposedWidth / aspectRatio;
+
+    if (proposedHeight > maxContentHeight) {
+      const maxWidth = maxContentHeight * aspectRatio;
+      return maxWidth / parentWidth;
+    }
+
+    return proposedProportion;
+  };
+
+  const checkAndAdjustProportion = () => {
+    const constrainedProportion = calculateConstrainedProportion(proportion);
+    if (constrainedProportion !== proportion) {
+      proportion = clamp(constrainedProportion, 0.1, 1);
+      updateAttributes({ proportion });
+      console.log('update proportion', constrainedProportion, proportion);
+    }
+  };
+
   let initialResizeData: {
     x: number;
     width: number;
@@ -148,14 +189,15 @@
 
   const handleResize = (event: PointerEvent) => {
     const target = event.currentTarget as HTMLElement;
-    if (!target.hasPointerCapture(event.pointerId) || !initialResizeData) {
+    if (!target.hasPointerCapture(event.pointerId) || !initialResizeData || !containerEl) {
       return;
     }
 
     const dx = (event.clientX - initialResizeData.x) * (initialResizeData.reverse ? -1 : 1);
-    const np = ((initialResizeData.width + dx * 2) / initialResizeData.width) * initialResizeData.proportion;
+    const proposedProportion = ((initialResizeData.width + dx * 2) / initialResizeData.width) * initialResizeData.proportion;
 
-    proportion = Math.max(0.1, Math.min(1, np));
+    const constrainedProportion = calculateConstrainedProportion(proposedProportion);
+    proportion = clamp(constrainedProportion, 0.1, 1);
   };
 
   const handleResizeEnd = (event: PointerEvent) => {
@@ -173,7 +215,7 @@
   });
 </script>
 
-<NodeView style={css.raw({ display: 'flex', justifyContent: 'center' })} {...HTMLAttributes}>
+<NodeView style={css.raw({ display: 'flex', justifyContent: 'center', width: 'full' })} {...HTMLAttributes}>
   <div
     bind:this={containerEl}
     style:width={`${proportion * 100}%`}
@@ -187,6 +229,7 @@
           style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
           alt="본문 이미지"
           onclick={() => !editor?.current.isEditable && (enlarged = true)}
+          onload={checkAndAdjustProportion}
           placeholder={attrs.placeholder}
           ratio={attrs.ratio}
           role="button"
@@ -200,6 +243,7 @@
           onerror={(e) => {
             (e.currentTarget as HTMLImageElement).src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
           }}
+          onload={checkAndAdjustProportion}
           src={inflightUrl}
         />
         <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50', zIndex: 'editor' })}>
@@ -330,7 +374,7 @@
 
         {#if editor?.current.isEditable && !window.__webview__}
           <Menu>
-            {#snippet button({ open })}
+            {#snippet button({ open }: { open: boolean })}
               <div
                 class={css(
                   {
