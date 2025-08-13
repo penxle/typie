@@ -18,8 +18,8 @@
     background-color: color-mix(in srgb, var(--prosemirror-color-selection) 50%, transparent);
   }
 
-  & > * + *,
-  & [data-node-view-content-editable] > * + * {
+  & > *:not(.ProseMirror-widget) + *,
+  & [data-node-view-content-editable] > *:not(.ProseMirror-widget) + * {
     margin-top: var(--prosemirror-block-gap);
   }
 

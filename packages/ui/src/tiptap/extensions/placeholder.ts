@@ -108,10 +108,11 @@ export const Placeholder = Extension.create({
 const createDecoration = (from: number, to: number, placeholder: string) => {
   return Decoration.node(from, to, {
     class: css({
+      position: 'relative',
       _before: {
         content: 'attr(data-placeholder)',
-        float: '[left]',
-        height: '0',
+        position: 'absolute',
+        left: '0',
         color: 'text.disabled',
         pointerEvents: 'none',
       },

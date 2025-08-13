@@ -920,7 +920,7 @@
                 />
 
                 {#if editor && mounted}
-                  <InEditorBody {editor}>
+                  <InEditorBody {editor} {pageLayout}>
                     <Placeholder $site={$query.entity.site} {doc} {editor} />
                   </InEditorBody>
                   {#if app.preference.current.lineHighlightEnabled}
