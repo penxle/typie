@@ -1,6 +1,6 @@
 import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
-import { and, asc, eq, lt, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, lt, lte, notInArray, or, sql } from 'drizzle-orm';
 import * as R from 'remeda';
 import { base64 } from 'rfc4648';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
@@ -461,12 +461,21 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 });
 
 export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', async () => {
-  const threshold = dayjs().subtract(24, 'hours');
+  const now = dayjs();
+  const threshold1h = now.subtract(1, 'hour');
+  const threshold25h = now.subtract(25, 'hours');
+  const threshold1d = now.subtract(1, 'day');
+  const threshold15d = now.subtract(15, 'days');
 
   const posts = await db
     .select({ postId: PostContents.postId })
     .from(PostContents)
-    .where(and(lt(PostContents.updatedAt, threshold), lt(PostContents.compactedAt, PostContents.updatedAt)));
+    .where(
+      or(
+        and(lte(PostContents.updatedAt, threshold1h), gt(PostContents.updatedAt, threshold25h), lt(PostContents.compactedAt, threshold1h)),
+        and(lte(PostContents.updatedAt, threshold25h), gt(PostContents.updatedAt, threshold15d), lt(PostContents.compactedAt, threshold1d)),
+      ),
+    );
 
   await Promise.all(
     posts.map(({ postId }) =>
