@@ -31,11 +31,10 @@
       const paddingLeft = Number.parseInt(computedStyle.paddingLeft, 10) || 0;
       const paddingRight = Number.parseInt(computedStyle.paddingRight, 10) || 0;
       const paddingTop = Number.parseInt(computedStyle.paddingTop, 10) || 0;
-      const blockGap = Number.parseInt(bodyElement.style.getPropertyValue('--prosemirror-block-gap'), 10) || 0;
 
       return {
         left: bodyElement.offsetLeft + paddingLeft,
-        top: bodyElement.offsetTop + paddingTop + blockGap * 16,
+        top: bodyElement.offsetTop + paddingTop,
         width: bodyElement.clientWidth - paddingLeft - paddingRight,
       };
     });
