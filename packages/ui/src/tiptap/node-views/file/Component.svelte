@@ -117,13 +117,14 @@
   };
 </script>
 
-<NodeView data-drag-handle draggable {...HTMLAttributes}>
+<NodeView data-drag-handle draggable {...HTMLAttributes} style={css.raw({ display: 'flex', justifyContent: 'center', width: 'full' })}>
   <svelte:element
     this={editor?.current.isEditable ? 'div' : 'a'}
     class={cx(
       'group',
       css({
         display: 'flex',
+        width: 'full',
         justifyContent: 'space-between',
         alignItems: 'center',
         borderRadius: '4px',
