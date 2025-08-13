@@ -6,7 +6,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { Helmet, HorizontalDivider, Icon, InEditorBody, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { getNodeView, TiptapEditor } from '@typie/ui/tiptap';
@@ -38,7 +38,6 @@
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import Anchors from './@anchor/Anchors.svelte';
   import Highlight from './Highlight.svelte';
-  import InEditorBody from './InEditorBody.svelte';
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
   import PanelNote from './PanelNote.svelte';
@@ -920,7 +919,7 @@
                 />
 
                 {#if editor && mounted}
-                  <InEditorBody {editor}>
+                  <InEditorBody {editor} {pageLayout}>
                     <Placeholder $site={$query.entity.site} {doc} {editor} />
                   </InEditorBody>
                   {#if app.preference.current.lineHighlightEnabled}
