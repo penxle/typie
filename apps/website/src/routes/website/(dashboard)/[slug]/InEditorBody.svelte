@@ -14,9 +14,32 @@
 
   let { editor, children, pageLayout }: Props = $props();
 
+  let editorDomSize = $state({ width: 0, height: 0 });
+
+  $effect(() => {
+    const dom = editor.current?.view?.dom;
+    if (!dom) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        editorDomSize = {
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        };
+      }
+    });
+
+    resizeObserver.observe(dom);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  });
+
   const bodyPosition = $derived.by(async () => {
-    // NOTE: pageLayout 변경 시에만 재계산
+    // NOTE: pageLayout 및 editor DOM 사이즈 변경 시 재계산
     void pageLayout;
+    void editorDomSize;
 
     await tick();
 
