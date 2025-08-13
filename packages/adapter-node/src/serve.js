@@ -27,6 +27,8 @@ export const serve = async ({ Server, manifest, prerendered }) => {
   app.use('*', compression());
 
   app.get('/healthz', (c) => c.json({ '*': true }));
+  app.get('/healthz/liveness', (c) => c.json({ '*': true }));
+  app.get('/healthz/readiness', (c) => c.json({ '*': true }));
 
   app.all('*', async (c) => {
     const relativePath = c.req.path.slice(1);
