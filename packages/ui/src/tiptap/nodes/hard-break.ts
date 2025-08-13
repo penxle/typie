@@ -21,7 +21,18 @@ export const HardBreak = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['br', HTMLAttributes];
+    return [
+      'span',
+      { style: 'display: inline;' },
+      ['br', HTMLAttributes],
+      [
+        'span',
+        {
+          // NOTE: page break 될 수 있도록 해줌
+          style: 'display: inline-block; width: 1px; height: 1px;',
+        },
+      ],
+    ];
   },
 
   addCommands() {
