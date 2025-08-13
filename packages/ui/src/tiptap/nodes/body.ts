@@ -48,7 +48,6 @@ export const Body = Node.create({
           this.editor?.isEditable ? 'ProseMirror-editable ProseMirror-body' : 'ProseMirror-body',
           css({
             '[data-layout="page"] &': {
-              backgroundColor: 'surface.default',
               paddingTop: 'var(--prosemirror-page-margin)',
               paddingX: 'var(--prosemirror-page-margin)',
             },
