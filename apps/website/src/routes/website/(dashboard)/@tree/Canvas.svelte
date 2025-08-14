@@ -142,7 +142,7 @@
 
 {#snippet contextMenuContent()}
   {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($canvas.entity.id)}
-    <MultiEntitiesMenu {treeState} />
+    <MultiEntitiesMenu />
   {:else}
     <CanvasMenu canvas={$canvas} via="tree" />
   {/if}

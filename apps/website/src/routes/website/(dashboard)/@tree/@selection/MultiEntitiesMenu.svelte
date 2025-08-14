@@ -14,16 +14,11 @@
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { graphql } from '$graphql';
-  import type { TreeState } from '../state.svelte';
+  import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
 
-  type Props = {
-    treeState: TreeState;
-  };
-
-  let { treeState }: Props = $props();
-
   const app = getAppContext();
+  const tree = getTreeContext();
 
   const deleteEntities = graphql(`
     mutation DashboardLayout_EntityTree_MultiEntitiesMenu_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
@@ -44,7 +39,7 @@
   let canvasIds = $state<string[]>([]);
 
   onMount(async () => {
-    const entityIds = new Set(treeState.selectedEntityIds);
+    const entityIds = new Set(tree.selectedEntityIds);
 
     const collect = (entities: TreeEntity[]) => {
       entities.forEach((entity) => {
@@ -64,7 +59,7 @@
       });
     };
 
-    collect(treeState.entities);
+    collect(tree.entities);
   });
 </script>
 
@@ -128,7 +123,7 @@
       actionLabel: '삭제',
       actionHandler: async () => {
         try {
-          const entityIds = [...treeState.selectedEntityIds];
+          const entityIds = [...tree.selectedEntityIds];
 
           await deleteEntities({ entityIds });
 
@@ -137,8 +132,8 @@
             via: 'tree',
           });
 
-          treeState.selectedEntityIds.clear();
-          treeState.lastSelectedEntityId = undefined;
+          tree.selectedEntityIds.clear();
+          tree.lastSelectedEntityId = undefined;
 
           Toast.success(`${entityIds.length}개의 항목이 삭제되었어요`);
         } catch {
