@@ -1,7 +1,8 @@
 import dayjs from 'dayjs';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
 import { db, Entities, first, firstOrThrow, Folders, PostContents, Posts, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility } from '@/enums';
+import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug } from '@/utils';
@@ -456,6 +457,91 @@ builder.mutationFields((t) => ({
       });
 
       return folder;
+    },
+  }),
+
+  updateFoldersOption: t.withAuth({ session: true }).fieldWithInput({
+    type: t.listRef(Folder),
+    input: {
+      folderIds: t.input.idList({ validate: { items: validateDbId(TableCode.FOLDERS) } }),
+      visibility: t.input.field({ type: EntityVisibility, required: false }),
+      recursive: t.input.boolean({ required: false, defaultValue: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const folders = await db
+        .select({
+          ...getTableColumns(Folders),
+          siteId: Entities.siteId,
+        })
+        .from(Folders)
+        .innerJoin(Entities, eq(Folders.entityId, Entities.id))
+        .where(and(inArray(Folders.id, input.folderIds), eq(Entities.state, EntityState.ACTIVE)));
+
+      if (folders.length === 0) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const siteId = folders[0].siteId;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (folders.some((folder) => folder.siteId !== siteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      if (!input.visibility) {
+        return folders;
+      }
+
+      const updatedEntities = await db.transaction(async (tx) => {
+        const entityIds = folders.map((folder) => folder.entityId);
+
+        const updatedEntities = await tx
+          .update(Entities)
+          .set({ visibility: input.visibility ?? undefined })
+          .where(inArray(Entities.id, entityIds))
+          .returning({ id: Entities.id });
+
+        if (input.recursive) {
+          const descendantEntityIds = await tx
+            .execute<{ id: string }>(
+              sql`
+                WITH RECURSIVE sq AS (
+                  SELECT ${Entities.id} FROM ${Entities} WHERE ${inArray(Entities.parentId, entityIds)} AND ${eq(Entities.state, EntityState.ACTIVE)}
+                  UNION ALL
+                  SELECT ${Entities.id} FROM ${Entities}
+                  JOIN sq ON ${Entities.parentId} = sq.id
+                  WHERE ${eq(Entities.state, EntityState.ACTIVE)}
+                )
+                SELECT id FROM sq;
+              `,
+            )
+            .then((rows) => rows.map(({ id }) => id));
+
+          if (descendantEntityIds.length > 0) {
+            // visibility는 not null이므로 null이여도 undefined로 취급
+            const updatedDescendantEntities = await tx
+              .update(Entities)
+              .set({ visibility: input.visibility ?? undefined })
+              .where(inArray(Entities.id, descendantEntityIds))
+              .returning({ id: Entities.id });
+
+            updatedEntities.push(...updatedDescendantEntities);
+          }
+        }
+
+        return updatedEntities;
+      });
+
+      pubsub.publish('site:update', siteId, { scope: 'site' });
+      for (const entity of updatedEntities) {
+        pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
+      }
+
+      return folders;
     },
   }),
 }));

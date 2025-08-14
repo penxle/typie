@@ -458,10 +458,12 @@ type Mutation {
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
+  updateFoldersOption(input: UpdateFoldersOptionInput!): [Folder!]!
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
   updatePassword(input: UpdatePasswordInput!): User!
   updatePostOption(input: UpdatePostOptionInput!): Post!
   updatePostType(input: UpdatePostTypeInput!): Post!
+  updatePostsOption(input: UpdatePostsOptionInput!): [Post!]!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
@@ -894,6 +896,12 @@ input UpdateFolderOptionInput {
   visibility: EntityVisibility!
 }
 
+input UpdateFoldersOptionInput {
+  folderIds: [ID!]!
+  recursive: Boolean = false
+  visibility: EntityVisibility
+}
+
 input UpdateMarketingConsentInput {
   marketingConsent: Boolean!
 }
@@ -917,6 +925,16 @@ input UpdatePostOptionInput {
 input UpdatePostTypeInput {
   postId: ID!
   type: PostType!
+}
+
+input UpdatePostsOptionInput {
+  allowReaction: Boolean
+  availability: EntityAvailability
+  contentRating: PostContentRating
+  password: String
+  postIds: [ID!]!
+  protectContent: Boolean
+  visibility: EntityVisibility
 }
 
 input UpdateSiteSlugInput {
