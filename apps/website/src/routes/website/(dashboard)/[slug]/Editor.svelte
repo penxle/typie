@@ -583,9 +583,22 @@
             {/if}
           {/each}
 
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle', lineClamp: 1 })}>
+          <button
+            class={css({
+              fontSize: '12px',
+              fontWeight: 'medium',
+              color: 'text.subtle',
+              lineClamp: 1,
+              _hover: { color: 'text.default' },
+              transition: 'common',
+            })}
+            onclick={() => {
+              titleEl?.focus();
+            }}
+            type="button"
+          >
             {effectiveTitle}
-          </div>
+          </button>
         </div>
 
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
