@@ -31,6 +31,7 @@ class EditorScreen extends HookWidget {
     final mode = useValueNotifier<EditorMode>(EditorMode.editor);
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
+    final focusedElement = useValueNotifier<String?>(null);
 
     final pageController = usePageController();
     final drag = useRef<Drag?>(null);
@@ -53,6 +54,7 @@ class EditorScreen extends HookWidget {
       mode: mode,
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
+      focusedElement: focusedElement,
       child: Material(
         color: context.colors.surfaceDefault,
         child: Stack(
