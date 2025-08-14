@@ -34,6 +34,7 @@ class EditorStateScope extends InheritedWidget {
     required this.mode,
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
+    required this.focusedElement,
     super.key,
   });
 
@@ -48,6 +49,7 @@ class EditorStateScope extends InheritedWidget {
   final ValueNotifier<EditorMode> mode;
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
+  final ValueNotifier<String?> focusedElement;
 
   Future<void> command(String name, {Map<String, dynamic>? attrs}) async {
     await webViewController.value?.emitEvent('command', {'name': name, 'attrs': attrs});

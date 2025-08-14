@@ -21,10 +21,25 @@
     editable?: boolean;
     onkeydown?: (view: EditorView, event: KeyboardEvent) => void;
     oncreate?: () => void;
+    onfocus?: () => void;
+    onblur?: () => void;
     onfile?: (event: { pos: number; file: File }) => void;
   };
 
-  let { style, editor = $bindable(), doc, awareness, storage, extensions, editable = true, onkeydown, oncreate, onfile }: Props = $props();
+  let {
+    style,
+    editor = $bindable(),
+    doc,
+    awareness,
+    storage,
+    extensions,
+    editable = true,
+    onkeydown,
+    oncreate,
+    onfocus,
+    onblur,
+    onfile,
+  }: Props = $props();
 
   let element = $state<HTMLDivElement>();
 
@@ -93,6 +108,14 @@
 
       onCreate: () => {
         oncreate?.();
+      },
+
+      onFocus: () => {
+        onfocus?.();
+      },
+
+      onBlur: () => {
+        onblur?.();
       },
     });
 
