@@ -931,6 +931,7 @@ input UpdatePostsOptionInput {
   allowReaction: Boolean
   availability: EntityAvailability
   contentRating: PostContentRating
+  password: String
   postIds: [ID!]!
   protectContent: Boolean
   visibility: EntityVisibility

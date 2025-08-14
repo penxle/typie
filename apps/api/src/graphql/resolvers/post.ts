@@ -797,6 +797,7 @@ builder.mutationFields((t) => ({
       postIds: t.input.idList({ validate: { items: validateDbId(TableCode.POSTS) } }),
       availability: t.input.field({ type: EntityAvailability, required: false }),
       visibility: t.input.field({ type: EntityVisibility, required: false }),
+      password: t.input.string({ required: false }),
       contentRating: t.input.field({ type: PostContentRating, required: false }),
       allowReaction: t.input.boolean({ required: false }),
       protectContent: t.input.boolean({ required: false }),
@@ -829,7 +830,7 @@ builder.mutationFields((t) => ({
 
       const updatedPostIds = await db.transaction(async (tx) => {
         if (input.availability || input.visibility) {
-          // null을 undefined 취급해야 DB에서 null로 설정되지 않음
+          // availability, visibility는 not null이므로 null이여도 undefined로 취급
           await tx
             .update(Entities)
             .set({
@@ -844,13 +845,20 @@ builder.mutationFields((t) => ({
             );
         }
 
-        if (input.contentRating || typeof input.allowReaction === 'boolean' || typeof input.protectContent === 'boolean') {
+        if (
+          input.contentRating ||
+          typeof input.allowReaction === 'boolean' ||
+          typeof input.protectContent === 'boolean' ||
+          input.password !== undefined
+        ) {
+          // 상동, password는 nullable이므로 null과 undefined 구분
           await tx
             .update(Posts)
             .set({
               contentRating: input.contentRating ?? undefined,
               allowReaction: input.allowReaction ?? undefined,
               protectContent: input.protectContent ?? undefined,
+              password: input.password,
             })
             .where(
               inArray(

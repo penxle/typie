@@ -522,6 +522,7 @@ builder.mutationFields((t) => ({
             .then((rows) => rows.map(({ id }) => id));
 
           if (descendantEntityIds.length > 0) {
+            // visibility는 not null이므로 null이여도 undefined로 취급
             const updatedDescendantEntities = await tx
               .update(Entities)
               .set({ visibility: input.visibility ?? undefined })
