@@ -283,14 +283,14 @@
             bottom: '0',
             left: '10px',
             alignItems: 'center',
-            zIndex: 'editor',
             pointerEvents: 'none',
           })}
         >
           <button
             class={css({
               borderRadius: '4px',
-              backgroundColor: '[#363839/70]',
+              backgroundColor: 'white/50',
+              mixBlendMode: 'difference',
               width: '8px',
               height: '1/3',
               maxHeight: '72px',
@@ -298,7 +298,7 @@
               opacity: '0',
               transition: 'opacity',
               pointerEvents: 'auto',
-              _hover: { backgroundColor: '[#363839/40]' },
+              _hover: { backgroundColor: 'white/40' },
               _groupHover: { opacity: '100' },
             })}
             aria-label="이미지 크기 조절"
@@ -319,14 +319,14 @@
             bottom: '0',
             right: '10px',
             alignItems: 'center',
-            zIndex: 'editor',
             pointerEvents: 'none',
           })}
         >
           <button
             class={css({
               borderRadius: '4px',
-              backgroundColor: '[#363839/70]',
+              backgroundColor: 'white/50',
+              mixBlendMode: 'difference',
               width: '8px',
               height: '1/3',
               maxHeight: '72px',
@@ -334,7 +334,7 @@
               opacity: '0',
               transition: 'opacity',
               pointerEvents: 'auto',
-              _hover: { backgroundColor: '[#363839/40]' },
+              _hover: { backgroundColor: 'white/40' },
               _groupHover: { opacity: '100' },
             })}
             aria-label="이미지 크기 조절"
