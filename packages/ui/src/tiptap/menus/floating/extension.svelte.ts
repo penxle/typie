@@ -174,6 +174,8 @@ export const FloatingMenu = Extension.create({
                   let rect: DOMRect;
                   if (isSelectionOverlapping) {
                     rect = posToDOMRect(view, from, to);
+                  } else if (node?.type.name === 'paragraph') {
+                    rect = posToDOMRect(view, pos + 1, nodeEnd - 1);
                   } else {
                     rect = posToDOMRect(view, pos, nodeEnd);
                   }
@@ -202,7 +204,12 @@ export const FloatingMenu = Extension.create({
               }
 
               const bodyRect = (body as HTMLElement).getBoundingClientRect();
-              const nodeRect = posToDOMRect(view, pos, nodeEnd);
+              let nodeRect: DOMRect;
+              if (node?.type.name === 'paragraph') {
+                nodeRect = posToDOMRect(view, pos + 1, nodeEnd - 1);
+              } else {
+                nodeRect = posToDOMRect(view, pos, nodeEnd);
+              }
 
               const referenceElement: VirtualElement = {
                 getBoundingClientRect: () => {
