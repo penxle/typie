@@ -300,6 +300,33 @@ builder.queryFields((t) => ({
     },
   }),
 
+  entities: t.withAuth({ session: true }).field({
+    type: [Entity],
+    args: {
+      entityIds: t.arg.idList({ required: true, validate: { items: validateDbId(TableCode.ENTITIES) } }),
+    },
+    resolve: async (_, args, ctx) => {
+      const entities = await db.select().from(Entities).where(inArray(Entities.id, args.entityIds));
+
+      if (entities.length === 0) {
+        return [];
+      }
+
+      const siteId = entities[0].siteId;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (entities.some((entity) => entity.siteId !== siteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      return entities;
+    },
+  }),
+
   entityView: t.field({
     type: EntityView,
     args: { origin: t.arg.string(), slug: t.arg.string() },
