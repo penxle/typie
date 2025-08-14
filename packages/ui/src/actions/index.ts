@@ -1,5 +1,5 @@
 export * from './autosize.svelte';
-export * from './context-menu';
+export * from './context-menu.svelte';
 export * from './floating.svelte';
 export * from './focus-trap.svelte';
 export * from './hover.svelte';
