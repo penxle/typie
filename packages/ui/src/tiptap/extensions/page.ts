@@ -242,7 +242,6 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout): Decorat
       container.style.position = 'relative';
 
       for (let i = 0; i < pageCount; i++) {
-        const isFirstPage = i === 0;
         const pageBreak = document.createElement('div');
         pageBreak.className = 'page-break';
 
@@ -252,7 +251,7 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout): Decorat
           position: relative;
           float: left;
           clear: both;
-          margin-top: ${isFirstPage ? `calc(${CONTENT_HEIGHT}px)` : `${CONTENT_HEIGHT}px`};
+          margin-top: ${CONTENT_HEIGHT}px;
         `;
 
         const pageBackground = document.createElement('div');
