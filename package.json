@@ -35,6 +35,7 @@
       "@firebase/util",
       "@pulumi/kubernetes",
       "@sentry/cli",
+      "@swc/core",
       "es5-ext",
       "msgpackr-extract",
       "protobufjs",
