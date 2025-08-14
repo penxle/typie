@@ -151,7 +151,7 @@
 
 {#snippet contextMenuContent()}
   {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($post.entity.id)}
-    <MultiEntitiesMenu {treeState} />
+    <MultiEntitiesMenu />
   {:else}
     <PostMenu entity={$post.entity} post={$post} via="tree" />
   {/if}
