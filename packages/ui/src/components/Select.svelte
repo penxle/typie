@@ -4,6 +4,7 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
+  import MinusIcon from '~icons/lucide/minus';
   import { Icon, Menu, MenuItem } from '../components';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component } from 'svelte';
@@ -11,6 +12,7 @@
   type Props = {
     style?: SystemStyleObject;
     value: T;
+    values?: T[];
     items: {
       icon?: Component;
       label: string;
@@ -21,13 +23,27 @@
     chevron?: boolean;
   };
 
-  let { style, value = $bindable(), items = [], onselect, chevron = true }: Props = $props();
+  let { style, value = $bindable(), values, items = [], onselect, chevron = true }: Props = $props();
 
-  const item = $derived(items.find((item) => item.value === value));
+  const selectedValues = $derived(values ?? [value]);
+  const isIndeterminate = $derived(selectedValues.some((v) => selectedValues[0] !== v));
+
+  const displayItem = $derived(
+    (() => {
+      if (isIndeterminate) {
+        const selectedItems = items.filter((item) => selectedValues.includes(item.value));
+        return {
+          label: selectedItems.map((item) => item.label).join(', '),
+          icon: MinusIcon,
+        };
+      }
+      return items.find((item) => item.value === selectedValues[0]);
+    })(),
+  );
 </script>
 
 <Menu disableAutoUpdate listStyle={css.raw({ minWidth: '[initial]', maxWidth: '240px' })} offset={4} placement="bottom-end">
-  {#snippet button({ open })}
+  {#snippet button({ open }: { open: boolean })}
     <button
       class={cx(
         'group',
@@ -49,14 +65,14 @@
       aria-expanded={open}
       type="button"
     >
-      {#if item}
+      {#if displayItem}
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
-          {#if item.icon}
-            <Icon style={css.raw({ color: 'text.faint' })} icon={item.icon} size={14} />
+          {#if displayItem.icon}
+            <Icon style={css.raw({ color: 'text.faint' })} icon={displayItem.icon} size={14} />
           {/if}
 
           <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-            {item.label}
+            {displayItem.label}
           </span>
         </div>
 
@@ -97,14 +113,15 @@
           </div>
         </div>
 
-        <Icon
-          style={css.raw({
-            color: 'text.subtle',
-            visibility: item.value === value ? 'visible' : 'hidden',
-          })}
-          icon={CheckIcon}
-          size={14}
-        />
+        {#if selectedValues.includes(item.value)}
+          {#if isIndeterminate}
+            <Icon style={css.raw({ color: 'text.subtle' })} icon={MinusIcon} size={14} />
+          {:else}
+            <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+          {/if}
+        {:else}
+          <div style:width="14px"></div>
+        {/if}
       </div>
     </MenuItem>
   {/each}
