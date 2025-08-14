@@ -2,9 +2,9 @@
   import { css } from '@typie/styled-system/css';
   import { tick, untrack } from 'svelte';
   import type { Editor } from '@tiptap/core';
-  import type { PageLayout } from '@typie/ui/tiptap';
-  import type { Ref } from '@typie/ui/utils';
   import type { Snippet } from 'svelte';
+  import type { PageLayout } from '../tiptap';
+  import type { Ref } from '../utils';
 
   type Props = {
     editor: Ref<Editor>;
@@ -15,6 +15,7 @@
   let { editor, children, pageLayout }: Props = $props();
 
   let editorDomSize = $state({ width: 0, height: 0 });
+  let bodySize = $state({ width: 0, height: 0 });
 
   $effect(() => {
     const dom = editor.current?.view?.dom;
@@ -36,10 +37,30 @@
     };
   });
 
+  $effect(() => {
+    const bodyEl = editor.current?.view?.dom?.querySelector('.ProseMirror-body');
+    if (!bodyEl) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        bodySize = {
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        };
+      }
+    });
+
+    resizeObserver.observe(bodyEl);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  });
+
   const bodyPosition = $derived.by(async () => {
-    // NOTE: pageLayout 및 editor DOM 사이즈 변경 시 재계산
     void pageLayout;
     void editorDomSize;
+    void bodySize;
 
     await tick();
 
@@ -51,9 +72,9 @@
       }
 
       const computedStyle = window.getComputedStyle(bodyElement);
-      const paddingLeft = Number.parseInt(computedStyle.paddingLeft, 10) || 0;
-      const paddingRight = Number.parseInt(computedStyle.paddingRight, 10) || 0;
-      const paddingTop = Number.parseInt(computedStyle.paddingTop, 10) || 0;
+      const paddingLeft = Number.parseFloat(computedStyle.paddingLeft) || 0;
+      const paddingRight = Number.parseFloat(computedStyle.paddingRight) || 0;
+      const paddingTop = Number.parseFloat(computedStyle.paddingTop) || 0;
 
       return {
         left: bodyElement.offsetLeft + paddingLeft,
