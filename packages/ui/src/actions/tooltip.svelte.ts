@@ -9,7 +9,7 @@ import type { Action } from 'svelte/action';
 type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
 
 export type TooltipParameter = {
-  message: string;
+  message?: string | null;
   trailing?: string;
   placement?: Placement;
   keys?: [...ModifierKey[], string];
