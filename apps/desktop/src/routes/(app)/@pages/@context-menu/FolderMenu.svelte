@@ -153,7 +153,7 @@
 <MenuItem
   icon={BlendIcon}
   onclick={() => {
-    app.state.shareOpen = entity.id;
+    app.state.shareOpen = [entity.id];
     mixpanel.track('open_folder_share_modal', { via });
   }}
 >
