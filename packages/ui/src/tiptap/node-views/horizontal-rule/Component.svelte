@@ -20,6 +20,6 @@
   );
 </script>
 
-<NodeView style={center.raw({ height: '16px' })} {...HTMLAttributes}>
+<NodeView style={center.raw({ width: 'full', height: '16px' })} {...HTMLAttributes}>
   <Component />
 </NodeView>

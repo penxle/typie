@@ -202,6 +202,7 @@
 <NodeView style={css.raw({ position: 'relative' })} {...HTMLAttributes}>
   <div
     class={css({
+      width: 'full',
       overflowX: 'auto',
       overflowY: 'hidden',
     })}
