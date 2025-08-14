@@ -92,12 +92,15 @@ class ProfileScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     color: context.colors.surfaceDefault,
                   ),
-                  padding: const Pad(all: 16),
+                  padding: const Pad(vertical: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     spacing: 12,
                     children: [
-                      const Text('나의 글쓰기 활동', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                      const Padding(
+                        padding: Pad(horizontal: 16),
+                        child: Text('나의 글쓰기 활동', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                      ),
                       ActivityGrid(characterCountChanges: data.me?.characterCountChanges.toList() ?? []),
                     ],
                   ),
