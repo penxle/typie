@@ -10,6 +10,10 @@ type FormState = {
   isDirty: boolean;
 };
 
+type DirtyFields<T> = {
+  [K in keyof T]?: boolean;
+};
+
 type CreateFormOptions<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>>> = {
   schema: Schema;
   defaultValues?: D;
@@ -24,6 +28,7 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
   #formState = $state<FormState>({ isLoading: false, isDirty: false });
   #formData = $state<Partial<z.infer<Schema>>>({});
   #errors = $state<FormFieldErrors<z.infer<Schema>>>({} as FormFieldErrors<z.infer<Schema>>);
+  #dirtyFields = $state<DirtyFields<z.infer<Schema>>>({});
   #defaultValues: Partial<z.infer<Schema>>;
 
   #options: CreateFormOptions<Schema, D>;
@@ -43,8 +48,10 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
 
     this.fields = new Proxy(this.#formData, {
       set: (target, prop, value) => {
-        target[prop as keyof z.infer<Schema>] = value;
+        const key = prop as keyof z.infer<Schema>;
+        target[key] = value;
 
+        this.#dirtyFields[key] = true;
         this.#formState.isDirty = true;
 
         if (this.#options.submitOn === 'change') {
@@ -56,10 +63,27 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
     }) as z.infer<Schema>;
   }
 
+  getDirtyFields = (): Partial<z.infer<Schema>> => {
+    const dirtyData: Partial<z.infer<Schema>> = {};
+    for (const key of Object.keys(this.#dirtyFields)) {
+      if (this.#dirtyFields[key as keyof z.infer<Schema>]) {
+        dirtyData[key as keyof z.infer<Schema>] = this.#formData[key as keyof z.infer<Schema>];
+      }
+    }
+    return dirtyData;
+  };
+
+  getDirtyFieldNames = (): (keyof z.infer<Schema>)[] => {
+    return Object.entries(this.#dirtyFields)
+      .filter(([, isDirty]) => isDirty)
+      .map(([key]) => key as keyof z.infer<Schema>);
+  };
+
   handleSubmit = async (event?: SubmitEvent) => {
     event?.preventDefault();
 
     this.#formState.isLoading = true;
+    let submitSucceeded = false;
     try {
       const data = this.#options.schema.parse(this.#formData) as z.infer<Schema>;
       for (const key of Object.keys(this.#errors)) {
@@ -68,6 +92,7 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
 
       try {
         await this.#options.onSubmit(data);
+        submitSucceeded = true;
       } catch (err) {
         this.#options.onError?.(err);
         throw err;
@@ -89,7 +114,10 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
       this.#errors = errors;
     } finally {
       this.#formState.isLoading = false;
-      this.#formState.isDirty = false;
+      if (submitSucceeded) {
+        this.#formState.isDirty = false;
+        this.#dirtyFields = {};
+      }
     }
   };
 
@@ -102,6 +130,7 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
       this.#errors[key as keyof z.infer<Schema>] = undefined;
     }
 
+    this.#dirtyFields = {};
     this.#formState.isDirty = false;
     this.#formState.isLoading = false;
   };
