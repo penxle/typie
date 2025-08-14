@@ -78,19 +78,49 @@
     const monthSpans: { month: number; start: number; end: number }[] = [];
 
     let currentDate = startDate.startOf('week');
-    let i = 1;
-    while (!currentDate.isAfter(endDate)) {
-      const month = currentDate.month() + 1;
+    const endWeek = endDate.endOf('week');
 
-      const last = monthSpans.at(-1);
-      if (last?.month === month) {
-        last.end = i;
-      } else {
-        monthSpans.push({ month, start: i, end: i });
+    let weekIndex = 0;
+    let prevMonth = -1;
+    let monthStartWeek = -1;
+
+    while (!currentDate.isAfter(endWeek)) {
+      let weekMonth = -1;
+      let hasFirstOfMonth = false;
+
+      for (let day = 0; day < 7; day++) {
+        const checkDate = currentDate.add(day, 'days');
+
+        if (checkDate.isBefore(startDate) || checkDate.isAfter(endDate)) {
+          continue;
+        }
+
+        if (weekMonth === -1) {
+          weekMonth = checkDate.month() + 1;
+        }
+
+        if (checkDate.date() === 1) {
+          hasFirstOfMonth = true;
+          weekMonth = checkDate.month() + 1;
+          break;
+        }
+      }
+
+      if (weekMonth !== -1 && (monthStartWeek === -1 || (hasFirstOfMonth && weekMonth !== prevMonth))) {
+        if (monthStartWeek >= 0 && prevMonth !== -1) {
+          monthSpans.push({ month: prevMonth, start: monthStartWeek, end: weekIndex - 1 });
+        }
+
+        monthStartWeek = weekIndex;
+        prevMonth = weekMonth;
       }
 
       currentDate = currentDate.add(1, 'week');
-      i++;
+      weekIndex++;
+    }
+
+    if (monthStartWeek >= 0 && prevMonth !== -1) {
+      monthSpans.push({ month: prevMonth, start: monthStartWeek, end: weekIndex - 1 });
     }
 
     return monthSpans;
@@ -148,15 +178,17 @@
   {/each}
 
   {#each monthSpans as month, i (i)}
-    {#if month.end - month.start > 1}
+    {#if month.end - month.start >= 1 || i === monthSpans.length - 1}
       <div
-        style:grid-column={`${month.start + 1} / ${month.end + 2}`}
-        class={center({
+        style:grid-column={`${month.start + 2} / ${month.end + 3}`}
+        class={css({
           gridRow: '1',
           paddingY: '1px',
           fontSize: '13px',
           fontWeight: 'medium',
           color: 'text.faint',
+          whiteSpace: 'nowrap',
+          overflow: 'visible',
         })}
       >
         {month.month}월

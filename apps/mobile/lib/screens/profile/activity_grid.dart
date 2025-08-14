@@ -114,33 +114,38 @@ class ActivityGrid extends HookWidget {
                   },
                   child: SizedBox(
                     height: labelHeight,
-                    child: Row(
+                    child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        for (final span in monthSpans)
-                          if (span.end - span.start > 1)
-                            GestureDetector(
-                              onTap: () {
-                                final monthWidth = (span.end - span.start + 1) * (cellSize + cellGap) - cellGap;
-                                final monthStartPosition = span.start * (cellSize + cellGap);
-                                final monthCenterPosition = monthStartPosition + (monthWidth / 2);
+                        for (int i = 0; i < monthSpans.length; i++)
+                          if (monthSpans[i].end - monthSpans[i].start >= 1 || i == monthSpans.length - 1)
+                            Positioned(
+                              left: monthSpans[i].start * (cellSize + cellGap),
+                              child: GestureDetector(
+                                onTap: () {
+                                  final span = monthSpans[i];
+                                  final monthWidth = (span.end - span.start + 1) * (cellSize + cellGap) - cellGap;
+                                  final monthStartPosition = span.start * (cellSize + cellGap);
+                                  final monthCenterPosition = monthStartPosition + (monthWidth / 2);
 
-                                final viewportWidth = scrollController.position.viewportDimension;
+                                  final viewportWidth = scrollController.position.viewportDimension;
 
-                                final targetPosition = monthCenterPosition - (viewportWidth / 2);
+                                  final targetPosition = monthCenterPosition - (viewportWidth / 2);
 
-                                unawaited(
-                                  scrollController.animateTo(
-                                    targetPosition.clamp(0.0, scrollController.position.maxScrollExtent),
-                                    duration: const Duration(milliseconds: 200),
-                                    curve: Curves.easeOutCubic,
-                                  ),
-                                );
-                              },
-                              child: SizedBox(
-                                width: (span.end - span.start + 1) * (cellSize + cellGap) - cellGap,
-                                child: Center(
+                                  unawaited(
+                                    scrollController.animateTo(
+                                      targetPosition.clamp(0.0, scrollController.position.maxScrollExtent),
+                                      duration: const Duration(milliseconds: 200),
+                                      curve: Curves.easeOutCubic,
+                                    ),
+                                  );
+                                },
+                                child: SizedBox(
+                                  width: (monthSpans[i].end - monthSpans[i].start + 1) * (cellSize + cellGap) - cellGap,
                                   child: Text(
-                                    '${span.month}월',
+                                    '${monthSpans[i].month}월',
+                                    overflow: TextOverflow.visible,
+                                    softWrap: false,
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w500,
@@ -390,23 +395,50 @@ class ActivityGrid extends HookWidget {
   List<MonthSpan> _generateMonthSpans(Jiffy startDate, Jiffy endDate) {
     final monthSpans = <MonthSpan>[];
 
-    var currentDate = startDate.clone();
-    while (currentDate.dayOfWeek != 7) {
-      currentDate = currentDate.subtract(days: 1);
-    }
+    final activities = _generateActivities(startDate, endDate);
+    final weekCount = (activities.length / 7).ceil();
 
-    var weekIndex = 0;
-    while (!currentDate.isAfter(endDate)) {
-      final month = currentDate.month;
+    var prevMonth = -1;
+    var monthStartWeek = -1;
 
-      if (monthSpans.isEmpty || monthSpans.last.month != month) {
-        monthSpans.add(MonthSpan(month: month, start: weekIndex, end: weekIndex));
-      } else {
-        monthSpans.last.end = weekIndex;
+    for (var weekIndex = 0; weekIndex < weekCount; weekIndex++) {
+      var weekMonth = -1;
+      var hasFirstOfMonth = false;
+
+      for (var dayIndex = 0; dayIndex < 7; dayIndex++) {
+        final activityIndex = weekIndex * 7 + dayIndex;
+        if (activityIndex >= activities.length) {
+          break;
+        }
+
+        final activity = activities[activityIndex];
+        if (activity.level == -1) {
+          continue;
+        }
+
+        if (weekMonth == -1) {
+          weekMonth = activity.date.month;
+        }
+
+        if (activity.date.date == 1) {
+          hasFirstOfMonth = true;
+          weekMonth = activity.date.month;
+          break;
+        }
       }
 
-      currentDate = currentDate.add(days: 7);
-      weekIndex++;
+      if (weekIndex == 0 || (hasFirstOfMonth && weekMonth != prevMonth)) {
+        if (monthStartWeek >= 0 && prevMonth != -1) {
+          monthSpans.add(MonthSpan(month: prevMonth, start: monthStartWeek, end: weekIndex - 1));
+        }
+
+        monthStartWeek = weekIndex;
+        prevMonth = weekMonth;
+      }
+    }
+
+    if (monthStartWeek >= 0 && prevMonth != -1) {
+      monthSpans.add(MonthSpan(month: prevMonth, start: monthStartWeek, end: weekCount - 1));
     }
 
     return monthSpans;
