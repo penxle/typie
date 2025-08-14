@@ -20,8 +20,13 @@ class EditorFloatingToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
     final proseMirrorState = useValueListenable(scope.proseMirrorState);
+    final focusedElement = useValueListenable(scope.focusedElement);
 
     if (proseMirrorState == null) {
+      return const SizedBox.shrink();
+    }
+
+    if (focusedElement == 'title' || focusedElement == 'subtitle') {
       return const SizedBox.shrink();
     }
 

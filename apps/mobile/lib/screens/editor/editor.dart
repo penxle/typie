@@ -141,6 +141,7 @@ class Editor extends HookWidget {
             }
           case 'focus':
             final element = (event.data as Map<String, dynamic>)['element'] as String;
+            scope.focusedElement.value = element;
             if (element == 'title' || element == 'subtitle') {
               unawaited(
                 state.setSerializedPostSelection(slug, jsonEncode({'type': 'element', 'element': element})).catchError((
@@ -154,6 +155,8 @@ class Editor extends HookWidget {
                 }),
               );
             }
+          case 'blur':
+            scope.focusedElement.value = null;
         }
       });
 

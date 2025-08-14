@@ -858,9 +858,15 @@
         style={css.raw({ size: 'full' })}
         {awareness}
         {doc}
+        onblur={() => {
+          window.__webview__?.emitEvent('blur');
+        }}
         oncreate={() => {
           window.__webview__?.emitEvent('webviewReady');
           setYJSState();
+        }}
+        onfocus={() => {
+          window.__webview__?.emitEvent('focus', { element: 'editor' });
         }}
         storage={{
           uploadBlobAsImage: (file) => {
