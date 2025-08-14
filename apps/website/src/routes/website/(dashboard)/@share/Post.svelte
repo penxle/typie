@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Icon, Select, Switch } from '@typie/ui/components';
+  import { HorizontalDivider, Icon, Select, Switch } from '@typie/ui/components';
   import { createForm } from '@typie/ui/form';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
@@ -24,22 +24,19 @@
   import type { DashboardLayout_Share_Post_post } from '$graphql';
 
   type Props = {
-    $post: DashboardLayout_Share_Post_post;
+    $posts: DashboardLayout_Share_Post_post[];
   };
 
-  let { $post: _post }: Props = $props();
+  let { $posts: _posts }: Props = $props();
 
-  let activeTab = $state<'publish' | 'share'>('publish');
-
-  const post = fragment(
-    _post,
+  const posts = fragment(
+    _posts,
     graphql(`
       fragment DashboardLayout_Share_Post_post on Post {
         id
         title
         password
         contentRating
-        allowComment
         allowReaction
         protectContent
 
@@ -54,13 +51,17 @@
     `),
   );
 
-  const updatePostOption = graphql(`
-    mutation DashboardLayout_Share_Post_UpdatePostOption_Mutation($input: UpdatePostOptionInput!) {
-      updatePostOption(input: $input) {
+  let activeTab = $state<'publish' | 'share'>('publish');
+
+  const isSinglePost = $derived($posts.length === 1);
+  const postIds = $derived($posts.map((p) => p.id));
+
+  const updatePostsOption = graphql(`
+    mutation DashboardLayout_Share_Post_UpdatePostsOption_Mutation($input: UpdatePostsOptionInput!) {
+      updatePostsOption(input: $input) {
         id
         password
         contentRating
-        allowComment
         allowReaction
         protectContent
 
@@ -78,6 +79,11 @@
 
   let showPassword = $state(false);
 
+  const visibilityIndeterminate = $derived($posts.length > 1 && $posts.some((p) => p.entity.visibility !== $posts[0].entity.visibility));
+  const availabilityIndeterminate = $derived(
+    $posts.length > 1 && $posts.some((p) => p.entity.availability !== $posts[0].entity.availability),
+  );
+
   const form = createForm({
     schema: z.object({
       availability: z.nativeEnum(EntityAvailability),
@@ -85,42 +91,52 @@
       hasPassword: z.boolean(),
       password: z.string().nullish(),
       contentRating: z.nativeEnum(PostContentRating),
-      allowComment: z.boolean(),
       allowReaction: z.boolean(),
       protectContent: z.boolean(),
     }),
     submitOn: 'change',
     onSubmit: async (data) => {
-      await updatePostOption({
-        postId: $post.id,
-        availability: data.availability,
-        visibility: data.visibility,
-        password: data.hasPassword ? data.password : null,
-        contentRating: data.contentRating,
-        allowComment: data.allowComment,
-        allowReaction: data.allowReaction,
-        protectContent: data.protectContent,
-      });
+      if ($posts.length === 0) return;
 
-      mixpanel.track('update_post_option', {
-        availability: data.availability,
-        visibility: data.visibility,
-        hasPassword: data.hasPassword,
-        contentRating: data.contentRating,
-        allowComment: data.allowComment,
-        allowReaction: data.allowReaction,
-        protectContent: data.protectContent,
-      });
+      const dirtyFields = form.getDirtyFields();
+      const updateData: {
+        postIds: string[];
+        availability?: EntityAvailability;
+        visibility?: EntityVisibility;
+        contentRating?: PostContentRating;
+        allowReaction?: boolean;
+        protectContent?: boolean;
+        password?: string | null;
+      } = { postIds };
+
+      if ('availability' in dirtyFields) updateData.availability = data.availability;
+      if ('visibility' in dirtyFields) updateData.visibility = data.visibility;
+      if ('contentRating' in dirtyFields) updateData.contentRating = data.contentRating;
+      if ('allowReaction' in dirtyFields) updateData.allowReaction = data.allowReaction;
+      if ('protectContent' in dirtyFields) updateData.protectContent = data.protectContent;
+      if ('hasPassword' in dirtyFields || 'password' in dirtyFields) updateData.password = data.hasPassword ? data.password : null;
+
+      if (Object.keys(updateData).length > 1) {
+        await updatePostsOption(updateData);
+
+        mixpanel.track('update_post_option', {
+          ...updateData,
+          hasPassword: data.hasPassword,
+          count: $posts.length,
+        });
+      }
     },
     defaultValues: {
-      availability: $post.entity.availability,
-      visibility: $post.entity.visibility,
-      hasPassword: $post.password !== null,
-      password: $post.password,
-      contentRating: $post.contentRating,
-      allowComment: $post.allowComment,
-      allowReaction: $post.allowReaction,
-      protectContent: $post.protectContent,
+      availability: $posts[0].entity.availability,
+      visibility: $posts[0].entity.visibility,
+      hasPassword: $posts[0].password !== null,
+      password:
+        $posts.length > 1 && $posts.filter((p) => p.password !== null).some((p) => p.password !== $posts[0].password)
+          ? null
+          : $posts[0].password,
+      contentRating: $posts[0].contentRating,
+      allowReaction: $posts[0].allowReaction,
+      protectContent: $posts[0].protectContent,
     },
   });
 
@@ -128,9 +144,20 @@
     void form;
   });
 
+  $effect(() => {
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  });
+
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(activeTab === 'publish' ? $post.entity.url : `${env.PUBLIC_WEBSITE_URL}/${$post.entity.slug}`);
-    mixpanel.track('copy_post_share_url', { tab: activeTab });
+    if ($posts.length === 0) return;
+
+    const urls = $posts.map((p) => (activeTab === 'publish' ? p.entity.url : `${env.PUBLIC_WEBSITE_URL}/${p.entity.slug}`)).join('\n');
+    navigator.clipboard.writeText(urls);
+    mixpanel.track('copy_post_share_url', { tab: activeTab, count: $posts.length });
 
     if (timer) {
       clearTimeout(timer);
@@ -140,6 +167,49 @@
     timer = setTimeout(() => (copied = false), 2000);
   };
 </script>
+
+<div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '16px', paddingY: '12px' })}>
+  <div class={flex({ gap: '[0.5ch]', fontSize: '12px', fontWeight: 'medium' })}>
+    <span class={css({ wordBreak: 'break-all', lineClamp: '1', fontWeight: 'semibold' })}>
+      {isSinglePost ? $posts[0].title : `${$posts.length}개의 포스트`}
+    </span>
+    <span class={css({ flexShrink: '0' })}>공유 및 게시하기</span>
+  </div>
+  <button
+    class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}
+    onclick={handleCopyLink}
+    type="button"
+    use:tooltip={{
+      message:
+        activeTab === 'publish'
+          ? visibilityIndeterminate
+            ? null
+            : form.fields.visibility === EntityVisibility.PRIVATE
+              ? '지금은 링크가 있어도 나만 볼 수 있어요'
+              : '링크가 있는 누구나 포스트를 볼 수 있어요'
+          : availabilityIndeterminate
+            ? null
+            : form.fields.availability === EntityAvailability.PRIVATE
+              ? '지금은 링크가 있어도 나만 편집할 수 있어요'
+              : '링크가 있는 누구나 편집할 수 있어요',
+      placement: 'top',
+      keepOnClick: true,
+    }}
+  >
+    {#if copied}
+      <Icon style={css.raw({ color: 'text.link' })} icon={CheckIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.link' })}>복사되었어요</div>
+    {:else}
+      <Icon style={css.raw({ color: 'text.link' })} icon={LinkIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.link' })}>
+        {activeTab === 'publish' ? '조회' : '편집'}
+        {isSinglePost ? '링크' : '링크 모두'} 복사
+      </div>
+    {/if}
+  </button>
+</div>
+
+<HorizontalDivider />
 
 <div class={css({ position: 'relative' })}>
   <div class={flex({ alignItems: 'center', paddingX: '16px' })}>
@@ -195,34 +265,6 @@
     >
       편집
     </button>
-
-    <div class={flex({ flexGrow: '1' })}></div>
-
-    <button
-      class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}
-      onclick={handleCopyLink}
-      type="button"
-      use:tooltip={{
-        message:
-          activeTab === 'publish'
-            ? form.fields.visibility === EntityVisibility.PRIVATE
-              ? '지금은 링크가 있어도 나만 볼 수 있어요'
-              : '링크가 있는 누구나 포스트를 볼 수 있어요'
-            : form.fields.availability === EntityAvailability.PRIVATE
-              ? '지금은 링크가 있어도 나만 편집할 수 있어요'
-              : '링크가 있는 누구나 편집할 수 있어요',
-        placement: 'top',
-        keepOnClick: true,
-      }}
-    >
-      {#if copied}
-        <Icon style={css.raw({ color: 'text.link' })} icon={CheckIcon} size={12} />
-        <div class={css({ fontSize: '12px', color: 'text.link' })}>복사되었어요</div>
-      {:else}
-        <Icon style={css.raw({ color: 'text.link' })} icon={LinkIcon} size={12} />
-        <div class={css({ fontSize: '12px', color: 'text.link' })}>{activeTab === 'publish' ? '조회' : '편집'} 링크 복사</div>
-      {/if}
-    </button>
   </div>
 
   <div
@@ -262,6 +304,7 @@
               value: EntityVisibility.PRIVATE,
             },
           ]}
+          values={$posts.map((p) => p.entity.visibility)}
           bind:value={form.fields.visibility}
         />
       </div>
@@ -273,7 +316,7 @@
             <div class={css({ fontSize: '12px', color: 'text.subtle' })}>비밀번호 보호</div>
           </div>
 
-          <Switch bind:checked={form.fields.hasPassword} />
+          <Switch values={$posts.map((p) => p.password !== null)} bind:checked={form.fields.hasPassword} />
         </div>
 
         {#if form.fields.hasPassword}
@@ -329,6 +372,7 @@
             { label: '15세', value: PostContentRating.R15 },
             { label: '성인', value: PostContentRating.R19 },
           ]}
+          values={$posts.map((p) => p.contentRating)}
           bind:value={form.fields.contentRating}
         />
       </div>
@@ -348,6 +392,7 @@
             { icon: UsersRoundIcon, label: '누구나', value: true },
             { icon: BanIcon, label: '비허용', value: false },
           ]}
+          values={$posts.map((p) => p.allowReaction)}
           bind:value={form.fields.allowReaction}
         />
       </div>
@@ -365,7 +410,7 @@
           </div>
         </div>
 
-        <Switch bind:checked={form.fields.protectContent} />
+        <Switch values={$posts.map((p) => p.protectContent)} bind:checked={form.fields.protectContent} />
       </div>
     </div>
   </div>
@@ -395,6 +440,7 @@
               value: EntityAvailability.PRIVATE,
             },
           ]}
+          values={$posts.map((p) => p.entity.availability)}
           bind:value={form.fields.availability}
         />
       </div>

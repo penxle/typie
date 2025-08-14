@@ -134,7 +134,7 @@
                 _hover: { color: 'text.subtle' },
               })}
               onclick={() => {
-                app.state.shareOpen = $post.entity.id;
+                app.state.shareOpen = [$post.entity.id];
                 mixpanel.track('open_post_share_modal', { via: 'panel' });
               }}
               type="button"

@@ -33,7 +33,7 @@ type AppState = {
   postsOpen: boolean;
   trashOpen: boolean;
   commandPaletteOpen: boolean;
-  shareOpen: string | false;
+  shareOpen: string[];
   statsOpen: boolean;
   upgradeOpen: boolean;
   findReplaceOpen: boolean;
@@ -71,7 +71,7 @@ export const setupAppContext = (userId: string) => {
     postsOpen: false,
     trashOpen: false,
     commandPaletteOpen: false,
-    shareOpen: false,
+    shareOpen: [],
     statsOpen: false,
     upgradeOpen: false,
     findReplaceOpen: false,

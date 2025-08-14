@@ -166,7 +166,7 @@
 <MenuItem
   icon={BlendIcon}
   onclick={() => {
-    app.state.shareOpen = entity.id;
+    app.state.shareOpen = [entity.id];
     if (via === 'editor') {
       mixpanel.track('open_post_share_modal', { via: 'editor' });
     }
