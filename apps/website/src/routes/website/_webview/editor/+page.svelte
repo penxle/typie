@@ -404,6 +404,10 @@
       features = data.features || [];
       settings = data.settings || {};
 
+      if (editor) {
+        editor.current.storage.webviewFeatures = features;
+      }
+
       if (settings.typewriterEnabled && settings.typewriterPosition !== undefined) {
         if (editor) {
           editor.current.storage.typewriter = { position: settings.typewriterPosition };

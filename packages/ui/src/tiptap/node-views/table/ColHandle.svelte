@@ -126,7 +126,7 @@
   }}
   placement="bottom-start"
 >
-  {#snippet button({ open })}
+  {#snippet button({ open }: { open: boolean })}
     <div
       class={center({
         display: open || hoveredColumnIndex === i || focusedColumnIndex === i ? 'flex' : 'none',
@@ -155,7 +155,7 @@
       <Icon icon={EllipsisIcon} size={14} />
     </div>
   {/snippet}
-  {#snippet children({ close })}
+  {#snippet children({ close }: { close: () => void })}
     {#if i !== 0}
       <Tooltip
         style={css.raw({ display: 'flex', flexDirection: 'column' })}
@@ -220,7 +220,7 @@
       <Icon icon={Trash2Icon} size={14} />
       <span>열 삭제</span>
     </MenuItem>
-    {#if window.__webview__}
+    {#if window.__webview__ && !editor?.current?.storage?.webviewFeatures?.includes('hide-table-delete-in-handle')}
       <MenuItem
         onclick={() => {
           close();
