@@ -239,7 +239,7 @@
   </summary>
   {#snippet contextMenuContent()}
     {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($folder.entity.id)}
-      <MultiEntitiesMenu {treeState} />
+      <MultiEntitiesMenu />
     {:else}
       <FolderMenu
         entity={$folder.entity}

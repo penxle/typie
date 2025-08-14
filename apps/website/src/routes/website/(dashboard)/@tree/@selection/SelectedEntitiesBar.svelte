@@ -77,6 +77,6 @@
       </div>
     {/snippet}
 
-    <MultiEntitiesMenu {treeState} />
+    <MultiEntitiesMenu />
   </Menu>
 </div>
