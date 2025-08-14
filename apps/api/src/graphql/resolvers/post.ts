@@ -829,6 +829,7 @@ builder.mutationFields((t) => ({
 
       const updatedPostIds = await db.transaction(async (tx) => {
         if (input.availability || input.visibility) {
+          // null을 undefined 취급해야 DB에서 null로 설정되지 않음
           await tx
             .update(Entities)
             .set({
@@ -843,15 +844,20 @@ builder.mutationFields((t) => ({
             );
         }
 
-        if (input.contentRating || input.allowReaction || input.protectContent) {
-          return await tx
+        if (input.contentRating || typeof input.allowReaction === 'boolean' || typeof input.protectContent === 'boolean') {
+          await tx
             .update(Posts)
             .set({
               contentRating: input.contentRating ?? undefined,
               allowReaction: input.allowReaction ?? undefined,
               protectContent: input.protectContent ?? undefined,
             })
-            .where(inArray(Posts.id, input.postIds));
+            .where(
+              inArray(
+                Posts.id,
+                posts.map((post) => post.id),
+              ),
+            );
         }
 
         return posts.map((post) => post.id);
