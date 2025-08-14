@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:jiffy/jiffy.dart';
@@ -21,11 +24,25 @@ class ActivityGrid extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scrollController = useScrollController();
+    final canScrollLeft = useState(false);
+    final canScrollRight = useState(true);
+    final lastToastedActivity = useRef<Activity?>(null);
 
     useAsyncEffect(() async {
-      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scrollController.hasClients) {
+          scrollController.jumpTo(scrollController.position.maxScrollExtent);
+          _updateScrollState(scrollController, canScrollLeft, canScrollRight);
+        }
+      });
 
-      return null;
+      void listener() {
+        _updateScrollState(scrollController, canScrollLeft, canScrollRight);
+      }
+
+      scrollController.addListener(listener);
+
+      return () => scrollController.removeListener(listener);
     }, []);
 
     final endDate = Jiffy.now();
@@ -37,45 +54,189 @@ class ActivityGrid extends HookWidget {
     final weekCount = ((endDate.diff(startDate, unit: Unit.day) + 1) / 7).ceil();
     final totalWidth = weekCount * (cellSize + cellGap) - cellGap;
 
-    return SingleChildScrollView(
-      controller: scrollController,
-      scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: totalWidth,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: labelHeight,
-              child: Row(
-                children: [
-                  for (final span in monthSpans)
-                    if (span.end - span.start > 1)
-                      SizedBox(
-                        width: (span.end - span.start + 1) * (cellSize + cellGap) - cellGap,
-                        child: Center(
-                          child: Text(
-                            '${span.month}월',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: context.colors.textFaint,
-                            ),
-                          ),
-                        ),
+    void scrollByMonths(int monthDelta) {
+      if (!scrollController.hasClients) {
+        return;
+      }
+
+      final currentPosition = scrollController.offset;
+      final currentWeekIndex = (currentPosition / (cellSize + cellGap)).floor();
+
+      var currentMonthIndex = 0;
+      for (var i = 0; i < monthSpans.length; i++) {
+        if (monthSpans[i].start <= currentWeekIndex && monthSpans[i].end >= currentWeekIndex) {
+          currentMonthIndex = i;
+          break;
+        }
+        if (monthSpans[i].start > currentWeekIndex) {
+          currentMonthIndex = i - 1;
+          break;
+        }
+      }
+
+      final targetMonthIndex = (currentMonthIndex + monthDelta).clamp(0, monthSpans.length - 1);
+      final targetWeekIndex = monthSpans[targetMonthIndex].start;
+      final targetPosition = targetWeekIndex * (cellSize + cellGap);
+
+      unawaited(
+        scrollController.animateTo(
+          targetPosition.clamp(0.0, scrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+
+    void scrollLeft() => scrollByMonths(-2);
+    void scrollRight() => scrollByMonths(2);
+
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          controller: scrollController,
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const Pad(horizontal: 16),
+          child: SizedBox(
+            width: totalWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragUpdate: (details) {
+                    scrollController.jumpTo(
+                      (scrollController.offset - details.delta.dx).clamp(
+                        0.0,
+                        scrollController.position.maxScrollExtent,
                       ),
-                ],
+                    );
+                  },
+                  child: SizedBox(
+                    height: labelHeight,
+                    child: Row(
+                      children: [
+                        for (final span in monthSpans)
+                          if (span.end - span.start > 1)
+                            GestureDetector(
+                              onTap: () {
+                                final monthWidth = (span.end - span.start + 1) * (cellSize + cellGap) - cellGap;
+                                final monthStartPosition = span.start * (cellSize + cellGap);
+                                final monthCenterPosition = monthStartPosition + (monthWidth / 2);
+
+                                final viewportWidth = scrollController.position.viewportDimension;
+
+                                final targetPosition = monthCenterPosition - (viewportWidth / 2);
+
+                                unawaited(
+                                  scrollController.animateTo(
+                                    targetPosition.clamp(0.0, scrollController.position.maxScrollExtent),
+                                    duration: const Duration(milliseconds: 200),
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                );
+                              },
+                              child: SizedBox(
+                                width: (span.end - span.start + 1) * (cellSize + cellGap) - cellGap,
+                                child: Center(
+                                  child: Text(
+                                    '${span.month}월',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: context.colors.textFaint,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: cellGap),
+                _buildActivityGrid(context, activities, lastToastedActivity, scrollController),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: AnimatedOpacity(
+            opacity: canScrollLeft.value ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 100),
+            child: IgnorePointer(
+              ignoring: !canScrollLeft.value,
+              child: Tappable(
+                onTap: scrollLeft,
+                child: Container(
+                  padding: const Pad(horizontal: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        context.theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
+                        context.theme.scaffoldBackgroundColor.withValues(alpha: 0),
+                      ],
+                      stops: const [0.3, 1],
+                    ),
+                  ),
+                  child: Center(child: Icon(Icons.chevron_left, size: 20, color: context.colors.textSubtle)),
+                ),
               ),
             ),
-            const SizedBox(height: cellGap),
-            _buildActivityGrid(context, activities),
-          ],
+          ),
         ),
-      ),
+        Positioned(
+          right: 0,
+          top: 0,
+          bottom: 0,
+          child: AnimatedOpacity(
+            opacity: canScrollRight.value ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 100),
+            child: IgnorePointer(
+              ignoring: !canScrollRight.value,
+              child: Tappable(
+                onTap: scrollRight,
+                child: Container(
+                  padding: const Pad(horizontal: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        context.theme.scaffoldBackgroundColor.withValues(alpha: 0),
+                        context.theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
+                      ],
+                      stops: const [0, 0.7],
+                    ),
+                  ),
+                  child: Center(child: Icon(Icons.chevron_right, size: 20, color: context.colors.textSubtle)),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildActivityGrid(BuildContext context, List<Activity> activities) {
+  void _updateScrollState(
+    ScrollController controller,
+    ValueNotifier<bool> canScrollLeft,
+    ValueNotifier<bool> canScrollRight,
+  ) {
+    if (controller.hasClients) {
+      canScrollLeft.value = controller.offset > 0;
+      canScrollRight.value = controller.offset < controller.position.maxScrollExtent;
+    }
+  }
+
+  Widget _buildActivityGrid(
+    BuildContext context,
+    List<Activity> activities,
+    ObjectRef<Activity?> lastToastedActivity,
+    ScrollController scrollController,
+  ) {
     final weeks = <List<Activity>>[];
     final weekCount = (activities.length / 7).ceil();
 
@@ -90,30 +251,73 @@ class ActivityGrid extends HookWidget {
       weeks.add(weekActivities);
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (int week = 0; week < weeks.length; week++)
-          Padding(
-            padding: EdgeInsets.only(right: week < weeks.length - 1 ? cellGap : 0),
-            child: Column(
-              children: [
-                for (int day = 0; day < 7; day++)
-                  if (day < weeks[week].length)
-                    Padding(
-                      padding: EdgeInsets.only(bottom: day < 6 ? cellGap : 0),
-                      child: weeks[week][day].level == -1
-                          ? const SizedBox(width: cellSize, height: cellSize)
-                          : Tappable(
-                              onTap: () {
-                                final activity = weeks[week][day];
-                                final date = activity.date.format(pattern: 'yyyy년 M월 d일');
-                                final message = activity.additions > 0
-                                    ? '$date에 ${activity.additions.comma}자를 작성했어요'
-                                    : '$date에는 작성한 글이 없어요';
-                                context.toast(ToastType.success, message);
-                              },
-                              child: Container(
+    Activity? getActivityAtPosition(Offset localPosition) {
+      final weekIndex = (localPosition.dx / (cellSize + cellGap)).floor();
+      final dayIndex = (localPosition.dy / (cellSize + cellGap)).floor();
+
+      if (weekIndex >= 0 &&
+          weekIndex < weeks.length &&
+          dayIndex >= 0 &&
+          dayIndex < 7 &&
+          dayIndex < weeks[weekIndex].length) {
+        final activity = weeks[weekIndex][dayIndex];
+        if (activity.level != -1) {
+          return activity;
+        }
+      }
+      return null;
+    }
+
+    void showActivityToast(Activity? activity, {bool force = false}) {
+      if (activity != null && (force || activity != lastToastedActivity.value)) {
+        final date = activity.date.format(pattern: 'yyyy년 M월 d일');
+        final message = activity.additions > 0 ? '$date에 ${activity.additions.comma}자를 작성했어요' : '$date에는 작성한 글이 없어요';
+        context.toast(ToastType.success, message, bottom: 64);
+        lastToastedActivity.value = activity;
+      }
+    }
+
+    void handleDragStart(DragStartDetails details) {
+      final activity = getActivityAtPosition(details.localPosition);
+      showActivityToast(activity, force: true);
+    }
+
+    void handleDragUpdate(DragUpdateDetails details) {
+      final activity = getActivityAtPosition(details.localPosition);
+      showActivityToast(activity);
+    }
+
+    void handleDragEnd(_) {
+      lastToastedActivity.value = null;
+    }
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: handleDragStart,
+      onVerticalDragUpdate: handleDragUpdate,
+      onVerticalDragEnd: handleDragEnd,
+      onPanStart: handleDragStart,
+      onPanUpdate: handleDragUpdate,
+      onPanEnd: handleDragEnd,
+      onTapDown: (details) {
+        final activity = getActivityAtPosition(details.localPosition);
+        showActivityToast(activity, force: true);
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int week = 0; week < weeks.length; week++)
+            Padding(
+              padding: EdgeInsets.only(right: week < weeks.length - 1 ? cellGap : 0),
+              child: Column(
+                children: [
+                  for (int day = 0; day < 7; day++)
+                    if (day < weeks[week].length)
+                      Padding(
+                        padding: EdgeInsets.only(bottom: day < 6 ? cellGap : 0),
+                        child: weeks[week][day].level == -1
+                            ? const SizedBox(width: cellSize, height: cellSize)
+                            : Container(
                                 width: cellSize,
                                 height: cellSize,
                                 decoration: BoxDecoration(
@@ -121,12 +325,12 @@ class ActivityGrid extends HookWidget {
                                   borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
-                            ),
-                    ),
-              ],
+                      ),
+                ],
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
