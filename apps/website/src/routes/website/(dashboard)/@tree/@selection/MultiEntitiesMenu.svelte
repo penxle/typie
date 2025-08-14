@@ -2,9 +2,11 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
+  import BlendIcon from '~icons/lucide/blend';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import InfoIcon from '~icons/lucide/info';
@@ -21,6 +23,8 @@
 
   let { treeState }: Props = $props();
 
+  const app = getAppContext();
+
   const deleteEntities = graphql(`
     mutation DashboardLayout_EntityTree_MultiEntitiesMenu_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
       deleteEntities(input: $input) {
@@ -35,9 +39,9 @@
     }
   `);
 
-  let folderCount = $state(0);
-  let postCount = $state(0);
-  let canvasCount = $state(0);
+  let folderIds = $state<string[]>([]);
+  let postIds = $state<string[]>([]);
+  let canvasIds = $state<string[]>([]);
 
   onMount(async () => {
     const entityIds = new Set(treeState.selectedEntityIds);
@@ -46,15 +50,15 @@
       entities.forEach((entity) => {
         if (entity.type === 'Folder') {
           if (entityIds.has(entity.id)) {
-            folderCount++;
+            folderIds.push(entity.id);
           }
 
           collect(entity.children ?? []);
         } else if (entityIds.has(entity.id)) {
           if (entity.type === 'Post') {
-            postCount++;
+            postIds.push(entity.id);
           } else if (entity.type === 'Canvas') {
-            canvasCount++;
+            canvasIds.push(entity.id);
           }
         }
       });
@@ -66,28 +70,52 @@
 
 <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', fontWeight: 'medium' })}>
   <div class={flex({ alignItems: 'center', gap: '8px' })}>
-    {#if folderCount > 0}
+    {#if folderIds.length > 0}
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={14} />
-        {folderCount}개
+        {folderIds.length}개
       </div>
     {/if}
-    {#if postCount > 0}
+    {#if postIds.length > 0}
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
-        {postCount}개
+        {postIds.length}개
       </div>
     {/if}
-    {#if canvasCount > 0}
+    {#if canvasIds.length > 0}
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={LineSquiggleIcon} size={14} />
-        {canvasCount}개
+        {canvasIds.length}개
       </div>
     {/if}
   </div>
 </div>
 
 <HorizontalDivider color="secondary" />
+
+{#if folderIds.length > 0}
+  <MenuItem
+    icon={BlendIcon}
+    onclick={() => {
+      app.state.shareOpen = folderIds;
+      mixpanel.track('open_folder_share_modal', { via: 'multi_entities_menu', count: folderIds.length });
+    }}
+  >
+    폴더 {folderIds.length}개 공유 및 게시
+  </MenuItem>
+{/if}
+
+{#if postIds.length > 0}
+  <MenuItem
+    icon={BlendIcon}
+    onclick={() => {
+      app.state.shareOpen = postIds;
+      mixpanel.track('open_post_share_modal', { via: 'multi_entities_menu', count: postIds.length });
+    }}
+  >
+    포스트 {postIds.length}개 공유 및 게시
+  </MenuItem>
+{/if}
 
 <MenuItem
   icon={TrashIcon}
@@ -138,9 +166,9 @@
     <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
     <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
       {[
-        folderCount > 0 && `${folderCount}개의 폴더`,
-        postCount > 0 && `${postCount}개의 포스트`,
-        canvasCount > 0 && `${canvasCount}개의 캔버스`,
+        folderIds.length > 0 && `${folderIds.length}개의 폴더`,
+        postIds.length > 0 && `${postIds.length}개의 포스트`,
+        canvasIds.length > 0 && `${canvasIds.length}개의 캔버스`,
       ]
         .filter(Boolean)
         .join(', ')}가 삭제돼요

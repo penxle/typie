@@ -16,13 +16,13 @@
   import type { DashboardLayout_Share_Folder_folder } from '$graphql';
 
   type Props = {
-    $folder: DashboardLayout_Share_Folder_folder;
+    $folders: DashboardLayout_Share_Folder_folder[];
   };
 
-  let { $folder: _folder }: Props = $props();
+  let { $folders: _folders }: Props = $props();
 
-  const folder = fragment(
-    _folder,
+  const folders = fragment(
+    _folders,
     graphql(`
       fragment DashboardLayout_Share_Folder_folder on Folder {
         id
@@ -30,16 +30,19 @@
 
         entity {
           id
-          url
           visibility
+          url
         }
       }
     `),
   );
 
-  const updateFolderOption = graphql(`
-    mutation DashboardLayout_Share_Folder_UpdateFolderOption_Mutation($input: UpdateFolderOptionInput!) {
-      updateFolderOption(input: $input) {
+  const isSingleFolder = $derived($folders.length === 1);
+  const folderIds = $derived($folders.map((f) => f.id));
+
+  const updateFoldersOption = graphql(`
+    mutation DashboardLayout_Share_Folder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
+      updateFoldersOption(input: $input) {
         id
 
         entity {
@@ -77,15 +80,25 @@
     }),
     submitOn: 'change',
     onSubmit: async (data) => {
-      await updateFolderOption({
-        folderId: $folder.id,
-        visibility: data.visibility,
-      });
+      if ($folders.length === 0) return;
 
-      mixpanel.track('update_folder_option', { visibility: data.visibility });
+      const dirtyFields = form.getDirtyFields();
+      const updateData: {
+        folderIds: string[];
+        visibility?: EntityVisibility;
+      } = { folderIds };
+
+      if ('visibility' in dirtyFields) {
+        updateData.visibility = data.visibility;
+      }
+
+      if (Object.keys(updateData).length > 1) {
+        await updateFoldersOption(updateData);
+        mixpanel.track('update_folder_option', { visibility: data.visibility, count: folderIds.length });
+      }
     },
     defaultValues: {
-      visibility: $folder.entity.visibility,
+      visibility: $folders[0].entity.visibility,
     },
   });
 
@@ -101,9 +114,16 @@
     };
   });
 
+  const visibilityIndeterminate = $derived(
+    $folders.length > 1 && $folders.some((f) => f.entity.visibility !== $folders[0].entity.visibility),
+  );
+
   const handleCopyLink = () => {
-    navigator.clipboard.writeText($folder.entity.url);
-    mixpanel.track('copy_folder_share_url');
+    if ($folders.length === 0) return;
+
+    const urls = $folders.map((f) => f.entity.url).join('\n');
+    navigator.clipboard.writeText(urls);
+    mixpanel.track('copy_folder_share_url', { count: $folders.length });
 
     if (timer) {
       clearTimeout(timer);
@@ -116,7 +136,9 @@
 
 <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '16px', paddingY: '12px' })}>
   <div class={flex({ gap: '[0.5ch]', fontSize: '12px', fontWeight: 'medium' })}>
-    <span class={css({ wordBreak: 'break-all', lineClamp: '1' })}>{$folder.name}</span>
+    <span class={css({ wordBreak: 'break-all', lineClamp: '1', fontWeight: 'semibold' })}>
+      {isSingleFolder ? $folders[0].name : `${$folders.length}개의 폴더`}
+    </span>
     <span class={css({ flexShrink: '0' })}>공유 및 게시하기</span>
   </div>
 
@@ -125,8 +147,9 @@
     onclick={handleCopyLink}
     type="button"
     use:tooltip={{
-      message:
-        form.fields.visibility === EntityVisibility.PRIVATE
+      message: visibilityIndeterminate
+        ? null
+        : form.fields.visibility === EntityVisibility.PRIVATE
           ? '지금은 링크가 있어도 나만 볼 수 있어요'
           : '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 포스트를 볼 수 있어요',
       placement: 'top',
@@ -138,7 +161,9 @@
       <div class={css({ fontSize: '12px', color: 'text.link' })}>복사되었어요</div>
     {:else}
       <Icon style={css.raw({ color: 'text.link' })} icon={LinkIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'text.link' })}>게시 링크 복사</div>
+      <div class={css({ fontSize: '12px', color: 'text.link' })}>
+        {isSingleFolder ? '게시 링크 복사' : '게시 링크 모두 복사'}
+      </div>
     {/if}
   </button>
 </div>
@@ -170,6 +195,7 @@
             value: EntityVisibility.PRIVATE,
           },
         ]}
+        values={$folders.map((f) => f.entity.visibility)}
         bind:value={form.fields.visibility}
       />
     </div>
@@ -189,7 +215,7 @@
 
         recursiveState = 'inflight';
 
-        await updateFolderOption({ folderId: $folder.id, visibility: form.fields.visibility, recursive: true });
+        await updateFoldersOption({ folderIds, visibility: form.fields.visibility, recursive: true });
 
         recursiveState = 'success';
         mixpanel.track('update_folder_option', { visibility: form.fields.visibility, recursive: true });

@@ -6,10 +6,11 @@
   import Folder from './Folder.svelte';
   import Post from './Post.svelte';
 
-  const query = graphql(`
-    query DashboardLayout_ShareModal_Query($entityId: ID!) @client {
-      entity(entityId: $entityId) {
+  const entitiesQuery = graphql(`
+    query DashboardLayout_ShareModal_Query($entityIds: [ID!]!) @client {
+      entities(entityIds: $entityIds) {
         id
+        type
 
         node {
           __typename
@@ -34,9 +35,10 @@
   let loaded = $state(false);
 
   const load = async () => {
-    if (app.state.shareOpen) {
-      loaded = false;
-      await query.load({ entityId: app.state.shareOpen });
+    loaded = false;
+
+    if (app.state.shareOpen.length > 0) {
+      await entitiesQuery.load({ entityIds: app.state.shareOpen });
       loaded = true;
     }
   };
@@ -50,20 +52,22 @@
   style={css.raw({
     maxWidth: '400px',
   })}
-  loading={!loaded || !query}
+  loading={!loaded}
   onclose={() => {
-    app.state.shareOpen = false;
+    app.state.shareOpen = [];
     loaded = false;
   }}
-  open={!!app.state.shareOpen}
+  open={app.state.shareOpen.length > 0}
 >
-  {#if loaded && $query}
-    {#key $query.entity.id}
-      {#if $query.entity.node.__typename === 'Post'}
-        <Post $post={$query.entity.node} />
-      {:else if $query.entity.node.__typename === 'Folder'}
-        <Folder $folder={$query.entity.node} />
-      {/if}
-    {/key}
+  {#if loaded && $entitiesQuery}
+    {@const entities = $entitiesQuery.entities}
+    {@const allFolders = entities.every((e) => e.type === 'FOLDER')}
+    {@const allPosts = entities.every((e) => e.type === 'POST')}
+
+    {#if allFolders}
+      <Folder $folders={$entitiesQuery.entities.map((e) => e.node).filter((e) => e.__typename === 'Folder')} />
+    {:else if allPosts}
+      <Post $posts={$entitiesQuery.entities.map((e) => e.node).filter((e) => e.__typename === 'Post')} />
+    {/if}
   {/if}
 </Modal>
