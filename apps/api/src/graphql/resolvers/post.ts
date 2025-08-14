@@ -828,7 +828,7 @@ builder.mutationFields((t) => ({
       }
 
       const updatedPostIds = await db.transaction(async (tx) => {
-        if (!!input.availability || !!input.visibility) {
+        if (input.availability || input.visibility) {
           await tx
             .update(Entities)
             .set({
@@ -843,7 +843,7 @@ builder.mutationFields((t) => ({
             );
         }
 
-        if (!!input.contentRating || !!input.allowReaction || !!input.protectContent) {
+        if (input.contentRating || input.allowReaction || input.protectContent) {
           return await tx
             .update(Posts)
             .set({

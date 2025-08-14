@@ -489,7 +489,7 @@ builder.mutationFields((t) => ({
       });
 
       if (folders.some((folder) => folder.siteId !== siteId)) {
-        throw new TypieError({ code: 'invalid_argument' });
+        throw new TypieError({ code: 'site_mismatch' });
       }
 
       if (!input.visibility) {
