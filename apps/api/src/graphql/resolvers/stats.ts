@@ -135,14 +135,13 @@ builder.queryField('stats', (t) =>
 
           const response = await aws.costExplorer.send(command);
 
-          if (!response.ResultsByTime?.[0]?.Total?.BlendedCost?.Amount) {
-            throw new Error('Cost Explorer response invalid');
-          }
+          const total = response.ResultsByTime?.reduce((acc, curr) => {
+            return acc + Number.parseFloat(curr.Total?.BlendedCost?.Amount ?? '0');
+          }, 0);
 
-          const usdAmount = Number.parseFloat(response.ResultsByTime[0].Total.BlendedCost.Amount);
           const usdToKrw = await getUsdToKrwRate();
 
-          return Math.round(usdAmount * usdToKrw);
+          return Math.round((total ?? 0) * usdToKrw);
         } catch {
           return 0;
         }
@@ -268,7 +267,7 @@ builder.queryField('stats', (t) =>
             date_series.date::text as date,
             COALESCE(SUM(active_sub.monthly_fee), 0)::int as value
           FROM date_series
-          LEFT JOIN active_subscriptions active_sub ON active_sub.starts_at <= date_series.date
+          LEFT JOIN active_subscriptions active_sub ON active_sub.starts_at <= (date_series.date + interval '1 day')
             AND active_sub.expires_at >= date_series.date
           GROUP BY date_series.date
           ORDER BY date_series.date
@@ -283,7 +282,7 @@ builder.queryField('stats', (t) =>
             date_series.date::text as date,
             COALESCE(COUNT(${Subscriptions.id}), 0)::int as value
           FROM date_series
-          LEFT JOIN ${Subscriptions} ON ${Subscriptions.startsAt} <= date_series.date
+          LEFT JOIN ${Subscriptions} ON ${Subscriptions.startsAt} <= (date_series.date + interval '1 day')
             AND ${Subscriptions.expiresAt} >= date_series.date
             AND ${Subscriptions.state} IN (${SubscriptionState.ACTIVE}, ${SubscriptionState.WILL_EXPIRE}, ${SubscriptionState.IN_GRACE_PERIOD})
           GROUP BY date_series.date
