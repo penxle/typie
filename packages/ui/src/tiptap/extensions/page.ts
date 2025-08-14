@@ -89,7 +89,7 @@ export const Page = Extension.create<unknown, PageStorage>({
               return { decorations: DecorationSet.empty, pages: 0 };
             }
 
-            if (!editor.view?.dom?.isConnected) {
+            if (!editor.view || !('dom' in editor.view)) {
               return {
                 decorations: value.decorations.map(tr.mapping, tr.doc),
                 pages: value.pages,
