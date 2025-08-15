@@ -92,7 +92,7 @@ class ProfileScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     color: context.colors.surfaceDefault,
                   ),
-                  padding: const Pad(vertical: 16),
+                  padding: const Pad(top: 16, bottom: 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     spacing: 12,
