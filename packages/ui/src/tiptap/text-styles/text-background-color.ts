@@ -32,6 +32,10 @@ export const TextBackgroundColor = Extension.create({
             parseHTML: (element) => {
               const value = element.style.backgroundColor;
 
+              if (!value || value === 'transparent' || value === 'rgba(0, 0, 0, 0)') {
+                return null;
+              }
+
               const match = value.match(/var\(--colors-prosemirror\\?\\.bg\\?\\.([^)]+)\)/);
               if (match) {
                 const name = match[1] as TextBackgroundColor;
