@@ -74,6 +74,7 @@
       state: serializeOAuthState({
         redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
         state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+        referral_code: page.url.searchParams.get('r'),
       }),
     });
 

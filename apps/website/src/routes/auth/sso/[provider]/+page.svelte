@@ -19,6 +19,9 @@
   `);
 
   onMount(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const { referral_code } = deserializeOAuthState(page.url.searchParams.get('state')!);
+
     const resp = await authorizeSingleSignOn({
       provider: match(page.params.provider)
         .with('google', () => SingleSignOnProvider.GOOGLE)
@@ -26,6 +29,7 @@
         .with('naver', () => SingleSignOnProvider.NAVER)
         .run(),
       params: Object.fromEntries(page.url.searchParams),
+      referralCode: referral_code,
     });
 
     location.href = qs.stringifyUrl({
