@@ -273,6 +273,14 @@ User.implement({
         return await db.select().from(Referrals).where(eq(Referrals.referrerId, self.id)).orderBy(desc(Referrals.createdAt));
       },
     }),
+
+    referral: t.field({
+      type: Referral,
+      nullable: true,
+      resolve: async (self) => {
+        return await db.select().from(Referrals).where(eq(Referrals.refereeId, self.id)).then(first);
+      },
+    }),
   }),
 });
 
