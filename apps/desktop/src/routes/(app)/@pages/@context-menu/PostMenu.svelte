@@ -4,12 +4,13 @@
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
-  import { comma } from '@typie/ui/utils';
+  import { comma, downloadFromBase64 } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
   import { TypieError } from '@/errors';
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
+  import DownloadIcon from '~icons/lucide/download';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import InfoIcon from '~icons/lucide/info';
   import ShapesIcon from '~icons/lucide/shapes';
@@ -34,6 +35,8 @@
   };
 
   let { post, entity, via }: Props = $props();
+
+  let isExporting = $state(false);
 
   const duplicatePost = graphql(`
     mutation PostMenu_DuplicatePost_Mutation($input: DuplicatePostInput!) {
@@ -93,6 +96,15 @@
     }
   `);
 
+  const exportPostAsPdf = graphql(`
+    mutation PostMenu_ExportPostAsPdf_Mutation($input: ExportPostAsPdfInput!) {
+      exportPostAsPdf(input: $input) {
+        data
+        filename
+      }
+    }
+  `);
+
   const app = getAppContext();
 
   const handleDuplicate = async () => {
@@ -141,6 +153,42 @@
       },
     });
   };
+
+  const handleExport = async () => {
+    if (isExporting) return;
+
+    isExporting = true;
+    try {
+      const pageLayoutEnabled = app.preference.current.experimental_pageEnabled;
+      const pageLayoutId = app.preference.current.experimental_pageLayoutId;
+      const pageLayout =
+        pageLayoutEnabled && pageLayoutId
+          ? pageLayoutId === 'a4'
+            ? { width: 210, height: 297, marginTop: 25, marginBottom: 25, marginLeft: 25, marginRight: 25 }
+            : pageLayoutId === 'a5'
+              ? { width: 148, height: 210, marginTop: 20, marginBottom: 20, marginLeft: 20, marginRight: 20 }
+              : pageLayoutId === 'b5'
+                ? { width: 176, height: 250, marginTop: 15, marginBottom: 15, marginLeft: 15, marginRight: 15 }
+                : pageLayoutId === 'b6'
+                  ? { width: 125, height: 176, marginTop: 10, marginBottom: 10, marginLeft: 10, marginRight: 10 }
+                  : null
+          : null;
+
+      const resp = await exportPostAsPdf({
+        entityId: entity.id,
+        ...pageLayout,
+      });
+
+      downloadFromBase64(resp.data, resp.filename, 'application/pdf');
+
+      Toast.success('PDF 내보내기가 완료되었어요');
+      mixpanel.track('export_post', { via, format: 'PDF' });
+    } catch {
+      Toast.error('내보내기 중 오류가 발생했습니다');
+    } finally {
+      isExporting = false;
+    }
+  };
 </script>
 
 {#snippet deleteDetailsView()}
@@ -181,6 +229,12 @@
   <MenuItem icon={ShapesIcon} onclick={() => handleTypeChange(PostType.TEMPLATE)}>템플릿으로 전환</MenuItem>
 {:else if post.type === PostType.TEMPLATE}
   <MenuItem icon={ShapesIcon} onclick={() => handleTypeChange(PostType.NORMAL)}>포스트로 전환</MenuItem>
+{/if}
+
+{#if app.preference.current.experimental_pdfExportEnabled}
+  <HorizontalDivider color="secondary" />
+
+  <MenuItem icon={DownloadIcon} loading={isExporting} onclick={handleExport}>PDF로 내보내기</MenuItem>
 {/if}
 
 <HorizontalDivider color="secondary" />

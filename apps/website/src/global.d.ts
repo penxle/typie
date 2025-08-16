@@ -25,6 +25,7 @@ declare global {
 
   interface Window {
     __webview__?: WebView;
+    notifyExportReady?: () => void;
   }
 
   interface Node {
