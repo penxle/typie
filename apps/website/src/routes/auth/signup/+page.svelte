@@ -61,6 +61,7 @@
           state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
         }),
         marketingAgreed: data.marketingAgreed ?? false,
+        referralCode: page.url.searchParams.get('r'),
       });
 
       mixpanel.track('send_sign_up_email');

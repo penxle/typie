@@ -8,7 +8,19 @@ import ky from 'ky';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import { redis } from '@/cache';
-import { db, first, firstOrThrow, Images, UserMarketingConsents, Users, UserSessions, UserSingleSignOns } from '@/db';
+import {
+  db,
+  first,
+  firstOrThrow,
+  Images,
+  ReferralCodes,
+  Referrals,
+  UserMarketingConsents,
+  UserPaymentCredits,
+  Users,
+  UserSessions,
+  UserSingleSignOns,
+} from '@/db';
 import { sendEmail } from '@/email';
 import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
 import { SingleSignOnProvider, UserState } from '@/enums';
@@ -68,6 +80,7 @@ builder.mutationFields((t) => ({
       name: t.input.string(),
       state: t.input.string(),
       marketingAgreed: t.input.boolean(),
+      referralCode: t.input.string({ required: false }),
     },
     resolve: async (_, { input }) => {
       const email = input.email.toLowerCase();
@@ -93,6 +106,7 @@ builder.mutationFields((t) => ({
           name: input.name,
           state: input.state,
           marketingAgreed: input.marketingAgreed,
+          referralCode: input.referralCode,
         }),
       );
 
@@ -117,7 +131,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_code' });
       }
 
-      const { email, password, name, state, marketingAgreed } = JSON.parse(data);
+      const { email, password, name, state, marketingAgreed, referralCode } = JSON.parse(data);
 
       const existingUser = await db
         .select({ id: Users.id })
@@ -137,6 +151,7 @@ builder.mutationFields((t) => ({
           email,
           name,
           avatarId: avatar.id,
+          referralCode,
         });
 
         await tx.update(Users).set({ password }).where(eq(Users.id, user.id));
@@ -180,6 +195,7 @@ builder.mutationFields((t) => ({
     input: {
       provider: t.input.field({ type: SingleSignOnProvider }),
       params: t.input.field({ type: 'JSON' }),
+      referralCode: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const externalUser = await match(input.provider)
@@ -234,6 +250,7 @@ builder.mutationFields((t) => ({
           email: externalUser.email,
           name: externalUser.name ?? generateRandomName(),
           avatarId: avatar.id,
+          referralCode: input.referralCode ?? undefined,
         });
 
         await tx.insert(UserSingleSignOns).values({
@@ -336,8 +353,8 @@ const createSession = async (ctx: UserContext, userId: string) => {
   });
 };
 
-type CreateUserParams = { email: string; name: string; avatarId: string };
-const createUser = async (tx: Transaction, { email, name: _name, avatarId }: CreateUserParams) => {
+type CreateUserParams = { email: string; name: string; avatarId: string; referralCode?: string };
+const createUser = async (tx: Transaction, { email, name: _name, avatarId, referralCode }: CreateUserParams) => {
   const name = _name.trim().slice(0, 20);
 
   const user = await tx.insert(Users).values({ email, name, avatarId }).returning({ id: Users.id }).then(firstOrThrow);
@@ -381,6 +398,19 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId }: Cre
       },
     }),
   );
+
+  if (referralCode) {
+    const referrer = await tx
+      .select({ userId: ReferralCodes.userId })
+      .from(ReferralCodes)
+      .where(eq(ReferralCodes.code, referralCode))
+      .then(first);
+
+    if (referrer) {
+      await tx.insert(Referrals).values({ referrerId: referrer.userId, refereeId: user.id });
+      await tx.insert(UserPaymentCredits).values({ userId: user.id, amount: 4900 });
+    }
+  }
 
   return user;
 };

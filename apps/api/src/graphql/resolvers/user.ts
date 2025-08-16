@@ -15,6 +15,7 @@ import {
   PaymentInvoices,
   PostCharacterCountChanges,
   Posts,
+  ReferralCodes,
   Sites,
   Subscriptions,
   TableCode,
@@ -630,6 +631,28 @@ builder.mutationFields((t) => ({
         .where(eq(Users.id, ctx.session.userId))
         .returning()
         .then(firstOrThrow);
+    },
+  }),
+
+  issueReferralUrl: t.withAuth({ session: true }).field({
+    type: 'String',
+    resolve: async (_, __, ctx) => {
+      const host = env.USERSITE_URL.replace('*.', '');
+
+      const existingCode = await db
+        .select({ code: ReferralCodes.code })
+        .from(ReferralCodes)
+        .where(eq(ReferralCodes.userId, ctx.session.userId))
+        .then(first);
+
+      if (existingCode) {
+        return `${host}/r/${existingCode.code}`;
+      }
+
+      const code = nanoid(6);
+      await db.insert(ReferralCodes).values({ userId: ctx.session.userId, code });
+
+      return `${host}/r/${code}`;
     },
   }),
 }));

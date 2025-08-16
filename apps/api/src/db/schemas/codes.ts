@@ -29,6 +29,8 @@ export const TableCode = {
   POST_REACTIONS: 'PR',
   PREORDER_PAYMENTS: 'PP',
   PREORDER_USERS: 'PU',
+  REFERRALS: 'RFR',
+  REFERRAL_CODES: 'RFRC',
   SITES: 'S',
   SUBSCRIPTIONS: 'SUB',
   USERS: 'U',
