@@ -51,7 +51,7 @@
       indeterminate: {
         true: {
           justifyContent: 'center',
-          backgroundColor: 'accent.brand.subtle',
+          backgroundColor: '[color-mix(in srgb, {colors.accent.brand.default}, {colors.surface.default})]',
           _after: {
             width: '1/2',
             aspectRatio: '1/1',
