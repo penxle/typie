@@ -504,6 +504,38 @@ export const PreorderUsers = pgTable('preorder_users', {
     .default(sql`now()`),
 });
 
+export const Referrals = pgTable('referrals', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.REFERRALS)),
+  referrerId: text('referrer_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  refereeId: text('referee_id')
+    .unique()
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  referrerCompensatedAt: datetime('referrer_compensated_at'),
+  refereeCompensatedAt: datetime('referee_compensated_at'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const ReferralCodes = pgTable('referral_codes', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.REFERRAL_CODES)),
+  userId: text('user_id')
+    .unique()
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  code: text('code').notNull().unique(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Sites = pgTable(
   'sites',
   {
@@ -590,6 +622,7 @@ export const UserBillingKeys = pgTable('user_billing_keys', {
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
   billingKey: text('billing_key').unique().notNull(),
+  cardNumberHash: text('card_number_hash'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

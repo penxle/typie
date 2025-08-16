@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import dayjs from 'dayjs';
 import { and, eq, gt, inArray, ne } from 'drizzle-orm';
 import { defaultPlanRules } from '@/const';
@@ -155,6 +156,7 @@ builder.mutationFields((t) => ({
             userId: ctx.session.userId,
             name: `${result.cardName} ${input.cardNumber.slice(-4)}`,
             billingKey: result.billingKey,
+            cardNumberHash: createHash('sha256').update(input.cardNumber).digest('hex'),
           })
           .returning()
           .then(firstOrThrow);

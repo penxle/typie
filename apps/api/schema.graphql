@@ -33,6 +33,7 @@ input AuthorizeSignUpEmailInput {
 input AuthorizeSingleSignOnInput {
   params: JSON!
   provider: SingleSignOnProvider!
+  referralCode: String
 }
 
 scalar Binary
@@ -428,6 +429,7 @@ type Mutation {
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
+  issueReferralUrl: String!
   loginWithEmail(input: LoginWithEmailInput!): Boolean!
   markAllNotificationsAsRead: [Notification!]!
   markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
@@ -770,6 +772,7 @@ input SendSignUpEmailInput {
   marketingAgreed: Boolean!
   name: String!
   password: String!
+  referralCode: String
   state: String!
 }
 
