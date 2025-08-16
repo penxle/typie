@@ -162,12 +162,23 @@ export const Clipboard = Extension.create({
               return true;
             },
             paste: (view, event) => {
-              const html = event.clipboardData?.getData('application/x-pm-html');
-              if (html) {
+              const pmHtml = event.clipboardData?.getData('application/x-pm-html');
+              if (pmHtml) {
                 event.preventDefault();
+                view.pasteHTML(pmHtml);
+                return true;
+              }
 
+              let html = event.clipboardData?.getData('text/html');
+              if (html) {
+                const isGoogleDocs = event.clipboardData?.types.includes('application/x-vnd.google-docs-document-slice-clip+wrapped');
+
+                if (isGoogleDocs) {
+                  html = html.replaceAll(/<meta[^>]*>/g, '').replace(/<b\s+[^>]*id="docs-internal-guid[^"]*"[^>]*>(.*?)<\/b>/s, '$1');
+                }
+
+                event.preventDefault();
                 view.pasteHTML(html);
-
                 return true;
               }
 
