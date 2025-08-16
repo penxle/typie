@@ -236,6 +236,7 @@
 
   let syncUpdateTimeout: NodeJS.Timeout | null = null;
   let pendingUpdate: Uint8Array | null = null;
+  let lastSyncTime = Date.now();
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote' && postId) {
@@ -249,26 +250,48 @@
         clearTimeout(syncUpdateTimeout);
       }
 
-      syncUpdateTimeout = setTimeout(async () => {
-        if (pendingUpdate && postId) {
-          await syncPost(
-            {
-              clientId,
-              postId,
-              type: PostSyncType.UPDATE,
-              data: base64.stringify(pendingUpdate),
-            },
-            { transport: 'ws' },
-          );
+      const timeSinceLastSync = Date.now() - lastSyncTime;
+      const shouldForceSync = timeSinceLastSync >= 100;
 
-          pendingUpdate = null;
-        }
-      }, 1000);
+      if (shouldForceSync && pendingUpdate) {
+        await syncPost(
+          {
+            clientId,
+            postId,
+            type: PostSyncType.UPDATE,
+            data: base64.stringify(pendingUpdate),
+          },
+          { transport: 'ws' },
+        );
+
+        pendingUpdate = null;
+        lastSyncTime = Date.now();
+      } else {
+        const remainingTime = Math.max(0, 100 - timeSinceLastSync);
+
+        syncUpdateTimeout = setTimeout(async () => {
+          if (pendingUpdate && postId) {
+            await syncPost(
+              {
+                clientId,
+                postId,
+                type: PostSyncType.UPDATE,
+                data: base64.stringify(pendingUpdate),
+              },
+              { transport: 'ws' },
+            );
+
+            pendingUpdate = null;
+            lastSyncTime = Date.now();
+          }
+        }, remainingTime);
+      }
     }
   });
 
   let syncAwarenessTimeout: NodeJS.Timeout | null = null;
   let pendingAwarenessStates: { added: number[]; updated: number[]; removed: number[] } | null = null;
+  let lastAwarenessSyncTime = Date.now();
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
     if (browser && origin !== 'remote' && postId) {
@@ -286,27 +309,54 @@
         clearTimeout(syncAwarenessTimeout);
       }
 
-      syncAwarenessTimeout = setTimeout(async () => {
-        if (pendingAwarenessStates && postId) {
-          const update = YAwareness.encodeAwarenessUpdate(awareness, [
-            ...pendingAwarenessStates.added,
-            ...pendingAwarenessStates.updated,
-            ...pendingAwarenessStates.removed,
-          ]);
+      const timeSinceLastSync = Date.now() - lastAwarenessSyncTime;
+      const shouldForceSync = timeSinceLastSync >= 100;
 
-          await syncPost(
-            {
-              clientId,
-              postId,
-              type: PostSyncType.AWARENESS,
-              data: base64.stringify(update),
-            },
-            { transport: 'ws' },
-          );
+      if (shouldForceSync && pendingAwarenessStates) {
+        const update = YAwareness.encodeAwarenessUpdate(awareness, [
+          ...pendingAwarenessStates.added,
+          ...pendingAwarenessStates.updated,
+          ...pendingAwarenessStates.removed,
+        ]);
 
-          pendingAwarenessStates = null;
-        }
-      }, 1000);
+        await syncPost(
+          {
+            clientId,
+            postId,
+            type: PostSyncType.AWARENESS,
+            data: base64.stringify(update),
+          },
+          { transport: 'ws' },
+        );
+
+        pendingAwarenessStates = null;
+        lastAwarenessSyncTime = Date.now();
+      } else {
+        const remainingTime = Math.max(0, 100 - timeSinceLastSync);
+
+        syncAwarenessTimeout = setTimeout(async () => {
+          if (pendingAwarenessStates && postId) {
+            const update = YAwareness.encodeAwarenessUpdate(awareness, [
+              ...pendingAwarenessStates.added,
+              ...pendingAwarenessStates.updated,
+              ...pendingAwarenessStates.removed,
+            ]);
+
+            await syncPost(
+              {
+                clientId,
+                postId,
+                type: PostSyncType.AWARENESS,
+                data: base64.stringify(update),
+              },
+              { transport: 'ws' },
+            );
+
+            pendingAwarenessStates = null;
+            lastAwarenessSyncTime = Date.now();
+          }
+        }, remainingTime);
+      }
     }
   });
 
