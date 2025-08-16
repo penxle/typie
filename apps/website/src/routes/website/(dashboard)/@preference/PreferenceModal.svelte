@@ -4,6 +4,7 @@
   import { Icon, Modal } from '@typie/ui/components';
   import CreditCardIcon from '~icons/lucide/credit-card';
   import FlaskConicalIcon from '~icons/lucide/flask-conical';
+  import GiftIcon from '~icons/lucide/gift';
   import KeyboardIcon from '~icons/lucide/keyboard';
   import PanelTopIcon from '~icons/lucide/panel-top';
   import PencilIcon from '~icons/lucide/pencil';
@@ -17,6 +18,7 @@
   import EditorTab from './EditorTab.svelte';
   import IdentityTab from './IdentityTab.svelte';
   import LaboratoryTab from './LaboratoryTab.svelte';
+  import ReferralTab from './ReferralTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
   import SiteTab from './SiteTab.svelte';
   import type { Component } from 'svelte';
@@ -52,6 +54,7 @@
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
         ...DashboardLayout_PreferenceModal_EditorTab_user
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
+        ...DashboardLayout_PreferenceModal_ReferralTab_user
       }
     `),
   );
@@ -90,6 +93,12 @@
       label: '결제',
       icon: CreditCardIcon,
       component: BillingTab,
+    },
+    {
+      path: '/preference/referral',
+      label: '초대',
+      icon: GiftIcon,
+      component: ReferralTab,
     },
     {
       path: '/preference/laboratory',

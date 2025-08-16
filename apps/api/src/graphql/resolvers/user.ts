@@ -16,6 +16,7 @@ import {
   PostCharacterCountChanges,
   Posts,
   ReferralCodes,
+  Referrals,
   Sites,
   Subscriptions,
   TableCode,
@@ -56,6 +57,7 @@ import {
   isTypeOf,
   Notification,
   Post,
+  Referral,
   Site,
   Subscription,
   User,
@@ -264,6 +266,13 @@ User.implement({
         return await getUserUsage({ userId: self.id });
       },
     }),
+
+    referrals: t.field({
+      type: [Referral],
+      resolve: async (self) => {
+        return await db.select().from(Referrals).where(eq(Referrals.referrerId, self.id)).orderBy(desc(Referrals.createdAt));
+      },
+    }),
   }),
 });
 
@@ -294,6 +303,14 @@ UserSingleSignOn.implement({
     id: t.exposeID('id'),
     provider: t.expose('provider', { type: SingleSignOnProvider }),
     email: t.exposeString('email'),
+  }),
+});
+
+Referral.implement({
+  isTypeOf: isTypeOf(TableCode.REFERRALS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    compensated: t.boolean({ resolve: (self) => !!self.referrerCompensatedAt }),
   }),
 });
 
