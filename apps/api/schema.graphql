@@ -971,6 +971,7 @@ type User {
   postCount: Int!
   recentPosts: [Post!]!
   recentlyViewedEntities: [Entity!]!
+  referral: Referral
   referrals: [Referral!]!
   role: UserRole!
   singleSignOns: [UserSingleSignOn!]!

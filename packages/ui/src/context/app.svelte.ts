@@ -24,6 +24,8 @@ type AppPreference = {
 
   experimental_pageEnabled: boolean;
   experimental_pageLayoutId?: string;
+
+  referralWelcomeModalShown: boolean;
 };
 
 type AppState = {
@@ -103,6 +105,8 @@ export const setupAppContext = (userId: string) => {
       searchMatchWholeWord: false,
 
       experimental_pageEnabled: false,
+
+      referralWelcomeModalShown: false,
     }),
     state: appState,
     timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {
