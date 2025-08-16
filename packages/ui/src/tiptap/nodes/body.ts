@@ -48,8 +48,10 @@ export const Body = Node.create({
           this.editor?.isEditable ? 'ProseMirror-editable ProseMirror-body' : 'ProseMirror-body',
           css({
             '[data-layout="page"] &': {
-              paddingTop: 'var(--prosemirror-page-margin)',
-              paddingX: 'var(--prosemirror-page-margin)',
+              paddingTop: 'var(--prosemirror-page-margin-top)',
+              paddingLeft: 'var(--prosemirror-page-margin-left)',
+              paddingBottom: 'var(--prosemirror-page-margin-bottom)',
+              paddingRight: 'var(--prosemirror-page-margin-right)',
             },
             '& > .paragraph-indent, & > .selected-node > .paragraph-indent': {
               textIndent: 'var(--prosemirror-paragraph-indent)',

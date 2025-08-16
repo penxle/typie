@@ -205,14 +205,14 @@
 
   const pageLayout = $derived(
     app.preference.current.experimental_pageLayoutId === 'a4'
-      ? { width: 210, height: 297, margin: 25 }
+      ? { width: 210, height: 297, marginTop: 25, marginBottom: 25, marginLeft: 25, marginRight: 25 }
       : app.preference.current.experimental_pageLayoutId === 'a5'
-        ? { width: 148, height: 210, margin: 20 }
+        ? { width: 148, height: 210, marginTop: 20, marginBottom: 20, marginLeft: 20, marginRight: 20 }
         : app.preference.current.experimental_pageLayoutId === 'b5'
-          ? { width: 176, height: 250, margin: 15 }
+          ? { width: 176, height: 250, marginTop: 15, marginBottom: 15, marginLeft: 15, marginRight: 15 }
           : app.preference.current.experimental_pageLayoutId === 'b6'
-            ? { width: 125, height: 176, margin: 10 }
-            : { width: 210, height: 297, margin: 25 },
+            ? { width: 125, height: 176, marginTop: 10, marginBottom: 10, marginLeft: 10, marginRight: 10 }
+            : { width: 210, height: 297, marginTop: 25, marginBottom: 25, marginLeft: 25, marginRight: 25 },
   );
 
   const persistSelection = () => {
@@ -761,7 +761,18 @@
             style:--prosemirror-max-width={app.preference.current.experimental_pageEnabled
               ? `${mmToPx(pageLayout.width)}px`
               : `${maxWidth.current}px`}
-            style:--prosemirror-page-margin={app.preference.current.experimental_pageEnabled ? `${mmToPx(pageLayout.margin)}px` : '0'}
+            style:--prosemirror-page-margin-top={app.preference.current.experimental_pageEnabled
+              ? `${mmToPx(pageLayout.marginTop)}px`
+              : '0'}
+            style:--prosemirror-page-margin-bottom={app.preference.current.experimental_pageEnabled
+              ? `${mmToPx(pageLayout.marginBottom)}px`
+              : '0'}
+            style:--prosemirror-page-margin-left={app.preference.current.experimental_pageEnabled
+              ? `${mmToPx(pageLayout.marginLeft)}px`
+              : '0'}
+            style:--prosemirror-page-margin-right={app.preference.current.experimental_pageEnabled
+              ? `${mmToPx(pageLayout.marginRight)}px`
+              : '0'}
             style:--prosemirror-padding-bottom={app.preference.current.experimental_pageEnabled
               ? '0'
               : `${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}

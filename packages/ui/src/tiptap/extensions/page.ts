@@ -11,7 +11,10 @@ const GAP_HEIGHT = 40;
 export type PageLayout = {
   width: number;
   height: number;
-  margin: number;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
 };
 
 export type PageStorage = {
@@ -45,9 +48,9 @@ export const Page = Extension.create<unknown, PageStorage>({
   addCommands() {
     return {
       setPageLayout:
-        ({ width, height, margin }) =>
+        ({ width, height, marginTop, marginBottom, marginLeft, marginRight }) =>
         ({ tr, dispatch }) => {
-          this.storage.layout = { width, height, margin };
+          this.storage.layout = { width, height, marginTop, marginBottom, marginLeft, marginRight };
 
           tr.setMeta(key, true);
           dispatch?.(tr);
@@ -158,10 +161,11 @@ const getExistingPageCount = (view: EditorView) => {
 };
 
 const calculatePageCount = (layout: PageLayout, view: EditorView): number => {
-  const { height, margin } = layout;
+  const { height, marginTop, marginBottom } = layout;
   const PAGE_HEIGHT_PX = mmToPx(height);
-  const MARGIN_PX = mmToPx(margin);
-  const CONTENT_HEIGHT = PAGE_HEIGHT_PX - MARGIN_PX * 2;
+  const MARGIN_TOP_PX = mmToPx(marginTop);
+  const MARGIN_BOTTOM_PX = mmToPx(marginBottom);
+  const CONTENT_HEIGHT = PAGE_HEIGHT_PX - MARGIN_TOP_PX - MARGIN_BOTTOM_PX;
 
   const editorDom = view.dom;
   if (!editorDom) return 1;
@@ -196,7 +200,7 @@ const calculatePageCount = (layout: PageLayout, view: EditorView): number => {
         return currentPageCount + addPage;
       } else {
         // NOTE: 마지막 콘텐츠가 마지막 페이지 브레이크보다 위에 있음
-        const minEmptySpace = -(MARGIN_PX * 2 + GAP_HEIGHT);
+        const minEmptySpace = -(MARGIN_TOP_PX + MARGIN_BOTTOM_PX + GAP_HEIGHT);
         const removePageThreshold = minEmptySpace - CONTENT_HEIGHT;
 
         if (lastPageGap > minEmptySpace) {
@@ -223,11 +227,15 @@ const calculatePageCount = (layout: PageLayout, view: EditorView): number => {
 };
 
 function createDecoration(_state: EditorState, pageOptions: PageLayout): Decoration[] {
-  const { width, height, margin } = pageOptions;
+  const { width, height, marginTop, marginBottom, marginLeft, marginRight } = pageOptions;
   const PAGE_WIDTH_PX = mmToPx(width);
   const PAGE_HEIGHT_PX = mmToPx(height);
-  const MARGIN_PX = mmToPx(margin);
-  const CONTENT_HEIGHT = PAGE_HEIGHT_PX - MARGIN_PX * 2;
+  const MARGIN_TOP_PX = mmToPx(marginTop);
+  const MARGIN_BOTTOM_PX = mmToPx(marginBottom);
+  const MARGIN_LEFT_PX = mmToPx(marginLeft);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const MARGIN_RIGHT_PX = mmToPx(marginRight);
+  const CONTENT_HEIGHT = PAGE_HEIGHT_PX - MARGIN_TOP_PX - MARGIN_BOTTOM_PX;
 
   const pageWidget = Decoration.widget(
     1,
@@ -258,8 +266,8 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout): Decorat
         pageBackground.className = 'page-background';
         pageBackground.style.cssText = `
           position: absolute;
-          top: ${i * (PAGE_HEIGHT_PX + GAP_HEIGHT) - MARGIN_PX}px;
-          left: -${MARGIN_PX}px;
+          top: ${i * (PAGE_HEIGHT_PX + GAP_HEIGHT) - MARGIN_TOP_PX}px;
+          left: -${MARGIN_LEFT_PX}px;
           z-index: -1;
           width: ${PAGE_WIDTH_PX}px;
           height: ${PAGE_HEIGHT_PX}px;
@@ -284,7 +292,7 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout): Decorat
         const pageFooter = document.createElement('div');
         pageFooter.className = 'page-footer';
         pageFooter.style.cssText = `
-          height: ${MARGIN_PX}px;
+          height: ${MARGIN_BOTTOM_PX}px;
         `;
 
         const paginationGap = document.createElement('div');
@@ -311,7 +319,7 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout): Decorat
         const pageHeader = document.createElement('div');
         pageHeader.className = 'page-header';
         pageHeader.style.cssText = `
-          height: ${MARGIN_PX}px;
+          height: ${MARGIN_TOP_PX}px;
         `;
 
         breaker.append(pageFooter);
