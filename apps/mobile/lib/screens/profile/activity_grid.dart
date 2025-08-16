@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:jiffy/jiffy.dart';
 import 'package:typie/context/theme.dart';
-import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.data.gql.dart';
@@ -26,7 +25,8 @@ class ActivityGrid extends HookWidget {
     final scrollController = useScrollController();
     final canScrollLeft = useState(false);
     final canScrollRight = useState(true);
-    final lastToastedActivity = useRef<Activity?>(null);
+    final tooltipData = useState<({Activity activity, int weekIndex, int dayIndex})?>(null);
+    final tooltipTimer = useRef<Timer?>(null);
 
     useAsyncEffect(() async {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -36,13 +36,13 @@ class ActivityGrid extends HookWidget {
         }
       });
 
-      void listener() {
+      void updateScroll() {
         _updateScrollState(scrollController, canScrollLeft, canScrollRight);
       }
 
-      scrollController.addListener(listener);
+      scrollController.addListener(updateScroll);
 
-      return () => scrollController.removeListener(listener);
+      return () => scrollController.removeListener(updateScroll);
     }, []);
 
     final endDate = Jiffy.now();
@@ -91,12 +91,13 @@ class ActivityGrid extends HookWidget {
     void scrollRight() => scrollByMonths(2);
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         SingleChildScrollView(
           controller: scrollController,
           scrollDirection: Axis.horizontal,
           physics: const NeverScrollableScrollPhysics(),
-          padding: const Pad(horizontal: 16),
+          padding: const Pad(horizontal: 16, bottom: 8),
           child: SizedBox(
             width: totalWidth,
             child: Column(
@@ -160,7 +161,7 @@ class ActivityGrid extends HookWidget {
                   ),
                 ),
                 const SizedBox(height: cellGap),
-                _buildActivityGrid(context, activities, lastToastedActivity, scrollController),
+                _buildActivityGrid(context, activities, scrollController, tooltipData, tooltipTimer),
               ],
             ),
           ),
@@ -221,6 +222,52 @@ class ActivityGrid extends HookWidget {
             ),
           ),
         ),
+        if (tooltipData.value != null)
+          Positioned.fill(
+            child: CustomSingleChildLayout(
+              delegate: _TooltipPositionDelegate(
+                cellPosition: Offset(
+                  tooltipData.value!.weekIndex * (cellSize + cellGap) + 16 - scrollController.offset,
+                  tooltipData.value!.dayIndex * (cellSize + cellGap) + labelHeight + cellGap,
+                ),
+                cellSize: const Size(cellSize, cellSize),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: context.colors.surfaceDark, borderRadius: BorderRadius.circular(6)),
+                child: IntrinsicWidth(
+                  child: IntrinsicHeight(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tooltipData.value!.activity.date.format(pattern: 'yyyy년 M월 d일'),
+                          style: TextStyle(
+                            color: context.colors.textBright,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                        Text(
+                          tooltipData.value!.activity.additions > 0
+                              ? '${tooltipData.value!.activity.additions.comma}자 작성했어요'
+                              : '기록이 없어요',
+                          style: TextStyle(
+                            color: context.colors.textBright,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -239,9 +286,11 @@ class ActivityGrid extends HookWidget {
   Widget _buildActivityGrid(
     BuildContext context,
     List<Activity> activities,
-    ObjectRef<Activity?> lastToastedActivity,
     ScrollController scrollController,
+    ValueNotifier<({Activity activity, int weekIndex, int dayIndex})?> tooltipData,
+    ObjectRef<Timer?> tooltipTimer,
   ) {
+    final selectedCell = useState<({int weekIndex, int dayIndex})?>(null);
     final weeks = <List<Activity>>[];
     final weekCount = (activities.length / 7).ceil();
 
@@ -256,7 +305,7 @@ class ActivityGrid extends HookWidget {
       weeks.add(weekActivities);
     }
 
-    Activity? getActivityAtPosition(Offset localPosition) {
+    ({Activity? activity, int weekIndex, int dayIndex})? getActivityAtPosition(Offset localPosition) {
       final weekIndex = (localPosition.dx / (cellSize + cellGap)).floor();
       final dayIndex = (localPosition.dy / (cellSize + cellGap)).floor();
 
@@ -267,47 +316,49 @@ class ActivityGrid extends HookWidget {
           dayIndex < weeks[weekIndex].length) {
         final activity = weeks[weekIndex][dayIndex];
         if (activity.level != -1) {
-          return activity;
+          return (activity: activity, weekIndex: weekIndex, dayIndex: dayIndex);
         }
       }
       return null;
     }
 
-    void showActivityToast(Activity? activity, {bool force = false}) {
-      if (activity != null && (force || activity != lastToastedActivity.value)) {
-        final date = activity.date.format(pattern: 'yyyy년 M월 d일');
-        final message = activity.additions > 0 ? '$date에 ${activity.additions.comma}자를 작성했어요' : '$date에는 작성한 글이 없어요';
-        context.toast(ToastType.success, message, bottom: 64);
-        lastToastedActivity.value = activity;
+    void showActivityTooltip(Activity? activity, int weekIndex, int dayIndex) {
+      if (activity != null) {
+        tooltipTimer.value?.cancel();
+        selectedCell.value = (weekIndex: weekIndex, dayIndex: dayIndex);
+        tooltipData.value = (activity: activity, weekIndex: weekIndex, dayIndex: dayIndex);
       }
     }
 
-    void handleDragStart(DragStartDetails details) {
-      final activity = getActivityAtPosition(details.localPosition);
-      showActivityToast(activity, force: true);
+    void hideAfterDelay(Duration delay) {
+      tooltipTimer.value?.cancel();
+      tooltipTimer.value = Timer(delay, () {
+        tooltipData.value = null;
+        selectedCell.value = null;
+      });
     }
 
-    void handleDragUpdate(DragUpdateDetails details) {
-      final activity = getActivityAtPosition(details.localPosition);
-      showActivityToast(activity);
+    void handleTooltipInteraction(Offset localPosition) {
+      final result = getActivityAtPosition(localPosition);
+      if (result != null) {
+        showActivityTooltip(result.activity, result.weekIndex, result.dayIndex);
+      }
     }
 
-    void handleDragEnd(_) {
-      lastToastedActivity.value = null;
+    void handleInteractionEnd() {
+      hideAfterDelay(const Duration(seconds: 1));
     }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: handleDragStart,
-      onVerticalDragUpdate: handleDragUpdate,
-      onVerticalDragEnd: handleDragEnd,
-      onPanStart: handleDragStart,
-      onPanUpdate: handleDragUpdate,
-      onPanEnd: handleDragEnd,
-      onTapDown: (details) {
-        final activity = getActivityAtPosition(details.localPosition);
-        showActivityToast(activity, force: true);
-      },
+      onVerticalDragStart: (details) => handleTooltipInteraction(details.localPosition),
+      onVerticalDragUpdate: (details) => handleTooltipInteraction(details.localPosition),
+      onVerticalDragEnd: (_) => handleInteractionEnd(),
+      onPanStart: (details) => handleTooltipInteraction(details.localPosition),
+      onPanUpdate: (details) => handleTooltipInteraction(details.localPosition),
+      onPanEnd: (_) => handleInteractionEnd(),
+      onTapDown: (details) => handleTooltipInteraction(details.localPosition),
+      onTapUp: (_) => handleInteractionEnd(),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -322,13 +373,33 @@ class ActivityGrid extends HookWidget {
                         padding: EdgeInsets.only(bottom: day < 6 ? cellGap : 0),
                         child: weeks[week][day].level == -1
                             ? const SizedBox(width: cellSize, height: cellSize)
-                            : Container(
-                                width: cellSize,
-                                height: cellSize,
-                                decoration: BoxDecoration(
-                                  color: _getColorByLevel(context, weeks[week][day].level),
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
+                            : Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Container(
+                                    width: cellSize,
+                                    height: cellSize,
+                                    decoration: BoxDecoration(
+                                      color: _getColorByLevel(context, weeks[week][day].level),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  if (selectedCell.value != null &&
+                                      selectedCell.value!.weekIndex == week &&
+                                      selectedCell.value!.dayIndex == day)
+                                    Positioned(
+                                      left: -1.5,
+                                      top: -1.5,
+                                      child: Container(
+                                        width: cellSize + 3,
+                                        height: cellSize + 3,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: context.colors.borderStrong, width: 1.5),
+                                          borderRadius: BorderRadius.circular(3.5),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                       ),
                 ],
@@ -480,4 +551,34 @@ class MonthSpan {
   final int month;
   final int start;
   int end;
+}
+
+class _TooltipPositionDelegate extends SingleChildLayoutDelegate {
+  const _TooltipPositionDelegate({required this.cellPosition, required this.cellSize});
+
+  final Offset cellPosition;
+  final Size cellSize;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    return BoxConstraints.loose(constraints.biggest);
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    const minX = 8.0;
+    var tooltipX = cellPosition.dx - childSize.width - 2;
+    final tooltipY = cellPosition.dy - 100;
+
+    if (tooltipX < minX) {
+      tooltipX = minX;
+    }
+
+    return Offset(tooltipX, tooltipY);
+  }
+
+  @override
+  bool shouldRelayout(covariant _TooltipPositionDelegate oldDelegate) {
+    return cellPosition != oldDelegate.cellPosition || cellSize != oldDelegate.cellSize;
+  }
 }
