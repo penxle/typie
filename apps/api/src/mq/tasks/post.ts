@@ -53,7 +53,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
   }
 
   await db.transaction(async (tx) => {
-    const hash = rapidhash(postId);
+    const hash = Number(BigInt(rapidhash(postId)) % BigInt('9223372036854775807'));
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
 
     const post = await tx
@@ -269,7 +269,7 @@ type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
   await db.transaction(async (tx) => {
-    const hash = rapidhash(postId);
+    const hash = Number(BigInt(rapidhash(postId)) % BigInt('9223372036854775807'));
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
 
     const snapshots = await tx
