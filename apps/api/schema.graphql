@@ -712,6 +712,11 @@ input RedeemCreditCodeInput {
   code: String!
 }
 
+type Referral {
+  compensated: Boolean!
+  id: ID!
+}
+
 input RegisterPushNotificationTokenInput {
   token: String!
 }
@@ -966,6 +971,7 @@ type User {
   postCount: Int!
   recentPosts: [Post!]!
   recentlyViewedEntities: [Entity!]!
+  referrals: [Referral!]!
   role: UserRole!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!
