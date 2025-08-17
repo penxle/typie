@@ -158,7 +158,7 @@
               color: 'gray.900',
             },
           })}
-          href="/home"
+          href="/initial"
         >
           EXIT SYSTEM
         </a>
