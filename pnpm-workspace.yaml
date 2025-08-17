@@ -5,12 +5,6 @@ packages:
 
 includeWorkspaceRoot: true
 
-onlyBuiltDependencies:
-  - argon2
-  - canvas
-  - esbuild
-  - sharp
-
 publicHoistPattern:
   - '*eslint*'
   - '*prettier*'

@@ -95,7 +95,6 @@
     "@pulumi/aws": "^7.3.1",
     "@pulumi/kubernetes": "^4.23.0",
     "@pulumi/pulumi": "^3.188.0",
-    "@types/puppeteer": "^7.0.4",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "@typie/pulumi": "workspace:*",
