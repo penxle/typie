@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, eq, lt, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, lt, lte, notInArray, or, sql } from 'drizzle-orm';
 import { rapidhash } from 'rapidhash-js';
 import * as R from 'remeda';
 import { base64 } from 'rfc4648';
@@ -330,17 +330,38 @@ export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: str
 });
 
 export const CanvasCompactScanCron = defineCron('canvas:compact:scan', '0 * * * *', async () => {
-  const threshold = dayjs().subtract(24, 'hours');
+  const now = dayjs();
+
+  const threshold1h = now.subtract(1, 'hour');
+  const threshold6h = now.subtract(6, 'hours');
+  const threshold24h = now.subtract(24, 'hours');
+
+  const threshold1d = now.subtract(1, 'day');
+  const threshold2d = now.subtract(2, 'days');
+  const threshold14d = now.subtract(14, 'days');
 
   const canvases = await db
     .select({ canvasId: CanvasContents.canvasId })
     .from(CanvasContents)
-    .where(and(lt(CanvasContents.updatedAt, threshold), lt(CanvasContents.compactedAt, CanvasContents.updatedAt)));
+    .where(
+      or(
+        and(
+          lte(CanvasContents.updatedAt, threshold1h),
+          gt(CanvasContents.updatedAt, threshold24h),
+          lt(CanvasContents.compactedAt, threshold6h),
+        ),
+        and(
+          lte(CanvasContents.updatedAt, threshold1d),
+          gt(CanvasContents.updatedAt, threshold14d),
+          lt(CanvasContents.compactedAt, threshold2d),
+        ),
+      ),
+    );
 
   await Promise.all(
     canvases.map(({ canvasId }) =>
       enqueueJob('canvas:compact', canvasId, {
-        delay: Math.random() * 10 * 60 * 1000,
+        delay: Math.random() * 50 * 60 * 1000,
         priority: 1,
       }),
     ),
