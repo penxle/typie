@@ -45,7 +45,6 @@
         ...DashboardLayout_CommandPalette_user
       }
 
-      ...DashboardLayout_Sidebar_query
       ...AdminImpersonateBanner_query
       ...DashboardLayout_Shortcuts_query
     }
@@ -234,7 +233,7 @@
         overflow: 'hidden',
       })}
     >
-      <Sidebar {$query} $user={$query.me} />
+      <Sidebar $user={$query.me} />
 
       <div
         class={css({
