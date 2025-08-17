@@ -1,5 +1,6 @@
 FROM amazonlinux:2023 AS base
 ENV NODE_ENV=production
+ENV PUPPETEER_CACHE_DIR=/puppeteer
 
 RUN curl -fsSL https://rpm.nodesource.com/setup_24.x | bash
 RUN dnf install -y nodejs
@@ -24,6 +25,7 @@ WORKDIR /app
 ADD https://github.com/krallin/tini/releases/download/v0.19.0/tini-arm64 /tini
 RUN chmod +x /tini
 
+COPY --from=deps /puppeteer /puppeteer
 COPY --from=deps /deps ./
 COPY out/full ./
 
