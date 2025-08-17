@@ -393,32 +393,36 @@ export const PostCharacterCountChanges = pgTable(
   (t) => [uniqueIndex().on(t.userId, t.postId, t.bucket), index().on(t.userId, t.bucket)],
 );
 
-export const PostContents = pgTable('post_contents', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.POST_CONTENTS)),
-  postId: text('post_id')
-    .notNull()
-    .unique()
-    .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  body: jsonb('body').notNull().$type<JSONContent>(),
-  text: text('text').notNull(),
-  characterCount: integer('character_count').notNull().default(0),
-  blobSize: integer('blob_size').notNull().default(0),
-  storedMarks: jsonb('stored_marks').notNull().$type<unknown[]>().default([]),
-  note: text('note').notNull().default(''),
-  update: bytea('update').notNull(),
-  vector: bytea('vector').notNull(),
-  compactedAt: datetime('compacted_at')
-    .notNull()
-    .default(sql`now()`),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-  updatedAt: datetime('updated_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const PostContents = pgTable(
+  'post_contents',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_CONTENTS)),
+    postId: text('post_id')
+      .notNull()
+      .unique()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    body: jsonb('body').notNull().$type<JSONContent>(),
+    text: text('text').notNull(),
+    characterCount: integer('character_count').notNull().default(0),
+    blobSize: integer('blob_size').notNull().default(0),
+    storedMarks: jsonb('stored_marks').notNull().$type<unknown[]>().default([]),
+    note: text('note').notNull().default(''),
+    update: bytea('update').notNull(),
+    vector: bytea('vector').notNull(),
+    compactedAt: datetime('compacted_at')
+      .notNull()
+      .default(sql`now()`),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.postId), index().on(t.updatedAt), index().on(t.compactedAt)],
+);
 
 export const PostSnapshots = pgTable(
   'post_snapshots',
