@@ -16,6 +16,8 @@ RUN pnpm fetch --prod
 COPY out/json ./
 RUN pnpm install --offline --prod
 
+RUN pnpm dlx puppeteer browsers install chrome
+
 FROM base AS runner
 WORKDIR /app
 

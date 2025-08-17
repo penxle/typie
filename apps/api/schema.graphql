@@ -245,6 +245,21 @@ enum EntityVisibility {
   UNLISTED
 }
 
+input ExportPostAsPdfInput {
+  entityId: ID!
+  height: Float
+  marginBottom: Float
+  marginLeft: Float
+  marginRight: Float
+  marginTop: Float
+  width: Float
+}
+
+type ExportPostAsPdfResult {
+  data: String!
+  filename: String!
+}
+
 type File implements Blob {
   id: ID!
   name: String!
@@ -424,6 +439,7 @@ type Mutation {
   deleteUser: Boolean!
   duplicateCanvas(input: DuplicateCanvasInput!): Canvas!
   duplicatePost(input: DuplicatePostInput!): Post!
+  exportPostAsPdf(input: ExportPostAsPdfInput!): ExportPostAsPdfResult!
   generateActivityImage: Binary!
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!

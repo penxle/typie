@@ -24,6 +24,7 @@ type AppPreference = {
 
   experimental_pageEnabled: boolean;
   experimental_pageLayoutId?: string;
+  experimental_pdfExportEnabled: boolean;
 };
 
 type AppState = {
@@ -103,6 +104,7 @@ export const setupAppContext = (userId: string) => {
       searchMatchWholeWord: false,
 
       experimental_pageEnabled: false,
+      experimental_pdfExportEnabled: false,
     }),
     state: appState,
     timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {
