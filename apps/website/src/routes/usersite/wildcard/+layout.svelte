@@ -196,7 +196,7 @@
               {/if}
             {/snippet}
 
-            <MenuItem href={`${env.PUBLIC_WEBSITE_URL}/home`} icon={HouseIcon} type="link">내 홈으로</MenuItem>
+            <MenuItem href={env.PUBLIC_WEBSITE_URL} icon={HouseIcon} type="link">내 홈으로</MenuItem>
             <MenuItem
               icon={LogOutIcon}
               onclick={() => {

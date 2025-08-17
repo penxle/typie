@@ -25,6 +25,7 @@ import {
   UserMarketingConsents,
   UserPaymentCredits,
   UserPersonalIdentities,
+  UserPreferences,
   UserPushNotificationTokens,
   Users,
   UserSessions,
@@ -279,6 +280,19 @@ User.implement({
       nullable: true,
       resolve: async (self) => {
         return await db.select().from(Referrals).where(eq(Referrals.refereeId, self.id)).then(first);
+      },
+    }),
+
+    preferences: t.field({
+      type: 'JSON',
+      resolve: async (self) => {
+        const preference = await db
+          .select({ value: UserPreferences.value })
+          .from(UserPreferences)
+          .where(eq(UserPreferences.userId, self.id))
+          .then(first);
+
+        return preference?.value ?? {};
       },
     }),
   }),
@@ -678,6 +692,30 @@ builder.mutationFields((t) => ({
       await db.insert(ReferralCodes).values({ userId: ctx.session.userId, code });
 
       return `${host}/r/${code}`;
+    },
+  }),
+
+  updatePreferences: t.withAuth({ session: true }).fieldWithInput({
+    type: User,
+    input: { value: t.input.field({ type: 'JSON' }) },
+    resolve: async (_, { input }, ctx) => {
+      const preference = await db
+        .select({ value: UserPreferences.value })
+        .from(UserPreferences)
+        .where(eq(UserPreferences.userId, ctx.session.userId))
+        .then(first);
+
+      const value = { ...preference?.value, ...input.value };
+
+      await db
+        .insert(UserPreferences)
+        .values({ userId: ctx.session.userId, value })
+        .onConflictDoUpdate({
+          target: [UserPreferences.userId],
+          set: { value },
+        });
+
+      return ctx.session.userId;
     },
   }),
 }));

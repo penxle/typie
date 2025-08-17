@@ -6,6 +6,7 @@
   import FlaskConicalIcon from '~icons/lucide/flask-conical';
   import GiftIcon from '~icons/lucide/gift';
   import KeyboardIcon from '~icons/lucide/keyboard';
+  import MonitorIcon from '~icons/lucide/monitor';
   import PanelTopIcon from '~icons/lucide/panel-top';
   import PencilIcon from '~icons/lucide/pencil';
   import ShieldCheckIcon from '~icons/lucide/shield-check';
@@ -19,6 +20,7 @@
   import IdentityTab from './IdentityTab.svelte';
   import LaboratoryTab from './LaboratoryTab.svelte';
   import ReferralTab from './ReferralTab.svelte';
+  import ScreenTab from './ScreenTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
   import SiteTab from './SiteTab.svelte';
   import type { Component } from 'svelte';
@@ -53,6 +55,7 @@
         ...DashboardLayout_PreferenceModal_SiteTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
         ...DashboardLayout_PreferenceModal_EditorTab_user
+        ...DashboardLayout_PreferenceModal_ScreenTab_user
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
         ...DashboardLayout_PreferenceModal_ReferralTab_user
       }
@@ -71,6 +74,12 @@
       label: '에디터',
       icon: PencilIcon,
       component: EditorTab,
+    },
+    {
+      path: '/preference/screen',
+      label: '화면',
+      icon: MonitorIcon,
+      component: ScreenTab,
     },
     ...($user.subscription
       ? [

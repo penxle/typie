@@ -693,6 +693,20 @@ export const UserPersonalIdentities = pgTable('user_personal_identities', {
   expiresAt: datetime('expires_at').notNull(),
 });
 
+export const UserPreferences = pgTable('user_preferences', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_PREFERENCES)),
+  userId: text('user_id')
+    .notNull()
+    .unique()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  value: jsonb('value').notNull().default({}).$type<Record<string, unknown>>(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const UserPushNotificationTokens = pgTable(
   'user_push_notification_tokens',
   {
