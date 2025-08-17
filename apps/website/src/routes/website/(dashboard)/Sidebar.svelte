@@ -26,28 +26,13 @@
   import SidebarButton from './SidebarButton.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
   import UserMenu from './UserMenu.svelte';
-  import type { DashboardLayout_Sidebar_query, DashboardLayout_Sidebar_user } from '$graphql';
+  import type { DashboardLayout_Sidebar_user } from '$graphql';
 
   type Props = {
-    $query: DashboardLayout_Sidebar_query;
     $user: DashboardLayout_Sidebar_user;
   };
 
-  let { $query: _query, $user: _user }: Props = $props();
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const query = fragment(
-    _query,
-    graphql(`
-      fragment DashboardLayout_Sidebar_query on Query {
-        announcements {
-          id
-
-          ...DashboardLayout_Announcements_postView
-        }
-      }
-    `),
-  );
+  let { $user: _user }: Props = $props();
 
   const user = fragment(
     _user,
@@ -198,10 +183,6 @@
     {#if $user.role === 'ADMIN'}
       <SidebarButton as="a" href="/admin" icon={ShieldUserIcon} label="어드민" />
     {/if}
-
-    <!-- <Announcements $posts={$query.announcements} /> -->
-
-    <!-- <SidebarButton as="a" href="https://help.typie.co" icon={CircleHelpIcon} label="도움말" rel="noopener noreferrer" target="_blank" /> -->
 
     <div class={center({ width: 'full' })}>
       <ThemeSwitch />
