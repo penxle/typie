@@ -466,6 +466,7 @@ type Mutation {
   updatePostOption(input: UpdatePostOptionInput!): Post!
   updatePostType(input: UpdatePostTypeInput!): Post!
   updatePostsOption(input: UpdatePostsOptionInput!): [Post!]!
+  updatePreferences(input: UpdatePreferencesInput!): User!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
@@ -945,6 +946,10 @@ input UpdatePostsOptionInput {
   visibility: EntityVisibility
 }
 
+input UpdatePreferencesInput {
+  value: JSON!
+}
+
 input UpdateSiteSlugInput {
   siteId: ID!
   slug: String!
@@ -969,6 +974,7 @@ type User {
   notifications: [Notification!]!
   personalIdentity: UserPersonalIdentity
   postCount: Int!
+  preferences: JSON!
   recentPosts: [Post!]!
   recentlyViewedEntities: [Entity!]!
   referral: Referral

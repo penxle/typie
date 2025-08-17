@@ -169,6 +169,13 @@
       "when": 1755333741289,
       "tag": "0023_sleepy_marten_broadcloak",
       "breakpoints": false
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1755406208034,
+      "tag": "0024_last_ma_gnuci",
+      "breakpoints": false
     }
   ]
 }

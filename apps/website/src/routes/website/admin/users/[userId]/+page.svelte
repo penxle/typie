@@ -76,7 +76,7 @@
 
   const handleImpersonate = async () => {
     await adminImpersonate({ userId: $query.adminUser.id });
-    location.href = '/home';
+    location.href = '/initial';
   };
 
   const adminGiveCredit = graphql(`

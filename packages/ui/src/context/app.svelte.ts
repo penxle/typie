@@ -26,6 +26,8 @@ type AppPreference = {
   experimental_pageLayoutId?: string;
 
   referralWelcomeModalShown: boolean;
+
+  initialPage: 'blank' | 'last';
 };
 
 type AppState = {
@@ -107,6 +109,8 @@ export const setupAppContext = (userId: string) => {
       experimental_pageEnabled: false,
 
       referralWelcomeModalShown: false,
+
+      initialPage: 'last',
     }),
     state: appState,
     timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {
