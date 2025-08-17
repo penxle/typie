@@ -445,25 +445,29 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 
 export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', async () => {
   const now = dayjs();
+
   const threshold1h = now.subtract(1, 'hour');
-  const threshold25h = now.subtract(25, 'hours');
+  const threshold6h = now.subtract(6, 'hours');
+  const threshold24h = now.subtract(24, 'hours');
+
   const threshold1d = now.subtract(1, 'day');
-  const threshold15d = now.subtract(15, 'days');
+  const threshold2d = now.subtract(2, 'days');
+  const threshold14d = now.subtract(14, 'days');
 
   const posts = await db
     .select({ postId: PostContents.postId })
     .from(PostContents)
     .where(
       or(
-        and(lte(PostContents.updatedAt, threshold1h), gt(PostContents.updatedAt, threshold25h), lt(PostContents.compactedAt, threshold1h)),
-        and(lte(PostContents.updatedAt, threshold25h), gt(PostContents.updatedAt, threshold15d), lt(PostContents.compactedAt, threshold1d)),
+        and(lte(PostContents.updatedAt, threshold1h), gt(PostContents.updatedAt, threshold24h), lt(PostContents.compactedAt, threshold6h)),
+        and(lte(PostContents.updatedAt, threshold1d), gt(PostContents.updatedAt, threshold14d), lt(PostContents.compactedAt, threshold2d)),
       ),
     );
 
   await Promise.all(
     posts.map(({ postId }) =>
       enqueueJob('post:compact', postId, {
-        delay: Math.random() * 10 * 60 * 1000,
+        delay: Math.random() * 50 * 60 * 1000,
         priority: 1,
       }),
     ),
