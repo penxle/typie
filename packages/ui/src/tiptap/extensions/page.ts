@@ -6,23 +6,27 @@ import { token } from '@typie/styled-system/tokens';
 import { tick } from 'svelte';
 import { mmToPx } from '../../utils';
 
-const GAP_HEIGHT = 40;
+const GAP_HEIGHT_PX = 40;
 
 export type PageLayout = {
   width: number;
   height: number;
-  margin: number;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
 };
 
 export type PageStorage = {
   layout?: PageLayout;
+  forPdf?: boolean;
 };
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     page: {
-      setPageLayout: (layout: PageLayout) => ReturnType;
+      setPageLayout: (layout: PageLayout, forPdf?: boolean) => ReturnType;
       clearPageLayout: () => ReturnType;
     };
   }
@@ -45,9 +49,10 @@ export const Page = Extension.create<unknown, PageStorage>({
   addCommands() {
     return {
       setPageLayout:
-        ({ width, height, margin }) =>
+        ({ width, height, marginTop, marginBottom, marginLeft, marginRight }, forPdf?: boolean) =>
         ({ tr, dispatch }) => {
-          this.storage.layout = { width, height, margin };
+          this.storage.layout = { width, height, marginTop, marginBottom, marginLeft, marginRight };
+          this.storage.forPdf = forPdf ?? false;
 
           tr.setMeta(key, true);
           dispatch?.(tr);
@@ -78,7 +83,7 @@ export const Page = Extension.create<unknown, PageStorage>({
             if (!storage.layout) {
               return { decorations: DecorationSet.empty, pages: 0 };
             }
-            const decorations = createDecoration(state, storage.layout);
+            const decorations = createDecoration(state, storage.layout, storage.forPdf);
             return {
               decorations: DecorationSet.create(state.doc, decorations),
               pages: decorations.length,
@@ -97,11 +102,11 @@ export const Page = Extension.create<unknown, PageStorage>({
             }
 
             const forceUpdate = tr.getMeta(key);
-            const pageCount = calculatePageCount(storage.layout, editor.view);
+            const pageCount = calculatePageCount(storage.layout, editor.view, storage.forPdf);
             const currentPageCount = getExistingPageCount(editor.view);
 
             if (forceUpdate || Math.max(pageCount, 1) !== currentPageCount) {
-              const newDecorations = createDecoration(newState, storage.layout);
+              const newDecorations = createDecoration(newState, storage.layout, storage.forPdf);
               return {
                 decorations: DecorationSet.create(newState.doc, newDecorations),
                 pages: newDecorations.length,
@@ -157,11 +162,12 @@ const getExistingPageCount = (view: EditorView) => {
   return 0;
 };
 
-const calculatePageCount = (layout: PageLayout, view: EditorView): number => {
-  const { height, margin } = layout;
+const calculatePageCount = (layout: PageLayout, view: EditorView, forPdf?: boolean): number => {
+  const { height, marginTop, marginBottom } = layout;
   const PAGE_HEIGHT_PX = mmToPx(height);
-  const MARGIN_PX = mmToPx(margin);
-  const CONTENT_HEIGHT = PAGE_HEIGHT_PX - MARGIN_PX * 2;
+  const MARGIN_TOP_PX = mmToPx(marginTop);
+  const MARGIN_BOTTOM_PX = mmToPx(marginBottom);
+  const CONTENT_HEIGHT_PX = mmToPx(height - marginTop - marginBottom);
 
   const editorDom = view.dom;
   if (!editorDom) return 1;
@@ -192,19 +198,20 @@ const calculatePageCount = (layout: PageLayout, view: EditorView): number => {
 
       if (lastPageGap > 0) {
         // NOTE: 콘텐츠가 마지막 페이지 브레이크보다 아래에 있음 - 페이지 추가 필요
-        const addPage = Math.ceil(lastPageGap / CONTENT_HEIGHT);
+        const addPage = Math.ceil(lastPageGap / CONTENT_HEIGHT_PX);
         return currentPageCount + addPage;
       } else {
         // NOTE: 마지막 콘텐츠가 마지막 페이지 브레이크보다 위에 있음
-        const minEmptySpace = -(MARGIN_PX * 2 + GAP_HEIGHT);
-        const removePageThreshold = minEmptySpace - CONTENT_HEIGHT;
+        const GAP = forPdf ? 0 : GAP_HEIGHT_PX;
+        const minEmptySpace = -(MARGIN_TOP_PX + MARGIN_BOTTOM_PX + GAP);
+        const removePageThreshold = minEmptySpace - CONTENT_HEIGHT_PX;
 
         if (lastPageGap > minEmptySpace) {
           // NOTE: 빈 공간이 최소값 이내면 현재 페이지 수 유지
           return currentPageCount;
         } else if (lastPageGap < removePageThreshold) {
           // NOTE: 빈 공간이 한 페이지 이상이면 페이지 제거
-          const pageHeightWithGap = PAGE_HEIGHT_PX + GAP_HEIGHT;
+          const pageHeightWithGap = PAGE_HEIGHT_PX + GAP;
           const pagesToRemove = Math.floor(lastPageGap / pageHeightWithGap);
           return Math.max(1, currentPageCount + pagesToRemove);
         } else {
@@ -217,22 +224,26 @@ const calculatePageCount = (layout: PageLayout, view: EditorView): number => {
   } else {
     // NOTE: 초기 상태 - scrollHeight 기반 계산
     const editorHeight = editorDom.scrollHeight;
-    const pageCount = Math.ceil(editorHeight / CONTENT_HEIGHT);
+    const pageCount = Math.ceil(editorHeight / CONTENT_HEIGHT_PX);
     return pageCount <= 0 ? 1 : pageCount;
   }
 };
 
-function createDecoration(_state: EditorState, pageOptions: PageLayout): Decoration[] {
-  const { width, height, margin } = pageOptions;
+function createDecoration(_state: EditorState, pageOptions: PageLayout, forPdf?: boolean): Decoration[] {
+  const { width, height, marginTop, marginBottom, marginLeft } = pageOptions;
   const PAGE_WIDTH_PX = mmToPx(width);
   const PAGE_HEIGHT_PX = mmToPx(height);
-  const MARGIN_PX = mmToPx(margin);
-  const CONTENT_HEIGHT = PAGE_HEIGHT_PX - MARGIN_PX * 2;
+  const MARGIN_TOP_PX = mmToPx(marginTop);
+  const MARGIN_BOTTOM_PX = mmToPx(marginBottom);
+  const MARGIN_LEFT_PX = mmToPx(marginLeft);
+  const GAP = forPdf ? 0 : GAP_HEIGHT_PX;
+  const CONTENT_HEIGHT_MM = height - marginTop - marginBottom;
+  const CONTENT_HEIGHT_PX = mmToPx(CONTENT_HEIGHT_MM);
 
   const pageWidget = Decoration.widget(
     1,
     (view) => {
-      const pageCount = calculatePageCount(pageOptions, view);
+      const pageCount = calculatePageCount(pageOptions, view, forPdf);
 
       const container = document.createElement('div');
       container.className = 'page-breaks-container';
@@ -251,21 +262,23 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout): Decorat
           position: relative;
           float: left;
           clear: both;
-          margin-top: ${CONTENT_HEIGHT}px;
+          margin-top: ${CONTENT_HEIGHT_PX}px;
         `;
 
         const pageBackground = document.createElement('div');
         pageBackground.className = 'page-background';
-        pageBackground.style.cssText = `
-          position: absolute;
-          top: ${i * (PAGE_HEIGHT_PX + GAP_HEIGHT) - MARGIN_PX}px;
-          left: -${MARGIN_PX}px;
-          z-index: -1;
-          width: ${PAGE_WIDTH_PX}px;
-          height: ${PAGE_HEIGHT_PX}px;
-          background-color: ${token('colors.surface.default')};
-          box-shadow: ${token('shadows.medium')};
-        `;
+        if (!forPdf) {
+          pageBackground.style.cssText = `
+            position: absolute;
+            top: ${i * (PAGE_HEIGHT_PX + GAP) - MARGIN_TOP_PX}px;
+            left: -${MARGIN_LEFT_PX}px;
+            z-index: -1;
+            width: ${PAGE_WIDTH_PX}px;
+            height: ${PAGE_HEIGHT_PX}px;
+            background-color: ${token('colors.surface.default')};
+            box-shadow: ${token('shadows.medium')};
+          `;
+        }
 
         const breaker = document.createElement('div');
         breaker.className = 'breaker';
@@ -284,41 +297,47 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout): Decorat
         const pageFooter = document.createElement('div');
         pageFooter.className = 'page-footer';
         pageFooter.style.cssText = `
-          height: ${MARGIN_PX}px;
+          height: ${MARGIN_BOTTOM_PX}px;
         `;
 
         const paginationGap = document.createElement('div');
         paginationGap.className = 'pagination-gap';
         paginationGap.style.cssText = `
-          height: ${GAP_HEIGHT}px;
+          height: ${GAP}px;
           position: relative;
           width: 100%;
         `;
 
-        const pageNumber = document.createElement('div');
-        pageNumber.textContent = `페이지 ${i + 1} / ${pageCount}`;
-        pageNumber.className = css({
-          position: 'absolute',
-          top: '12px',
-          right: '12px',
-          transform: 'translateY(-50%)',
-          fontSize: '14px',
-          color: 'text.faint',
-          userSelect: 'none',
-        });
-        paginationGap.append(pageNumber);
+        if (!forPdf) {
+          const pageNumber = document.createElement('div');
+          pageNumber.textContent = `페이지 ${i + 1} / ${pageCount}`;
+          pageNumber.className = css({
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            transform: 'translateY(-50%)',
+            fontSize: '14px',
+            color: 'text.faint',
+            userSelect: 'none',
+          });
+          paginationGap.append(pageNumber);
+        }
 
         const pageHeader = document.createElement('div');
         pageHeader.className = 'page-header';
         pageHeader.style.cssText = `
-          height: ${MARGIN_PX}px;
+          height: ${MARGIN_TOP_PX}px;
         `;
 
         breaker.append(pageFooter);
-        breaker.append(paginationGap);
+        if (!forPdf) {
+          breaker.append(paginationGap);
+        }
         breaker.append(pageHeader);
 
-        pageBreak.append(pageBackground);
+        if (!forPdf) {
+          pageBreak.append(pageBackground);
+        }
         pageBreak.append(page);
         pageBreak.append(breaker);
 

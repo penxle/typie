@@ -2,6 +2,7 @@
   import { css, cx, sva } from '@typie/styled-system/css';
   import { getContext } from 'svelte';
   import Icon from './Icon.svelte';
+  import RingSpinner from './RingSpinner.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component, Snippet } from 'svelte';
   import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
@@ -10,9 +11,11 @@
     style?: SystemStyleObject;
     icon?: Component;
     disabled?: boolean;
+    loading?: boolean;
     variant?: 'default' | 'danger';
     children?: Snippet;
     prefix?: Snippet;
+    suffix?: Snippet;
     onclick?: () => void;
   };
 
@@ -32,10 +35,22 @@
 
   type Props = ButtonAllProps | LinkAllProps;
 
-  let { type = 'button', style, variant = 'default', disabled = false, icon, children, prefix, onclick, ...rest }: Props = $props();
+  let {
+    type = 'button',
+    style,
+    variant = 'default',
+    disabled = false,
+    loading = false,
+    icon,
+    children,
+    prefix,
+    suffix,
+    onclick,
+    ...rest
+  }: Props = $props();
 
   const element = $derived(type === 'link' ? 'a' : 'button');
-  const properties = $derived(type === 'link' ? { 'aria-disabled': disabled } : { type, disabled });
+  const properties = $derived(type === 'link' ? { 'aria-disabled': disabled || loading } : { type, disabled: disabled || loading });
 
   let close = getContext<undefined | (() => void)>('close');
 
@@ -97,8 +112,10 @@
   this={element}
   onblur={() => (focused = false)}
   onclick={() => {
-    close?.();
     onclick?.();
+    if (!loading) {
+      close?.();
+    }
   }}
   onfocus={() => (focused = true)}
   role="menuitem"
@@ -113,4 +130,9 @@
     <Icon style={styles.icon} {icon} size={14} />
   {/if}
   {@render children?.()}
+  {#if loading}
+    <RingSpinner style={css.raw({ size: '14px', marginLeft: 'auto' })} />
+  {:else}
+    {@render suffix?.()}
+  {/if}
 </svelte:element>

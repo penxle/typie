@@ -1,5 +1,6 @@
 export * from './auth';
 export * from './device';
+export * from './download';
 export * from './number';
 export * from './ref';
 export * from './remeda';

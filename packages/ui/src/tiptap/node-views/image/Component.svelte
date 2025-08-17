@@ -27,7 +27,7 @@
   });
 
   const pageLayout = $derived(editor?.current.storage.page?.layout);
-  const maxContentHeight = $derived(pageLayout ? mmToPx(pageLayout.height - pageLayout.margin * 2) : undefined);
+  const maxContentHeight = $derived(pageLayout ? mmToPx(pageLayout.height - pageLayout.marginTop - pageLayout.marginBottom) : undefined);
 
   $effect(() => {
     if (pendingFiles.length > 0) {

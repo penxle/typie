@@ -1,15 +1,5 @@
-let mmPx: number | undefined;
+const mmPx = 3.779_527_559_1;
 
 export const mmToPx = (mm: number) => {
-  if (mmPx === undefined) {
-    const element = document.createElement('div');
-    element.style.width = '1mm';
-    element.style.position = 'absolute';
-    element.style.visibility = 'hidden';
-    document.body.append(element);
-    mmPx = element.offsetWidth;
-    element.remove();
-  }
-
   return mm * mmPx;
 };

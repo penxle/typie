@@ -7,15 +7,18 @@
   import { baseExtensions } from '../schema';
   import type { JSONContent } from '@tiptap/core';
   import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { PageLayout } from '../extensions';
 
   type Props = {
     style?: SystemStyleObject;
     content: JSONContent;
     editor?: Ref<Editor>;
     extensions?: Extension[];
+    pageLayout?: PageLayout;
+    forPdf?: boolean;
   };
 
-  let { style, content, editor = $bindable(), extensions }: Props = $props();
+  let { style, content, editor = $bindable(), extensions, pageLayout, forPdf }: Props = $props();
 
   let element = $state<HTMLElement>();
   const html = $derived(renderHTML(content, [...baseExtensions, ...(extensions ?? [])]));
@@ -34,6 +37,9 @@
       onCreate: ({ editor }) => {
         // eslint-disable-next-line svelte/no-dom-manipulating
         element?.replaceWith(editor.view.dom);
+        if (pageLayout) {
+          editor.commands.setPageLayout(pageLayout, forPdf ?? false);
+        }
       },
 
       onTransaction: ({ editor: e }) => {
@@ -56,7 +62,13 @@
 </svelte:head>
 
 <article
+  style:--prosemirror-max-width={pageLayout ? `${pageLayout.width}mm` : '100%'}
+  style:--prosemirror-page-margin-top={pageLayout ? `${pageLayout.marginTop}mm` : '0'}
+  style:--prosemirror-page-margin-bottom={pageLayout ? `${pageLayout.marginBottom}mm` : '0'}
+  style:--prosemirror-page-margin-left={pageLayout ? `${pageLayout.marginLeft}mm` : '0'}
+  style:--prosemirror-page-margin-right={pageLayout ? `${pageLayout.marginRight}mm` : '0'}
   class={css({ display: 'contents', fontFamily: 'prose', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-all' })}
+  data-layout={pageLayout ? 'page' : 'scroll'}
 >
   <div
     bind:this={element}
