@@ -88,4 +88,21 @@
       <Select items={pageLayouts} bind:value={app.preference.current.experimental_pageLayoutId} />
     </div>
   {/if}
+
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
+    <div>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>PDF 내보내기</h3>
+      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>PDF 내보내기 기능을 활성화합니다.</p>
+    </div>
+
+    <Switch
+      onchange={() => {
+        mixpanel.track('toggle_experimental_feature', {
+          feature: 'pdf_export',
+          enabled: app.preference.current.experimental_pdfExportEnabled,
+        });
+      }}
+      bind:checked={app.preference.current.experimental_pdfExportEnabled}
+    />
+  </div>
 </div>
