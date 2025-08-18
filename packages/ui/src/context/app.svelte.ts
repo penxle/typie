@@ -23,7 +23,6 @@ type AppPreference = {
   searchMatchWholeWord: boolean;
 
   experimental_pageEnabled: boolean;
-  experimental_pageLayoutId?: string;
   experimental_pdfExportEnabled: boolean;
 
   referralWelcomeModalShown: boolean;

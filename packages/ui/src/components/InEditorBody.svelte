@@ -9,7 +9,7 @@
   type Props = {
     editor: Ref<Editor>;
     children: Snippet;
-    pageLayout: PageLayout;
+    pageLayout: PageLayout | null;
   };
 
   let { editor, children, pageLayout }: Props = $props();

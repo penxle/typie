@@ -97,6 +97,17 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       return;
     }
 
+    // NOTE: 다른 메뉴나 포탈 클릭 무시
+    const menus = document.querySelectorAll('[role="menu"]');
+    const visiblePortals = document.querySelectorAll('[data-portal]:not(:empty)');
+    if (
+      (menus.length > 0 || visiblePortals.length > 0) &&
+      referenceElement instanceof Element &&
+      !referenceElement.contains(event.target as Node)
+    ) {
+      return;
+    }
+
     if (options?.onClickOutside && !floatingElement?.contains(event.target as Node)) {
       options.onClickOutside();
     }

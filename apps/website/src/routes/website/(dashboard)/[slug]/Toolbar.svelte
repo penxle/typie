@@ -3,21 +3,16 @@
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { tooltip } from '@typie/ui/actions';
-  import { HorizontalDivider, Icon, SegmentButtons, Slider, Switch, Tooltip, VerticalDivider } from '@typie/ui/components';
+  import { HorizontalDivider, VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { defaultValues, values } from '@typie/ui/tiptap';
-  import mixpanel from 'mixpanel-browser';
-  import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
-  import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import BoldIcon from '~icons/lucide/bold';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
   import FileUpIcon from '~icons/lucide/file-up';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
-  import HighlighterIcon from '~icons/lucide/highlighter';
   import ImageIcon from '~icons/lucide/image';
-  import InfoIcon from '~icons/lucide/info';
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
   import ListIcon from '~icons/lucide/list';
@@ -25,12 +20,9 @@
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
   import RedoIcon from '~icons/lucide/redo';
-  import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import SearchIcon from '~icons/lucide/search';
-  import SettingsIcon from '~icons/lucide/settings';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import TableIcon from '~icons/lucide/table';
-  import TypeIcon from '~icons/lucide/type';
   import UnderlineIcon from '~icons/lucide/underline';
   import UndoIcon from '~icons/lucide/undo';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
@@ -39,7 +31,6 @@
   import RubyIcon from '~icons/typie/ruby';
   import { fragment, graphql } from '$graphql';
   import Spellcheck from './Spellcheck.svelte';
-  import { YState } from './state.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
@@ -49,6 +40,7 @@
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarFontFamily from './ToolbarFontFamily.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
+  import ToolbarSettings from './ToolbarSettings.svelte';
   import type { Editor } from '@tiptap/core';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Ref } from '@typie/ui/utils';
@@ -84,7 +76,6 @@
   );
 
   const app = getAppContext();
-  const maxWidth = new YState<number>(doc, 'maxWidth', 800);
 </script>
 
 <div
@@ -682,139 +673,6 @@
 
     <div class={css({ flexGrow: '1' })}></div>
 
-    <ToolbarDropdownButton label="설정" placement="bottom-end" size="small">
-      {#snippet anchor({ opened })}
-        <ToolbarIcon style={css.raw({ transform: opened ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={SettingsIcon} />
-      {/snippet}
-
-      {#snippet floating()}
-        <div
-          class={flex({
-            flexDirection: 'column',
-            gap: '8px',
-            padding: '16px',
-          })}
-        >
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
-              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>본문 폭</div>
-            </div>
-            <div class={css({ width: '200px' })}>
-              <SegmentButtons
-                items={[
-                  { label: '600px', value: 600 },
-                  { label: '800px', value: 800 },
-                  { label: '1000px', value: 1000 },
-                ]}
-                onselect={(value) => {
-                  maxWidth.current = value;
-                }}
-                size="sm"
-                value={maxWidth.current ?? 800}
-              />
-            </div>
-          </div>
-
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={ArrowRightToLineIcon} />
-              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>첫 줄 들여쓰기</div>
-            </div>
-            <div class={css({ width: '200px' })}>
-              <SegmentButtons
-                items={[
-                  { label: '없음', value: 0 },
-                  { label: '0.5칸', value: 0.5 },
-                  { label: '1칸', value: 1 },
-                  { label: '2칸', value: 2 },
-                ]}
-                onselect={(value) => {
-                  editor?.current.chain().focus().setBodyParagraphIndent(value).run();
-                }}
-                size="sm"
-                value={editor?.current.state.doc.firstChild?.attrs.paragraphIndent}
-              />
-            </div>
-          </div>
-
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={AlignVerticalSpaceAroundIcon} />
-              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>문단 사이 간격</div>
-            </div>
-            <div class={css({ width: '200px' })}>
-              <SegmentButtons
-                items={[
-                  { label: '없음', value: 0 },
-                  { label: '0.5줄', value: 0.5 },
-                  { label: '1줄', value: 1 },
-                  { label: '2줄', value: 2 },
-                ]}
-                onselect={(value) => {
-                  editor?.current.chain().focus().setBodyBlockGap(value).run();
-                }}
-                size="sm"
-                value={editor?.current.state.doc.firstChild?.attrs.blockGap}
-              />
-            </div>
-          </div>
-
-          <HorizontalDivider style={css.raw({ marginY: '12px' })} />
-
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
-              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>타자기 모드</div>
-              <Tooltip message="현재 작성 중인 줄을 항상 화면의 특정 위치에 고정합니다." placement="top">
-                <Icon style={css.raw({ color: 'text.faint' })} icon={InfoIcon} />
-              </Tooltip>
-            </div>
-            <Switch
-              onchange={() => {
-                mixpanel.track('toggle_typewriter', {
-                  enabled: app.preference.current.typewriterEnabled,
-                });
-              }}
-              bind:checked={app.preference.current.typewriterEnabled}
-            />
-          </div>
-
-          {#if app.preference.current.typewriterEnabled}
-            <div class={flex({ width: 'full', align: 'center', gap: '16px' })}>
-              <div class={css({ flexShrink: '0', fontSize: '11px', color: 'text.muted' })}>상단</div>
-              <Slider
-                max={1}
-                min={0}
-                onchange={() => {
-                  mixpanel.track('change_typewriter_position', {
-                    position: Math.round(app.preference.current.typewriterPosition * 100),
-                  });
-                }}
-                step={0.05}
-                tooltipFormatter={(v) => `${Math.round(v * 100)}% 위치에 고정`}
-                bind:value={app.preference.current.typewriterPosition}
-              />
-              <div class={css({ flexShrink: '0', fontSize: '11px', color: 'text.muted' })}>하단</div>
-            </div>
-          {/if}
-
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', marginTop: '8px' })}>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={HighlighterIcon} />
-              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>현재 줄 강조</div>
-            </div>
-            <Switch
-              onchange={() => {
-                mixpanel.track('toggle_line_highlight', {
-                  enabled: app.preference.current.lineHighlightEnabled,
-                });
-              }}
-              bind:checked={app.preference.current.lineHighlightEnabled}
-            />
-          </div>
-        </div>
-      {/snippet}
-    </ToolbarDropdownButton>
+    <ToolbarSettings {doc} {editor} />
   </div>
 </div>

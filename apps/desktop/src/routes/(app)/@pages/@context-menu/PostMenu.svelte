@@ -4,7 +4,7 @@
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
-  import { comma, downloadFromBase64 } from '@typie/ui/utils';
+  import { comma, downloadFromBase64, getPageLayoutDimensions } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
   import { TypieError } from '@/errors';
@@ -17,6 +17,8 @@
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
+  import { getPostYjsAttrs } from '$lib/utils/yjs-post';
+  import type { PageLayoutSettings } from '@typie/ui/utils';
 
   type Props = {
     post: {
@@ -32,9 +34,11 @@
       availability: EntityAvailability;
     };
     via: 'tree' | 'editor';
+    pageLayoutSettings?: PageLayoutSettings;
+    pageLayoutEnabled?: boolean;
   };
 
-  let { post, entity, via }: Props = $props();
+  let { post, entity, via, pageLayoutSettings, pageLayoutEnabled }: Props = $props();
 
   let isExporting = $state(false);
 
@@ -159,20 +163,20 @@
 
     isExporting = true;
     try {
-      const pageLayoutEnabled = app.preference.current.experimental_pageEnabled;
-      const pageLayoutId = app.preference.current.experimental_pageLayoutId;
-      const pageLayout =
-        pageLayoutEnabled && pageLayoutId
-          ? pageLayoutId === 'a4'
-            ? { width: 210, height: 297, marginTop: 25, marginBottom: 25, marginLeft: 25, marginRight: 25 }
-            : pageLayoutId === 'a5'
-              ? { width: 148, height: 210, marginTop: 20, marginBottom: 20, marginLeft: 20, marginRight: 20 }
-              : pageLayoutId === 'b5'
-                ? { width: 176, height: 250, marginTop: 15, marginBottom: 15, marginLeft: 15, marginRight: 15 }
-                : pageLayoutId === 'b6'
-                  ? { width: 125, height: 176, marginTop: 10, marginBottom: 10, marginLeft: 10, marginRight: 10 }
-                  : null
-          : null;
+      let layout = pageLayoutSettings;
+      let pageEnabled = pageLayoutEnabled;
+
+      if (!layout && via === 'tree') {
+        const attrs = await getPostYjsAttrs<{
+          experimental_pageLayout: PageLayoutSettings;
+          experimental_pageEnabled: boolean;
+        }>(post.id, ['experimental_pageLayout', 'experimental_pageEnabled']);
+
+        layout = attrs.experimental_pageLayout;
+        pageEnabled = attrs.experimental_pageEnabled ?? false;
+      }
+
+      const pageLayout = app.preference.current.experimental_pageEnabled && pageEnabled && layout ? getPageLayoutDimensions(layout) : null;
 
       const resp = await exportPostAsPdf({
         entityId: entity.id,
