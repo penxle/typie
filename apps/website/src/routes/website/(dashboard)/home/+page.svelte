@@ -124,7 +124,7 @@
 <Helmet title="홈" />
 
 {#if $query.me.sites[0].firstEntity}
-  <div class={center({ flexDirection: 'column', gap: '32px', size: 'full' })}>
+  <div class={center({ flexDirection: 'column', gap: '32px', width: 'full', minHeight: 'full', padding: '32px' })}>
     {#if mounted}
       <h1
         class={css({ fontSize: '24px', fontWeight: 'bold', color: 'text.default', minHeight: '36px', width: '800px' })}
