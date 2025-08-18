@@ -226,20 +226,23 @@
   >
     {#if attrs.id || inflightUrl}
       {#if attrs.id}
-        <Img
-          style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
-          alt="본문 이미지"
-          onclick={() => !editor?.current.isEditable && (enlarged = true)}
-          onload={checkAndAdjustProportion}
-          placeholder={attrs.placeholder}
-          progressive={!context?.pdf}
-          ratio={attrs.ratio}
-          role="button"
-          size="full"
-          url={attrs.url}
-        />
+        <div style:max-height={maxContentHeight ? `${maxContentHeight}px` : undefined}>
+          <Img
+            style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
+            alt="본문 이미지"
+            onclick={() => !editor?.current.isEditable && (enlarged = true)}
+            onload={checkAndAdjustProportion}
+            placeholder={attrs.placeholder}
+            progressive={!context?.pdf}
+            ratio={attrs.ratio}
+            role="button"
+            size="full"
+            url={attrs.url}
+          />
+        </div>
       {:else if inflightUrl}
         <img
+          style:max-height={maxContentHeight ? `${maxContentHeight}px` : undefined}
           class={css({ width: 'full', borderRadius: '4px' })}
           alt="본문 이미지"
           onerror={(e) => {
