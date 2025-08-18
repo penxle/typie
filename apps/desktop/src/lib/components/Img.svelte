@@ -17,7 +17,7 @@
     progressive?: boolean;
   } & Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt' | 'placeholder'>;
 
-  let { $image: _image, ...rest }: Props = $props();
+  let { $image: _image, progressive, ...rest }: Props = $props();
 
   const image = fragment(
     _image,
@@ -32,4 +32,4 @@
   );
 </script>
 
-<Img placeholder={$image.placeholder} url={$image.url} {...rest} />
+<Img placeholder={progressive ? $image.placeholder : undefined} ratio={$image.ratio} url={$image.url} {...rest} />
