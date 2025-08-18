@@ -1,7 +1,6 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
-  import { Mark } from '@tiptap/pm/model';
   import { Selection } from '@tiptap/pm/state';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
@@ -12,7 +11,6 @@
   import { getNodeView, TiptapEditor } from '@typie/ui/tiptap';
   import { getPageLayoutDimensions, mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
-  import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -198,7 +196,6 @@
   const title = new YState<string>(doc, 'title', '');
   const subtitle = new YState<string>(doc, 'subtitle', '');
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
-  const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
   const experimentalPageLayout = new YState<PageLayoutSettings | undefined>(doc, 'experimental_pageLayout', undefined);
   const experimentalPageEnabled = new YState<boolean>(doc, 'experimental_pageEnabled', false);
@@ -459,10 +456,6 @@
     }
 
     editor?.current.once('create', ({ editor }) => {
-      const { tr, schema } = editor.state;
-      tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
-      editor.view.dispatch(tr);
-
       const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
       if (postId && selections[postId]) {
         if (selections[postId].type === 'element') {
@@ -545,23 +538,6 @@
     app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
     app.state.current = $query.entity.id;
 
-    const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
-
-    const handler = ({ editor }: { editor: Editor }) => {
-      const marks =
-        arrayOrNull(editor.state.storedMarks) ||
-        arrayOrNull(editor.state.selection.$anchor.marks()) ||
-        arrayOrNull(editor.state.selection.$anchor.parent.firstChild?.firstChild?.marks) ||
-        [];
-
-      const jsonMarks = marks.map((mark) => mark.toJSON());
-
-      if (stringify(storedMarks.current) !== stringify(jsonMarks)) {
-        storedMarks.current = jsonMarks;
-      }
-    };
-
-    editor?.current.on('transaction', handler);
     editor?.current.on('selectionUpdate', persistSelection);
 
     return () => {
@@ -581,7 +557,6 @@
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
 
-      editor?.current.off('transaction', handler);
       editor?.current.off('selectionUpdate', persistSelection);
 
       persistence.destroy();

@@ -152,7 +152,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       const maxWidth = (map.get('maxWidth') as number) ?? 800;
       const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
       const note = (map.get('note') as string) || '';
-      const storedMarks = (map.get('storedMarks') as unknown[]) ?? [];
       const anchors = (map.get('anchors') as Record<string, string | null>) ?? {};
 
       const fragment = doc.getXmlFragment('body');
@@ -183,7 +182,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
           text,
           characterCount,
           blobSize,
-          storedMarks,
           note,
           updatedAt,
         })
