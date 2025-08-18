@@ -3,7 +3,6 @@
   import { css, cx } from '@typie/styled-system/css';
   import { onMount } from 'svelte';
   import { Ref } from '../../utils';
-  import { setupEditorContext } from '../lib';
   import { renderHTML } from '../lib/html';
   import { baseExtensions } from '../schema';
   import type { JSONContent } from '@tiptap/core';
@@ -19,8 +18,6 @@
   };
 
   let { style, content, editor = $bindable(), extensions, pageLayout }: Props = $props();
-
-  setupEditorContext();
 
   let element = $state<HTMLElement>();
 
