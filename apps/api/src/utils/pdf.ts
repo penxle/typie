@@ -3,11 +3,11 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { PDFDocument } from 'pdf-lib';
 
 const execFileAsync = promisify(execFile);
 
 async function mergePDFsWithPdfLib(pdfBuffers: Buffer[]): Promise<Buffer> {
+  const { PDFDocument } = await import('pdf-lib');
   const mergedPdf = await PDFDocument.create();
 
   for (const pdfBuffer of pdfBuffers) {
