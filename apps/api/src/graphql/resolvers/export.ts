@@ -183,7 +183,7 @@ async function generatePostPDF(params: {
     });
 
     const pageHeightPx = pageLayout.height * 3.779_527_559_1; // NOTE: Convert mm to px (96 DPI)
-    const totalPages = Math.floor(totalHeight / pageHeightPx);
+    const totalPages = Math.round(totalHeight / pageHeightPx);
 
     const pdfBuffers: Buffer[] = [];
 
