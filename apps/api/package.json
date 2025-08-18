@@ -70,7 +70,6 @@
     "meilisearch": "^0.51.0",
     "nanoid": "^5.1.5",
     "p-map": "^7.0.3",
-    "pdf-lib": "^1.17.1",
     "playwright": "^1.54.2",
     "postgres": "^3.4.7",
     "query-string": "^9.2.2",

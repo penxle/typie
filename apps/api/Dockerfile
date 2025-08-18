@@ -3,7 +3,7 @@ ENV NODE_ENV=production
 ENV PLAYWRIGHT_BROWSERS_PATH=/playwright
 
 RUN curl -fsSL https://rpm.nodesource.com/setup_24.x | bash
-RUN dnf install -y nodejs
+RUN dnf install -y nodejs ghostscript
 RUN corepack enable pnpm && corepack install -g pnpm@latest-10
 RUN pnpm config set store-dir /pnpm-store
 
