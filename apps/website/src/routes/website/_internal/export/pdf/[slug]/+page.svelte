@@ -1,9 +1,11 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
-  import { TiptapRenderer } from '@typie/ui/tiptap';
+  import { setupEditorContext, TiptapRenderer } from '@typie/ui/tiptap';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { graphql } from '$graphql';
+  import type { Editor } from '@tiptap/core';
+  import type { Ref } from '@typie/ui/utils';
 
   const query = graphql(`
     query ExportPdfSlugPage_query($slug: String!) {
@@ -40,6 +42,9 @@
     }
   `);
 
+  let editor = $state<Ref<Editor>>();
+  setupEditorContext({ pdf: true });
+
   const post = $derived($query.entity.node.__typename === 'Post' ? $query.entity.node : null);
 
   const urlParams = $derived(page.url.searchParams);
@@ -65,7 +70,9 @@
   });
 
   onMount(() => {
-    window.notifyExportReady?.();
+    if (editor) {
+      editor.current.storage.page.forPdf = true;
+    }
   });
 </script>
 
@@ -78,8 +85,8 @@
           type: 'doc',
           content: post.body.content,
         }}
-        forPdf
         {pageLayout}
+        bind:editor
       />
     </div>
   {:else}
@@ -89,7 +96,7 @@
         type: 'doc',
         content: post.body.content,
       }}
-      forPdf
+      bind:editor
     />
   {/if}
 {/if}

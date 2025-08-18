@@ -10,7 +10,7 @@
   import { Toast } from '../../../notification';
   import { clamp } from '../../../utils/number';
   import { mmToPx } from '../../../utils/unit';
-  import { getNodeView, NodeView } from '../../lib';
+  import { getEditorContext, getNodeView, NodeView } from '../../lib';
   import Enlarge from './Enlarge.svelte';
   import type { NodeViewProps } from '../../lib';
 
@@ -27,7 +27,7 @@
   });
 
   const pageLayout = $derived(editor?.current.storage.page?.layout);
-  const forPdf = $derived(editor?.current.storage.page?.forPdf ?? false);
+  const context = getEditorContext();
 
   const maxContentHeight = $derived(pageLayout ? mmToPx(pageLayout.height - pageLayout.marginTop - pageLayout.marginBottom) : undefined);
 
@@ -232,7 +232,7 @@
           onclick={() => !editor?.current.isEditable && (enlarged = true)}
           onload={checkAndAdjustProportion}
           placeholder={attrs.placeholder}
-          progressive={!forPdf}
+          progressive={!context.pdf}
           ratio={attrs.ratio}
           role="button"
           size="full"

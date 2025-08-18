@@ -8,7 +8,7 @@
   import { Helmet, HorizontalDivider, Icon, InEditorBody, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
-  import { getNodeView, TiptapEditor } from '@typie/ui/tiptap';
+  import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import { getPageLayoutDimensions, mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
@@ -172,6 +172,8 @@
       }
     }
   `);
+
+  setupEditorContext();
 
   const app = getAppContext();
   const clientId = nanoid();

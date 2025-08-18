@@ -1,3 +1,4 @@
+export * from './context.svelte';
 export { createNodeView } from './create';
 export { default as NodeView } from './NodeView.svelte';
 export { default as NodeViewContentEditable } from './NodeViewContentEditable.svelte';
