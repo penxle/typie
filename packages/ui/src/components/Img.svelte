@@ -18,7 +18,7 @@
     ratio?: number;
     quality?: number;
     placeholder?: string;
-  } & Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt'>;
+  } & Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt' | 'placeholder'>;
 
   let { url, alt, style, size, ratio, quality, placeholder, ...rest }: Props = $props();
 
@@ -104,6 +104,6 @@
       {/if}
     </div>
   {:else}
-    <img class={css(style)} {alt} loading="lazy" {sizes} {src} {srcset} {...rest} />
+    <img class={css(style)} {alt} {sizes} {src} {srcset} {...rest} />
   {/if}
 {/key}
