@@ -8,7 +8,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { autosize } from '@typie/ui/actions';
-  import { getNodeViewByNodeId, TiptapEditor } from '@typie/ui/tiptap';
+  import { getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import { clamp } from '@typie/ui/utils';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
@@ -126,6 +126,8 @@
       }
     }
   `);
+
+  setupEditorContext();
 
   const clientId = nanoid();
   let editor = $state<Ref<Editor>>();

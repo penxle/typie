@@ -39,18 +39,12 @@ declare module '@tiptap/core' {
 
 const key = new PluginKey('page');
 
-export const Page = Extension.create<{ forPdf?: boolean }, PageStorage>({
+export const Page = Extension.create<unknown, PageStorage>({
   name: 'page',
-
-  addOptions() {
-    return {
-      forPdf: false,
-    };
-  },
 
   addStorage() {
     return {
-      forPdf: this.options.forPdf,
+      forPdf: false,
     };
   },
 

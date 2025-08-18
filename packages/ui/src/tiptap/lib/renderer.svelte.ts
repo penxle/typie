@@ -1,5 +1,5 @@
 import { NodeView } from '@tiptap/core';
-import { mount, unmount } from 'svelte';
+import { getAllContexts, mount, unmount } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { Ref } from '../../utils';
 import type {
@@ -53,6 +53,10 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
 
     const context = new SvelteMap();
     context.set('onDragStart', (event: DragEvent) => this.#onDragStart(event));
+
+    for (const [key, value] of getAllContexts()) {
+      context.set(key, value);
+    }
 
     this.#props = {
       editor: new Ref(this.editor),
