@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { typewriter } from '@typie/ui/transitions';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
@@ -69,10 +70,14 @@
     }
   `);
 
+  const app = getAppContext();
+
   let mounted = $state(false);
 
   onMount(() => {
     mounted = true;
+    app.state.current = undefined;
+    app.state.ancestors = [];
   });
 
   const greetings = {
