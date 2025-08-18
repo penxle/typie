@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { PDFDocument } from 'pdf-lib';
-import puppeteer from 'puppeteer';
+import { chromium } from 'playwright';
 import { db, Entities, firstOrThrowWith, Posts, TableCode, validateDbId } from '@/db';
 import { EntityVisibility } from '@/enums';
 import { env } from '@/env';
@@ -100,7 +100,7 @@ async function generatePostPDF(params: {
 }): Promise<Buffer> {
   const { entitySlug, accessToken, pageLayout } = params;
 
-  const browser = await puppeteer.launch({
+  const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
@@ -122,18 +122,20 @@ async function generatePostPDF(params: {
 
     const websiteUrl = new URL(env.WEBSITE_URL);
 
-    const context = await browser.createBrowserContext();
+    const context = await browser.newContext();
 
     if (accessToken) {
-      await context.setCookie({
-        name: 'typie-at',
-        value: accessToken,
-        domain: websiteUrl.hostname,
-        path: '/',
-        httpOnly: true,
-        secure: websiteUrl.protocol === 'https:',
-        sameSite: 'Lax',
-      });
+      await context.addCookies([
+        {
+          name: 'typie-at',
+          value: accessToken,
+          domain: websiteUrl.hostname,
+          path: '/',
+          httpOnly: true,
+          secure: websiteUrl.protocol === 'https:',
+          sameSite: 'Lax',
+        },
+      ]);
     }
 
     const page = await context.newPage();
