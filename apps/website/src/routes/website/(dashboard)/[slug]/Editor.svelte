@@ -10,7 +10,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { getNodeView, TiptapEditor } from '@typie/ui/tiptap';
-  import { mmToPx } from '@typie/ui/utils';
+  import { getPageLayoutDimensions, mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
@@ -46,7 +46,7 @@
   import Timeline from './Timeline.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '@typie/ui/utils';
+  import type { PageLayoutSettings, Ref } from '@typie/ui/utils';
   import type { Editor_query } from '$graphql';
 
   type Props = {
@@ -200,20 +200,14 @@
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
+  const experimentalPageLayout = new YState<PageLayoutSettings | undefined>(doc, 'experimental_pageLayout', undefined);
+  const experimentalPageEnabled = new YState<boolean>(doc, 'experimental_pageEnabled', false);
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
-  const pageLayout = $derived(
-    app.preference.current.experimental_pageLayoutId === 'a4'
-      ? { width: 210, height: 297, marginTop: 25, marginBottom: 25, marginLeft: 25, marginRight: 25 }
-      : app.preference.current.experimental_pageLayoutId === 'a5'
-        ? { width: 148, height: 210, marginTop: 20, marginBottom: 20, marginLeft: 20, marginRight: 20 }
-        : app.preference.current.experimental_pageLayoutId === 'b5'
-          ? { width: 176, height: 250, marginTop: 15, marginBottom: 15, marginLeft: 15, marginRight: 15 }
-          : app.preference.current.experimental_pageLayoutId === 'b6'
-            ? { width: 125, height: 176, marginTop: 10, marginBottom: 10, marginLeft: 10, marginRight: 10 }
-            : { width: 210, height: 297, marginTop: 25, marginBottom: 25, marginLeft: 25, marginRight: 25 },
-  );
+  const isPageLayoutEnabled = $derived(app.preference.current.experimental_pageEnabled && experimentalPageEnabled.current);
+
+  const pageLayout = $derived(getPageLayoutDimensions(experimentalPageLayout.current));
 
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
@@ -399,7 +393,7 @@
   });
 
   $effect(() => {
-    if (app.preference.current.experimental_pageEnabled && pageLayout) {
+    if (isPageLayoutEnabled && pageLayout) {
       untrack(() => {
         editor?.current.commands.setPageLayout(pageLayout);
       });
@@ -699,7 +693,13 @@
               {/snippet}
 
               {#if $query.entity.node.__typename === 'Post'}
-                <PostMenu entity={$query.entity} post={$query.entity.node} via="editor" />
+                <PostMenu
+                  entity={$query.entity}
+                  pageLayoutEnabled={experimentalPageEnabled.current}
+                  pageLayoutSettings={experimentalPageLayout.current}
+                  post={$query.entity.node}
+                  via="editor"
+                />
               {/if}
 
               <HorizontalDivider color="secondary" />
@@ -794,7 +794,7 @@
               backgroundColor: 'surface.muted',
             },
           })}
-          data-layout={app.preference.current.experimental_pageEnabled ? 'page' : 'scroll'}
+          data-layout={isPageLayoutEnabled && pageLayout ? 'page' : 'scroll'}
           onmouseleave={() => {
             showAnchorOutline = false;
           }}
@@ -808,22 +808,12 @@
           role="none"
         >
           <div
-            style:--prosemirror-max-width={app.preference.current.experimental_pageEnabled
-              ? `${mmToPx(pageLayout.width)}px`
-              : `${maxWidth.current}px`}
-            style:--prosemirror-page-margin-top={app.preference.current.experimental_pageEnabled
-              ? `${mmToPx(pageLayout.marginTop)}px`
-              : '0'}
-            style:--prosemirror-page-margin-bottom={app.preference.current.experimental_pageEnabled
-              ? `${mmToPx(pageLayout.marginBottom)}px`
-              : '0'}
-            style:--prosemirror-page-margin-left={app.preference.current.experimental_pageEnabled
-              ? `${mmToPx(pageLayout.marginLeft)}px`
-              : '0'}
-            style:--prosemirror-page-margin-right={app.preference.current.experimental_pageEnabled
-              ? `${mmToPx(pageLayout.marginRight)}px`
-              : '0'}
-            style:--prosemirror-padding-bottom={app.preference.current.experimental_pageEnabled
+            style:--prosemirror-max-width={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.width)}px` : `${maxWidth.current}px`}
+            style:--prosemirror-page-margin-top={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
+            style:--prosemirror-page-margin-bottom={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
+            style:--prosemirror-page-margin-left={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
+            style:--prosemirror-page-margin-right={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginRight)}px` : '0'}
+            style:--prosemirror-padding-bottom={isPageLayoutEnabled && pageLayout
               ? '0'
               : `${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}
             class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}
