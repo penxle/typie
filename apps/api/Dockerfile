@@ -3,7 +3,8 @@ ENV NODE_ENV=production
 ENV PLAYWRIGHT_BROWSERS_PATH=/playwright
 
 RUN curl -fsSL https://rpm.nodesource.com/setup_24.x | bash
-RUN dnf install -y nodejs ghostscript
+# spell-checker:disable-next-line
+RUN dnf install -y nodejs ghostscript nspr nss atk at-spi2-atk libxkbcommon libXcomposite libXdamage libXrandr libgbm alsa-lib pango
 RUN corepack enable pnpm && corepack install -g pnpm@latest-10
 RUN pnpm config set store-dir /pnpm-store
 
@@ -17,15 +18,14 @@ RUN pnpm fetch --prod
 COPY out/json ./
 RUN pnpm install --offline --prod
 
-RUN pnpm exec playwright install chromium --with-deps
-
 FROM base AS runner
 WORKDIR /app
 
 ADD https://github.com/krallin/tini/releases/download/v0.19.0/tini-arm64 /tini
 RUN chmod +x /tini
 
-COPY --from=deps /playwright /playwright
+RUN pnpm dlx playwright install chromium
+
 COPY --from=deps /deps ./
 COPY out/full ./
 
