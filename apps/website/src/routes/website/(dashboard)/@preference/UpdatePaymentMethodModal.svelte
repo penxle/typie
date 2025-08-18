@@ -73,6 +73,21 @@
     ) {
       subscribePlanWithBillingKey(input: $input) {
         id
+
+        user {
+          id
+          ...DashboardLayout_PreferenceModal_BillingTab_user
+          ...DashboardLayout_PlanUsageWidget_user
+          ...DashboardLayout_UserMenu_user
+
+          sites {
+            id
+
+            ...Editor_Toolbar_site
+            ...Editor_Limit_site
+            ...Editor_Toolbar_FontFamily_site
+          }
+        }
       }
     }
   `);
