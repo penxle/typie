@@ -232,7 +232,7 @@
           onclick={() => !editor?.current.isEditable && (enlarged = true)}
           onload={checkAndAdjustProportion}
           placeholder={attrs.placeholder}
-          progressive={!context.pdf}
+          progressive={!context?.pdf}
           ratio={attrs.ratio}
           role="button"
           size="full"
