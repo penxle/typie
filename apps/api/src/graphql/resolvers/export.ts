@@ -1,10 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { PDFDocument } from 'pdf-lib';
 import { chromium } from 'playwright';
 import { db, Entities, firstOrThrowWith, Posts, TableCode, validateDbId } from '@/db';
 import { EntityVisibility } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError } from '@/errors';
+import { mergePDFs } from '@/utils/pdf';
 import { builder } from '../builder';
 
 /**
@@ -208,17 +208,7 @@ async function generatePostPDF(params: {
       pdfBuffers.push(Buffer.from(pdfBuffer));
     }
 
-    const mergedPdf = await PDFDocument.create();
-
-    for (const pdfBuffer of pdfBuffers) {
-      const pdf = await PDFDocument.load(pdfBuffer);
-
-      const [page] = await mergedPdf.copyPages(pdf, [0]);
-      mergedPdf.addPage(page);
-    }
-
-    const mergedPdfBytes = await mergedPdf.save();
-    return Buffer.from(mergedPdfBytes);
+    return mergePDFs(pdfBuffers);
   } finally {
     await browser.close();
   }
