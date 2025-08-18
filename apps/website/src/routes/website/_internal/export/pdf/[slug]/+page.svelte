@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
-  import { setupEditorContext, TiptapRenderer } from '@typie/ui/tiptap';
+  import { NotifyIdle, setupEditorContext, TiptapRenderer } from '@typie/ui/tiptap';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { graphql } from '$graphql';
@@ -78,13 +78,14 @@
 
 {#if post}
   {#if pageLayout.width && pageLayout.height}
-    <div style:height={`${pageLayout.height}mm`} class={cx('page-export-viewport', css({ overflowY: 'hidden' }))}>
+    <div style:height={`${pageLayout.height}mm`} class={cx('page-export-viewport', css({ overflowY: 'scroll' }))}>
       <TiptapRenderer
         style={css.raw({ size: 'full' })}
         content={{
           type: 'doc',
           content: post.body.content,
         }}
+        extensions={[NotifyIdle]}
         {pageLayout}
         bind:editor
       />
@@ -96,6 +97,7 @@
         type: 'doc',
         content: post.body.content,
       }}
+      extensions={[NotifyIdle]}
       bind:editor
     />
   {/if}
