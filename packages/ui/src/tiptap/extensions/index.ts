@@ -6,6 +6,7 @@ export * from './drop-cursor';
 export * from './ios-selection';
 export * from './node-commands';
 export * from './node-id';
+export * from './notify-idle';
 export * from './page';
 export * from './placeholder';
 export * from './search';

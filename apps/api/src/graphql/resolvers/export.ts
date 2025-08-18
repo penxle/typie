@@ -140,11 +140,21 @@ async function generatePostPDF(params: {
 
     const page = await context.newPage();
 
+    let resolveIdle: () => void;
+    const idlePromise = new Promise<void>((resolve) => {
+      resolveIdle = () => resolve();
+    });
+
+    await page.exposeFunction('notifyIdle', () => {
+      resolveIdle();
+    });
+
     await page.goto(exportUrl.toString(), {
       waitUntil: 'load',
     });
 
     await page.evaluateHandle('document.fonts.ready');
+    await idlePromise;
 
     if (!pageLayout) {
       // NOTE: scroll 방식인 경우 간단히 생성하고 반환
