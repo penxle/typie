@@ -268,18 +268,16 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout, forPdf?:
 
         const pageBackground = document.createElement('div');
         pageBackground.className = 'page-background';
-        if (!forPdf) {
-          pageBackground.style.cssText = `
-            position: absolute;
-            top: ${i * (PAGE_HEIGHT_PX + GAP) - MARGIN_TOP_PX}px;
-            left: -${MARGIN_LEFT_PX}px;
-            z-index: -1;
-            width: ${PAGE_WIDTH_PX}px;
-            height: ${PAGE_HEIGHT_PX}px;
-            background-color: ${token('colors.surface.default')};
-            box-shadow: ${token('shadows.medium')};
-          `;
-        }
+        pageBackground.style.cssText = `
+          position: absolute;
+          top: ${i * (PAGE_HEIGHT_PX + GAP) - MARGIN_TOP_PX}px;
+          left: -${MARGIN_LEFT_PX}px;
+          z-index: -1;
+          width: ${PAGE_WIDTH_PX}px;
+          height: ${PAGE_HEIGHT_PX}px;
+          background-color: ${token('colors.surface.default')};
+          box-shadow: ${forPdf ? 'none' : token('shadows.medium')};
+        `;
 
         const breaker = document.createElement('div');
         breaker.className = 'breaker';
@@ -336,9 +334,7 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout, forPdf?:
         }
         breaker.append(pageHeader);
 
-        if (!forPdf) {
-          pageBreak.append(pageBackground);
-        }
+        pageBreak.append(pageBackground);
         pageBreak.append(page);
         pageBreak.append(breaker);
 
