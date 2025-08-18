@@ -367,6 +367,19 @@
     );
   };
 
+  const fullSync = async () => {
+    if (!postId) return;
+
+    const update = Y.encodeStateAsUpdateV2(doc);
+
+    await syncPost({
+      clientId,
+      postId,
+      type: PostSyncType.UPDATE,
+      data: base64.stringify(update),
+    });
+  };
+
   $effect(() => {
     if (app.preference.current.typewriterEnabled && app.preference.current.typewriterPosition !== undefined) {
       untrack(() => {
@@ -440,7 +453,6 @@
     });
 
     const persistence = new IndexeddbPersistence(`typie:editor:${postId}`, doc);
-    persistence.on('synced', () => forceSync());
 
     if ($query.entity.node.__typename === 'Post') {
       Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
@@ -486,6 +498,7 @@
       }
     });
 
+    const fullSyncInterval = setInterval(() => fullSync(), 60_000);
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
     const heartbeatInterval = setInterval(() => {
       if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
@@ -540,9 +553,12 @@
 
     editor?.current.on('selectionUpdate', persistSelection);
 
+    fullSync();
+
     return () => {
       off();
 
+      clearInterval(fullSyncInterval);
       clearInterval(forceSyncInterval);
       clearInterval(heartbeatInterval);
 
