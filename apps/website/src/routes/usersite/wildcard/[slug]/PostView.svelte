@@ -5,7 +5,7 @@
   import { Button, ContentProtect, Helmet, HorizontalDivider, Icon, TextInput } from '@typie/ui/components';
   import { createForm, FormError } from '@typie/ui/form';
   import { Toast } from '@typie/ui/notification';
-  import { TiptapRenderer } from '@typie/ui/tiptap';
+  import { setupEditorContext, TiptapRenderer } from '@typie/ui/tiptap';
   import { comma, serializeOAuthState } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
@@ -182,6 +182,8 @@
   $effect(() => {
     void form;
   });
+
+  setupEditorContext();
 
   const fontFaces = $derived(
     $entityView.site.fonts
