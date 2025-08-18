@@ -21,13 +21,19 @@
   let { style, content, editor = $bindable(), extensions, pageLayout, forPdf }: Props = $props();
 
   let element = $state<HTMLElement>();
-  const html = $derived(renderHTML(content, [...baseExtensions, ...(extensions ?? [])]));
+
+  const allExtensions = $derived([
+    ...baseExtensions.map((ext) => (ext.name === 'page' ? ext.configure({ forPdf }) : ext)),
+    ...(extensions ?? []),
+  ]);
+
+  const html = $derived(renderHTML(content, allExtensions));
 
   onMount(() => {
     const e = new Editor({
       editable: false,
       content,
-      extensions: [...baseExtensions, ...(extensions ?? [])],
+      extensions: allExtensions,
       injectCSS: false,
 
       editorProps: {
@@ -37,8 +43,9 @@
       onCreate: ({ editor }) => {
         // eslint-disable-next-line svelte/no-dom-manipulating
         element?.replaceWith(editor.view.dom);
+
         if (pageLayout) {
-          editor.commands.setPageLayout(pageLayout, forPdf ?? false);
+          editor.commands.setPageLayout(pageLayout);
         }
       },
 
