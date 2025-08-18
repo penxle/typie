@@ -415,8 +415,9 @@ class ActivityGrid extends HookWidget {
     final changesMap = <String, GProfileScreen_QueryData_me_characterCountChanges>{};
 
     for (final change in characterCountChanges) {
-      final key = change.date.format(pattern: 'yyyy-MM-dd');
-      changesMap[key] = change;
+      final date = change.date.toLocal();
+      final dateKey = date.format(pattern: 'yyyy-MM-dd');
+      changesMap[dateKey] = change;
     }
 
     final numbers = characterCountChanges.map((c) => c.additions).where((n) => n > 0).toList();
