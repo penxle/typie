@@ -26,7 +26,7 @@ declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     page: {
-      setPageLayout: (layout: PageLayout, forPdf?: boolean) => ReturnType;
+      setPageLayout: (layout: PageLayout) => ReturnType;
       clearPageLayout: () => ReturnType;
     };
   }
@@ -39,20 +39,27 @@ declare module '@tiptap/core' {
 
 const key = new PluginKey('page');
 
-export const Page = Extension.create<unknown, PageStorage>({
+export const Page = Extension.create<{ forPdf?: boolean }, PageStorage>({
   name: 'page',
 
+  addOptions() {
+    return {
+      forPdf: false,
+    };
+  },
+
   addStorage() {
-    return {};
+    return {
+      forPdf: this.options.forPdf,
+    };
   },
 
   addCommands() {
     return {
       setPageLayout:
-        ({ width, height, marginTop, marginBottom, marginLeft, marginRight }, forPdf?: boolean) =>
+        ({ width, height, marginTop, marginBottom, marginLeft, marginRight }) =>
         ({ tr, dispatch }) => {
           this.storage.layout = { width, height, marginTop, marginBottom, marginLeft, marginRight };
-          this.storage.forPdf = forPdf ?? false;
 
           tr.setMeta(key, true);
           dispatch?.(tr);
@@ -83,7 +90,7 @@ export const Page = Extension.create<unknown, PageStorage>({
             if (!storage.layout) {
               return { decorations: DecorationSet.empty, pages: 0 };
             }
-            const decorations = createDecoration(state, storage.layout, storage.forPdf);
+            const decorations = createDecoration(state, storage.layout, storage.forPdf ?? false);
             return {
               decorations: DecorationSet.create(state.doc, decorations),
               pages: decorations.length,
@@ -102,11 +109,11 @@ export const Page = Extension.create<unknown, PageStorage>({
             }
 
             const forceUpdate = tr.getMeta(key);
-            const pageCount = calculatePageCount(storage.layout, editor.view, storage.forPdf);
+            const pageCount = calculatePageCount(storage.layout, editor.view, storage.forPdf ?? false);
             const currentPageCount = getExistingPageCount(editor.view);
 
             if (forceUpdate || Math.max(pageCount, 1) !== currentPageCount) {
-              const newDecorations = createDecoration(newState, storage.layout, storage.forPdf);
+              const newDecorations = createDecoration(newState, storage.layout, storage.forPdf ?? false);
               return {
                 decorations: DecorationSet.create(newState.doc, newDecorations),
                 pages: newDecorations.length,
