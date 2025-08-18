@@ -7,7 +7,9 @@
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import { match } from 'ts-pattern';
+  import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
+  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import ActivityGrid from '../@stats/ActivityGrid.svelte';
@@ -41,6 +43,7 @@
               id
               title
               subtitle
+              excerpt
             }
 
             ... on Canvas {
@@ -144,8 +147,21 @@
               })}
               href="/{entity.slug}"
             >
-              <div class={css({ fontSize: '14px', color: 'text.default' })}>
-                {entity.node.__typename === 'Post' || entity.node.__typename === 'Canvas' ? entity.node.title : ''}
+              <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+                <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                  <Icon
+                    style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
+                    icon={entity.node.__typename === 'Canvas' ? LineSquiggleIcon : FileIcon}
+                  />
+                  <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
+                    {entity.node.__typename === 'Post' || entity.node.__typename === 'Canvas' ? entity.node.title : ''}
+                  </div>
+                </div>
+                {#if entity.node.__typename === 'Post' && entity.node.excerpt}
+                  <div class={css({ fontSize: '13px', color: 'text.subtle', paddingLeft: '24px', lineClamp: '1' })}>
+                    {entity.node.excerpt}
+                  </div>
+                {/if}
               </div>
             </a>
           {/each}
