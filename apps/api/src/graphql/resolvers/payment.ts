@@ -25,7 +25,7 @@ import { getSubscriptionExpiresAt, payInvoiceWithBillingKey } from '@/utils';
 import { delay } from '@/utils/promise';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
-import { CreditCode, isTypeOf, PaymentInvoice, Plan, PlanRule, Subscription, UserBillingKey } from '../objects';
+import { CreditCode, isTypeOf, PaymentInvoice, Plan, PlanRule, Subscription, User, UserBillingKey } from '../objects';
 
 /**
  * * Types
@@ -76,6 +76,7 @@ Subscription.implement({
     startsAt: t.expose('startsAt', { type: 'DateTime' }),
     expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
     state: t.expose('state', { type: SubscriptionState }),
+    user: t.expose('userId', { type: User }),
   }),
 });
 

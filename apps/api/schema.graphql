@@ -879,6 +879,7 @@ type Subscription_ {
   plan: Plan!
   startsAt: DateTime!
   state: SubscriptionState!
+  user: User!
 }
 
 input SyncCanvasInput {
