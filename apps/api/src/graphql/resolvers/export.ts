@@ -61,7 +61,16 @@ builder.mutationFields((t) => ({
           entitySlug: entity.slug,
           accessToken,
           pageLayout:
-            input.width && input.height && input.marginTop && input.marginBottom && input.marginLeft && input.marginRight
+            input.width &&
+            input.height &&
+            input.marginTop !== undefined &&
+            input.marginTop !== null &&
+            input.marginBottom !== undefined &&
+            input.marginBottom !== null &&
+            input.marginLeft !== undefined &&
+            input.marginLeft !== null &&
+            input.marginRight !== undefined &&
+            input.marginRight !== null
               ? {
                   width: input.width,
                   height: input.height,
