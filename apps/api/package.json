@@ -99,6 +99,7 @@
     "@typie/pulumi": "workspace:*",
     "@typie/rps": "workspace:*",
     "drizzle-kit": "^0.31.4",
+    "pdf-lib": "^1.17.1",
     "react-email": "^4.2.8",
     "tsup": "^8.5.0"
   }

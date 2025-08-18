@@ -3,8 +3,23 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { PDFDocument } from 'pdf-lib';
 
 const execFileAsync = promisify(execFile);
+
+async function mergePDFsWithPdfLib(pdfBuffers: Buffer[]): Promise<Buffer> {
+  const mergedPdf = await PDFDocument.create();
+
+  for (const pdfBuffer of pdfBuffers) {
+    const pdf = await PDFDocument.load(pdfBuffer);
+    const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+    for (const page of pages) {
+      mergedPdf.addPage(page);
+    }
+  }
+
+  return Buffer.from(await mergedPdf.save());
+}
 
 export async function mergePDFs(pdfBuffers: Buffer[]): Promise<Buffer> {
   if (pdfBuffers.length === 0) {
@@ -13,6 +28,11 @@ export async function mergePDFs(pdfBuffers: Buffer[]): Promise<Buffer> {
 
   if (pdfBuffers.length === 1) {
     return pdfBuffers[0];
+  }
+
+  const isLocal = process.env.NODE_ENV === undefined;
+  if (isLocal) {
+    return mergePDFsWithPdfLib(pdfBuffers);
   }
 
   const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'pdf-merge-'));

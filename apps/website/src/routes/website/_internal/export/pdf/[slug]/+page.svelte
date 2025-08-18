@@ -78,7 +78,7 @@
 
 {#if post}
   {#if pageLayout.width && pageLayout.height}
-    <div style:height={`${pageLayout.height}mm`} class={cx('page-export-viewport', css({ overflowY: 'scroll' }))}>
+    <div style:height={`${pageLayout.height}mm`} class={cx('page-export-viewport', css({ overflowY: 'hidden' }))}>
       <TiptapRenderer
         style={css.raw({ size: 'full' })}
         content={{
