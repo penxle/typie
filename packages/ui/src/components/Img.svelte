@@ -18,9 +18,10 @@
     ratio?: number;
     quality?: number;
     placeholder?: string;
+    progressive?: boolean;
   } & Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt' | 'placeholder'>;
 
-  let { url, alt, style, size, ratio, quality, placeholder, ...rest }: Props = $props();
+  let { url, alt, style, size, ratio, quality, placeholder, progressive = false, ...rest }: Props = $props();
 
   let containerEl = $state<HTMLElement>();
   let targetEl = $state<HTMLElement>();
@@ -63,7 +64,7 @@
   };
 
   $effect(() => {
-    if (containerEl) {
+    if (containerEl && progressive) {
       loaded = false;
 
       const observer = new IntersectionObserver((entries) => {
@@ -83,7 +84,7 @@
 </script>
 
 {#key url}
-  {#if placeholderUrl}
+  {#if progressive && placeholderUrl}
     <div
       bind:this={containerEl}
       style:aspect-ratio={ratio}

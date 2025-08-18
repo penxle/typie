@@ -27,6 +27,8 @@
   });
 
   const pageLayout = $derived(editor?.current.storage.page?.layout);
+  const forPdf = $derived(editor?.current.storage.page?.forPdf ?? false);
+
   const maxContentHeight = $derived(pageLayout ? mmToPx(pageLayout.height - pageLayout.marginTop - pageLayout.marginBottom) : undefined);
 
   $effect(() => {
@@ -160,7 +162,6 @@
     if (constrainedProportion !== proportion) {
       proportion = clamp(constrainedProportion, 0.1, 1);
       updateAttributes({ proportion });
-      console.log('update proportion', constrainedProportion, proportion);
     }
   };
 
@@ -231,6 +232,7 @@
           onclick={() => !editor?.current.isEditable && (enlarged = true)}
           onload={checkAndAdjustProportion}
           placeholder={attrs.placeholder}
+          progressive={!forPdf}
           ratio={attrs.ratio}
           role="button"
           size="full"
