@@ -77,6 +77,7 @@
   onMount(() => {
     mounted = true;
     app.state.current = undefined;
+    app.state.ancestors = [];
   });
 
   const greetings = {
