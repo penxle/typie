@@ -639,9 +639,9 @@
                 <PostMenu entity={$query.entity} post={$query.entity.node} via="editor" />
               {/if}
 
-              <HorizontalDivider color="secondary" />
-
               {#if $query.me.role === UserRole.ADMIN}
+                <HorizontalDivider color="secondary" />
+
                 <MenuItem
                   icon={IconClockFading}
                   onclick={() => {
