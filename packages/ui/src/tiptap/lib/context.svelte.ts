@@ -7,25 +7,16 @@ type EditorContext = {
 };
 
 export const getEditorContext = () => {
-  return getContext<EditorContext>(key);
+  return getContext<EditorContext | undefined>(key);
 };
 
 export const setupEditorContext = (value?: Partial<EditorContext>) => {
-  const ctx = getContext<EditorContext | undefined>(key);
-  if (ctx) {
-    if (value) {
-      Object.assign(ctx, value);
-    }
+  const context = $state<EditorContext>({
+    pdf: false,
+    ...value,
+  });
 
-    return ctx;
-  } else {
-    const context = $state<EditorContext>({
-      pdf: false,
-      ...value,
-    });
+  setContext(key, context);
 
-    setContext(key, context);
-
-    return context;
-  }
+  return context;
 };

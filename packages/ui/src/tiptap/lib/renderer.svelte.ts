@@ -54,8 +54,10 @@ class SvelteNodeView extends NodeView<NodeViewComponent> implements ProseMirrorN
     const context = new SvelteMap();
     context.set('onDragStart', (event: DragEvent) => this.#onDragStart(event));
 
-    for (const [key, value] of getAllContexts()) {
-      context.set(key, value);
+    if ($effect.tracking()) {
+      for (const [key, value] of getAllContexts()) {
+        context.set(key, value);
+      }
     }
 
     this.#props = {
