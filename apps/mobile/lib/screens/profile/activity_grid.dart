@@ -233,7 +233,7 @@ class ActivityGrid extends HookWidget {
                 cellSize: const Size(cellSize, cellSize),
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(color: context.colors.surfaceDark, borderRadius: BorderRadius.circular(6)),
                 child: IntrinsicWidth(
                   child: IntrinsicHeight(
@@ -568,7 +568,7 @@ class _TooltipPositionDelegate extends SingleChildLayoutDelegate {
   Offset getPositionForChild(Size size, Size childSize) {
     const minX = 8.0;
     var tooltipX = cellPosition.dx - childSize.width - 2;
-    final tooltipY = cellPosition.dy - 100;
+    final tooltipY = cellPosition.dy - childSize.height - 2;
 
     if (tooltipX < minX) {
       tooltipX = minX;
