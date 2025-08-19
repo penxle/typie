@@ -32,6 +32,7 @@ class EditorScreen extends HookWidget {
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
     final focusedElement = useValueNotifier<String?>(null);
+    final connectionStatus = useValueNotifier<ConnectionStatus>(ConnectionStatus.connecting);
 
     final pageController = usePageController();
     final drag = useRef<Drag?>(null);
@@ -55,6 +56,7 @@ class EditorScreen extends HookWidget {
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
       focusedElement: focusedElement,
+      connectionStatus: connectionStatus,
       child: Material(
         color: context.colors.surfaceDefault,
         child: Stack(

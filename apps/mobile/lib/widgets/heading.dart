@@ -15,9 +15,11 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
     this.titleIcon,
     this.title,
     this.titleWidget,
+    this.suffix,
     this.actions,
     this.backgroundColor,
     this.fallbackSystemUiOverlayStyle,
+    this.banner,
     super.key,
   }) : assert(title != null || titleWidget != null, 'title or titleWidget must be provided');
 
@@ -25,11 +27,14 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
   final IconData? titleIcon;
   final String? title;
   final Widget? titleWidget;
+  final Widget? suffix;
   final List<Widget>? actions;
   final Color? backgroundColor;
   final SystemUiOverlayStyle? fallbackSystemUiOverlayStyle;
+  final Widget? banner;
 
-  static const _preferredSize = Size.fromHeight(52);
+  static const _headingHeight = 52.0;
+  static const _bannerHeight = 32.0;
 
   @override
   Widget build(BuildContext context) {
@@ -60,52 +65,64 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
         decoration: BoxDecoration(color: backgroundColor ?? context.colors.surfaceSubtle),
         child: SafeArea(
           bottom: false,
-          child: Container(
-            height: _preferredSize.height,
-            margin: const Pad(horizontal: 20),
-            decoration: BoxDecoration(
-              border: Border.symmetric(horizontal: BorderSide(color: context.colors.borderStrong)),
-            ),
-            child: Row(
-              children: [
-                if (leadingWidget != null) ...[
-                  leadingWidget!,
-                  AppVerticalDivider(color: context.colors.borderStrong),
-                  const Gap(20),
-                ] else if (route?.canPop ?? false) ...[
-                  Tappable(
-                    onTap: () => context.router.maybePop(),
-                    padding: const Pad(vertical: 4),
-                    child: SizedBox(
-                      width: 52,
-                      child: Icon(
-                        route?.settings is AutoRoutePage && (route!.settings as AutoRoutePage).fullscreenDialog
-                            ? LucideLightIcons.x
-                            : LucideLightIcons.chevron_left,
-                        color: context.colors.textDefault,
-                      ),
-                    ),
-                  ),
-                  AppVerticalDivider(color: context.colors.borderStrong),
-                  const Gap(20),
-                ],
-                if (titleIcon != null) ...[Icon(titleIcon, size: 20), const Gap(8)],
-                Expanded(
-                  child:
-                      titleWidget ??
-                      Text(
-                        title!,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: const Size.fromHeight(_headingHeight).height,
+                margin: const Pad(horizontal: 20),
+                decoration: BoxDecoration(
+                  border: Border.symmetric(horizontal: BorderSide(color: context.colors.borderStrong)),
                 ),
-                if (actions != null) ...[
-                  const Gap(20),
-                  AppVerticalDivider(color: context.colors.borderStrong),
-                  ...actions!,
-                ],
-              ],
-            ),
+                child: Row(
+                  children: [
+                    if (leadingWidget != null) ...[
+                      leadingWidget!,
+                      AppVerticalDivider(color: context.colors.borderStrong),
+                      const Gap(20),
+                    ] else if (route?.canPop ?? false) ...[
+                      Tappable(
+                        onTap: () => context.router.maybePop(),
+                        padding: const Pad(vertical: 4),
+                        child: SizedBox(
+                          width: 52,
+                          child: Icon(
+                            route?.settings is AutoRoutePage && (route!.settings as AutoRoutePage).fullscreenDialog
+                                ? LucideLightIcons.x
+                                : LucideLightIcons.chevron_left,
+                            color: context.colors.textDefault,
+                          ),
+                        ),
+                      ),
+                      AppVerticalDivider(color: context.colors.borderStrong),
+                      const Gap(20),
+                    ],
+                    if (titleIcon != null) ...[Icon(titleIcon, size: 20), const Gap(8)],
+                    Expanded(
+                      child:
+                          titleWidget ??
+                          Text(
+                            title!,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                    ),
+                    if (suffix != null) ...[const Gap(8), suffix!],
+                    if (actions != null) ...[
+                      const Gap(20),
+                      AppVerticalDivider(color: context.colors.borderStrong),
+                      ...actions!,
+                    ],
+                  ],
+                ),
+              ),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                height: banner != null ? _bannerHeight : 0,
+                child: banner,
+              ),
+            ],
           ),
         ),
       ),
@@ -113,7 +130,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => _preferredSize;
+  Size get preferredSize => const Size.fromHeight(_headingHeight + _bannerHeight);
 }
 
 class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
@@ -182,6 +199,28 @@ class HeadingAction extends StatelessWidget {
       onTap: onTap,
       padding: const Pad(vertical: 4),
       child: ConstrainedBox(constraints: const BoxConstraints(minWidth: 52), child: Icon(icon, size: 24)),
+    );
+  }
+}
+
+class HeadingBanner extends StatelessWidget {
+  const HeadingBanner({required this.text, required this.backgroundColor, super.key});
+
+  final String text;
+  final Color backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 32,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      color: backgroundColor,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+      ),
     );
   }
 }
