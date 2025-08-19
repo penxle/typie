@@ -5,7 +5,14 @@
   import { HorizontalDivider, Icon, SegmentButtons, Select, Slider, Switch, TextInput, Tooltip } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
-  import { clamp, createDefaultPageLayout, DEFAULT_PAGE_MARGINS, getMaxMargin, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
+  import {
+    clamp,
+    createDefaultPageLayout,
+    DEFAULT_PAGE_MARGINS,
+    getMaxMargin,
+    INCOMPATIBLE_NODE_TYPES,
+    PAGE_LAYOUT_OPTIONS,
+  } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
@@ -43,15 +50,13 @@
 
   const isPageLayoutEnabled = $derived(app.preference.current.experimental_pageEnabled && pageEnabled.current);
 
-  const incompatibleTypes = new Set(['blockquote', 'callout', 'fold', 'table', 'code_block', 'html_block']);
-
   const getIncompatibleBlocks = () => {
     if (!editor?.current) return [];
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const types = new Set<string>();
 
     editor.current.state.doc.descendants((node) => {
-      if (incompatibleTypes.has(node.type.name)) {
+      if (INCOMPATIBLE_NODE_TYPES.has(node.type.name)) {
         types.add(node.type.name);
       }
     });
@@ -91,7 +96,7 @@
           const blocksToConvert: NodeWithPos[] = [];
 
           tr.doc.descendants((node, pos) => {
-            if (incompatibleTypes.has(node.type.name)) {
+            if (INCOMPATIBLE_NODE_TYPES.has(node.type.name)) {
               const depth = tr.doc.resolve(pos).depth;
               blocksToConvert.push({ pos, node, depth });
               return false; // NOTE: 자식 노드를 순회하지 않음. 중첩된 노드는 다음 루프에서 처리됨
