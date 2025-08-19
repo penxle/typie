@@ -46,7 +46,11 @@ export const Callout = createNodeView(Component, {
     return {
       toggleCallout:
         () =>
-        ({ editor, commands }) => {
+        ({ can, editor, commands }) => {
+          if (!can().isNodeAllowed(this.name)) {
+            return false;
+          }
+
           if (editor.isActive(this.name)) {
             return commands.lift(this.name);
           } else {

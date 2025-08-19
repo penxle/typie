@@ -91,7 +91,9 @@ export const SlashMenu = Extension.create({
               }
             }
 
-            const availableItems = menuItems.filter((item) => item.visible !== false && typeSet.has(item.type));
+            const availableItems = menuItems.filter(
+              (item) => item.visible !== false && typeSet.has(item.type) && this.editor.can().isNodeAllowed(item.type),
+            );
 
             const items = matchSorter(availableItems, disassemble(query), {
               keys: [(item) => disassemble(item.name), (item) => item.keywords.map((v) => disassemble(v))],

@@ -1,6 +1,7 @@
 import { Extension, getMarkType } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { ReplaceAroundStep, ReplaceStep } from '@tiptap/pm/transform';
+import { INCOMPATIBLE_NODE_TYPES } from '../../utils';
 import type { MarkType, Node, NodeType } from '@tiptap/pm/model';
 
 declare module '@tiptap/core' {
@@ -49,9 +50,17 @@ export const Command = Extension.create({
           return false;
         },
 
-      isNodeAllowed: () => () => {
-        return true;
-      },
+      isNodeAllowed:
+        (typeOrName: string | NodeType) =>
+        ({ editor }) => {
+          const name = typeof typeOrName === 'string' ? typeOrName : typeOrName.name;
+          const isPageLayout = !!editor.storage.page.layout;
+          if (isPageLayout && INCOMPATIBLE_NODE_TYPES.has(name)) {
+            return false;
+          }
+
+          return true;
+        },
 
       insertNode:
         (node) =>
