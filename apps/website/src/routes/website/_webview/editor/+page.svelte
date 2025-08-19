@@ -899,13 +899,13 @@
       ></textarea>
 
       <div class={center()}>
-        <div class={css({ marginY: '40px', width: '120px', height: '1px', backgroundColor: 'interactive.hover' })}></div>
+        <div class={css({ marginTop: '40px', width: '120px', height: '1px', backgroundColor: 'interactive.hover' })}></div>
       </div>
     </div>
 
     <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
       <TiptapEditor
-        style={css.raw({ size: 'full' })}
+        style={css.raw({ size: 'full', paddingTop: '40px' })}
         {awareness}
         {doc}
         onblur={() => {
