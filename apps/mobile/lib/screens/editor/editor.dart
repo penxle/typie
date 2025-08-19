@@ -71,6 +71,7 @@ class Editor extends HookWidget {
     final scope = EditorStateScope.of(context);
     final webViewController = useValueListenable(scope.webViewController);
     final mode = useValueListenable(scope.mode);
+    final connectionStatus = useValueListenable(scope.connectionStatus);
 
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((height) {
@@ -111,6 +112,14 @@ class Editor extends HookWidget {
 
       final subscription = webViewController.onEvent.listen((event) async {
         switch (event.name) {
+          case 'connectionStatus':
+            final status = event.data as String;
+            scope.connectionStatus.value = switch (status) {
+              'connecting' => ConnectionStatus.connecting,
+              'connected' => ConnectionStatus.connected,
+              'disconnected' => ConnectionStatus.disconnected,
+              _ => ConnectionStatus.connecting,
+            };
           case 'webviewReady':
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
@@ -199,6 +208,9 @@ class Editor extends HookWidget {
           heading: Heading(
             titleIcon: data.post.type == GPostType.NORMAL ? LucideLabIcons.text_square : LucideLightIcons.shapes,
             title: data.post.title,
+            banner: connectionStatus == ConnectionStatus.disconnected
+                ? HeadingBanner(text: '연결이 끊어졌습니다', backgroundColor: context.colors.accentDanger)
+                : null,
             actions: [
               HeadingAction(
                 icon: LucideLightIcons.ellipsis,
