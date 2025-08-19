@@ -39,7 +39,11 @@ export const Fold = createNodeView(Component, {
     return {
       toggleFold:
         () =>
-        ({ editor, commands }) => {
+        ({ can, editor, commands }) => {
+          if (!can().isNodeAllowed(this.name)) {
+            return false;
+          }
+
           if (editor.isActive(this.type)) {
             return commands.lift(this.type);
           } else {
