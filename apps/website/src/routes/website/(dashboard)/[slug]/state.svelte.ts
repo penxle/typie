@@ -36,6 +36,6 @@ export class YState<T> {
 
     this.#doc.transact(() => {
       this.#map.set(this.#name, value);
-    });
+    }, 'local');
   }
 }
