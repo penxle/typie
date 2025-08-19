@@ -20,6 +20,8 @@ enum SecondaryToolbarMode {
 
 enum BottomToolbarMode { hidden, insert, horizontalRule, blockquote }
 
+enum ConnectionStatus { connecting, connected, disconnected }
+
 class EditorStateScope extends InheritedWidget {
   const EditorStateScope({
     required super.child,
@@ -35,6 +37,7 @@ class EditorStateScope extends InheritedWidget {
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
     required this.focusedElement,
+    required this.connectionStatus,
     super.key,
   });
 
@@ -50,6 +53,7 @@ class EditorStateScope extends InheritedWidget {
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
   final ValueNotifier<String?> focusedElement;
+  final ValueNotifier<ConnectionStatus> connectionStatus;
 
   Future<void> command(String name, {Map<String, dynamic>? attrs}) async {
     await webViewController.value?.emitEvent('command', {'name': name, 'attrs': attrs});
