@@ -5,7 +5,7 @@
   import { HorizontalDivider, Icon, SegmentButtons, Select, Slider, Switch, TextInput, Tooltip } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
-  import { createDefaultPageLayout, DEFAULT_PAGE_MARGINS, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
+  import { clamp, createDefaultPageLayout, DEFAULT_PAGE_MARGINS, getMaxMargin, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
@@ -284,16 +284,17 @@
                 <div class={css({ fontSize: '11px', color: 'text.muted' })}>상</div>
                 <TextInput
                   style={css.raw({ width: 'full' })}
-                  max="100"
+                  max={pageLayout.current ? String(getMaxMargin('top', pageLayout.current.size, pageLayout.current.margins)) : undefined}
                   min="0"
-                  onchange={(e) => {
+                  oninput={(e) => {
+                    if (!pageLayout.current) return;
                     const target = e.target as HTMLInputElement;
-                    if (pageLayout.current) {
-                      pageLayout.current = {
-                        ...pageLayout.current,
-                        margins: { ...pageLayout.current.margins, top: Number(target.value) },
-                      };
-                    }
+                    const value = clamp(Number(target.value), 0, getMaxMargin('top', pageLayout.current.size, pageLayout.current.margins));
+                    target.value = String(value);
+                    pageLayout.current = {
+                      ...pageLayout.current,
+                      margins: { ...pageLayout.current.margins, top: value },
+                    };
                   }}
                   size="sm"
                   type="number"
@@ -304,16 +305,21 @@
                 <div class={css({ fontSize: '11px', color: 'text.muted' })}>하</div>
                 <TextInput
                   style={css.raw({ width: 'full' })}
-                  max="100"
+                  max={pageLayout.current ? String(getMaxMargin('bottom', pageLayout.current.size, pageLayout.current.margins)) : undefined}
                   min="0"
-                  onchange={(e) => {
+                  oninput={(e) => {
+                    if (!pageLayout.current) return;
                     const target = e.target as HTMLInputElement;
-                    if (pageLayout.current) {
-                      pageLayout.current = {
-                        ...pageLayout.current,
-                        margins: { ...pageLayout.current.margins, bottom: Number(target.value) },
-                      };
-                    }
+                    const value = clamp(
+                      Number(target.value),
+                      0,
+                      getMaxMargin('bottom', pageLayout.current.size, pageLayout.current.margins),
+                    );
+                    target.value = String(value);
+                    pageLayout.current = {
+                      ...pageLayout.current,
+                      margins: { ...pageLayout.current.margins, bottom: value },
+                    };
                   }}
                   size="sm"
                   type="number"
@@ -324,16 +330,17 @@
                 <div class={css({ fontSize: '11px', color: 'text.muted' })}>좌</div>
                 <TextInput
                   style={css.raw({ width: 'full' })}
-                  max="100"
+                  max={pageLayout.current ? String(getMaxMargin('left', pageLayout.current.size, pageLayout.current.margins)) : undefined}
                   min="0"
                   onchange={(e) => {
+                    if (!pageLayout.current) return;
                     const target = e.target as HTMLInputElement;
-                    if (pageLayout.current) {
-                      pageLayout.current = {
-                        ...pageLayout.current,
-                        margins: { ...pageLayout.current.margins, left: Number(target.value) },
-                      };
-                    }
+                    const value = clamp(Number(target.value), 0, getMaxMargin('left', pageLayout.current.size, pageLayout.current.margins));
+                    target.value = String(value);
+                    pageLayout.current = {
+                      ...pageLayout.current,
+                      margins: { ...pageLayout.current.margins, left: value },
+                    };
                   }}
                   size="sm"
                   type="number"
@@ -344,16 +351,21 @@
                 <div class={css({ fontSize: '11px', color: 'text.muted' })}>우</div>
                 <TextInput
                   style={css.raw({ width: 'full' })}
-                  max="100"
+                  max={pageLayout.current ? String(getMaxMargin('right', pageLayout.current.size, pageLayout.current.margins)) : undefined}
                   min="0"
-                  onchange={(e) => {
+                  oninput={(e) => {
+                    if (!pageLayout.current) return;
                     const target = e.target as HTMLInputElement;
-                    if (pageLayout.current) {
-                      pageLayout.current = {
-                        ...pageLayout.current,
-                        margins: { ...pageLayout.current.margins, right: Number(target.value) },
-                      };
-                    }
+                    const value = clamp(
+                      Number(target.value),
+                      0,
+                      getMaxMargin('right', pageLayout.current.size, pageLayout.current.margins),
+                    );
+                    target.value = String(value);
+                    pageLayout.current = {
+                      ...pageLayout.current,
+                      margins: { ...pageLayout.current.margins, right: value },
+                    };
                   }}
                   size="sm"
                   type="number"

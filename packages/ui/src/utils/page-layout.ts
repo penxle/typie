@@ -1,3 +1,5 @@
+export const MIN_CONTENT_SIZE_MM = 50;
+
 export type PageLayoutSettings = {
   size: 'a4' | 'a5' | 'b5' | 'b6';
   margins: {
@@ -50,4 +52,22 @@ export function createDefaultPageLayout(size: PageLayoutSize = 'a4'): PageLayout
     size,
     margins: DEFAULT_PAGE_MARGINS[size],
   };
+}
+
+export function getMaxMargin(
+  side: 'top' | 'bottom' | 'left' | 'right',
+  pageSize: PageLayoutSize,
+  margins: PageLayoutSettings['margins'],
+): number {
+  const pageDimensions = PAGE_SIZE_MAP[pageSize];
+
+  if (side === 'left') {
+    return pageDimensions.width - margins.right - MIN_CONTENT_SIZE_MM;
+  } else if (side === 'right') {
+    return pageDimensions.width - margins.left - MIN_CONTENT_SIZE_MM;
+  } else if (side === 'top') {
+    return pageDimensions.height - margins.bottom - MIN_CONTENT_SIZE_MM;
+  } else {
+    return pageDimensions.height - margins.top - MIN_CONTENT_SIZE_MM;
+  }
 }
