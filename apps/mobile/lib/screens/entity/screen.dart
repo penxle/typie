@@ -258,7 +258,7 @@ class _EntityList extends HookWidget {
                           ],
                           BottomMenuItem(
                             icon: LucideLightIcons.square_pen,
-                            label: '하위 포스트 만들기',
+                            label: '여기에 포스트 만들기',
                             onTap: () async {
                               final resp = await client.request(
                                 GEntityScreen_CreatePost_MutationReq(
@@ -278,7 +278,7 @@ class _EntityList extends HookWidget {
                           if ((entity?.depth ?? 0) < maxDepth - 1)
                             BottomMenuItem(
                               icon: LucideLightIcons.folder_plus,
-                              label: '하위 폴더 만들기',
+                              label: '여기에 폴더 만들기',
                               onTap: () async {
                                 final resp = await client.request(
                                   GEntityScreen_CreateFolder_MutationReq(
