@@ -105,6 +105,19 @@
       {/if}
     </div>
   {:else}
-    <img class={css(style)} {alt} {sizes} {src} {srcset} {...rest} />
+    <img
+      class={css(style)}
+      {alt}
+      {sizes}
+      {src}
+      {srcset}
+      {...rest}
+      onload={() => {
+        loaded = true;
+      }}
+    />
+    {#if !loaded && placeholderUrl}
+      <img class={css(style, { size: 'full', objectFit: 'cover' })} src={placeholderUrl} {...rest} />
+    {/if}
   {/if}
 {/key}
