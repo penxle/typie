@@ -83,10 +83,22 @@ class ReferralScreen extends StatelessWidget {
                                   final issueReferralUrl = GReferralScreen_IssueReferralUrl_MutationReq();
                                   final response = await client.request(issueReferralUrl);
 
+                                  if (!context.mounted) {
+                                    return;
+                                  }
+
                                   final referralUrl = response.issueReferralUrl;
                                   final message = '📝 타이피 가입하고 한달 무료 혜택 받아가세요! $referralUrl';
 
-                                  await SharePlus.instance.share(ShareParams(title: message, text: message));
+                                  final box = context.findRenderObject() as RenderBox?;
+
+                                  await SharePlus.instance.share(
+                                    ShareParams(
+                                      title: message,
+                                      text: message,
+                                      sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
+                                    ),
+                                  );
                                 },
                                 child: Container(
                                   decoration: BoxDecoration(
