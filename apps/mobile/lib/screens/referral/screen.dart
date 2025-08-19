@@ -1,6 +1,7 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/widget.dart';
@@ -44,35 +45,66 @@ class ReferralScreen extends StatelessWidget {
                             '친구를 초대하면 친구는 바로 1달 무료, 친구가 첫 결제를 하면 나도 1달 무료 혜택을 받아요.',
                             style: TextStyle(fontSize: 14, color: context.colors.textDefault),
                           ),
-                          Tappable(
-                            onTap: () async {
-                              final issueReferralUrl = GReferralScreen_IssueReferralUrl_MutationReq();
-                              final response = await client.request(issueReferralUrl);
+                          Row(
+                            spacing: 8,
+                            children: [
+                              Tappable(
+                                onTap: () async {
+                                  final issueReferralUrl = GReferralScreen_IssueReferralUrl_MutationReq();
+                                  final response = await client.request(issueReferralUrl);
 
-                              final referralUrl = response.issueReferralUrl;
-                              final message = '📝 타이피 가입하고 한달 무료 혜택 받아가세요! $referralUrl';
+                                  final referralUrl = response.issueReferralUrl;
+                                  final message = '📝 타이피 가입하고 한달 무료 혜택 받아가세요! $referralUrl';
 
-                              await Clipboard.setData(ClipboardData(text: message));
+                                  await Clipboard.setData(ClipboardData(text: message));
 
-                              if (context.mounted) {
-                                context.toast(ToastType.success, '초대 링크가 복사되었어요. 친구들에게 공유해보세요!');
-                              }
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: context.colors.borderStrong),
+                                  if (context.mounted) {
+                                    context.toast(ToastType.success, '초대 링크가 복사되었어요.');
+                                  }
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: context.colors.borderStrong),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    spacing: 8,
+                                    children: [
+                                      Icon(LucideLightIcons.copy, size: 16),
+                                      Text('초대 링크 복사', style: TextStyle(fontSize: 14)),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                spacing: 8,
-                                children: [
-                                  Icon(LucideLightIcons.copy, size: 16),
-                                  Text('초대 링크 복사', style: TextStyle(fontSize: 14)),
-                                ],
+                              Tappable(
+                                onTap: () async {
+                                  final issueReferralUrl = GReferralScreen_IssueReferralUrl_MutationReq();
+                                  final response = await client.request(issueReferralUrl);
+
+                                  final referralUrl = response.issueReferralUrl;
+                                  final message = '📝 타이피 가입하고 한달 무료 혜택 받아가세요! $referralUrl';
+
+                                  await SharePlus.instance.share(ShareParams(title: message, text: message));
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: context.colors.borderStrong),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    spacing: 8,
+                                    children: [
+                                      Icon(LucideLightIcons.share, size: 16),
+                                      Text('공유하기', style: TextStyle(fontSize: 14)),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ],
                       ),
