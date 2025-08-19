@@ -2,7 +2,7 @@
   import { Fragment } from '@tiptap/pm/model';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
-  import { HorizontalDivider, Icon, SegmentButtons, Select, Slider, Switch, Tooltip } from '@typie/ui/components';
+  import { HorizontalDivider, Icon, SegmentButtons, Select, Slider, Switch, TextInput, Tooltip } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
   import { createDefaultPageLayout, DEFAULT_PAGE_MARGINS, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
@@ -282,17 +282,8 @@
             <div class={grid({ columns: 2, gap: '8px', marginLeft: '28px' })}>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
                 <div class={css({ fontSize: '11px', color: 'text.muted' })}>상</div>
-                <input
-                  class={css({
-                    width: 'full',
-                    paddingX: '8px',
-                    paddingY: '4px',
-                    fontSize: '12px',
-                    borderWidth: '1px',
-                    borderColor: 'border.default',
-                    borderRadius: '4px',
-                    backgroundColor: 'surface.default',
-                  })}
+                <TextInput
+                  style={css.raw({ width: 'full' })}
                   max="100"
                   min="0"
                   onchange={(e) => {
@@ -304,23 +295,15 @@
                       };
                     }
                   }}
+                  size="sm"
                   type="number"
                   value={pageLayout.current?.margins.top ?? 25}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
                 <div class={css({ fontSize: '11px', color: 'text.muted' })}>하</div>
-                <input
-                  class={css({
-                    width: 'full',
-                    paddingX: '8px',
-                    paddingY: '4px',
-                    fontSize: '12px',
-                    borderWidth: '1px',
-                    borderColor: 'border.default',
-                    borderRadius: '4px',
-                    backgroundColor: 'surface.default',
-                  })}
+                <TextInput
+                  style={css.raw({ width: 'full' })}
                   max="100"
                   min="0"
                   onchange={(e) => {
@@ -332,23 +315,15 @@
                       };
                     }
                   }}
+                  size="sm"
                   type="number"
                   value={pageLayout.current?.margins.bottom ?? 25}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
                 <div class={css({ fontSize: '11px', color: 'text.muted' })}>좌</div>
-                <input
-                  class={css({
-                    width: 'full',
-                    paddingX: '8px',
-                    paddingY: '4px',
-                    fontSize: '12px',
-                    borderWidth: '1px',
-                    borderColor: 'border.default',
-                    borderRadius: '4px',
-                    backgroundColor: 'surface.default',
-                  })}
+                <TextInput
+                  style={css.raw({ width: 'full' })}
                   max="100"
                   min="0"
                   onchange={(e) => {
@@ -360,23 +335,15 @@
                       };
                     }
                   }}
+                  size="sm"
                   type="number"
                   value={pageLayout.current?.margins.left ?? 25}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
                 <div class={css({ fontSize: '11px', color: 'text.muted' })}>우</div>
-                <input
-                  class={css({
-                    width: 'full',
-                    paddingX: '8px',
-                    paddingY: '4px',
-                    fontSize: '12px',
-                    borderWidth: '1px',
-                    borderColor: 'border.default',
-                    borderRadius: '4px',
-                    backgroundColor: 'surface.default',
-                  })}
+                <TextInput
+                  style={css.raw({ width: 'full' })}
                   max="100"
                   min="0"
                   onchange={(e) => {
@@ -388,6 +355,7 @@
                       };
                     }
                   }}
+                  size="sm"
                   type="number"
                   value={pageLayout.current?.margins.right ?? 25}
                 />

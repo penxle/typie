@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { chromium } from 'playwright';
 import { db, Entities, firstOrThrowWith, Posts, TableCode, validateDbId } from '@/db';
-import { EntityVisibility } from '@/enums';
+import { EntityVisibility, ExportLayoutMode } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError } from '@/errors';
 import { mergePDFs } from '@/utils/pdf';
@@ -35,12 +35,13 @@ builder.mutationFields((t) => ({
     type: ExportPostAsPdfResult,
     input: {
       entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
-      width: t.input.float({ required: false }),
-      height: t.input.float({ required: false }),
-      marginTop: t.input.float({ required: false }),
-      marginBottom: t.input.float({ required: false }),
-      marginLeft: t.input.float({ required: false }),
-      marginRight: t.input.float({ required: false }),
+      layoutMode: t.input.field({ type: ExportLayoutMode }),
+      width: t.input.float(),
+      height: t.input.float(),
+      marginTop: t.input.float(),
+      marginBottom: t.input.float(),
+      marginLeft: t.input.float(),
+      marginRight: t.input.float(),
     },
     resolve: async (_, { input }, ctx) => {
       const entity = await db.select().from(Entities).where(eq(Entities.id, input.entityId)).then(firstOrThrowWith(new NotFoundError()));
@@ -60,26 +61,15 @@ builder.mutationFields((t) => ({
         generatePostPDF({
           entitySlug: entity.slug,
           accessToken,
-          pageLayout:
-            input.width &&
-            input.height &&
-            input.marginTop !== undefined &&
-            input.marginTop !== null &&
-            input.marginBottom !== undefined &&
-            input.marginBottom !== null &&
-            input.marginLeft !== undefined &&
-            input.marginLeft !== null &&
-            input.marginRight !== undefined &&
-            input.marginRight !== null
-              ? {
-                  width: input.width,
-                  height: input.height,
-                  marginTop: input.marginTop,
-                  marginBottom: input.marginBottom,
-                  marginLeft: input.marginLeft,
-                  marginRight: input.marginRight,
-                }
-              : undefined,
+          layoutMode: input.layoutMode,
+          pageLayout: {
+            width: input.width,
+            height: input.height,
+            marginTop: input.marginTop,
+            marginBottom: input.marginBottom,
+            marginLeft: input.marginLeft,
+            marginRight: input.marginRight,
+          },
         }),
       ]);
 
@@ -98,7 +88,8 @@ builder.mutationFields((t) => ({
 async function generatePostPDF(params: {
   entitySlug: string;
   accessToken?: string;
-  pageLayout?: {
+  layoutMode: ExportLayoutMode;
+  pageLayout: {
     width: number;
     height: number;
     marginTop: number;
@@ -107,7 +98,7 @@ async function generatePostPDF(params: {
     marginRight: number;
   };
 }): Promise<Buffer> {
-  const { entitySlug, accessToken, pageLayout } = params;
+  const { entitySlug, accessToken, layoutMode, pageLayout } = params;
 
   const browser = await chromium.launch({
     headless: true,
@@ -115,16 +106,17 @@ async function generatePostPDF(params: {
   });
 
   try {
-    const urlParams = pageLayout
-      ? new URLSearchParams({
-          width: pageLayout.width.toString(),
-          height: pageLayout.height.toString(),
-          'margin-top': pageLayout.marginTop.toString(),
-          'margin-bottom': pageLayout.marginBottom.toString(),
-          'margin-left': pageLayout.marginLeft.toString(),
-          'margin-right': pageLayout.marginRight.toString(),
-        })
-      : new URLSearchParams();
+    const urlParams =
+      layoutMode === ExportLayoutMode.PAGE
+        ? new URLSearchParams({
+            width: pageLayout.width.toString(),
+            height: pageLayout.height.toString(),
+            'margin-top': pageLayout.marginTop.toString(),
+            'margin-bottom': pageLayout.marginBottom.toString(),
+            'margin-left': pageLayout.marginLeft.toString(),
+            'margin-right': pageLayout.marginRight.toString(),
+          })
+        : new URLSearchParams();
 
     const exportUrl = new URL(`/_internal/export/pdf/${entitySlug}`, env.WEBSITE_URL);
     exportUrl.search = urlParams.toString();
@@ -165,18 +157,20 @@ async function generatePostPDF(params: {
     await page.evaluateHandle('document.fonts.ready');
     await idlePromise;
 
-    if (!pageLayout) {
+    if (layoutMode === ExportLayoutMode.SCROLL) {
       // NOTE: scroll 방식인 경우 간단히 생성하고 반환
       const pdfBuffer = await page.pdf({
         printBackground: true,
         displayHeaderFooter: false,
         preferCSSPageSize: false,
         scale: 1,
+        width: `${pageLayout.width}mm`,
+        height: `${pageLayout.height}mm`,
         margin: {
-          top: '20mm',
-          bottom: '20mm',
-          left: '20mm',
-          right: '20mm',
+          top: `${pageLayout.marginTop}mm`,
+          bottom: `${pageLayout.marginBottom}mm`,
+          left: `${pageLayout.marginLeft}mm`,
+          right: `${pageLayout.marginRight}mm`,
         },
       });
 

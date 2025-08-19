@@ -31,11 +31,7 @@ export const PAGE_LAYOUT_OPTIONS = [
   { label: 'B6 (125mm × 176mm)', value: 'b6' as const },
 ];
 
-export function getPageLayoutDimensions(settings: PageLayoutSettings | undefined) {
-  if (!settings) {
-    return null;
-  }
-
+export function getPageLayoutDimensions(settings: PageLayoutSettings) {
   const size = PAGE_SIZE_MAP[settings.size];
   const margins = settings.margins;
 

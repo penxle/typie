@@ -17,6 +17,7 @@
     prefix?: Snippet;
     suffix?: Snippet;
     onclick?: () => void;
+    noCloseOnClick?: boolean;
   };
 
   type ButtonAttributes = Omit<HTMLButtonAttributes, 'type' | 'style' | 'disabled' | 'prefix'>;
@@ -46,6 +47,7 @@
     prefix,
     suffix,
     onclick,
+    noCloseOnClick = false,
     ...rest
   }: Props = $props();
 
@@ -113,7 +115,7 @@
   onblur={() => (focused = false)}
   onclick={() => {
     onclick?.();
-    if (!loading) {
+    if (!loading && !noCloseOnClick) {
       close?.();
     }
   }}

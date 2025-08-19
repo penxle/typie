@@ -36,7 +36,12 @@
 {#if open}
   <div
     class={center({ position: 'fixed', inset: '0', zIndex: 'modal', padding: '20px', userSelect: 'none' })}
-    use:focusTrap={{ fallbackFocus: '[role="none"]', escapeDeactivates: false, returnFocusOnDeactivate: false }}
+    use:focusTrap={{
+      fallbackFocus: '[role="none"]',
+      escapeDeactivates: false,
+      returnFocusOnDeactivate: false,
+      allowOutsideClick: true, // NOTE: downloadFromBase64 등 외부 클릭 허용
+    }}
     use:portal
   >
     <div
