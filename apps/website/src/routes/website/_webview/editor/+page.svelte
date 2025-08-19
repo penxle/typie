@@ -10,6 +10,7 @@
   import { autosize } from '@typie/ui/actions';
   import { getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import { clamp } from '@typie/ui/utils';
+  import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -32,6 +33,8 @@
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
+
+  const WEBVIEW_DISCONNECT_THRESHOLD = 10;
 
   const query = graphql(`
     query WebViewEditorPage_Query($slug: String!, $siteId: ID!) {
@@ -131,6 +134,8 @@
 
   const clientId = nanoid();
   let editor = $state<Ref<Editor>>();
+  let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
+  let lastHeartbeatAt = $state(dayjs());
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -261,9 +266,39 @@
     });
   };
 
+  $effect(() => {
+    window.__webview__?.emitEvent('connectionStatus', connectionStatus);
+  });
+
   onMount(() => {
+    const heartbeatCheckInterval = setInterval(() => {
+      if (dayjs().diff(lastHeartbeatAt, 'seconds') > WEBVIEW_DISCONNECT_THRESHOLD) {
+        connectionStatus = 'disconnected';
+      }
+    }, 1000);
+
+    const handleOnline = () => {
+      if (connectionStatus === 'disconnected' && dayjs().diff(lastHeartbeatAt, 'seconds') <= WEBVIEW_DISCONNECT_THRESHOLD) {
+        connectionStatus = 'connected';
+      }
+    };
+
+    const handleOffline = () => {
+      connectionStatus = 'disconnected';
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (!navigator.onLine) {
+      connectionStatus = 'disconnected';
+    }
+
     const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
-      if (payload.type === PostSyncType.UPDATE) {
+      if (payload.type === PostSyncType.HEARTBEAT) {
+        lastHeartbeatAt = dayjs(payload.data);
+        connectionStatus = 'connected';
+      } else if (payload.type === PostSyncType.UPDATE) {
         Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
       } else if (payload.type === PostSyncType.VECTOR) {
         const update = Y.encodeStateAsUpdateV2(doc, base64.parse(payload.data));
@@ -706,6 +741,7 @@
 
     return () => {
       clearInterval(forceSyncInterval);
+      clearInterval(heartbeatCheckInterval);
 
       if (syncUpdateTimeout) {
         clearTimeout(syncUpdateTimeout);
@@ -714,6 +750,9 @@
       if (syncAwarenessTimeout) {
         clearTimeout(syncAwarenessTimeout);
       }
+
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
