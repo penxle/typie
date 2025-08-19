@@ -1,0 +1,3 @@
+mutation ReferralScreen_IssueReferralUrl_Mutation {
+  issueReferralUrl
+}

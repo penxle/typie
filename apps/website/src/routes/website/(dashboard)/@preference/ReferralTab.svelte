@@ -129,6 +129,7 @@
     <h4 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default', marginBottom: '12px' })}>초대 혜택 안내</h4>
 
     <ul class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]', listStyleType: 'disc', paddingLeft: '20px' })}>
+      <li>초대 링크를 통해 웹에서 가입하고, 웹에서 플랜을 가입해야 초대 혜택을 받을 수 있어요. 앱에서 가입하면 혜택을 받을 수 없어요.</li>
       <li>
         친구가 초대 링크로 가입하면 친구는 즉시 FULL ACCESS 플랜 1개월에 해당하는 크레딧을 지급받아요. 지급받은 크레딧으로 바로 FULL ACCESS
         플랜을 체험해볼 수 있어요.
