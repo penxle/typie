@@ -48,6 +48,12 @@ export const InAppPurchaseStore = {
   GOOGLE_PLAY: 'GOOGLE_PLAY',
 } as const;
 
+export type ExportLayoutMode = keyof typeof ExportLayoutMode;
+export const ExportLayoutMode = {
+  SCROLL: 'SCROLL',
+  PAGE: 'PAGE',
+} as const;
+
 export type NotificationCategory = keyof typeof NotificationCategory;
 export const NotificationCategory = {
   ANNOUNCEMENT: 'ANNOUNCEMENT',

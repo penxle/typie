@@ -6,7 +6,7 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import { comma, downloadFromBase64, getPageLayoutDimensions } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
+  import { EntityAvailability, EntityVisibility, ExportLayoutMode, PostType } from '@/enums';
   import { TypieError } from '@/errors';
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
@@ -18,6 +18,7 @@
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { getPostYjsAttrs } from '$lib/utils/yjs-post';
+  import PdfExportModal from './PdfExportModal.svelte';
   import type { PageLayoutSettings } from '@typie/ui/utils';
 
   type Props = {
@@ -40,7 +41,9 @@
 
   let { post, entity, via, pageLayoutSettings, pageLayoutEnabled }: Props = $props();
 
-  let isExporting = $state(false);
+  let showPdfExportModal = $state(false);
+  let exportModalPageLayout = $state<PageLayoutSettings | undefined>();
+  let exportModalPageEnabled = $state<boolean>(false);
 
   const duplicatePost = graphql(`
     mutation PostMenu_DuplicatePost_Mutation($input: DuplicatePostInput!) {
@@ -159,38 +162,40 @@
   };
 
   const handleExport = async () => {
-    if (isExporting) return;
+    let layout = pageLayoutSettings;
+    let pageEnabled = pageLayoutEnabled;
 
-    isExporting = true;
+    if (!layout && via === 'tree') {
+      const attrs = await getPostYjsAttrs<{
+        experimental_pageLayout: PageLayoutSettings;
+        experimental_pageEnabled: boolean;
+      }>(post.id, ['experimental_pageLayout', 'experimental_pageEnabled']);
+
+      layout = attrs.experimental_pageLayout;
+      pageEnabled = attrs.experimental_pageEnabled ?? false;
+    }
+
+    exportModalPageLayout = layout;
+    exportModalPageEnabled = app.preference.current.experimental_pageEnabled && (pageEnabled ?? false);
+    showPdfExportModal = true;
+  };
+
+  const handleExportConfirm = async (layoutMode: ExportLayoutMode, pageLayout: PageLayoutSettings) => {
     try {
-      let layout = pageLayoutSettings;
-      let pageEnabled = pageLayoutEnabled;
-
-      if (!layout && via === 'tree') {
-        const attrs = await getPostYjsAttrs<{
-          experimental_pageLayout: PageLayoutSettings;
-          experimental_pageEnabled: boolean;
-        }>(post.id, ['experimental_pageLayout', 'experimental_pageEnabled']);
-
-        layout = attrs.experimental_pageLayout;
-        pageEnabled = attrs.experimental_pageEnabled ?? false;
-      }
-
-      const pageLayout = app.preference.current.experimental_pageEnabled && pageEnabled && layout ? getPageLayoutDimensions(layout) : null;
+      const pageLayoutDimensions = getPageLayoutDimensions(pageLayout);
 
       const resp = await exportPostAsPdf({
         entityId: entity.id,
-        ...pageLayout,
+        layoutMode,
+        ...pageLayoutDimensions,
       });
 
       downloadFromBase64(resp.data, resp.filename, 'application/pdf');
 
       Toast.success('PDF 내보내기가 완료되었어요');
-      mixpanel.track('export_post', { via, format: 'PDF' });
+      mixpanel.track('export_post', { via, format: 'PDF', layoutMode });
     } catch {
       Toast.error('내보내기 중 오류가 발생했습니다');
-    } finally {
-      isExporting = false;
     }
   };
 </script>
@@ -238,12 +243,22 @@
 {#if app.preference.current.experimental_pdfExportEnabled}
   <HorizontalDivider color="secondary" />
 
-  <MenuItem icon={DownloadIcon} loading={isExporting} onclick={handleExport}>PDF로 내보내기</MenuItem>
+  <MenuItem icon={DownloadIcon} noCloseOnClick onclick={handleExport}>PDF로 내보내기</MenuItem>
 {/if}
 
 <HorizontalDivider color="secondary" />
 
 <MenuItem icon={TrashIcon} onclick={handleDelete} variant="danger">삭제</MenuItem>
+
+<PdfExportModal
+  currentPageEnabled={exportModalPageEnabled}
+  currentPageLayout={exportModalPageLayout}
+  onClose={() => {
+    showPdfExportModal = false;
+  }}
+  onConfirm={handleExportConfirm}
+  bind:open={showPdfExportModal}
+/>
 
 {#if via === 'tree'}
   <HorizontalDivider color="secondary" />
