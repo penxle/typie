@@ -16,6 +16,7 @@
   "devDependencies": {
     "@ctrl/tinycolor": "^4.1.0",
     "@floating-ui/dom": "^1.7.3",
+    "@hono/node-server": "^1.19.0",
     "@iconify-json/lucide": "^1.2.62",
     "@iconify-json/simple-icons": "^1.2.48",
     "@iconify-json/twemoji": "^1.2.4",
@@ -46,6 +47,7 @@
     "graphql-request": "^7.2.0",
     "graphql-ws": "^6.0.6",
     "happy-dom": "^18.0.1",
+    "hono": "^4.9.2",
     "konva": "^9.3.22",
     "ky": "^1.8.2",
     "marked": "^16.2.0",
