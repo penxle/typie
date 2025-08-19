@@ -27,6 +27,8 @@
   import Zoom from './Zoom.svelte';
   import type { Canvas_query } from '$graphql';
 
+  const DISCONNECT_THRESHOLD = 3;
+
   type Props = {
     $query: Canvas_query;
   };
@@ -206,6 +208,26 @@
   onMount(() => {
     if (!canvasId) return;
 
+    const handleOnline = () => {
+      const isFresh = dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD;
+      if (isFresh) {
+        connectionStatus = 'connected';
+      } else {
+        connectionStatus = 'connecting';
+      }
+    };
+
+    const handleOffline = () => {
+      connectionStatus = 'disconnected';
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (!navigator.onLine) {
+      connectionStatus = 'disconnected';
+    }
+
     const unsubscribe = canvasSyncStream.subscribe({ clientId, canvasId }, async (payload) => {
       if (payload.type === CanvasSyncType.HEARTBEAT) {
         lastHeartbeatAt = dayjs(payload.data);
@@ -255,7 +277,7 @@
 
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
     const heartbeatInterval = setInterval(() => {
-      if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
+      if (dayjs().diff(lastHeartbeatAt, 'seconds') > DISCONNECT_THRESHOLD) {
         connectionStatus = 'disconnected';
       }
     }, 1000);
@@ -285,6 +307,9 @@
       if (syncAwarenessTimeout) {
         clearTimeout(syncAwarenessTimeout);
       }
+
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
