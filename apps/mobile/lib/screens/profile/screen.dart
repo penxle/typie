@@ -95,7 +95,6 @@ class ProfileScreen extends StatelessWidget {
                   padding: const Pad(top: 16, bottom: 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 12,
                     children: [
                       const Padding(
                         padding: Pad(horizontal: 16),

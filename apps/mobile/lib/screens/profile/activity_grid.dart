@@ -114,9 +114,10 @@ class ActivityGrid extends HookWidget {
                     );
                   },
                   child: SizedBox(
-                    height: labelHeight,
+                    height: labelHeight + 12,
                     child: Stack(
                       clipBehavior: Clip.none,
+                      alignment: Alignment.bottomCenter,
                       children: [
                         for (int i = 0; i < monthSpans.length; i++)
                           if (monthSpans[i].end - monthSpans[i].start >= 1 || i == monthSpans.length - 1)
