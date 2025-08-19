@@ -51,10 +51,11 @@
     $site?: Optional<Editor_Toolbar_site>;
     editor?: Ref<Editor>;
     doc: Y.Doc;
+    undoManager: Y.UndoManager;
     style?: SystemStyleObject;
   };
 
-  let { $site: _site, editor, doc, style }: Props = $props();
+  let { $site: _site, editor, doc, undoManager, style }: Props = $props();
 
   const site = fragment(
     _site,
@@ -76,6 +77,28 @@
   );
 
   const app = getAppContext();
+
+  let canUndo = $state(false);
+  let canRedo = $state(false);
+
+  $effect(() => {
+    const handler = () => {
+      canUndo = undoManager.canUndo();
+      canRedo = undoManager.canRedo();
+    };
+
+    undoManager.on('stack-item-added', handler);
+    undoManager.on('stack-item-popped', handler);
+    undoManager.on('stack-item-updated', handler);
+    undoManager.on('stack-cleared', handler);
+
+    return () => {
+      undoManager.off('stack-item-added', handler);
+      undoManager.off('stack-item-popped', handler);
+      undoManager.off('stack-item-updated', handler);
+      undoManager.off('stack-cleared', handler);
+    };
+  });
 </script>
 
 <div
@@ -310,22 +333,22 @@
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
       <ToolbarButton
         style={css.raw({ borderRightRadius: '0' })}
-        disabled={!editor?.current.can().undo()}
+        disabled={!canUndo}
         icon={UndoIcon}
         label="실행 취소"
         onclick={() => {
-          editor?.current.chain().focus().undo().run();
+          undoManager.undo();
         }}
         size="small"
       />
 
       <ToolbarButton
         style={css.raw({ borderLeftRadius: '0' })}
-        disabled={!editor?.current.can().redo()}
+        disabled={!canRedo}
         icon={RedoIcon}
         label="다시 실행"
         onclick={() => {
-          editor?.current.chain().focus().redo().run();
+          undoManager.redo();
         }}
         size="small"
       />

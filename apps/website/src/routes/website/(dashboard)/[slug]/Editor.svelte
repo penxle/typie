@@ -1,6 +1,7 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
+  import { isiOS, isMacOS } from '@tiptap/core';
   import { Selection } from '@tiptap/pm/state';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
@@ -18,6 +19,7 @@
   import { on } from 'svelte/events';
   import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
+  import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostSyncType, UserRole } from '@/enums';
@@ -196,6 +198,11 @@
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
+  const undoManager = new Y.UndoManager(doc, {
+    trackedOrigins: new Set([ySyncPluginKey, 'local']),
+    captureTransaction: (tr) => tr.meta.get('addToHistory') !== false,
+    deleteFilter: (item) => defaultDeleteFilter(item, defaultProtectedNodes),
+  });
 
   const title = new YState<string>(doc, 'title', '');
   const subtitle = new YState<string>(doc, 'subtitle', '');
@@ -614,6 +621,22 @@
   {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
+<svelte:window
+  onkeydown={(e) => {
+    const modKey = isMacOS() || isiOS() ? e.metaKey : e.ctrlKey;
+
+    if (modKey && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      undoManager.undo();
+    } else if ((modKey && e.key === 'y') || (modKey && e.key === 'z' && e.shiftKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      undoManager.redo();
+    }
+  }}
+/>
+
 <Helmet title={`${effectiveTitle} 작성 중`} />
 
 {#if $query.entity.node.__typename === 'Post'}
@@ -793,7 +816,7 @@
 
       <HorizontalDivider color="secondary" />
 
-      <Toolbar $site={$query.entity.site} {doc} {editor} />
+      <Toolbar $site={$query.entity.site} {doc} {editor} {undoManager} />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div
@@ -997,6 +1020,7 @@
                       return unfurlEmbed({ url });
                     },
                   }}
+                  {undoManager}
                   bind:editor
                 />
 
