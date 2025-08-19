@@ -951,13 +951,13 @@
                     use:autosize
                   ></textarea>
 
-                  <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+                  <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
                 </div>
               </div>
 
               <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
                 <TiptapEditor
-                  style={css.raw({ size: 'full', paddingX: '80px' })}
+                  style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
                   {awareness}
                   {doc}
                   oncreate={() => {
