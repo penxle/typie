@@ -283,8 +283,7 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout, forPdf?:
         breaker.className = 'breaker';
         breaker.style.cssText = `
           width: ${PAGE_WIDTH_PX}px;
-          margin-left: calc(50% - ${PAGE_WIDTH_PX / 2}px);
-          margin-right: calc(50% - ${PAGE_WIDTH_PX / 2}px);
+          margin-left: -${MARGIN_LEFT_PX}px;
           position: relative;
           float: left;
           clear: both;
