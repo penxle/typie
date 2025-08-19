@@ -246,14 +246,20 @@ enum EntityVisibility {
   UNLISTED
 }
 
+enum ExportLayoutMode {
+  PAGE
+  SCROLL
+}
+
 input ExportPostAsPdfInput {
   entityId: ID!
-  height: Float
-  marginBottom: Float
-  marginLeft: Float
-  marginRight: Float
-  marginTop: Float
-  width: Float
+  height: Float!
+  layoutMode: ExportLayoutMode!
+  marginBottom: Float!
+  marginLeft: Float!
+  marginRight: Float!
+  marginTop: Float!
+  width: Float!
 }
 
 type ExportPostAsPdfResult {

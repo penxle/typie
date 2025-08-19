@@ -206,7 +206,7 @@
 
   const isPageLayoutEnabled = $derived(app.preference.current.experimental_pageEnabled && experimentalPageEnabled.current);
 
-  const pageLayout = $derived(getPageLayoutDimensions(experimentalPageLayout.current));
+  const pageLayout = $derived(experimentalPageLayout.current ? getPageLayoutDimensions(experimentalPageLayout.current) : null);
 
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
