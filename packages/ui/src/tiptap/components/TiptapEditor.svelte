@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Editor, Extension } from '@tiptap/core';
   import { css } from '@typie/styled-system/css';
-  import { onMount } from 'svelte';
+  import { getAllContexts, onMount } from 'svelte';
   import { Ref } from '../../utils';
   import { Collaboration } from '../extensions';
   import { baseExtensions, editorExtensions } from '../schema';
@@ -42,6 +42,7 @@
   }: Props = $props();
 
   let element = $state<HTMLDivElement>();
+  const contexts = getAllContexts();
 
   onMount(() => {
     const e = new Editor({
@@ -104,6 +105,10 @@
         } else {
           editor = new Ref(e);
         }
+      },
+
+      onBeforeCreate: ({ editor }) => {
+        editor.storage.contexts = contexts;
       },
 
       onCreate: () => {
