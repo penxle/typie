@@ -1,22 +1,31 @@
 <script lang="ts">
+  import { Fragment } from '@tiptap/pm/model';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, SegmentButtons, Select, Slider, Switch, Tooltip } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { Dialog } from '@typie/ui/notification';
   import { createDefaultPageLayout, DEFAULT_PAGE_MARGINS, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
+  import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
+  import CodeIcon from '~icons/lucide/code';
+  import CodeXmlIcon from '~icons/lucide/code-xml';
   import FileTextIcon from '~icons/lucide/file-text';
+  import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
   import HighlighterIcon from '~icons/lucide/highlighter';
   import InfoIcon from '~icons/lucide/info';
+  import QuoteIcon from '~icons/lucide/quote';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import SettingsIcon from '~icons/lucide/settings';
+  import TableIcon from '~icons/lucide/table';
   import TypeIcon from '~icons/lucide/type';
   import { YState } from './state.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
+  import type { Node } from '@tiptap/pm/model';
   import type { PageLayoutSettings, PageLayoutSize, Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
 
@@ -33,7 +42,189 @@
   const pageEnabled = new YState<boolean>(doc, 'experimental_pageEnabled', false);
 
   const isPageLayoutEnabled = $derived(app.preference.current.experimental_pageEnabled && pageEnabled.current);
+
+  const incompatibleTypes = new Set(['blockquote', 'callout', 'fold', 'table', 'code_block', 'html_block']);
+
+  const getIncompatibleBlocks = () => {
+    if (!editor?.current) return [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const types = new Set<string>();
+
+    editor.current.state.doc.descendants((node) => {
+      if (incompatibleTypes.has(node.type.name)) {
+        types.add(node.type.name);
+      }
+    });
+
+    return [...types];
+  };
+
+  const getBlockInfo = (blockType: string) => {
+    const blockInfo: Record<string, { name: string; icon: typeof QuoteIcon }> = {
+      blockquote: { name: '인용구', icon: QuoteIcon },
+      callout: { name: '콜아웃', icon: GalleryVerticalEndIcon },
+      fold: { name: '폴드', icon: ChevronsDownUpIcon },
+      table: { name: '표', icon: TableIcon },
+      code_block: { name: '코드', icon: CodeIcon },
+      html_block: { name: 'HTML', icon: CodeXmlIcon },
+    };
+    return blockInfo[blockType] || { name: blockType, icon: FileTextIcon };
+  };
+
+  const convertIncompatibleBlocks = () => {
+    if (!editor?.current) return;
+
+    editor.current
+      .chain()
+      .focus()
+      .command(({ tr, state }) => {
+        const paragraph = state.schema.nodes.paragraph;
+
+        if (!paragraph) return false;
+
+        let docChanged = true;
+
+        while (docChanged) {
+          docChanged = false;
+
+          type NodeWithPos = { pos: number; node: Node; depth: number };
+          const blocksToConvert: NodeWithPos[] = [];
+
+          tr.doc.descendants((node, pos) => {
+            if (incompatibleTypes.has(node.type.name)) {
+              const depth = tr.doc.resolve(pos).depth;
+              blocksToConvert.push({ pos, node, depth });
+              return false; // NOTE: 자식 노드를 순회하지 않음. 중첩된 노드는 다음 루프에서 처리됨
+            }
+            return true;
+          });
+
+          if (blocksToConvert.length === 0) break;
+
+          // NOTE: 깊이가 깊은 것부터 처리
+          blocksToConvert.sort((a, b) => b.depth - a.depth || b.pos - a.pos);
+
+          blocksToConvert.forEach(({ pos, node }) => {
+            docChanged = true;
+            if (node.type.name === 'blockquote' || node.type.name === 'callout' || node.type.name === 'fold') {
+              if (node.content.size > 0) {
+                const slice = node.content;
+                tr.replaceWith(pos, pos + node.nodeSize, slice);
+              } else {
+                tr.delete(pos, pos + node.nodeSize);
+              }
+            } else if (node.type.name === 'table') {
+              // NOTE: 모든 셀의 내용을 나열
+              const blocks: Node[] = [];
+
+              node.descendants((child) => {
+                if (child.type.name === 'table_cell' || child.type.name === 'table_header') {
+                  child.content.forEach((contentNode) => {
+                    blocks.push(contentNode);
+                  });
+                }
+              });
+
+              if (blocks.length > 0) {
+                const fragment = Fragment.from(blocks);
+                tr.replaceWith(pos, pos + node.nodeSize, fragment);
+              } else {
+                tr.delete(pos, pos + node.nodeSize);
+              }
+            } else if (node.type.name === 'code_block' || node.type.name === 'html_block') {
+              const textContent = node.textContent;
+              if (textContent) {
+                const hardBreak = state.schema.nodes.hard_break;
+                const lines = textContent.split('\n');
+                const content: Node[] = [];
+
+                lines.forEach((line, index) => {
+                  if (index > 0 && hardBreak) {
+                    content.push(hardBreak.create());
+                  }
+                  if (line) {
+                    content.push(state.schema.text(line));
+                  }
+                });
+
+                if (content.length > 0) {
+                  const paragraphNode = paragraph.create(null, content);
+                  tr.replaceWith(pos, pos + node.nodeSize, paragraphNode);
+                } else {
+                  tr.delete(pos, pos + node.nodeSize);
+                }
+              } else {
+                tr.delete(pos, pos + node.nodeSize);
+              }
+            }
+          });
+        }
+
+        return true;
+      })
+      .run();
+  };
+
+  let capturedIncompatibleBlocks = $state<string[]>([]);
+
+  const handlePageLayoutToggle = (value: boolean) => {
+    const incompatibleBlocks = getIncompatibleBlocks();
+    capturedIncompatibleBlocks = incompatibleBlocks;
+
+    if (value && incompatibleBlocks.length > 0) {
+      Dialog.confirm({
+        title: '페이지 모드 전환',
+        message: '페이지 모드에서는 일부 블록을 지원하지 않아요.',
+        children: pageLayoutToggleConfirmView,
+        action: 'primary',
+        actionLabel: '모두 해제하고 전환',
+        cancelLabel: '취소',
+        actionHandler: () => {
+          convertIncompatibleBlocks();
+          pageEnabled.current = value;
+          if (value && !pageLayout.current) {
+            pageLayout.current = createDefaultPageLayout('a4');
+          }
+          mixpanel.track('toggle_post_page_layout', {
+            enabled: value,
+          });
+        },
+      });
+    } else {
+      pageEnabled.current = value;
+      if (value && !pageLayout.current) {
+        pageLayout.current = createDefaultPageLayout('a4');
+      }
+      mixpanel.track('toggle_post_page_layout', {
+        enabled: value,
+      });
+    }
+  };
 </script>
+
+{#snippet pageLayoutToggleConfirmView()}
+  <div class={css({ fontSize: '15px' })}>
+    <div class={css({ marginBottom: '12px', color: 'text.subtle' })}>다음 블록들을 해제해서 일반 문단으로 변환할까요?</div>
+
+    <div
+      class={css({
+        padding: '12px',
+        backgroundColor: 'surface.subtle',
+        borderRadius: '6px',
+      })}
+    >
+      <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+        {#each capturedIncompatibleBlocks as blockType (blockType)}
+          {@const blockInfo = getBlockInfo(blockType)}
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ width: '16px', height: '16px', color: 'text.default', fontWeight: 'semibold' })} icon={blockInfo.icon} />
+            <span class={css({ color: 'text.default', fontWeight: 'medium' })}>{blockInfo.name}</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/snippet}
 
 <ToolbarDropdownButton label="설정" placement="bottom-end" size="small">
   {#snippet anchor({ opened })}
@@ -60,15 +251,7 @@
                 { label: '스크롤', value: false },
                 { label: '페이지', value: true },
               ]}
-              onselect={(value) => {
-                pageEnabled.current = value;
-                if (value && !pageLayout.current) {
-                  pageLayout.current = createDefaultPageLayout('a4');
-                }
-                mixpanel.track('toggle_post_page_layout', {
-                  enabled: value,
-                });
-              }}
+              onselect={handlePageLayoutToggle}
               size="sm"
               value={pageEnabled.current}
             />
