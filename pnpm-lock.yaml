@@ -128,9 +128,6 @@ importers:
       '@tiptap/core':
         specifier: ^3.2.0
         version: 3.2.0(@tiptap/pm@3.2.0)
-      '@tiptap/html':
-        specifier: ^3.2.0
-        version: 3.2.0(@tiptap/core@3.2.0(@tiptap/pm@3.2.0))(@tiptap/pm@3.2.0)(happy-dom@18.0.1)
       '@tiptap/pm':
         specifier: ^3.2.0
         version: 3.2.0
@@ -306,9 +303,6 @@ importers:
       react-email:
         specifier: ^4.2.8
         version: 4.2.8
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.0(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.9.2)(yaml@2.8.1)
 
   apps/caddy: {}
 
@@ -345,9 +339,6 @@ importers:
       '@floating-ui/dom':
         specifier: ^1.7.3
         version: 1.7.3
-      '@hono/node-server':
-        specifier: ^1.19.0
-        version: 1.19.0(hono@4.9.2)
       '@iconify-json/lucide':
         specifier: ^1.2.62
         version: 1.2.62
@@ -357,27 +348,9 @@ importers:
       '@iconify-json/twemoji':
         specifier: ^1.2.4
         version: 1.2.4
-      '@number-flow/svelte':
-        specifier: ^0.3.9
-        version: 0.3.9(svelte@5.38.2)
-      '@observablehq/plot':
-        specifier: ^0.6.17
-        version: 0.6.17
       '@pandacss/dev':
         specifier: ^1.1.0
         version: 1.1.0(jsdom@26.1.0(canvas@3.1.2))(typescript@5.9.2)
-      '@portone/browser-sdk':
-        specifier: ^0.0.24
-        version: 0.0.24
-      '@pulumi/aws':
-        specifier: ^7.4.0
-        version: 7.4.0(typescript@5.9.2)
-      '@pulumi/kubernetes':
-        specifier: ^4.23.0
-        version: 4.23.0(typescript@5.9.2)
-      '@pulumi/pulumi':
-        specifier: ^3.190.0
-        version: 3.190.0(typescript@5.9.2)
       '@sindresorhus/string-hash':
         specifier: ^2.0.0
         version: 2.0.0
@@ -396,30 +369,15 @@ importers:
       '@tiptap/core':
         specifier: ^3.2.0
         version: 3.2.0(@tiptap/pm@3.2.0)
-      '@tiptap/html':
-        specifier: ^3.2.0
-        version: 3.2.0(@tiptap/core@3.2.0(@tiptap/pm@3.2.0))(@tiptap/pm@3.2.0)(happy-dom@18.0.1)
       '@tiptap/pm':
         specifier: ^3.2.0
         version: 3.2.0
       '@types/node':
         specifier: ^24.3.0
         version: 24.3.0
-      '@types/textarea-caret':
-        specifier: ^3.0.4
-        version: 3.0.4
-      '@typie/adapter-node':
-        specifier: workspace:*
-        version: link:../../packages/adapter-node
       '@typie/lib':
         specifier: workspace:*
         version: link:../../packages/lib
-      '@typie/pulumi':
-        specifier: workspace:*
-        version: link:../../packages/pulumi
-      '@typie/rps':
-        specifier: workspace:*
-        version: link:../../packages/rps
       '@typie/sark':
         specifier: workspace:*
         version: link:../../packages/sark
@@ -435,12 +393,6 @@ importers:
       autoprefixer:
         specifier: ^10.4.21
         version: 10.4.21(postcss@8.4.49)
-      body-scroll-lock-upgrade:
-        specifier: ^1.1.0
-        version: 1.1.0
-      comlink:
-        specifier: ^4.4.2
-        version: 4.4.2
       dayjs:
         specifier: ^1.11.13
         version: 1.11.13
@@ -453,21 +405,6 @@ importers:
       fast-json-stable-stringify:
         specifier: ^2.1.0
         version: 2.1.0
-      focus-trap:
-        specifier: ^7.6.5
-        version: 7.6.5
-      graphql-request:
-        specifier: ^7.2.0
-        version: 7.2.0(graphql@16.11.0)
-      graphql-ws:
-        specifier: ^6.0.6
-        version: 6.0.6(graphql@16.11.0)(ws@8.18.3)
-      happy-dom:
-        specifier: ^18.0.1
-        version: 18.0.1
-      hono:
-        specifier: ^4.9.2
-        version: 4.9.2
       konva:
         specifier: ^9.3.22
         version: 9.3.22
@@ -477,27 +414,18 @@ importers:
       linkifyjs:
         specifier: ^4.3.2
         version: 4.3.2
-      marked:
-        specifier: ^16.2.0
-        version: 16.2.0
       match-sorter:
         specifier: ^8.1.0
         version: 8.1.0
       mixpanel-browser:
         specifier: ^2.68.0
         version: 2.68.0
-      motion:
-        specifier: ^12.23.12
-        version: 12.23.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       nanoid:
         specifier: ^5.1.5
         version: 5.1.5
       query-string:
         specifier: ^9.2.2
         version: 9.2.2
-      remeda:
-        specifier: ^2.30.0
-        version: 2.30.0
       rfc4648:
         specifier: ^1.5.4
         version: 1.5.4
@@ -513,15 +441,6 @@ importers:
       svelte-check:
         specifier: ^4.3.1
         version: 4.3.1(picomatch@4.0.3)(svelte@5.38.2)(typescript@5.9.2)
-      svelte-preprocess:
-        specifier: ^6.0.3
-        version: 6.0.3(@babel/core@7.28.3)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.4)(yaml@2.8.1))(postcss@8.4.49)(svelte@5.38.2)(typescript@5.9.2)
-      svelte-sonner:
-        specifier: ^1.0.5
-        version: 1.0.5(svelte@5.38.2)
-      textarea-caret:
-        specifier: ^3.1.0
-        version: 3.1.0
       thumbhash:
         specifier: ^0.1.1
         version: 0.1.1
@@ -531,9 +450,6 @@ importers:
       tsx:
         specifier: ^4.20.4
         version: 4.20.4
-      type-fest:
-        specifier: ^4.41.0
-        version: 4.41.0
       typescript:
         specifier: ^5.9.2
         version: 5.9.2
@@ -670,9 +586,6 @@ importers:
       '@floating-ui/dom':
         specifier: ^1.7.3
         version: 1.7.3
-      '@hono/node-server':
-        specifier: ^1.19.0
-        version: 1.19.0(hono@4.9.2)
       '@iconify-json/lucide':
         specifier: ^1.2.62
         version: 1.2.62
@@ -715,18 +628,12 @@ importers:
       '@tiptap/core':
         specifier: ^3.2.0
         version: 3.2.0(@tiptap/pm@3.2.0)
-      '@tiptap/html':
-        specifier: ^3.2.0
-        version: 3.2.0(@tiptap/core@3.2.0(@tiptap/pm@3.2.0))(@tiptap/pm@3.2.0)(happy-dom@18.0.1)
       '@tiptap/pm':
         specifier: ^3.2.0
         version: 3.2.0
       '@types/node':
         specifier: ^24.3.0
         version: 24.3.0
-      '@types/textarea-caret':
-        specifier: ^3.0.4
-        version: 3.0.4
       '@typie/adapter-node':
         specifier: workspace:*
         version: link:../../packages/adapter-node
@@ -751,27 +658,15 @@ importers:
       '@typie/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      body-scroll-lock-upgrade:
-        specifier: ^1.1.0
-        version: 1.1.0
-      comlink:
-        specifier: ^4.4.2
-        version: 4.4.2
       dayjs:
         specifier: ^1.11.13
         version: 1.11.13
       es-hangul:
         specifier: ^2.3.5
         version: 2.3.5
-      escape-string-regexp:
-        specifier: ^5.0.0
-        version: 5.0.0
       fast-json-stable-stringify:
         specifier: ^2.1.0
         version: 2.1.0
-      focus-trap:
-        specifier: ^7.6.5
-        version: 7.6.5
       graphql-request:
         specifier: ^7.2.0
         version: 7.2.0(graphql@16.11.0)
@@ -781,18 +676,9 @@ importers:
       happy-dom:
         specifier: ^18.0.1
         version: 18.0.1
-      hono:
-        specifier: ^4.9.2
-        version: 4.9.2
-      konva:
-        specifier: ^9.3.22
-        version: 9.3.22
       ky:
         specifier: ^1.8.2
         version: 1.8.2
-      linkifyjs:
-        specifier: ^4.3.2
-        version: 4.3.2
       marked:
         specifier: ^16.2.0
         version: 16.2.0
@@ -802,9 +688,6 @@ importers:
       mixpanel-browser:
         specifier: ^2.68.0
         version: 2.68.0
-      motion:
-        specifier: ^12.23.12
-        version: 12.23.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       nanoid:
         specifier: ^5.1.5
         version: 5.1.5
@@ -817,45 +700,21 @@ importers:
       rfc4648:
         specifier: ^1.5.4
         version: 1.5.4
-      roughjs:
-        specifier: ^4.6.6
-        version: 4.6.6
-      shiki:
-        specifier: ^3.9.2
-        version: 3.9.2
       svelte:
         specifier: ^5.38.2
         version: 5.38.2
       svelte-check:
         specifier: ^4.3.1
         version: 4.3.1(picomatch@4.0.3)(svelte@5.38.2)(typescript@5.9.2)
-      svelte-preprocess:
-        specifier: ^6.0.3
-        version: 6.0.3(@babel/core@7.28.3)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(yaml@2.8.1))(postcss@8.5.6)(svelte@5.38.2)(typescript@5.9.2)
-      svelte-sonner:
-        specifier: ^1.0.5
-        version: 1.0.5(svelte@5.38.2)
-      textarea-caret:
-        specifier: ^3.1.0
-        version: 3.1.0
-      thumbhash:
-        specifier: ^0.1.1
-        version: 0.1.1
       ts-pattern:
         specifier: ^5.8.0
         version: 5.8.0
       tsx:
         specifier: ^4.20.4
         version: 4.20.4
-      type-fest:
-        specifier: ^4.41.0
-        version: 4.41.0
       typescript:
         specifier: ^5.9.2
         version: 5.9.2
-      universal-cookie:
-        specifier: ^8.0.1
-        version: 8.0.1
       unplugin-icons:
         specifier: ^22.2.0
         version: 22.2.0(@vue/compiler-sfc@3.4.19)(svelte@5.38.2)
@@ -874,9 +733,6 @@ importers:
       yjs:
         specifier: ^13.6.27
         version: 13.6.27
-      zeed-dom:
-        specifier: ^0.17.7
-        version: 0.17.7
       zod:
         specifier: ^4.0.17
         version: 4.0.17
@@ -1143,9 +999,6 @@ importers:
       '@tiptap/core':
         specifier: ^3.2.0
         version: 3.2.0(@tiptap/pm@3.2.0)
-      '@tiptap/html':
-        specifier: ^3.2.0
-        version: 3.2.0(@tiptap/core@3.2.0(@tiptap/pm@3.2.0))(@tiptap/pm@3.2.0)(happy-dom@18.0.1)
       '@tiptap/pm':
         specifier: ^3.2.0
         version: 3.2.0
@@ -4795,13 +4648,6 @@ packages:
     peerDependencies:
       '@tiptap/pm': ^3.2.0
 
-  '@tiptap/html@3.2.0':
-    resolution: {integrity: sha512-9zr3o8yKJXBHSDMsQgS8AqsbaiBA376Yh19uZQAsmRow8+h8iRQrzW9sOtZqozRFtqPTFENt25S9oiLu5S9Dqw==}
-    peerDependencies:
-      '@tiptap/core': ^3.2.0
-      '@tiptap/pm': ^3.2.0
-      happy-dom: ^18.0.1
-
   '@tiptap/pm@3.2.0':
     resolution: {integrity: sha512-2UTlVts1Q7snQaUlxUtXfwEndNgcBcEIf74f1aEzcLzJRwBRRexCS6M0n+F50IifoB0OVBZENMBv1X/YXIPGPA==}
 
@@ -5672,9 +5518,6 @@ packages:
   combined-stream@1.0.8:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
-
-  comlink@4.4.2:
-    resolution: {integrity: sha512-OxGdvBmJuNKSCMO4NTl1L47VRp6xn2wG4F/2hYzB6tiCb709otOxtEYCSvK80PtjODfXXZu8ds+Nw5kVCjqd2g==}
 
   comma-separated-tokens@2.0.3:
     resolution: {integrity: sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg==}
@@ -6801,20 +6644,6 @@ packages:
 
   fractional-indexing-jittered@1.0.0:
     resolution: {integrity: sha512-0tLU0FOedVY7lrvN4LK0DVj6FTuYM0pWDpN97/8UTZE2lx1+OwX8+2uL7IOWc2PmktYTHQjMT6FvZZ3SGCdZdg==}
-
-  framer-motion@12.23.12:
-    resolution: {integrity: sha512-6e78rdVtnBvlEVgu6eFEAgG9v3wLnYEboM8I5O5EXvfKC8gxGQB8wXJdhkMy10iVcn05jl6CNw7/HTsTCfwcWg==}
-    peerDependencies:
-      '@emotion/is-prop-valid': '*'
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@emotion/is-prop-valid':
-        optional: true
-      react:
-        optional: true
-      react-dom:
-        optional: true
 
   fs-constants@1.0.0:
     resolution: {integrity: sha512-y6OAwoSIf7FyjMIv94u+b5rdheZEjzR63GTyZJm5qh4Bi+2YgwLCcI/fPFZkL5PSixOt6ZNKm+w+Hfp/Bciwow==}
@@ -8156,26 +7985,6 @@ packages:
 
   module-details-from-path@1.0.4:
     resolution: {integrity: sha512-EGWKgxALGMgzvxYF1UyGTy0HXX/2vHLkw6+NvDKW2jypWbHpjQuj4UMcqQWXHERJhVGKikolT06G3bcKe4fi7w==}
-
-  motion-dom@12.23.12:
-    resolution: {integrity: sha512-RcR4fvMCTESQBD/uKQe49D5RUeDOokkGRmz4ceaJKDBgHYtZtntC/s2vLvY38gqGaytinij/yi3hMcWVcEF5Kw==}
-
-  motion-utils@12.23.6:
-    resolution: {integrity: sha512-eAWoPgr4eFEOFfg2WjIsMoqJTW6Z8MTUCgn/GZ3VRpClWBdnbjryiA3ZSNLyxCTmCQx4RmYX6jX1iWHbenUPNQ==}
-
-  motion@12.23.12:
-    resolution: {integrity: sha512-8jCD8uW5GD1csOoqh1WhH1A6j5APHVE15nuBkFeRiMzYBdRwyAHmSP/oXSuW0WJPZRXTFdBoG4hY9TFWNhhwng==}
-    peerDependencies:
-      '@emotion/is-prop-valid': '*'
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@emotion/is-prop-valid':
-        optional: true
-      react:
-        optional: true
-      react-dom:
-        optional: true
 
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
@@ -9655,43 +9464,6 @@ packages:
       svelte: ^3.37.0 || ^4.0.0 || ^5.0.0
     peerDependenciesMeta:
       svelte:
-        optional: true
-
-  svelte-preprocess@6.0.3:
-    resolution: {integrity: sha512-PLG2k05qHdhmRG7zR/dyo5qKvakhm8IJ+hD2eFRQmMLHp7X3eJnjeupUtvuRpbNiF31RjVw45W+abDwHEmP5OA==}
-    engines: {node: '>= 18.0.0'}
-    peerDependencies:
-      '@babel/core': ^7.10.2
-      coffeescript: ^2.5.1
-      less: ^3.11.3 || ^4.0.0
-      postcss: ^7 || ^8
-      postcss-load-config: '>=3'
-      pug: ^3.0.0
-      sass: ^1.26.8
-      stylus: '>=0.55'
-      sugarss: ^2.0.0 || ^3.0.0 || ^4.0.0
-      svelte: ^4.0.0 || ^5.0.0-next.100 || ^5.0.0
-      typescript: ^5.0.0
-    peerDependenciesMeta:
-      '@babel/core':
-        optional: true
-      coffeescript:
-        optional: true
-      less:
-        optional: true
-      postcss:
-        optional: true
-      postcss-load-config:
-        optional: true
-      pug:
-        optional: true
-      sass:
-        optional: true
-      stylus:
-        optional: true
-      sugarss:
-        optional: true
-      typescript:
         optional: true
 
   svelte-sonner@1.0.5:
@@ -14875,12 +14647,6 @@ snapshots:
     dependencies:
       '@tiptap/pm': 3.2.0
 
-  '@tiptap/html@3.2.0(@tiptap/core@3.2.0(@tiptap/pm@3.2.0))(@tiptap/pm@3.2.0)(happy-dom@18.0.1)':
-    dependencies:
-      '@tiptap/core': 3.2.0(@tiptap/pm@3.2.0)
-      '@tiptap/pm': 3.2.0
-      happy-dom: 18.0.1
-
   '@tiptap/pm@3.2.0':
     dependencies:
       prosemirror-changeset: 2.3.1
@@ -15942,8 +15708,6 @@ snapshots:
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
-
-  comlink@4.4.2: {}
 
   comma-separated-tokens@2.0.3: {}
 
@@ -17208,15 +16972,6 @@ snapshots:
   fraction.js@4.3.7: {}
 
   fractional-indexing-jittered@1.0.0: {}
-
-  framer-motion@12.23.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
-    dependencies:
-      motion-dom: 12.23.12
-      motion-utils: 12.23.6
-      tslib: 2.8.1
-    optionalDependencies:
-      react: 19.1.1
-      react-dom: 19.1.1(react@19.1.1)
 
   fs-constants@1.0.0:
     optional: true
@@ -18682,20 +18437,6 @@ snapshots:
 
   module-details-from-path@1.0.4: {}
 
-  motion-dom@12.23.12:
-    dependencies:
-      motion-utils: 12.23.6
-
-  motion-utils@12.23.6: {}
-
-  motion@12.23.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
-    dependencies:
-      framer-motion: 12.23.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      tslib: 2.8.1
-    optionalDependencies:
-      react: 19.1.1
-      react-dom: 19.1.1(react@19.1.1)
-
   mri@1.2.0: {}
 
   mrmime@2.0.1: {}
@@ -19325,16 +19066,6 @@ snapshots:
       yaml: 1.10.2
     optionalDependencies:
       postcss: 8.5.6
-
-  postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.4)(yaml@2.8.1):
-    dependencies:
-      lilconfig: 3.1.3
-    optionalDependencies:
-      jiti: 2.4.2
-      postcss: 8.4.49
-      tsx: 4.20.4
-      yaml: 2.8.1
-    optional: true
 
   postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(yaml@2.8.1):
     dependencies:
@@ -20405,24 +20136,6 @@ snapshots:
       postcss-selector-parser: 7.1.0
     optionalDependencies:
       svelte: 5.38.2
-
-  svelte-preprocess@6.0.3(@babel/core@7.28.3)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.4)(yaml@2.8.1))(postcss@8.4.49)(svelte@5.38.2)(typescript@5.9.2):
-    dependencies:
-      svelte: 5.38.2
-    optionalDependencies:
-      '@babel/core': 7.28.3
-      postcss: 8.4.49
-      postcss-load-config: 6.0.1(jiti@2.4.2)(postcss@8.4.49)(tsx@4.20.4)(yaml@2.8.1)
-      typescript: 5.9.2
-
-  svelte-preprocess@6.0.3(@babel/core@7.28.3)(postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(yaml@2.8.1))(postcss@8.5.6)(svelte@5.38.2)(typescript@5.9.2):
-    dependencies:
-      svelte: 5.38.2
-    optionalDependencies:
-      '@babel/core': 7.28.3
-      postcss: 8.5.6
-      postcss-load-config: 6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(yaml@2.8.1)
-      typescript: 5.9.2
 
   svelte-sonner@1.0.5(svelte@5.38.2):
     dependencies:

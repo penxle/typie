@@ -40,7 +40,6 @@
     "@sindresorhus/string-hash": "^2.0.0",
     "@slack/web-api": "^7.9.3",
     "@tiptap/core": "^3.2.0",
-    "@tiptap/html": "^3.2.0",
     "@tiptap/pm": "^3.2.0",
     "@typie/fondue": "workspace:*",
     "@typie/lib": "workspace:*",
@@ -100,7 +99,6 @@
     "@typie/rps": "workspace:*",
     "drizzle-kit": "^0.31.4",
     "pdf-lib": "^1.17.1",
-    "react-email": "^4.2.8",
-    "tsup": "^8.5.0"
+    "react-email": "^4.2.8"
   }
 }
