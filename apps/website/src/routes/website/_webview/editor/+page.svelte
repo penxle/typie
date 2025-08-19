@@ -16,6 +16,7 @@
   import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import { IndexeddbPersistence } from 'y-indexeddb';
+  import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostSyncType } from '@/enums';
@@ -149,6 +150,11 @@
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
+  const undoManager = new Y.UndoManager(doc, {
+    trackedOrigins: new Set([ySyncPluginKey, 'local']),
+    captureTransaction: (tr) => tr.meta.get('addToHistory') !== false,
+    deleteFilter: (item) => defaultDeleteFilter(item, defaultProtectedNodes),
+  });
 
   const title = new YState<string>(doc, 'title', '');
   const subtitle = new YState<string>(doc, 'subtitle', '');
@@ -608,9 +614,9 @@
       } else if (name === 'html_block') {
         editor?.current.chain().focus().setHtmlBlock().run();
       } else if (name === 'undo') {
-        editor?.current.chain().focus().undo().run();
+        undoManager.undo();
       } else if (name === 'redo') {
-        editor?.current.chain().focus().redo().run();
+        undoManager.redo();
       } else if (name === 'delete') {
         editor?.current.chain().focus().deleteSelection().run();
       } else if (name === 'select_upward_node') {
@@ -923,6 +929,7 @@
             return unfurlEmbed({ url });
           },
         }}
+        {undoManager}
         bind:editor
       />
 

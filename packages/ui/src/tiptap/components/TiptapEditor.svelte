@@ -16,6 +16,7 @@
     editor?: Ref<Editor>;
     doc?: Y.Doc;
     awareness?: YAwareness.Awareness;
+    undoManager?: Y.UndoManager;
     storage?: Partial<Storage>;
     extensions?: Extension[];
     editable?: boolean;
@@ -31,6 +32,7 @@
     editor = $bindable(),
     doc,
     awareness,
+    undoManager,
     storage,
     extensions,
     editable = true,
@@ -51,7 +53,7 @@
         ...baseExtensions,
         ...(editable ? editorExtensions : []),
         ...(extensions ?? []),
-        ...(doc ? [Collaboration.configure({ doc, awareness })] : []),
+        ...(doc ? [Collaboration.configure({ doc, awareness, undoManager })] : []),
       ],
       injectCSS: false,
       autofocus: false,
