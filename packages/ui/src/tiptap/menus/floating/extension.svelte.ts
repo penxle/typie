@@ -114,6 +114,11 @@ export const FloatingMenu = Extension.create({
               return;
             }
 
+            const editorContainer = view.dom.closest('#editor-container');
+            if (!editorContainer) {
+              return;
+            }
+
             remove();
 
             // NOTE: 이 노드가 현재 selection을 포함하는지 확인
@@ -140,7 +145,7 @@ export const FloatingMenu = Extension.create({
               visibility: 'hidden',
             });
 
-            document.body.append(leftDom);
+            editorContainer.append(leftDom);
 
             rightDom = document.createElement('div');
             rightComponent = mount(Right, {
@@ -160,7 +165,7 @@ export const FloatingMenu = Extension.create({
               visibility: 'hidden',
             });
 
-            document.body.append(rightDom);
+            editorContainer.append(rightDom);
 
             leftCleanup?.();
             leftCleanup = autoUpdate(nodeDOM, leftDom, async () => {
