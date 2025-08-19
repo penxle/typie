@@ -3,7 +3,7 @@
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Checkbox, HorizontalDivider, Modal, Select, TextInput } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { DEFAULT_PAGE_MARGINS, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
+  import { clamp, DEFAULT_PAGE_MARGINS, getMaxMargin, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
   import { ExportLayoutMode } from '@/enums';
   import type { PageLayoutSettings, PageLayoutSize } from '@typie/ui/utils';
 
@@ -108,11 +108,17 @@
               <TextInput
                 id="margin-top"
                 style={css.raw({ width: 'full' })}
-                max="100"
+                max={String(getMaxMargin('top', pageSize, margins))}
                 min="0"
+                oninput={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  const value = clamp(Number(target.value), 0, getMaxMargin('top', pageSize, margins));
+                  target.value = String(value);
+                  margins.top = value;
+                }}
                 size="sm"
                 type="number"
-                bind:value={margins.top}
+                value={margins.top}
               />
             </div>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -120,11 +126,17 @@
               <TextInput
                 id="margin-bottom"
                 style={css.raw({ width: 'full' })}
-                max="100"
+                max={String(getMaxMargin('bottom', pageSize, margins))}
                 min="0"
+                oninput={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  const value = clamp(Number(target.value), 0, getMaxMargin('bottom', pageSize, margins));
+                  target.value = String(value);
+                  margins.bottom = value;
+                }}
                 size="sm"
                 type="number"
-                bind:value={margins.bottom}
+                value={margins.bottom}
               />
             </div>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -132,11 +144,17 @@
               <TextInput
                 id="margin-left"
                 style={css.raw({ width: 'full' })}
-                max="100"
+                max={String(getMaxMargin('left', pageSize, margins))}
                 min="0"
+                oninput={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  const value = clamp(Number(target.value), 0, getMaxMargin('left', pageSize, margins));
+                  target.value = String(value);
+                  margins.left = value;
+                }}
                 size="sm"
                 type="number"
-                bind:value={margins.left}
+                value={margins.left}
               />
             </div>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -144,11 +162,17 @@
               <TextInput
                 id="margin-right"
                 style={css.raw({ width: 'full' })}
-                max="100"
+                max={String(getMaxMargin('right', pageSize, margins))}
                 min="0"
+                oninput={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  const value = clamp(Number(target.value), 0, getMaxMargin('right', pageSize, margins));
+                  target.value = String(value);
+                  margins.right = value;
+                }}
                 size="sm"
                 type="number"
-                bind:value={margins.right}
+                value={margins.right}
               />
             </div>
           </div>
