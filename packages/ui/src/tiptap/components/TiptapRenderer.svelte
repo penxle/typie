@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Editor, Extension } from '@tiptap/core';
   import { css, cx } from '@typie/styled-system/css';
-  import { onMount } from 'svelte';
+  import { getAllContexts, onMount } from 'svelte';
   import { Ref } from '../../utils';
   import { renderHTML } from '../lib/html';
   import { baseExtensions } from '../schema';
@@ -20,6 +20,7 @@
   let { style, content, editor = $bindable(), extensions, pageLayout }: Props = $props();
 
   let element = $state<HTMLElement>();
+  const contexts = getAllContexts();
 
   const allExtensions = $derived([...baseExtensions, ...(extensions ?? [])]);
 
@@ -34,6 +35,10 @@
 
       editorProps: {
         attributes: { class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center' }, style) },
+      },
+
+      onBeforeCreate: ({ editor }) => {
+        editor.storage.contexts = contexts;
       },
 
       onCreate: ({ editor }) => {
