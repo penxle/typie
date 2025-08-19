@@ -47,6 +47,8 @@
   import type { PageLayoutSettings, Ref } from '@typie/ui/utils';
   import type { Editor_query } from '$graphql';
 
+  const DISCONNECT_THRESHOLD = 3;
+
   type Props = {
     $query: Editor_query;
   };
@@ -419,6 +421,26 @@
   onMount(() => {
     if (!postId) return;
 
+    const handleOnline = () => {
+      const isFresh = dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD;
+      if (isFresh) {
+        connectionStatus = 'connected';
+      } else {
+        connectionStatus = 'connecting';
+      }
+    };
+
+    const handleOffline = () => {
+      connectionStatus = 'disconnected';
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (!navigator.onLine) {
+      connectionStatus = 'disconnected';
+    }
+
     const unsubscribe = postSyncStream.subscribe({ clientId, postId }, async (payload) => {
       if (payload.type === PostSyncType.HEARTBEAT) {
         lastHeartbeatAt = dayjs(payload.data);
@@ -503,7 +525,7 @@
     const fullSyncInterval = setInterval(() => fullSync(), 60_000);
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
     const heartbeatInterval = setInterval(() => {
-      if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
+      if (dayjs().diff(lastHeartbeatAt, 'seconds') > DISCONNECT_THRESHOLD) {
         connectionStatus = 'disconnected';
       }
     }, 1000);
@@ -571,6 +593,9 @@
       if (syncAwarenessTimeout) {
         clearTimeout(syncAwarenessTimeout);
       }
+
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
