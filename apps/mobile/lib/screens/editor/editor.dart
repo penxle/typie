@@ -123,13 +123,14 @@ class Editor extends HookWidget {
           case 'webviewReady':
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
-              'features': ['template', 'hide-table-delete-in-handle'],
+              'features': ['template', 'hide-table-delete-in-handle', 'focusable'],
               'settings': {
                 'lineHighlightEnabled': pref.lineHighlightEnabled,
                 'typewriterEnabled': pref.typewriterEnabled,
                 'typewriterPosition': pref.typewriterPosition,
               },
               'state': {'selection': jsonDecode(state.getSerializedPostSelection(slug) ?? 'null')},
+              'focusable': !scope.isBottomSheetOpen.value,
             });
 
             isReady.value = true;
@@ -229,6 +230,8 @@ class Editor extends HookWidget {
                   if (!context.mounted) {
                     return;
                   }
+
+                  scope.isBottomSheetOpen.value = true;
 
                   await context.showBottomSheet(
                     intercept: true,
@@ -451,6 +454,8 @@ class Editor extends HookWidget {
                       ),
                     ),
                   );
+
+                  scope.isBottomSheetOpen.value = false;
                 },
               ),
             ],
