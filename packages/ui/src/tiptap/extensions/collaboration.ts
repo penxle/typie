@@ -1,70 +1,24 @@
 import { Extension } from '@tiptap/core';
 import { css } from '@typie/styled-system/css';
-import { redo, undo, yCursorPlugin, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from 'y-prosemirror';
+import { yCursorPlugin, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from 'y-prosemirror';
 import type { EditorView } from '@tiptap/pm/view';
 import type * as YAwareness from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 
-declare module '@tiptap/core' {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
-  interface Commands<ReturnType> {
-    collaboration: {
-      undo: () => ReturnType;
-      redo: () => ReturnType;
-    };
-  }
-}
-
 type CollaborationOptions = {
   doc: Y.Doc;
   awareness?: YAwareness.Awareness;
+  undoManager?: Y.UndoManager;
 };
 
 export const Collaboration = Extension.create<CollaborationOptions>({
   name: 'collaboration',
   priority: 1000,
 
-  addCommands() {
-    return {
-      undo:
-        () =>
-        ({ state, tr, dispatch }) => {
-          tr.setMeta('preventDispatch', true);
-
-          const undoManager = yUndoPluginKey.getState(state)?.undoManager;
-          if (!undoManager || undoManager.undoStack.length === 0) {
-            return false;
-          }
-
-          if (!dispatch) {
-            return true;
-          }
-
-          return undo(state);
-        },
-      redo:
-        () =>
-        ({ state, tr, dispatch }) => {
-          tr.setMeta('preventDispatch', true);
-
-          const undoManager = yUndoPluginKey.getState(state)?.undoManager;
-          if (!undoManager || undoManager.redoStack.length === 0) {
-            return false;
-          }
-
-          if (!dispatch) {
-            return true;
-          }
-
-          return redo(state);
-        },
-    };
-  },
-
   addProseMirrorPlugins() {
     const fragment = this.options.doc.getXmlFragment('body');
 
-    const yUndoPluginInstance = yUndoPlugin();
+    const yUndoPluginInstance = yUndoPlugin({ undoManager: this.options.undoManager });
     const originalUndoPluginView = yUndoPluginInstance.spec.view;
 
     yUndoPluginInstance.spec.view = (view: EditorView) => {
@@ -156,13 +110,5 @@ export const Collaboration = Extension.create<CollaborationOptions>({
     }
 
     return plugins;
-  },
-
-  addKeyboardShortcuts() {
-    return {
-      'Mod-z': () => this.editor.commands.undo(),
-      'Mod-y': () => this.editor.commands.redo(),
-      'Shift-Mod-z': () => this.editor.commands.redo(),
-    };
   },
 });

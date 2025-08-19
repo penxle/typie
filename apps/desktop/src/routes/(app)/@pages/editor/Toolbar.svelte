@@ -308,27 +308,9 @@
 
   <div class={flex({ alignItems: 'center', gap: '10px', paddingLeft: '20px', paddingRight: '12px' })}>
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <ToolbarButton
-        style={css.raw({ borderRightRadius: '0' })}
-        disabled={!editor?.current.can().undo()}
-        icon={UndoIcon}
-        label="실행 취소"
-        onclick={() => {
-          editor?.current.chain().focus().undo().run();
-        }}
-        size="small"
-      />
+      <ToolbarButton style={css.raw({ borderRightRadius: '0' })} icon={UndoIcon} label="실행 취소" size="small" />
 
-      <ToolbarButton
-        style={css.raw({ borderLeftRadius: '0' })}
-        disabled={!editor?.current.can().redo()}
-        icon={RedoIcon}
-        label="다시 실행"
-        onclick={() => {
-          editor?.current.chain().focus().redo().run();
-        }}
-        size="small"
-      />
+      <ToolbarButton style={css.raw({ borderLeftRadius: '0' })} icon={RedoIcon} label="다시 실행" size="small" />
     </div>
 
     <VerticalDivider style={css.raw({ height: '12px' })} />

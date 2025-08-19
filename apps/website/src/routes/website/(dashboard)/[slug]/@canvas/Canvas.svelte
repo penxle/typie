@@ -209,8 +209,11 @@
     if (!canvasId) return;
 
     const handleOnline = () => {
-      if (connectionStatus === 'disconnected' && dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD) {
+      const isFresh = dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD;
+      if (isFresh) {
         connectionStatus = 'connected';
+      } else {
+        connectionStatus = 'connecting';
       }
     };
 
