@@ -136,11 +136,15 @@
   let containerEl = $state<HTMLDivElement>();
   let proportion = $state(node.attrs.proportion);
 
-  const calculateConstrainedProportion = (proposedProportion: number): number => {
-    if (!maxContentHeight || !containerEl) return proposedProportion;
+  const calculateConstrainedProportion = (proposedProportion: number): { proportion: number; minProportion: number } => {
+    if (!maxContentHeight || !containerEl) {
+      return { proportion: proposedProportion, minProportion: 0.1 };
+    }
 
     const imgElement = containerEl.querySelector('img') as HTMLImageElement;
-    if (!imgElement) return proposedProportion;
+    if (!imgElement) {
+      return { proportion: proposedProportion, minProportion: 0.1 };
+    }
 
     const parentWidth = containerEl.parentElement?.clientWidth || 0;
     const proposedWidth = parentWidth * proposedProportion;
@@ -149,18 +153,26 @@
     const aspectRatio = currentRect.width / currentRect.height;
     const proposedHeight = proposedWidth / aspectRatio;
 
+    // NOTE: 이미지가 maxContentHeight를 넘지 않기 위한 최대 너비
+    const maxWidthForHeight = maxContentHeight * aspectRatio;
+    const minProportionForHeight = maxWidthForHeight / parentWidth;
+
+    // NOTE: 더 작은 값을 최소 proportion으로 사용
+    const minProportion = Math.min(0.1, minProportionForHeight);
+
+    let constrainedProportion = proposedProportion;
     if (proposedHeight > maxContentHeight) {
-      const maxWidth = maxContentHeight * aspectRatio;
-      return maxWidth / parentWidth;
+      constrainedProportion = maxWidthForHeight / parentWidth;
     }
 
-    return proposedProportion;
+    return { proportion: constrainedProportion, minProportion };
   };
 
   const checkAndAdjustProportion = () => {
-    const constrainedProportion = calculateConstrainedProportion(proportion);
-    if (constrainedProportion !== proportion) {
-      proportion = clamp(constrainedProportion, 0.1, 1);
+    const { proportion: constrainedProportion, minProportion } = calculateConstrainedProportion(proportion);
+    const clampedProportion = clamp(constrainedProportion, minProportion, 1);
+    if (clampedProportion !== proportion) {
+      proportion = clampedProportion;
       updateAttributes({ proportion });
     }
   };
@@ -197,8 +209,8 @@
     const dx = (event.clientX - initialResizeData.x) * (initialResizeData.reverse ? -1 : 1);
     const proposedProportion = ((initialResizeData.width + dx * 2) / initialResizeData.width) * initialResizeData.proportion;
 
-    const constrainedProportion = calculateConstrainedProportion(proposedProportion);
-    proportion = clamp(constrainedProportion, 0.1, 1);
+    const { proportion: constrainedProportion, minProportion } = calculateConstrainedProportion(proposedProportion);
+    proportion = clamp(constrainedProportion, minProportion, 1);
   };
 
   const handleResizeEnd = (event: PointerEvent) => {
