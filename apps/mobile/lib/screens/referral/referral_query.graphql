@@ -1,0 +1,10 @@
+query ReferralScreen_Query {
+  me {
+    id
+
+    referrals {
+      id
+      compensated
+    }
+  }
+}
