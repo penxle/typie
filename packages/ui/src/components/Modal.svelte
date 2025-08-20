@@ -39,7 +39,7 @@
     use:focusTrap={{
       fallbackFocus: '[role="none"]',
       escapeDeactivates: false,
-      returnFocusOnDeactivate: false,
+      returnFocusOnDeactivate: true,
       allowOutsideClick: true, // NOTE: downloadFromBase64 등 외부 클릭 허용
     }}
     use:portal
