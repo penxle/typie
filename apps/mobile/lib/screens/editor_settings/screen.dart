@@ -133,6 +133,35 @@ class EditorSettingsScreen extends HookWidget {
                 ),
               ],
             ),
+            _Section(
+              title: '위젯 설정',
+              children: [
+                HookForm(
+                  submitMode: HookFormSubmitMode.onChange,
+                  onSubmit: (form) async {
+                    final characterCountFloatingEnabled = form.data['characterCountFloatingEnabled'] as bool;
+                    pref.characterCountFloatingEnabled = characterCountFloatingEnabled;
+
+                    unawaited(
+                      mixpanel.track(
+                        'toggle_character_count_floating',
+                        properties: {'enabled': characterCountFloatingEnabled},
+                      ),
+                    );
+                  },
+                  builder: (context, form) {
+                    return _Item(
+                      label: '글자 수 위젯',
+                      description: '에디터에서 글자 수를 표시합니다.',
+                      trailing: HookFormSwitch(
+                        name: 'characterCountFloatingEnabled',
+                        initialValue: pref.characterCountFloatingEnabled,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ],
         ),
       ),
