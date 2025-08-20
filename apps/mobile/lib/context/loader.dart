@@ -70,7 +70,7 @@ class _Widget extends HookWidget {
 
     useOnListenableChange(shouldDismiss, () {
       if (shouldDismiss.value && context.mounted) {
-        animationController.reverse();
+        unawaited(animationController.reverse());
       }
     });
 
@@ -92,7 +92,7 @@ class _Widget extends HookWidget {
       if (shouldDismiss.value) {
         onAnimationComplete();
       } else {
-        animationController.forward();
+        unawaited(animationController.forward());
       }
 
       return null;

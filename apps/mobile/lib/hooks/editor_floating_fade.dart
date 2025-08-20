@@ -28,7 +28,7 @@ EditorFloatingFadeController useEditorFloatingFade() {
 
   void showImmediately() {
     idleTimer.value?.cancel();
-    opacity.forward();
+    unawaited(opacity.forward());
     isFadedOut.value = false;
   }
 
@@ -38,7 +38,7 @@ EditorFloatingFadeController useEditorFloatingFade() {
     }
     idleTimer.value?.cancel();
     idleTimer.value = Timer(const Duration(milliseconds: 1500), () {
-      opacity.forward();
+      unawaited(opacity.forward());
       isFadedOut.value = false;
     });
   }
@@ -50,7 +50,7 @@ EditorFloatingFadeController useEditorFloatingFade() {
     idleTimer.value?.cancel();
 
     if (!isFadedOut.value) {
-      opacity.reverse();
+      unawaited(opacity.reverse());
       isFadedOut.value = true;
     }
 
@@ -114,7 +114,7 @@ EditorFloatingFadeController useEditorFloatingFade() {
     } else {
       // NOTE: 자동 페이드 끔
       idleTimer.value?.cancel();
-      opacity.reverse();
+      unawaited(opacity.reverse());
       isFadedOut.value = false;
     }
     return null;

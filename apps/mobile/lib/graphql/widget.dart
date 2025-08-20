@@ -61,7 +61,7 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
       final data = snapshot.data?.data;
       if (data != null && !loaded.value) {
         loaded.value = true;
-        controller.forward();
+        unawaited(controller.forward());
         onLoaded?.call(data);
       }
 

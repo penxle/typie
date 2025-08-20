@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
@@ -114,9 +116,8 @@ class _BottomSheet extends HookWidget {
             context.router.pop();
           }
         } else {
-          controller
-            ..duration = const Duration(milliseconds: 300)
-            ..animateTo(0, curve: Curves.easeOutCubic);
+          controller.duration = const Duration(milliseconds: 300);
+          unawaited(controller.animateTo(0, curve: Curves.easeOutCubic));
         }
       },
       child: AnimatedBuilder(

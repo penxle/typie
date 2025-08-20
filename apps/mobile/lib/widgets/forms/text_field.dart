@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -98,7 +100,7 @@ class HookFormTextField extends HookWidget {
           final end = hasFocus ? focusedColor : defaultColor;
 
           colorTween.value = ColorTween(begin: begin ?? end, end: end);
-          animationController.forward(from: 0);
+          unawaited(animationController.forward(from: 0));
 
           return null;
         }, [hasFocus]);
