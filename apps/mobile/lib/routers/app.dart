@@ -20,6 +20,7 @@ class AppRouter extends RootStackRouter {
             AutoRoute(page: LoginWithEmailRoute.page),
           ],
         ),
+        CustomRoute<dynamic>(page: OfflineRoute.page, transitionsBuilder: TransitionsBuilders.fadeIn),
         CustomRoute<dynamic>(
           page: DashboardRouter.page,
           transitionsBuilder: TransitionsBuilders.fadeIn,

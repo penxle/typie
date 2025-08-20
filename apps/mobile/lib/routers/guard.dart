@@ -14,13 +14,18 @@ class GuardRouter extends HookWidget {
     final auth = useService<Auth>();
     final state = useValueListenable(auth);
 
+    if (state is AuthInitializing) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return AutoRouter.declarative(
       routes: (handler) {
         return [
           switch (state) {
-            AuthInitializing() => const AuthRouter(),
             Authenticated() => const DashboardRouter(),
             Unauthenticated() => const AuthRouter(),
+            Offline() => const OfflineRoute(),
+            _ => const AuthRouter(),
           },
         ];
       },
