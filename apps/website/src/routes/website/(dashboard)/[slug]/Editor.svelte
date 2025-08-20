@@ -198,7 +198,7 @@
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
-  const undoManager = new Y.UndoManager(doc, {
+  const undoManager = new Y.UndoManager([doc.getMap('attrs'), doc.getXmlFragment('body')], {
     trackedOrigins: new Set([ySyncPluginKey, 'local']),
     captureTransaction: (tr) => tr.meta.get('addToHistory') !== false,
     deleteFilter: (item) => defaultDeleteFilter(item, defaultProtectedNodes),
