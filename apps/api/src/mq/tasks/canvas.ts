@@ -6,7 +6,9 @@ import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
 import { CanvasContents, Canvases, CanvasSnapshotContributors, CanvasSnapshots, db, Entities, firstOrThrow } from '@/db';
+import { EntityState } from '@/enums';
 import { pubsub } from '@/pubsub';
+import { meilisearch } from '@/search';
 import { queue } from '../bullmq';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
@@ -148,6 +150,12 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
 
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
     pubsub.publish('site:usage:update', siteId, null);
+
+    await enqueueJob('canvas:index', canvasId, {
+      deduplication: {
+        id: `canvas:index:${canvasId}`,
+      },
+    });
   }
 });
 
@@ -327,6 +335,32 @@ export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: str
       })
       .where(eq(CanvasContents.canvasId, canvasId));
   });
+});
+
+export const CanvasIndexJob = defineJob('canvas:index', async (canvasId: string) => {
+  const canvas = await db
+    .select({
+      id: Canvases.id,
+      state: Entities.state,
+      siteId: Entities.siteId,
+      title: Canvases.title,
+    })
+    .from(Canvases)
+    .innerJoin(Entities, eq(Canvases.entityId, Entities.id))
+    .where(eq(Canvases.id, canvasId))
+    .then(firstOrThrow);
+
+  if (canvas.state === EntityState.ACTIVE) {
+    await meilisearch.index('canvases').addDocuments([
+      {
+        id: canvas.id,
+        siteId: canvas.siteId,
+        title: canvas.title,
+      },
+    ]);
+  } else {
+    await meilisearch.index('canvases').deleteDocument(canvas.id);
+  }
 });
 
 export const CanvasCompactScanCron = defineCron('canvas:compact:scan', '0 * * * *', async () => {
