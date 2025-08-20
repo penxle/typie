@@ -16,6 +16,8 @@ type AppArgs = {
     memory: pulumi.Input<string>;
   };
 
+  env?: { name: pulumi.Input<string>; value: pulumi.Input<string> }[];
+
   autoscale?: {
     minCount: pulumi.Input<number>;
     maxCount: pulumi.Input<number>;
@@ -173,6 +175,7 @@ export class App extends pulumi.ComponentResource {
                     { name: 'PUBLIC_PULUMI_PROJECT', value: project },
                     { name: 'PUBLIC_PULUMI_STACK', value: stack },
                     { name: 'AWS_REGION', value: 'ap-northeast-2' },
+                    ...(args.env ?? []),
                   ],
                   envFrom: [{ secretRef: { name: es.metadata.name } }],
                   resources: {
