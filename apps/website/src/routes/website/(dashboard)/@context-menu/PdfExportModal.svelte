@@ -91,6 +91,7 @@
         <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
           <div class={css({ fontSize: '14px', color: 'text.subtle' })}>페이지 크기</div>
           <Select
+            disabled={useCurrentSettings}
             items={PAGE_LAYOUT_OPTIONS}
             onselect={(value: PageLayoutSize) => {
               pageSize = value;
@@ -108,6 +109,7 @@
               <TextInput
                 id="margin-top"
                 style={css.raw({ width: 'full' })}
+                disabled={useCurrentSettings}
                 max={String(getMaxMargin('top', pageSize, margins))}
                 min="0"
                 oninput={(e) => {
@@ -126,6 +128,7 @@
               <TextInput
                 id="margin-bottom"
                 style={css.raw({ width: 'full' })}
+                disabled={useCurrentSettings}
                 max={String(getMaxMargin('bottom', pageSize, margins))}
                 min="0"
                 oninput={(e) => {
@@ -144,6 +147,7 @@
               <TextInput
                 id="margin-left"
                 style={css.raw({ width: 'full' })}
+                disabled={useCurrentSettings}
                 max={String(getMaxMargin('left', pageSize, margins))}
                 min="0"
                 oninput={(e) => {
@@ -162,6 +166,7 @@
               <TextInput
                 id="margin-right"
                 style={css.raw({ width: 'full' })}
+                disabled={useCurrentSettings}
                 max={String(getMaxMargin('right', pageSize, margins))}
                 min="0"
                 oninput={(e) => {
