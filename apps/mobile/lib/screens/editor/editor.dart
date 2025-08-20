@@ -29,6 +29,7 @@ import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/update_post_type_mutation.req.gql.dart';
 import 'package:typie/screens/editor/anchor.dart';
 import 'package:typie/screens/editor/find_replace.dart';
+import 'package:typie/screens/editor/floating/widgets/character_count_floating.dart';
 import 'package:typie/screens/editor/limit.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
@@ -485,6 +486,7 @@ class Editor extends HookWidget {
                               scope.webViewController.value = controller;
                             },
                           ),
+                          if (pref.characterCountFloatingEnabled) const CharacterCountFloating(),
                           const Positioned(bottom: 20, right: 20, child: EditorFloatingToolbar()),
                         ],
                       ),

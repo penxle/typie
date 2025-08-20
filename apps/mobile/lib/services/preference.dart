@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:hive_ce/hive.dart';
 import 'package:injectable/injectable.dart';
 import 'package:typie/services/kv.dart';
@@ -28,4 +30,24 @@ class Pref {
 
   bool get lineHighlightEnabled => _box.get('line_highlight_enabled', defaultValue: true) as bool;
   set lineHighlightEnabled(bool value) => _box.put('line_highlight_enabled', value);
+
+  Map<String, double>? get characterCountFloatingPosition {
+    final data = _box.get('character_count_floating_position');
+    if (data == null) {
+      return null;
+    }
+
+    return Map<String, double>.from(data as Map);
+  }
+
+  set characterCountFloatingPosition(Map<String, double>? value) {
+    if (value == null) {
+      unawaited(_box.delete('character_count_floating_position'));
+    } else {
+      unawaited(_box.put('character_count_floating_position', value));
+    }
+  }
+
+  bool get characterCountFloatingEnabled => _box.get('character_count_floating_enabled', defaultValue: false) as bool;
+  set characterCountFloatingEnabled(bool value) => _box.put('character_count_floating_enabled', value);
 }
