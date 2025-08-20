@@ -16,6 +16,19 @@ query SearchScreen_Query($siteId: ID!, $query: String!) {
           }
         }
       }
+
+      ... on SearchHitCanvas {
+        title
+
+        canvas {
+          id
+
+          entity {
+            id
+            slug
+          }
+        }
+      }
     }
   }
 }
