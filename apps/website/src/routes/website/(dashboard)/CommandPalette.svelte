@@ -99,6 +99,20 @@
               }
             }
           }
+
+          ... on SearchHitCanvas {
+            title
+
+            canvas {
+              id
+              title
+
+              entity {
+                id
+                slug
+              }
+            }
+          }
         }
       }
     }
@@ -261,6 +275,7 @@
       action: match(hit)
         .with({ __typename: 'SearchHitCommand' }, (hit) => hit.action)
         .with({ __typename: 'SearchHitPost' }, (hit) => () => goto(`/${hit.post.entity.slug}`))
+        .with({ __typename: 'SearchHitCanvas' }, (hit) => () => goto(`/${hit.canvas.entity.slug}`))
         .with({ __typename: 'SearchHitRecent' }, (hit) => () => goto(`/${hit.entity.slug}`))
         .exhaustive(),
     })),
@@ -473,6 +488,7 @@
         {match(type)
           .with('SearchHitCommand', () => '액션')
           .with('SearchHitPost', () => '포스트')
+          .with('SearchHitCanvas', () => '캔버스')
           .with('SearchHitRecent', () => '최근 본 항목')
           .exhaustive()}
       </div>
@@ -539,6 +555,21 @@
                 {@html hit.text}
               </div>
             {/if}
+          {:else if hit.__typename === 'SearchHitCanvas'}
+            <div
+              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+            >
+              <Icon icon={LineSquiggleIcon} size={16} />
+            </div>
+
+            <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
+              {#if hit.title}
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                {@html hit.title}
+              {:else}
+                {hit.canvas.title || '제목 없음'}
+              {/if}
+            </div>
           {:else if hit.__typename === 'SearchHitRecent'}
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
