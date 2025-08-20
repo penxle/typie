@@ -242,11 +242,7 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', input.siteId, { scope: 'site' });
       pubsub.publish('site:usage:update', input.siteId, null);
 
-      await enqueueJob('canvas:index', canvas.id, {
-        deduplication: {
-          id: `canvas:index:${canvas.id}`,
-        },
-      });
+      await enqueueJob('canvas:index', canvas.id);
 
       return canvas;
     },
@@ -362,11 +358,7 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
       pubsub.publish('site:usage:update', entity.siteId, null);
 
-      await enqueueJob('canvas:index', newCanvas.id, {
-        deduplication: {
-          id: `canvas:index:${newCanvas.id}`,
-        },
-      });
+      await enqueueJob('canvas:index', newCanvas.id);
 
       return newCanvas;
     },
@@ -400,11 +392,7 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
       pubsub.publish('site:usage:update', entity.siteId, null);
 
-      await enqueueJob('canvas:index', input.canvasId, {
-        deduplication: {
-          id: `canvas:index:${input.canvasId}`,
-        },
-      });
+      await enqueueJob('canvas:index', input.canvasId);
 
       return input.canvasId;
     },

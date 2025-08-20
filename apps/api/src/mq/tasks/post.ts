@@ -226,7 +226,8 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
     await enqueueJob('post:index', postId, {
       deduplication: {
-        id: `post:index:${postId}`,
+        id: postId,
+        ttl: 60 * 1000,
       },
     });
   }

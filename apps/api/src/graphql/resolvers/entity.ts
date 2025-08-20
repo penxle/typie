@@ -729,11 +729,7 @@ builder.mutationFields((t) => ({
           const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
 
           for (const post of posts) {
-            await enqueueJob('post:index', post.id, {
-              deduplication: {
-                id: `post:index:${post.id}`,
-              },
-            });
+            await enqueueJob('post:index', post.id);
           }
         }
 
@@ -824,11 +820,7 @@ builder.mutationFields((t) => ({
         if (postEntityIds.length > 0) {
           const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
           for (const post of posts) {
-            await enqueueJob('post:index', post.id, {
-              deduplication: {
-                id: `post:index:${post.id}`,
-              },
-            });
+            await enqueueJob('post:index', post.id);
           }
         }
 

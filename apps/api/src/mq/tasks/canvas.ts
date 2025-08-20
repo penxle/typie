@@ -153,7 +153,8 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
 
     await enqueueJob('canvas:index', canvasId, {
       deduplication: {
-        id: `canvas:index:${canvasId}`,
+        id: canvasId,
+        ttl: 60 * 1000,
       },
     });
   }

@@ -401,11 +401,7 @@ builder.mutationFields((t) => ({
         );
 
       for (const post of deletedPosts) {
-        await enqueueJob('post:index', post.id, {
-          deduplication: {
-            id: `post:index:${post.id}`,
-          },
-        });
+        await enqueueJob('post:index', post.id);
       }
 
       return folder.id;
