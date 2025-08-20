@@ -26,7 +26,7 @@ export const queue = new Queue(lane, {
   },
 });
 
-if (!process.env.SCRIPT) {
+if (!process.env.SCRIPT && !process.env.NO_WORKER) {
   const worker = new Worker(
     lane,
     async (job) => {
