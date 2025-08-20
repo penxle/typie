@@ -35,50 +35,48 @@ class CharacterCountFloating extends HookWidget {
       onPositionChanged: (position) {
         pref.characterCountFloatingPosition = {'x': position.dx, 'y': position.dy};
       },
-      child: GestureDetector(
-        onTap: () {
-          isExpanded.value = !isExpanded.value;
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: context.colors.surfaceSubtle.withValues(alpha: 0.95),
-            border: Border.all(color: context.colors.borderDefault),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(LucideLightIcons.type_, size: 14, color: context.colors.textSubtle),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${characterCountState.countWithWhitespace.comma}자',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.colors.textDefault),
-                  ),
-                  const SizedBox(width: 8),
-                  AnimatedRotation(
-                    turns: isExpanded.value ? 0.25 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textSubtle),
-                  ),
-                ],
-              ),
-              if (isExpanded.value) ...[
-                const SizedBox(height: 8),
-                _buildCountRow(label: '공백 미포함', count: characterCountState.countWithoutWhitespace, context: context),
-                const SizedBox(height: 4),
-                _buildCountRow(
-                  label: '공백/부호 미포함',
-                  count: characterCountState.countWithoutWhitespaceAndPunctuation,
-                  context: context,
+      onTap: () {
+        isExpanded.value = !isExpanded.value;
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: context.colors.surfaceSubtle.withValues(alpha: 0.95),
+          border: Border.all(color: context.colors.borderDefault),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(LucideLightIcons.type_, size: 14, color: context.colors.textSubtle),
+                const SizedBox(width: 6),
+                Text(
+                  '${characterCountState.countWithWhitespace.comma}자',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.colors.textDefault),
+                ),
+                const SizedBox(width: 8),
+                AnimatedRotation(
+                  turns: isExpanded.value ? 0.25 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textSubtle),
                 ),
               ],
+            ),
+            if (isExpanded.value) ...[
+              const SizedBox(height: 8),
+              _buildCountRow(label: '공백 미포함', count: characterCountState.countWithoutWhitespace, context: context),
+              const SizedBox(height: 4),
+              _buildCountRow(
+                label: '공백/부호 미포함',
+                count: characterCountState.countWithoutWhitespaceAndPunctuation,
+                context: context,
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

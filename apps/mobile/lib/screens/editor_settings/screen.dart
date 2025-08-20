@@ -150,13 +150,44 @@ class EditorSettingsScreen extends HookWidget {
                     );
                   },
                   builder: (context, form) {
-                    return _Item(
-                      label: '글자 수 위젯',
-                      description: '에디터에서 글자 수를 표시합니다.',
-                      trailing: HookFormSwitch(
-                        name: 'characterCountFloatingEnabled',
-                        initialValue: pref.characterCountFloatingEnabled,
-                      ),
+                    return Column(
+                      children: [
+                        _Item(
+                          label: '글자 수 위젯',
+                          description: '에디터에서 글자 수를 표시합니다.',
+                          trailing: HookFormSwitch(
+                            name: 'characterCountFloatingEnabled',
+                            initialValue: pref.characterCountFloatingEnabled,
+                          ),
+                        ),
+                        if (pref.characterCountFloatingEnabled) ...[
+                          const _Divider(),
+                          HookForm(
+                            submitMode: HookFormSubmitMode.onChange,
+                            onSubmit: (form) async {
+                              final widgetAutoFadeEnabled = form.data['widgetAutoFadeEnabled'] as bool;
+                              pref.widgetAutoFadeEnabled = widgetAutoFadeEnabled;
+
+                              unawaited(
+                                mixpanel.track(
+                                  'toggle_widget_auto_fade',
+                                  properties: {'enabled': widgetAutoFadeEnabled},
+                                ),
+                              );
+                            },
+                            builder: (context, form) {
+                              return _Item(
+                                label: '위젯 자동 페이드 인/아웃',
+                                description: '타이핑, 스크롤 시 위젯이 잠시 사라집니다.',
+                                trailing: HookFormSwitch(
+                                  name: 'widgetAutoFadeEnabled',
+                                  initialValue: pref.widgetAutoFadeEnabled,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ],
                     );
                   },
                 ),

@@ -140,6 +140,7 @@
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
+  let editorContainerEl = $state<HTMLDivElement>();
 
   let features = $state<string[]>([]);
   let settings = $state<{
@@ -274,6 +275,28 @@
 
   $effect(() => {
     window.__webview__?.emitEvent('connectionStatus', connectionStatus);
+  });
+
+  $effect(() => {
+    const el = editorContainerEl;
+    if (!el) return;
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          window.__webview__?.emitEvent('scrollTop', el.scrollTop);
+        });
+      }
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      el.removeEventListener('scroll', handleScroll);
+    };
   });
 
   onMount(() => {
@@ -803,6 +826,7 @@
 
 <div class={css({ width: 'full', height: '[100dvh]', overflow: 'hidden' })}>
   <div
+    bind:this={editorContainerEl}
     style:--prosemirror-max-width={`${maxWidth.current}px`}
     style:--prosemirror-padding-bottom="80dvh"
     style:--prosemirror-color-selection={token.var('colors.border.strong')}

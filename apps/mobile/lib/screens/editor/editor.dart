@@ -168,6 +168,11 @@ class Editor extends HookWidget {
             }
           case 'blur':
             scope.focusedElement.value = null;
+          case 'scrollTop':
+            final value = (event.data as num).toDouble();
+            if (value != scope.scrollTop.value) {
+              scope.scrollTop.value = value;
+            }
         }
       });
 
