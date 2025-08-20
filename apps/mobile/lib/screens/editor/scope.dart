@@ -38,6 +38,7 @@ class EditorStateScope extends InheritedWidget {
     required this.secondaryToolbarMode,
     required this.focusedElement,
     required this.connectionStatus,
+    required this.isBottomSheetOpen,
     super.key,
   });
 
@@ -54,6 +55,7 @@ class EditorStateScope extends InheritedWidget {
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
   final ValueNotifier<String?> focusedElement;
   final ValueNotifier<ConnectionStatus> connectionStatus;
+  final ValueNotifier<bool> isBottomSheetOpen;
 
   Future<void> command(String name, {Map<String, dynamic>? attrs}) async {
     await webViewController.value?.emitEvent('command', {'name': name, 'attrs': attrs});
