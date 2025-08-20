@@ -16,6 +16,7 @@
     listStyle?: SystemStyleObject;
     setFullWidth?: boolean;
     disableAutoUpdate?: boolean;
+    disabled?: boolean;
     onopen?: () => void;
     onclose?: () => void;
     button?: Snippet<[{ open: boolean }]>;
@@ -32,6 +33,7 @@
     listStyle,
     setFullWidth = false,
     disableAutoUpdate = false,
+    disabled = false,
     onopen,
     onclose,
     button,
@@ -76,19 +78,20 @@
   const onKeydown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
     if (open) {
-      if (e.key === 'Escape') {
+      const focusInList = menuEl?.contains(target);
+      const focusInButton = buttonEl?.contains(target);
+
+      if (e.key === 'Escape' && (focusInList || focusInButton)) {
         e.preventDefault();
         e.stopPropagation();
         close();
         return;
       }
 
-      if (e.key === 'Tab') {
+      if (e.key === 'Tab' && (focusInList || focusInButton)) {
         close();
         return;
       }
-
-      const focusInList = menuEl?.contains(target);
 
       const menuItems = getMenuItems();
       if (!menuItems || menuItems.length === 0) {
@@ -111,11 +114,9 @@
           const prev = (menuItems[pos - 1] || menuItems[menuItems.length - 1]) as HTMLElement;
           prev?.focus();
         }
-      } else {
-        if (['ArrowDown', 'ArrowUp'].includes(e.key)) {
-          e.preventDefault();
-          (menuItems[0] as HTMLElement).focus();
-        }
+      } else if (focusInButton && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
+        e.preventDefault();
+        (menuItems[0] as HTMLElement).focus();
       }
     } else {
       // 버튼에 포커스가 있을 때 아래 키로 메뉴를 열고 첫번째 항목에 포커스
@@ -152,14 +153,20 @@
   <button
     bind:this={buttonEl}
     class={css(style)}
+    aria-disabled={disabled}
     aria-expanded={open}
+    {disabled}
     onclick={(e) => {
+      if (disabled) {
+        return;
+      }
       e.preventDefault();
       open = !open;
       if (open) {
         onopen?.();
       }
     }}
+    tabindex={disabled ? -1 : 0}
     type="button"
     use:anchor
   >

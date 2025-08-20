@@ -19,11 +19,12 @@
       description?: string;
       value: T;
     }[];
+    disabled?: boolean;
     onselect?: (value: T) => void;
     chevron?: boolean;
   };
 
-  let { style, value = $bindable(), values, items = [], onselect, chevron = true }: Props = $props();
+  let { style, value = $bindable(), values, items = [], disabled, onselect, chevron = true }: Props = $props();
 
   const selectedValues = $derived(values ?? [value]);
   const isIndeterminate = $derived(selectedValues.some((v) => selectedValues[0] !== v));
@@ -42,7 +43,7 @@
   );
 </script>
 
-<Menu disableAutoUpdate listStyle={css.raw({ minWidth: '[initial]', maxWidth: '240px' })} offset={4} placement="bottom-end">
+<Menu disableAutoUpdate {disabled} listStyle={css.raw({ minWidth: '[initial]', maxWidth: '240px' })} offset={4} placement="bottom-end">
   {#snippet button({ open }: { open: boolean })}
     <button
       class={cx(
@@ -58,11 +59,22 @@
             transition: 'common',
             _hover: { backgroundColor: 'surface.muted' },
             _expanded: { backgroundColor: 'surface.muted' },
+            _disabled: {
+              opacity: '70',
+            },
           },
           style,
         ),
       )}
+      aria-disabled={disabled}
       aria-expanded={open}
+      {disabled}
+      onclick={() => {
+        if (disabled) {
+          return;
+        }
+      }}
+      tabindex={disabled ? -1 : 0}
       type="button"
     >
       {#if displayItem}

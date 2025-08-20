@@ -100,6 +100,7 @@
             <div class={css({ fontSize: '13px', color: 'text.subtle' })}>페이지 크기</div>
           </div>
           <Select
+            disabled={useCurrentSettings}
             items={PAGE_LAYOUT_OPTIONS}
             onselect={(value: PageLayoutSize) => {
               pageSize = value;
@@ -122,6 +123,7 @@
               </div>
               <TextInput
                 style={css.raw({ width: 'full' })}
+                disabled={useCurrentSettings}
                 max={String(getMaxMargin('top', pageSize, margins))}
                 min="0"
                 oninput={(e) => {
@@ -142,6 +144,7 @@
               </div>
               <TextInput
                 style={css.raw({ width: 'full' })}
+                disabled={useCurrentSettings}
                 max={String(getMaxMargin('bottom', pageSize, margins))}
                 min="0"
                 oninput={(e) => {
@@ -162,6 +165,7 @@
               </div>
               <TextInput
                 style={css.raw({ width: 'full' })}
+                disabled={useCurrentSettings}
                 max={String(getMaxMargin('left', pageSize, margins))}
                 min="0"
                 oninput={(e) => {
@@ -182,6 +186,7 @@
               </div>
               <TextInput
                 style={css.raw({ width: 'full' })}
+                disabled={useCurrentSettings}
                 max={String(getMaxMargin('right', pageSize, margins))}
                 min="0"
                 oninput={(e) => {
