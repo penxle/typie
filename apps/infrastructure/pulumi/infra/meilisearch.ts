@@ -24,7 +24,11 @@ const meilisearch = new aws.ec2.Instance(
     keyName: keyPair.keyName,
 
     rootBlockDevice: {
+      volumeType: 'gp3',
       volumeSize: 20,
+
+      iops: 10_000,
+      throughput: 500,
     },
 
     userData: `
