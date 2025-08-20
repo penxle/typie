@@ -5,7 +5,7 @@ import { SearchHitType } from '@/enums';
 import { meilisearch } from '@/search';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Post } from '../objects';
+import { Canvas, Post } from '../objects';
 
 /**
  * * Queries
@@ -29,10 +29,18 @@ builder.queryFields((t) => ({
                     post: t.field({ type: Post }),
                   }),
                 }),
+                builder.simpleObject('SearchHitCanvas', {
+                  fields: (t) => ({
+                    type: t.field({ type: SearchHitType }),
+                    title: t.string({ nullable: true }),
+                    canvas: t.field({ type: Canvas }),
+                  }),
+                }),
               ],
               resolveType: (self) =>
                 match(self.type)
                   .with(SearchHitType.POST, () => 'SearchHitPost')
+                  .with(SearchHitType.CANVAS, () => 'SearchHitCanvas')
                   .exhaustive(),
             }),
           ],
@@ -66,6 +74,13 @@ builder.queryFields((t) => ({
             attributesToCrop: ['*'],
             attributesToHighlight: ['title', 'subtitle', 'text'],
           },
+          {
+            indexUid: 'canvases',
+            q: args.query.trim(),
+            filter: [`siteId = ${args.siteId}`],
+            attributesToCrop: ['*'],
+            attributesToHighlight: ['title'],
+          },
         ],
       });
 
@@ -79,6 +94,11 @@ builder.queryFields((t) => ({
               subtitle: sanitizeHtml(hit._formatted?.subtitle),
               text: sanitizeHtml(hit._formatted?.text),
               post: hit.id,
+            }))
+            .with('canvases', () => ({
+              type: SearchHitType.CANVAS,
+              title: sanitizeHtml(hit._formatted?.title),
+              canvas: hit.id,
             }))
             .run(),
         ),

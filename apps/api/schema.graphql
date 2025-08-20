@@ -768,7 +768,13 @@ input SchedulePlanChangeInput {
   planId: ID!
 }
 
-union SearchHit = SearchHitPost
+union SearchHit = SearchHitCanvas | SearchHitPost
+
+type SearchHitCanvas {
+  canvas: Canvas!
+  title: String
+  type: SearchHitType!
+}
 
 type SearchHitPost {
   post: Post!
@@ -779,6 +785,7 @@ type SearchHitPost {
 }
 
 enum SearchHitType {
+  CANVAS
   POST
 }
 
