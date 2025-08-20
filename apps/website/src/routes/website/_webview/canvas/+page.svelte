@@ -32,6 +32,14 @@
     }
   `);
 
+  const viewEntity = graphql(`
+    mutation WebViewCanvas_ViewEntity_Mutation($input: ViewEntityInput!) {
+      viewEntity(input: $input) {
+        id
+      }
+    }
+  `);
+
   let canvas = $state<Canvas>();
   let doc = new Y.Doc();
 
@@ -47,6 +55,8 @@
   });
 
   onMount(() => {
+    viewEntity({ entityId: $query.entity.id });
+
     if (canvas) {
       const { x, y, width, height } = canvas.scene.getLayer().getClientRect();
       const stageWidth = canvas.stage.width();

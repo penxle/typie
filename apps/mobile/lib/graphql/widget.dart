@@ -12,12 +12,19 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/widgets/tappable.dart';
 
+class RefreshNotifier extends ChangeNotifier {
+  void refresh() {
+    notifyListeners();
+  }
+}
+
 class GraphQLOperation<TData, TVars> extends HookWidget {
   const GraphQLOperation({
     required this.operation,
     required this.builder,
     this.initialBackgroundColor,
     this.onLoaded,
+    this.refreshNotifier,
     super.key,
   });
 
@@ -25,10 +32,21 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
   final Widget Function(BuildContext context, GraphQLClient client, TData data) builder;
   final Color? initialBackgroundColor;
   final void Function(TData data)? onLoaded;
+  final RefreshNotifier? refreshNotifier;
 
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
+
+    useEffect(() {
+      void onRefresh() {
+        unawaited(client.refetch(operation));
+      }
+
+      refreshNotifier?.addListener(onRefresh);
+      return () => refreshNotifier?.removeListener(onRefresh);
+    }, [refreshNotifier, operation]);
+
     final stream = useMemoized(() => client.raw.request(operation).distinct(), [operation]);
     final snapshot = useStream(stream);
     final loaded = useRef(false);

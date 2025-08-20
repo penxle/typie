@@ -107,6 +107,14 @@
     }
   `);
 
+  const viewEntity = graphql(`
+    mutation WebViewEditor_ViewEntity_Mutation($input: ViewEntityInput!) {
+      viewEntity(input: $input) {
+        id
+      }
+    }
+  `);
+
   const postSyncStream = graphql(`
     subscription WebViewEditor_PostSyncStream_Subscription($clientId: String!, $postId: ID!) {
       postSyncStream(clientId: $clientId, postId: $postId) {
@@ -303,6 +311,8 @@
   });
 
   onMount(() => {
+    viewEntity({ entityId: $query.post.entity.id });
+
     const heartbeatCheckInterval = setInterval(() => {
       if (dayjs().diff(lastHeartbeatAt, 'seconds') > WEBVIEW_DISCONNECT_THRESHOLD) {
         connectionStatus = 'disconnected';

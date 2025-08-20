@@ -1,0 +1,26 @@
+query SearchScreen_RecentlyViewed_Query {
+  me {
+    id
+    recentlyViewedEntities {
+      id
+      slug
+      type
+
+      node {
+        __typename
+
+        ... on Post {
+          id
+          title
+          excerpt
+          type
+          updatedAt
+        }
+        ... on Canvas {
+          id
+          title
+        }
+      }
+    }
+  }
+}
