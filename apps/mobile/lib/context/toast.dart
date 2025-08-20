@@ -40,7 +40,7 @@ class _Widget extends HookWidget {
     }, [animationController]);
 
     useEffect(() {
-      animationController.forward();
+      unawaited(animationController.forward());
 
       final timer = Timer(duration, () async {
         await animationController.reverse().then((_) {

@@ -117,9 +117,10 @@ Future<Client> _createClient(_CreateClientParams params, SendPort? sendPort) asy
   var accessToken = params.accessToken;
 
   receivePort.listen((message) {
-    switch (message) {
+    switch (message as GraphQLMessage) {
       case GraphQLAccessTokenMessage(:final token):
         accessToken = token;
+      default:
     }
   });
 
