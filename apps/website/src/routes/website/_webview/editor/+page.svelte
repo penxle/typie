@@ -8,6 +8,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { autosize } from '@typie/ui/actions';
+  import { InEditorBody } from '@typie/ui/components';
   import { getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import { clamp } from '@typie/ui/utils';
   import dayjs from 'dayjs';
@@ -137,6 +138,8 @@
   let editor = $state<Ref<Editor>>();
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
   let lastHeartbeatAt = $state(dayjs());
+
+  let mounted = $state(false);
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -940,6 +943,7 @@
           window.__webview__?.emitEvent('blur');
         }}
         oncreate={() => {
+          mounted = true;
           window.__webview__?.emitEvent('webviewReady');
           setYJSState();
         }}
@@ -961,8 +965,10 @@
         bind:editor
       />
 
-      {#if editor}
-        <Placeholder {editor} isTemplateActive={features.includes('template')} />
+      {#if editor && mounted}
+        <InEditorBody {editor} pageLayout={null}>
+          <Placeholder {editor} isTemplateActive={features.includes('template')} />
+        </InEditorBody>
         {#if settings.lineHighlightEnabled}
           <Highlight {editor} />
         {/if}
