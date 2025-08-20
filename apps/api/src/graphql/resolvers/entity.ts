@@ -717,19 +717,28 @@ builder.mutationFields((t) => ({
         pubsub.publish('site:usage:update', siteId, null);
 
         const postEntityIds: string[] = [];
+        const canvasEntityIds: string[] = [];
 
         for (const entity of deletedEntities) {
           pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
           if (entity.type === EntityType.POST) {
             postEntityIds.push(entity.id);
+          } else if (entity.type === EntityType.CANVAS) {
+            canvasEntityIds.push(entity.id);
           }
         }
 
         if (postEntityIds.length > 0) {
           const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
-
           for (const post of posts) {
             await enqueueJob('post:index', post.id);
+          }
+        }
+
+        if (canvasEntityIds.length > 0) {
+          const canvases = await tx.select({ id: Canvases.id }).from(Canvases).where(inArray(Canvases.entityId, canvasEntityIds));
+          for (const canvas of canvases) {
+            await enqueueJob('canvas:index', canvas.id);
           }
         }
 
@@ -816,11 +825,18 @@ builder.mutationFields((t) => ({
         pubsub.publish('site:usage:update', entity.siteId, null);
 
         const postEntityIds = updatedEntities.filter(({ type }) => type === EntityType.POST).map(({ id }) => id);
-
         if (postEntityIds.length > 0) {
           const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
           for (const post of posts) {
             await enqueueJob('post:index', post.id);
+          }
+        }
+
+        const canvasEntityIds = updatedEntities.filter(({ type }) => type === EntityType.CANVAS).map(({ id }) => id);
+        if (canvasEntityIds.length > 0) {
+          const canvases = await tx.select({ id: Canvases.id }).from(Canvases).where(inArray(Canvases.entityId, canvasEntityIds));
+          for (const canvas of canvases) {
+            await enqueueJob('canvas:index', canvas.id);
           }
         }
 
