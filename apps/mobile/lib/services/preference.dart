@@ -50,4 +50,7 @@ class Pref {
 
   bool get characterCountFloatingEnabled => _box.get('character_count_floating_enabled', defaultValue: false) as bool;
   set characterCountFloatingEnabled(bool value) => _box.put('character_count_floating_enabled', value);
+
+  bool get widgetAutoFadeEnabled => _box.get('widget_auto_fade_enabled', defaultValue: true) as bool;
+  set widgetAutoFadeEnabled(bool value) => _box.put('widget_auto_fade_enabled', value);
 }
