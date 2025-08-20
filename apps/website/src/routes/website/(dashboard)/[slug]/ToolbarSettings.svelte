@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Fragment } from '@tiptap/pm/model';
   import { css } from '@typie/styled-system/css';
-  import { flex, grid } from '@typie/styled-system/patterns';
+  import { center, flex, grid } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, SegmentButtons, Select, Slider, Switch, TextInput, Tooltip } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
@@ -19,10 +19,15 @@
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
+  import FileIcon from '~icons/lucide/file';
   import FileTextIcon from '~icons/lucide/file-text';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
   import HighlighterIcon from '~icons/lucide/highlighter';
   import InfoIcon from '~icons/lucide/info';
+  import PanelBottomDashedIcon from '~icons/lucide/panel-bottom-dashed';
+  import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
+  import PanelRightDashedIcon from '~icons/lucide/panel-right-dashed';
+  import PanelTopDashedIcon from '~icons/lucide/panel-top-dashed';
   import QuoteIcon from '~icons/lucide/quote';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import SettingsIcon from '~icons/lucide/settings';
@@ -267,7 +272,10 @@
       {#if isPageLayoutEnabled && pageLayout.current}
         <div class={flex({ flexDirection: 'column', gap: '12px', marginTop: '4px', marginBottom: '8px' })}>
           <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle', marginLeft: '28px' })}>페이지 크기</div>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>페이지 크기</div>
+            </div>
             <Select
               items={PAGE_LAYOUT_OPTIONS}
               onselect={(value: PageLayoutSize) => {
@@ -283,10 +291,16 @@
           </div>
 
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle', marginLeft: '28px' })}>여백 (mm)</div>
-            <div class={grid({ columns: 2, gap: '8px', marginLeft: '28px' })}>
-              <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <div class={css({ fontSize: '11px', color: 'text.muted' })}>상</div>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>여백 (mm)</div>
+            </div>
+            <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
+              <div class={center({ gap: '8px' })}>
+                <div class={center({ gap: '4px' })}>
+                  <Icon style={css.raw({ width: '14px', height: '14px', color: 'text.subtle' })} icon={PanelTopDashedIcon} />
+                  <div class={css({ fontSize: '12px', color: 'text.subtle' })}>상</div>
+                </div>
                 <TextInput
                   style={css.raw({ width: 'full' })}
                   max={pageLayout.current ? String(getMaxMargin('top', pageLayout.current.size, pageLayout.current.margins)) : undefined}
@@ -306,8 +320,11 @@
                   value={pageLayout.current?.margins.top ?? 25}
                 />
               </div>
-              <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <div class={css({ fontSize: '11px', color: 'text.muted' })}>하</div>
+              <div class={center({ gap: '8px' })}>
+                <div class={center({ gap: '4px' })}>
+                  <Icon style={css.raw({ width: '14px', height: '14px', color: 'text.subtle' })} icon={PanelBottomDashedIcon} />
+                  <div class={css({ fontSize: '12px', color: 'text.subtle' })}>하</div>
+                </div>
                 <TextInput
                   style={css.raw({ width: 'full' })}
                   max={pageLayout.current ? String(getMaxMargin('bottom', pageLayout.current.size, pageLayout.current.margins)) : undefined}
@@ -331,8 +348,11 @@
                   value={pageLayout.current?.margins.bottom ?? 25}
                 />
               </div>
-              <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <div class={css({ fontSize: '11px', color: 'text.muted' })}>좌</div>
+              <div class={center({ gap: '8px' })}>
+                <div class={center({ gap: '4px' })}>
+                  <Icon style={css.raw({ width: '14px', height: '14px', color: 'text.subtle' })} icon={PanelLeftDashedIcon} />
+                  <div class={css({ fontSize: '12px', color: 'text.subtle' })}>좌</div>
+                </div>
                 <TextInput
                   style={css.raw({ width: 'full' })}
                   max={pageLayout.current ? String(getMaxMargin('left', pageLayout.current.size, pageLayout.current.margins)) : undefined}
@@ -352,8 +372,11 @@
                   value={pageLayout.current?.margins.left ?? 25}
                 />
               </div>
-              <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <div class={css({ fontSize: '11px', color: 'text.muted' })}>우</div>
+              <div class={center({ gap: '8px' })}>
+                <div class={center({ gap: '4px' })}>
+                  <Icon style={css.raw({ width: '14px', height: '14px', color: 'text.subtle' })} icon={PanelRightDashedIcon} />
+                  <div class={css({ fontSize: '12px', color: 'text.subtle' })}>우</div>
+                </div>
                 <TextInput
                   style={css.raw({ width: 'full' })}
                   max={pageLayout.current ? String(getMaxMargin('right', pageLayout.current.size, pageLayout.current.margins)) : undefined}

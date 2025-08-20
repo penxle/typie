@@ -1,10 +1,16 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { flex, grid } from '@typie/styled-system/patterns';
-  import { Button, Checkbox, HorizontalDivider, Modal, Select, TextInput } from '@typie/ui/components';
+  import { center, flex, grid } from '@typie/styled-system/patterns';
+  import { Button, Checkbox, HorizontalDivider, Icon, Modal, Select, TextInput } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp, DEFAULT_PAGE_MARGINS, getMaxMargin, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
   import { ExportLayoutMode } from '@/enums';
+  import FileIcon from '~icons/lucide/file';
+  import PanelBottomDashedIcon from '~icons/lucide/panel-bottom-dashed';
+  import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
+  import PanelRightDashedIcon from '~icons/lucide/panel-right-dashed';
+  import PanelTopDashedIcon from '~icons/lucide/panel-top-dashed';
+  import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import type { PageLayoutSettings, PageLayoutSize } from '@typie/ui/utils';
 
   type Props = {
@@ -89,7 +95,10 @@
         })}
       >
         <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-          <div class={css({ fontSize: '14px', color: 'text.subtle' })}>페이지 크기</div>
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
+            <div class={css({ fontSize: '13px', color: 'text.subtle' })}>페이지 크기</div>
+          </div>
           <Select
             items={PAGE_LAYOUT_OPTIONS}
             onselect={(value: PageLayoutSize) => {
@@ -100,13 +109,18 @@
           />
         </div>
 
-        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-          <div class={css({ fontSize: '14px', color: 'text.subtle' })}>여백 (mm)</div>
-          <div class={grid({ columns: 2, gap: '8px' })}>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <label class={css({ fontSize: '12px', color: 'text.muted', width: '20px' })} for="margin-top">상</label>
+        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
+            <div class={css({ fontSize: '13px', color: 'text.subtle' })}>여백 (mm)</div>
+          </div>
+          <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
+            <div class={center({ gap: '8px' })}>
+              <div class={center({ gap: '4px' })}>
+                <Icon style={css.raw({ width: '14px', height: '14px', color: 'text.subtle' })} icon={PanelTopDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.subtle' })}>상</div>
+              </div>
               <TextInput
-                id="margin-top"
                 style={css.raw({ width: 'full' })}
                 max={String(getMaxMargin('top', pageSize, margins))}
                 min="0"
@@ -121,10 +135,12 @@
                 value={margins.top}
               />
             </div>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <label class={css({ fontSize: '12px', color: 'text.muted', width: '20px' })} for="margin-bottom">하</label>
+            <div class={center({ gap: '8px' })}>
+              <div class={center({ gap: '4px' })}>
+                <Icon style={css.raw({ width: '14px', height: '14px', color: 'text.subtle' })} icon={PanelBottomDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.subtle' })}>하</div>
+              </div>
               <TextInput
-                id="margin-bottom"
                 style={css.raw({ width: 'full' })}
                 max={String(getMaxMargin('bottom', pageSize, margins))}
                 min="0"
@@ -139,10 +155,12 @@
                 value={margins.bottom}
               />
             </div>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <label class={css({ fontSize: '12px', color: 'text.muted', width: '20px' })} for="margin-left">좌</label>
+            <div class={center({ gap: '8px' })}>
+              <div class={center({ gap: '4px' })}>
+                <Icon style={css.raw({ width: '14px', height: '14px', color: 'text.subtle' })} icon={PanelLeftDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.subtle' })}>좌</div>
+              </div>
               <TextInput
-                id="margin-left"
                 style={css.raw({ width: 'full' })}
                 max={String(getMaxMargin('left', pageSize, margins))}
                 min="0"
@@ -157,10 +175,12 @@
                 value={margins.left}
               />
             </div>
-            <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <label class={css({ fontSize: '12px', color: 'text.muted', width: '20px' })} for="margin-right">우</label>
+            <div class={center({ gap: '8px' })}>
+              <div class={center({ gap: '4px' })}>
+                <Icon style={css.raw({ width: '14px', height: '14px', color: 'text.subtle' })} icon={PanelRightDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.subtle' })}>우</div>
+              </div>
               <TextInput
-                id="margin-right"
                 style={css.raw({ width: 'full' })}
                 max={String(getMaxMargin('right', pageSize, margins))}
                 min="0"
