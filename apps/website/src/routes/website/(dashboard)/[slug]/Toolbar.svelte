@@ -106,10 +106,8 @@
     {
       display: 'flex',
       flexDirection: 'column',
-      gap: '8px',
       borderBottomWidth: '1px',
       borderColor: 'border.subtle',
-      paddingY: '8px',
       position: 'relative',
       zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor',
       backgroundColor: 'surface.default',
@@ -119,7 +117,16 @@
   role="toolbar"
   tabindex="-1"
 >
-  <div class={flex({ alignItems: 'center', gap: '4px', paddingX: '16px' })}>
+  <div
+    class={flex({
+      alignItems: 'center',
+      gap: '4px',
+      paddingX: '16px',
+      paddingY: '8px',
+      overflowX: 'auto',
+      scrollbarWidth: '[thin]',
+    })}
+  >
     <ToolbarButton
       disabled={!editor?.current.can().setImage()}
       icon={ImageIcon}
@@ -329,7 +336,17 @@
 
   <HorizontalDivider color="secondary" />
 
-  <div class={flex({ alignItems: 'center', gap: '10px', paddingLeft: '20px', paddingRight: '12px' })}>
+  <div
+    class={flex({
+      alignItems: 'center',
+      gap: '10px',
+      paddingLeft: '20px',
+      paddingRight: '12px',
+      paddingY: '8px',
+      overflowX: 'auto',
+      scrollbarWidth: '[thin]',
+    })}
+  >
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
       <ToolbarButton
         style={css.raw({ borderRightRadius: '0' })}
