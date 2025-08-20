@@ -832,7 +832,7 @@
             zIndex: 'editor',
             backgroundColor: 'surface.default',
             '&[data-layout="page"]': {
-              backgroundColor: 'surface.muted',
+              backgroundColor: 'surface.subtle/50',
             },
           })}
           data-layout={isPageLayoutEnabled && pageLayout ? 'page' : 'scroll'}
