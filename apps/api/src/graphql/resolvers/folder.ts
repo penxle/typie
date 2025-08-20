@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import { db, Entities, first, firstOrThrow, Folders, PostContents, Posts, TableCode, validateDbId } from '@/db';
+import { Canvases, db, Entities, first, firstOrThrow, Folders, PostContents, Posts, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -400,8 +400,22 @@ builder.mutationFields((t) => ({
           ),
         );
 
+      const deletedCanvases = await db
+        .select({ id: Canvases.id })
+        .from(Canvases)
+        .where(
+          inArray(
+            Canvases.entityId,
+            descendants.filter(({ type }) => type === EntityType.CANVAS).map(({ id }) => id),
+          ),
+        );
+
       for (const post of deletedPosts) {
         await enqueueJob('post:index', post.id);
+      }
+
+      for (const canvas of deletedCanvases) {
+        await enqueueJob('canvas:index', canvas.id);
       }
 
       return folder.id;

@@ -545,6 +545,8 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', input.siteId, { scope: 'site' });
       pubsub.publish('site:usage:update', input.siteId, null);
 
+      await enqueueJob('post:index', post.id);
+
       return post;
     },
   }),
@@ -698,6 +700,8 @@ builder.mutationFields((t) => ({
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
       pubsub.publish('site:usage:update', entity.siteId, null);
+
+      await enqueueJob('post:index', newPost.id);
 
       return newPost;
     },
