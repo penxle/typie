@@ -31,6 +31,8 @@ sealed class AuthState with _$AuthState {
   }) = Authenticated;
 
   const factory AuthState.unauthenticated() = Unauthenticated;
+
+  const factory AuthState.offline() = Offline;
 }
 
 @singleton
@@ -79,6 +81,14 @@ class Auth extends ValueNotifier<AuthState> {
       _mixpanel.getPeople().set(r'$avatar', '${me.avatar.url}?s=256&f=png');
 
       value = AuthState.authenticated(sessionToken: sessionToken, accessToken: accessToken, me: me);
+    } on LinkException {
+      final sessionToken = _box.get(_sessionTokenKey) as String?;
+      if (sessionToken != null) {
+        value = const AuthState.offline();
+      } else {
+        value = const AuthState.unauthenticated();
+      }
+      return;
     } catch (_) {
       await clearTokens();
     }
@@ -110,6 +120,11 @@ class Auth extends ValueNotifier<AuthState> {
     }
 
     await clearTokens();
+  }
+
+  Future<void> retry() async {
+    value = const AuthState.initializing();
+    await _refreshTokens();
   }
 
   Future<void> clearTokens() async {
@@ -174,6 +189,11 @@ class Auth extends ValueNotifier<AuthState> {
     );
 
     final result = await client.request(GAuth_QueryReq()).first;
+
+    if (result.linkException != null) {
+      throw result.linkException!;
+    }
+
     if (result.data?.me == null) {
       throw Exception('Invalid access token');
     }
