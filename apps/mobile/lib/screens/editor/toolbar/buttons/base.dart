@@ -73,7 +73,7 @@ class ToolbarButton extends HookWidget {
     );
 
     useEffect(() {
-      controller.forward(from: 0);
+      unawaited(controller.forward(from: 0));
       return null;
     }, [effectiveState]);
 

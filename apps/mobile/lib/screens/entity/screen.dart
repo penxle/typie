@@ -128,11 +128,11 @@ class _EntityList extends HookWidget {
       void listener() {
         if (primaryScrollController.position.pixels > 0) {
           if (animationController.status != AnimationStatus.forward) {
-            animationController.forward();
+            unawaited(animationController.forward());
           }
         } else {
           if (animationController.status != AnimationStatus.reverse) {
-            animationController.reverse();
+            unawaited(animationController.reverse());
           }
         }
       }

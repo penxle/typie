@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
@@ -30,9 +32,9 @@ class SecondaryToolbar extends HookWidget {
 
     useEffect(() {
       if (isVisible) {
-        controller.forward();
+        unawaited(controller.forward());
       } else {
-        controller.reverse();
+        unawaited(controller.reverse());
       }
 
       return null;
@@ -71,9 +73,9 @@ class SecondaryToolbar extends HookWidget {
 
               useEffect(() {
                 if (isOptions) {
-                  switchController.forward();
+                  unawaited(switchController.forward());
                 } else {
-                  switchController.reverse();
+                  unawaited(switchController.reverse());
                 }
 
                 return null;
