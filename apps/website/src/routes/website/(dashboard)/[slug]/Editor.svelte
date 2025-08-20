@@ -641,7 +641,7 @@
 
 {#if $query.entity.node.__typename === 'Post'}
   <div class={flex({ height: 'full' })}>
-    <div class={flex({ flexDirection: 'column', flexGrow: '1' })}>
+    <div class={flex({ flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
       <div
         class={flex({
           justifyContent: 'space-between',

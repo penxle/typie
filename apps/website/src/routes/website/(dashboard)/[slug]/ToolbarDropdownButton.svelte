@@ -85,6 +85,7 @@
           _pressed: { color: 'text.brand' },
         },
         _disabled: { opacity: '50' },
+        flexShrink: '0',
       },
       style,
     )}
@@ -117,6 +118,7 @@
           _pressed: { color: 'text.brand' },
         },
         _disabled: { opacity: '50' },
+        flexShrink: '0',
       },
       style,
     )}
