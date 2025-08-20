@@ -449,6 +449,7 @@
     window.__webview__?.addEventListener('appReady', (data) => {
       features = data.features || [];
       settings = data.settings || {};
+      const isFocusable = features.includes('focusable') ? data.focusable : true;
 
       if (editor) {
         editor.current.storage.webviewFeatures = features;
@@ -467,9 +468,10 @@
       if (data.state?.selection) {
         if (data.state.selection.type === 'element') {
           if (data.state.selection.element === 'title') {
-            titleEl?.focus();
+            if (isFocusable) titleEl?.focus();
           } else if (data.state.selection.element === 'subtitle') {
-            subtitleEl?.focus();
+            // eslint-disable-next-line unicorn/no-lonely-if
+            if (isFocusable) subtitleEl?.focus();
           }
         } else {
           if (editor) {
@@ -480,7 +482,9 @@
               return true;
             });
 
-            editor.current.commands.focus(null, { scrollIntoView: false });
+            if (isFocusable) {
+              editor.current.commands.focus(null, { scrollIntoView: false });
+            }
 
             let resized = false;
             let fontLoaded = false;
@@ -509,7 +513,7 @@
         }
       } else {
         editor?.current.commands.setTextSelection(2);
-        titleEl?.focus();
+        if (isFocusable) titleEl?.focus();
       }
     });
 

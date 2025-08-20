@@ -33,6 +33,7 @@ class EditorScreen extends HookWidget {
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
     final focusedElement = useValueNotifier<String?>(null);
     final connectionStatus = useValueNotifier<ConnectionStatus>(ConnectionStatus.connecting);
+    final isBottomSheetOpen = useValueNotifier<bool>(false);
 
     final pageController = usePageController();
     final drag = useRef<Drag?>(null);
@@ -57,6 +58,7 @@ class EditorScreen extends HookWidget {
       secondaryToolbarMode: secondaryToolbarMode,
       focusedElement: focusedElement,
       connectionStatus: connectionStatus,
+      isBottomSheetOpen: isBottomSheetOpen,
       child: Material(
         color: context.colors.surfaceDefault,
         child: Stack(
