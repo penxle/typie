@@ -34,6 +34,7 @@ class EditorScreen extends HookWidget {
     final focusedElement = useValueNotifier<String?>(null);
     final connectionStatus = useValueNotifier<ConnectionStatus>(ConnectionStatus.connecting);
     final isBottomSheetOpen = useValueNotifier<bool>(false);
+    final scrollTop = useValueNotifier<double>(0);
 
     final pageController = usePageController();
     final drag = useRef<Drag?>(null);
@@ -59,6 +60,7 @@ class EditorScreen extends HookWidget {
       focusedElement: focusedElement,
       connectionStatus: connectionStatus,
       isBottomSheetOpen: isBottomSheetOpen,
+      scrollTop: scrollTop,
       child: Material(
         color: context.colors.surfaceDefault,
         child: Stack(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/editor_floating_fade.dart';
 
 class EditorFloatingWidget extends HookWidget {
   const EditorFloatingWidget({
@@ -9,6 +10,7 @@ class EditorFloatingWidget extends HookWidget {
     this.initialOffset,
     this.isExpanded = false,
     this.onExpansionChanged,
+    this.onTap,
     super.key,
   });
 
@@ -18,6 +20,7 @@ class EditorFloatingWidget extends HookWidget {
   final Offset? initialOffset;
   final bool isExpanded;
   final VoidCallback? onExpansionChanged;
+  final VoidCallback? onTap;
 
   Offset _adjustPositionWithinBounds({
     required Offset currentPosition,
@@ -56,6 +59,8 @@ class EditorFloatingWidget extends HookWidget {
     final originalPosition = useState<Offset?>(null);
     final hasDragged = useState(false);
     final wasExpanded = useState(false);
+
+    final fadeController = useEditorFloatingFade();
 
     // NOTE: 확장 상태 변화 감지
     useEffect(() {
@@ -135,34 +140,46 @@ class EditorFloatingWidget extends HookWidget {
       curve: Curves.easeOutCubic,
       left: position.value.dx,
       top: position.value.dy,
-      child: GestureDetector(
-        onPanStart: (_) {
-          isDragging.value = true;
-        },
-        onPanUpdate: (details) {
-          hasDragged.value = true;
+      child: FadeTransition(
+        opacity: fadeController.opacity,
+        child: GestureDetector(
+          onTap: () {
+            fadeController.showImmediately();
+            onTap?.call();
+          },
+          onPanStart: (_) {
+            isDragging.value = true;
+            fadeController.showImmediately();
+          },
+          onPanUpdate: (details) {
+            hasDragged.value = true;
 
-          final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
+            final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
 
-          if (widgetSize.value == null || editorContainer == null || !editorContainer.hasSize) {
-            return;
-          }
+            if (widgetSize.value == null || editorContainer == null || !editorContainer.hasSize) {
+              return;
+            }
 
-          final newPosition = Offset(position.value.dx + details.delta.dx, position.value.dy + details.delta.dy);
+            final newPosition = Offset(position.value.dx + details.delta.dx, position.value.dy + details.delta.dy);
 
-          final adjustedPosition = _adjustPositionWithinBounds(
-            currentPosition: newPosition,
-            widgetSize: widgetSize.value!,
-            containerSize: editorContainer.size,
-          );
+            final adjustedPosition = _adjustPositionWithinBounds(
+              currentPosition: newPosition,
+              widgetSize: widgetSize.value!,
+              containerSize: editorContainer.size,
+            );
 
-          position.value = adjustedPosition;
-          onPositionChanged(adjustedPosition);
-        },
-        onPanEnd: (_) {
-          isDragging.value = false;
-        },
-        child: KeyedSubtree(key: widgetKey, child: child),
+            position.value = adjustedPosition;
+          },
+          onPanEnd: (_) {
+            isDragging.value = false;
+            onPositionChanged(position.value);
+          },
+          onPanCancel: () {
+            isDragging.value = false;
+            onPositionChanged(position.value);
+          },
+          child: KeyedSubtree(key: widgetKey, child: child),
+        ),
       ),
     );
   }

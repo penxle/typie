@@ -39,6 +39,7 @@ class EditorStateScope extends InheritedWidget {
     required this.focusedElement,
     required this.connectionStatus,
     required this.isBottomSheetOpen,
+    required this.scrollTop,
     super.key,
   });
 
@@ -56,6 +57,7 @@ class EditorStateScope extends InheritedWidget {
   final ValueNotifier<String?> focusedElement;
   final ValueNotifier<ConnectionStatus> connectionStatus;
   final ValueNotifier<bool> isBottomSheetOpen;
+  final ValueNotifier<double> scrollTop;
 
   Future<void> command(String name, {Map<String, dynamic>? attrs}) async {
     await webViewController.value?.emitEvent('command', {'name': name, 'attrs': attrs});
