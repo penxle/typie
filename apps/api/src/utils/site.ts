@@ -1,6 +1,7 @@
+import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import * as Y from 'yjs';
-import { Entities, first, firstOrThrow, Folders, PostContents, Posts, PostSnapshotContributors, PostSnapshots, Sites } from '@/db';
+import { Entities, first, firstOrThrow, Folders, PostContents, Posts, PostVersions, Sites } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { generatePermalink, generateSlug, makeYDoc } from './entity';
 import type { Transaction } from '@/db';
@@ -147,18 +148,19 @@ export const createSite = async ({ userId, name, slug, tx }: CreateSiteParams) =
         vector: Y.encodeStateVector(doc),
       });
 
-      const postSnapshot = await tx
-        .insert(PostSnapshots)
-        .values({
-          postId: newPost.id,
-          snapshot: Y.encodeSnapshotV2(snapshot),
-        })
-        .returning({ id: PostSnapshots.id })
-        .then(firstOrThrow);
-
-      await tx.insert(PostSnapshotContributors).values({
-        snapshotId: postSnapshot.id,
-        userId,
+      await tx.insert(PostVersions).values({
+        postId: newPost.id,
+        archive: Buffer.from([]),
+        latests: [Y.encodeSnapshotV2(snapshot)],
+        metadata: {
+          latests: [
+            {
+              createdAt: dayjs.utc().toISOString(),
+              contributorIds: [userId],
+            },
+          ],
+          archive: [],
+        },
       });
     }
   }
