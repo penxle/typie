@@ -36,16 +36,18 @@
       useCurrentSettings = !!currentPageEnabled && !!currentPageLayout;
 
       if (currentPageLayout && currentPageEnabled) {
-        pageLayout = currentPageLayout;
+        pageLayout = { ...currentPageLayout };
       } else {
-        pageLayout = app.preference.current.lastPdfPageLayout ?? createDefaultPageLayout('a4');
+        pageLayout = app.preference.current.lastPdfPageLayout
+          ? { ...app.preference.current.lastPdfPageLayout }
+          : createDefaultPageLayout('a4');
       }
     }
   });
 
   $effect(() => {
     if (useCurrentSettings && currentPageLayout) {
-      pageLayout = currentPageLayout;
+      pageLayout = { ...currentPageLayout };
     }
   });
 
@@ -119,7 +121,7 @@
                   const target = e.target as HTMLInputElement;
                   const value = Math.max(100, Number(target.value));
                   target.value = String(value);
-                  pageLayout.width = value;
+                  pageLayout = { ...pageLayout, width: value };
                 }}
                 size="sm"
                 type="number"
@@ -137,7 +139,7 @@
                   const target = e.target as HTMLInputElement;
                   const value = Math.max(100, Number(target.value));
                   target.value = String(value);
-                  pageLayout.height = value;
+                  pageLayout = { ...pageLayout, height: value };
                 }}
                 size="sm"
                 type="number"
@@ -165,7 +167,7 @@
                   const target = e.target as HTMLInputElement;
                   const value = clamp(Number(target.value), 0, getMaxMargin('top', pageLayout));
                   target.value = String(value);
-                  pageLayout.marginTop = value;
+                  pageLayout = { ...pageLayout, marginTop: value };
                 }}
                 size="sm"
                 type="number"
@@ -184,7 +186,7 @@
                   const target = e.target as HTMLInputElement;
                   const value = clamp(Number(target.value), 0, getMaxMargin('bottom', pageLayout));
                   target.value = String(value);
-                  pageLayout.marginBottom = value;
+                  pageLayout = { ...pageLayout, marginBottom: value };
                 }}
                 size="sm"
                 type="number"
@@ -203,7 +205,7 @@
                   const target = e.target as HTMLInputElement;
                   const value = clamp(Number(target.value), 0, getMaxMargin('left', pageLayout));
                   target.value = String(value);
-                  pageLayout.marginLeft = value;
+                  pageLayout = { ...pageLayout, marginLeft: value };
                 }}
                 size="sm"
                 type="number"
@@ -222,7 +224,7 @@
                   const target = e.target as HTMLInputElement;
                   const value = clamp(Number(target.value), 0, getMaxMargin('right', pageLayout));
                   target.value = String(value);
-                  pageLayout.marginRight = value;
+                  pageLayout = { ...pageLayout, marginRight: value };
                 }}
                 size="sm"
                 type="number"

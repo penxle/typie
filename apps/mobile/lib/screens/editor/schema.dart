@@ -180,7 +180,26 @@ abstract class CharacterCountState with _$CharacterCountState {
 
 @freezed
 abstract class YJSState with _$YJSState {
-  const factory YJSState({required int maxWidth, required String note}) = _YJSState;
+  const factory YJSState({
+    required int maxWidth,
+    required String note,
+    required String layoutMode,
+    required PageLayout? pageLayout,
+  }) = _YJSState;
 
   factory YJSState.fromJson(Map<String, dynamic> json) => _$YJSStateFromJson(json);
+}
+
+@freezed
+abstract class PageLayout with _$PageLayout {
+  const factory PageLayout({
+    required double width,
+    required double height,
+    required double marginTop,
+    required double marginBottom,
+    required double marginLeft,
+    required double marginRight,
+  }) = _PageLayout;
+
+  factory PageLayout.fromJson(Map<String, dynamic> json) => _$PageLayoutFromJson(json);
 }
