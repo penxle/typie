@@ -187,7 +187,7 @@ export class App extends pulumi.ComponentResource {
                     initialDelaySeconds: 10,
                     periodSeconds: 10,
                     successThreshold: 1,
-                    failureThreshold: 3,
+                    failureThreshold: 6,
                   },
                   readinessProbe: {
                     httpGet: { path: '/healthz/readiness', port: 3000 },
