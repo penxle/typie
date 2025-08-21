@@ -15,8 +15,8 @@ const app = new typie.App('api', {
   },
 
   resources: {
-    cpu: '1',
-    memory: '2Gi',
+    cpu: '2',
+    memory: '4Gi',
   },
 
   env: [{ name: 'NO_WORKER', value: 'true' }],
@@ -75,8 +75,8 @@ new typie.App('worker', {
   },
 
   resources: {
-    cpu: '1',
-    memory: '2Gi',
+    cpu: '4',
+    memory: '8Gi',
   },
 
   autoscale: {
