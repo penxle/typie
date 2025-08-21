@@ -10,7 +10,7 @@ sealed class OperationError with _$OperationError implements Exception {
 }
 
 @freezed
-sealed class GraphQLError with _$GraphQLError {
+sealed class GraphQLError with _$GraphQLError implements Exception {
   factory GraphQLError(gql.GraphQLError error) {
     return switch (error.extensions?['type']) {
       'UnexpectedError' => GraphQLError.unexpected(
