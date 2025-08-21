@@ -314,6 +314,8 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
       });
     }
 
+    const sortedSnapshots = allSnapshots.sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
+
     const threshold24h = dayjs.utc().subtract(24, 'hours');
     const threshold2w = dayjs.utc().subtract(2, 'weeks');
     const windowedSnapshots = new Map<
@@ -325,7 +327,7 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
       }
     >();
 
-    for (const snapshot of allSnapshots) {
+    for (const snapshot of sortedSnapshots) {
       const window = snapshot.createdAt.isAfter(threshold24h)
         ? snapshot.createdAt.toISOString()
         : snapshot.createdAt.isAfter(threshold2w)
