@@ -9,10 +9,10 @@ import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 100,
-  idleTimeoutMillis: 5 * 60 * 1000,
-  statement_timeout: 60_000,
-  lock_timeout: 60_000,
+  max: 200,
+  idleTimeoutMillis: 30 * 60 * 1000,
+  statement_timeout: 10 * 60 * 1000,
+  lock_timeout: 10 * 60 * 1000,
 });
 
 export const db = drizzle(pool, {
