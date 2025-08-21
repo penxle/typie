@@ -6,7 +6,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { WebClient } from '@slack/web-api';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
-import postgres from 'postgres';
+import { Pool } from 'pg';
 import { env } from '@/env';
 import * as aws from '@/external/aws';
 import { generateChart } from '@/utils/chart-generation';
@@ -22,36 +22,38 @@ type SlackAppMentionEventPayload = {
   event_ts: string;
 };
 
-const sql = postgres(env.DATABASE_URL, {
+const pool = new Pool({
+  connectionString: env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  prepare: false,
   max: 5,
-  max_lifetime: 10 * 60,
-  connection: {
-    statement_timeout: 60_000,
-    TimeZone: 'Asia/Seoul',
-  },
+  idleTimeoutMillis: 10 * 60 * 1000,
+  statement_timeout: 60_000,
+  options: 'TimeZone=Asia/Seoul',
 });
 
 const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 const slack = new WebClient(env.SLACK_BOT_TOKEN);
 
 const executeQuery = async (query: string) => {
+  const client = await pool.connect();
   try {
-    const result = await sql.begin('read only', async (sql) => {
-      return await sql.unsafe(query);
-    });
+    await client.query('BEGIN READ ONLY');
+    const result = await client.query(query);
+    await client.query('COMMIT');
 
     return {
       success: true,
-      count: result.length,
-      rows: [...result],
+      count: result.rows.length,
+      rows: [...result.rows],
     };
   } catch (err) {
+    await client.query('ROLLBACK');
     return {
       success: false,
       error: err instanceof Error ? err.message : String(err),
     };
+  } finally {
+    client.release();
   }
 };
 
@@ -173,10 +175,19 @@ SELECT json_build_object(
 
 const getDatabaseSchema = async () => {
   if (!schema) {
-    schema = await sql.begin('read only', async (sql) => {
-      const [row] = await sql.unsafe(getSchemaQuery);
-      return row?.schema || { tables: [], enums: [] };
-    });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN READ ONLY');
+      const result = await client.query(getSchemaQuery);
+      await client.query('COMMIT');
+      const [row] = result.rows;
+      schema = row?.schema || { tables: [], enums: [] };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   return schema;
