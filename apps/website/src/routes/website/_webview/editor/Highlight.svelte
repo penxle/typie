@@ -6,9 +6,10 @@
 
   type Props = {
     editor: Ref<Editor>;
+    scale?: number;
   };
 
-  let { editor }: Props = $props();
+  let { editor, scale = 1 }: Props = $props();
 
   let visible = $state(false);
 
@@ -32,8 +33,8 @@
       const rect = editor.current.view.dom.getBoundingClientRect();
       const padding = 4;
 
-      top = coords.top - rect.top - padding;
-      height = coords.bottom - coords.top + padding * 2;
+      top = (coords.top - rect.top) / scale - padding / scale;
+      height = (coords.bottom - coords.top) / scale + (padding * 2) / scale;
 
       visible = true;
     };

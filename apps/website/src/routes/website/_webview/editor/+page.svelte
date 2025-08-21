@@ -10,12 +10,12 @@
   import { autosize } from '@typie/ui/actions';
   import { InEditorBody } from '@typie/ui/components';
   import { getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
-  import { clamp } from '@typie/ui/utils';
+  import { clamp, getPageLayoutDimensions, mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { IndexeddbPersistence } from 'y-indexeddb';
   import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
@@ -34,7 +34,7 @@
   import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '@typie/ui/utils';
+  import type { PageLayoutSettings, Ref } from '@typie/ui/utils';
 
   const WEBVIEW_DISCONNECT_THRESHOLD = 10;
 
@@ -151,7 +151,31 @@
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
-  let editorContainerEl = $state<HTMLDivElement>();
+
+  let scrollContainer = $state<HTMLDivElement>();
+
+  let isPinching = $state(false);
+  let lastPinchDistance = 0;
+  let userScale = $state(1);
+
+  let baseScale = $derived(() => {
+    if (!browser) return 1;
+    if (!(experimentalPageEnabled.current && pageLayout)) return 1;
+
+    const viewportWidth = window.innerWidth;
+    const bodyWidth = mmToPx(pageLayout.width);
+
+    if (bodyWidth > viewportWidth) {
+      return viewportWidth / bodyWidth;
+    }
+    return 1;
+  });
+
+  let editorScale = $derived(() => {
+    const base = baseScale();
+    const desired = base * userScale;
+    return clamp(desired, base, 1);
+  });
 
   let features = $state<string[]>([]);
   let settings = $state<{
@@ -173,6 +197,10 @@
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
   const note = new YState(doc, 'note', '');
+  const experimentalPageLayout = new YState<PageLayoutSettings | undefined>(doc, 'experimental_pageLayout', undefined);
+  const experimentalPageEnabled = new YState<boolean>(doc, 'experimental_pageEnabled', false);
+
+  const pageLayout = $derived(experimentalPageLayout.current ? getPageLayoutDimensions(experimentalPageLayout.current) : null);
 
   const fontFaces = $derived(
     $query.post.entity.site.fonts
@@ -289,7 +317,7 @@
   });
 
   $effect(() => {
-    const el = editorContainerEl;
+    const el = scrollContainer;
     if (!el) return;
 
     let ticking = false;
@@ -308,6 +336,18 @@
     return () => {
       el.removeEventListener('scroll', handleScroll);
     };
+  });
+
+  $effect(() => {
+    if (experimentalPageEnabled.current && pageLayout) {
+      untrack(() => {
+        editor?.current.commands.setPageLayout(pageLayout);
+      });
+    } else {
+      untrack(() => {
+        editor?.current.commands.clearPageLayout();
+      });
+    }
   });
 
   onMount(() => {
@@ -837,10 +877,106 @@
   }}
 />
 
-<div class={css({ width: 'full', height: '[100dvh]', overflow: 'hidden' })}>
+<div
+  class={css({ width: 'full', height: '[100dvh]', overflow: 'hidden' })}
+  ontouchend={(e) => {
+    if (e.touches.length < 2) {
+      isPinching = false;
+    }
+  }}
+  ontouchmove={(e) => {
+    if (isPinching && e.touches.length === 2) {
+      if (!(experimentalPageEnabled.current && pageLayout)) return;
+
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+
+      if (!scrollContainer) return;
+      const prevScale = editorScale();
+
+      const rect = scrollContainer.getBoundingClientRect();
+      const centerX = (touch1.clientX + touch2.clientX) / 2 - rect.left;
+      const centerY = (touch1.clientY + touch2.clientY) / 2 - rect.top;
+
+      const pinchX = centerX + scrollContainer.scrollLeft;
+      const pinchY = centerY + scrollContainer.scrollTop;
+
+      const delta = currentDistance - lastPinchDistance;
+      const scaleDelta = delta * 0.01;
+
+      const newUserScale = userScale + scaleDelta;
+      const currentBaseScale = baseScale();
+
+      if (currentBaseScale <= 1) {
+        userScale = clamp(newUserScale, 1, 1 / currentBaseScale);
+
+        requestAnimationFrame(() => {
+          const newScale = editorScale();
+          const scaleRatio = newScale / prevScale;
+
+          if (!scrollContainer) return;
+
+          scrollContainer.scrollLeft = pinchX * scaleRatio - centerX;
+          scrollContainer.scrollTop = pinchY * scaleRatio - centerY;
+        });
+      }
+
+      lastPinchDistance = currentDistance;
+    }
+  }}
+  ontouchstart={(e) => {
+    if (e.touches.length === 2) {
+      isPinching = true;
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      lastPinchDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+    }
+  }}
+  onwheel={(e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+
+      if (!(experimentalPageEnabled.current && pageLayout)) return;
+
+      if (!scrollContainer) return;
+      const prevScale = editorScale();
+
+      const rect = scrollContainer.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left + scrollContainer.scrollLeft;
+      const mouseY = e.clientY - rect.top + scrollContainer.scrollTop;
+
+      const scaleDelta = -e.deltaY * 0.01;
+      const newUserScale = userScale + scaleDelta;
+      const currentBaseScale = baseScale();
+
+      if (currentBaseScale <= 1) {
+        userScale = clamp(newUserScale, 1, 1 / currentBaseScale);
+
+        requestAnimationFrame(() => {
+          const newScale = editorScale();
+          const scaleRatio = newScale / prevScale;
+
+          if (!scrollContainer) return;
+
+          const localX = e.clientX - rect.left;
+          const localY = e.clientY - rect.top;
+          scrollContainer.scrollLeft = mouseX * scaleRatio - localX;
+          scrollContainer.scrollTop = mouseY * scaleRatio - localY;
+        });
+      }
+    }
+  }}
+>
   <div
-    bind:this={editorContainerEl}
-    style:--prosemirror-max-width={`${maxWidth.current}px`}
+    bind:this={scrollContainer}
+    style:--prosemirror-max-width={experimentalPageEnabled.current && pageLayout
+      ? `${mmToPx(pageLayout.width)}px`
+      : `${maxWidth.current}px`}
+    style:--prosemirror-page-margin-top={experimentalPageEnabled.current && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
+    style:--prosemirror-page-margin-bottom={experimentalPageEnabled.current && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
+    style:--prosemirror-page-margin-left={experimentalPageEnabled.current && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
+    style:--prosemirror-page-margin-right={experimentalPageEnabled.current && pageLayout ? `${mmToPx(pageLayout.marginRight)}px` : '0'}
     style:--prosemirror-padding-bottom="80dvh"
     style:--prosemirror-color-selection={token.var('colors.border.strong')}
     class={cx(
@@ -851,15 +987,22 @@
         paddingTop: '40px',
         paddingX: '20px',
         size: 'full',
-        overflowY: 'scroll',
+        overflowY: 'auto',
         userSelect: 'text',
         touchAction: 'pan-y',
         WebkitTouchCallout: 'none',
         WebkitOverflowScrolling: 'touch',
+        '&[data-layout="page"]': {
+          paddingX: '0',
+          touchAction: editorScale() <= baseScale() ? 'pan-y' : 'auto',
+          overflowX: editorScale() <= baseScale() ? 'hidden' : 'auto',
+          backgroundColor: 'surface.subtle/50',
+        },
       }),
     )}
+    data-layout={experimentalPageEnabled.current && pageLayout ? 'page' : 'scroll'}
   >
-    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)', flexShrink: '0' })}>
       <textarea
         bind:this={titleEl}
         class={css({
@@ -944,49 +1087,80 @@
       </div>
     </div>
 
-    <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
-      <TiptapEditor
-        style={css.raw({ size: 'full', paddingTop: '40px' })}
-        {awareness}
-        {doc}
-        onblur={() => {
-          window.__webview__?.emitEvent('blur');
-        }}
-        oncreate={() => {
-          mounted = true;
-          window.__webview__?.emitEvent('webviewReady');
-          setYJSState();
-        }}
-        onfocus={() => {
-          window.__webview__?.emitEvent('focus', { element: 'editor' });
-        }}
-        storage={{
-          uploadBlobAsImage: (file) => {
-            return uploadBlobAsImage(file);
-          },
-          uploadBlobAsFile: (file) => {
-            return uploadBlobAsFile(file);
-          },
-          unfurlEmbed: (url) => {
-            return unfurlEmbed({ url });
-          },
-        }}
-        {undoManager}
-        bind:editor
-      />
-
-      {#if editor && mounted}
-        <InEditorBody {editor} pageLayout={null}>
-          <Placeholder {editor} isTemplateActive={features.includes('template')} />
-        </InEditorBody>
-        {#if settings.lineHighlightEnabled}
-          <Highlight {editor} />
+    <div
+      style:width={editorScale() > baseScale() ? `${(pageLayout ? mmToPx(pageLayout.width) : maxWidth.current) * editorScale()}px` : '100%'}
+      style:align-self={editorScale() > baseScale() ? 'flex-start' : 'center'}
+      class={css({ position: 'relative', flexGrow: '1' })}
+    >
+      <div
+        style:transform={`scale(${editorScale()})`}
+        style:transform-origin="top left"
+        style:width={editorScale() < 1 ? `${100 / editorScale()}%` : '100%'}
+        style:height={editorScale() < 1 ? `${100 / editorScale()}%` : '100%'}
+        style:will-change={editorScale() === 1 ? 'auto' : 'transform'}
+      >
+        <TiptapEditor
+          style={css.raw({ size: 'full', minWidth: '[fit-content]', paddingTop: '40px' })}
+          {awareness}
+          {doc}
+          onblur={() => {
+            window.__webview__?.emitEvent('blur');
+          }}
+          oncreate={() => {
+            mounted = true;
+            window.__webview__?.emitEvent('webviewReady');
+            setYJSState();
+          }}
+          onfocus={() => {
+            window.__webview__?.emitEvent('focus', { element: 'editor' });
+          }}
+          storage={{
+            uploadBlobAsImage: (file) => {
+              return uploadBlobAsImage(file);
+            },
+            uploadBlobAsFile: (file) => {
+              return uploadBlobAsFile(file);
+            },
+            unfurlEmbed: (url) => {
+              return unfurlEmbed({ url });
+            },
+          }}
+          {undoManager}
+          bind:editor
+        />
+        {#if editor && mounted}
+          <InEditorBody {editor} {pageLayout}>
+            <Placeholder {editor} isTemplateActive={features.includes('template')} />
+          </InEditorBody>
+          {#if settings.lineHighlightEnabled}
+            <Highlight {editor} scale={editorScale()} />
+          {/if}
+          <Limit {$query} {editor} />
+          <Spellcheck {editor} />
+          <FindReplace {editor} />
+          <Anchors {doc} {editor} />
         {/if}
-        <Limit {$query} {editor} />
-        <Spellcheck {editor} />
-        <FindReplace {editor} />
-        <Anchors {doc} {editor} />
-      {/if}
+      </div>
     </div>
+
+    {#if editorScale() !== 1}
+      <div
+        class={css({
+          position: 'fixed',
+          left: '20px',
+          bottom: '20px',
+          paddingX: '12px',
+          paddingY: '8px',
+          backgroundColor: 'surface.subtle',
+          borderWidth: '1px',
+          borderColor: 'border.subtle',
+          borderRadius: '8px',
+          fontSize: '12px',
+          color: 'text.subtle',
+        })}
+      >
+        {Math.round(editorScale() * 100)}%
+      </div>
+    {/if}
   </div>
 </div>
