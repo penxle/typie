@@ -6,7 +6,6 @@ const log = logger.getChild('db');
 
 export class DrizzleLogger implements Logger {
   logQuery(query: string, params: unknown[]): void {
-    return;
     if (!dev) {
       return;
     }
