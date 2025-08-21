@@ -19,8 +19,8 @@ import {
   PostContents,
   PostReactions,
   Posts,
-  PostSnapshotContributors,
   PostSnapshots,
+  PostVersions,
   TableCode,
   UserPersonalIdentities,
   Users,
@@ -525,18 +525,19 @@ builder.mutationFields((t) => ({
           vector: Y.encodeStateVector(doc),
         });
 
-        const postSnapshot = await tx
-          .insert(PostSnapshots)
-          .values({
-            postId: post.id,
-            snapshot: Y.encodeSnapshotV2(snapshot),
-          })
-          .returning({ id: PostSnapshots.id })
-          .then(firstOrThrow);
-
-        await tx.insert(PostSnapshotContributors).values({
-          snapshotId: postSnapshot.id,
-          userId: ctx.session.userId,
+        await tx.insert(PostVersions).values({
+          postId: post.id,
+          archive: Buffer.from([]),
+          latests: [Y.encodeSnapshotV2(snapshot)],
+          metadata: {
+            latests: [
+              {
+                createdAt: dayjs.utc().toISOString(),
+                contributorIds: [ctx.session.userId],
+              },
+            ],
+            archive: [],
+          },
         });
 
         return post;
@@ -681,18 +682,19 @@ builder.mutationFields((t) => ({
           await tx.insert(PostAnchors).values(anchors.map((anchor) => ({ postId: newPost.id, nodeId: anchor.nodeId, name: anchor.name })));
         }
 
-        const postSnapshot = await tx
-          .insert(PostSnapshots)
-          .values({
-            postId: newPost.id,
-            snapshot: Y.encodeSnapshotV2(snapshot),
-          })
-          .returning({ id: PostSnapshots.id })
-          .then(firstOrThrow);
-
-        await tx.insert(PostSnapshotContributors).values({
-          snapshotId: postSnapshot.id,
-          userId: ctx.session.userId,
+        await tx.insert(PostVersions).values({
+          postId: newPost.id,
+          archive: Buffer.from([]),
+          latests: [Y.encodeSnapshotV2(snapshot)],
+          metadata: {
+            latests: [
+              {
+                createdAt: dayjs.utc().toISOString(),
+                contributorIds: [ctx.session.userId],
+              },
+            ],
+            archive: [],
+          },
         });
 
         return newPost;

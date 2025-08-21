@@ -3,10 +3,10 @@ import { boolean, index, integer, jsonb, pgTable, text, unique, uniqueIndex } fr
 import { TableCode } from './codes';
 import * as E from './enums';
 import { createDbId } from './id';
-import { bytea, datetime } from './types';
+import { bytea, byteaArray, datetime } from './types';
 import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { CanvasShape, NotificationData, PlanRules } from './json';
+import type { CanvasShape, NotificationData, PlanRules, PostVersionsMetadata } from './json';
 
 export const Canvases = pgTable(
   'canvases',
@@ -459,6 +459,29 @@ export const PostSnapshotContributors = pgTable(
       .default(sql`now()`),
   },
   (t) => [unique().on(t.snapshotId, t.userId)],
+);
+
+export const PostVersions = pgTable(
+  'post_versions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_VERSIONS)),
+    postId: text('post_id')
+      .notNull()
+      .unique()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    archive: bytea('archive').notNull(),
+    latests: byteaArray('latests').notNull(),
+    metadata: jsonb('metadata').notNull().$type<PostVersionsMetadata>(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.postId)],
 );
 
 export const PostReactions = pgTable(
