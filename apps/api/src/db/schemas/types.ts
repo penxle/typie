@@ -7,6 +7,12 @@ export const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
   fromDriver: (value) => value,
 });
 
+export const byteaArray = customType<{ data: Uint8Array[]; driverData: Uint8Array[] }>({
+  dataType: () => 'bytea[]',
+  toDriver: (value) => value,
+  fromDriver: (value) => value,
+});
+
 export const datetime = customType<{ data: dayjs.Dayjs; driverData: string }>({
   dataType: () => 'timestamp with time zone',
   fromDriver: (value) => dayjs(value),
