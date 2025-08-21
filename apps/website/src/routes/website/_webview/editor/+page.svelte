@@ -1088,7 +1088,8 @@
     </div>
 
     <div
-      style:width={editorScale() > baseScale() ? `${(pageLayout ? mmToPx(pageLayout.width) : maxWidth.current) * editorScale()}px` : '100%'}
+      style:width={editorScale() > baseScale() && pageLayout ? `${mmToPx(pageLayout.width) * editorScale()}px` : '100%'}
+      style:height={editorScale() > baseScale() && pageLayout ? `${mmToPx(pageLayout.height) * editorScale()}px` : '100%'}
       style:align-self={editorScale() > baseScale() ? 'flex-start' : 'center'}
       class={css({ position: 'relative', flexGrow: '1' })}
     >
