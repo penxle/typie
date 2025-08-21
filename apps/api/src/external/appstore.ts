@@ -1,7 +1,6 @@
 import { AppStoreServerAPIClient, Environment, SignedDataVerifier, Status } from '@apple/app-store-server-library';
 import ky from 'ky';
 import { env } from '@/env';
-import { Lazy } from '@/utils';
 
 const certificateUrls = [
   'https://www.apple.com/appleca/AppleIncRootCertificate.cer',
@@ -9,7 +8,7 @@ const certificateUrls = [
   'https://www.apple.com/certificateauthority/AppleRootCA-G3.cer',
 ];
 
-const lazyCertificates = new Lazy(() => Promise.all(certificateUrls.map(async (url) => Buffer.from(await ky.get(url).arrayBuffer()))));
+const certificates = await Promise.all(certificateUrls.map(async (url) => Buffer.from(await ky.get(url).arrayBuffer())));
 
 const clients = {
   production: new AppStoreServerAPIClient(
@@ -28,21 +27,15 @@ const clients = {
   ),
 };
 
-const lazyVerifiers = new Lazy(async () => {
-  const certificate = await lazyCertificates.get();
-
-  return {
-    production: new SignedDataVerifier(certificate, true, Environment.PRODUCTION, env.APPLE_APP_BUNDLE_ID, env.APPLE_APP_APPLE_ID),
-    sandbox: new SignedDataVerifier(certificate, true, Environment.SANDBOX, env.APPLE_APP_BUNDLE_ID, env.APPLE_APP_APPLE_ID),
-  };
-});
+const verifiers = {
+  production: new SignedDataVerifier(certificates, true, Environment.PRODUCTION, env.APPLE_APP_BUNDLE_ID, env.APPLE_APP_APPLE_ID),
+  sandbox: new SignedDataVerifier(certificates, true, Environment.SANDBOX, env.APPLE_APP_BUNDLE_ID, env.APPLE_APP_APPLE_ID),
+};
 
 const environments = ['production', 'sandbox'] as const;
 
 export const getSubscription = async (transactionId: string) => {
   for (const environment of environments) {
-    const verifiers = await lazyVerifiers.get();
-
     const client = clients[environment];
     const verifier = verifiers[environment];
 
@@ -62,7 +55,6 @@ export const getSubscription = async (transactionId: string) => {
 
 export const decodeNotification = async (signedPayload: string) => {
   for (const environment of environments) {
-    const verifiers = await lazyVerifiers.get();
     const verifier = verifiers[environment];
 
     try {

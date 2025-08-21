@@ -9,7 +9,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import satori from 'satori';
 import twemoji from 'twemoji';
 import { db, first, Images, PostCharacterCountChanges, Users } from '@/db';
-import { Lazy } from './lazy';
 
 const generateRandomGradient = () => {
   const first = random({
@@ -66,7 +65,7 @@ const loadFonts = async <T extends string>(names: T[]) => {
   return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await load(name)]))) as Record<T, ArrayBuffer>;
 };
 
-const lazyFonts = new Lazy(() => loadFonts(['Paperlogy-4Regular', 'Paperlogy-7Bold', 'DeepMindSans-Regular']));
+const fonts = await loadFonts(['Paperlogy-4Regular', 'Paperlogy-7Bold', 'DeepMindSans-Regular']);
 
 const gray = {
   100: '#F4F4F5',
@@ -425,8 +424,6 @@ export async function generateActivityImage(userId: string): Promise<Buffer> {
   );
 
   const scale = 2;
-  const fonts = await lazyFonts.get();
-
   const svg = await satori(node, {
     width: 1000,
     height: 1000,
