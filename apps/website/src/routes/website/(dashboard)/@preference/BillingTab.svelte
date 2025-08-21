@@ -58,6 +58,16 @@
     }
   `);
 
+  const cancelSubscriptionCancellation = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_CancelSubscriptionCancellation_Mutation {
+      cancelSubscriptionCancellation {
+        id
+        state
+        expiresAt
+      }
+    }
+  `);
+
   let updatePaymentMethodOpen = $state(false);
   let redeemCreditCodeOpen = $state(false);
 </script>
@@ -175,9 +185,28 @@
             {dayjs($user.subscription.expiresAt).formatAsDate()}에 {comma($user.subscription.plan.fee)}원 결제 예정
           </p>
         {:else if $user.subscription.state === SubscriptionState.WILL_EXPIRE}
-          <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.danger' })}>
-            {dayjs($user.subscription.expiresAt).formatAsDate()} 해지 예정
-          </p>
+          <div class={flex({ align: 'center', justify: 'space-between', marginTop: '8px' })}>
+            <p class={css({ fontSize: '12px', color: 'text.danger' })}>
+              {dayjs($user.subscription.expiresAt).formatAsDate()} 해지 예정
+            </p>
+            <Button
+              onclick={() => {
+                Dialog.confirm({
+                  title: '구독 해지를 취소하시겠어요?',
+                  message: '구독이 계속 유지되며, 다음 결제일에 자동으로 결제됩니다.',
+                  actionLabel: '해지 취소',
+                  actionHandler: async () => {
+                    await cancelSubscriptionCancellation();
+                    mixpanel.track('resume_subscription');
+                  },
+                });
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              해지 취소
+            </Button>
+          </div>
         {/if}
       </div>
     </div>
