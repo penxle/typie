@@ -28,7 +28,11 @@ const pool = new Pool({
   max: 5,
   idleTimeoutMillis: 10 * 60 * 1000,
   statement_timeout: 60_000,
-  options: 'TimeZone=Asia/Seoul',
+});
+
+// 각 클라이언트 연결 시 타임존 설정
+pool.on('connect', (client) => {
+  client.query("SET TIME ZONE 'Asia/Seoul'");
 });
 
 const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
