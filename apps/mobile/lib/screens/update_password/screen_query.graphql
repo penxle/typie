@@ -1,0 +1,6 @@
+query UpdatePasswordScreen_Query {
+  me {
+    id
+    hasPassword
+  }
+}

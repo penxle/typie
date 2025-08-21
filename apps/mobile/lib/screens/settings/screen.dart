@@ -76,6 +76,13 @@ class SettingsScreen extends HookWidget {
                     ),
                     const _Divider(),
                     _Item(
+                      label: (data.me?.hasPassword ?? false) ? '비밀번호 변경' : '비밀번호 설정',
+                      onTap: () async {
+                        await context.router.push(const UpdatePasswordRoute());
+                      },
+                    ),
+                    const _Divider(),
+                    _Item(
                       label: '연결된 SNS 계정',
                       onTap: () async {
                         await context.router.push(const SocialAccountsRoute());
