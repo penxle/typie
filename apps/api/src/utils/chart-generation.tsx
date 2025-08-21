@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { renderAsync } from '@resvg/resvg-js';
 import ky from 'ky';
-import { Lazy } from './lazy';
 
 const colors = {
   primary: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'],
@@ -44,7 +43,7 @@ const loadFonts = async <T extends string>(names: T[]) => {
   return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await load(name)]))) as Record<T, ArrayBuffer>;
 };
 
-const lazyFonts = new Lazy(() => loadFonts(['Interop-Regular', 'Interop-Bold']));
+await loadFonts(['Interop-Regular', 'Interop-Bold']);
 
 const createSvgBase = (title: string) => {
   let svg = `<svg width="${CHART_WIDTH}" height="${CHART_HEIGHT}" xmlns="http://www.w3.org/2000/svg">`;
@@ -106,8 +105,6 @@ export const generateChart = async (title: string, type: 'bar' | 'line' | 'pie',
       break;
     }
   }
-
-  await lazyFonts.get();
 
   const resvg = await renderAsync(svgContent, {
     background: colors.background,

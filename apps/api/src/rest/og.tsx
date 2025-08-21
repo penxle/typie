@@ -13,7 +13,6 @@ import twemoji from 'twemoji';
 import { Canvases, db, Entities, first, Folders, Images, Posts } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import * as aws from '@/external/aws';
-import { Lazy } from '@/utils';
 import type { Env } from '@/context';
 
 export const og = new Hono<Env>();
@@ -38,16 +37,14 @@ const loadFonts = async <T extends string>(names: T[]) => {
   return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await load(name)]))) as Record<T, ArrayBuffer>;
 };
 
-const lazyFonts = new Lazy(() =>
-  loadFonts([
-    'KoPubWorldDotum-Medium',
-    'KoPubWorldDotum-Bold',
-    'Pretendard-Medium',
-    'Pretendard-ExtraBold',
-    'SUIT-Medium',
-    'SUIT-ExtraBold',
-  ]),
-);
+const fonts = await loadFonts([
+  'KoPubWorldDotum-Medium',
+  'KoPubWorldDotum-Bold',
+  'Pretendard-Medium',
+  'Pretendard-ExtraBold',
+  'SUIT-Medium',
+  'SUIT-ExtraBold',
+]);
 
 const colors = {
   white: '#FFFFFF',
@@ -85,8 +82,6 @@ og.get('/:entityId', async (c) => {
     .with(EntityType.FOLDER, () => renderFolder(entityId))
     .with(EntityType.CANVAS, () => renderCanvas(entityId))
     .exhaustive();
-
-  const fonts = await lazyFonts.get();
 
   const svg = await satori(node, {
     width: 1200,
