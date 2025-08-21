@@ -559,12 +559,16 @@
           }
         } else {
           if (editor) {
-            const selection = Selection.fromJSON(editor.current.state.doc, data.state.selection);
-            editor.current.commands.command(({ tr, dispatch }) => {
-              tr.setSelection(selection);
-              dispatch?.(tr);
-              return true;
-            });
+            try {
+              const selection = Selection.fromJSON(editor.current.state.doc, data.state.selection);
+              editor.current.commands.command(({ tr, dispatch }) => {
+                tr.setSelection(selection);
+                dispatch?.(tr);
+                return true;
+              });
+            } catch {
+              editor?.current.commands.setTextSelection(2);
+            }
 
             if (isFocusable) {
               editor.current.commands.focus(null, { scrollIntoView: false });
