@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:airbridge_flutter_sdk/airbridge_flutter_sdk.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/gestures.dart';
@@ -44,6 +46,18 @@ class EditorScreen extends HookWidget {
 
       return null;
     }, []);
+
+    useEffect(() {
+      final listener = AppLifecycleListener(
+        onStateChange: (state) {
+          if (state == AppLifecycleState.resumed) {
+            connectionStatus.value = ConnectionStatus.connecting;
+            unawaited(webViewController.value?.emitEvent('appResumed', <String, dynamic>{}));
+          }
+        },
+      );
+      return listener.dispose;
+    }, [webViewController, connectionStatus]);
 
     return EditorStateScope(
       data: data,
