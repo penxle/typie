@@ -146,6 +146,7 @@
   let editor = $state<Ref<Editor>>();
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
   let lastHeartbeatAt = $state(dayjs());
+  let lastAppActiveAt = $state(dayjs());
 
   let mounted = $state(false);
 
@@ -354,7 +355,8 @@
     viewEntity({ entityId: $query.post.entity.id });
 
     const heartbeatCheckInterval = setInterval(() => {
-      if (dayjs().diff(lastHeartbeatAt, 'seconds') > WEBVIEW_DISCONNECT_THRESHOLD) {
+      const lastActiveTime = dayjs.max(lastHeartbeatAt, lastAppActiveAt);
+      if (dayjs().diff(lastActiveTime, 'seconds') > WEBVIEW_DISCONNECT_THRESHOLD) {
         connectionStatus = 'disconnected';
       }
     }, 1000);
@@ -522,7 +524,13 @@
 
     doc.getMap('attrs').observe(setYJSState);
 
+    window.__webview__?.addEventListener('appResumed', () => {
+      lastAppActiveAt = dayjs();
+      connectionStatus = 'connecting';
+    });
+
     window.__webview__?.addEventListener('appReady', (data) => {
+      lastAppActiveAt = dayjs();
       features = data.features || [];
       settings = data.settings || {};
       const isFocusable = features.includes('focusable') ? data.focusable : true;
