@@ -1,13 +1,25 @@
 import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
-import { and, eq, gt, lt, lte, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lt, lte, notInArray, or, sql } from 'drizzle-orm';
 import { rapidhash } from 'rapidhash-js';
 import * as R from 'remeda';
 import { base64 } from 'rfc4648';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
-import { db, Entities, first, firstOrThrow, PostAnchors, PostCharacterCountChanges, PostContents, Posts, PostVersions } from '@/db';
+import {
+  db,
+  Entities,
+  first,
+  firstOrThrow,
+  PostAnchors,
+  PostCharacterCountChanges,
+  PostContents,
+  Posts,
+  PostSnapshotContributors,
+  PostSnapshots,
+  PostVersions,
+} from '@/db';
 import { EntityState } from '@/enums';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
@@ -441,6 +453,98 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         compactedAt: dayjs(),
       })
       .where(eq(PostContents.postId, postId));
+  });
+});
+
+export const PostMigrateSnapshotsJob = defineJob('post:migrate:snapshots', async (postId: string) => {
+  await db.transaction(async (tx) => {
+    const hash = Number(BigInt(rapidhash(postId)) % BigInt('9223372036854775807'));
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
+
+    const snapshotCount = await tx
+      .select({ count: sql<number>`count(*)` })
+      .from(PostSnapshots)
+      .where(eq(PostSnapshots.postId, postId))
+      .then((rows) => Number(rows[0]?.count || 0));
+
+    if (snapshotCount === 0) {
+      return;
+    }
+
+    const CHUNK_SIZE = 10;
+
+    for (let offset = 0; offset < snapshotCount; offset += CHUNK_SIZE) {
+      const snapshots = await tx
+        .select({
+          id: PostSnapshots.id,
+          snapshot: PostSnapshots.snapshot,
+          createdAt: PostSnapshots.createdAt,
+          order: PostSnapshots.order,
+        })
+        .from(PostSnapshots)
+        .where(eq(PostSnapshots.postId, postId))
+        .orderBy(asc(PostSnapshots.createdAt), asc(PostSnapshots.order))
+        .limit(CHUNK_SIZE)
+        .offset(offset);
+
+      if (snapshots.length === 0) break;
+
+      const contributorsBySnapshot = new Map<string, string[]>();
+      const contributors = await tx
+        .select({
+          snapshotId: PostSnapshotContributors.snapshotId,
+          userId: PostSnapshotContributors.userId,
+        })
+        .from(PostSnapshotContributors)
+        .where(
+          inArray(
+            PostSnapshotContributors.snapshotId,
+            snapshots.map((s) => s.id),
+          ),
+        );
+
+      for (const contributor of contributors) {
+        if (!contributorsBySnapshot.has(contributor.snapshotId)) {
+          contributorsBySnapshot.set(contributor.snapshotId, []);
+        }
+        if (contributor.userId) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          contributorsBySnapshot.get(contributor.snapshotId)!.push(contributor.userId);
+        }
+      }
+
+      const processedSnapshotIds: string[] = [];
+
+      for (const snapshot of snapshots) {
+        const contributorIds = contributorsBySnapshot.get(snapshot.id) || [];
+        const metadata = {
+          createdAt: dayjs(snapshot.createdAt).utc().toISOString(),
+          contributorIds,
+        };
+
+        await tx
+          .update(PostVersions)
+          .set({
+            latests: sql`array_append(${PostVersions.latests}, ${snapshot.snapshot})`,
+            metadata: sql`
+              jsonb_set(
+                ${PostVersions.metadata},
+                '{latests}',
+                COALESCE(${PostVersions.metadata}->'latests', '[]'::jsonb) || ${JSON.stringify(metadata)}::jsonb
+              )
+            `,
+            updatedAt: sql`NOW()`,
+          })
+          .where(eq(PostVersions.postId, postId));
+
+        processedSnapshotIds.push(snapshot.id);
+      }
+
+      if (processedSnapshotIds.length > 0) {
+        await tx.delete(PostSnapshotContributors).where(inArray(PostSnapshotContributors.snapshotId, processedSnapshotIds));
+        await tx.delete(PostSnapshots).where(inArray(PostSnapshots.id, processedSnapshotIds));
+      }
+    }
   });
 });
 
