@@ -80,7 +80,13 @@ class GraphQLClient {
 
     if (resp.graphqlErrors?.isNotEmpty ?? false) {
       final error = resp.graphqlErrors![0];
-      throw OperationError.graphql(GraphQLError(error));
+      final mapped = GraphQLError(error);
+
+      if (mapped is TypieError) {
+        throw mapped;
+      }
+
+      throw OperationError.graphql(mapped);
     }
 
     return resp.data as TData;
