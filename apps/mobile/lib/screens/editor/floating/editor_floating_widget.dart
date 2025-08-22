@@ -16,7 +16,7 @@ class EditorFloatingWidget extends HookWidget {
   final void Function(Offset relativePosition) onPositionChanged;
   final Offset? initialRelativePosition;
   final bool isExpanded;
-  final VoidCallback? onTap;
+  final void Function(bool isFaded)? onTap;
 
   Offset _clampPosition(Offset position, Size widgetSize, Size containerSize) {
     final maxX = (containerSize.width - widgetSize.width).clamp(0.0, double.infinity);
@@ -140,8 +140,9 @@ class EditorFloatingWidget extends HookWidget {
         opacity: fadeController.opacity,
         child: GestureDetector(
           onTap: () {
+            final isFaded = fadeController.opacity.value < 1.0;
             fadeController.showImmediately();
-            onTap?.call();
+            onTap?.call(isFaded);
           },
           onPanStart: (_) {
             isDragging.value = true;

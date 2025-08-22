@@ -34,8 +34,10 @@ class CharacterCountFloating extends HookWidget {
       onPositionChanged: (relativePosition) {
         pref.characterCountFloatingPosition = {'x': relativePosition.dx, 'y': relativePosition.dy};
       },
-      onTap: () {
-        isExpanded.value = !isExpanded.value;
+      onTap: (isFaded) {
+        if (!isFaded) {
+          isExpanded.value = !isExpanded.value;
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
