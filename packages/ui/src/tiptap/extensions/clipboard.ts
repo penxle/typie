@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core';
-import { Fragment, Slice } from '@tiptap/pm/model';
+import { Fragment, Mark, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { handleHTML } from 'zeed-dom';
 import { findNodeUpward } from '../lib/node-utils';
@@ -114,20 +114,32 @@ export const Clipboard = Extension.create({
     return [
       new Plugin({
         props: {
-          clipboardTextParser: (text, context, __, view) => {
+          clipboardTextParser: (text, _, __, view) => {
             const { state } = view;
             const { selection, schema } = state;
 
-            const marks = state.storedMarks || selection.$head.marks();
-            const lines = text.split(/(?:\r\n|\n|\r)/g);
+            let marks: readonly Mark[] = [];
 
-            if (lines.length === 1) {
-              let textNode = schema.text(lines[0]);
-              if (marks.length > 0) {
-                textNode = textNode.mark(marks);
-              }
+            if (selection.empty) {
+              marks = state.storedMarks || selection.$head.marks();
+            } else {
+              state.doc.nodesBetween(selection.from, selection.to, (node) => {
+                if (node.isText) {
+                  for (const mark of node.marks) {
+                    marks = mark.addToSet(marks);
+                  }
+                }
+              });
+            }
 
-              return new Slice(Fragment.from(textNode), 0, 0);
+            let lines = text.split(/(?:\r\n|\n|\r)/g);
+
+            while (lines.length > 0 && lines[0] === '') {
+              lines = lines.slice(1);
+            }
+
+            while (lines.length > 0 && lines.at(-1) === '') {
+              lines = lines.slice(0, -1);
             }
 
             const $pos = selection.$head;
@@ -201,14 +213,8 @@ export const Clipboard = Extension.create({
                 return true;
               }
 
-              let html = event.clipboardData?.getData('text/html');
+              const html = event.clipboardData?.getData('text/html');
               if (html) {
-                const isGoogleDocs = event.clipboardData?.types.includes('application/x-vnd.google-docs-document-slice-clip+wrapped');
-
-                if (isGoogleDocs) {
-                  html = html.replaceAll(/<meta[^>]*>/g, '').replace(/<b\s+[^>]*id="docs-internal-guid[^"]*"[^>]*>(.*?)<\/b>/s, '$1');
-                }
-
                 event.preventDefault();
                 view.pasteHTML(html, event);
                 return true;
