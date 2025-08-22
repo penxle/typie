@@ -1124,7 +1124,7 @@
         style:will-change={editorScale() === 1 ? 'auto' : 'transform'}
       >
         <TiptapEditor
-          style={css.raw({ size: 'full', minWidth: '[fit-content]', paddingTop: '40px' })}
+          style={css.raw({ size: 'full', minWidth: pageLayout.current ? '[fit-content]' : undefined, paddingTop: '40px' })}
           {awareness}
           {doc}
           onblur={() => {
