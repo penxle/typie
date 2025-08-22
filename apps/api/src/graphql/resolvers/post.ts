@@ -45,6 +45,7 @@ import { enqueueJob } from '@/mq';
 import { schema, textSerializers } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug, getKoreanAge, makeText, makeYDoc } from '@/utils';
+import { compressZstd } from '@/utils/compression';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
@@ -525,11 +526,14 @@ builder.mutationFields((t) => ({
           vector: Y.encodeStateVector(doc),
         });
 
+        const snapshotData = Y.encodeSnapshotV2(snapshot);
+        const compressedSnapshot = await compressZstd(Buffer.from(snapshotData));
+
         const postSnapshot = await tx
           .insert(PostSnapshots)
           .values({
             postId: post.id,
-            snapshot: Y.encodeSnapshotV2(snapshot),
+            snapshot: compressedSnapshot,
           })
           .returning({ id: PostSnapshots.id })
           .then(firstOrThrow);
@@ -681,11 +685,14 @@ builder.mutationFields((t) => ({
           await tx.insert(PostAnchors).values(anchors.map((anchor) => ({ postId: newPost.id, nodeId: anchor.nodeId, name: anchor.name })));
         }
 
+        const snapshotData = Y.encodeSnapshotV2(snapshot);
+        const compressedSnapshot = await compressZstd(Buffer.from(snapshotData));
+
         const postSnapshot = await tx
           .insert(PostSnapshots)
           .values({
             postId: newPost.id,
-            snapshot: Y.encodeSnapshotV2(snapshot),
+            snapshot: compressedSnapshot,
           })
           .returning({ id: PostSnapshots.id })
           .then(firstOrThrow);

@@ -2,7 +2,7 @@ import { constants, createZstdCompress, createZstdDecompress } from 'node:zlib';
 
 export const compressZstd = (data: Buffer): Promise<Buffer> => {
   return new Promise((resolve, reject) => {
-    const compress = createZstdCompress({ params: { [constants.ZSTD_c_compressionLevel]: 22 } });
+    const compress = createZstdCompress({ params: { [constants.ZSTD_c_compressionLevel]: 19 } });
     const chunks: Buffer[] = [];
 
     compress.on('data', (chunk) => chunks.push(chunk));

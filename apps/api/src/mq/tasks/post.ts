@@ -23,6 +23,7 @@ import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
 import { makeText } from '@/utils';
+import { compressZstd, decompressZstd } from '@/utils/compression';
 import { queue } from '../bullmq';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
@@ -90,11 +91,14 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
         snapshotUpdated = true;
 
+        const snapshotData = Y.encodeSnapshotV2(snapshot);
+        const compressedSnapshot = await compressZstd(Buffer.from(snapshotData));
+
         const postSnapshot = await tx
           .insert(PostSnapshots)
           .values({
             postId,
-            snapshot: Y.encodeSnapshotV2(snapshot),
+            snapshot: compressedSnapshot,
             order: order++,
           })
           .returning({ id: PostSnapshots.id })
@@ -363,7 +367,8 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 
       let snapshotDoc;
       try {
-        snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(snapshotData));
+        const decompressedSnapshot = await decompressZstd(Buffer.from(snapshotData));
+        snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
       } catch {
         continue;
       }
@@ -384,11 +389,14 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         Y.applyUpdateV2(newDoc, revertUpdate);
       }
 
+      const newSnapshotData = Y.encodeSnapshotV2(Y.snapshot(newDoc));
+      const compressedNewSnapshot = await compressZstd(Buffer.from(newSnapshotData));
+
       const postSnapshot = await tx
         .insert(PostSnapshots)
         .values({
           postId,
-          snapshot: Y.encodeSnapshotV2(Y.snapshot(newDoc)),
+          snapshot: compressedNewSnapshot,
           createdAt: snapshot.createdAt,
           order: 0,
         })
@@ -424,9 +432,12 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
     const afterSnapshot = Y.snapshot(newDoc);
 
     if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
+      const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
+      const compressedFinalSnapshot = await compressZstd(Buffer.from(finalSnapshotData));
+
       await tx.insert(PostSnapshots).values({
         postId,
-        snapshot: Y.encodeSnapshotV2(afterSnapshot),
+        snapshot: compressedFinalSnapshot,
         order: 0,
       });
     }
