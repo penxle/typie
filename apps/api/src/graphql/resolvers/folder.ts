@@ -31,7 +31,7 @@ Folder.implement({
 
     maxDescendantFoldersDepth: t.int({
       resolve: async (self) => {
-        const { rows } = await db.execute<{ depth: number }>(
+        const rows = await db.execute<{ depth: number }>(
           sql`
             WITH RECURSIVE sq AS (
               SELECT ${Entities.id}, ${Entities.depth}
@@ -52,7 +52,7 @@ Folder.implement({
 
     characterCount: t.int({
       resolve: async (self) => {
-        const { rows } = await db.execute<{ total: number }>(
+        const rows = await db.execute<{ total: number }>(
           sql`
             WITH RECURSIVE descendant_entities AS (
               SELECT id
@@ -78,7 +78,7 @@ Folder.implement({
 
     folderCount: t.int({
       resolve: async (self) => {
-        const { rows } = await db.execute<{ count: number }>(
+        const rows = await db.execute<{ count: number }>(
           sql`
             WITH RECURSIVE descendant_entities AS (
               SELECT id, type
@@ -102,7 +102,7 @@ Folder.implement({
 
     postCount: t.int({
       resolve: async (self) => {
-        const { rows } = await db.execute<{ count: number }>(
+        const rows = await db.execute<{ count: number }>(
           sql`
             WITH RECURSIVE descendant_entities AS (
               SELECT id, type
@@ -126,7 +126,7 @@ Folder.implement({
 
     canvasCount: t.int({
       resolve: async (self) => {
-        const { rows } = await db.execute<{ count: number }>(
+        const rows = await db.execute<{ count: number }>(
           sql`
             WITH RECURSIVE descendant_entities AS (
               SELECT id, type
@@ -158,7 +158,7 @@ FolderView.implement({
 
     folderCount: t.int({
       resolve: async (self) => {
-        const { rows } = await db.execute<{ count: number }>(
+        const rows = await db.execute<{ count: number }>(
           sql`
             WITH RECURSIVE descendant_entities AS (
               SELECT id, type, visibility
@@ -183,7 +183,7 @@ FolderView.implement({
 
     postCount: t.int({
       resolve: async (self) => {
-        const { rows } = await db.execute<{ count: number }>(
+        const rows = await db.execute<{ count: number }>(
           sql`
             WITH RECURSIVE descendant_entities AS (
               SELECT id, type, visibility
@@ -369,7 +369,7 @@ builder.mutationFields((t) => ({
         siteId: folder.siteId,
       });
 
-      const { rows: descendants } = await db.execute<{ id: string; type: EntityType }>(
+      const descendants = await db.execute<{ id: string; type: EntityType }>(
         sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.type} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
@@ -458,7 +458,7 @@ builder.mutationFields((t) => ({
                 SELECT id FROM sq;
               `,
             )
-            .then(({ rows }) => rows.map(({ id }) => id));
+            .then((rows) => rows.map(({ id }) => id));
 
           if (descendantEntityIds.length > 0) {
             await tx.update(Entities).set({ visibility: input.visibility }).where(inArray(Entities.id, descendantEntityIds));
@@ -529,7 +529,7 @@ builder.mutationFields((t) => ({
                 SELECT id FROM sq;
               `,
             )
-            .then(({ rows }) => rows.map(({ id }) => id));
+            .then((rows) => rows.map(({ id }) => id));
 
           if (descendantEntityIds.length > 0) {
             // visibility는 not null이므로 null이여도 undefined로 취급

@@ -5,7 +5,7 @@
       "name": "Node",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "pnpm",
+      "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "dev"],
       "outputCapture": "std"
     },

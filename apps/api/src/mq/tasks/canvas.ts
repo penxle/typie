@@ -28,7 +28,7 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
   }
 
   await db.transaction(async (tx) => {
-    const hash = Number(BigInt(rapidhash(canvasId)) % BigInt('9223372036854775807'));
+    const hash = BigInt(rapidhash(canvasId)) % BigInt('9223372036854775807');
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
 
     const canvas = await tx
@@ -164,7 +164,7 @@ type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: string) => {
   await db.transaction(async (tx) => {
-    const hash = Number(BigInt(rapidhash(canvasId)) % BigInt('9223372036854775807'));
+    const hash = BigInt(rapidhash(canvasId)) % BigInt('9223372036854775807');
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
 
     const snapshots = await tx

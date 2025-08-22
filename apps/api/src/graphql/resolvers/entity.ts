@@ -126,7 +126,7 @@ Entity.implement({
     ancestors: t.field({
       type: [Entity],
       resolve: async (self) => {
-        const { rows } = await db.execute<{ id: string }>(sql`
+        const rows = await db.execute<{ id: string }>(sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.parentId}, 0 AS depth
             FROM ${Entities}
@@ -150,7 +150,7 @@ Entity.implement({
     descendants: t.field({
       type: [Entity],
       resolve: async (self) => {
-        const { rows } = await db.execute<{ id: string }>(sql`
+        const rows = await db.execute<{ id: string }>(sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.depth}
             FROM ${Entities}
@@ -240,7 +240,7 @@ EntityView.implement({
     ancestors: t.field({
       type: [EntityView],
       resolve: async (self) => {
-        const { rows } = await db.execute<{ id: string }>(sql`
+        const rows = await db.execute<{ id: string }>(sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.parentId}, 0 AS depth
             FROM ${Entities}
@@ -417,9 +417,7 @@ builder.mutationFields((t) => ({
           .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.siteId, entity.siteId)))
           .then(firstOrThrow);
 
-        const {
-          rows: [hasCycle],
-        } = await db.execute<{ exists: boolean }>(
+        const [hasCycle] = await db.execute<{ exists: boolean }>(
           sql`
             WITH RECURSIVE sq AS (
               SELECT ${Entities.id}, ${Entities.parentId}
@@ -529,7 +527,7 @@ builder.mutationFields((t) => ({
       upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
-      const { rows: entities } = await db.execute<{ id: string; site_id: string; depth: number }>(sql`
+      const entities = await db.execute<{ id: string; site_id: string; depth: number }>(sql`
         WITH RECURSIVE descendants AS (
           SELECT ${Entities.id}
           FROM ${Entities}
@@ -579,9 +577,7 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'circular_reference' });
         }
 
-        const {
-          rows: [hasCycle],
-        } = await db.execute<{ exists: boolean }>(
+        const [hasCycle] = await db.execute<{ exists: boolean }>(
           sql`
             WITH RECURSIVE sq AS (
               SELECT ${Entities.id}, ${Entities.parentId}
@@ -653,7 +649,7 @@ builder.mutationFields((t) => ({
                     RETURNING ${Entities.id}
                   `,
                 )
-                .then((result) => result.rows.map(({ id }) => id))),
+                .then((result) => result.map(({ id }) => id))),
             );
           }
         }
@@ -669,7 +665,7 @@ builder.mutationFields((t) => ({
     type: [Entity],
     input: { entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }) },
     resolve: async (_, { input }, ctx) => {
-      const { rows: entities } = await db.execute<{ id: string; site_id: string }>(sql`
+      const entities = await db.execute<{ id: string; site_id: string }>(sql`
         WITH RECURSIVE sq AS (
           SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
           FROM ${Entities}
@@ -801,7 +797,7 @@ builder.mutationFields((t) => ({
             .where(eq(Entities.id, entity.id));
         }
 
-        const { rows: updatedEntities } = await tx.execute<{ id: string; type: EntityType }>(
+        const updatedEntities = await tx.execute<{ id: string; type: EntityType }>(
           sql`
             WITH RECURSIVE sq AS (
               SELECT ${Entities.id}

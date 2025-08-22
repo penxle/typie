@@ -6,7 +6,6 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { WebClient } from '@slack/web-api';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
-import { Pool } from 'pg';
 import { env } from '@/env';
 import * as aws from '@/external/aws';
 import { generateChart } from '@/utils/chart-generation';
@@ -22,43 +21,35 @@ type SlackAppMentionEventPayload = {
   event_ts: string;
 };
 
-const pool = new Pool({
-  connectionString: env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: 5,
-  idleTimeoutMillis: 10 * 60 * 1000,
-  statement_timeout: 60_000,
-});
-
-// 각 클라이언트 연결 시 타임존 설정
-pool.on('connect', (client) => {
-  client.query("SET TIME ZONE 'Asia/Seoul'");
+const sql = new Bun.SQL({
+  url: env.DATABASE_URL,
+  tls: { rejectUnauthorized: false },
+  connection: {
+    statement_timeout: 600_000,
+    TimeZone: 'Asia/Seoul',
+  },
 });
 
 const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 const slack = new WebClient(env.SLACK_BOT_TOKEN);
 
 const executeQuery = async (query: string) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN READ ONLY');
-    const result = await client.query(query);
-    await client.query('COMMIT');
+  await sql.begin('READ ONLY', async (sql) => {
+    try {
+      const result = await sql.unsafe(query);
 
-    return {
-      success: true,
-      count: result.rows.length,
-      rows: [...result.rows],
-    };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  } finally {
-    client.release();
-  }
+      return {
+        success: true,
+        count: result.length,
+        rows: [...result],
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
 };
 
 let schema: unknown | null = null;
@@ -179,19 +170,10 @@ SELECT json_build_object(
 
 const getDatabaseSchema = async () => {
   if (!schema) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN READ ONLY');
-      const result = await client.query(getSchemaQuery);
-      await client.query('COMMIT');
-      const [row] = result.rows;
-      schema = row?.schema || { tables: [], enums: [] };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+    await sql.begin('READ ONLY', async (sql) => {
+      const result = await sql.unsafe(getSchemaQuery);
+      schema = result.schema;
+    });
   }
 
   return schema;

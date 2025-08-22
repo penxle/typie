@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { random } from '@ctrl/tinycolor';
 import { renderAsync } from '@resvg/resvg-js';
@@ -50,13 +49,12 @@ const loadFonts = async <T extends string>(names: T[]) => {
     const filePath = path.join('/tmp/fonts', `${name}.ttf`);
 
     try {
-      return await fs.readFile(filePath);
+      return await Bun.file(filePath).bytes();
     } catch {
       const url = `https://cdn.typie.net/fonts/ttf/${name}.ttf`;
       const resp = await ky.get(url).arrayBuffer();
 
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, Buffer.from(resp));
+      await Bun.write(filePath, resp);
 
       return resp;
     }
@@ -94,7 +92,7 @@ const levelColors = {
 
 type Level = 0 | 1 | 2 | 3 | 4 | 5;
 
-export async function generateActivityImage(userId: string): Promise<Buffer> {
+export async function generateActivityImage(userId: string): Promise<Uint8Array> {
   const user = await db
     .select({
       id: Users.id,
@@ -465,5 +463,5 @@ export async function generateActivityImage(userId: string): Promise<Buffer> {
     },
   });
 
-  return img.asPng();
+  return Uint8Array.from(img.asPng());
 }

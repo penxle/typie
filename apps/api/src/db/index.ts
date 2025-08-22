@@ -1,21 +1,21 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/bun-sql';
 import { env } from '@/env';
 import { DrizzleLogger } from './logger';
 import * as enums from './schemas/enums';
 import * as tables from './schemas/tables';
 import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
-export const pool = new Pool({
-  connectionString: env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+export const sql = new Bun.SQL({
+  url: env.DATABASE_URL,
   max: 100,
-  idleTimeoutMillis: 5 * 60 * 1000,
-  statement_timeout: 60_000,
-  lock_timeout: 60_000,
+  tls: { rejectUnauthorized: false },
+  connection: {
+    statement_timeout: 600_000,
+    lock_timeout: 600_000,
+  },
 });
 
-export const db = drizzle(pool, {
+export const db = drizzle(sql, {
   schema: { ...tables, ...enums },
   logger: new DrizzleLogger(),
 });

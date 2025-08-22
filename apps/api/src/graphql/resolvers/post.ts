@@ -527,7 +527,7 @@ builder.mutationFields((t) => ({
         });
 
         const snapshotData = Y.encodeSnapshotV2(snapshot);
-        const compressedSnapshot = await compressZstd(Buffer.from(snapshotData));
+        const compressedSnapshot = await compressZstd(snapshotData);
 
         const postSnapshot = await tx
           .insert(PostSnapshots)
@@ -686,7 +686,7 @@ builder.mutationFields((t) => ({
         }
 
         const snapshotData = Y.encodeSnapshotV2(snapshot);
-        const compressedSnapshot = await compressZstd(Buffer.from(snapshotData));
+        const compressedSnapshot = await compressZstd(snapshotData);
 
         const postSnapshot = await tx
           .insert(PostSnapshots)

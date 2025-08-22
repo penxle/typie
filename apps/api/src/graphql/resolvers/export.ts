@@ -12,16 +12,13 @@ import { builder } from '../builder';
  */
 
 const ExportPostAsPdfResult = builder.objectRef<{
-  data: Buffer;
+  data: Uint8Array;
   filename: string;
 }>('ExportPostAsPdfResult');
 
 ExportPostAsPdfResult.implement({
   fields: (t) => ({
-    data: t.field({
-      type: 'String',
-      resolve: (self) => self.data.toString('base64'),
-    }),
+    data: t.expose('data', { type: 'Binary' }),
     filename: t.exposeString('filename'),
   }),
 });
@@ -97,7 +94,7 @@ async function generatePostPDF(params: {
     marginLeft: number;
     marginRight: number;
   };
-}): Promise<Buffer> {
+}): Promise<Uint8Array> {
   const { entitySlug, accessToken, layoutMode, pageLayout } = params;
 
   const browser = await chromium.launch({
@@ -186,7 +183,7 @@ async function generatePostPDF(params: {
         },
       });
 
-      return Buffer.from(pdfBuffer);
+      return new Uint8Array(pdfBuffer);
     }
 
     // NOTE: page layout 방식인 경우 1페이지만큼씩 스크롤하며 PDF 생성하고 병합
@@ -200,7 +197,7 @@ async function generatePostPDF(params: {
     const pageHeightPx = pageLayout.height * 3.779_527_559_1; // NOTE: Convert mm to px (96 DPI)
     const totalPages = Math.round(totalHeight / pageHeightPx);
 
-    const pdfBuffers: Buffer[] = [];
+    const pdfBuffers: Uint8Array[] = [];
 
     for (let i = 0; i < totalPages; i++) {
       await page.evaluate((scrollY) => {
@@ -221,7 +218,7 @@ async function generatePostPDF(params: {
         height: `${pageLayout.height}mm`,
       });
 
-      pdfBuffers.push(Buffer.from(pdfBuffer));
+      pdfBuffers.push(new Uint8Array(pdfBuffer));
     }
 
     return mergePDFs(pdfBuffers);

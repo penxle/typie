@@ -1,6 +1,6 @@
 // spell-checker:words cand
 
-import * as Sentry from '@sentry/node';
+import * as Sentry from '@sentry/bun';
 import { XMLParser } from 'fast-xml-parser';
 import DOMPurify from 'isomorphic-dompurify';
 import ky from 'ky';

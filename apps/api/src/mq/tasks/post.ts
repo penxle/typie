@@ -54,7 +54,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
   }
 
   await db.transaction(async (tx) => {
-    const hash = Number(BigInt(rapidhash(postId)) % BigInt('9223372036854775807'));
+    const hash = BigInt(rapidhash(postId)) % BigInt('9223372036854775807');
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
 
     const post = await tx
@@ -92,7 +92,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
         snapshotUpdated = true;
 
         const snapshotData = Y.encodeSnapshotV2(snapshot);
-        const compressedSnapshot = await compressZstd(Buffer.from(snapshotData));
+        const compressedSnapshot = await compressZstd(snapshotData);
 
         const postSnapshot = await tx
           .insert(PostSnapshots)
@@ -272,7 +272,7 @@ type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
   await db.transaction(async (tx) => {
-    const hash = Number(BigInt(rapidhash(postId)) % BigInt('9223372036854775807'));
+    const hash = BigInt(rapidhash(postId)) % BigInt('9223372036854775807');
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
 
     const snapshots = await tx
@@ -367,7 +367,7 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 
       let snapshotDoc;
       try {
-        const decompressedSnapshot = await decompressZstd(Buffer.from(snapshotData));
+        const decompressedSnapshot = await decompressZstd(snapshotData);
         snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
       } catch {
         continue;
@@ -390,7 +390,7 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
       }
 
       const newSnapshotData = Y.encodeSnapshotV2(Y.snapshot(newDoc));
-      const compressedNewSnapshot = await compressZstd(Buffer.from(newSnapshotData));
+      const compressedNewSnapshot = await compressZstd(newSnapshotData);
 
       const postSnapshot = await tx
         .insert(PostSnapshots)
@@ -433,7 +433,7 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 
     if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
       const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
-      const compressedFinalSnapshot = await compressZstd(Buffer.from(finalSnapshotData));
+      const compressedFinalSnapshot = await compressZstd(finalSnapshotData);
 
       await tx.insert(PostSnapshots).values({
         postId,

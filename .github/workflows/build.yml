@@ -46,23 +46,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          cache: pnpm
-          node-version: latest
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Prune workspace
-        run: pnpm turbo prune --docker @typie/${{ inputs.app }}
+        run: bun install --frozen-lockfile
 
       - name: Build application
-        run: pnpm turbo run build --filter=@typie/${{ inputs.app }}
+        run: bun run turbo run build --filter=@typie/${{ inputs.app }}
         env:
           NODE_ENV: production
 

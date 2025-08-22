@@ -17,7 +17,7 @@ try {
 
   if (/\.(ts|tsx|js|jsx|svelte)$/.test(filePath)) {
     try {
-      await execAsync(`pnpm -w eslint --fix "${filePath}"`);
+      await execAsync(`bun run eslint --fix "${filePath}"`);
     } catch (err) {
       console.error(err.stderr || err.stdout);
       process.exit(2);
@@ -34,7 +34,7 @@ try {
   }
 
   try {
-    await execAsync(`pnpm -w prettier --write "${filePath}"`);
+    await execAsync(`bun run prettier --write "${filePath}"`);
   } catch (err) {
     console.error(err);
   }

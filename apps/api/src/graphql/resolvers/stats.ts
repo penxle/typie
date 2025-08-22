@@ -704,7 +704,7 @@ builder.queryField('stats', (t) =>
         getInfraCost(),
       ]);
 
-      const transformToData = ({ rows }: { rows: Record<string, unknown>[] }) => {
+      const transformToData = (rows: Record<string, unknown>[]) => {
         const data = rows.map((row) => ({
           date: String(row.date),
           value: Number(row.value),

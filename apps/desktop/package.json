@@ -27,7 +27,6 @@
     "@tauri-apps/cli": "^2.8.0",
     "@tiptap/core": "^3.2.0",
     "@tiptap/pm": "^3.2.0",
-    "@types/node": "^24.3.0",
     "@typie/lib": "workspace:*",
     "@typie/sark": "workspace:*",
     "@typie/styled-system": "workspace:*",

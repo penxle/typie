@@ -1,30 +1,8 @@
-import { Readable } from 'node:stream';
-import { constants, createBrotliCompress, createDeflate, createGzip, createZstdCompress } from 'node:zlib';
 import { createMiddleware } from 'hono/factory';
 import { COMPRESSIBLE_CONTENT_TYPE_REGEX } from 'hono/utils/compress';
-import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
+import { match } from 'ts-pattern';
 
-const ENCODINGS = ['zstd', 'br', 'gzip', 'deflate'] as const;
-
-function createCompressionStream(encoding: string) {
-  switch (encoding) {
-    case 'zstd': {
-      return createZstdCompress({ params: { [constants.ZSTD_c_compressionLevel]: 3 } });
-    }
-    case 'br': {
-      return createBrotliCompress({ params: { [constants.BROTLI_PARAM_QUALITY]: 4 } });
-    }
-    case 'gzip': {
-      return createGzip({ level: 6 });
-    }
-    case 'deflate': {
-      return createDeflate({ level: 6 });
-    }
-    default: {
-      throw new Error(`Unknown encoding: ${encoding}`);
-    }
-  }
-}
+const ENCODINGS = ['zstd', 'gzip', 'deflate'] as const;
 
 export const compression = () =>
   createMiddleware(async (c, next) => {
@@ -51,11 +29,14 @@ export const compression = () =>
     if (!encoding) return;
 
     try {
-      const nodeReadable = Readable.fromWeb(c.res.body as NodeReadableStream);
-      const compressionStream = createCompressionStream(encoding);
-      nodeReadable.pipe(compressionStream);
+      const bytes = await c.res.bytes();
+      const compressed = await match(encoding)
+        .with('zstd', () => Bun.zstdCompress(bytes, { level: 19 }))
+        .with('gzip', () => Bun.gzipSync(bytes, { level: 6 }))
+        .with('deflate', () => Bun.deflateSync(bytes, { level: 6 }))
+        .exhaustive();
 
-      c.res = new Response(Readable.toWeb(compressionStream) as unknown as ReadableStream, c.res);
+      c.res = new Response(Uint8Array.from(compressed), c.res);
 
       c.res.headers.set('Content-Encoding', encoding);
       c.res.headers.delete('Content-Length');

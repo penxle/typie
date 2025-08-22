@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/node';
+import * as Sentry from '@sentry/bun';
 import dayjs from 'dayjs';
 import { eq } from 'drizzle-orm';
 import { match } from 'ts-pattern';

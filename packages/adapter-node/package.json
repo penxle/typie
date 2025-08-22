@@ -13,7 +13,6 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.0",
     "@sveltejs/kit": "^2.33.0",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
