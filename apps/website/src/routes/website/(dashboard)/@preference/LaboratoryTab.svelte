@@ -36,25 +36,6 @@
 
   <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
     <div>
-      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>페이지 레이아웃</h3>
-      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>
-        포스트별로 본문 설정에서 페이지 레이아웃 모드를 활성화할 수 있습니다.
-      </p>
-    </div>
-
-    <Switch
-      onchange={() => {
-        mixpanel.track('toggle_experimental_feature', {
-          feature: 'page_view',
-          enabled: app.preference.current.experimental_pageEnabled,
-        });
-      }}
-      bind:checked={app.preference.current.experimental_pageEnabled}
-    />
-  </div>
-
-  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
-    <div>
       <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>PDF 내보내기</h3>
       <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>PDF 내보내기 기능을 활성화합니다.</p>
     </div>

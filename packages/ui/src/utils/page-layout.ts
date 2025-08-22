@@ -2,17 +2,16 @@ export const MIN_CONTENT_SIZE_MM = 50;
 
 export const INCOMPATIBLE_NODE_TYPES = new Set(['blockquote', 'callout', 'fold', 'table', 'code_block', 'html_block']);
 
-export type PageLayoutSettings = {
-  size: 'a4' | 'a5' | 'b5' | 'b6';
-  margins: {
-    top: number;
-    bottom: number;
-    left: number;
-    right: number;
-  };
-};
+export type PageLayoutPreset = 'a4' | 'a5' | 'b5' | 'b6';
 
-export type PageLayoutSize = PageLayoutSettings['size'];
+export type PageLayout = {
+  width: number;
+  height: number;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+};
 
 export const PAGE_SIZE_MAP = {
   a4: { width: 210, height: 297 },
@@ -33,43 +32,27 @@ export const PAGE_LAYOUT_OPTIONS = [
   { label: 'A5 (148mm × 210mm)', value: 'a5' as const },
   { label: 'B5 (176mm × 250mm)', value: 'b5' as const },
   { label: 'B6 (125mm × 176mm)', value: 'b6' as const },
+  { label: '직접 지정', value: 'custom' as const },
 ];
 
-export function getPageLayoutDimensions(settings: PageLayoutSettings) {
-  const size = PAGE_SIZE_MAP[settings.size];
-  const margins = settings.margins;
-
+export function createDefaultPageLayout(preset: PageLayoutPreset = 'a4'): PageLayout {
   return {
-    width: size.width,
-    height: size.height,
-    marginTop: margins.top,
-    marginBottom: margins.bottom,
-    marginLeft: margins.left,
-    marginRight: margins.right,
+    ...PAGE_SIZE_MAP[preset],
+    marginTop: DEFAULT_PAGE_MARGINS[preset].top,
+    marginBottom: DEFAULT_PAGE_MARGINS[preset].bottom,
+    marginLeft: DEFAULT_PAGE_MARGINS[preset].left,
+    marginRight: DEFAULT_PAGE_MARGINS[preset].right,
   };
 }
 
-export function createDefaultPageLayout(size: PageLayoutSize = 'a4'): PageLayoutSettings {
-  return {
-    size,
-    margins: DEFAULT_PAGE_MARGINS[size],
-  };
-}
-
-export function getMaxMargin(
-  side: 'top' | 'bottom' | 'left' | 'right',
-  pageSize: PageLayoutSize,
-  margins: PageLayoutSettings['margins'],
-): number {
-  const pageDimensions = PAGE_SIZE_MAP[pageSize];
-
+export function getMaxMargin(side: 'top' | 'bottom' | 'left' | 'right', pageLayoutSettings: PageLayout): number {
   if (side === 'left') {
-    return pageDimensions.width - margins.right - MIN_CONTENT_SIZE_MM;
+    return pageLayoutSettings.width - pageLayoutSettings.marginRight - MIN_CONTENT_SIZE_MM;
   } else if (side === 'right') {
-    return pageDimensions.width - margins.left - MIN_CONTENT_SIZE_MM;
+    return pageLayoutSettings.width - pageLayoutSettings.marginLeft - MIN_CONTENT_SIZE_MM;
   } else if (side === 'top') {
-    return pageDimensions.height - margins.bottom - MIN_CONTENT_SIZE_MM;
+    return pageLayoutSettings.height - pageLayoutSettings.marginBottom - MIN_CONTENT_SIZE_MM;
   } else {
-    return pageDimensions.height - margins.top - MIN_CONTENT_SIZE_MM;
+    return pageLayoutSettings.height - pageLayoutSettings.marginTop - MIN_CONTENT_SIZE_MM;
   }
 }

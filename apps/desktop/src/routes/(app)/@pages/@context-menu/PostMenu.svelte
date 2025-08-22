@@ -4,7 +4,7 @@
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
-  import { comma, downloadFromBase64, getPageLayoutDimensions } from '@typie/ui/utils';
+  import { comma, downloadFromBase64 } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility, ExportLayoutMode, PostType } from '@/enums';
   import { TypieError } from '@/errors';
@@ -19,7 +19,7 @@
   import { graphql } from '$graphql';
   import { getPostYjsAttrs } from '$lib/utils/yjs-post';
   import PdfExportModal from './PdfExportModal.svelte';
-  import type { PageLayoutSettings } from '@typie/ui/utils';
+  import type { PageLayout } from '@typie/ui/utils';
 
   type Props = {
     post: {
@@ -35,14 +35,14 @@
       availability: EntityAvailability;
     };
     via: 'tree' | 'editor';
-    pageLayoutSettings?: PageLayoutSettings;
+    pageLayout?: PageLayout;
     pageLayoutEnabled?: boolean;
   };
 
-  let { post, entity, via, pageLayoutSettings, pageLayoutEnabled }: Props = $props();
+  let { post, entity, via, pageLayout, pageLayoutEnabled }: Props = $props();
 
   let showPdfExportModal = $state(false);
-  let exportModalPageLayout = $state<PageLayoutSettings | undefined>();
+  let exportModalPageLayout = $state<PageLayout | undefined>();
   let exportModalPageEnabled = $state<boolean>(false);
 
   const duplicatePost = graphql(`
@@ -162,32 +162,30 @@
   };
 
   const handleExport = async () => {
-    let layout = pageLayoutSettings;
+    let layout = pageLayout;
     let pageEnabled = pageLayoutEnabled;
 
     if (!layout && via === 'tree') {
       const attrs = await getPostYjsAttrs<{
-        experimental_pageLayout: PageLayoutSettings;
-        experimental_pageEnabled: boolean;
-      }>(post.id, ['experimental_pageLayout', 'experimental_pageEnabled']);
+        pageLayout: PageLayout;
+        layoutMode: 'scroll' | 'page';
+      }>(post.id, ['pageLayout', 'layoutMode']);
 
-      layout = attrs.experimental_pageLayout;
-      pageEnabled = attrs.experimental_pageEnabled ?? false;
+      layout = attrs.pageLayout;
+      pageEnabled = attrs.layoutMode === 'page';
     }
 
     exportModalPageLayout = layout;
-    exportModalPageEnabled = app.preference.current.experimental_pageEnabled && (pageEnabled ?? false);
+    exportModalPageEnabled = !!pageEnabled;
     showPdfExportModal = true;
   };
 
-  const handleExportConfirm = async (layoutMode: ExportLayoutMode, pageLayout: PageLayoutSettings) => {
+  const handleExportConfirm = async (layoutMode: ExportLayoutMode, pageLayout: PageLayout) => {
     try {
-      const pageLayoutDimensions = getPageLayoutDimensions(pageLayout);
-
       const resp = await exportPostAsPdf({
         entityId: entity.id,
         layoutMode,
-        ...pageLayoutDimensions,
+        ...pageLayout,
       });
 
       downloadFromBase64(resp.data, resp.filename, 'application/pdf');

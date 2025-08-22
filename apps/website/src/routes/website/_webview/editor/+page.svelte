@@ -10,7 +10,7 @@
   import { autosize } from '@typie/ui/actions';
   import { InEditorBody } from '@typie/ui/components';
   import { getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
-  import { clamp, getPageLayoutDimensions, mmToPx } from '@typie/ui/utils';
+  import { clamp, mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
@@ -34,7 +34,7 @@
   import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { PageLayoutSettings, Ref } from '@typie/ui/utils';
+  import type { PageLayout, Ref } from '@typie/ui/utils';
 
   const WEBVIEW_DISCONNECT_THRESHOLD = 10;
 
@@ -161,10 +161,10 @@
 
   let baseScale = $derived(() => {
     if (!browser) return 1;
-    if (!(experimentalPageEnabled.current && pageLayout)) return 1;
+    if (!(layoutMode.current === 'page' && pageLayout.current)) return 1;
 
     const viewportWidth = window.innerWidth;
-    const bodyWidth = mmToPx(pageLayout.width);
+    const bodyWidth = mmToPx(pageLayout.current.width);
 
     if (bodyWidth > viewportWidth) {
       return viewportWidth / bodyWidth;
@@ -198,10 +198,8 @@
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
   const note = new YState(doc, 'note', '');
-  const experimentalPageLayout = new YState<PageLayoutSettings | undefined>(doc, 'experimental_pageLayout', undefined);
-  const experimentalPageEnabled = new YState<boolean>(doc, 'experimental_pageEnabled', false);
-
-  const pageLayout = $derived(experimentalPageLayout.current ? getPageLayoutDimensions(experimentalPageLayout.current) : null);
+  const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
+  const layoutMode = new YState<'scroll' | 'page'>(doc, 'layoutMode', 'scroll');
 
   const fontFaces = $derived(
     $query.post.entity.site.fonts
@@ -340,9 +338,10 @@
   });
 
   $effect(() => {
-    if (experimentalPageEnabled.current && pageLayout) {
+    if (layoutMode.current === 'page' && pageLayout.current) {
       untrack(() => {
-        editor?.current.commands.setPageLayout(pageLayout);
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        editor?.current.commands.setPageLayout(pageLayout.current!);
       });
     } else {
       untrack(() => {
@@ -894,7 +893,7 @@
   }}
   ontouchmove={(e) => {
     if (isPinching && e.touches.length === 2) {
-      if (!(experimentalPageEnabled.current && pageLayout)) return;
+      if (!(layoutMode.current === 'page' && pageLayout.current)) return;
 
       const touch1 = e.touches[0];
       const touch2 = e.touches[1];
@@ -945,7 +944,7 @@
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
 
-      if (!(experimentalPageEnabled.current && pageLayout)) return;
+      if (!(layoutMode.current === 'page' && pageLayout.current)) return;
 
       if (!scrollContainer) return;
       const prevScale = editorScale();
@@ -978,13 +977,21 @@
 >
   <div
     bind:this={scrollContainer}
-    style:--prosemirror-max-width={experimentalPageEnabled.current && pageLayout
-      ? `${mmToPx(pageLayout.width)}px`
+    style:--prosemirror-max-width={layoutMode.current === 'page' && pageLayout.current
+      ? `${mmToPx(pageLayout.current.width)}px`
       : `${maxWidth.current}px`}
-    style:--prosemirror-page-margin-top={experimentalPageEnabled.current && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
-    style:--prosemirror-page-margin-bottom={experimentalPageEnabled.current && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
-    style:--prosemirror-page-margin-left={experimentalPageEnabled.current && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
-    style:--prosemirror-page-margin-right={experimentalPageEnabled.current && pageLayout ? `${mmToPx(pageLayout.marginRight)}px` : '0'}
+    style:--prosemirror-page-margin-top={layoutMode.current === 'page' && pageLayout.current
+      ? `${mmToPx(pageLayout.current.marginTop)}px`
+      : '0'}
+    style:--prosemirror-page-margin-bottom={layoutMode.current === 'page' && pageLayout.current
+      ? `${mmToPx(pageLayout.current.marginBottom)}px`
+      : '0'}
+    style:--prosemirror-page-margin-left={layoutMode.current === 'page' && pageLayout.current
+      ? `${mmToPx(pageLayout.current.marginLeft)}px`
+      : '0'}
+    style:--prosemirror-page-margin-right={layoutMode.current === 'page' && pageLayout.current
+      ? `${mmToPx(pageLayout.current.marginRight)}px`
+      : '0'}
     style:--prosemirror-padding-bottom="80dvh"
     style:--prosemirror-color-selection={token.var('colors.border.strong')}
     class={cx(
@@ -1008,7 +1015,7 @@
         },
       }),
     )}
-    data-layout={experimentalPageEnabled.current && pageLayout ? 'page' : 'scroll'}
+    data-layout={layoutMode.current === 'page' && pageLayout.current ? 'page' : 'scroll'}
   >
     <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)', flexShrink: '0' })}>
       <textarea
@@ -1096,8 +1103,10 @@
     </div>
 
     <div
-      style:width={editorScale() > baseScale() && pageLayout ? `${mmToPx(pageLayout.width) * editorScale()}px` : '100%'}
-      style:height={editorScale() > baseScale() && pageLayout ? `${mmToPx(pageLayout.height) * editorScale()}px` : undefined}
+      style:width={editorScale() > baseScale() && pageLayout.current ? `${mmToPx(pageLayout.current.width) * editorScale()}px` : '100%'}
+      style:height={editorScale() > baseScale() && pageLayout.current
+        ? `${mmToPx(pageLayout.current.height) * editorScale()}px`
+        : undefined}
       style:align-self={editorScale() > baseScale() ? 'flex-start' : 'center'}
       class={css({ position: 'relative', flexGrow: '1' })}
     >
@@ -1138,7 +1147,7 @@
           bind:editor
         />
         {#if editor && mounted}
-          <InEditorBody {editor} {pageLayout}>
+          <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
             <Placeholder {editor} isTemplateActive={features.includes('template')} />
           </InEditorBody>
           {#if settings.lineHighlightEnabled}

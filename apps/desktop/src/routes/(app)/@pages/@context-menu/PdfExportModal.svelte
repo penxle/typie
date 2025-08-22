@@ -1,17 +1,25 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
-  import { Button, Checkbox, HorizontalDivider, Modal, Select, TextInput } from '@typie/ui/components';
+  import { Button, Checkbox, HorizontalDivider, Icon, Modal, Select, TextInput } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { clamp, DEFAULT_PAGE_MARGINS, getMaxMargin, PAGE_LAYOUT_OPTIONS } from '@typie/ui/utils';
+  import { clamp, createDefaultPageLayout, getMaxMargin, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import { ExportLayoutMode } from '@/enums';
-  import type { PageLayoutSettings, PageLayoutSize } from '@typie/ui/utils';
+  import FileIcon from '~icons/lucide/file';
+  import MoveHorizontalIcon from '~icons/lucide/move-horizontal';
+  import MoveVerticalIcon from '~icons/lucide/move-vertical';
+  import PanelBottomDashedIcon from '~icons/lucide/panel-bottom-dashed';
+  import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
+  import PanelRightDashedIcon from '~icons/lucide/panel-right-dashed';
+  import PanelTopDashedIcon from '~icons/lucide/panel-top-dashed';
+  import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
+  import type { PageLayout, PageLayoutPreset } from '@typie/ui/utils';
 
   type Props = {
     open: boolean;
-    currentPageLayout?: PageLayoutSettings;
+    currentPageLayout?: PageLayout;
     currentPageEnabled?: boolean;
-    onConfirm: (layoutMode: ExportLayoutMode, pageLayout: PageLayoutSettings) => Promise<void>;
+    onConfirm: (layoutMode: ExportLayoutMode, pageLayout: PageLayout) => Promise<void>;
     onClose: () => void;
   };
 
@@ -21,27 +29,23 @@
 
   let isExporting = $state(false);
   let useCurrentSettings = $state(false);
-  let pageSize = $state<PageLayoutSize>(app.preference.current.lastPdfPageLayoutSettings.size);
-  let margins = $state(app.preference.current.lastPdfPageLayoutSettings.margins);
+  let pageLayout = $state<PageLayout>(app.preference.current.lastPdfPageLayout ?? createDefaultPageLayout('a4'));
 
   $effect(() => {
     if (open) {
       useCurrentSettings = !!currentPageEnabled && !!currentPageLayout;
 
       if (currentPageLayout && currentPageEnabled) {
-        pageSize = currentPageLayout.size;
-        margins = { ...currentPageLayout.margins };
+        pageLayout = currentPageLayout;
       } else {
-        pageSize = app.preference.current.lastPdfPageLayoutSettings.size;
-        margins = { ...app.preference.current.lastPdfPageLayoutSettings.margins };
+        pageLayout = app.preference.current.lastPdfPageLayout ?? createDefaultPageLayout('a4');
       }
     }
   });
 
   $effect(() => {
     if (useCurrentSettings && currentPageLayout) {
-      pageSize = currentPageLayout.size;
-      margins = { ...currentPageLayout.margins };
+      pageLayout = currentPageLayout;
     }
   });
 
@@ -51,11 +55,7 @@
     if (useCurrentSettings && currentPageLayout) {
       await onConfirm(layoutMode, currentPageLayout);
     } else {
-      const pageLayout: PageLayoutSettings = {
-        size: pageSize,
-        margins,
-      };
-      app.preference.current.lastPdfPageLayoutSettings = pageLayout;
+      app.preference.current.lastPdfPageLayout = pageLayout;
       await onConfirm(layoutMode, pageLayout);
     }
     isExporting = false;
@@ -88,91 +88,145 @@
           pointerEvents: useCurrentSettings ? 'none' : 'auto',
         })}
       >
-        <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-          <div class={css({ fontSize: '14px', color: 'text.subtle' })}>페이지 크기</div>
-          <Select
-            items={PAGE_LAYOUT_OPTIONS}
-            onselect={(value: PageLayoutSize) => {
-              pageSize = value;
-              margins = { ...DEFAULT_PAGE_MARGINS[value] };
-            }}
-            value={pageSize}
-          />
+        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>페이지 크기 (mm)</div>
+            </div>
+            <Select
+              disabled={useCurrentSettings}
+              items={PAGE_LAYOUT_OPTIONS}
+              onselect={(value: PageLayoutPreset | 'custom') => {
+                if (value === 'custom') return;
+                pageLayout = createDefaultPageLayout(value);
+              }}
+              value={(Object.entries(PAGE_SIZE_MAP).find(
+                ([, dimension]) => dimension.width === pageLayout.width && dimension.height === pageLayout.height,
+              )?.[0] as PageLayoutPreset) ?? ('custom' as const)}
+            />
+          </div>
+
+          <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={MoveHorizontalIcon} />
+              <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>너비</div>
+              <TextInput
+                style={css.raw({ width: '100px' })}
+                disabled={useCurrentSettings}
+                min="100"
+                onchange={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  const value = Math.max(100, Number(target.value));
+                  target.value = String(value);
+                  pageLayout.width = value;
+                }}
+                size="sm"
+                type="number"
+                value={pageLayout.width}
+              />
+            </div>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={MoveVerticalIcon} />
+              <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>높이</div>
+              <TextInput
+                style={css.raw({ width: '100px' })}
+                disabled={useCurrentSettings}
+                min="100"
+                onchange={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  const value = Math.max(100, Number(target.value));
+                  target.value = String(value);
+                  pageLayout.height = value;
+                }}
+                size="sm"
+                type="number"
+                value={pageLayout.height}
+              />
+            </div>
+          </div>
         </div>
 
-        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-          <div class={css({ fontSize: '14px', color: 'text.subtle' })}>여백 (mm)</div>
-          <div class={grid({ columns: 2, gap: '8px' })}>
+        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
+            <div class={css({ fontSize: '13px', color: 'text.subtle' })}>여백 (mm)</div>
+          </div>
+          <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <label class={css({ fontSize: '12px', color: 'text.muted', width: '20px' })} for="margin-top">상</label>
+              <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelTopDashedIcon} />
+              <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>위</div>
               <TextInput
-                id="margin-top"
-                style={css.raw({ width: 'full' })}
-                max={String(getMaxMargin('top', pageSize, margins))}
+                style={css.raw({ width: '100px' })}
+                disabled={useCurrentSettings}
+                max={String(getMaxMargin('top', pageLayout))}
                 min="0"
                 oninput={(e) => {
                   const target = e.target as HTMLInputElement;
-                  const value = clamp(Number(target.value), 0, getMaxMargin('top', pageSize, margins));
+                  const value = clamp(Number(target.value), 0, getMaxMargin('top', pageLayout));
                   target.value = String(value);
-                  margins.top = value;
+                  pageLayout.marginTop = value;
                 }}
                 size="sm"
                 type="number"
-                value={margins.top}
+                value={pageLayout.marginTop}
               />
             </div>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <label class={css({ fontSize: '12px', color: 'text.muted', width: '20px' })} for="margin-bottom">하</label>
+              <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelBottomDashedIcon} />
+              <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>아래</div>
               <TextInput
-                id="margin-bottom"
-                style={css.raw({ width: 'full' })}
-                max={String(getMaxMargin('bottom', pageSize, margins))}
+                style={css.raw({ width: '100px' })}
+                disabled={useCurrentSettings}
+                max={String(getMaxMargin('bottom', pageLayout))}
                 min="0"
                 oninput={(e) => {
                   const target = e.target as HTMLInputElement;
-                  const value = clamp(Number(target.value), 0, getMaxMargin('bottom', pageSize, margins));
+                  const value = clamp(Number(target.value), 0, getMaxMargin('bottom', pageLayout));
                   target.value = String(value);
-                  margins.bottom = value;
+                  pageLayout.marginBottom = value;
                 }}
                 size="sm"
                 type="number"
-                value={margins.bottom}
+                value={pageLayout.marginBottom}
               />
             </div>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <label class={css({ fontSize: '12px', color: 'text.muted', width: '20px' })} for="margin-left">좌</label>
+              <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelLeftDashedIcon} />
+              <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>왼쪽</div>
               <TextInput
-                id="margin-left"
-                style={css.raw({ width: 'full' })}
-                max={String(getMaxMargin('left', pageSize, margins))}
+                style={css.raw({ width: '100px' })}
+                disabled={useCurrentSettings}
+                max={String(getMaxMargin('left', pageLayout))}
                 min="0"
                 oninput={(e) => {
                   const target = e.target as HTMLInputElement;
-                  const value = clamp(Number(target.value), 0, getMaxMargin('left', pageSize, margins));
+                  const value = clamp(Number(target.value), 0, getMaxMargin('left', pageLayout));
                   target.value = String(value);
-                  margins.left = value;
+                  pageLayout.marginLeft = value;
                 }}
                 size="sm"
                 type="number"
-                value={margins.left}
+                value={pageLayout.marginLeft}
               />
             </div>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <label class={css({ fontSize: '12px', color: 'text.muted', width: '20px' })} for="margin-right">우</label>
+              <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelRightDashedIcon} />
+              <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>오른쪽</div>
               <TextInput
-                id="margin-right"
-                style={css.raw({ width: 'full' })}
-                max={String(getMaxMargin('right', pageSize, margins))}
+                style={css.raw({ width: '100px' })}
+                disabled={useCurrentSettings}
+                max={String(getMaxMargin('right', pageLayout))}
                 min="0"
                 oninput={(e) => {
                   const target = e.target as HTMLInputElement;
-                  const value = clamp(Number(target.value), 0, getMaxMargin('right', pageSize, margins));
+                  const value = clamp(Number(target.value), 0, getMaxMargin('right', pageLayout));
                   target.value = String(value);
-                  margins.right = value;
+                  pageLayout.marginRight = value;
                 }}
                 size="sm"
                 type="number"
-                value={margins.right}
+                value={pageLayout.marginRight}
               />
             </div>
           </div>
