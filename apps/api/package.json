@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "exit 0",
-    "dev": "rps -- pnpm tsx watch --clear-screen=false src/main.ts",
+    "dev": "rps -- bun run --watch --no-clear-screen src/main.ts",
     "dev:email": "email dev --port 3001 --dir src/email/templates",
     "lint:typecheck": "tsc",
-    "start": "tsx src/main.ts"
+    "start": "bun run src/main.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.60.0",
@@ -23,8 +23,6 @@
     "@faker-js/faker": "^9.9.0",
     "@googleapis/androidpublisher": "^29.3.0",
     "@graphql-yoga/redis-event-target": "^3.0.3",
-    "@hono/node-server": "^1.19.0",
-    "@hono/node-ws": "^1.2.0",
     "@paralleldrive/cuid2": "^2.2.2",
     "@portone/server-sdk": "^0.15.0",
     "@pothos/core": "^4.8.1",
@@ -35,7 +33,7 @@
     "@pothos/plugin-zod": "^4.2.2",
     "@react-email/components": "^0.5.0",
     "@resvg/resvg-js": "^2.6.2",
-    "@sentry/node": "^10.5.0",
+    "@sentry/bun": "^10.5.0",
     "@sesamecare-oss/redlock": "^1.4.0",
     "@sindresorhus/string-hash": "^2.0.0",
     "@slack/web-api": "^7.9.3",
@@ -69,7 +67,6 @@
     "meilisearch": "^0.52.0",
     "nanoid": "^5.1.5",
     "p-map": "^7.0.3",
-    "pg": "^8.16.3",
     "playwright": "^1.54.2",
     "query-string": "^9.2.2",
     "rapidhash-js": "^2.2.0",
@@ -93,7 +90,7 @@
     "@pulumi/aws": "^7.4.0",
     "@pulumi/kubernetes": "^4.23.0",
     "@pulumi/pulumi": "^3.190.0",
-    "@types/pg": "^8.15.5",
+    "@types/bun": "^1.2.20",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@typie/pulumi": "workspace:*",

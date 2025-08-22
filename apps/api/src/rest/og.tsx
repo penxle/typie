@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { renderAsync } from '@resvg/resvg-js';
@@ -22,13 +21,12 @@ const loadFonts = async <T extends string>(names: T[]) => {
     const filePath = path.join('/tmp/fonts', `${name}.otf`);
 
     try {
-      return await fs.readFile(filePath);
+      return await Bun.file(filePath).bytes();
     } catch {
       const url = `https://cdn.typie.net/fonts/otf/${name}.otf`;
       const resp = await ky.get(url).arrayBuffer();
 
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, Buffer.from(resp));
+      await Bun.write(filePath, resp);
 
       return resp;
     }
@@ -113,7 +111,7 @@ og.get('/:entityId', async (c) => {
     textRendering: 1, // optimizeLegibility
   });
 
-  return c.body(img.asPng(), {
+  return c.body(Uint8Array.from(img.asPng()), {
     headers: {
       'Content-Type': 'image/png',
     },

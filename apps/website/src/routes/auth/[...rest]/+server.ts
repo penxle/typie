@@ -5,6 +5,7 @@ const handler: RequestHandler = async ({ url, request, params }) => {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete('Host');
   requestHeaders.delete('Accept-Encoding');
+  requestHeaders.set('Accept-Encoding', 'zstd');
 
   const response = await fetch(`${env.PUBLIC_API_URL}/auth/${params.rest}${url.search}`, {
     method: request.method,
