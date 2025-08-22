@@ -3,58 +3,62 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/hooks/editor_floating_fade.dart';
 
 class EditorFloatingWidget extends HookWidget {
-  const EditorFloatingWidget({
+  EditorFloatingWidget({
     required this.child,
-    required this.storageKey,
     required this.onPositionChanged,
-    this.initialOffset,
+    this.initialRelativePosition,
     this.isExpanded = false,
-    this.onExpansionChanged,
     this.onTap,
     super.key,
-  });
+  }) : assert(
+         initialRelativePosition == null ||
+             (initialRelativePosition.dx >= 0.0 &&
+                 initialRelativePosition.dx <= 1.0 &&
+                 initialRelativePosition.dy >= 0.0 &&
+                 initialRelativePosition.dy <= 1.0),
+         'initialRelativePosition must be within 0.0–1.0',
+       );
 
   final Widget child;
-  final String storageKey;
-  final void Function(Offset position) onPositionChanged;
-  final Offset? initialOffset;
+  final void Function(Offset relativePosition) onPositionChanged;
+  final Offset? initialRelativePosition;
   final bool isExpanded;
-  final VoidCallback? onExpansionChanged;
-  final VoidCallback? onTap;
+  final void Function(bool isFaded)? onTap;
 
-  Offset _adjustPositionWithinBounds({
-    required Offset currentPosition,
-    required Size widgetSize,
-    required Size containerSize,
-  }) {
-    var newX = currentPosition.dx;
-    var newY = currentPosition.dy;
+  Offset _clampPosition(Offset position, Size widgetSize, Size containerSize) {
+    final maxX = (containerSize.width - widgetSize.width).clamp(0.0, double.infinity);
+    final maxY = (containerSize.height - widgetSize.height).clamp(0.0, double.infinity);
 
-    if (newX < 0) {
-      newX = 0;
-    } else if (newX + widgetSize.width > containerSize.width) {
-      newX = containerSize.width - widgetSize.width;
+    return Offset(position.dx.clamp(0.0, maxX), position.dy.clamp(0.0, maxY));
+  }
+
+  Offset _toAbsolutePosition(Offset relativePos, Size containerSize) {
+    return Offset(relativePos.dx * containerSize.width, relativePos.dy * containerSize.height);
+  }
+
+  Offset _toRelativePosition(Offset absolutePos, Size containerSize) {
+    final w = containerSize.width;
+    final h = containerSize.height;
+    if (w == 0 || h == 0) {
+      return Offset.zero;
     }
-
-    if (newY < 0) {
-      newY = 0;
-    } else if (newY + widgetSize.height > containerSize.height) {
-      newY = containerSize.height - widgetSize.height;
-    }
-
-    return Offset(newX, newY);
+    return Offset(absolutePos.dx / w, absolutePos.dy / h);
   }
 
   @override
   Widget build(BuildContext context) {
-    // NOTE: 키보드 등 레이아웃 변화 감지
-    MediaQuery.of(context);
-
     final widgetKey = useMemoized(GlobalKey.new);
     final widgetSize = useState<Size?>(null);
-    final position = useState(initialOffset ?? const Offset(20, 20));
-    final previousEditorSize = useState<Size?>(null);
+
+    final screenSize = MediaQuery.of(context).size;
+    final relativePos = initialRelativePosition ?? const Offset(0.5, 0.5);
+    final initialX = relativePos.dx * screenSize.width;
+    final initialY = relativePos.dy * screenSize.height;
+
+    final position = useState<Offset>(Offset(initialX, initialY));
     final isDragging = useState(false);
+    final currentRelativePosition = useState<Offset?>(initialRelativePosition);
+    final previousEditorSize = useState<Size?>(null);
 
     final originalPosition = useState<Offset?>(null);
     final hasDragged = useState(false);
@@ -74,11 +78,7 @@ class EditorFloatingWidget extends HookWidget {
           final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
 
           if (renderBox != null && editorContainer != null && renderBox.hasSize && editorContainer.hasSize) {
-            final adjustedPosition = _adjustPositionWithinBounds(
-              currentPosition: position.value,
-              widgetSize: renderBox.size,
-              containerSize: editorContainer.size,
-            );
+            final adjustedPosition = _clampPosition(position.value, renderBox.size, editorContainer.size);
 
             if (adjustedPosition != position.value) {
               position.value = adjustedPosition;
@@ -96,43 +96,70 @@ class EditorFloatingWidget extends HookWidget {
       return null;
     }, [isExpanded]);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final renderBox = widgetKey.currentContext?.findRenderObject() as RenderBox?;
-      if (renderBox != null && renderBox.hasSize) {
-        widgetSize.value = renderBox.size;
-      }
+    // NOTE: 초기 상대 위치에서 절대 위치 계산 (위젯 크기 측정 후)
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final renderBox = widgetKey.currentContext?.findRenderObject() as RenderBox?;
+        final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
 
-      final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
-      if (editorContainer != null && editorContainer.hasSize) {
-        final currentEditorSize = editorContainer.size;
-        final currentWidgetSize = widgetSize.value ?? const Size(120, 40);
-
-        // NOTE: 부모 크기가 변경되었을 때 상대 위치 유지
-        if (previousEditorSize.value != null && previousEditorSize.value != currentEditorSize) {
-          final oldHeight = previousEditorSize.value!.height;
-          final newHeight = currentEditorSize.height;
-
-          if (oldHeight > 0 && newHeight > 0) {
-            final yPercentage = position.value.dy / oldHeight;
-            final newY = yPercentage * newHeight;
-
-            position.value = _adjustPositionWithinBounds(
-              currentPosition: Offset(position.value.dx, newY),
-              widgetSize: currentWidgetSize,
-              containerSize: currentEditorSize,
-            );
+        if (renderBox != null && renderBox.hasSize && editorContainer != null && editorContainer.hasSize) {
+          if (initialRelativePosition == null) {
+            return;
           }
-        } else if (previousEditorSize.value == null) {
-          // NOTE: 초기 로드 시 위치 조정
-          position.value = _adjustPositionWithinBounds(
-            currentPosition: position.value,
-            widgetSize: currentWidgetSize,
-            containerSize: currentEditorSize,
-          );
-        }
 
-        previousEditorSize.value = currentEditorSize;
+          final relativePos = initialRelativePosition!;
+          currentRelativePosition.value = relativePos;
+
+          final absolutePos = _toAbsolutePosition(relativePos, editorContainer.size);
+          position.value = _clampPosition(absolutePos, renderBox.size, editorContainer.size);
+
+          previousEditorSize.value = editorContainer.size;
+          widgetSize.value = renderBox.size;
+        }
+      });
+      return null;
+    }, []);
+
+    // NOTE: 화면 크기 변경 시 위치 재계산
+    useEffect(() {
+      void updateWidgetSizeAndPosition() {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final renderBox = widgetKey.currentContext?.findRenderObject() as RenderBox?;
+          if (renderBox != null && renderBox.hasSize && widgetSize.value != renderBox.size) {
+            widgetSize.value = renderBox.size;
+          }
+
+          // NOTE: 에디터 컨테이너 크기 변경 감지 및 위치 재계산
+          if (!isDragging.value && previousEditorSize.value != null) {
+            final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
+            if (editorContainer != null && editorContainer.hasSize) {
+              final currentEditorSize = editorContainer.size;
+
+              // NOTE: 크기가 변경되었을 때만 위치 재계산
+              if (previousEditorSize.value != currentEditorSize) {
+                final relativePos = currentRelativePosition.value ?? initialRelativePosition;
+                if (relativePos == null) {
+                  return;
+                }
+
+                if (widgetSize.value != null) {
+                  final absolutePos = _toAbsolutePosition(relativePos, currentEditorSize);
+                  final newPosition = _clampPosition(absolutePos, widgetSize.value!, currentEditorSize);
+
+                  if (position.value != newPosition) {
+                    position.value = newPosition;
+                  }
+                }
+
+                previousEditorSize.value = currentEditorSize;
+              }
+            }
+          }
+        });
       }
+
+      updateWidgetSizeAndPosition();
+      return null;
     });
 
     return AnimatedPositioned(
@@ -144,8 +171,9 @@ class EditorFloatingWidget extends HookWidget {
         opacity: fadeController.opacity,
         child: GestureDetector(
           onTap: () {
+            final isFaded = fadeController.opacity.value < 1.0;
             fadeController.showImmediately();
-            onTap?.call();
+            onTap?.call(isFaded);
           },
           onPanStart: (_) {
             isDragging.value = true;
@@ -162,21 +190,27 @@ class EditorFloatingWidget extends HookWidget {
 
             final newPosition = Offset(position.value.dx + details.delta.dx, position.value.dy + details.delta.dy);
 
-            final adjustedPosition = _adjustPositionWithinBounds(
-              currentPosition: newPosition,
-              widgetSize: widgetSize.value!,
-              containerSize: editorContainer.size,
-            );
+            final adjustedPosition = _clampPosition(newPosition, widgetSize.value!, editorContainer.size);
 
             position.value = adjustedPosition;
           },
           onPanEnd: (_) {
             isDragging.value = false;
-            onPositionChanged(position.value);
+            final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
+            if (editorContainer != null && editorContainer.hasSize) {
+              final relativePos = _toRelativePosition(position.value, editorContainer.size);
+              currentRelativePosition.value = relativePos;
+              onPositionChanged(relativePos);
+            }
           },
           onPanCancel: () {
             isDragging.value = false;
-            onPositionChanged(position.value);
+            final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
+            if (editorContainer != null && editorContainer.hasSize) {
+              final relativePos = _toRelativePosition(position.value, editorContainer.size);
+              currentRelativePosition.value = relativePos;
+              onPositionChanged(relativePos);
+            }
           },
           child: KeyedSubtree(key: widgetKey, child: child),
         ),

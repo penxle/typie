@@ -11,6 +11,8 @@ import 'package:typie/services/preference.dart';
 class CharacterCountFloating extends HookWidget {
   const CharacterCountFloating({super.key});
 
+  static const defaultRelativePosition = Offset(0.05, 0.05);
+
   @override
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
@@ -24,20 +26,28 @@ class CharacterCountFloating extends HookWidget {
     }
 
     final savedPosition = pref.characterCountFloatingPosition;
-    final initialOffset = savedPosition != null
-        ? Offset(savedPosition['x'] ?? 20, savedPosition['y'] ?? 20)
-        : const Offset(20, 20);
+    final initialRelativePosition = savedPosition != null
+        ? Offset(savedPosition['x'] ?? defaultRelativePosition.dx, savedPosition['y'] ?? defaultRelativePosition.dy)
+        : defaultRelativePosition;
+
+    final handlePositionChanged = useCallback((Offset relativePosition) {
+      pref.characterCountFloatingPosition = {
+        'x': relativePosition.dx.clamp(0.0, 1.0),
+        'y': relativePosition.dy.clamp(0.0, 1.0),
+      };
+    }, [pref]);
+
+    final handleTap = useCallback((bool isFaded) {
+      if (!isFaded) {
+        isExpanded.value = !isExpanded.value;
+      }
+    }, []);
 
     return EditorFloatingWidget(
-      storageKey: 'character_count',
-      initialOffset: initialOffset,
+      initialRelativePosition: initialRelativePosition,
       isExpanded: isExpanded.value,
-      onPositionChanged: (position) {
-        pref.characterCountFloatingPosition = {'x': position.dx, 'y': position.dy};
-      },
-      onTap: () {
-        isExpanded.value = !isExpanded.value;
-      },
+      onPositionChanged: handlePositionChanged,
+      onTap: handleTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
