@@ -263,7 +263,7 @@ input ExportPostAsPdfInput {
 }
 
 type ExportPostAsPdfResult {
-  data: String!
+  data: Binary!
   filename: String!
 }
 

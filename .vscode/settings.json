@@ -13,7 +13,7 @@
   "eslint.format.enable": true,
   "eslint.useFlatConfig": true,
   "eslint.validate": ["javascript", "typescript", "svelte"],
-  "npm.packageManager": "pnpm",
+  "npm.packageManager": "bun",
   "prettier.documentSelectors": ["**/*"],
   "svelte.enable-ts-plugin": true,
   "svelte.plugin.svelte.defaultScriptLanguage": "ts",

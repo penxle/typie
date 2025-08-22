@@ -149,7 +149,7 @@ export const createSite = async ({ userId, name, slug, tx }: CreateSiteParams) =
       });
 
       const snapshotData = Y.encodeSnapshotV2(snapshot);
-      const compressedSnapshot = await compressZstd(Buffer.from(snapshotData));
+      const compressedSnapshot = await compressZstd(snapshotData);
 
       const postSnapshot = await tx
         .insert(PostSnapshots)

@@ -1,5 +1,5 @@
 import { isAsyncIterable } from '@envelop/core';
-import * as Sentry from '@sentry/node';
+import * as Sentry from '@sentry/bun';
 import { logger } from '@typie/lib';
 import { GraphQLError } from 'graphql';
 import { dev } from '@/env';

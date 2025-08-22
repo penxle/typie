@@ -15,7 +15,7 @@ Typie is a Korean writing platform that aims to be a "space for writing thoughts
 
 ### Monorepo Structure
 
-- **Package Manager**: pnpm with workspaces
+- **Package Manager**: bun with workspaces
 - **Main directories**:
   - `apps/` - Applications (api, website, mobile, etc.)
   - `packages/` - Shared packages

@@ -1,5 +1,5 @@
 import os from 'node:os';
-import * as Sentry from '@sentry/node';
+import * as Sentry from '@sentry/bun';
 import { logger } from '@typie/lib';
 import { Queue, Worker } from 'bullmq';
 import Redis from 'ioredis';

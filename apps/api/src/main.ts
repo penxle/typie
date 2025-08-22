@@ -2,15 +2,14 @@ import '@/instrument';
 import '@typie/lib/dayjs';
 import '@/mq';
 
-import { serve } from '@hono/node-server';
 import { compression, logger } from '@typie/lib';
+import { websocket } from 'hono/bun';
 import { HTTPException } from 'hono/http-exception';
 import { app } from '@/app';
 import { deriveContext } from '@/context';
 import { env } from '@/env';
 import { graphql } from '@/graphql';
 import { rest } from '@/rest';
-import { injectWebSocket } from '@/ws';
 
 const log = logger.getChild('main');
 
@@ -39,15 +38,11 @@ app.onError((error, c) => {
   return c.text('Internal Server Error', { status: 500 });
 });
 
-const server = serve(
-  {
-    fetch: app.fetch,
-    hostname: '0.0.0.0',
-    port: env.LISTEN_PORT ?? 3000,
-  },
-  (addr) => {
-    log.info('Listening {*}', { address: addr.address, port: addr.port });
-  },
-);
+const server = Bun.serve({
+  fetch: app.fetch,
+  hostname: '0.0.0.0',
+  port: env.LISTEN_PORT ?? 3000,
+  websocket,
+});
 
-injectWebSocket(server);
+log.info('Listening {*}', { hostname: server.hostname, port: server.port });

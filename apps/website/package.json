@@ -6,9 +6,9 @@
   "scripts": {
     "build": "vite build",
     "codegen": "svelte-kit sync && panda codegen && sark codegen",
-    "dev": "rps -- pnpm vite dev",
+    "dev": "rps -- bun run vite dev",
     "lint:svelte": "svelte-check --fail-on-warnings",
-    "start": "node dist/index.js"
+    "start": "bun run dist/index.js"
   },
   "dependencies": {
     "@sentry/sveltekit": "^10.5.0"
@@ -16,7 +16,6 @@
   "devDependencies": {
     "@ctrl/tinycolor": "^4.1.0",
     "@floating-ui/dom": "^1.7.3",
-    "@hono/node-server": "^1.19.0",
     "@iconify-json/lucide": "^1.2.62",
     "@iconify-json/simple-icons": "^1.2.48",
     "@iconify-json/twemoji": "^1.2.4",
@@ -32,7 +31,6 @@
     "@sveltejs/vite-plugin-svelte": "^6.1.2",
     "@tiptap/core": "^3.2.0",
     "@tiptap/pm": "^3.2.0",
-    "@types/node": "^24.3.0",
     "@typie/adapter-node": "workspace:*",
     "@typie/lib": "workspace:*",
     "@typie/pulumi": "workspace:*",

@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { renderAsync } from '@resvg/resvg-js';
 import ky from 'ky';
@@ -28,13 +27,12 @@ const loadFonts = async <T extends string>(names: T[]) => {
     const filePath = path.join('/tmp/fonts', `${name}.otf`);
 
     try {
-      return await fs.readFile(filePath);
+      return await Bun.file(filePath).bytes();
     } catch {
       const url = `https://cdn.typie.net/fonts/otf/${name}.otf`;
       const resp = await ky.get(url).arrayBuffer();
 
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, Buffer.from(resp));
+      await Bun.write(filePath, resp);
 
       return resp;
     }

@@ -1,7 +1,7 @@
 .husky/_/
 
 LICENSE
-pnpm-lock.yaml
+bun.lock
 docs/*
 !docs/*.md
 *.dart

@@ -21,6 +21,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
   const response = await fetch(`${env.PUBLIC_API_URL}/graphql`, {
     method: 'POST',
     headers: {
+      'Accept-Encoding': 'zstd',
       'Content-Type': 'application/json',
       'X-Client-IP': getClientAddress(),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
