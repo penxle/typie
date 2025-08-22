@@ -3,8 +3,7 @@
   import { tick, untrack } from 'svelte';
   import type { Editor } from '@tiptap/core';
   import type { Snippet } from 'svelte';
-  import type { PageLayout } from '../tiptap';
-  import type { Ref } from '../utils';
+  import type { PageLayout, Ref } from '../utils';
 
   type Props = {
     editor: Ref<Editor>;

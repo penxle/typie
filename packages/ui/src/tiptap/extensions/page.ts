@@ -5,17 +5,9 @@ import { css } from '@typie/styled-system/css';
 import { token } from '@typie/styled-system/tokens';
 import { tick } from 'svelte';
 import { mmToPx } from '../../utils';
+import type { PageLayout } from '../../utils';
 
 const GAP_HEIGHT_PX = 40;
-
-export type PageLayout = {
-  width: number;
-  height: number;
-  marginTop: number;
-  marginBottom: number;
-  marginLeft: number;
-  marginRight: number;
-};
 
 export type PageStorage = {
   layout?: PageLayout;

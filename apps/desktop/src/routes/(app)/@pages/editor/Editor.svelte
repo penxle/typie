@@ -1,7 +1,7 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
-  import { Mark } from '@tiptap/pm/model';
+  import { isiOS, isMacOS } from '@tiptap/core';
   import { Selection } from '@tiptap/pm/state';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
@@ -9,10 +9,9 @@
   import { Helmet, HorizontalDivider, Icon, InEditorBody, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
-  import { getNodeView, TiptapEditor } from '@typie/ui/tiptap';
-  import { getPageLayoutDimensions, mmToPx } from '@typie/ui/utils';
+  import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
+  import { mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
-  import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
@@ -20,6 +19,7 @@
   import { on } from 'svelte/events';
   import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
+  import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
   import { PostSyncType, UserRole } from '@/enums';
@@ -46,8 +46,10 @@
   import Timeline from './Timeline.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { PageLayoutSettings, Ref } from '@typie/ui/utils';
+  import type { PageLayout, Ref } from '@typie/ui/utils';
   import type { Editor_query } from '$graphql';
+
+  const DISCONNECT_THRESHOLD = 3;
 
   type Props = {
     $query: Editor_query;
@@ -175,6 +177,8 @@
     }
   `);
 
+  setupEditorContext();
+
   const app = getAppContext();
   const clientId = nanoid();
   const postId = $derived($query && $query.entity.node.__typename === 'Post' ? $query.entity.node.id : null);
@@ -194,20 +198,22 @@
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
+  const undoManager = new Y.UndoManager([doc.getMap('attrs'), doc.getXmlFragment('body')], {
+    trackedOrigins: new Set([ySyncPluginKey, 'local']),
+    captureTransaction: (tr) => tr.meta.get('addToHistory') !== false,
+    deleteFilter: (item) => defaultDeleteFilter(item, defaultProtectedNodes),
+  });
 
   const title = new YState<string>(doc, 'title', '');
   const subtitle = new YState<string>(doc, 'subtitle', '');
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
-  const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
-  const experimentalPageLayout = new YState<PageLayoutSettings | undefined>(doc, 'experimental_pageLayout', undefined);
-  const experimentalPageEnabled = new YState<boolean>(doc, 'experimental_pageEnabled', false);
+  const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
+  const layoutMode = new YState<'scroll' | 'page'>(doc, 'layoutMode', 'scroll');
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
-  const isPageLayoutEnabled = $derived(app.preference.current.experimental_pageEnabled && experimentalPageEnabled.current);
-
-  const pageLayout = $derived(experimentalPageLayout.current ? getPageLayoutDimensions(experimentalPageLayout.current) : null);
+  const isPageLayoutEnabled = $derived(layoutMode.current === 'page');
 
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
@@ -230,6 +236,7 @@
 
   let syncUpdateTimeout: NodeJS.Timeout | null = null;
   let pendingUpdate: Uint8Array | null = null;
+  let lastSyncTime = Date.now();
 
   doc.on('updateV2', async (update, origin) => {
     if (browser && origin !== 'remote' && postId) {
@@ -243,26 +250,48 @@
         clearTimeout(syncUpdateTimeout);
       }
 
-      syncUpdateTimeout = setTimeout(async () => {
-        if (pendingUpdate && postId) {
-          await syncPost(
-            {
-              clientId,
-              postId,
-              type: PostSyncType.UPDATE,
-              data: base64.stringify(pendingUpdate),
-            },
-            { transport: 'ws' },
-          );
+      const timeSinceLastSync = Date.now() - lastSyncTime;
+      const shouldForceSync = timeSinceLastSync >= 100;
 
-          pendingUpdate = null;
-        }
-      }, 1000);
+      if (shouldForceSync && pendingUpdate) {
+        await syncPost(
+          {
+            clientId,
+            postId,
+            type: PostSyncType.UPDATE,
+            data: base64.stringify(pendingUpdate),
+          },
+          { transport: 'ws' },
+        );
+
+        pendingUpdate = null;
+        lastSyncTime = Date.now();
+      } else {
+        const remainingTime = Math.max(0, 100 - timeSinceLastSync);
+
+        syncUpdateTimeout = setTimeout(async () => {
+          if (pendingUpdate && postId) {
+            await syncPost(
+              {
+                clientId,
+                postId,
+                type: PostSyncType.UPDATE,
+                data: base64.stringify(pendingUpdate),
+              },
+              { transport: 'ws' },
+            );
+
+            pendingUpdate = null;
+            lastSyncTime = Date.now();
+          }
+        }, remainingTime);
+      }
     }
   });
 
   let syncAwarenessTimeout: NodeJS.Timeout | null = null;
   let pendingAwarenessStates: { added: number[]; updated: number[]; removed: number[] } | null = null;
+  let lastAwarenessSyncTime = Date.now();
 
   awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
     if (browser && origin !== 'remote' && postId) {
@@ -280,27 +309,54 @@
         clearTimeout(syncAwarenessTimeout);
       }
 
-      syncAwarenessTimeout = setTimeout(async () => {
-        if (pendingAwarenessStates && postId) {
-          const update = YAwareness.encodeAwarenessUpdate(awareness, [
-            ...pendingAwarenessStates.added,
-            ...pendingAwarenessStates.updated,
-            ...pendingAwarenessStates.removed,
-          ]);
+      const timeSinceLastSync = Date.now() - lastAwarenessSyncTime;
+      const shouldForceSync = timeSinceLastSync >= 100;
 
-          await syncPost(
-            {
-              clientId,
-              postId,
-              type: PostSyncType.AWARENESS,
-              data: base64.stringify(update),
-            },
-            { transport: 'ws' },
-          );
+      if (shouldForceSync && pendingAwarenessStates) {
+        const update = YAwareness.encodeAwarenessUpdate(awareness, [
+          ...pendingAwarenessStates.added,
+          ...pendingAwarenessStates.updated,
+          ...pendingAwarenessStates.removed,
+        ]);
 
-          pendingAwarenessStates = null;
-        }
-      }, 1000);
+        await syncPost(
+          {
+            clientId,
+            postId,
+            type: PostSyncType.AWARENESS,
+            data: base64.stringify(update),
+          },
+          { transport: 'ws' },
+        );
+
+        pendingAwarenessStates = null;
+        lastAwarenessSyncTime = Date.now();
+      } else {
+        const remainingTime = Math.max(0, 100 - timeSinceLastSync);
+
+        syncAwarenessTimeout = setTimeout(async () => {
+          if (pendingAwarenessStates && postId) {
+            const update = YAwareness.encodeAwarenessUpdate(awareness, [
+              ...pendingAwarenessStates.added,
+              ...pendingAwarenessStates.updated,
+              ...pendingAwarenessStates.removed,
+            ]);
+
+            await syncPost(
+              {
+                clientId,
+                postId,
+                type: PostSyncType.AWARENESS,
+                data: base64.stringify(update),
+              },
+              { transport: 'ws' },
+            );
+
+            pendingAwarenessStates = null;
+            lastAwarenessSyncTime = Date.now();
+          }
+        }, remainingTime);
+      }
     }
   });
 
@@ -318,6 +374,19 @@
       },
       { transport: 'ws' },
     );
+  };
+
+  const fullSync = async () => {
+    if (!postId) return;
+
+    const update = Y.encodeStateAsUpdateV2(doc);
+
+    await syncPost({
+      clientId,
+      postId,
+      type: PostSyncType.UPDATE,
+      data: base64.stringify(update),
+    });
   };
 
   $effect(() => {
@@ -343,9 +412,10 @@
   });
 
   $effect(() => {
-    if (isPageLayoutEnabled && pageLayout) {
+    if (isPageLayoutEnabled && pageLayout.current) {
       untrack(() => {
-        editor?.current.commands.setPageLayout(pageLayout);
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        editor?.current.commands.setPageLayout(pageLayout.current!);
       });
     } else {
       untrack(() => {
@@ -356,6 +426,26 @@
 
   onMount(() => {
     if (!postId) return;
+
+    const handleOnline = () => {
+      const isFresh = dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD;
+      if (isFresh) {
+        connectionStatus = 'connected';
+      } else {
+        connectionStatus = 'connecting';
+      }
+    };
+
+    const handleOffline = () => {
+      connectionStatus = 'disconnected';
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (!navigator.onLine) {
+      connectionStatus = 'disconnected';
+    }
 
     const unsubscribe = postSyncStream.subscribe({ clientId, postId }, async (payload) => {
       if (payload.type === PostSyncType.HEARTBEAT) {
@@ -393,7 +483,6 @@
     });
 
     const persistence = new IndexeddbPersistence(`typie:editor:${postId}`, doc);
-    persistence.on('synced', () => forceSync());
 
     if ($query.entity.node.__typename === 'Post') {
       Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
@@ -409,10 +498,6 @@
     }
 
     editor?.current.once('create', ({ editor }) => {
-      const { tr, schema } = editor.state;
-      tr.setStoredMarks(storedMarks.current.map((mark) => Mark.fromJSON(schema, mark)));
-      editor.view.dispatch(tr);
-
       const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
       if (postId && selections[postId]) {
         if (selections[postId].type === 'element') {
@@ -443,9 +528,10 @@
       }
     });
 
+    const fullSyncInterval = setInterval(() => fullSync(), 60_000);
     const forceSyncInterval = setInterval(() => forceSync(), 10_000);
     const heartbeatInterval = setInterval(() => {
-      if (dayjs().diff(lastHeartbeatAt, 'seconds') > 10) {
+      if (dayjs().diff(lastHeartbeatAt, 'seconds') > DISCONNECT_THRESHOLD) {
         connectionStatus = 'disconnected';
       }
     }, 1000);
@@ -495,28 +581,14 @@
     app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
     app.state.current = $query.entity.id;
 
-    const arrayOrNull = <T,>(array: T[] | readonly T[] | null | undefined) => (array?.length ? array : null);
-
-    const handler = ({ editor }: { editor: Editor }) => {
-      const marks =
-        arrayOrNull(editor.state.storedMarks) ||
-        arrayOrNull(editor.state.selection.$anchor.marks()) ||
-        arrayOrNull(editor.state.selection.$anchor.parent.firstChild?.firstChild?.marks) ||
-        [];
-
-      const jsonMarks = marks.map((mark) => mark.toJSON());
-
-      if (stringify(storedMarks.current) !== stringify(jsonMarks)) {
-        storedMarks.current = jsonMarks;
-      }
-    };
-
-    editor?.current.on('transaction', handler);
     editor?.current.on('selectionUpdate', persistSelection);
+
+    fullSync();
 
     return () => {
       off();
 
+      clearInterval(fullSyncInterval);
       clearInterval(forceSyncInterval);
       clearInterval(heartbeatInterval);
 
@@ -528,10 +600,12 @@
         clearTimeout(syncAwarenessTimeout);
       }
 
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
       unsubscribe();
 
-      editor?.current.off('transaction', handler);
       editor?.current.off('selectionUpdate', persistSelection);
 
       persistence.destroy();
@@ -546,11 +620,27 @@
   {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
+<svelte:window
+  onkeydown={(e) => {
+    const modKey = isMacOS() || isiOS() ? e.metaKey : e.ctrlKey;
+
+    if (modKey && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      undoManager.undo();
+    } else if ((modKey && e.key === 'y') || (modKey && e.key === 'z' && e.shiftKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      undoManager.redo();
+    }
+  }}
+/>
+
 <Helmet title={`${effectiveTitle} 작성 중`} />
 
 {#if $query.entity.node.__typename === 'Post'}
   <div class={flex({ height: 'full' })}>
-    <div class={flex({ flexDirection: 'column', flexGrow: '1' })}>
+    <div class={flex({ flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
       <div
         class={flex({
           justifyContent: 'space-between',
@@ -577,9 +667,22 @@
             {/if}
           {/each}
 
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle', lineClamp: 1 })}>
+          <button
+            class={css({
+              fontSize: '12px',
+              fontWeight: 'medium',
+              color: 'text.subtle',
+              lineClamp: 1,
+              _hover: { color: 'text.default' },
+              transition: 'common',
+            })}
+            onclick={() => {
+              titleEl?.focus();
+            }}
+            type="button"
+          >
             {effectiveTitle}
-          </div>
+          </button>
         </div>
 
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
@@ -632,16 +735,16 @@
               {#if $query.entity.node.__typename === 'Post'}
                 <PostMenu
                   entity={$query.entity}
-                  pageLayoutEnabled={experimentalPageEnabled.current}
-                  pageLayoutSettings={experimentalPageLayout.current}
+                  pageLayout={pageLayout.current}
+                  pageLayoutEnabled={isPageLayoutEnabled}
                   post={$query.entity.node}
                   via="editor"
                 />
               {/if}
 
-              {#if $query.me.role === UserRole.ADMIN}
-                <HorizontalDivider color="secondary" />
+              <HorizontalDivider color="secondary" />
 
+              {#if $query.me.role === UserRole.ADMIN}
                 <MenuItem
                   icon={IconClockFading}
                   onclick={() => {
@@ -712,7 +815,7 @@
 
       <HorizontalDivider color="secondary" />
 
-      <Toolbar $site={$query.entity.site} {doc} {editor} />
+      <Toolbar $site={$query.entity.site} {doc} {editor} {undoManager} />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div
@@ -728,7 +831,7 @@
             zIndex: 'editor',
             backgroundColor: 'surface.default',
             '&[data-layout="page"]': {
-              backgroundColor: 'surface.muted',
+              backgroundColor: 'surface.subtle/50',
             },
           })}
           data-layout={isPageLayoutEnabled && pageLayout ? 'page' : 'scroll'}
@@ -745,12 +848,22 @@
           role="none"
         >
           <div
-            style:--prosemirror-max-width={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.width)}px` : `${maxWidth.current}px`}
-            style:--prosemirror-page-margin-top={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
-            style:--prosemirror-page-margin-bottom={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
-            style:--prosemirror-page-margin-left={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
-            style:--prosemirror-page-margin-right={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginRight)}px` : '0'}
-            style:--prosemirror-padding-bottom={isPageLayoutEnabled && pageLayout
+            style:--prosemirror-max-width={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.width)}px`
+              : `${maxWidth.current}px`}
+            style:--prosemirror-page-margin-top={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.marginTop)}px`
+              : '0'}
+            style:--prosemirror-page-margin-bottom={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.marginBottom)}px`
+              : '0'}
+            style:--prosemirror-page-margin-left={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.marginLeft)}px`
+              : '0'}
+            style:--prosemirror-page-margin-right={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.marginRight)}px`
+              : '0'}
+            style:--prosemirror-padding-bottom={isPageLayoutEnabled && pageLayout.current
               ? '0'
               : `${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}
             class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}
@@ -847,13 +960,13 @@
                     use:autosize
                   ></textarea>
 
-                  <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: '20px' })} />
+                  <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
                 </div>
               </div>
 
               <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
                 <TiptapEditor
-                  style={css.raw({ size: 'full', paddingX: '80px' })}
+                  style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
                   {awareness}
                   {doc}
                   oncreate={() => {
@@ -916,11 +1029,12 @@
                       return unfurlEmbed({ url });
                     },
                   }}
+                  {undoManager}
                   bind:editor
                 />
 
                 {#if editor && mounted}
-                  <InEditorBody {editor} {pageLayout}>
+                  <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
                     <Placeholder $site={$query.entity.site} {doc} {editor} />
                   </InEditorBody>
                   {#if app.preference.current.lineHighlightEnabled}
