@@ -146,16 +146,28 @@ async function generatePostPDF(params: {
       resolveIdle = () => resolve();
     });
 
+    let resolveFontsReady: () => void;
+    const fontsReadyPromise = new Promise<void>((resolve) => {
+      resolveFontsReady = () => resolve();
+    });
+
     await page.exposeFunction('notifyIdle', () => {
       resolveIdle();
+    });
+
+    // NOTE: 동적으로 삽입되는 폰트의 경우 page.evaluateHandle('document.fonts.ready')는 동작하지 않는듯
+    await page.exposeFunction('notifyFontsReady', () => {
+      resolveFontsReady();
     });
 
     await page.goto(exportUrl.toString(), {
       waitUntil: 'load',
     });
 
-    await page.evaluateHandle('document.fonts.ready');
-    await idlePromise;
+    await Promise.race([
+      Promise.all([idlePromise, fontsReadyPromise]),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for idle and font readiness')), 10_000)),
+    ]);
 
     if (layoutMode === ExportLayoutMode.SCROLL) {
       // NOTE: scroll 방식인 경우 간단히 생성하고 반환

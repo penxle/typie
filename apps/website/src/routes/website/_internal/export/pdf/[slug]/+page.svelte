@@ -58,6 +58,15 @@
     marginRight: Number(urlParams.get('margin-right') ?? 20),
   });
 
+  const fontFaces = $derived(
+    $query.entity.site.fonts
+      .map(
+        (font) =>
+          `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+      )
+      .join('\n'),
+  );
+
   $effect(() => {
     if (pageLayout.width && pageLayout.height) {
       document.documentElement.style.setProperty('--page-width', `${pageLayout.width}mm`);
@@ -73,8 +82,19 @@
     if (editor) {
       editor.current.storage.page.forPdf = true;
     }
+
+    if (document.fonts.status === 'loaded') {
+      window.notifyFontsReady?.();
+    } else {
+      document.fonts.ready.then(() => window.notifyFontsReady?.()).catch(() => window.notifyFontsReady?.());
+    }
   });
 </script>
+
+<svelte:head>
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+  {@html '<st' + `yle type="text/css">${fontFaces}</st` + 'yle>'}
+</svelte:head>
 
 {#if post}
   {#if pageLayout.width && pageLayout.height}
