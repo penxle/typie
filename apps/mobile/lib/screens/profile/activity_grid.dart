@@ -570,7 +570,7 @@ class _TooltipPositionDelegate extends SingleChildLayoutDelegate {
   Offset getPositionForChild(Size size, Size childSize) {
     const minX = 8.0;
     var tooltipX = cellPosition.dx - childSize.width - 2;
-    final tooltipY = cellPosition.dy - childSize.height - 2;
+    final tooltipY = cellPosition.dy - childSize.height + cellSize.height - 2;
 
     if (tooltipX < minX) {
       tooltipX = minX;
