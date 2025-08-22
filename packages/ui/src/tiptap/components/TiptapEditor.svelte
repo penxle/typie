@@ -25,6 +25,7 @@
     onfocus?: () => void;
     onblur?: () => void;
     onfile?: (event: { pos: number; file: File }) => void;
+    onpaste?: (event: ClipboardEvent) => boolean;
   };
 
   let {
@@ -41,6 +42,7 @@
     onfocus,
     onblur,
     onfile,
+    onpaste,
   }: Props = $props();
 
   let element = $state<HTMLDivElement>();
@@ -95,7 +97,11 @@
             return true;
           }
 
-          return false;
+          if (event.clipboardData?.getData('application/x-pm-html')) {
+            return false;
+          }
+
+          return onpaste?.(event) ?? false;
         },
       },
 

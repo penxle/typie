@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core';
-import { DOMParser, Fragment, Slice } from '@tiptap/pm/model';
+import { Fragment, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { handleHTML } from 'zeed-dom';
 import { findNodeUpward } from '../lib/node-utils';
@@ -115,19 +115,51 @@ export const Clipboard = Extension.create({
       new Plugin({
         props: {
           clipboardTextParser: (text, context, __, view) => {
-            const parser = DOMParser.fromSchema(view.state.schema);
-            const dom = document.createElement('div');
+            const { state } = view;
+            const { selection, schema } = state;
 
-            for (const line of text.split(/(?:\r\n|\n|\r)/g)) {
-              const p = document.createElement('p');
-              p.textContent = line;
-              dom.append(p);
+            const marks = state.storedMarks || selection.$head.marks();
+            const lines = text.split(/(?:\r\n|\n|\r)/g);
+
+            if (lines.length === 1) {
+              let textNode = schema.text(lines[0]);
+              if (marks.length > 0) {
+                textNode = textNode.mark(marks);
+              }
+
+              return new Slice(Fragment.from(textNode), 0, 0);
             }
 
-            return parser.parseSlice(dom, {
-              context,
-              preserveWhitespace: true,
-            });
+            const $pos = selection.$head;
+            let currentBlockNode = $pos.node($pos.depth);
+
+            for (let d = $pos.depth; d >= 0; d--) {
+              const node = $pos.node(d);
+              if (node.type === schema.nodes.paragraph) {
+                currentBlockNode = node;
+                break;
+              }
+            }
+
+            const nodes = [];
+
+            for (const line of lines) {
+              let content = Fragment.empty;
+
+              if (line) {
+                let textNode = schema.text(line);
+                if (marks.length > 0) {
+                  textNode = textNode.mark(marks);
+                }
+
+                content = Fragment.from(textNode);
+              }
+
+              const newParagraph = schema.nodes.paragraph.create(currentBlockNode.attrs, content);
+              nodes.push(newParagraph);
+            }
+
+            return new Slice(Fragment.from(nodes), 0, 0);
           },
 
           clipboardTextSerializer: (content) => {
@@ -165,7 +197,7 @@ export const Clipboard = Extension.create({
               const pmHtml = event.clipboardData?.getData('application/x-pm-html');
               if (pmHtml) {
                 event.preventDefault();
-                view.pasteHTML(pmHtml);
+                view.pasteHTML(pmHtml, event);
                 return true;
               }
 
@@ -178,7 +210,7 @@ export const Clipboard = Extension.create({
                 }
 
                 event.preventDefault();
-                view.pasteHTML(html);
+                view.pasteHTML(html, event);
                 return true;
               }
 
