@@ -24,16 +24,15 @@ class CharacterCountFloating extends HookWidget {
     }
 
     final savedPosition = pref.characterCountFloatingPosition;
-    final initialOffset = savedPosition != null
-        ? Offset(savedPosition['x'] ?? 20, savedPosition['y'] ?? 20)
-        : const Offset(20, 20);
+    final initialRelativePosition = savedPosition != null
+        ? Offset(savedPosition['x'] ?? 0.05, savedPosition['y'] ?? 0.05)
+        : const Offset(0.05, 0.05);
 
     return EditorFloatingWidget(
-      storageKey: 'character_count',
-      initialOffset: initialOffset,
+      initialRelativePosition: initialRelativePosition,
       isExpanded: isExpanded.value,
-      onPositionChanged: (position) {
-        pref.characterCountFloatingPosition = {'x': position.dx, 'y': position.dy};
+      onPositionChanged: (relativePosition) {
+        pref.characterCountFloatingPosition = {'x': relativePosition.dx, 'y': relativePosition.dy};
       },
       onTap: () {
         isExpanded.value = !isExpanded.value;
