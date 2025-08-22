@@ -7,7 +7,7 @@
   import { baseExtensions } from '../schema';
   import type { JSONContent } from '@tiptap/core';
   import type { SystemStyleObject } from '@typie/styled-system/types';
-  import type { PageLayout } from '../extensions';
+  import type { PageLayout } from '../../utils';
 
   type Props = {
     style?: SystemStyleObject;

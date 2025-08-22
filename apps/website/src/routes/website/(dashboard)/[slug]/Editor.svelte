@@ -10,7 +10,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
-  import { getPageLayoutDimensions, mmToPx } from '@typie/ui/utils';
+  import { mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
@@ -46,7 +46,7 @@
   import Timeline from './Timeline.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { PageLayoutSettings, Ref } from '@typie/ui/utils';
+  import type { PageLayout, Ref } from '@typie/ui/utils';
   import type { Editor_query } from '$graphql';
 
   const DISCONNECT_THRESHOLD = 3;
@@ -208,14 +208,12 @@
   const subtitle = new YState<string>(doc, 'subtitle', '');
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
-  const experimentalPageLayout = new YState<PageLayoutSettings | undefined>(doc, 'experimental_pageLayout', undefined);
-  const experimentalPageEnabled = new YState<boolean>(doc, 'experimental_pageEnabled', false);
+  const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
+  const layoutMode = new YState<'scroll' | 'page'>(doc, 'layoutMode', 'scroll');
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
-  const isPageLayoutEnabled = $derived(app.preference.current.experimental_pageEnabled && experimentalPageEnabled.current);
-
-  const pageLayout = $derived(experimentalPageLayout.current ? getPageLayoutDimensions(experimentalPageLayout.current) : null);
+  const isPageLayoutEnabled = $derived(layoutMode.current === 'page');
 
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
@@ -414,9 +412,10 @@
   });
 
   $effect(() => {
-    if (isPageLayoutEnabled && pageLayout) {
+    if (isPageLayoutEnabled && pageLayout.current) {
       untrack(() => {
-        editor?.current.commands.setPageLayout(pageLayout);
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        editor?.current.commands.setPageLayout(pageLayout.current!);
       });
     } else {
       untrack(() => {
@@ -736,8 +735,8 @@
               {#if $query.entity.node.__typename === 'Post'}
                 <PostMenu
                   entity={$query.entity}
-                  pageLayoutEnabled={experimentalPageEnabled.current}
-                  pageLayoutSettings={experimentalPageLayout.current}
+                  pageLayout={pageLayout.current}
+                  pageLayoutEnabled={isPageLayoutEnabled}
                   post={$query.entity.node}
                   via="editor"
                 />
@@ -849,12 +848,22 @@
           role="none"
         >
           <div
-            style:--prosemirror-max-width={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.width)}px` : `${maxWidth.current}px`}
-            style:--prosemirror-page-margin-top={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
-            style:--prosemirror-page-margin-bottom={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
-            style:--prosemirror-page-margin-left={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
-            style:--prosemirror-page-margin-right={isPageLayoutEnabled && pageLayout ? `${mmToPx(pageLayout.marginRight)}px` : '0'}
-            style:--prosemirror-padding-bottom={isPageLayoutEnabled && pageLayout
+            style:--prosemirror-max-width={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.width)}px`
+              : `${maxWidth.current}px`}
+            style:--prosemirror-page-margin-top={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.marginTop)}px`
+              : '0'}
+            style:--prosemirror-page-margin-bottom={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.marginBottom)}px`
+              : '0'}
+            style:--prosemirror-page-margin-left={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.marginLeft)}px`
+              : '0'}
+            style:--prosemirror-page-margin-right={isPageLayoutEnabled && pageLayout.current
+              ? `${mmToPx(pageLayout.current.marginRight)}px`
+              : '0'}
+            style:--prosemirror-padding-bottom={isPageLayoutEnabled && pageLayout.current
               ? '0'
               : `${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}
             class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}
@@ -1025,7 +1034,7 @@
                 />
 
                 {#if editor && mounted}
-                  <InEditorBody {editor} {pageLayout}>
+                  <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
                     <Placeholder $site={$query.entity.site} {doc} {editor} />
                   </InEditorBody>
                   {#if app.preference.current.lineHighlightEnabled}

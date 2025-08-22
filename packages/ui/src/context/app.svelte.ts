@@ -1,6 +1,6 @@
 import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
-import type { PageLayoutSettings } from '../utils';
+import type { PageLayout } from '../utils';
 
 type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
@@ -23,10 +23,9 @@ type AppPreference = {
 
   searchMatchWholeWord: boolean;
 
-  experimental_pageEnabled: boolean;
   experimental_pdfExportEnabled: boolean;
 
-  lastPdfPageLayoutSettings: PageLayoutSettings;
+  lastPdfPageLayout: PageLayout | null;
 
   referralWelcomeModalShown: boolean;
 
@@ -109,18 +108,9 @@ export const setupAppContext = (userId: string) => {
 
       searchMatchWholeWord: false,
 
-      experimental_pageEnabled: false,
       experimental_pdfExportEnabled: false,
 
-      lastPdfPageLayoutSettings: {
-        size: 'a4',
-        margins: {
-          top: 25,
-          bottom: 25,
-          left: 25,
-          right: 25,
-        },
-      },
+      lastPdfPageLayout: null,
 
       referralWelcomeModalShown: false,
 

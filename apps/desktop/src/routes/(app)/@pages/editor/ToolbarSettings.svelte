@@ -8,10 +8,10 @@
   import {
     clamp,
     createDefaultPageLayout,
-    DEFAULT_PAGE_MARGINS,
     getMaxMargin,
     INCOMPATIBLE_NODE_TYPES,
     PAGE_LAYOUT_OPTIONS,
+    PAGE_SIZE_MAP,
   } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
@@ -19,10 +19,17 @@
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
+  import FileIcon from '~icons/lucide/file';
   import FileTextIcon from '~icons/lucide/file-text';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
   import HighlighterIcon from '~icons/lucide/highlighter';
   import InfoIcon from '~icons/lucide/info';
+  import MoveHorizontalIcon from '~icons/lucide/move-horizontal';
+  import MoveVerticalIcon from '~icons/lucide/move-vertical';
+  import PanelBottomDashedIcon from '~icons/lucide/panel-bottom-dashed';
+  import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
+  import PanelRightDashedIcon from '~icons/lucide/panel-right-dashed';
+  import PanelTopDashedIcon from '~icons/lucide/panel-top-dashed';
   import QuoteIcon from '~icons/lucide/quote';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import SettingsIcon from '~icons/lucide/settings';
@@ -33,7 +40,7 @@
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
-  import type { PageLayoutSettings, PageLayoutSize, Ref } from '@typie/ui/utils';
+  import type { PageLayout, PageLayoutPreset, Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
 
   type Props = {
@@ -45,10 +52,10 @@
 
   const app = getAppContext();
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
-  const pageLayout = new YState<PageLayoutSettings | undefined>(doc, 'experimental_pageLayout', undefined);
-  const pageEnabled = new YState<boolean>(doc, 'experimental_pageEnabled', false);
+  const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
+  const layoutMode = new YState<'scroll' | 'page'>(doc, 'layoutMode', 'scroll');
 
-  const isPageLayoutEnabled = $derived(app.preference.current.experimental_pageEnabled && pageEnabled.current);
+  const isPageLayoutEnabled = $derived(layoutMode.current === 'page');
 
   const getIncompatibleBlocks = () => {
     if (!editor?.current) return [];
@@ -172,11 +179,11 @@
 
   let capturedIncompatibleBlocks = $state<string[]>([]);
 
-  const handlePageLayoutToggle = (value: boolean) => {
+  const handlePageLayoutToggle = (value: 'scroll' | 'page') => {
     const incompatibleBlocks = getIncompatibleBlocks();
     capturedIncompatibleBlocks = incompatibleBlocks;
 
-    if (value && incompatibleBlocks.length > 0) {
+    if (value === 'page' && incompatibleBlocks.length > 0) {
       Dialog.confirm({
         title: '페이지 모드 전환',
         message: '페이지 모드에서는 일부 블록을 지원하지 않아요.',
@@ -186,8 +193,8 @@
         cancelLabel: '취소',
         actionHandler: () => {
           convertIncompatibleBlocks();
-          pageEnabled.current = value;
-          if (value && !pageLayout.current) {
+          layoutMode.current = value;
+          if (value === 'page' && !pageLayout.current) {
             pageLayout.current = createDefaultPageLayout('a4');
           }
           mixpanel.track('toggle_post_page_layout', {
@@ -196,8 +203,8 @@
         },
       });
     } else {
-      pageEnabled.current = value;
-      if (value && !pageLayout.current) {
+      layoutMode.current = value;
+      if (value === 'page' && !pageLayout.current) {
         pageLayout.current = createDefaultPageLayout('a4');
       }
       mixpanel.track('toggle_post_page_layout', {
@@ -244,137 +251,185 @@
         padding: '16px',
       })}
     >
-      {#if app.preference.current.experimental_pageEnabled}
-        <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-          <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={FileTextIcon} />
-            <div class={css({ fontSize: '13px', color: 'text.subtle' })}>레이아웃 모드</div>
-          </div>
-          <div class={css({ width: '140px' })}>
-            <SegmentButtons
-              items={[
-                { label: '스크롤', value: false },
-                { label: '페이지', value: true },
-              ]}
-              onselect={handlePageLayoutToggle}
-              size="sm"
-              value={pageEnabled.current}
-            />
-          </div>
+      <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={FileTextIcon} />
+          <div class={css({ fontSize: '13px', color: 'text.subtle' })}>레이아웃 모드</div>
         </div>
-      {/if}
+        <div class={css({ width: '140px' })}>
+          <SegmentButtons
+            items={[
+              { label: '스크롤', value: 'scroll' },
+              { label: '페이지', value: 'page' },
+            ]}
+            onselect={handlePageLayoutToggle}
+            size="sm"
+            value={layoutMode.current}
+          />
+        </div>
+      </div>
 
       {#if isPageLayoutEnabled && pageLayout.current}
-        <div class={flex({ flexDirection: 'column', gap: '12px', marginTop: '4px', marginBottom: '8px' })}>
-          <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle', marginLeft: '28px' })}>페이지 크기</div>
-            <Select
-              items={PAGE_LAYOUT_OPTIONS}
-              onselect={(value: PageLayoutSize) => {
-                if (pageLayout.current && value) {
-                  pageLayout.current = {
-                    size: value,
-                    margins: DEFAULT_PAGE_MARGINS[value],
-                  };
-                }
-              }}
-              value={pageLayout.current?.size ?? 'a4'}
-            />
+        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+          <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+            <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
+              <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
+                <div class={css({ fontSize: '13px', color: 'text.subtle' })}>페이지 크기 (mm)</div>
+              </div>
+              <Select
+                items={PAGE_LAYOUT_OPTIONS}
+                onselect={(value: PageLayoutPreset | 'custom') => {
+                  if (pageLayout.current && value !== 'custom') {
+                    pageLayout.current = createDefaultPageLayout(value);
+                  }
+                }}
+                value={(Object.entries(PAGE_SIZE_MAP).find(
+                  ([, dimension]) => dimension.width === pageLayout.current?.width && dimension.height === pageLayout.current?.height,
+                )?.[0] as PageLayoutPreset) ?? ('custom' as const)}
+              />
+            </div>
+
+            <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+              <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
+                <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                  <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={MoveHorizontalIcon} />
+                  <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>너비</div>
+                  <TextInput
+                    style={css.raw({ width: '100px' })}
+                    min="100"
+                    onchange={(e) => {
+                      if (!pageLayout.current) return;
+                      const target = e.target as HTMLInputElement;
+                      const value = Math.max(100, Number(target.value));
+                      target.value = String(value);
+                      pageLayout.current = {
+                        ...pageLayout.current,
+                        width: value,
+                      };
+                    }}
+                    size="sm"
+                    type="number"
+                    value={pageLayout.current.width}
+                  />
+                </div>
+                <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                  <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={MoveVerticalIcon} />
+                  <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>높이</div>
+                  <TextInput
+                    style={css.raw({ width: '100px' })}
+                    min="100"
+                    onchange={(e) => {
+                      if (!pageLayout.current) return;
+                      const target = e.target as HTMLInputElement;
+                      const value = Math.max(100, Number(target.value));
+                      target.value = String(value);
+                      pageLayout.current = {
+                        ...pageLayout.current,
+                        height: value,
+                      };
+                    }}
+                    size="sm"
+                    type="number"
+                    value={pageLayout.current.height}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle', marginLeft: '28px' })}>여백 (mm)</div>
-            <div class={grid({ columns: 2, gap: '8px', marginLeft: '28px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>여백 (mm)</div>
+            </div>
+            <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <div class={css({ fontSize: '11px', color: 'text.muted' })}>상</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelTopDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>위</div>
                 <TextInput
-                  style={css.raw({ width: 'full' })}
-                  max={pageLayout.current ? String(getMaxMargin('top', pageLayout.current.size, pageLayout.current.margins)) : undefined}
+                  style={css.raw({ width: '100px' })}
+                  max={pageLayout.current ? String(getMaxMargin('top', pageLayout.current)) : undefined}
                   min="0"
                   oninput={(e) => {
                     if (!pageLayout.current) return;
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('top', pageLayout.current.size, pageLayout.current.margins));
+                    const value = clamp(Number(target.value), 0, getMaxMargin('top', pageLayout.current));
                     target.value = String(value);
                     pageLayout.current = {
                       ...pageLayout.current,
-                      margins: { ...pageLayout.current.margins, top: value },
+                      marginTop: value,
                     };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.current?.margins.top ?? 25}
+                  value={pageLayout.current?.marginTop ?? 25}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <div class={css({ fontSize: '11px', color: 'text.muted' })}>하</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelBottomDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>아래</div>
                 <TextInput
-                  style={css.raw({ width: 'full' })}
-                  max={pageLayout.current ? String(getMaxMargin('bottom', pageLayout.current.size, pageLayout.current.margins)) : undefined}
+                  style={css.raw({ width: '100px' })}
+                  max={pageLayout.current ? String(getMaxMargin('bottom', pageLayout.current)) : undefined}
                   min="0"
                   oninput={(e) => {
                     if (!pageLayout.current) return;
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(
-                      Number(target.value),
-                      0,
-                      getMaxMargin('bottom', pageLayout.current.size, pageLayout.current.margins),
-                    );
+                    const value = clamp(Number(target.value), 0, getMaxMargin('bottom', pageLayout.current));
                     target.value = String(value);
                     pageLayout.current = {
                       ...pageLayout.current,
-                      margins: { ...pageLayout.current.margins, bottom: value },
+                      marginBottom: value,
                     };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.current?.margins.bottom ?? 25}
+                  value={pageLayout.current?.marginBottom ?? 25}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <div class={css({ fontSize: '11px', color: 'text.muted' })}>좌</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelLeftDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>왼쪽</div>
                 <TextInput
-                  style={css.raw({ width: 'full' })}
-                  max={pageLayout.current ? String(getMaxMargin('left', pageLayout.current.size, pageLayout.current.margins)) : undefined}
+                  style={css.raw({ width: '100px' })}
+                  max={pageLayout.current ? String(getMaxMargin('left', pageLayout.current)) : undefined}
                   min="0"
                   onchange={(e) => {
                     if (!pageLayout.current) return;
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('left', pageLayout.current.size, pageLayout.current.margins));
+                    const value = clamp(Number(target.value), 0, getMaxMargin('left', pageLayout.current));
                     target.value = String(value);
                     pageLayout.current = {
                       ...pageLayout.current,
-                      margins: { ...pageLayout.current.margins, left: value },
+                      marginLeft: value,
                     };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.current?.margins.left ?? 25}
+                  value={pageLayout.current?.marginLeft ?? 25}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <div class={css({ fontSize: '11px', color: 'text.muted' })}>우</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelRightDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>오른쪽</div>
                 <TextInput
-                  style={css.raw({ width: 'full' })}
-                  max={pageLayout.current ? String(getMaxMargin('right', pageLayout.current.size, pageLayout.current.margins)) : undefined}
+                  style={css.raw({ width: '100px' })}
+                  max={pageLayout.current ? String(getMaxMargin('right', pageLayout.current)) : undefined}
                   min="0"
                   oninput={(e) => {
                     if (!pageLayout.current) return;
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(
-                      Number(target.value),
-                      0,
-                      getMaxMargin('right', pageLayout.current.size, pageLayout.current.margins),
-                    );
+                    const value = clamp(Number(target.value), 0, getMaxMargin('right', pageLayout.current));
                     target.value = String(value);
                     pageLayout.current = {
                       ...pageLayout.current,
-                      margins: { ...pageLayout.current.margins, right: value },
+                      marginRight: value,
                     };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.current?.margins.right ?? 25}
+                  value={pageLayout.current?.marginRight ?? 25}
                 />
               </div>
             </div>
