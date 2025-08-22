@@ -41,6 +41,7 @@
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
   import PanelNote from './PanelNote.svelte';
+  import PasteModal from './PasteModal.svelte';
   import Placeholder from './Placeholder.svelte';
   import { YState } from './state.svelte';
   import Timeline from './Timeline.svelte';
@@ -195,6 +196,8 @@
 
   let showTimeline = $state(false);
   let showAnchorOutline = $state(false);
+
+  let clipboardData = $state<{ html: string; text?: string }>();
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -1018,6 +1021,18 @@
                       subtitleEl?.focus();
                     }
                   }}
+                  onpaste={(event) => {
+                    if (event.clipboardData?.getData('text/html')) {
+                      clipboardData = {
+                        html: event.clipboardData.getData('text/html'),
+                        text: event.clipboardData.getData('text/plain'),
+                      };
+
+                      return true;
+                    }
+
+                    return false;
+                  }}
                   storage={{
                     uploadBlobAsImage: (file) => {
                       return uploadBlobAsImage(file);
@@ -1115,3 +1130,31 @@
 {/if}
 
 <Limit {$query} $site={$query.entity.site} {editor} />
+<PasteModal
+  onconfirm={(mode) => {
+    if (!editor || !clipboardData) {
+      return;
+    }
+
+    if (mode === 'html') {
+      editor.current.view.pasteHTML(clipboardData.html);
+    } else if (mode === 'text') {
+      if (clipboardData.text) {
+        editor?.current.view.pasteText(clipboardData.text);
+      } else {
+        const dom = new DOMParser().parseFromString(clipboardData.html, 'text/html');
+        editor.current.view.pasteText(dom.body.textContent);
+      }
+    }
+
+    clipboardData = undefined;
+  }}
+  bind:open={
+    () => !!clipboardData,
+    (v) => {
+      if (!v) {
+        clipboardData = undefined;
+      }
+    }
+  }
+/>
