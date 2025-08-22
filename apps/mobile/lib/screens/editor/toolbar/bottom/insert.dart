@@ -45,13 +45,19 @@ class InsertBottomToolbar extends HookWidget {
     final webViewController = useValueListenable(scope.webViewController);
     final keyboardType = useValueListenable(scope.keyboardType);
     final proseMirrorState = useValueListenable(scope.proseMirrorState);
+    final yjsState = useValueListenable(scope.yjsState);
+
+    final hiddenInPageLayout = {'blockquote', 'callout', 'fold', 'table', 'code_block', 'html_block'};
+    final visibleNodes = yjsState?.layoutMode == 'page'
+        ? _nodes.where((node) => !hiddenInPageLayout.contains(node.type)).toList()
+        : _nodes;
 
     return GridView.extent(
       maxCrossAxisExtent: 96,
       padding: Pad(all: 16, bottom: MediaQuery.paddingOf(context).bottom),
       mainAxisSpacing: 16,
       crossAxisSpacing: 16,
-      children: _nodes.map((node) {
+      children: visibleNodes.map((node) {
         final activeNodeTypes = node.activeNodeTypes ?? [node.type];
         final isActive = activeNodeTypes.any((nodeType) => proseMirrorState?.isNodeActive(nodeType) ?? false);
 

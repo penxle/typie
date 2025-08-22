@@ -45,14 +45,14 @@ export function createDefaultPageLayout(preset: PageLayoutPreset = 'a4'): PageLa
   };
 }
 
-export function getMaxMargin(side: 'top' | 'bottom' | 'left' | 'right', pageLayoutSettings: PageLayout): number {
+export function getMaxMargin(side: 'top' | 'bottom' | 'left' | 'right', pageLayout: PageLayout): number {
   if (side === 'left') {
-    return pageLayoutSettings.width - pageLayoutSettings.marginRight - MIN_CONTENT_SIZE_MM;
+    return Math.max(0, pageLayout.width - pageLayout.marginRight - MIN_CONTENT_SIZE_MM);
   } else if (side === 'right') {
-    return pageLayoutSettings.width - pageLayoutSettings.marginLeft - MIN_CONTENT_SIZE_MM;
+    return Math.max(0, pageLayout.width - pageLayout.marginLeft - MIN_CONTENT_SIZE_MM);
   } else if (side === 'top') {
-    return pageLayoutSettings.height - pageLayoutSettings.marginBottom - MIN_CONTENT_SIZE_MM;
+    return Math.max(0, pageLayout.height - pageLayout.marginBottom - MIN_CONTENT_SIZE_MM);
   } else {
-    return pageLayoutSettings.height - pageLayoutSettings.marginTop - MIN_CONTENT_SIZE_MM;
+    return Math.max(0, pageLayout.height - pageLayout.marginTop - MIN_CONTENT_SIZE_MM);
   }
 }

@@ -308,6 +308,8 @@
     window.__webview__?.emitEvent('setYJSState', {
       maxWidth: maxWidth.current,
       note: note.current,
+      layoutMode: layoutMode.current,
+      pageLayout: pageLayout.current,
     });
   };
 
