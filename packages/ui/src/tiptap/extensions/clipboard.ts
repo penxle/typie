@@ -118,7 +118,7 @@ export const Clipboard = Extension.create({
             const parser = DOMParser.fromSchema(view.state.schema);
             const dom = document.createElement('div');
 
-            for (const line of text.split('\n')) {
+            for (const line of text.split(/(?:\r\n|\n|\r)/g)) {
               const p = document.createElement('p');
               p.textContent = line;
               dom.append(p);
@@ -126,7 +126,7 @@ export const Clipboard = Extension.create({
 
             return parser.parseSlice(dom, {
               context,
-              preserveWhitespace: 'full',
+              preserveWhitespace: true,
             });
           },
 
