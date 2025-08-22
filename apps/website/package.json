@@ -39,6 +39,7 @@
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
+    "canvas": "^3.2.0",
     "dayjs": "^1.11.13",
     "es-hangul": "^2.3.5",
     "fast-json-stable-stringify": "^2.1.0",
