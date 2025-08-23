@@ -45,7 +45,7 @@ import { enqueueJob } from '@/mq';
 import { schema, textSerializers } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { generateEntityOrder, generatePermalink, generateSlug, getKoreanAge, makeText, makeYDoc } from '@/utils';
-import { compressZstd } from '@/utils/compression';
+import { compressZstd, decompressZstd } from '@/utils/compression';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
@@ -392,7 +392,7 @@ PostSnapshot.implement({
   isTypeOf: isTypeOf(TableCode.POST_SNAPSHOTS),
   fields: (t) => ({
     id: t.exposeID('id'),
-    snapshot: t.expose('snapshot', { type: 'Binary' }),
+    snapshot: t.field({ type: 'Binary', resolve: (self) => decompressZstd(self.snapshot) }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });
