@@ -184,7 +184,7 @@
     <ToolbarButton
       disabled={!editor?.current.can().toggleCallout()}
       icon={GalleryVerticalEndIcon}
-      label="콜아웃"
+      label="강조"
       onclick={() => {
         editor?.current.chain().focus().toggleCallout().run();
       }}
@@ -194,7 +194,7 @@
     <ToolbarButton
       disabled={!editor?.current.can().toggleFold()}
       icon={ChevronsDownUpIcon}
-      label="폴드"
+      label="접기"
       onclick={() => {
         editor?.current.chain().focus().toggleFold().run();
       }}

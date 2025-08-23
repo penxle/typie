@@ -74,8 +74,8 @@
   const getBlockInfo = (blockType: string) => {
     const blockInfo: Record<string, { name: string; icon: typeof QuoteIcon }> = {
       blockquote: { name: '인용구', icon: QuoteIcon },
-      callout: { name: '콜아웃', icon: GalleryVerticalEndIcon },
-      fold: { name: '폴드', icon: ChevronsDownUpIcon },
+      callout: { name: '강조', icon: GalleryVerticalEndIcon },
+      fold: { name: '접기', icon: ChevronsDownUpIcon },
       table: { name: '표', icon: TableIcon },
       code_block: { name: '코드', icon: CodeIcon },
       html_block: { name: 'HTML', icon: CodeXmlIcon },
