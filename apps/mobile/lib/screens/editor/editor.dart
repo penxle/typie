@@ -364,7 +364,10 @@ class Editor extends HookWidget {
                                 : null,
                             onTap: () async {
                               unawaited(mixpanel.track('open_post_share_modal', properties: {'via': 'editor'}));
-                              await context.showBottomSheet(intercept: true, child: SharePostBottomSheet(slug: slug));
+                              await context.showBottomSheet(
+                                intercept: true,
+                                child: ShareBottomSheet(entityIds: [data.post.entity.id]),
+                              );
                             },
                           ),
                           BottomMenuItem(

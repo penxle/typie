@@ -1,0 +1,15 @@
+mutation ShareFolder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
+  updateFoldersOption(input: $input) {
+    id
+
+    entity {
+      id
+      visibility
+
+      children {
+        id
+        visibility
+      }
+    }
+  }
+}

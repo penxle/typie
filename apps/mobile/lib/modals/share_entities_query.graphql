@@ -1,0 +1,28 @@
+query ShareEntities_Query($entityIds: [ID!]!) {
+  entities(entityIds: $entityIds) {
+    id
+    type
+    url
+    slug
+    visibility
+    availability
+
+    node {
+      __typename
+
+      ... on Folder {
+        id
+        name
+      }
+
+      ... on Post {
+        id
+        title
+        password
+        contentRating
+        allowReaction
+        protectContent
+      }
+    }
+  }
+}
