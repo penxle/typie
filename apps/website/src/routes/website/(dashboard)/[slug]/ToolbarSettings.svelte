@@ -1,18 +1,11 @@
 <script lang="ts">
-  import { Fragment } from '@tiptap/pm/model';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, SegmentButtons, Select, Slider, Switch, TextInput, Tooltip } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
-  import {
-    clamp,
-    createDefaultPageLayout,
-    getMaxMargin,
-    INCOMPATIBLE_NODE_TYPES,
-    PAGE_LAYOUT_OPTIONS,
-    PAGE_SIZE_MAP,
-  } from '@typie/ui/utils';
+  import { getIncompatibleBlocks } from '@typie/ui/tiptap';
+  import { clamp, createDefaultPageLayout, getMaxMargin, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
@@ -39,7 +32,6 @@
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Node } from '@tiptap/pm/model';
   import type { PageLayout, PageLayoutPreset, Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
 
@@ -57,20 +49,6 @@
 
   const isPageLayoutEnabled = $derived(layoutMode.current === 'page');
 
-  const getIncompatibleBlocks = () => {
-    if (!editor?.current) return [];
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const types = new Set<string>();
-
-    editor.current.state.doc.descendants((node) => {
-      if (INCOMPATIBLE_NODE_TYPES.has(node.type.name)) {
-        types.add(node.type.name);
-      }
-    });
-
-    return [...types];
-  };
-
   const getBlockInfo = (blockType: string) => {
     const blockInfo: Record<string, { name: string; icon: typeof QuoteIcon }> = {
       blockquote: { name: '인용구', icon: QuoteIcon },
@@ -83,104 +61,14 @@
     return blockInfo[blockType] || { name: blockType, icon: FileTextIcon };
   };
 
-  const convertIncompatibleBlocks = () => {
-    if (!editor?.current) return;
-
-    editor.current
-      .chain()
-      .focus()
-      .command(({ tr, state }) => {
-        const paragraph = state.schema.nodes.paragraph;
-
-        if (!paragraph) return false;
-
-        let docChanged = true;
-
-        while (docChanged) {
-          docChanged = false;
-
-          type NodeWithPos = { pos: number; node: Node; depth: number };
-          const blocksToConvert: NodeWithPos[] = [];
-
-          tr.doc.descendants((node, pos) => {
-            if (INCOMPATIBLE_NODE_TYPES.has(node.type.name)) {
-              const depth = tr.doc.resolve(pos).depth;
-              blocksToConvert.push({ pos, node, depth });
-              return false; // NOTE: 자식 노드를 순회하지 않음. 중첩된 노드는 다음 루프에서 처리됨
-            }
-            return true;
-          });
-
-          if (blocksToConvert.length === 0) break;
-
-          // NOTE: 깊이가 깊은 것부터 처리
-          blocksToConvert.sort((a, b) => b.depth - a.depth || b.pos - a.pos);
-
-          blocksToConvert.forEach(({ pos, node }) => {
-            docChanged = true;
-            if (node.type.name === 'blockquote' || node.type.name === 'callout' || node.type.name === 'fold') {
-              if (node.content.size > 0) {
-                const slice = node.content;
-                tr.replaceWith(pos, pos + node.nodeSize, slice);
-              } else {
-                tr.delete(pos, pos + node.nodeSize);
-              }
-            } else if (node.type.name === 'table') {
-              // NOTE: 모든 셀의 내용을 나열
-              const blocks: Node[] = [];
-
-              node.descendants((child) => {
-                if (child.type.name === 'table_cell' || child.type.name === 'table_header') {
-                  child.content.forEach((contentNode) => {
-                    blocks.push(contentNode);
-                  });
-                }
-              });
-
-              if (blocks.length > 0) {
-                const fragment = Fragment.from(blocks);
-                tr.replaceWith(pos, pos + node.nodeSize, fragment);
-              } else {
-                tr.delete(pos, pos + node.nodeSize);
-              }
-            } else if (node.type.name === 'code_block' || node.type.name === 'html_block') {
-              const textContent = node.textContent;
-              if (textContent) {
-                const hardBreak = state.schema.nodes.hard_break;
-                const lines = textContent.split('\n');
-                const content: Node[] = [];
-
-                lines.forEach((line, index) => {
-                  if (index > 0 && hardBreak) {
-                    content.push(hardBreak.create());
-                  }
-                  if (line) {
-                    content.push(state.schema.text(line));
-                  }
-                });
-
-                if (content.length > 0) {
-                  const paragraphNode = paragraph.create(null, content);
-                  tr.replaceWith(pos, pos + node.nodeSize, paragraphNode);
-                } else {
-                  tr.delete(pos, pos + node.nodeSize);
-                }
-              } else {
-                tr.delete(pos, pos + node.nodeSize);
-              }
-            }
-          });
-        }
-
-        return true;
-      })
-      .run();
-  };
-
   let capturedIncompatibleBlocks = $state<string[]>([]);
 
   const handlePageLayoutToggle = (value: 'scroll' | 'page') => {
-    const incompatibleBlocks = getIncompatibleBlocks();
+    if (!editor?.current) {
+      return;
+    }
+
+    const incompatibleBlocks = getIncompatibleBlocks(editor.current);
     capturedIncompatibleBlocks = incompatibleBlocks;
 
     if (value === 'page' && incompatibleBlocks.length > 0) {
@@ -192,11 +80,17 @@
         actionLabel: '모두 해제하고 전환',
         cancelLabel: '취소',
         actionHandler: () => {
-          convertIncompatibleBlocks();
+          if (!editor?.current) {
+            return;
+          }
+
+          editor.current.chain().focus().convertIncompatibleBlocks().run();
           layoutMode.current = value;
+
           if (value === 'page' && !pageLayout.current) {
             pageLayout.current = createDefaultPageLayout('a4');
           }
+
           mixpanel.track('toggle_post_page_layout', {
             enabled: value,
           });
