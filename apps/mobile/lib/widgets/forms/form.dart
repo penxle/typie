@@ -25,15 +25,35 @@ class HookFormController extends ChangeNotifier {
 
   final Map<String, dynamic> _data = {};
   final Map<String, String> _errors = {};
+  final Set<String> _dirtyFields = {};
 
   var _validated = false;
 
   Map<String, dynamic> get data => _data;
   Map<String, String> get errors => _errors;
   bool get isValid => !_validated || _errors.isEmpty;
+  Set<String> get dirtyFields => _dirtyFields;
+
+  void setInitialValue(String name, dynamic value) {
+    _data[name] = value;
+  }
+
+  void markAsDirty(String name) {
+    _dirtyFields.add(name);
+  }
+
+  Map<String, dynamic> getDirtyFieldsData() {
+    final dirtyData = <String, dynamic>{};
+    for (final field in _dirtyFields) {
+      dirtyData[field] = _data[field];
+    }
+    return dirtyData;
+  }
 
   void setValue(String name, dynamic value, {bool notify = true}) {
     _data[name] = value;
+
+    markAsDirty(name);
 
     if (!notify) {
       return;
