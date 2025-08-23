@@ -1,14 +1,14 @@
-import { drizzle } from 'drizzle-orm/bun-sql';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { dev, env } from '@/env';
 import { DrizzleLogger } from './logger';
 import * as enums from './schemas/enums';
 import * as tables from './schemas/tables';
 import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
-const sql = new Bun.SQL({
-  url: env.DATABASE_URL,
+const sql = postgres(env.DATABASE_URL, {
   max: dev ? 5 : 20,
-  tls: { rejectUnauthorized: false },
+  ssl: { rejectUnauthorized: false },
   connection: {
     statement_timeout: 600_000,
     lock_timeout: 600_000,
