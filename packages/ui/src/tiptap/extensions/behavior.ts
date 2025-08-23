@@ -97,6 +97,32 @@ export const Behavior = Extension.create({
 
         return false;
       },
+
+      'Meta-ArrowUp': ({ editor }) => {
+        if (!editor.storage.page.layout) {
+          return false;
+        }
+
+        // NOTE: 페이지 레이아웃에서만 Meta-ArrowUp을 직접 처리함
+        const { doc } = editor.state;
+
+        const body = doc.firstChild;
+        if (!body) return false;
+
+        const firstBlock = body.firstChild;
+        if (!firstBlock) return false;
+
+        let pos = 0;
+        doc.descendants((node, nodePos) => {
+          if (node === firstBlock) {
+            // NOTE: 첫 번째 블록 내부의 첫 번째 위치
+            pos = nodePos + 1;
+            return false;
+          }
+        });
+
+        return editor.chain().focus().setTextSelection(pos).scrollIntoView().run();
+      },
     };
   },
 
