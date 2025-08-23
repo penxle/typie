@@ -494,12 +494,19 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
 
       const finalMessage = await stream.finalMessage();
       for (const content of finalMessage.content) {
-        if (content.type === 'tool_use') {
+        if (content.type === 'text') {
+          responseText = content.text;
+        } else if (content.type === 'tool_use') {
           const toolIndex = toolsToExecute.findIndex((t) => t.id === content.id);
           if (toolIndex !== -1) {
             toolsToExecute[toolIndex].input = content.input;
           }
         }
+      }
+
+      if (updateTimer) {
+        clearTimeout(updateTimer);
+        updateTimer = null;
       }
 
       if (responseText && !hasToolUse) {
@@ -663,6 +670,18 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
         }
 
         const finalMessage = await stream.finalMessage();
+
+        let finalText = '';
+        for (const content of finalMessage.content) {
+          if (content.type === 'text') {
+            finalText = content.text;
+          }
+        }
+
+        if (finalText) {
+          await updateSlackMessage(finalText, true);
+        }
+
         accMessages.push(
           {
             role: 'assistant' as const,
@@ -671,6 +690,9 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
           ...toolResults,
         );
       } else {
+        if (responseText) {
+          await updateSlackMessage(responseText, true);
+        }
         break;
       }
 
