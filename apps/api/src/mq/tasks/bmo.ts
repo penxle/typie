@@ -34,7 +34,7 @@ const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 const slack = new WebClient(env.SLACK_BOT_TOKEN);
 
 const executeQuery = async (query: string) => {
-  await sql.begin('READ ONLY', async (sql) => {
+  return await sql.begin('READ ONLY', async (sql) => {
     try {
       const result = await sql.unsafe(query);
 
