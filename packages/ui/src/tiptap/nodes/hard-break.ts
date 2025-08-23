@@ -23,7 +23,7 @@ export const HardBreak = Node.create({
   renderHTML({ HTMLAttributes }) {
     return [
       'span',
-      { style: 'display: inline;' },
+      {},
       ['br', HTMLAttributes],
       [
         'span',
