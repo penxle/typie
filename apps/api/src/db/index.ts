@@ -1,13 +1,13 @@
 import { drizzle } from 'drizzle-orm/bun-sql';
-import { env } from '@/env';
+import { dev, env } from '@/env';
 import { DrizzleLogger } from './logger';
 import * as enums from './schemas/enums';
 import * as tables from './schemas/tables';
 import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
-export const sql = new Bun.SQL({
+const sql = new Bun.SQL({
   url: env.DATABASE_URL,
-  max: 100,
+  max: dev ? 5 : 20,
   tls: { rejectUnauthorized: false },
   connection: {
     statement_timeout: 600_000,
