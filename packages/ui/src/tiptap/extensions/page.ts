@@ -1,10 +1,12 @@
-import { Extension } from '@tiptap/core';
+import { Editor, Extension } from '@tiptap/core';
+import { Fragment } from '@tiptap/pm/model';
 import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
 import { css } from '@typie/styled-system/css';
 import { token } from '@typie/styled-system/tokens';
 import { tick } from 'svelte';
-import { mmToPx } from '../../utils';
+import { INCOMPATIBLE_NODE_TYPES, mmToPx } from '../../utils';
+import type { Node } from '@tiptap/pm/model';
 import type { PageLayout } from '../../utils';
 
 const GAP_HEIGHT_PX = 40;
@@ -14,12 +16,23 @@ export type PageStorage = {
   forPdf?: boolean;
 };
 
+export function getIncompatibleBlocks(editor: Editor): string[] {
+  const types = new Set<string>();
+  editor.state.doc.descendants((node) => {
+    if (INCOMPATIBLE_NODE_TYPES.has(node.type.name)) {
+      types.add(node.type.name);
+    }
+  });
+  return [...types];
+}
+
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     page: {
       setPageLayout: (layout: PageLayout) => ReturnType;
       clearPageLayout: () => ReturnType;
+      convertIncompatibleBlocks: () => ReturnType;
     };
   }
 
@@ -58,6 +71,93 @@ export const Page = Extension.create<unknown, PageStorage>({
           this.storage.layout = undefined;
 
           dispatch?.(tr);
+
+          return true;
+        },
+      convertIncompatibleBlocks:
+        () =>
+        ({ tr, state }) => {
+          const paragraph = state.schema.nodes.paragraph;
+
+          if (!paragraph) return false;
+
+          let docChanged = true;
+
+          while (docChanged) {
+            docChanged = false;
+
+            type NodeWithPos = { pos: number; node: Node; depth: number };
+            const blocksToConvert: NodeWithPos[] = [];
+
+            tr.doc.descendants((node, pos) => {
+              if (INCOMPATIBLE_NODE_TYPES.has(node.type.name)) {
+                const depth = tr.doc.resolve(pos).depth;
+                blocksToConvert.push({ pos, node, depth });
+                return false; // NOTE: 자식 노드를 순회하지 않음. 중첩된 노드는 다음 루프에서 처리됨
+              }
+              return true;
+            });
+
+            if (blocksToConvert.length === 0) break;
+
+            // NOTE: 깊이가 깊은 것부터 처리
+            blocksToConvert.sort((a, b) => b.depth - a.depth || b.pos - a.pos);
+
+            blocksToConvert.forEach(({ pos, node }) => {
+              docChanged = true;
+              if (node.type.name === 'blockquote' || node.type.name === 'callout' || node.type.name === 'fold') {
+                if (node.content.size > 0) {
+                  const slice = node.content;
+                  tr.replaceWith(pos, pos + node.nodeSize, slice);
+                } else {
+                  tr.delete(pos, pos + node.nodeSize);
+                }
+              } else if (node.type.name === 'table') {
+                // NOTE: 모든 셀의 내용을 나열
+                const blocks: Node[] = [];
+
+                node.descendants((child) => {
+                  if (child.type.name === 'table_cell' || child.type.name === 'table_header') {
+                    child.content.forEach((contentNode) => {
+                      blocks.push(contentNode);
+                    });
+                  }
+                });
+
+                if (blocks.length > 0) {
+                  const fragment = Fragment.from(blocks);
+                  tr.replaceWith(pos, pos + node.nodeSize, fragment);
+                } else {
+                  tr.delete(pos, pos + node.nodeSize);
+                }
+              } else if (node.type.name === 'code_block' || node.type.name === 'html_block') {
+                const textContent = node.textContent;
+                if (textContent) {
+                  const hardBreak = state.schema.nodes.hard_break;
+                  const lines = textContent.split('\n');
+                  const content: Node[] = [];
+
+                  lines.forEach((line, index) => {
+                    if (index > 0 && hardBreak) {
+                      content.push(hardBreak.create());
+                    }
+                    if (line) {
+                      content.push(state.schema.text(line));
+                    }
+                  });
+
+                  if (content.length > 0) {
+                    const paragraphNode = paragraph.create(null, content);
+                    tr.replaceWith(pos, pos + node.nodeSize, paragraphNode);
+                  } else {
+                    tr.delete(pos, pos + node.nodeSize);
+                  }
+                } else {
+                  tr.delete(pos, pos + node.nodeSize);
+                }
+              }
+            });
+          }
 
           return true;
         },
