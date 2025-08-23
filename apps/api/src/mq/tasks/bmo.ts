@@ -6,6 +6,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { WebClient } from '@slack/web-api';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
+import postgres from 'postgres';
 import { env } from '@/env';
 import * as aws from '@/external/aws';
 import { generateChart } from '@/utils/chart-generation';
@@ -21,12 +22,11 @@ type SlackAppMentionEventPayload = {
   event_ts: string;
 };
 
-const sql = new Bun.SQL({
-  url: env.DATABASE_URL,
-  tls: { rejectUnauthorized: false },
+const sql = postgres(env.DATABASE_URL, {
+  ssl: { rejectUnauthorized: false },
   connection: {
     statement_timeout: 600_000,
-    TimeZone: 'Asia/Seoul',
+    lock_timeout: 600_000,
   },
 });
 
@@ -172,7 +172,7 @@ const getDatabaseSchema = async () => {
   if (!schema) {
     await sql.begin('READ ONLY', async (sql) => {
       const result = await sql.unsafe(getSchemaQuery);
-      schema = result.schema;
+      schema = result[0].schema;
     });
   }
 
