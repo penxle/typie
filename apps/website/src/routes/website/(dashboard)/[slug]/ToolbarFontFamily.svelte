@@ -79,6 +79,7 @@
   const errorMap = {
     invalid_font_weight: '폰트가 너무 얇거나 두꺼워요.',
     invalid_font_style: '폰트가 기울어져 있어요.',
+    duplicate_font_in_site: '이미 동일한 폰트가 업로드되어 있어요.',
   };
 
   const handleUpload = async () => {
