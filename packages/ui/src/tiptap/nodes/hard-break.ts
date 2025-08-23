@@ -1,4 +1,6 @@
 import { Node } from '@tiptap/core';
+import { Plugin } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
@@ -21,18 +23,7 @@ export const HardBreak = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return [
-      'span',
-      {},
-      ['br', HTMLAttributes],
-      [
-        'span',
-        {
-          // NOTE: page break 될 수 있도록 해줌
-          style: 'display: inline-block; width: 1px; height: 1px;',
-        },
-      ],
-    ];
+    return ['br', HTMLAttributes];
   },
 
   addCommands() {
@@ -75,5 +66,49 @@ export const HardBreak = Node.create({
     return {
       'Shift-Enter': () => this.editor.commands.setHardBreak(),
     };
+  },
+
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+
+    return [
+      new Plugin({
+        props: {
+          decorations(state) {
+            const decorations: Decoration[] = [];
+            const { doc } = state;
+
+            const isPageMode = editor?.storage?.page.layout;
+
+            if (!isPageMode) {
+              return DecorationSet.create(doc, decorations);
+            }
+
+            // NOTE: 페이지 브레이크 대응
+            doc.descendants((node, pos) => {
+              if (node.type.name === 'hard_break') {
+                const decoration = Decoration.widget(
+                  pos + 1,
+                  () => {
+                    const span = document.createElement('span');
+                    span.style.display = 'inline-block';
+                    span.style.width = '1px';
+                    span.style.height = '1em';
+                    return span;
+                  },
+                  {
+                    side: 1,
+                    marks: [],
+                  },
+                );
+                decorations.push(decoration);
+              }
+            });
+
+            return DecorationSet.create(doc, decorations);
+          },
+        },
+      }),
+    ];
   },
 });
