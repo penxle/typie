@@ -34,8 +34,8 @@ const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 const slack = new WebClient(env.SLACK_BOT_TOKEN);
 
 const executeQuery = async (query: string) => {
-  return await sql.begin('READ ONLY', async (sql) => {
-    try {
+  try {
+    return await sql.begin('READ ONLY', async (sql) => {
       const result = await sql.unsafe(query);
 
       return {
@@ -43,13 +43,13 @@ const executeQuery = async (query: string) => {
         count: result.length,
         rows: [...result],
       };
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-  });
+    });
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 };
 
 let schema: unknown | null = null;
