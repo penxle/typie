@@ -76,7 +76,7 @@ builder.queryFields((t) => ({
  */
 
 builder.mutationFields((t) => ({
-  issueBlobUploadUrl: t.fieldWithInput({
+  issueBlobUploadUrl: t.withAuth({ session: true }).fieldWithInput({
     type: t.builder.simpleObject('IssueBlobUploadUrlResult', {
       fields: (t) => ({
         path: t.string(),
@@ -98,7 +98,7 @@ builder.mutationFields((t) => ({
         ],
         Fields: {
           'x-amz-meta-name': encodeURIComponent(input.filename),
-          'x-amz-meta-user-id': ctx.session?.userId ?? 'anonymous',
+          'x-amz-meta-user-id': ctx.session.userId,
         },
         Expires: 60 * 5, // 5 minutes
       });
@@ -111,7 +111,7 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  persistBlobAsFile: t.fieldWithInput({
+  persistBlobAsFile: t.withAuth({ session: true }).fieldWithInput({
     type: File,
     input: { path: t.input.string() },
     resolve: async (_, { input }, ctx) => {
@@ -135,7 +135,7 @@ builder.mutationFields((t) => ({
           MetadataDirective: 'REPLACE',
           TaggingDirective: 'REPLACE',
           Tagging: qs.stringify({
-            UserId: ctx.session?.userId ?? 'anonymous',
+            UserId: ctx.session.userId,
             Environment: stack,
           }),
         }),
@@ -145,7 +145,7 @@ builder.mutationFields((t) => ({
       return await db
         .insert(Files)
         .values({
-          userId: ctx.session?.userId,
+          userId: ctx.session.userId,
           name: decodeURIComponent(fileName),
           size: head.ContentLength!,
           format: head.ContentType ?? 'application/octet-stream',
@@ -157,7 +157,7 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  persistBlobAsImage: t.fieldWithInput({
+  persistBlobAsImage: t.withAuth({ session: true }).fieldWithInput({
     type: Image,
     input: {
       path: t.input.string(),
@@ -220,7 +220,7 @@ builder.mutationFields((t) => ({
           Body: data,
           ContentType: mimetype,
           Tagging: qs.stringify({
-            UserId: ctx.session?.userId ?? 'anonymous',
+            UserId: ctx.session.userId,
             Environment: stack,
           }),
         }),
@@ -230,7 +230,7 @@ builder.mutationFields((t) => ({
       return await db
         .insert(Images)
         .values({
-          userId: ctx.session?.userId,
+          userId: ctx.session.userId,
           name: decodeURIComponent(object.Metadata!.name),
           size: data.length,
           format: mimetype,
@@ -245,7 +245,7 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  persistBlobAsFont: t.fieldWithInput({
+  persistBlobAsFont: t.withAuth({ session: true }).fieldWithInput({
     type: Font,
     input: { path: t.input.string() },
     resolve: async (_, { input }, ctx) => {
@@ -285,7 +285,7 @@ builder.mutationFields((t) => ({
           Body: woff2,
           ContentType: 'font/woff2',
           Tagging: qs.stringify({
-            UserId: ctx.session?.userId ?? 'anonymous',
+            UserId: ctx.session.userId,
             Environment: stack,
           }),
         }),
@@ -294,7 +294,7 @@ builder.mutationFields((t) => ({
       return await db
         .insert(Fonts)
         .values({
-          userId: ctx.session?.userId,
+          userId: ctx.session.userId,
           name,
           familyName: metadata.familyName,
           fullName: metadata.fullName,
