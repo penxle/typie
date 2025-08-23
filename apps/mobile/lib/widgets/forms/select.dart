@@ -1,5 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
@@ -9,10 +10,11 @@ import 'package:typie/widgets/forms/field.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class HookFormSelect<T> extends StatelessWidget {
-  const HookFormSelect({required this.name, required this.initialValue, required this.items, super.key});
+  const HookFormSelect({required this.name, required this.initialValue, required this.items, this.values, super.key});
 
   final String name;
   final T initialValue;
+  final List<T>? values;
   final List<HookFormSelectItem<T>> items;
 
   @override
@@ -21,7 +23,18 @@ class HookFormSelect<T> extends StatelessWidget {
       name: name,
       initialValue: initialValue,
       builder: (context, field) {
-        final item = items.firstWhere((item) => item.value == field.value);
+        final selectedValues = values ?? [field.value as T];
+        final isIndeterminate = selectedValues.toSet().length > 1;
+
+        final item = isIndeterminate
+            ? HookFormSelectItem<T>(
+                icon: LucideLightIcons.minus,
+                label: selectedValues
+                    .map((v) => items.firstWhereOrNull((item) => item.value == v)?.label ?? '')
+                    .join(', '),
+                value: field.value as T,
+              )
+            : items.firstWhereOrNull((item) => item.value == field.value);
 
         return Tappable(
           onTap: () async {
@@ -40,7 +53,7 @@ class HookFormSelect<T> extends StatelessWidget {
                         child: Container(
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: field.value == item.value
+                              color: selectedValues.contains(item.value)
                                   ? context.colors.borderInverse
                                   : context.colors.borderDefault,
                             ),
@@ -77,8 +90,8 @@ class HookFormSelect<T> extends StatelessWidget {
           },
           child: Row(
             children: [
-              if (item.icon != null) ...[Icon(item.icon, size: 18), const Gap(4)],
-              Text(item.label, style: const TextStyle(fontSize: 16)),
+              if (item?.icon != null) ...[Icon(item!.icon, size: 18), const Gap(4)],
+              Text(item?.label ?? '(알 수 없음)', style: const TextStyle(fontSize: 16)),
               const Gap(8),
               const Icon(LucideLightIcons.chevron_down, size: 16),
             ],

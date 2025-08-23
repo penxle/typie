@@ -8,10 +8,11 @@ import 'package:typie/widgets/forms/field.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class HookFormSwitch extends HookWidget {
-  const HookFormSwitch({required this.name, this.initialValue, super.key});
+  const HookFormSwitch({required this.name, this.initialValue, this.values, super.key});
 
   final String name;
   final bool? initialValue;
+  final List<bool>? values;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +24,8 @@ class HookFormSwitch extends HookWidget {
       initialValue: initialValue ?? false,
       builder: (context, field) {
         final value = field.value ?? false;
+        final selectedValues = values ?? [value];
+        final isIndeterminate = selectedValues.toSet().length > 1;
 
         useEffect(() {
           if (field.value ?? false) {
@@ -50,7 +53,13 @@ class HookFormSwitch extends HookWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Container(color: context.colors.accentSuccess)),
+                      Expanded(
+                        child: Container(
+                          color: isIndeterminate
+                              ? Color.lerp(context.colors.accentSuccess, context.colors.surfaceDefault, 0.5)
+                              : context.colors.accentSuccess,
+                        ),
+                      ),
                       Expanded(child: Container(color: context.colors.surfaceMuted)),
                     ],
                   ),
@@ -58,27 +67,33 @@ class HookFormSwitch extends HookWidget {
                     animation: curve,
                     builder: (context, child) {
                       return Align(
-                        alignment: Alignment.lerp(Alignment.centerLeft, Alignment.centerRight, curve.value)!,
+                        alignment: isIndeterminate
+                            ? Alignment.center
+                            : Alignment.lerp(Alignment.centerLeft, Alignment.centerRight, curve.value)!,
                         child: Container(
                           width: 24,
                           height: 24,
                           decoration: BoxDecoration(
                             color: context.colors.surfaceDefault,
-                            border: Border(
-                              left: curve.value > 0
-                                  ? BorderSide(color: context.colors.borderStrong, width: curve.value)
-                                  : BorderSide.none,
-                              right: curve.value < 1
-                                  ? BorderSide(color: context.colors.borderStrong, width: 1 - curve.value)
-                                  : BorderSide.none,
-                            ),
+                            border: isIndeterminate
+                                ? Border.all(color: context.colors.borderStrong)
+                                : Border(
+                                    left: curve.value > 0
+                                        ? BorderSide(color: context.colors.borderStrong, width: curve.value)
+                                        : BorderSide.none,
+                                    right: curve.value < 1
+                                        ? BorderSide(color: context.colors.borderStrong, width: 1 - curve.value)
+                                        : BorderSide.none,
+                                  ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: child,
                         ),
                       );
                     },
-                    child: const Icon(LucideLightIcons.check, size: 16),
+                    child: isIndeterminate
+                        ? const Icon(LucideLightIcons.minus, size: 16)
+                        : const Icon(LucideLightIcons.check, size: 16),
                   ),
                 ],
               ),
