@@ -86,39 +86,79 @@
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = '.ttf,.otf';
+    picker.multiple = true;
 
     picker.addEventListener('change', async () => {
-      const file = picker.files?.[0];
-      if (!file || !$site) {
+      const files = picker.files;
+      if (!files || files.length === 0 || !$site) {
         return;
       }
 
       inflight = true;
-      try {
-        const path = await uploadBlob(file);
-        const resp = await persistBlobAsFont({ path });
-        await addSiteFont({ siteId: $site.id, fontId: resp.id });
 
-        open = false;
-        Dialog.alert({
-          title: '폰트 업로드 완료',
-          message: `"${resp.name}" 폰트가 추가되었어요. 업로드한 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
-        });
-      } catch (err) {
-        if (err instanceof TypieError) {
-          Dialog.alert({
-            title: '폰트 업로드 실패',
-            message: errorMap[err.code as never] ?? '폰트 업로드에 실패했어요.',
-          });
-        } else {
-          Dialog.alert({
-            title: '폰트 업로드 실패',
-            message: '폰트 업로드에 실패했어요.',
+      const results: { name: string; success: boolean; error?: string }[] = [];
+
+      // NOTE: 업로드 폭탄을 방지하기 위해 하나씩 업로드
+      for (const file of files) {
+        try {
+          const path = await uploadBlob(file);
+          const resp = await persistBlobAsFont({ path });
+          await addSiteFont({ siteId: $site.id, fontId: resp.id });
+          results.push({ name: resp.name, success: true });
+        } catch (err) {
+          let errorMessage = '폰트 업로드에 실패했어요.';
+          if (err instanceof TypieError) {
+            errorMessage = errorMap[err.code as never] ?? errorMessage;
+          }
+          results.push({
+            name: file.name,
+            success: false,
+            error: errorMessage,
           });
         }
-      } finally {
-        inflight = false;
-        open = false;
+      }
+
+      inflight = false;
+      open = false;
+
+      const successCount = results.filter((r) => r.success).length;
+      const failureCount = results.filter((r) => !r.success).length;
+
+      if (successCount > 0 && failureCount === 0) {
+        if (successCount === 1) {
+          Dialog.alert({
+            title: '폰트 업로드 완료',
+            message: `"${results[0].name}" 폰트가 추가되었어요. 업로드한 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
+          });
+        } else {
+          const fontNames = results
+            .filter((r) => r.success)
+            .map((r) => r.name)
+            .join(', ');
+          Dialog.alert({
+            title: '폰트 업로드 완료',
+            message: `${successCount}개의 폰트(${fontNames})가 추가되었어요. 업로드한 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
+          });
+        }
+      } else if (successCount === 0) {
+        const errorMessages = results.map((r) => `• ${r.name}: ${r.error}`).join('\n');
+        Dialog.alert({
+          title: '폰트 업로드 실패',
+          message: `모든 폰트 업로드에 실패했어요.\n\n${errorMessages}`,
+        });
+      } else {
+        const successNames = results
+          .filter((r) => r.success)
+          .map((r) => `"${r.name}"`)
+          .join(', ');
+        const failureMessages = results
+          .filter((r) => !r.success)
+          .map((r) => `• ${r.name}: ${r.error}`)
+          .join('\n');
+        Dialog.alert({
+          title: '폰트 업로드 일부 완료',
+          message: `${successCount}개의 폰트(${successNames})가 추가되었어요.\n\n다음 ${failureCount}개의 폰트는 업로드에 실패했어요:\n${failureMessages}\n\n업로드된 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
+        });
       }
     });
 
