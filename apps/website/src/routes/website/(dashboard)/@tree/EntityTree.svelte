@@ -158,6 +158,9 @@
   let pointerType = $state<PointerEvent['pointerType']>('mouse');
   let dragTimeout = $state<NodeJS.Timeout | null>(null);
 
+  let lastPointerX = $state<number>(0);
+  let lastPointerY = $state<number>(0);
+
   const app = getAppContext();
   const treeState = setupTreeContext();
 
@@ -265,47 +268,10 @@
     }
   };
 
-  const handlePointerMove: PointerEventHandler<HTMLDivElement> = (e) => {
-    if (!dragging || !tree) {
-      if (dragTimeout) {
-        clearTimeout(dragTimeout);
-        dragTimeout = null;
-      }
+  const updateDropTarget = (clientX: number, clientY: number) => {
+    if (!dragging || !tree) return;
 
-      return;
-    }
-
-    const isPostsPanelVisible = app.state.postsOpen || app.preference.current.postsExpanded === 'open';
-    if (dragging.eligible && !isPostsPanelVisible) {
-      cancelDragging();
-      return;
-    }
-
-    if (dragging.eligible) {
-      dragging.ghost = {
-        x: e.clientX,
-        y: e.clientY,
-        offsetX: dragging.ghost?.offsetX ?? 0,
-        offsetY: dragging.ghost?.offsetY ?? 0,
-      };
-    } else {
-      if (Math.abs(dragging.event.clientX - e.clientX) + Math.abs(dragging.event.clientY - e.clientY) > 10) {
-        dragging.eligible = true;
-        dragging.element.setPointerCapture(e.pointerId);
-
-        const rect = dragging.element.getBoundingClientRect();
-        dragging.ghost = {
-          x: dragging.event.clientX,
-          y: dragging.event.clientY,
-          offsetX: dragging.event.clientX - rect.left,
-          offsetY: dragging.event.clientY - rect.top,
-        };
-      } else {
-        return;
-      }
-    }
-
-    const trashElement = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-type="trash"]');
+    const trashElement = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-type="trash"]');
     if (trashElement) {
       const rect = trashElement.getBoundingClientRect();
       dragging.indicator = {
@@ -321,8 +287,8 @@
     }
 
     const targetElement =
-      document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-id]') ??
-      document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
+      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-id]') ??
+      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
     if (!targetElement) {
       return;
     }
@@ -356,7 +322,7 @@
     const targetRect = targetElement.getBoundingClientRect();
     const anchorRect = anchorElement.getBoundingClientRect();
 
-    const relativeY = e.clientY - anchorRect.top;
+    const relativeY = clientY - anchorRect.top;
     const thresholdY = 5;
 
     let offsetElement;
@@ -442,6 +408,91 @@
           return;
         }
       }
+    }
+  };
+
+  // NOTE: 위, 아래 끝에서 드래그 중 자동 스크롤
+  $effect(() => {
+    if (!dragging?.eligible || !tree) return;
+
+    const scrollContainer = tree.parentElement;
+    if (!scrollContainer) return;
+
+    let animationId: number | null = null;
+
+    const scroll = () => {
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const scrollZoneSize = 50;
+      const maxScrollSpeed = 15;
+
+      if (lastPointerY < containerRect.top + scrollZoneSize) {
+        const distance = containerRect.top + scrollZoneSize - lastPointerY;
+        const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
+        scrollContainer.scrollBy(0, -scrollSpeed);
+        updateDropTarget(lastPointerX, lastPointerY);
+        animationId = requestAnimationFrame(scroll);
+      } else if (lastPointerY > containerRect.bottom - scrollZoneSize) {
+        const distance = lastPointerY - (containerRect.bottom - scrollZoneSize);
+        const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
+        scrollContainer.scrollBy(0, scrollSpeed);
+        updateDropTarget(lastPointerX, lastPointerY);
+        animationId = requestAnimationFrame(scroll);
+      }
+    };
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const scrollZoneSize = 50;
+
+    if (lastPointerY < containerRect.top + scrollZoneSize || lastPointerY > containerRect.bottom - scrollZoneSize) {
+      animationId = requestAnimationFrame(scroll);
+    }
+
+    return () => {
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+      }
+    };
+  });
+
+  const handlePointerMove: PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!dragging || !tree) {
+      if (dragTimeout) {
+        clearTimeout(dragTimeout);
+        dragTimeout = null;
+      }
+
+      return;
+    }
+
+    lastPointerX = e.clientX;
+    lastPointerY = e.clientY;
+
+    const isPostsPanelVisible = app.state.postsOpen || app.preference.current.postsExpanded === 'open';
+    if (dragging.eligible && !isPostsPanelVisible) {
+      cancelDragging();
+      return;
+    }
+
+    if (dragging.eligible) {
+      dragging.ghost = {
+        x: e.clientX,
+        y: e.clientY,
+        offsetX: dragging.ghost?.offsetX ?? 0,
+        offsetY: dragging.ghost?.offsetY ?? 0,
+      };
+
+      updateDropTarget(e.clientX, e.clientY);
+    } else if (Math.abs(dragging.event.clientX - e.clientX) + Math.abs(dragging.event.clientY - e.clientY) > 10) {
+      dragging.eligible = true;
+      dragging.element.setPointerCapture(e.pointerId);
+
+      const rect = dragging.element.getBoundingClientRect();
+      dragging.ghost = {
+        x: dragging.event.clientX,
+        y: dragging.event.clientY,
+        offsetX: dragging.event.clientX - rect.left,
+        offsetY: dragging.event.clientY - rect.top,
+      };
     }
   };
 
