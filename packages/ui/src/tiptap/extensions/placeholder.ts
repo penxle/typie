@@ -48,8 +48,8 @@ export const Placeholder = Extension.create({
         if (block) {
           placeholder = match(block.type.name)
             .with('blockquote', () => '인용구')
-            .with('callout', () => '콜아웃')
-            .with('fold', () => '폴드')
+            .with('callout', () => '강조')
+            .with('fold', () => '접기')
             .with('bullet_list', 'ordered_list', () => '목록')
             .otherwise(() => null);
 

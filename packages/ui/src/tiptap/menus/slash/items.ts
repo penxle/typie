@@ -66,7 +66,7 @@ export const menuItems: MenuItem[] = [
     id: 'callout',
     type: 'callout',
     group: 'block',
-    name: '콜아웃',
+    name: '강조',
     keywords: ['callout'],
     icon: GalleryVerticalEndIcon,
     command: ({ editor, range }) => {
@@ -77,7 +77,7 @@ export const menuItems: MenuItem[] = [
     id: 'fold',
     type: 'fold',
     group: 'block',
-    name: '폴드',
+    name: '접기',
     keywords: ['fold', 'collapse'],
     icon: ChevronsDownUpIcon,
     command: ({ editor, range }) => {

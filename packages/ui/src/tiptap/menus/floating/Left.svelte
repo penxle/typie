@@ -21,8 +21,8 @@
 
   const unwrapLabels = {
     [Blockquote.name]: '인용구 해제',
-    [Callout.name]: '콜아웃 해제',
-    [Fold.name]: '폴드 해제',
+    [Callout.name]: '강조 해제',
+    [Fold.name]: '접기 해제',
     [CodeBlock.name]: '코드 해제',
     [HtmlBlock.name]: 'HTML 해제',
   };
