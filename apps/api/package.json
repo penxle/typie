@@ -68,6 +68,7 @@
     "nanoid": "^5.1.5",
     "p-map": "^7.0.3",
     "playwright": "^1.54.2",
+    "postgres": "^3.4.7",
     "query-string": "^9.2.2",
     "rapidhash-js": "^2.2.0",
     "react": "^19.1.1",
