@@ -9,8 +9,8 @@
   import { token } from '@typie/styled-system/tokens';
   import { autosize } from '@typie/ui/actions';
   import { InEditorBody } from '@typie/ui/components';
-  import { getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
-  import { clamp, mmToPx } from '@typie/ui/utils';
+  import { getIncompatibleBlocks, getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
+  import { clamp, createDefaultPageLayout, mmToPx, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
@@ -34,7 +34,7 @@
   import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { PageLayout, Ref } from '@typie/ui/utils';
+  import type { PageLayout, PageLayoutPreset, Ref } from '@typie/ui/utils';
 
   const WEBVIEW_DISCONNECT_THRESHOLD = 10;
 
@@ -300,11 +300,7 @@
     );
   };
 
-  const setYJSState = (_?: Y.YMapEvent<unknown>, transaction?: Y.Transaction) => {
-    if (transaction && transaction.origin !== 'remote') {
-      return;
-    }
-
+  const setYJSState = () => {
     window.__webview__?.emitEvent('setYJSState', {
       maxWidth: maxWidth.current,
       note: note.current,
@@ -741,6 +737,45 @@
       } else if (name === 'note') {
         note.current = attrs.note;
       }
+    });
+
+    window.__webview__?.addEventListener('setLayoutMode', (data) => {
+      const mode = data.mode as 'scroll' | 'page';
+      const convertIncompatibleBlocksFlag = data.convertIncompatibleBlocks as boolean;
+
+      if (convertIncompatibleBlocksFlag && editor?.current) {
+        editor.current.chain().focus().convertIncompatibleBlocks().run();
+      }
+
+      layoutMode.current = mode;
+
+      if (mode === 'page' && !pageLayout.current) {
+        const preset = data.preset || 'a4';
+        if (Object.keys(PAGE_SIZE_MAP).includes(preset)) {
+          pageLayout.current = createDefaultPageLayout(preset as PageLayoutPreset);
+        } else {
+          pageLayout.current = createDefaultPageLayout('a4');
+        }
+      }
+    });
+
+    window.__webview__?.addEventListener('setPageLayout', (data) => {
+      const preset = data.preset as string;
+
+      if (Object.keys(PAGE_SIZE_MAP).includes(preset)) {
+        pageLayout.current = createDefaultPageLayout(preset as PageLayoutPreset);
+      }
+    });
+
+    window.__webview__?.setProcedure('getIncompatibleBlocks', () => {
+      if (!editor?.current) return [];
+      return getIncompatibleBlocks(editor.current);
+    });
+
+    window.__webview__?.setProcedure('convertIncompatibleBlocks', () => {
+      if (!editor?.current) return false;
+      editor.current.chain().focus().convertIncompatibleBlocks().run();
+      return true;
     });
 
     window.__webview__?.setProcedure('insertNodes', (params) => {

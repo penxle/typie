@@ -28,6 +28,7 @@ import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/update_post_type_mutation.req.gql.dart';
 import 'package:typie/screens/editor/anchor.dart';
+import 'package:typie/screens/editor/body_setting_bottom_sheet.dart';
 import 'package:typie/screens/editor/find_replace.dart';
 import 'package:typie/screens/editor/floating/widgets/character_count_floating.dart';
 import 'package:typie/screens/editor/limit.dart';
@@ -41,8 +42,6 @@ import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/services/state.dart';
 import 'package:typie/services/theme.dart';
-import 'package:typie/widgets/forms/form.dart';
-import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
@@ -329,7 +328,10 @@ class Editor extends HookWidget {
                             icon: LucideLightIcons.settings,
                             label: '본문 설정',
                             onTap: () async {
-                              await context.showBottomSheet(intercept: true, child: _SettingBottomSheet(scope: scope));
+                              await context.showBottomSheet(
+                                intercept: true,
+                                child: BodySettingBottomSheet(scope: scope),
+                              );
                             },
                           ),
                           BottomMenuItem(
@@ -513,107 +515,6 @@ class Editor extends HookWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _SettingBottomSheet extends HookWidget {
-  const _SettingBottomSheet({required this.scope});
-
-  final EditorStateScope scope;
-
-  @override
-  Widget build(BuildContext context) {
-    final yjsState = useValueListenable(scope.yjsState);
-    final proseMirrorState = useValueListenable(scope.proseMirrorState);
-
-    return AppBottomSheet(
-      padding: const Pad(horizontal: 20),
-      child: HookForm(
-        submitMode: HookFormSubmitMode.onChange,
-        onSubmit: (form) async {
-          await scope.command('max_width', attrs: {'maxWidth': form.data['maxWidth']});
-          await scope.command('body', attrs: {'paragraphIndent': form.data['paragraphIndent']});
-          await scope.command('body', attrs: {'blockGap': form.data['blockGap']});
-        },
-        builder: (context, form) {
-          return Column(
-            spacing: 16,
-            children: [
-              _Option(
-                icon: LucideLightIcons.ruler_dimension_line,
-                label: '본문 폭',
-                trailing: HookFormSelect(
-                  name: 'maxWidth',
-                  initialValue: yjsState?.maxWidth ?? 800,
-                  items: const [
-                    HookFormSelectItem(label: '600px', value: 600),
-                    HookFormSelectItem(label: '800px', value: 800),
-                    HookFormSelectItem(label: '1000px', value: 1000),
-                  ],
-                ),
-              ),
-              _Option(
-                icon: LucideLightIcons.arrow_right_to_line,
-                label: '첫 줄 들여쓰기',
-                trailing: HookFormSelect(
-                  name: 'paragraphIndent',
-                  initialValue: (proseMirrorState?.nodes.isNotEmpty ?? false)
-                      ? (proseMirrorState!.nodes.first.attrs?['paragraphIndent'] ?? 1)
-                      : 1,
-                  items: const [
-                    HookFormSelectItem(label: '없음', value: 0),
-                    HookFormSelectItem(label: '0.5칸', value: 0.5),
-                    HookFormSelectItem(label: '1칸', value: 1),
-                    HookFormSelectItem(label: '2칸', value: 2),
-                  ],
-                ),
-              ),
-              _Option(
-                icon: LucideLightIcons.align_vertical_space_around,
-                label: '문단 사이 간격',
-                trailing: HookFormSelect(
-                  name: 'blockGap',
-                  initialValue: (proseMirrorState?.nodes.isNotEmpty ?? false)
-                      ? (proseMirrorState!.nodes.first.attrs?['blockGap'] ?? 1)
-                      : 1,
-                  items: const [
-                    HookFormSelectItem(label: '없음', value: 0),
-                    HookFormSelectItem(label: '0.5줄', value: 0.5),
-                    HookFormSelectItem(label: '1줄', value: 1),
-                    HookFormSelectItem(label: '2줄', value: 2),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _Option extends StatelessWidget {
-  const _Option({required this.icon, required this.label, required this.trailing});
-
-  final IconData icon;
-  final String label;
-  final Widget trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 24,
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: context.colors.textSubtle),
-          const Gap(8),
-          Expanded(
-            child: Text(label, style: TextStyle(fontSize: 16, color: context.colors.textSubtle)),
-          ),
-          trailing,
-        ],
-      ),
     );
   }
 }
