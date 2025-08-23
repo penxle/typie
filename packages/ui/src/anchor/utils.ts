@@ -1,5 +1,7 @@
 import { clamp } from '../utils';
 
+const displayCache = new WeakMap<HTMLElement, string>();
+
 export const getLastNodeOffsetTop = (): number | null => {
   const editorEl = document.querySelector('.editor');
   if (!editorEl) return null;
@@ -7,7 +9,26 @@ export const getLastNodeOffsetTop = (): number | null => {
   const allNodes = [...editorEl.querySelectorAll('[data-node-id]')];
   if (allNodes.length === 0) return null;
 
-  const lastNode = allNodes.at(-1) as HTMLElement;
+  // NOTE: inline 노드(특히 hard_break의 br)는 offsetTop이 0이거나 부정확한 값을 가질 수 있음
+  const blockNodes = allNodes.filter((node) => {
+    const element = node as HTMLElement;
+
+    let display = displayCache.get(element);
+    if (!display) {
+      display = window.getComputedStyle(element).display;
+      displayCache.set(element, display);
+    }
+
+    if (display === 'inline' || display === 'none') {
+      return false;
+    }
+
+    return true;
+  });
+
+  if (blockNodes.length === 0) return null;
+
+  const lastNode = blockNodes.at(-1) as HTMLElement;
   return lastNode.offsetTop;
 };
 
