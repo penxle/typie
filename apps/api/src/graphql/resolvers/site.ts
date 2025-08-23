@@ -227,6 +227,25 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
+      const font = await db
+        .select({ name: Fonts.name, fullName: Fonts.fullName })
+        .from(Fonts)
+        .where(eq(Fonts.id, input.fontId))
+        .then(firstOrThrow);
+
+      const checkField = font.fullName ? Fonts.fullName : Fonts.name;
+      const checkValue = font.fullName || font.name;
+
+      const existingFont = await db
+        .select()
+        .from(Fonts)
+        .where(and(eq(Fonts.siteId, input.siteId), eq(checkField, checkValue), eq(Fonts.state, FontState.ACTIVE)))
+        .then(first);
+
+      if (existingFont) {
+        throw new TypieError({ code: 'duplicate_font_in_site' });
+      }
+
       await db.update(Fonts).set({ siteId: input.siteId }).where(eq(Fonts.id, input.fontId));
 
       return input.siteId;
