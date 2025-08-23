@@ -109,7 +109,7 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
     throw new Error('User not found');
   }
 
-  const endDate = dayjs.utc().startOf('day');
+  const endDate = dayjs.kst().startOf('day');
   const startDate = endDate.subtract(364, 'days');
   const startOfTomorrow = endDate.add(1, 'day');
 

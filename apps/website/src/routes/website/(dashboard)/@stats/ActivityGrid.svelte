@@ -38,7 +38,7 @@
 
   let hoverActivity = $state<Activity & { element: HTMLElement }>();
 
-  const endDate = dayjs.utc().startOf('day');
+  const endDate = dayjs.kst().startOf('day');
   const startDate = endDate.subtract(364, 'days');
 
   const activities = $derived.by<Activity[]>(() => {
