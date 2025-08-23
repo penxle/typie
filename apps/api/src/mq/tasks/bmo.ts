@@ -453,6 +453,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       let responseText = '';
+      let thinkingText = '';
       let hasToolUse = false;
       const toolsToExecute: { id: string; name: string; input: unknown }[] = [];
       const toolInputMap = new Map<string, string>();
@@ -460,6 +461,10 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       const stream = anthropic.messages.stream({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 64_000,
+        thinking: {
+          type: 'enabled',
+          budget_tokens: 20_000,
+        },
         messages: accMessages,
         system,
         tools,
@@ -479,7 +484,11 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
             toolInputMap.set(chunk.content_block.id, '');
           }
         } else if (chunk.type === 'content_block_delta') {
-          if (chunk.delta.type === 'text_delta') {
+          if (chunk.delta.type === 'thinking_delta') {
+            thinkingText += chunk.delta.thinking;
+            const displayText = `💭 *생각 중...*\n\`\`\`\n${thinkingText}\n\`\`\``;
+            scheduleUpdate(displayText);
+          } else if (chunk.delta.type === 'text_delta') {
             responseText += chunk.delta.text;
             scheduleUpdate(responseText);
           } else if (chunk.delta.type === 'input_json_delta') {
