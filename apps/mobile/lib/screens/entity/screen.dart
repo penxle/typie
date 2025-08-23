@@ -250,7 +250,7 @@ class _EntityList extends HookWidget {
 
                                 await context.showBottomSheet(
                                   intercept: true,
-                                  child: ShareFolderBottomSheet(entityId: entity!.id),
+                                  child: ShareBottomSheet(entityIds: [entity!.id]),
                                 );
                               },
                             ),
@@ -499,7 +499,7 @@ class _EntityList extends HookWidget {
 
                                       await context.showBottomSheet(
                                         intercept: true,
-                                        child: ShareFolderBottomSheet(entityId: entities[index].id),
+                                        child: ShareBottomSheet(entityIds: [entities[index].id]),
                                       );
                                     },
                                   ),
@@ -642,7 +642,7 @@ class _EntityList extends HookWidget {
 
                                       await context.showBottomSheet(
                                         intercept: true,
-                                        child: SharePostBottomSheet(slug: entities[index].slug),
+                                        child: ShareBottomSheet(entityIds: [entities[index].id]),
                                       );
                                     },
                                   ),

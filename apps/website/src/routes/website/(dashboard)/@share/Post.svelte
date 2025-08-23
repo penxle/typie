@@ -130,10 +130,7 @@
       availability: $posts[0].entity.availability,
       visibility: $posts[0].entity.visibility,
       hasPassword: $posts[0].password !== null,
-      password:
-        $posts.length > 1 && $posts.filter((p) => p.password !== null).some((p) => p.password !== $posts[0].password)
-          ? null
-          : $posts[0].password,
+      password: $posts.length > 1 && $posts.some((p) => p.password !== $posts[0].password) ? null : $posts[0].password,
       contentRating: $posts[0].contentRating,
       allowReaction: $posts[0].allowReaction,
       protectContent: $posts[0].protectContent,

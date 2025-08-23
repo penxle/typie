@@ -10,6 +10,7 @@ import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/modals/share.dart';
 import 'package:typie/screens/entity/__generated__/delete_entities_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart';
 import 'package:typie/screens/entity/move_entity_modal.dart';
@@ -34,18 +35,47 @@ class MultiEntitiesMenu extends HookWidget {
     final mixpanel = useService<Mixpanel>();
 
     final selectedEntities = entities.where((e) => selectedItems.contains(e.id)).toList();
-    final folderCount = selectedEntities.where((e) => e.node.G__typename == 'Folder').length;
-    final postCount = selectedEntities.where((e) => e.node.G__typename == 'Post').length;
-    final canvasCount = selectedEntities.where((e) => e.node.G__typename == 'Canvas').length;
+
+    final folderIds = selectedEntities.where((e) => e.node.G__typename == 'Folder').map((e) => e.id).toList();
+    final postIds = selectedEntities.where((e) => e.node.G__typename == 'Post').map((e) => e.id).toList();
+    final canvasIds = selectedEntities.where((e) => e.node.G__typename == 'Canvas').map((e) => e.id).toList();
 
     return BottomMenu(
       header: MultiEntitiesMenuHeader(
         selectedCount: selectedItems.length,
-        folderCount: folderCount,
-        postCount: postCount,
-        canvasCount: canvasCount,
+        folderCount: folderIds.length,
+        postCount: postIds.length,
+        canvasCount: canvasIds.length,
       ),
       items: [
+        if (folderIds.isNotEmpty)
+          BottomMenuItem(
+            icon: LucideLightIcons.blend,
+            label: '폴더 ${folderIds.length}개 공유 및 게시',
+            onTap: () async {
+              unawaited(
+                mixpanel.track(
+                  'open_folder_share_modal',
+                  properties: {'via': 'multi_entities_menu', 'count': folderIds.length},
+                ),
+              );
+              await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: folderIds));
+            },
+          ),
+        if (postIds.isNotEmpty)
+          BottomMenuItem(
+            icon: LucideLightIcons.blend,
+            label: '포스트 ${postIds.length}개 공유 및 게시',
+            onTap: () async {
+              unawaited(
+                mixpanel.track(
+                  'open_post_share_modal',
+                  properties: {'via': 'multi_entities_menu', 'count': postIds.length},
+                ),
+              );
+              await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: postIds));
+            },
+          ),
         BottomMenuItem(
           icon: LucideLightIcons.folder_symlink,
           label: '다른 폴더로 옮기기',

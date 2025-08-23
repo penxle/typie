@@ -1,0 +1,15 @@
+mutation SharePost_UpdatePostsOption_Mutation($input: UpdatePostsOptionInput!) {
+  updatePostsOption(input: $input) {
+    id
+    password
+    contentRating
+    allowReaction
+    protectContent
+
+    entity {
+      id
+      visibility
+      availability
+    }
+  }
+}
