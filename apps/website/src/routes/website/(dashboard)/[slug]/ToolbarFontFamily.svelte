@@ -177,7 +177,8 @@
     <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle', lineClamp: '1' })}>
       {values.fontFamily.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily))
         ?.label ??
-        $site?.fonts.find(({ id }) => id === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily))?.name}
+        $site?.fonts.find(({ id }) => id === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily))?.name ??
+        '(알 수 없는 폰트)'}
     </div>
   {/snippet}
 
