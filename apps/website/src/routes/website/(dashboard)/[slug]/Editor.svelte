@@ -6,6 +6,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
+  import { cleanOrphanAnchors } from '@typie/ui/anchor';
   import { EditorLayout, Helmet, HorizontalDivider, Icon, InEditorBody, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
@@ -493,8 +494,9 @@
       color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
     });
 
-    if (editor) {
+    if (editor?.current) {
       editor.current.storage.anchors = anchors;
+      cleanOrphanAnchors(editor.current, doc);
     }
 
     editor?.current.once('create', ({ editor }) => {
