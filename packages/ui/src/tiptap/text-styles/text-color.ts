@@ -27,14 +27,10 @@ export const TextColor = Extension.create({
         attributes: {
           textColor: {
             parseHTML: (element) => {
-              const value = element.style.color;
+              const value = element.dataset.textColor || element.style.color;
 
-              const match = value.match(/var\(--colors-prosemirror\\?\\.([^)]+)\)/);
-              if (match) {
-                const name = match[1] as TextColor;
-                if (textColors.includes(name)) {
-                  return name;
-                }
+              if (textColors.includes(value as TextColor)) {
+                return value;
               }
 
               const color = new TinyColor(value);
@@ -51,6 +47,7 @@ export const TextColor = Extension.create({
 
               if (textColor === 'white') {
                 return {
+                  'data-text-color': textColor,
                   style: `color: ${colors[textColor]};`,
                   class: cx(
                     'low-contrast-text',
@@ -63,6 +60,7 @@ export const TextColor = Extension.create({
                 };
               } else {
                 return {
+                  'data-text-color': textColor,
                   style: `color: ${colors[textColor]};`,
                 };
               }
