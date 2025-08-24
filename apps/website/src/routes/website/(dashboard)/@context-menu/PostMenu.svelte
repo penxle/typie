@@ -36,10 +36,10 @@
     };
     via: 'tree' | 'editor';
     pageLayout?: PageLayout;
-    pageLayoutEnabled?: boolean;
+    layoutMode?: 'scroll' | 'page';
   };
 
-  let { post, entity, via, pageLayout, pageLayoutEnabled }: Props = $props();
+  let { post, entity, via, pageLayout, layoutMode }: Props = $props();
 
   let showPdfExportModal = $state(false);
   let exportModalPageLayout = $state<PageLayout | undefined>();
@@ -163,20 +163,19 @@
 
   const handleExport = async () => {
     let layout = pageLayout;
-    let pageEnabled = pageLayoutEnabled;
 
-    if (!layout && via === 'tree') {
+    if (via === 'tree') {
       const attrs = await getPostYjsAttrs<{
         pageLayout: PageLayout;
         layoutMode: 'scroll' | 'page';
       }>(post.id, ['pageLayout', 'layoutMode']);
 
       layout = attrs.pageLayout;
-      pageEnabled = attrs.layoutMode === 'page';
+      layoutMode = attrs.layoutMode;
     }
 
     exportModalPageLayout = layout;
-    exportModalPageEnabled = !!pageEnabled;
+    exportModalPageEnabled = layoutMode === 'page';
     showPdfExportModal = true;
   };
 

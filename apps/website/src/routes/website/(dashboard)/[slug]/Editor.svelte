@@ -6,11 +6,10 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Helmet, HorizontalDivider, Icon, InEditorBody, Menu, MenuItem } from '@typie/ui/components';
+  import { EditorLayout, Helmet, HorizontalDivider, Icon, InEditorBody, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
-  import { mmToPx } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
@@ -216,8 +215,6 @@
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
-  const isPageLayoutEnabled = $derived(layoutMode.current === 'page');
-
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
 
@@ -415,7 +412,7 @@
   });
 
   $effect(() => {
-    if (isPageLayoutEnabled && pageLayout.current) {
+    if (layoutMode.current === 'page' && pageLayout.current) {
       untrack(() => {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         editor?.current.commands.setPageLayout(pageLayout.current!);
@@ -738,8 +735,8 @@
               {#if $query.entity.node.__typename === 'Post'}
                 <PostMenu
                   entity={$query.entity}
+                  layoutMode={layoutMode.current}
                   pageLayout={pageLayout.current}
-                  pageLayoutEnabled={isPageLayoutEnabled}
                   post={$query.entity.node}
                   via="editor"
                 />
@@ -833,11 +830,7 @@
             flexGrow: '1',
             zIndex: 'editor',
             backgroundColor: 'surface.default',
-            '&[data-layout="page"]': {
-              backgroundColor: 'surface.subtle/50',
-            },
           })}
-          data-layout={isPageLayoutEnabled && pageLayout ? 'page' : 'scroll'}
           onmouseleave={() => {
             showAnchorOutline = false;
           }}
@@ -850,26 +843,22 @@
           }}
           role="none"
         >
-          <div
-            style:--prosemirror-max-width={isPageLayoutEnabled && pageLayout.current
-              ? `${mmToPx(pageLayout.current.width)}px`
-              : `${maxWidth.current}px`}
-            style:--prosemirror-page-margin-top={isPageLayoutEnabled && pageLayout.current
-              ? `${mmToPx(pageLayout.current.marginTop)}px`
-              : '0'}
-            style:--prosemirror-page-margin-bottom={isPageLayoutEnabled && pageLayout.current
-              ? `${mmToPx(pageLayout.current.marginBottom)}px`
-              : '0'}
-            style:--prosemirror-page-margin-left={isPageLayoutEnabled && pageLayout.current
-              ? `${mmToPx(pageLayout.current.marginLeft)}px`
-              : '0'}
-            style:--prosemirror-page-margin-right={isPageLayoutEnabled && pageLayout.current
-              ? `${mmToPx(pageLayout.current.marginRight)}px`
-              : '0'}
-            style:--prosemirror-padding-bottom={isPageLayoutEnabled && pageLayout.current
-              ? '0'
-              : `${(1 - (app.preference.current.typewriterPosition ?? 0.8)) * 100}vh`}
-            class={cx('editor', css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' }))}
+          <EditorLayout
+            class={cx(
+              'editor',
+              css({
+                position: 'relative',
+                flexGrow: '1',
+                height: 'full',
+                overflowY: 'auto',
+                scrollbarGutter: 'stable',
+              }),
+            )}
+            layoutMode={layoutMode.current}
+            maxWidth={maxWidth.current}
+            pageLayout={pageLayout.current}
+            typewriterEnabled={app.preference.current.typewriterEnabled}
+            typewriterPosition={app.preference.current.typewriterPosition}
           >
             <div
               class={flex({
@@ -1064,7 +1053,7 @@
                 <Timeline $post={$query.entity.node} {doc} />
               </div>
             {/if}
-          </div>
+          </EditorLayout>
 
           <Anchors
             anchors={anchors.current}
