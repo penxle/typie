@@ -4,6 +4,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_lab.dart';
@@ -47,6 +48,25 @@ class BodySettingBottomSheet extends HookWidget {
       }
     }
 
+    IconData getBlockIcon(String blockName) {
+      switch (blockName) {
+        case '인용구':
+          return LucideLightIcons.quote;
+        case '강조':
+          return LucideLightIcons.message_square_warning;
+        case '접기':
+          return LucideLightIcons.chevrons_down_up;
+        case '표':
+          return LucideLightIcons.table;
+        case '코드':
+          return LucideLightIcons.code;
+        case 'HTML':
+          return LucideLightIcons.code_xml;
+        default:
+          return LucideLightIcons.file_text;
+      }
+    }
+
     Future<List<String>> getIncompatibleBlocks() async {
       try {
         final result = await scope.webViewController.value?.callProcedure('getIncompatibleBlocks');
@@ -63,9 +83,9 @@ class BodySettingBottomSheet extends HookWidget {
         incompatibleBlocks.value = blocks;
 
         if (blocks.isNotEmpty && context.mounted) {
-          await context.showBottomSheet(
-            child: _IncompatibleBlocksBottomSheet(
-              blocks: blocks.map(getBlockName).toList(),
+          await context.showModal(
+            child: ConfirmModal(
+              title: '페이지 모드 전환',
               onConfirm: () async {
                 await scope.webViewController.value?.emitEvent('setLayoutMode', {
                   'mode': mode,
@@ -76,6 +96,47 @@ class BodySettingBottomSheet extends HookWidget {
               onCancel: () {
                 onCancel();
               },
+              confirmText: '해제 및 전환',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 16,
+                children: [
+                  Text(
+                    '페이지 모드에서는 일부 블록을 지원하지 않아요. 다음 블록들을 해제해서 일반 문단으로 변환할까요?',
+                    style: TextStyle(fontSize: 15, color: context.colors.textSubtle),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: context.colors.surfaceSubtle,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 8,
+                      children: blocks
+                          .map(getBlockName)
+                          .map(
+                            (block) => Row(
+                              children: [
+                                Icon(getBlockIcon(block), size: 16, color: context.colors.textDefault),
+                                const Gap(8),
+                                Text(
+                                  block,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: context.colors.textDefault,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         } else {
@@ -308,121 +369,5 @@ class _PageMarginSection extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-class _IncompatibleBlocksBottomSheet extends StatelessWidget {
-  const _IncompatibleBlocksBottomSheet({required this.blocks, required this.onConfirm, required this.onCancel});
-
-  final List<String> blocks;
-  final VoidCallback onConfirm;
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppBottomSheet(
-      padding: const Pad(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 16,
-        children: [
-          Text(
-            '페이지 모드 전환',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: context.colors.textDefault),
-          ),
-          Text(
-            '페이지 모드에서는 일부 블록을 지원하지 않아요.\n다음 블록들을 해제해서 일반 문단으로 변환할까요?',
-            style: TextStyle(fontSize: 15, color: context.colors.textSubtle),
-          ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: context.colors.surfaceSubtle, borderRadius: BorderRadius.circular(6)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 8,
-              children: blocks
-                  .map(
-                    (block) => Row(
-                      children: [
-                        Icon(_getBlockIcon(block), size: 16, color: context.colors.textDefault),
-                        const Gap(8),
-                        Text(
-                          block,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: context.colors.textDefault,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-          Row(
-            spacing: 8,
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onCancel();
-                  },
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: context.colors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: const Text('취소', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onConfirm();
-                  },
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: context.colors.surfaceInverse,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      '모두 해제하고 전환',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textInverse),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  IconData _getBlockIcon(String blockName) {
-    switch (blockName) {
-      case '인용구':
-        return LucideLightIcons.quote;
-      case '강조':
-        return LucideLightIcons.message_square_warning;
-      case '접기':
-        return LucideLightIcons.chevrons_down_up;
-      case '표':
-        return LucideLightIcons.table;
-      case '코드':
-        return LucideLightIcons.code;
-      case 'HTML':
-        return LucideLightIcons.code_xml;
-      default:
-        return LucideLightIcons.file_text;
-    }
   }
 }
