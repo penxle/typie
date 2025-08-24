@@ -2,6 +2,8 @@ export const MIN_CONTENT_SIZE_MM = 50;
 
 export const INCOMPATIBLE_NODE_TYPES = new Set(['blockquote', 'callout', 'fold', 'table', 'code_block', 'html_block']);
 
+export type LayoutMode = 'scroll' | 'page';
+
 export type PageLayoutPreset = 'a4' | 'a5' | 'b5' | 'b6';
 
 export type PageLayout = {
