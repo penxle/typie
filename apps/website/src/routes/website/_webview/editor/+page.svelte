@@ -8,9 +8,9 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { autosize } from '@typie/ui/actions';
-  import { InEditorBody } from '@typie/ui/components';
+  import { EditorLayout, EditorZoom, InEditorBody } from '@typie/ui/components';
   import { getIncompatibleBlocks, getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
-  import { clamp, createDefaultPageLayout, mmToPx, PAGE_SIZE_MAP } from '@typie/ui/utils';
+  import { clamp, createDefaultPageLayout, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
@@ -155,28 +155,8 @@
 
   let scrollContainer = $state<HTMLDivElement>();
 
-  let isPinching = $state(false);
-  let lastPinchDistance = 0;
-  let userScale = $state(1);
-
-  let baseScale = $derived(() => {
-    if (!browser) return 1;
-    if (!(layoutMode.current === 'page' && pageLayout.current)) return 1;
-
-    const viewportWidth = window.innerWidth;
-    const bodyWidth = mmToPx(pageLayout.current.width);
-
-    if (bodyWidth > viewportWidth) {
-      return viewportWidth / bodyWidth;
-    }
-    return 1;
-  });
-
-  let editorScale = $derived(() => {
-    const base = baseScale();
-    const desired = base * userScale;
-    return clamp(desired, base, 1);
-  });
+  let editorScale = $state(1);
+  let editorZoomed = $state(false);
 
   let features = $state<string[]>([]);
   let settings = $state<{
@@ -926,115 +906,10 @@
 />
 
 <div
+  style:--prosemirror-color-selection={token.var('colors.border.strong')}
   class={css({ width: 'full', height: '[100dvh]', overflow: 'hidden' })}
-  ontouchend={(e) => {
-    if (e.touches.length < 2) {
-      isPinching = false;
-    }
-  }}
-  ontouchmove={(e) => {
-    if (isPinching && e.touches.length === 2) {
-      if (!(layoutMode.current === 'page' && pageLayout.current)) return;
-
-      const touch1 = e.touches[0];
-      const touch2 = e.touches[1];
-      const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
-
-      if (!scrollContainer) return;
-      const prevScale = editorScale();
-
-      const rect = scrollContainer.getBoundingClientRect();
-      const centerX = (touch1.clientX + touch2.clientX) / 2 - rect.left;
-      const centerY = (touch1.clientY + touch2.clientY) / 2 - rect.top;
-
-      const pinchX = centerX + scrollContainer.scrollLeft;
-      const pinchY = centerY + scrollContainer.scrollTop;
-
-      const delta = currentDistance - lastPinchDistance;
-      const scaleDelta = delta * 0.01;
-
-      const newUserScale = userScale + scaleDelta;
-      const currentBaseScale = baseScale();
-
-      if (currentBaseScale <= 1) {
-        userScale = clamp(newUserScale, 1, 1 / currentBaseScale);
-
-        requestAnimationFrame(() => {
-          const newScale = editorScale();
-          const scaleRatio = newScale / prevScale;
-
-          if (!scrollContainer) return;
-
-          scrollContainer.scrollLeft = pinchX * scaleRatio - centerX;
-          scrollContainer.scrollTop = pinchY * scaleRatio - centerY;
-        });
-      }
-
-      lastPinchDistance = currentDistance;
-    }
-  }}
-  ontouchstart={(e) => {
-    if (e.touches.length === 2) {
-      isPinching = true;
-      const touch1 = e.touches[0];
-      const touch2 = e.touches[1];
-      lastPinchDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
-    }
-  }}
-  onwheel={(e) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-
-      if (!(layoutMode.current === 'page' && pageLayout.current)) return;
-
-      if (!scrollContainer) return;
-      const prevScale = editorScale();
-
-      const rect = scrollContainer.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left + scrollContainer.scrollLeft;
-      const mouseY = e.clientY - rect.top + scrollContainer.scrollTop;
-
-      const scaleDelta = -e.deltaY * 0.01;
-      const newUserScale = userScale + scaleDelta;
-      const currentBaseScale = baseScale();
-
-      if (currentBaseScale <= 1) {
-        userScale = clamp(newUserScale, 1, 1 / currentBaseScale);
-
-        requestAnimationFrame(() => {
-          const newScale = editorScale();
-          const scaleRatio = newScale / prevScale;
-
-          if (!scrollContainer) return;
-
-          const localX = e.clientX - rect.left;
-          const localY = e.clientY - rect.top;
-          scrollContainer.scrollLeft = mouseX * scaleRatio - localX;
-          scrollContainer.scrollTop = mouseY * scaleRatio - localY;
-        });
-      }
-    }
-  }}
 >
-  <div
-    bind:this={scrollContainer}
-    style:--prosemirror-max-width={layoutMode.current === 'page' && pageLayout.current
-      ? `${mmToPx(pageLayout.current.width)}px`
-      : `${maxWidth.current}px`}
-    style:--prosemirror-page-margin-top={layoutMode.current === 'page' && pageLayout.current
-      ? `${mmToPx(pageLayout.current.marginTop)}px`
-      : '0'}
-    style:--prosemirror-page-margin-bottom={layoutMode.current === 'page' && pageLayout.current
-      ? `${mmToPx(pageLayout.current.marginBottom)}px`
-      : '0'}
-    style:--prosemirror-page-margin-left={layoutMode.current === 'page' && pageLayout.current
-      ? `${mmToPx(pageLayout.current.marginLeft)}px`
-      : '0'}
-    style:--prosemirror-page-margin-right={layoutMode.current === 'page' && pageLayout.current
-      ? `${mmToPx(pageLayout.current.marginRight)}px`
-      : '0'}
-    style:--prosemirror-padding-bottom="80dvh"
-    style:--prosemirror-color-selection={token.var('colors.border.strong')}
+  <EditorLayout
     class={cx(
       'editor',
       flex({
@@ -1048,17 +923,23 @@
         touchAction: 'pan-y',
         WebkitTouchCallout: 'none',
         WebkitOverflowScrolling: 'touch',
-        '&[data-layout="page"]': {
-          paddingX: '0',
-          touchAction: editorScale() <= baseScale() ? 'pan-y' : 'auto',
-          overflowX: editorScale() <= baseScale() ? 'hidden' : 'auto',
-          backgroundColor: 'surface.subtle/50',
-        },
       }),
     )}
-    data-layout={layoutMode.current === 'page' && pageLayout.current ? 'page' : 'scroll'}
+    layoutMode={layoutMode.current}
+    maxWidth={maxWidth.current}
+    mobile={true}
+    pageLayout={pageLayout.current}
+    zoomed={editorZoomed}
+    bind:container={scrollContainer}
   >
-    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)', flexShrink: '0' })}>
+    <div
+      style:width={editorZoomed && layoutMode.current === 'page' ? `calc(var(--prosemirror-max-width) * ${editorScale})` : '100%'}
+      class={flex({
+        flexDirection: 'column',
+        flexShrink: '0',
+        ...(editorZoomed && { alignSelf: 'flex-start' }),
+      })}
+    >
       <textarea
         bind:this={titleEl}
         class={css({
@@ -1143,83 +1024,55 @@
       </div>
     </div>
 
-    <div
-      style:width={editorScale() > baseScale() && pageLayout.current ? `${mmToPx(pageLayout.current.width) * editorScale()}px` : '100%'}
-      style:height={editorScale() > baseScale() && pageLayout.current
-        ? `${mmToPx(pageLayout.current.height) * editorScale()}px`
-        : undefined}
-      style:align-self={editorScale() > baseScale() ? 'flex-start' : 'center'}
+    <EditorZoom
       class={css({ position: 'relative', flexGrow: '1' })}
+      layoutMode={layoutMode.current}
+      pageLayout={pageLayout.current}
+      {scrollContainer}
+      bind:scale={editorScale}
+      bind:zoomed={editorZoomed}
     >
-      <div
-        style:transform={`scale(${editorScale()})`}
-        style:transform-origin="top left"
-        style:width={editorScale() < 1 ? `${100 / editorScale()}%` : '100%'}
-        style:height={editorScale() < 1 ? `${100 / editorScale()}%` : '100%'}
-        style:will-change={editorScale() === 1 ? 'auto' : 'transform'}
-      >
-        <TiptapEditor
-          style={css.raw({ size: 'full', minWidth: pageLayout.current ? '[fit-content]' : undefined, paddingTop: '40px' })}
-          {awareness}
-          {doc}
-          onblur={() => {
-            window.__webview__?.emitEvent('blur');
-          }}
-          oncreate={() => {
-            mounted = true;
-            window.__webview__?.emitEvent('webviewReady');
-            setYJSState();
-          }}
-          onfocus={() => {
-            window.__webview__?.emitEvent('focus', { element: 'editor' });
-          }}
-          storage={{
-            uploadBlobAsImage: (file) => {
-              return uploadBlobAsImage(file);
-            },
-            uploadBlobAsFile: (file) => {
-              return uploadBlobAsFile(file);
-            },
-            unfurlEmbed: (url) => {
-              return unfurlEmbed({ url });
-            },
-          }}
-          {undoManager}
-          bind:editor
-        />
-        {#if editor && mounted}
-          <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
-            <Placeholder {editor} isTemplateActive={features.includes('template')} />
-          </InEditorBody>
-          {#if settings.lineHighlightEnabled}
-            <Highlight {editor} scale={editorScale()} />
-          {/if}
-          <Limit {$query} {editor} />
-          <Spellcheck {editor} />
-          <FindReplace {editor} />
-          <Anchors {doc} {editor} />
+      <TiptapEditor
+        style={css.raw({ size: 'full', paddingTop: '40px' })}
+        {awareness}
+        {doc}
+        onblur={() => {
+          window.__webview__?.emitEvent('blur');
+        }}
+        oncreate={() => {
+          mounted = true;
+          window.__webview__?.emitEvent('webviewReady');
+          setYJSState();
+        }}
+        onfocus={() => {
+          window.__webview__?.emitEvent('focus', { element: 'editor' });
+        }}
+        storage={{
+          uploadBlobAsImage: (file) => {
+            return uploadBlobAsImage(file);
+          },
+          uploadBlobAsFile: (file) => {
+            return uploadBlobAsFile(file);
+          },
+          unfurlEmbed: (url) => {
+            return unfurlEmbed({ url });
+          },
+        }}
+        {undoManager}
+        bind:editor
+      />
+      {#if editor && mounted}
+        <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
+          <Placeholder {editor} isTemplateActive={features.includes('template')} />
+        </InEditorBody>
+        {#if settings.lineHighlightEnabled}
+          <Highlight {editor} scale={editorScale} />
         {/if}
-      </div>
-    </div>
-
-    {#if editorScale() !== 1}
-      <div
-        class={css({
-          position: 'fixed',
-          left: '20px',
-          bottom: '20px',
-          paddingX: '12px',
-          paddingY: '8px',
-          backgroundColor: 'surface.subtle',
-          borderWidth: '1px',
-          borderColor: 'border.subtle',
-          borderRadius: '8px',
-          fontSize: '12px',
-          color: 'text.subtle',
-        })}
-      >
-        {Math.round(editorScale() * 100)}%
-      </div>
-    {/if}
-  </div>
+        <Limit {$query} {editor} />
+        <Spellcheck {editor} />
+        <FindReplace {editor} />
+        <Anchors {doc} {editor} />
+      {/if}
+    </EditorZoom>
+  </EditorLayout>
 </div>
