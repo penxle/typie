@@ -30,18 +30,14 @@ export const TextBackgroundColor = Extension.create({
         attributes: {
           textBackgroundColor: {
             parseHTML: (element) => {
-              const value = element.style.backgroundColor;
+              const value = element.dataset.textBackgroundColor || element.style.backgroundColor;
 
               if (!value || value === 'transparent' || value === 'rgba(0, 0, 0, 0)') {
                 return null;
               }
 
-              const match = value.match(/var\(--colors-prosemirror\\?\\.bg\\?\\.([^)]+)\)/);
-              if (match) {
-                const name = match[1] as TextBackgroundColor;
-                if (textBackgroundColors.includes(name)) {
-                  return name;
-                }
+              if (textBackgroundColors.includes(value as TextBackgroundColor)) {
+                return value;
               }
 
               const color = new TinyColor(value);
@@ -57,6 +53,7 @@ export const TextBackgroundColor = Extension.create({
               }
 
               return {
+                'data-text-background-color': textBackgroundColor,
                 style: `background-color: ${colors[textBackgroundColor as TextBackgroundColor]};`,
               };
             },
