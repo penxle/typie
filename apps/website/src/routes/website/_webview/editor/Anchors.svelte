@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { calculateAnchorPositions, getAnchorElements, getLastNodeOffsetTop } from '@typie/ui/anchor';
+  import { calculateAnchorPositions, cleanOrphanAnchors, getAnchorElements, getLastNodeOffsetTop } from '@typie/ui/anchor';
   import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
@@ -193,5 +193,9 @@
         mixpanel.track('anchor_reset');
       }
     });
+
+    if (editor?.current) {
+      cleanOrphanAnchors(editor.current, doc);
+    }
   });
 </script>

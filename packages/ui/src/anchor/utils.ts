@@ -1,4 +1,6 @@
 import { clamp } from '../utils';
+import type { Editor } from '@tiptap/core';
+import type * as Y from 'yjs';
 
 const displayCache = new WeakMap<HTMLElement, string>();
 
@@ -78,4 +80,37 @@ export const calculateAnchorPositions = (
       };
     })
     .sort((a, b) => a.position - b.position);
+};
+
+// NOTE: 존재하지 않는 노드의 앵커를 제거
+export const cleanOrphanAnchors = (editor: Editor, doc: Y.Doc): number => {
+  const attrsMap = doc.getMap('attrs');
+  const anchors = attrsMap.get('anchors') as Record<string, string | null> | undefined;
+
+  if (!anchors || Object.keys(anchors).length === 0) {
+    return 0;
+  }
+
+  const existingNodeIds = new Set(
+    [...editor.view.dom.querySelectorAll('[data-node-id]')]
+      .map((el) => (el as HTMLElement).dataset.nodeId)
+      .filter((id): id is string => id !== undefined),
+  );
+
+  const orphanNodeIds: string[] = [];
+  const cleanedAnchors: Record<string, string | null> = {};
+
+  for (const [nodeId, name] of Object.entries(anchors)) {
+    if (existingNodeIds.has(nodeId)) {
+      cleanedAnchors[nodeId] = name;
+    } else {
+      orphanNodeIds.push(nodeId);
+    }
+  }
+
+  if (orphanNodeIds.length > 0) {
+    attrsMap.set('anchors', cleanedAnchors);
+  }
+
+  return orphanNodeIds.length;
 };
