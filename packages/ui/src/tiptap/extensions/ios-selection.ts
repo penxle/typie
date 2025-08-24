@@ -27,51 +27,54 @@ const cloneTransparentParagraph = (paragraphElement: HTMLElement) => {
   clonedParagraph.setAttribute('aria-hidden', 'true');
   clonedParagraph.setAttribute('role', 'presentation');
 
-  const computedStyle = window.getComputedStyle(paragraphElement);
+  const paragraphStyle = window.getComputedStyle(paragraphElement);
 
-  clonedParagraph.style.fontSize = computedStyle.fontSize;
-  clonedParagraph.style.fontFamily = computedStyle.fontFamily;
-  clonedParagraph.style.fontWeight = computedStyle.fontWeight;
-  clonedParagraph.style.fontStyle = computedStyle.fontStyle;
-  clonedParagraph.style.fontVariant = computedStyle.fontVariant;
-  clonedParagraph.style.fontFeatureSettings = computedStyle.fontFeatureSettings;
-  clonedParagraph.style.fontKerning = computedStyle.fontKerning;
-  clonedParagraph.style.fontOpticalSizing = computedStyle.fontOpticalSizing;
-  clonedParagraph.style.fontSizeAdjust = computedStyle.fontSizeAdjust;
+  const textElement = (paragraphElement.querySelector('[style*="font-size"]') as HTMLElement) || paragraphElement;
+  const textStyle = window.getComputedStyle(textElement);
 
-  clonedParagraph.style.lineHeight = computedStyle.lineHeight;
-  clonedParagraph.style.letterSpacing = computedStyle.letterSpacing;
-  clonedParagraph.style.wordSpacing = computedStyle.wordSpacing;
-  clonedParagraph.style.textAlign = computedStyle.textAlign;
-  clonedParagraph.style.textAlignLast = computedStyle.textAlignLast;
-  clonedParagraph.style.textIndent = computedStyle.textIndent;
-  clonedParagraph.style.verticalAlign = computedStyle.verticalAlign;
+  clonedParagraph.style.fontSize = textStyle.fontSize;
+  clonedParagraph.style.fontFamily = textStyle.fontFamily;
+  clonedParagraph.style.fontWeight = textStyle.fontWeight;
+  clonedParagraph.style.fontStyle = textStyle.fontStyle;
+  clonedParagraph.style.fontVariant = textStyle.fontVariant;
+  clonedParagraph.style.fontFeatureSettings = textStyle.fontFeatureSettings;
+  clonedParagraph.style.fontKerning = textStyle.fontKerning;
+  clonedParagraph.style.fontOpticalSizing = textStyle.fontOpticalSizing;
+  clonedParagraph.style.fontSizeAdjust = textStyle.fontSizeAdjust;
 
-  clonedParagraph.style.textTransform = computedStyle.textTransform;
-  clonedParagraph.style.textDecoration = computedStyle.textDecoration;
-  clonedParagraph.style.textDecorationLine = computedStyle.textDecorationLine;
-  clonedParagraph.style.textDecorationStyle = computedStyle.textDecorationStyle;
-  clonedParagraph.style.textDecorationThickness = computedStyle.textDecorationThickness;
-  clonedParagraph.style.textUnderlineOffset = computedStyle.textUnderlineOffset;
-  clonedParagraph.style.textShadow = computedStyle.textShadow;
+  clonedParagraph.style.lineHeight = textStyle.lineHeight;
+  clonedParagraph.style.letterSpacing = textStyle.letterSpacing;
+  clonedParagraph.style.wordSpacing = textStyle.wordSpacing;
+  clonedParagraph.style.textAlign = textStyle.textAlign;
+  clonedParagraph.style.textAlignLast = textStyle.textAlignLast;
+  clonedParagraph.style.textIndent = textStyle.textIndent;
+  clonedParagraph.style.verticalAlign = textStyle.verticalAlign;
 
-  clonedParagraph.style.textRendering = computedStyle.textRendering;
+  clonedParagraph.style.textTransform = textStyle.textTransform;
+  clonedParagraph.style.textDecoration = textStyle.textDecoration;
+  clonedParagraph.style.textDecorationLine = textStyle.textDecorationLine;
+  clonedParagraph.style.textDecorationStyle = textStyle.textDecorationStyle;
+  clonedParagraph.style.textDecorationThickness = textStyle.textDecorationThickness;
+  clonedParagraph.style.textUnderlineOffset = textStyle.textUnderlineOffset;
+  clonedParagraph.style.textShadow = textStyle.textShadow;
 
-  clonedParagraph.style.whiteSpace = computedStyle.whiteSpace;
-  clonedParagraph.style.wordBreak = computedStyle.wordBreak;
-  clonedParagraph.style.overflowWrap = computedStyle.overflowWrap;
-  clonedParagraph.style.hyphens = computedStyle.hyphens;
-  clonedParagraph.style.tabSize = computedStyle.tabSize;
+  clonedParagraph.style.textRendering = textStyle.textRendering;
 
-  clonedParagraph.style.direction = computedStyle.direction;
-  clonedParagraph.style.writingMode = computedStyle.writingMode;
-  clonedParagraph.style.textOrientation = computedStyle.textOrientation;
+  clonedParagraph.style.whiteSpace = textStyle.whiteSpace;
+  clonedParagraph.style.wordBreak = textStyle.wordBreak;
+  clonedParagraph.style.overflowWrap = textStyle.overflowWrap;
+  clonedParagraph.style.hyphens = textStyle.hyphens;
+  clonedParagraph.style.tabSize = textStyle.tabSize;
 
-  clonedParagraph.style.textOverflow = computedStyle.textOverflow;
-  clonedParagraph.style.quotes = computedStyle.quotes;
-  clonedParagraph.style.unicodeBidi = computedStyle.unicodeBidi;
+  clonedParagraph.style.direction = textStyle.direction;
+  clonedParagraph.style.writingMode = textStyle.writingMode;
+  clonedParagraph.style.textOrientation = textStyle.textOrientation;
 
-  clonedParagraph.style.padding = computedStyle.padding;
+  clonedParagraph.style.textOverflow = textStyle.textOverflow;
+  clonedParagraph.style.quotes = textStyle.quotes;
+  clonedParagraph.style.unicodeBidi = textStyle.unicodeBidi;
+
+  clonedParagraph.style.padding = paragraphStyle.padding;
 
   // NOTE: 모든 요소를 투명하게 만들기
   const allElements = clonedParagraph.querySelectorAll('*');
