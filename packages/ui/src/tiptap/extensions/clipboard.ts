@@ -114,6 +114,17 @@ export const Clipboard = Extension.create({
     return [
       new Plugin({
         props: {
+          transformPasted: (slice, view) => {
+            const { state } = view;
+            const { $from } = state.selection;
+
+            const isEmptyParagraph = $from.parent.type.name === 'paragraph' && $from.parent.content.size === 0;
+            if (isEmptyParagraph) {
+              return new Slice(slice.content, slice.openStart - 1, slice.openEnd);
+            }
+
+            return slice;
+          },
           clipboardTextParser: (text, _, __, view) => {
             const { state } = view;
             const { selection, schema } = state;
