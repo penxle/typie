@@ -6,7 +6,7 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import { comma, downloadFromBase64 } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { EntityAvailability, EntityVisibility, ExportLayoutMode, PostType } from '@/enums';
+  import { EntityAvailability, EntityVisibility, ExportLayoutMode, PostLayoutMode, PostType } from '@/enums';
   import { TypieError } from '@/errors';
   import BlendIcon from '~icons/lucide/blend';
   import CopyIcon from '~icons/lucide/copy';
@@ -36,7 +36,7 @@
     };
     via: 'tree' | 'editor';
     pageLayout?: PageLayout;
-    layoutMode?: 'scroll' | 'page';
+    layoutMode?: PostLayoutMode;
   };
 
   let { post, entity, via, pageLayout, layoutMode }: Props = $props();
@@ -167,7 +167,7 @@
     if (via === 'tree') {
       const attrs = await getPostYjsAttrs<{
         pageLayout: PageLayout;
-        layoutMode: 'scroll' | 'page';
+        layoutMode: PostLayoutMode;
       }>(post.id, ['pageLayout', 'layoutMode']);
 
       layout = attrs.pageLayout;
@@ -175,7 +175,7 @@
     }
 
     exportModalPageLayout = layout;
-    exportModalPageEnabled = layoutMode === 'page';
+    exportModalPageEnabled = layoutMode === PostLayoutMode.PAGE;
     showPdfExportModal = true;
   };
 

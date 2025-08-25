@@ -4,6 +4,7 @@ import { Node } from '@tiptap/pm/model';
 import { generateJitteredKeyBetween, indexCharacterSet } from 'fractional-indexing-jittered';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
+import { PostLayoutMode } from '@/enums';
 import { schema, textSerializers } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
 import type { CanvasShape } from '@/db/schemas/json';
@@ -16,8 +17,10 @@ type MakeYDocParams = {
   storedMarks?: unknown[];
   note?: string;
   anchors?: Record<string, string | null>;
+  layoutMode?: PostLayoutMode;
+  pageLayout?: unknown;
 };
-export const makeYDoc = ({ title, subtitle, maxWidth, body, note, storedMarks, anchors }: MakeYDocParams) => {
+export const makeYDoc = ({ title, subtitle, maxWidth, body, note, storedMarks, anchors, layoutMode, pageLayout }: MakeYDocParams) => {
   const node = Node.fromJSON(schema, body);
   const doc = new Y.Doc();
 
@@ -29,6 +32,8 @@ export const makeYDoc = ({ title, subtitle, maxWidth, body, note, storedMarks, a
     map.set('storedMarks', storedMarks ?? []);
     map.set('note', note ?? '');
     map.set('anchors', anchors ?? {});
+    map.set('layoutMode', layoutMode ?? PostLayoutMode.SCROLL);
+    map.set('pageLayout', pageLayout ?? null);
 
     const fragment = doc.getXmlFragment('body');
     prosemirrorToYXmlFragment(node, fragment);

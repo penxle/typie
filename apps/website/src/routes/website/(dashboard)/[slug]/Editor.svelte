@@ -22,7 +22,7 @@
   import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostSyncType, UserRole } from '@/enums';
+  import { PostLayoutMode, PostSyncType, UserRole } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import IconClockFading from '~icons/lucide/clock-fading';
   import ElipsisIcon from '~icons/lucide/ellipsis';
@@ -212,7 +212,7 @@
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
-  const layoutMode = new YState<'scroll' | 'page'>(doc, 'layoutMode', 'scroll');
+  const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
@@ -413,7 +413,7 @@
   });
 
   $effect(() => {
-    if (layoutMode.current === 'page' && pageLayout.current) {
+    if (layoutMode.current === PostLayoutMode.PAGE && pageLayout.current) {
       untrack(() => {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         editor?.current.commands.setPageLayout(pageLayout.current!);

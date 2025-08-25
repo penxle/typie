@@ -105,6 +105,12 @@ export const PostContentRating = {
   R19: 'R19',
 } as const;
 
+export type PostLayoutMode = keyof typeof PostLayoutMode;
+export const PostLayoutMode = {
+  SCROLL: 'SCROLL',
+  PAGE: 'PAGE',
+} as const;
+
 export type PostType = keyof typeof PostType;
 export const PostType = {
   NORMAL: 'NORMAL',

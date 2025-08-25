@@ -6,7 +6,7 @@ import { createDbId } from './id';
 import { bytea, datetime } from './types';
 import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { CanvasShape, NotificationData, PlanRules } from './json';
+import type { CanvasShape, NotificationData, PageLayout, PlanRules } from './json';
 
 export const Canvases = pgTable(
   'canvases',
@@ -408,6 +408,8 @@ export const PostContents = pgTable(
     characterCount: integer('character_count').notNull().default(0),
     blobSize: integer('blob_size').notNull().default(0),
     storedMarks: jsonb('stored_marks').notNull().$type<unknown[]>().default([]),
+    layoutMode: E._PostLayoutMode('layout_mode').notNull().default('SCROLL'),
+    pageLayout: jsonb('page_layout').$type<PageLayout>(),
     note: text('note').notNull().default(''),
     update: bytea('update').notNull(),
     vector: bytea('vector').notNull(),

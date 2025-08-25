@@ -22,7 +22,7 @@
   import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostSyncType, UserRole } from '@/enums';
+  import { PostLayoutMode, PostSyncType, UserRole } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import IconClockFading from '~icons/lucide/clock-fading';
   import ElipsisIcon from '~icons/lucide/ellipsis';
@@ -209,11 +209,11 @@
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
-  const layoutMode = new YState<'scroll' | 'page'>(doc, 'layoutMode', 'scroll');
+  const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
-  const isPageLayoutEnabled = $derived(layoutMode.current === 'page');
+  const isPageLayoutEnabled = $derived(layoutMode.current === PostLayoutMode.PAGE);
 
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
@@ -815,7 +815,7 @@
 
       <HorizontalDivider color="secondary" />
 
-      <Toolbar $site={$query.entity.site} {doc} {editor} {undoManager} />
+      <Toolbar $site={$query.entity.site} {doc} {editor} />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div

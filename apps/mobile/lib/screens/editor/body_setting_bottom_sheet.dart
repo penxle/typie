@@ -7,6 +7,7 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_lab.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -81,8 +82,8 @@ class BodySettingBottomSheet extends HookWidget {
       return [];
     }
 
-    Future<void> handleLayoutModeChange(String mode, VoidCallback onCancel) async {
-      if (mode == 'page') {
+    Future<void> handleLayoutModeChange(GPostLayoutMode mode, VoidCallback onCancel) async {
+      if (mode == GPostLayoutMode.PAGE) {
         final blocks = await getIncompatibleBlocks();
         incompatibleBlocks.value = blocks;
 
@@ -160,8 +161,8 @@ class BodySettingBottomSheet extends HookWidget {
         onSubmit: (form) async {
           final dirtyData = form.getDirtyFieldsData();
           if (dirtyData.containsKey('layoutMode')) {
-            await handleLayoutModeChange(dirtyData['layoutMode'] as String, () {
-              form.setValue('layoutMode', yjsState?.layoutMode ?? 'scroll');
+            await handleLayoutModeChange(dirtyData['layoutMode'] as GPostLayoutMode, () {
+              form.setValue('layoutMode', GPostLayoutMode.valueOf(yjsState?.layoutMode ?? GPostLayoutMode.SCROLL.name));
             });
           }
           if (dirtyData.containsKey('pageSize')) {
@@ -182,7 +183,7 @@ class BodySettingBottomSheet extends HookWidget {
           }
         },
         builder: (context, form) {
-          final isPageLayoutEnabled = yjsState?.layoutMode == 'page';
+          final isPageLayoutEnabled = yjsState?.layoutMode == GPostLayoutMode.PAGE.name;
           return Column(
             spacing: 16,
             children: [
@@ -191,10 +192,10 @@ class BodySettingBottomSheet extends HookWidget {
                 label: '레이아웃 모드',
                 trailing: HookFormSelect(
                   name: 'layoutMode',
-                  initialValue: yjsState?.layoutMode ?? 'scroll',
+                  initialValue: GPostLayoutMode.valueOf(yjsState?.layoutMode ?? GPostLayoutMode.SCROLL.name),
                   items: const [
-                    HookFormSelectItem(label: '스크롤', value: 'scroll'),
-                    HookFormSelectItem(label: '페이지', value: 'page'),
+                    HookFormSelectItem(label: '스크롤', value: GPostLayoutMode.SCROLL),
+                    HookFormSelectItem(label: '페이지', value: GPostLayoutMode.PAGE),
                   ],
                 ),
               ),

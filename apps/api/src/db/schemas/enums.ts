@@ -19,6 +19,7 @@ export const _PaymentOutcome = createPgEnum('_payment_outcome', E.PaymentOutcome
 export const _PlanAvailability = createPgEnum('_plan_availability', E.PlanAvailability);
 export const _PlanInterval = createPgEnum('_plan_interval', E.PlanInterval);
 export const _PostContentRating = createPgEnum('_post_content_rating', E.PostContentRating);
+export const _PostLayoutMode = createPgEnum('_post_layout_mode', E.PostLayoutMode);
 export const _PostType = createPgEnum('_post_type', E.PostType);
 export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.PreorderPaymentState);
 export const _SiteState = createPgEnum('_site_state', E.SiteState);

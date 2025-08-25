@@ -7,6 +7,7 @@
   import { getIncompatibleBlocks } from '@typie/ui/tiptap';
   import { clamp, createDefaultPageLayout, getMaxMargin, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { PostLayoutMode } from '@/enums';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
@@ -45,9 +46,9 @@
   const app = getAppContext();
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
-  const layoutMode = new YState<'scroll' | 'page'>(doc, 'layoutMode', 'scroll');
+  const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
 
-  const isPageLayoutEnabled = $derived(layoutMode.current === 'page');
+  const isPageLayoutEnabled = $derived(layoutMode.current === PostLayoutMode.PAGE);
 
   const getBlockInfo = (blockType: string) => {
     const blockInfo: Record<string, { name: string; icon: typeof QuoteIcon }> = {
@@ -63,7 +64,7 @@
 
   let capturedIncompatibleBlocks = $state<string[]>([]);
 
-  const handlePageLayoutToggle = (value: 'scroll' | 'page') => {
+  const handlePageLayoutToggle = (value: PostLayoutMode) => {
     if (!editor?.current) {
       return;
     }
@@ -71,7 +72,7 @@
     const incompatibleBlocks = getIncompatibleBlocks(editor.current);
     capturedIncompatibleBlocks = incompatibleBlocks;
 
-    if (value === 'page' && incompatibleBlocks.length > 0) {
+    if (value === PostLayoutMode.PAGE && incompatibleBlocks.length > 0) {
       Dialog.confirm({
         title: '페이지 모드 전환',
         message: '페이지 모드에서는 일부 블록을 지원하지 않아요.',
@@ -87,7 +88,7 @@
           editor.current.chain().focus().convertIncompatibleBlocks().run();
           layoutMode.current = value;
 
-          if (value === 'page' && !pageLayout.current) {
+          if (value === PostLayoutMode.PAGE && !pageLayout.current) {
             pageLayout.current = createDefaultPageLayout('a4');
           }
 
@@ -98,7 +99,7 @@
       });
     } else {
       layoutMode.current = value;
-      if (value === 'page' && !pageLayout.current) {
+      if (value === PostLayoutMode.PAGE && !pageLayout.current) {
         pageLayout.current = createDefaultPageLayout('a4');
       }
       mixpanel.track('toggle_post_page_layout', {
@@ -153,8 +154,8 @@
         <div class={css({ width: '140px' })}>
           <SegmentButtons
             items={[
-              { label: '스크롤', value: 'scroll' },
-              { label: '페이지', value: 'page' },
+              { label: '스크롤', value: PostLayoutMode.SCROLL },
+              { label: '페이지', value: PostLayoutMode.PAGE },
             ]}
             onselect={handlePageLayoutToggle}
             size="sm"
