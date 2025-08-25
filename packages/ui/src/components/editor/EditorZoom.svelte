@@ -227,7 +227,7 @@
         height: '[inherit]',
         direction: 'column',
         alignItems: 'center',
-        touchAction: 'auto',
+        touchAction: '[pan-x pan-y]',
       }),
     )}
     onwheel={handleWheel}
