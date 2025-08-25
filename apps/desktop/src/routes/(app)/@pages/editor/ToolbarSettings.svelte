@@ -10,6 +10,8 @@
     createDefaultPageLayout,
     getMaxMargin,
     INCOMPATIBLE_NODE_TYPES,
+    MAX_PAGE_SIZE_MM,
+    MIN_PAGE_SIZE_MM,
     PAGE_LAYOUT_OPTIONS,
     PAGE_SIZE_MAP,
   } from '@typie/ui/utils';
@@ -297,15 +299,23 @@
                   <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>너비</div>
                   <TextInput
                     style={css.raw({ width: '100px' })}
-                    min="100"
+                    max={MAX_PAGE_SIZE_MM}
+                    min={MIN_PAGE_SIZE_MM}
                     onchange={(e) => {
                       if (!pageLayout.current) return;
                       const target = e.target as HTMLInputElement;
-                      const value = Math.max(100, Number(target.value));
+                      const value = clamp(Number(target.value), MIN_PAGE_SIZE_MM, MAX_PAGE_SIZE_MM);
                       target.value = String(value);
+
+                      const tempLayout = { ...pageLayout.current, width: value };
+                      const maxLeft = getMaxMargin('left', tempLayout);
+                      const maxRight = getMaxMargin('right', tempLayout);
+
                       pageLayout.current = {
                         ...pageLayout.current,
                         width: value,
+                        ...(pageLayout.current.marginLeft > maxLeft && { marginLeft: maxLeft }),
+                        ...(pageLayout.current.marginRight > maxRight && { marginRight: maxRight }),
                       };
                     }}
                     size="sm"
@@ -318,15 +328,23 @@
                   <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>높이</div>
                   <TextInput
                     style={css.raw({ width: '100px' })}
-                    min="100"
+                    max={MAX_PAGE_SIZE_MM}
+                    min={MIN_PAGE_SIZE_MM}
                     onchange={(e) => {
                       if (!pageLayout.current) return;
                       const target = e.target as HTMLInputElement;
-                      const value = Math.max(100, Number(target.value));
+                      const value = clamp(Number(target.value), MIN_PAGE_SIZE_MM, MAX_PAGE_SIZE_MM);
                       target.value = String(value);
+
+                      const tempLayout = { ...pageLayout.current, height: value };
+                      const maxTop = getMaxMargin('top', tempLayout);
+                      const maxBottom = getMaxMargin('bottom', tempLayout);
+
                       pageLayout.current = {
                         ...pageLayout.current,
                         height: value,
+                        ...(pageLayout.current.marginTop > maxTop && { marginTop: maxTop }),
+                        ...(pageLayout.current.marginBottom > maxBottom && { marginBottom: maxBottom }),
                       };
                     }}
                     size="sm"
