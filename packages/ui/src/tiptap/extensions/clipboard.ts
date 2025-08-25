@@ -111,6 +111,8 @@ export const Clipboard = Extension.create({
   name: 'clipboard',
 
   addProseMirrorPlugins() {
+    const editor = this.editor;
+
     return [
       new Plugin({
         props: {
@@ -221,6 +223,9 @@ export const Clipboard = Extension.create({
               if (pmHtml) {
                 event.preventDefault();
                 view.pasteHTML(pmHtml, event);
+                if (editor.storage.page.layout) {
+                  editor.commands.convertIncompatibleBlocks();
+                }
                 return true;
               }
 
