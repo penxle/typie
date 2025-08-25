@@ -68,8 +68,17 @@ class HookFormController extends ChangeNotifier {
     }
   }
 
-  void setError(String name, String error) {
-    _errors[name] = error;
+  void setError(String name, String? error) {
+    if (error == null) {
+      _errors.remove(name);
+    } else {
+      _errors[name] = error;
+    }
+    notifyListeners();
+  }
+
+  void clearError(String name) {
+    _errors.remove(name);
     notifyListeners();
   }
 

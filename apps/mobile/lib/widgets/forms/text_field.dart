@@ -26,6 +26,8 @@ class HookFormTextField extends HookWidget {
     this.initialValue,
     this.submitOnEnter = true,
     this.maxLength,
+    this.inputFormatters,
+    this.onChanged,
   });
 
   const factory HookFormTextField.collapsed({
@@ -40,6 +42,8 @@ class HookFormTextField extends HookWidget {
     TextInputAction textInputAction,
     bool submitOnEnter,
     int? maxLength,
+    List<TextInputFormatter>? inputFormatters,
+    void Function(String)? onChanged,
     Key? key,
   }) = _HookFormCollapsedTextField;
 
@@ -56,6 +60,8 @@ class HookFormTextField extends HookWidget {
   final String? initialValue;
   final bool submitOnEnter;
   final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
+  final void Function(String)? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +159,7 @@ class HookFormTextField extends HookWidget {
             maxLength: maxLength,
             maxLengthEnforcement: MaxLengthEnforcement.enforced,
             buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+            inputFormatters: inputFormatters,
             decoration: InputDecoration.collapsed(
               hintText: placeholder,
               hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
@@ -161,6 +168,7 @@ class HookFormTextField extends HookWidget {
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             onChanged: (value) {
               field.value = value;
+              onChanged?.call(value);
             },
             onSubmitted: (value) async {
               if (submitOnEnter && textInputAction == TextInputAction.done) {
@@ -187,6 +195,8 @@ class _HookFormCollapsedTextField extends HookFormTextField {
     super.textInputAction = TextInputAction.done,
     super.submitOnEnter = true,
     super.maxLength,
+    super.inputFormatters,
+    super.onChanged,
     super.key,
   }) : super(label: '');
 
@@ -221,30 +231,41 @@ class _HookFormCollapsedTextField extends HookFormTextField {
       name: name,
       initialValue: initialValue,
       builder: (context, field) {
-        return TextField(
-          controller: effectiveController,
-          focusNode: effectiveFocusNode,
-          smartDashesType: SmartDashesType.disabled,
-          smartQuotesType: SmartQuotesType.disabled,
-          obscureText: obscureText,
-          keyboardType: keyboardType,
-          textInputAction: textInputAction,
-          style: style,
-          maxLength: maxLength,
-          maxLengthEnforcement: MaxLengthEnforcement.enforced,
-          buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-          decoration: InputDecoration.collapsed(
-            hintText: placeholder,
-            hintStyle: style.copyWith(color: context.colors.textDisabled),
-          ),
-          onChanged: (value) {
-            field.value = value;
-          },
-          onSubmitted: (value) async {
-            if (submitOnEnter && textInputAction == TextInputAction.done) {
-              await field.form.submit();
-            }
-          },
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: effectiveController,
+              focusNode: effectiveFocusNode,
+              smartDashesType: SmartDashesType.disabled,
+              smartQuotesType: SmartQuotesType.disabled,
+              obscureText: obscureText,
+              keyboardType: keyboardType,
+              textInputAction: textInputAction,
+              style: style,
+              maxLength: maxLength,
+              maxLengthEnforcement: MaxLengthEnforcement.enforced,
+              buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+              inputFormatters: inputFormatters,
+              decoration: InputDecoration.collapsed(
+                hintText: placeholder,
+                hintStyle: style.copyWith(color: context.colors.textDisabled),
+              ),
+              onChanged: (value) {
+                field.value = value;
+                onChanged?.call(value);
+              },
+              onSubmitted: (value) async {
+                if (submitOnEnter && textInputAction == TextInputAction.done) {
+                  await field.form.submit();
+                }
+              },
+            ),
+            if (field.error != null) ...[
+              const SizedBox(height: 4),
+              Text(field.error!, style: TextStyle(fontSize: 12, color: context.colors.textDanger)),
+            ],
+          ],
         );
       },
     );
