@@ -1,5 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -9,11 +10,14 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_lab.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/screens/editor/page_layout.dart' as page_utils;
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
+import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
+import 'package:typie/widgets/tappable.dart';
 
 class BodySettingBottomSheet extends HookWidget {
   const BodySettingBottomSheet({super.key, required this.scope});
@@ -161,7 +165,11 @@ class BodySettingBottomSheet extends HookWidget {
             });
           }
           if (dirtyData.containsKey('pageSize')) {
-            await scope.webViewController.value?.emitEvent('setPageLayout', {'preset': dirtyData['pageSize']});
+            final preset = dirtyData['pageSize'] as String;
+            if (preset != 'custom') {
+              final newLayout = page_utils.createDefaultPageLayout(preset);
+              await scope.webViewController.value?.emitEvent('setPageLayout', newLayout.toJson());
+            }
           }
           if (dirtyData.containsKey('maxWidth')) {
             await scope.command('max_width', attrs: {'maxWidth': dirtyData['maxWidth']});
@@ -191,7 +199,7 @@ class BodySettingBottomSheet extends HookWidget {
                 ),
               ),
               if (isPageLayoutEnabled && pageLayout != null) ...[
-                _PageSizeSection(pageLayout: pageLayout),
+                _PageSizeSection(pageLayout: pageLayout, scope: scope),
                 _PageMarginSection(scope: scope, pageLayout: pageLayout),
                 HorizontalDivider(color: context.colors.borderDefault),
               ],
@@ -274,26 +282,222 @@ class _Option extends StatelessWidget {
   }
 }
 
+Future<void> _editPageMargin(BuildContext context, EditorStateScope scope, PageLayout layout, String side) async {
+  final currentValue = switch (side) {
+    'top' => layout.marginTop,
+    'bottom' => layout.marginBottom,
+    'left' => layout.marginLeft,
+    'right' => layout.marginRight,
+    _ => 0.0,
+  };
+
+  final label = switch (side) {
+    'top' => '위',
+    'bottom' => '아래',
+    'left' => '왼쪽',
+    'right' => '오른쪽',
+    _ => '',
+  };
+
+  num? newValue;
+
+  bool validateMargin(HookFormController form, String? valueStr) {
+    if (valueStr == null || valueStr.isEmpty) {
+      form.setError('value', '값을 입력해주세요');
+      return false;
+    }
+
+    final value = num.parse(valueStr);
+    final maxMargin = page_utils.getMaxMargin(side, layout);
+
+    if (value > maxMargin) {
+      form.setError('value', '최대 ${maxMargin.toStringAsFixed(0)}mm까지 가능합니다');
+      return false;
+    }
+
+    form.clearError('value');
+    return true;
+  }
+
+  await context.showModal(
+    intercept: true,
+    child: HookForm(
+      onSubmit: (form) async {
+        final valueStr = form.data['value'] as String?;
+        if (validateMargin(form, valueStr)) {
+          newValue = num.parse(valueStr!);
+        }
+      },
+      builder: (context, form) {
+        final maxMargin = page_utils.getMaxMargin(side, layout);
+        return ConfirmModal(
+          title: '$label 여백 설정',
+          confirmText: '저장',
+          onConfirmValidate: () async {
+            await form.submit();
+            return form.errors['value'] == null && newValue != null;
+          },
+          onConfirm: () {},
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 8,
+            children: [
+              Text(
+                '$label 여백을 입력하세요 (0-${maxMargin.toStringAsFixed(0)}mm)',
+                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+              ),
+              HookFormTextField.collapsed(
+                initialValue: currentValue.toStringAsFixed(0),
+                name: 'value',
+                placeholder: '여백 (mm)',
+                autofocus: true,
+                style: const TextStyle(fontSize: 16),
+                submitOnEnter: false,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onChanged: (String value) {
+                  validateMargin(form, value);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+
+  if (newValue != null && newValue != currentValue) {
+    final updateData = {
+      switch (side) {
+        'top' => 'marginTop',
+        'bottom' => 'marginBottom',
+        'left' => 'marginLeft',
+        'right' => 'marginRight',
+        _ => '',
+      }: newValue!
+          .toDouble(),
+    };
+    await scope.webViewController.value?.emitEvent('setPageLayout', updateData);
+  }
+}
+
+Future<void> _editPageSize(BuildContext context, EditorStateScope scope, PageLayout layout, String dimension) async {
+  final currentValue = dimension == 'width' ? layout.width : layout.height;
+  final label = dimension == 'width' ? '너비' : '높이';
+  num? newValue;
+
+  bool validatePageSize(HookFormController form, String? valueStr) {
+    if (valueStr == null || valueStr.isEmpty) {
+      form.setError('value', '값을 입력해주세요');
+      return false;
+    }
+
+    final value = num.parse(valueStr);
+
+    if (value < page_utils.minPageSizeMm) {
+      form.setError('value', '최소 ${page_utils.minPageSizeMm} mm 이상이어야 합니다');
+      return false;
+    }
+
+    if (value > page_utils.maxPageSizeMm) {
+      form.setError('value', '최대 ${page_utils.maxPageSizeMm} mm 이하여야 합니다');
+      return false;
+    }
+
+    form.clearError('value');
+    return true;
+  }
+
+  await context.showModal(
+    intercept: true,
+    child: HookForm(
+      onSubmit: (form) async {
+        final valueStr = form.data['value'] as String?;
+        if (validatePageSize(form, valueStr)) {
+          newValue = num.parse(valueStr!);
+        }
+      },
+      builder: (context, form) {
+        return ConfirmModal(
+          title: '페이지 $label 설정',
+          confirmText: '저장',
+          onConfirmValidate: () async {
+            await form.submit();
+            return form.errors['value'] == null && newValue != null;
+          },
+          onConfirm: () {},
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 8,
+            children: [
+              Text('페이지 $label를 입력하세요 (mm)', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+              HookFormTextField.collapsed(
+                initialValue: currentValue.toStringAsFixed(0),
+                name: 'value',
+                placeholder: '$label (mm)',
+                autofocus: true,
+                style: const TextStyle(fontSize: 16),
+                submitOnEnter: false,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onChanged: (String value) {
+                  validatePageSize(form, value);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+
+  if (newValue != null && newValue != currentValue) {
+    final updateData = <String, double>{};
+
+    if (dimension == 'width') {
+      updateData['width'] = newValue!.toDouble();
+      final tempLayout = layout.copyWith(width: newValue!.toDouble());
+      final maxLeft = page_utils.getMaxMargin('left', tempLayout);
+      final maxRight = page_utils.getMaxMargin('right', tempLayout);
+
+      if (layout.marginLeft > maxLeft) {
+        updateData['marginLeft'] = maxLeft;
+      }
+      if (layout.marginRight > maxRight) {
+        updateData['marginRight'] = maxRight;
+      }
+    } else {
+      updateData['height'] = newValue!.toDouble();
+      final tempLayout = layout.copyWith(height: newValue!.toDouble());
+      final maxTop = page_utils.getMaxMargin('top', tempLayout);
+      final maxBottom = page_utils.getMaxMargin('bottom', tempLayout);
+
+      if (layout.marginTop > maxTop) {
+        updateData['marginTop'] = maxTop;
+      }
+      if (layout.marginBottom > maxBottom) {
+        updateData['marginBottom'] = maxBottom;
+      }
+    }
+
+    await scope.webViewController.value?.emitEvent('setPageLayout', updateData);
+  }
+}
+
+String _getPageSizePreset(PageLayout layout) {
+  for (final entry in page_utils.pageSizeMap.entries) {
+    if (layout.width == entry.value['width'] && layout.height == entry.value['height']) {
+      return entry.key;
+    }
+  }
+  return 'custom';
+}
+
 class _PageSizeSection extends HookWidget {
-  const _PageSizeSection({required this.pageLayout});
+  const _PageSizeSection({required this.pageLayout, required this.scope});
 
   final PageLayout pageLayout;
-
-  String _getPageSizePreset(PageLayout layout) {
-    if (layout.width == 210 && layout.height == 297) {
-      return 'a4';
-    }
-    if (layout.width == 148 && layout.height == 210) {
-      return 'a5';
-    }
-    if (layout.width == 176 && layout.height == 250) {
-      return 'b5';
-    }
-    if (layout.width == 125 && layout.height == 176) {
-      return 'b6';
-    }
-    return 'custom';
-  }
+  final EditorStateScope scope;
 
   @override
   Widget build(BuildContext context) {
@@ -315,16 +519,38 @@ class _PageSizeSection extends HookWidget {
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(left: 14),
-          child: Row(
-            children: [
-              Text(
-                '${pageLayout.width.toStringAsFixed(0)} × ${pageLayout.height.toStringAsFixed(0)}mm',
-                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+        Row(
+          spacing: 8,
+          children: [
+            Tappable(
+              onTap: () => _editPageSize(context, scope, pageLayout, 'width'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '너비: ${pageLayout.width.toStringAsFixed(0)}mm',
+                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                ),
               ),
-            ],
-          ),
+            ),
+            Tappable(
+              onTap: () => _editPageSize(context, scope, pageLayout, 'height'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '높이: ${pageLayout.height.toStringAsFixed(0)}mm',
+                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -342,30 +568,67 @@ class _PageMarginSection extends StatelessWidget {
     return Column(
       spacing: 8,
       children: [
-        const _Option(icon: LucideLightIcons.ruler_dimension_line, label: '여백', trailing: SizedBox.shrink()),
-        Padding(
-          padding: const EdgeInsets.only(left: 14),
-          child: Row(
-            spacing: 8,
-            children: [
-              Text(
-                '위: ${pageLayout.marginTop.toStringAsFixed(0)}mm',
-                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+        const _Option(icon: LucideLightIcons.ruler_dimension_line, label: '여백 (mm)', trailing: SizedBox.shrink()),
+        Row(
+          spacing: 8,
+          children: [
+            Tappable(
+              onTap: () => _editPageMargin(context, scope, pageLayout, 'top'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '위: ${pageLayout.marginTop.toStringAsFixed(0)}',
+                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                ),
               ),
-              Text(
-                '아래: ${pageLayout.marginBottom.toStringAsFixed(0)}mm',
-                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+            ),
+            Tappable(
+              onTap: () => _editPageMargin(context, scope, pageLayout, 'bottom'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '아래: ${pageLayout.marginBottom.toStringAsFixed(0)}',
+                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                ),
               ),
-              Text(
-                '왼쪽: ${pageLayout.marginLeft.toStringAsFixed(0)}mm',
-                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+            ),
+            Tappable(
+              onTap: () => _editPageMargin(context, scope, pageLayout, 'left'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '왼쪽: ${pageLayout.marginLeft.toStringAsFixed(0)}',
+                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                ),
               ),
-              Text(
-                '오른쪽: ${pageLayout.marginRight.toStringAsFixed(0)}mm',
-                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+            ),
+            Tappable(
+              onTap: () => _editPageMargin(context, scope, pageLayout, 'right'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '오른쪽: ${pageLayout.marginRight.toStringAsFixed(0)}',
+                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ],
     );
