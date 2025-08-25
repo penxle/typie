@@ -166,6 +166,7 @@ class ConfirmModal extends StatelessWidget {
     this.child,
     required this.onConfirm,
     this.onCancel,
+    this.onConfirmValidate,
     this.confirmText = '확인',
     this.cancelText = '취소',
     this.confirmTextColor,
@@ -185,6 +186,7 @@ class ConfirmModal extends StatelessWidget {
 
   final void Function() onConfirm;
   final void Function()? onCancel;
+  final Future<bool> Function()? onConfirmValidate;
 
   @override
   Widget build(BuildContext context) {
@@ -222,8 +224,17 @@ class ConfirmModal extends StatelessWidget {
               Expanded(
                 child: Tappable(
                   onTap: () async {
-                    await context.router.maybePop();
+                    if (onConfirmValidate != null) {
+                      final isValid = await onConfirmValidate!();
+                      if (!isValid) {
+                        return;
+                      }
+                    }
+
                     onConfirm();
+                    if (context.mounted) {
+                      await context.router.maybePop();
+                    }
                   },
                   child: Container(
                     alignment: Alignment.center,

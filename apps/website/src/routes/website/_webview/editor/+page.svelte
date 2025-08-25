@@ -740,11 +740,16 @@
     });
 
     window.__webview__?.addEventListener('setPageLayout', (data) => {
-      const preset = data.preset as string;
+      const { width, height, marginTop, marginBottom, marginLeft, marginRight } = data;
 
-      if (Object.keys(PAGE_SIZE_MAP).includes(preset)) {
-        pageLayout.current = createDefaultPageLayout(preset as PageLayoutPreset);
-      }
+      pageLayout.current = {
+        width: width ?? pageLayout.current?.width,
+        height: height ?? pageLayout.current?.height,
+        marginTop: marginTop ?? pageLayout.current?.marginTop,
+        marginBottom: marginBottom ?? pageLayout.current?.marginBottom,
+        marginLeft: marginLeft ?? pageLayout.current?.marginLeft,
+        marginRight: marginRight ?? pageLayout.current?.marginRight,
+      };
     });
 
     window.__webview__?.setProcedure('getIncompatibleBlocks', () => {
