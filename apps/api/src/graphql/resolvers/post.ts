@@ -607,6 +607,8 @@ builder.mutationFields((t) => ({
             text: PostContents.text,
             characterCount: PostContents.characterCount,
             blobSize: PostContents.blobSize,
+            layoutMode: PostContents.layoutMode,
+            pageLayout: PostContents.pageLayout,
             storedMarks: PostContents.storedMarks,
             note: PostContents.note,
           },
@@ -632,6 +634,8 @@ builder.mutationFields((t) => ({
         body: post.content.body,
         maxWidth: post.maxWidth,
         storedMarks: post.content.storedMarks,
+        layoutMode: post.content.layoutMode,
+        pageLayout: post.content.pageLayout,
         note: post.content.note,
         anchors: Object.fromEntries(anchors.map((anchor) => [anchor.nodeId, anchor.name])),
       });
@@ -678,6 +682,8 @@ builder.mutationFields((t) => ({
           vector: Y.encodeStateVector(doc),
           characterCount: post.content.characterCount,
           blobSize: post.content.blobSize,
+          layoutMode: post.content.layoutMode,
+          pageLayout: post.content.pageLayout,
           note: post.content.note,
         });
 

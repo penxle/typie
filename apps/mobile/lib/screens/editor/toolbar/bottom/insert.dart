@@ -1,6 +1,7 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/toolbar/buttons/base.dart';
 import 'package:typie/screens/editor/values.dart';
@@ -48,7 +49,7 @@ class InsertBottomToolbar extends HookWidget {
     final yjsState = useValueListenable(scope.yjsState);
 
     final hiddenInPageLayout = {'blockquote', 'callout', 'fold', 'table', 'code_block', 'html_block'};
-    final visibleNodes = yjsState?.layoutMode == 'page'
+    final visibleNodes = yjsState?.layoutMode == GPostLayoutMode.PAGE.name
         ? _nodes.where((node) => !hiddenInPageLayout.contains(node.type)).toList()
         : _nodes;
 
