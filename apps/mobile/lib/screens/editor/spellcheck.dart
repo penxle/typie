@@ -45,7 +45,9 @@ class SpellCheckBottomSheet extends HookWidget {
           await context.router.root.maybePop();
         }
       } finally {
-        isLoading.value = false;
+        if (context.mounted) {
+          isLoading.value = false;
+        }
       }
 
       return null;
