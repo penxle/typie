@@ -2,13 +2,14 @@
   import { css, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { onMount, tick } from 'svelte';
+  import { PostLayoutMode } from '@/enums';
   import { browser } from '$app/environment';
   import { clamp, mmToPx } from '../../utils';
   import type { Snippet } from 'svelte';
-  import type { LayoutMode, PageLayout } from '../../utils/page-layout';
+  import type { PageLayout } from '../../utils/page-layout';
 
   type Props = {
-    layoutMode: LayoutMode;
+    layoutMode: PostLayoutMode;
     pageLayout?: PageLayout;
     scrollContainer?: HTMLDivElement;
     class?: string;
@@ -34,7 +35,7 @@
 
   const baseScale = $derived(() => {
     if (!browser) return 1;
-    if (!(layoutMode === 'page' && pageLayout)) return 1;
+    if (!(layoutMode === PostLayoutMode.PAGE && pageLayout)) return 1;
     const screenWidth = window.innerWidth;
     const pageWidthPx = mmToPx(pageLayout.width);
     return Math.min(1, screenWidth / pageWidthPx);
@@ -91,7 +92,7 @@
   const handleTouchMove = async (e: TouchEvent) => {
     if (!isPinching || e.touches.length !== 2) return;
     e.preventDefault();
-    if (!(layoutMode === 'page' && pageLayout)) return;
+    if (!(layoutMode === PostLayoutMode.PAGE && pageLayout)) return;
     if (!scrollContainer) return;
 
     const touch1 = e.touches[0];
@@ -150,7 +151,7 @@
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
 
-    if (!(layoutMode === 'page' && pageLayout)) return;
+    if (!(layoutMode === PostLayoutMode.PAGE && pageLayout)) return;
     if (!scrollContainer) return;
 
     const prevScale = editorScale();
@@ -216,7 +217,7 @@
   });
 </script>
 
-{#if layoutMode === 'page'}
+{#if layoutMode === PostLayoutMode.PAGE}
   <div
     bind:this={containerRef}
     style:align-self={alignSelf}

@@ -622,6 +622,11 @@ enum PostContentRating {
   R19
 }
 
+enum PostLayoutMode {
+  PAGE
+  SCROLL
+}
+
 type PostReaction {
   emoji: String!
   id: ID!

@@ -20,7 +20,7 @@
   import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostSyncType } from '@/enums';
+  import { PostLayoutMode, PostSyncType } from '@/enums';
   import { textSerializers } from '@/pm/serializer';
   import { browser } from '$app/environment';
   import { graphql } from '$graphql';
@@ -179,7 +179,7 @@
   const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
   const note = new YState(doc, 'note', '');
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
-  const layoutMode = new YState<'scroll' | 'page'>(doc, 'layoutMode', 'scroll');
+  const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
 
   const fontFaces = $derived(
     $query.post.entity.site.fonts
@@ -316,7 +316,7 @@
   });
 
   $effect(() => {
-    if (layoutMode.current === 'page' && pageLayout.current) {
+    if (layoutMode.current === PostLayoutMode.PAGE && pageLayout.current) {
       untrack(() => {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         editor?.current.commands.setPageLayout(pageLayout.current!);
@@ -720,7 +720,7 @@
     });
 
     window.__webview__?.addEventListener('setLayoutMode', (data) => {
-      const mode = data.mode as 'scroll' | 'page';
+      const mode = data.mode as PostLayoutMode;
       const convertIncompatibleBlocksFlag = data.convertIncompatibleBlocks as boolean;
 
       if (convertIncompatibleBlocksFlag && editor?.current) {
@@ -729,7 +729,7 @@
 
       layoutMode.current = mode;
 
-      if (mode === 'page' && !pageLayout.current) {
+      if (mode === PostLayoutMode.PAGE && !pageLayout.current) {
         const preset = data.preset || 'a4';
         if (Object.keys(PAGE_SIZE_MAP).includes(preset)) {
           pageLayout.current = createDefaultPageLayout(preset as PageLayoutPreset);
@@ -938,7 +938,9 @@
     bind:container={scrollContainer}
   >
     <div
-      style:width={editorZoomed && layoutMode.current === 'page' ? `calc(var(--prosemirror-max-width) * ${editorScale})` : '100%'}
+      style:width={editorZoomed && layoutMode.current === PostLayoutMode.PAGE
+        ? `calc(var(--prosemirror-max-width) * ${editorScale})`
+        : '100%'}
       class={flex({
         flexDirection: 'column',
         flexShrink: '0',

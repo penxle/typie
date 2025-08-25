@@ -18,7 +18,7 @@ import {
   PostSnapshotContributors,
   PostSnapshots,
 } from '@/db';
-import { EntityState } from '@/enums';
+import { EntityState, PostLayoutMode } from '@/enums';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
@@ -28,6 +28,7 @@ import { queue } from '../bullmq';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
 import type { Node } from '@tiptap/pm/model';
+import type { PageLayout } from '@/db/schemas/json';
 
 const getCharacterCount = (text: string) => {
   return [...text.replaceAll(/\s+/g, ' ').trim()].length;
@@ -155,6 +156,8 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       const subtitle = (map.get('subtitle') as string) || null;
       const maxWidth = (map.get('maxWidth') as number) ?? 800;
       const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
+      const layoutMode = (map.get('layoutMode') as PostLayoutMode) ?? PostLayoutMode.SCROLL;
+      const pageLayout = (map.get('pageLayout') as PageLayout) ?? null;
       const note = (map.get('note') as string) || '';
       const anchors = (map.get('anchors') as Record<string, string | null>) ?? {};
 
@@ -186,6 +189,8 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
           text,
           characterCount,
           blobSize,
+          layoutMode,
+          pageLayout,
           note,
           updatedAt,
         })

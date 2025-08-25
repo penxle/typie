@@ -1,11 +1,12 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
+  import { PostLayoutMode } from '@/enums';
   import { mmToPx } from '../../utils/unit';
   import type { Snippet } from 'svelte';
-  import type { LayoutMode, PageLayout } from '../../utils/page-layout';
+  import type { PageLayout } from '../../utils/page-layout';
 
   type Props = {
-    layoutMode: LayoutMode;
+    layoutMode: PostLayoutMode;
     pageLayout?: PageLayout;
     maxWidth: number;
     typewriterPosition?: number;
@@ -33,14 +34,14 @@
 
 <div
   bind:this={container}
-  style:--prosemirror-max-width={layoutMode === 'page' && pageLayout ? `${mmToPx(pageLayout.width)}px` : `${maxWidth}px`}
-  style:--prosemirror-page-margin-top={layoutMode === 'page' && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
-  style:--prosemirror-page-margin-bottom={layoutMode === 'page' && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
-  style:--prosemirror-page-margin-left={layoutMode === 'page' && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
-  style:--prosemirror-page-margin-right={layoutMode === 'page' && pageLayout ? `${mmToPx(pageLayout.marginRight)}px` : '0'}
+  style:--prosemirror-max-width={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.width)}px` : `${maxWidth}px`}
+  style:--prosemirror-page-margin-top={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
+  style:--prosemirror-page-margin-bottom={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
+  style:--prosemirror-page-margin-left={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
+  style:--prosemirror-page-margin-right={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginRight)}px` : '0'}
   style:--prosemirror-padding-bottom={mobile
     ? '80dvh'
-    : layoutMode === 'page' && pageLayout
+    : layoutMode === PostLayoutMode.PAGE && pageLayout
       ? '0'
       : typewriterEnabled
         ? `${(1 - typewriterPosition) * 100}vh`
