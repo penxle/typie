@@ -14,11 +14,8 @@
       me @required {
         id
 
-        characterCountChanges {
-          date
-          additions
-          deletions
-        }
+        ...DashboardLayout_Stats_ActivityChart_user
+        ...DashboardLayout_Stats_ActivityGrid_user
       }
     }
   `);
@@ -72,7 +69,7 @@
       <div class={flex({ flexDirection: 'column', gap: '16px' })}>
         <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.faint' })}>지난 1년간의 기록</div>
 
-        <ActivityGrid characterCountChanges={$query.me.characterCountChanges} />
+        <ActivityGrid $user={$query.me} />
 
         <div class={flex({ justifyContent: 'flex-end' })}>
           <Button onclick={copyActivityImage}>이미지로 복사하기</Button>
@@ -80,7 +77,7 @@
       </div>
 
       <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-        <ActivityChart characterCountChanges={$query.me.characterCountChanges} />
+        <ActivityChart $user={$query.me} />
       </div>
     </div>
   {/if}

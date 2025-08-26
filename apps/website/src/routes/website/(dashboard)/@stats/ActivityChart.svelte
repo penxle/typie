@@ -5,6 +5,8 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { fade } from 'svelte/transition';
+  import { fragment, graphql } from '$graphql';
+  import type { DashboardLayout_Stats_ActivityChart_user } from '$graphql';
 
   type DayData = {
     date: dayjs.Dayjs;
@@ -14,14 +16,25 @@
   };
 
   type Props = {
-    characterCountChanges: {
-      date: string;
-      additions: number;
-      deletions: number;
-    }[];
+    $user: DashboardLayout_Stats_ActivityChart_user;
   };
 
-  const { characterCountChanges }: Props = $props();
+  const { $user: _user }: Props = $props();
+
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment DashboardLayout_Stats_ActivityChart_user on User {
+        id
+
+        characterCountChanges {
+          date
+          additions
+          deletions
+        }
+      }
+    `),
+  );
 
   let hoverData = $state<DayData & { element: HTMLElement }>();
   let isHoveringCompressedBar = $state(false);
@@ -35,7 +48,7 @@
 
     const changesByDate: Record<string, { additions: number; deletions: number }> = {};
 
-    for (const change of characterCountChanges) {
+    for (const change of $user.characterCountChanges) {
       const date = dayjs(change.date).format('YYYY-MM-DD');
       changesByDate[date] = {
         additions: change.additions,
