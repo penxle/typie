@@ -1,3 +1,7 @@
+import { fileURLToPath } from 'node:url';
+
+const plugins = ['prettier-plugin-packagejson', 'prettier-plugin-sh', 'prettier-plugin-svelte', '@prettier/plugin-xml'];
+
 /** @type {import('prettier').Config} */
 // eslint-disable-next-line import/no-default-export
 export default {
@@ -8,14 +12,5 @@ export default {
   xmlWhitespaceSensitivity: 'ignore',
   xmlQuoteAttributes: 'double',
 
-  plugins: ['prettier-plugin-packagejson', 'prettier-plugin-sh', 'prettier-plugin-svelte', '@prettier/plugin-xml'],
-
-  overrides: [
-    {
-      files: '**/*.{ts,tsx}',
-      options: {
-        parser: 'typescript',
-      },
-    },
-  ],
+  plugins: plugins.map((plugin) => fileURLToPath(import.meta.resolve(plugin))),
 };

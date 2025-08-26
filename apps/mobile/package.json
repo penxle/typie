@@ -10,7 +10,7 @@
     "codegen:watch": "rps -- dart run build_runner watch --delete-conflicting-outputs"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.62",
+    "@iconify-json/lucide": "^1.2.64",
     "@iconify-json/lucide-lab": "^1.2.3",
     "@iconify/tools": "^4.1.2",
     "@typie/rps": "workspace:*",

@@ -8,7 +8,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   clearScreen: false,
   plugins: [
+    // @ts-expect-error type mismatch
     svg(),
+    // @ts-expect-error type mismatch
     icons({
       scale: 1,
       compiler: 'svelte',
@@ -16,6 +18,7 @@ export default defineConfig({
         typie: FileSystemIconLoader('./src/icons'),
       },
     }),
+    // @ts-expect-error type mismatch
     sark(),
     sveltekit(),
   ],
