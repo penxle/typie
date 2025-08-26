@@ -171,6 +171,8 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
       const updatedAt = dayjs();
 
+      const effectiveLayoutMode = [PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode) ? layoutMode : PostLayoutMode.SCROLL;
+
       await tx
         .update(Posts)
         .set({
@@ -189,7 +191,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
           text,
           characterCount,
           blobSize,
-          layoutMode,
+          layoutMode: effectiveLayoutMode,
           pageLayout,
           note,
           updatedAt,
