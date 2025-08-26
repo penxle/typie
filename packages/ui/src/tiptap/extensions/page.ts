@@ -9,7 +9,7 @@ import { INCOMPATIBLE_NODE_TYPES, mmToPx } from '../../utils';
 import type { Node } from '@tiptap/pm/model';
 import type { PageLayout } from '../../utils';
 
-const GAP_HEIGHT_PX = 40;
+export const GAP_HEIGHT_PX = 40;
 
 export type PageStorage = {
   layout?: PageLayout;
