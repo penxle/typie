@@ -43,6 +43,7 @@ const server = Bun.serve({
   hostname: '0.0.0.0',
   port: env.LISTEN_PORT ?? 3000,
   websocket,
+  idleTimeout: 60,
 });
 
 log.info('Listening {*}', { hostname: server.hostname, port: server.port });
