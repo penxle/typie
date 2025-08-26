@@ -16,6 +16,17 @@
 
   let pageBreakEl = $state<HTMLElement>();
 
+  const isInSelection = $derived.by(() => {
+    if (!editor?.current) return false;
+    const pos = getPos();
+    if (pos === undefined) return false;
+
+    const { from, to } = editor.current.state.selection;
+    const nodeSize = editor.current.state.doc.nodeAt(pos)?.nodeSize || 0;
+
+    return pos >= from && pos + nodeSize <= to;
+  });
+
   const calculateRemainingHeight = () => {
     if (!hasPageLayout || !pageLayout || !pageBreakEl || !editor) return 0;
 
@@ -62,14 +73,15 @@
     'page-break-node',
     css({
       width: 'full',
-      '.page-break-node+&, .page-break-node+.selected-node &': {
+      '[data-layout="page"] .page-break-node+&, [data-layout="page"] .page-break-node+.selected-node &': {
         marginTop:
           '[calc(var(--prosemirror-page-margin-bottom) + var(--prosemirror-page-gap-height) + var(--prosemirror-page-margin-top))]',
       },
-      opacity: '0',
+      opacity: isInSelection ? '100' : '0',
       '.selected-node &': {
         opacity: '100',
       },
+      pageBreakAfter: 'always',
     }),
   )}
   {...HTMLAttributes}
