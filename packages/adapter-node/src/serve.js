@@ -119,5 +119,6 @@ export const serve = async ({ Server, manifest, prerendered }) => {
     fetch: app.fetch,
     hostname: '0.0.0.0',
     port: 3000,
+    idleTimeout: 60,
   });
 };
