@@ -27,6 +27,7 @@
   <div
     style:padding-left={`${paragraphIndent}em`}
     class={flex({
+      position: 'relative',
       flexDirection: 'column',
       gap: '4px',
       width: 'full',
@@ -34,6 +35,7 @@
       color: 'text.disabled',
       lineHeight: '[1.6]',
       pointerEvents: 'none',
+      zIndex: 'editor',
     })}
   >
     <div class={css({ fontFamily: 'ui' })}>내용</div>
