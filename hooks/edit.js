@@ -1,14 +1,21 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
-import { exec } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { promisify } from 'node:util';
+const run = async (cmd) => {
+  const p = Bun.spawn({
+    cmd,
+    stdout: 2,
+    stderr: 2,
+  });
 
-const execAsync = promisify(exec);
+  const code = await p.exited;
+
+  if (code !== 0) {
+    process.exit(2);
+  }
+};
 
 try {
-  const input = readFileSync(0, 'utf8');
-  const hookData = JSON.parse(input);
+  const hookData = await Bun.stdin.json();
 
   const filePath = hookData.tool_input.file_path;
   if (!filePath) {
@@ -16,28 +23,15 @@ try {
   }
 
   if (/\.(ts|tsx|js|jsx|svelte)$/.test(filePath)) {
-    try {
-      await execAsync(`bun run eslint --fix "${filePath}"`);
-    } catch (err) {
-      console.error(err.stderr || err.stdout);
-      process.exit(2);
-    }
+    await run(['bun', 'eslint', '--fix', filePath]);
   }
 
   if (/\.(dart)$/.test(filePath)) {
-    try {
-      await execAsync(`dart format "${filePath}"`);
-    } catch (err) {
-      console.error(err.stderr || err.stdout);
-      process.exit(2);
-    }
+    await run(['dart', 'fix', '--apply', filePath]);
+    await run(['dart', 'format', filePath]);
   }
 
-  try {
-    await execAsync(`bun run prettier --write "${filePath}"`);
-  } catch (err) {
-    console.error(err);
-  }
+  await run(['bun', 'prettier', '--write', filePath]);
 
   process.exit(0);
 } catch (err) {
