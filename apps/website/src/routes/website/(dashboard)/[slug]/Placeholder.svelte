@@ -87,6 +87,7 @@
   <div
     style:padding-left={`${paragraphIndent}em`}
     class={flex({
+      position: 'relative',
       flexDirection: 'column',
       gap: '4px',
       width: 'full',
@@ -94,6 +95,7 @@
       color: 'text.disabled',
       lineHeight: '[1.6]',
       pointerEvents: 'none',
+      zIndex: 'editor',
     })}
   >
     <div class={css({ fontFamily: 'ui' })}>내용을 입력하거나 /를 입력해 블록 삽입하기...</div>
