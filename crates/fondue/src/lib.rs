@@ -15,7 +15,7 @@ mod ffi {
 pub struct FontMetadata {
   pub weight: u16,
   #[napi(ts_type = "'normal' | 'italic' | 'oblique'")]
-  pub style: &'static str,
+  pub style: String,
   pub family_name: Option<String>,
   pub full_name: Option<String>,
   pub post_script_name: Option<String>,
@@ -62,7 +62,8 @@ pub fn get_font_metadata(data: Uint8Array) -> Result<FontMetadata> {
     Style::Normal => "normal",
     Style::Italic => "italic",
     Style::Oblique => "oblique",
-  };
+  }
+  .to_string();
 
   let family_name =
     get_name(&face, name_id::TYPOGRAPHIC_FAMILY).or_else(|| get_name(&face, name_id::FAMILY));
