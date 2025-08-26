@@ -2,6 +2,7 @@ FROM debian:12-slim AS base
 ENV NODE_ENV=production
 
 RUN apt-get update && apt-get install -y \
+    build-essential \
     tini \
     curl \
     ca-certificates \
