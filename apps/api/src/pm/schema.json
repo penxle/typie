@@ -31,6 +31,12 @@
       "attrs": { "nodeId": { "default": null } },
       "parseDOM": [{ "tag": "br" }]
     },
+    "page_break": {
+      "group": "block",
+      "atom": true,
+      "selectable": true,
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=page_break]" }]
+    },
     "list_item": {
       "content": "paragraph{1,2} list*",
       "defining": true,

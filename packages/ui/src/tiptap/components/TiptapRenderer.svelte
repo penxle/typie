@@ -3,6 +3,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { getAllContexts, onMount } from 'svelte';
   import { Ref } from '../../utils';
+  import { GAP_HEIGHT_PX } from '../extensions';
   import { renderHTML } from '../lib/html';
   import { baseExtensions } from '../schema';
   import type { JSONContent } from '@tiptap/core';
@@ -75,6 +76,7 @@
   style:--prosemirror-page-margin-bottom={pageLayout ? `${pageLayout.marginBottom}mm` : '0'}
   style:--prosemirror-page-margin-left={pageLayout ? `${pageLayout.marginLeft}mm` : '0'}
   style:--prosemirror-page-margin-right={pageLayout ? `${pageLayout.marginRight}mm` : '0'}
+  style:--prosemirror-page-gap-height={`${GAP_HEIGHT_PX}px`}
   class={css({ display: 'contents', fontFamily: 'prose', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-all' })}
   data-layout={pageLayout ? 'page' : 'scroll'}
 >

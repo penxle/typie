@@ -7,4 +7,5 @@ export * from './fold';
 export * from './horizontal-rule';
 export * from './html-block';
 export * from './image';
+export * from './page-break';
 export * from './table';
