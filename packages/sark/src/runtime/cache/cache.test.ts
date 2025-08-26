@@ -1540,4 +1540,138 @@ describe('Cache', () => {
     expect(entityResult).toEqual(entityData);
     expect(resultResult).toEqual(resultData);
   });
+
+  test('동일한 필드를 가진 서로 다른 fragment 사용시 무한 루프가 발생하지 않아야 한다', () => {
+    const cache = createCache();
+
+    const mainQuery = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query GetUser {
+          me {
+            __typename
+            id
+            name
+            email
+            sites {
+              __typename
+              id
+              name
+              url
+            }
+          }
+        }
+      `,
+    });
+
+    const nameFragment = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query NameOnly {
+          me {
+            __typename
+            id
+            name
+            sites {
+              __typename
+              id
+              name
+            }
+          }
+        }
+      `,
+    });
+
+    const emailFragment = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query EmailOnly {
+          me {
+            __typename
+            id
+            email
+            sites {
+              __typename
+              id
+              url
+            }
+          }
+        }
+      `,
+    });
+
+    const variables = {};
+    const initialData = {
+      me: {
+        __typename: 'User',
+        id: 'user1',
+        name: 'John Doe',
+        email: 'john@example.com',
+        sites: [
+          {
+            __typename: 'Site',
+            id: 'site1',
+            name: 'Site 1',
+            url: 'https://site1.com',
+          },
+          {
+            __typename: 'Site',
+            id: 'site2',
+            name: 'Site 2',
+            url: 'https://site2.com',
+          },
+        ],
+      },
+    };
+
+    cache.writeQuery(mainQuery, variables, initialData);
+
+    let observerCallCount = 0;
+    const observers: { unsubscribe: () => void }[] = [];
+
+    const mainSub = pipe(
+      cache.observe(mainQuery, variables),
+      subscribe(() => {
+        observerCallCount++;
+      }),
+    );
+    observers.push(mainSub);
+
+    const nameSub = pipe(
+      cache.observe(nameFragment, variables),
+      subscribe(() => {
+        observerCallCount++;
+      }),
+    );
+    observers.push(nameSub);
+
+    const emailSub = pipe(
+      cache.observe(emailFragment, variables),
+      subscribe(() => {
+        observerCallCount++;
+      }),
+    );
+    observers.push(emailSub);
+
+    observerCallCount = 0;
+
+    cache.writeQuery(mainQuery, variables, initialData);
+
+    cache.writeQuery(mainQuery, variables, initialData);
+    cache.writeQuery(mainQuery, variables, initialData);
+
+    expect(observerCallCount).toBeLessThanOrEqual(3);
+
+    const updatedData = {
+      ...initialData,
+      me: {
+        ...initialData.me,
+        name: 'Jane Doe',
+      },
+    };
+
+    const beforeUpdateCount = observerCallCount;
+    cache.writeQuery(mainQuery, variables, updatedData);
+
+    expect(observerCallCount).toBeGreaterThan(beforeUpdateCount);
+
+    observers.forEach((sub) => sub.unsubscribe());
+  });
 });

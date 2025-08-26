@@ -1,3 +1,4 @@
+import stringify from 'fast-json-stable-stringify';
 import { nanoid } from 'nanoid';
 import { make, makeSubject, pipe, subscribe } from 'wonka';
 import { denormalize } from './denormalize';
@@ -22,6 +23,7 @@ export class Cache {
   #queries = new Map<QueryKey, Query>();
   #dependencies = new Map<DependencyKey, Set<QueryKey>>();
   #subjects = new Map<QueryKey, Subject<QueryResult>>();
+  #lastResults = new Map<QueryKey, string>();
   id = nanoid();
 
   readQuery<T extends $ArtifactSchema>(schema: ArtifactSchema<T>, variables: Variables): T['$output'] | null {
@@ -39,6 +41,8 @@ export class Cache {
     const queryKey = makeQueryKey(schema, variables);
     const fieldUpdates = new Map<EntityKey, Set<FieldKey>>();
 
+    let isStorageChanged = false;
+
     for (const [key, value] of entries(normalized)) {
       if (key === RootFieldKey) {
         this.#storage[RootFieldKey] = deepMerge(this.#storage[RootFieldKey], value, { arrayStrategy: 'replace' });
@@ -49,12 +53,19 @@ export class Cache {
         const updatedFields = new Set<FieldKey>(Object.keys(value).filter((field) => this.#storage[key][field] !== value[field]));
         if (updatedFields.size > 0) {
           fieldUpdates.set(key, updatedFields);
+          isStorageChanged = true;
         }
 
         this.#storage[key] = deepMerge(this.#storage[key], value, { arrayStrategy: 'replace' });
       } else {
         this.#storage[key] = value;
+        fieldUpdates.set(key, new Set(Object.keys(value)));
+        isStorageChanged = true;
       }
+    }
+
+    if (isStorageChanged) {
+      this.#refreshAffectedQueries(fieldUpdates, queryKey);
     }
 
     if (this.#queries.has(queryKey)) {
@@ -68,10 +79,15 @@ export class Cache {
       this.#trackDependency(queryKey, entityKey, fieldKey);
     });
 
-    this.#refreshAffectedQueries(fieldUpdates, queryKey);
+    const resultString = stringify(result.data);
+    const lastResult = this.#lastResults.get(queryKey);
 
-    const subject = this.#retriveSubject(queryKey);
-    subject.next(result);
+    if (lastResult !== resultString) {
+      this.#lastResults.set(queryKey, resultString);
+
+      const subject = this.#retriveSubject(queryKey);
+      subject.next(result);
+    }
   }
 
   writeFragment<T extends Record<string, unknown>>(entityKey: EntityKey, data: T) {
@@ -132,6 +148,7 @@ export class Cache {
     this.#storage = { [RootFieldKey]: {} };
     this.#queries.clear();
     this.#dependencies.clear();
+    this.#lastResults.clear();
 
     for (const [, subject] of this.#subjects) {
       subject.next({ data: null as unknown as Data, partial: true });
@@ -185,8 +202,14 @@ export class Cache {
       this.#trackDependency(queryKey, entityKey, fieldKey);
     });
 
-    const subject = this.#retriveSubject(queryKey);
-    subject.next(result);
+    const resultString = stringify(result.data);
+    const lastResult = this.#lastResults.get(queryKey);
+
+    if (lastResult !== resultString) {
+      this.#lastResults.set(queryKey, resultString);
+      const subject = this.#retriveSubject(queryKey);
+      subject.next(result);
+    }
   }
 
   #refreshAffectedQueries(fieldUpdates: Map<EntityKey, Set<FieldKey>>, excludeKey?: QueryKey) {
