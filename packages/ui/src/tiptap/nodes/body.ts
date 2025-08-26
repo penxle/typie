@@ -1,4 +1,5 @@
 import { mergeAttributes, Node } from '@tiptap/core';
+import { Plugin } from '@tiptap/pm/state';
 import { css, cx } from '@typie/styled-system/css';
 import { defaultValues, values } from '../values';
 
@@ -21,6 +22,7 @@ declare module '@tiptap/core' {
 export const Body = Node.create({
   name: 'body',
   content: 'block+',
+  isolating: true,
 
   addAttributes() {
     return {
@@ -101,5 +103,22 @@ export const Body = Node.create({
           return true;
         },
     };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        filterTransaction: (tr, state) => {
+          const oldBody = state.doc.firstChild;
+          const newBody = tr.doc.firstChild;
+
+          if (oldBody?.attrs.nodeId && !newBody?.attrs.nodeId) {
+            return false;
+          }
+
+          return true;
+        },
+      }),
+    ];
   },
 });

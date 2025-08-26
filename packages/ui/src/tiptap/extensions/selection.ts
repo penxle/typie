@@ -95,7 +95,7 @@ export const Selection = Extension.create({
           if (needsExpansion) {
             if (depth === 1) {
               return editor.commands.command(({ state, tr, dispatch }) => {
-                const s = MultiNodeSelection.create(state.doc, 1, state.doc.content.size);
+                const s = MultiNodeSelection.create(state.doc, 1, state.doc.content.size - 1);
                 tr.setSelection(s);
                 dispatch?.(tr);
                 return true;
