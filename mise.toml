@@ -1,2 +1,4 @@
 [tools]
 ruby = "latest"
+rust = "latest"
+zig = "latest"

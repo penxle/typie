@@ -39,7 +39,7 @@ const verifySlackSignature = (signingSecret: string, requestTimestamp: string, r
   const sigBasestring = `v0:${requestTimestamp}:${body}`;
   const mySignature = `v0=${crypto.createHmac('sha256', signingSecret).update(sigBasestring).digest('hex')}`;
 
-  return crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(requestSignature));
+  return crypto.timingSafeEqual(Uint8Array.from(mySignature), Uint8Array.from(requestSignature));
 };
 
 export const bmo = new Hono<Env>();
