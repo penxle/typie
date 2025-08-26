@@ -23,7 +23,10 @@
         id
         name
 
-        ...DashboardLayout_Stats_ActivityGrid_user
+        characterCountChanges {
+          date
+          additions
+        }
 
         sites {
           id
@@ -183,7 +186,7 @@
 
     <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px' })}>
       <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 활동</h2>
-      <ActivityGrid $user={$query.me} />
+      <ActivityGrid characterCountChanges={$query.me.characterCountChanges} />
     </div>
   </div>
 {:else}
