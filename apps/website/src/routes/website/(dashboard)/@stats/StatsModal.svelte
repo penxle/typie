@@ -6,6 +6,7 @@
   import { Toast } from '@typie/ui/notification';
   import { base64 } from 'rfc4648';
   import { graphql } from '$graphql';
+  import ActivityChart from './ActivityChart.svelte';
   import ActivityGrid from './ActivityGrid.svelte';
 
   const query = graphql(`
@@ -13,6 +14,7 @@
       me @required {
         id
 
+        ...DashboardLayout_Stats_ActivityChart_user
         ...DashboardLayout_Stats_ActivityGrid_user
       }
     }
@@ -63,13 +65,19 @@
   {#if loaded && $query}
     <div class={css({ fontSize: '20px', fontWeight: 'bold', color: 'text.subtle' })}>나의 글쓰기 통계</div>
 
-    <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-      <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.faint' })}>지난 1년간의 기록</div>
+    <div class={flex({ flexDirection: 'column', gap: '32px' })}>
+      <div class={flex({ flexDirection: 'column', gap: '16px' })}>
+        <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.faint' })}>지난 1년간의 기록</div>
 
-      <ActivityGrid $user={$query.me} />
+        <ActivityGrid $user={$query.me} />
 
-      <div class={flex({ justifyContent: 'flex-end' })}>
-        <Button onclick={copyActivityImage}>이미지로 복사하기</Button>
+        <div class={flex({ justifyContent: 'flex-end' })}>
+          <Button onclick={copyActivityImage}>이미지로 복사하기</Button>
+        </div>
+      </div>
+
+      <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+        <ActivityChart $user={$query.me} />
       </div>
     </div>
   {/if}
