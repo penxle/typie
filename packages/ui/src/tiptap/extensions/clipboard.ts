@@ -121,7 +121,7 @@ export const Clipboard = Extension.create({
             const { $from } = state.selection;
 
             const isEmptyParagraph = $from.parent.type.name === 'paragraph' && $from.parent.content.size === 0;
-            if (isEmptyParagraph) {
+            if (isEmptyParagraph && slice.openStart > 0) {
               return new Slice(slice.content, slice.openStart - 1, slice.openEnd);
             }
 
