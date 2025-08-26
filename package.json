@@ -21,6 +21,7 @@
     "test": "turbo run test"
   },
   "devDependencies": {
+    "@types/bun": "^1.2.21",
     "@typie/lintconfig": "workspace:*",
     "cspell": "^9.2.0",
     "eslint": "^9.34.0",

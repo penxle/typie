@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node hooks/edit.js"
+            "command": "bun hooks/edit.js"
           }
         ]
       }
