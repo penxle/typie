@@ -1,3 +1,4 @@
+import stringify from 'fast-json-stable-stringify';
 import { nanoid } from 'nanoid';
 import { make, makeSubject, pipe, subscribe } from 'wonka';
 import { denormalize } from './denormalize';
@@ -78,7 +79,7 @@ export class Cache {
       this.#trackDependency(queryKey, entityKey, fieldKey);
     });
 
-    const resultString = JSON.stringify(result.data);
+    const resultString = stringify(result.data);
     const lastResult = this.#lastResults.get(queryKey);
 
     if (lastResult !== resultString) {
@@ -201,7 +202,7 @@ export class Cache {
       this.#trackDependency(queryKey, entityKey, fieldKey);
     });
 
-    const resultString = JSON.stringify(result.data);
+    const resultString = stringify(result.data);
     const lastResult = this.#lastResults.get(queryKey);
 
     if (lastResult !== resultString) {
