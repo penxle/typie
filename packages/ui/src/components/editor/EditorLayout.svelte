@@ -46,7 +46,7 @@
       ? '0'
       : typewriterEnabled
         ? `${(1 - typewriterPosition) * 100}vh`
-        : '0'}
+        : '20dvh'}
   style:--prosemirror-page-gap-height={`${GAP_HEIGHT_PX}px`}
   class={cx(
     css({
