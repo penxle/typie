@@ -29,11 +29,6 @@ export const PageBreak = createNodeView(Component, {
       setPageBreak:
         () =>
         ({ chain, editor }) => {
-          const pageLayout = editor.storage?.page?.layout;
-          if (!pageLayout) {
-            return false;
-          }
-
           const result = chain()
             .insertNode(this.type.create())
             .command(({ tr }) => {
