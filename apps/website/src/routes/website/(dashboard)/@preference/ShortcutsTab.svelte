@@ -58,6 +58,7 @@
       shortcuts: [
         { keys: ['Enter'], description: '문단 나누기' },
         { keys: ['Shift', 'Enter'], description: '줄바꿈' },
+        { keys: [modKey, 'Enter'], description: '페이지 나누기' },
         { keys: [['드래그 앤 드롭'], [modKey, 'V']], description: '이미지/파일 삽입' },
         { keys: ['--'], description: '긴 대시 (—)' },
         { keys: ['...'], description: '말줄임표 (…)' },

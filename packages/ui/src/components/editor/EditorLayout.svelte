@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { PostLayoutMode } from '@/enums';
+  import { GAP_HEIGHT_PX } from '../../tiptap';
   import { mmToPx } from '../../utils/unit';
   import type { Snippet } from 'svelte';
   import type { PageLayout } from '../../utils/page-layout';
@@ -46,6 +47,7 @@
       : typewriterEnabled
         ? `${(1 - typewriterPosition) * 100}vh`
         : '0'}
+  style:--prosemirror-page-gap-height={`${GAP_HEIGHT_PX}px`}
   class={cx(
     css({
       '&[data-layout="page"]': {

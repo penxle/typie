@@ -27,6 +27,7 @@ import {
   HorizontalRule,
   HtmlBlock,
   Image,
+  PageBreak,
   Table,
   TableCell,
   TableRow,
@@ -75,6 +76,7 @@ export const baseExtensions = [
   Table,
   TableCell,
   TableRow,
+  PageBreak,
 
   // extensions
   NodeId,
