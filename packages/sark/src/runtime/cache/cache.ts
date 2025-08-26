@@ -1,5 +1,6 @@
 import stringify from 'fast-json-stable-stringify';
 import { nanoid } from 'nanoid';
+import { rapidhash } from 'rapidhash-js';
 import { make, makeSubject, pipe, subscribe } from 'wonka';
 import { denormalize } from './denormalize';
 import { normalize } from './normalize';
@@ -23,7 +24,7 @@ export class Cache {
   #queries = new Map<QueryKey, Query>();
   #dependencies = new Map<DependencyKey, Set<QueryKey>>();
   #subjects = new Map<QueryKey, Subject<QueryResult>>();
-  #lastResults = new Map<QueryKey, string>();
+  #lastResultHashes = new Map<QueryKey, string>();
   id = nanoid();
 
   readQuery<T extends $ArtifactSchema>(schema: ArtifactSchema<T>, variables: Variables): T['$output'] | null {
@@ -79,11 +80,11 @@ export class Cache {
       this.#trackDependency(queryKey, entityKey, fieldKey);
     });
 
-    const resultString = stringify(result.data);
-    const lastResult = this.#lastResults.get(queryKey);
+    const resultHash = rapidhash(stringify(result.data)).toString();
+    const lastHash = this.#lastResultHashes.get(queryKey);
 
-    if (lastResult !== resultString) {
-      this.#lastResults.set(queryKey, resultString);
+    if (lastHash !== resultHash) {
+      this.#lastResultHashes.set(queryKey, resultHash);
 
       const subject = this.#retriveSubject(queryKey);
       subject.next(result);
@@ -148,7 +149,7 @@ export class Cache {
     this.#storage = { [RootFieldKey]: {} };
     this.#queries.clear();
     this.#dependencies.clear();
-    this.#lastResults.clear();
+    this.#lastResultHashes.clear();
 
     for (const [, subject] of this.#subjects) {
       subject.next({ data: null as unknown as Data, partial: true });
@@ -202,11 +203,11 @@ export class Cache {
       this.#trackDependency(queryKey, entityKey, fieldKey);
     });
 
-    const resultString = stringify(result.data);
-    const lastResult = this.#lastResults.get(queryKey);
+    const resultHash = rapidhash(stringify(result.data)).toString();
+    const lastHash = this.#lastResultHashes.get(queryKey);
 
-    if (lastResult !== resultString) {
-      this.#lastResults.set(queryKey, resultString);
+    if (lastHash !== resultHash) {
+      this.#lastResultHashes.set(queryKey, resultHash);
       const subject = this.#retriveSubject(queryKey);
       subject.next(result);
     }
