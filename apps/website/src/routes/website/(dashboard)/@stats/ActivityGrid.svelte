@@ -5,8 +5,6 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { fade } from 'svelte/transition';
-  import { fragment, graphql } from '$graphql';
-  import type { DashboardLayout_Stats_ActivityGrid_user } from '$graphql';
 
   type Level = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -17,24 +15,13 @@
   };
 
   type Props = {
-    $user: DashboardLayout_Stats_ActivityGrid_user;
+    characterCountChanges: {
+      date: string;
+      additions: number;
+    }[];
   };
 
-  const { $user: _user }: Props = $props();
-
-  const user = fragment(
-    _user,
-    graphql(`
-      fragment DashboardLayout_Stats_ActivityGrid_user on User {
-        id
-
-        characterCountChanges {
-          date
-          additions
-        }
-      }
-    `),
-  );
+  const { characterCountChanges }: Props = $props();
 
   let hoverActivity = $state<Activity & { element: HTMLElement }>();
 
@@ -44,12 +31,12 @@
   const activities = $derived.by<Activity[]>(() => {
     const activities: Activity[] = [];
 
-    const numbers = $user.characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
+    const numbers = characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
     const min = Math.min(...numbers);
     const max = Math.max(...numbers);
     const range = max - min;
 
-    const changes = Object.fromEntries($user.characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
+    const changes = Object.fromEntries(characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
 
     let currentDate = startDate;
     while (!currentDate.isAfter(endDate)) {
