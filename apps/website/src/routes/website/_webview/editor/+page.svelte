@@ -399,6 +399,11 @@
     persistence.on('synced', () => forceSync());
 
     Y.applyUpdateV2(doc, base64.parse($query.post.update), 'remote');
+
+    if (![PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode.current)) {
+      layoutMode.current = PostLayoutMode.SCROLL;
+    }
+
     awareness.setLocalStateField('user', {
       name: $query.me.name,
       color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),

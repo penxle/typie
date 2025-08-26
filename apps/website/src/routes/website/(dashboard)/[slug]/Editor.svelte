@@ -487,6 +487,10 @@
 
     if ($query.entity.node.__typename === 'Post') {
       Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
+
+      if (![PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode.current)) {
+        layoutMode.current = PostLayoutMode.SCROLL;
+      }
     }
 
     awareness.setLocalStateField('user', {
