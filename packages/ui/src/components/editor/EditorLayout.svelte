@@ -59,7 +59,7 @@
     }),
     className,
   )}
-  data-layout={layoutMode}
+  data-layout={layoutMode === PostLayoutMode.PAGE ? 'page' : 'scroll'}
 >
   {@render children()}
 </div>
