@@ -6,11 +6,13 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import type { Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { TooltipParameter } from '@typie/ui/actions';
   import type { Snippet } from 'svelte';
 
   type Props = {
     style?: SystemStyleObject;
-    size: 'large' | 'small';
+    size: 'large' | 'medium' | 'small';
+    keys?: TooltipParameter['keys'];
     label: string;
     active?: boolean;
     disabled?: boolean;
@@ -25,6 +27,7 @@
   let {
     style,
     size,
+    keys,
     label,
     active = false,
     disabled = false,
@@ -82,14 +85,15 @@
         transition: 'common',
         _enabled: {
           _hover: { color: 'text.brand' },
-          _pressed: { color: 'text.brand' },
+          _expanded: { color: 'text.brand' },
         },
         _disabled: { opacity: '50' },
         flexShrink: '0',
       },
       style,
     )}
-    aria-pressed={opened}
+    aria-expanded={opened}
+    aria-haspopup="menu"
     {disabled}
     onclick={open}
     type="button"
@@ -97,6 +101,50 @@
   >
     {@render anchor({ open, opened })}
     <span class={css({ fontSize: '11px' })}>{label}</span>
+  </button>
+{:else if size === 'medium'}
+  <button
+    class={css({
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: '2px',
+      borderRadius: '4px',
+      paddingX: chevron ? '4px' : '0',
+      width: chevron ? 'fit' : '28px',
+      height: '28px',
+      textAlign: 'left',
+      color: active ? 'text.brand' : 'text.subtle',
+      transition: 'common',
+      _enabled: {
+        _hover: { color: 'text.brand' },
+        _expanded: { color: 'text.brand' },
+      },
+      _disabled: { opacity: '50' },
+      flexShrink: '0',
+    })}
+    aria-expanded={opened}
+    aria-haspopup="menu"
+    aria-label={label}
+    {disabled}
+    onclick={open}
+    type="button"
+    use:anchorAction
+    use:tooltip={{ message: label, keys, delay: 200, arrow: false }}
+  >
+    {@render anchor({ open, opened })}
+
+    {#if chevron}
+      <Icon
+        style={css.raw({
+          color: 'text.faint',
+          transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
+          transitionDuration: '150ms',
+        })}
+        icon={ChevronDownIcon}
+        size={16}
+      />
+    {/if}
   </button>
 {:else if size === 'small'}
   <button
@@ -115,20 +163,21 @@
         transition: 'common',
         _enabled: {
           _hover: { color: 'text.brand' },
-          _pressed: { color: 'text.brand' },
+          _expanded: { color: 'text.brand' },
         },
         _disabled: { opacity: '50' },
         flexShrink: '0',
       },
       style,
     )}
+    aria-expanded={opened}
+    aria-haspopup="menu"
     aria-label={label}
-    aria-pressed={opened}
     {disabled}
     onclick={open}
     type="button"
     use:anchorAction
-    use:tooltip={{ message: label, delay: 1000, arrow: false }}
+    use:tooltip={{ message: label, keys, delay: 1000, arrow: false }}
   >
     {@render anchor({ open, opened })}
 
