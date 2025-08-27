@@ -1,8 +1,8 @@
 import { findChildrenInRange, findParentNodeClosestToPos, isNodeActive, mergeAttributes, Node } from '@tiptap/core';
-import { Plugin } from '@tiptap/pm/state';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { closest } from '../../utils';
 import { defaultValues, values } from '../values';
-import type { NodeType, ResolvedPos } from '@tiptap/pm/model';
+import type { Attrs, Mark, NodeType, ResolvedPos } from '@tiptap/pm/model';
 
 const textAligns = values.textAlign.map(({ value }) => value);
 type TextAlign = (typeof textAligns)[number];
@@ -12,6 +12,8 @@ type LineHeight = (typeof lineHeights)[number];
 
 const letterSpacings = values.letterSpacing.map(({ value }) => value);
 type LetterSpacing = (typeof letterSpacings)[number];
+
+const pluginKey = new PluginKey<{ attrs: Attrs | null; marks: Mark[] | null }>('paragraph');
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
@@ -29,7 +31,7 @@ export const Paragraph = Node.create({
   name: 'paragraph',
   group: 'block',
   content: 'inline*',
-  priority: 255,
+  priority: 20_000,
 
   addAttributes() {
     return {
@@ -110,7 +112,7 @@ export const Paragraph = Node.create({
             return false;
           }
 
-          for (const { pos } of children) {
+          for (const { pos, node } of children) {
             const pos$ = tr.doc.resolve(pos);
             const parent = findParentNodeClosestToPos(
               pos$,
@@ -121,7 +123,7 @@ export const Paragraph = Node.create({
               continue;
             }
 
-            tr.setNodeMarkup(pos, undefined, { textAlign });
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, textAlign });
           }
 
           dispatch?.(tr);
@@ -163,6 +165,64 @@ export const Paragraph = Node.create({
 
   addProseMirrorPlugins() {
     return [
+      new Plugin<{ attrs: Attrs | null; marks: Mark[] | null }>({
+        key: pluginKey,
+        state: {
+          init: () => ({ attrs: null, marks: null }),
+          apply: (tr, value, oldState) => {
+            if (!tr.docChanged) {
+              return value;
+            }
+
+            const { from, to } = oldState.selection;
+            let attrs: Attrs | null = null;
+            let marks: Mark[] | null = null;
+
+            oldState.doc.nodesBetween(from, to, (node, pos) => {
+              if (node.type === this.type && !attrs) {
+                attrs = node.attrs;
+              }
+
+              if (node.type === this.type && !marks) {
+                const pos$ = oldState.doc.resolve(pos + 1);
+                marks = [...pos$.marks()];
+              }
+            });
+
+            return { attrs, marks };
+          },
+        },
+        appendTransaction: (transactions, _, newState) => {
+          if (!transactions.some((tr) => tr.docChanged)) {
+            return;
+          }
+
+          const { tr } = newState;
+          const pluginState = pluginKey.getState(newState);
+
+          newState.doc.descendants((node, pos) => {
+            if (node.type === this.type && node.attrs.nodeId === null) {
+              if (pluginState?.attrs) {
+                tr.setNodeMarkup(pos, undefined, { ...pluginState.attrs, nodeId: null });
+              }
+
+              if (pluginState?.marks) {
+                for (const mark of pluginState.marks) {
+                  tr.addMark(pos, pos + node.nodeSize, mark);
+                  tr.addStoredMark(mark);
+                }
+              }
+            }
+          });
+
+          if (tr.docChanged) {
+            return tr;
+          }
+
+          return;
+        },
+      }),
+
       new Plugin({
         appendTransaction: (_, __, newState) => {
           const { selection, storedMarks, tr } = newState;
