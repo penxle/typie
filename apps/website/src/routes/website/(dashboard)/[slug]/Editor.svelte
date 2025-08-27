@@ -37,6 +37,7 @@
   import { unfurlEmbed, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import Anchors from './@anchor/Anchors.svelte';
+  import FloatingFindReplace from './FloatingFindReplace.svelte';
   import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
   import Panel from './Panel.svelte';
@@ -1071,6 +1072,10 @@
               anchors.current = newAnchors;
             }}
           />
+
+          {#if editor && app.state.findReplaceOpen}
+            <FloatingFindReplace close={() => (app.state.findReplaceOpen = false)} {editor} />
+          {/if}
         </div>
 
         {#if app.preference.current.zenModeEnabled}

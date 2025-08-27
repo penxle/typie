@@ -10,6 +10,7 @@
   import ReplaceIcon from '~icons/lucide/replace';
   import ReplaceAllIcon from '~icons/lucide/replace-all';
   import WholeWordIcon from '~icons/lucide/whole-word';
+  import XIcon from '~icons/lucide/x';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
 
@@ -36,7 +37,26 @@
     });
   });
 
+  const getFindTextFromSelection = () => {
+    const { selection } = editor.current.state;
+    if (selection.from !== selection.to) {
+      const selectionText = editor.current.state.doc.textBetween(selection.from, selection.to, ' ');
+      findText = selectionText;
+    }
+  };
+
   const handleKeydown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
+      e.preventDefault();
+
+      getFindTextFromSelection();
+
+      tick().then(() => {
+        findInputEl.select();
+      });
+      return;
+    }
+
     if (e.key === 'Escape') {
       close();
       editor.current.commands.focus(undefined, { scrollIntoView: false });
@@ -64,8 +84,9 @@
   };
 
   onMount(() => {
+    getFindTextFromSelection();
     tick().then(() => {
-      findInputEl?.focus();
+      findInputEl.select();
     });
 
     return () => {
@@ -74,10 +95,19 @@
   });
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div
   class={flex({
     gap: '4px',
     padding: '8px',
+    position: 'absolute',
+    top: '0',
+    right: '52px',
+    zIndex: 'overEditor',
+    backgroundColor: 'surface.default',
+    borderRadius: '6px',
+    boxShadow: 'small',
   })}
   onkeydown={handleKeydown}
   role="dialog"
@@ -222,7 +252,7 @@
       </div>
     </div>
 
-    <div class={flex({ alignItems: 'center', gap: '4px', height: '30px' })}>
+    <div class={flex({ alignItems: 'center', gap: '4px', height: '30px', justifyContent: 'space-between' })}>
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
         <button
           class={center({
@@ -277,6 +307,22 @@
           <Icon icon={ReplaceAllIcon} size={16} />
         </button>
       </div>
+      <button
+        class={center({
+          size: '24px',
+          padding: '4px',
+          borderRadius: '4px',
+          color: 'text.faint',
+          _hover: {
+            backgroundColor: 'surface.muted',
+          },
+        })}
+        onclick={close}
+        type="button"
+        use:tooltip={{ message: '닫기', keys: ['Esc'] }}
+      >
+        <Icon icon={XIcon} size={16} />
+      </button>
     </div>
   </div>
 </div>
