@@ -72,13 +72,19 @@
       return;
     }
 
-    if (event.code === 'Escape' && app.preference.current.zenModeEnabled) {
-      event.preventDefault();
+    if (event.code === 'Escape') {
+      if (app.state.findReplaceOpen) {
+        return;
+      }
 
-      app.preference.current.zenModeEnabled = false;
-      mixpanel.track('zen_mode_disabled', { via: 'esc' });
+      if (app.preference.current.zenModeEnabled) {
+        event.preventDefault();
 
-      return;
+        app.preference.current.zenModeEnabled = false;
+        mixpanel.track('zen_mode_disabled', { via: 'esc' });
+
+        return;
+      }
     }
   };
 </script>

@@ -34,7 +34,6 @@
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
-  import ToolbarFloatingFindReplace from './ToolbarFloatingFindReplace.svelte';
   import ToolbarFloatingLink from './ToolbarFloatingLink.svelte';
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarFontFamily from './ToolbarFontFamily.svelte';
@@ -302,27 +301,16 @@
     <div class={css({ flexGrow: '1' })}></div>
 
     {#if editor}
-      <ToolbarDropdownButton
+      <ToolbarButton
         disabled={!editor.current}
+        icon={SearchIcon}
         keys={['Mod', 'F']}
         label="찾기, 바꾸기"
-        onOpenChange={(opened) => {
-          app.state.findReplaceOpen = opened;
+        onclick={() => {
+          app.state.findReplaceOpen = !app.state.findReplaceOpen;
         }}
-        opened={app.state.findReplaceOpen}
-        placement="bottom-end"
         size="medium"
-      >
-        {#snippet anchor()}
-          <ToolbarIcon icon={SearchIcon} />
-        {/snippet}
-
-        {#snippet floating({ close })}
-          {#if editor}
-            <ToolbarFloatingFindReplace {close} {editor} />
-          {/if}
-        {/snippet}
-      </ToolbarDropdownButton>
+      ></ToolbarButton>
 
       <Spellcheck {editor} subscription={!!$site?.user.subscription} />
     {/if}
