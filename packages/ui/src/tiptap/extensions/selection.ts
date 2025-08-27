@@ -138,10 +138,10 @@ export const Selection = Extension.create({
             const decorations: Decoration[] = [];
 
             if (this.editor.isEditable && (selection instanceof NodeSelection || selection instanceof MultiNodeSelection)) {
-              const startPos = Math.max(1, from - 1);
-              const endPos = Math.min(body.content.size + 1, to + 1);
+              const startPos = Math.max(0, from - 1);
+              const endPos = Math.min(body.content.size, to - 1);
 
-              body.nodesBetween(startPos - 1, endPos - 1, (node, offset) => {
+              body.nodesBetween(startPos, endPos, (node, offset) => {
                 if (!node.isBlock) {
                   return true;
                 }
@@ -152,7 +152,6 @@ export const Selection = Extension.create({
 
                 const pos = offset + 1;
                 const selected = from <= pos && to >= pos + node.nodeSize;
-
                 if (!selected) {
                   return true;
                 }
