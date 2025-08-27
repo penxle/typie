@@ -303,7 +303,6 @@
       <VerticalDivider style={css.raw({ height: '12px' })} />
 
       <ToolbarButton
-        disabled={!editor?.current.can().setPageBreak()}
         icon={FilePlusIcon}
         keys={['Mod', 'Enter']}
         label="페이지 나누기"
