@@ -90,6 +90,7 @@ export const NodeId = Extension.create({
           const { mapping } = transform;
           const { tr } = newState;
 
+          const seenNodes = new Set<number>();
           const seenIds = new Set<string>();
           const duplicateIds = new Set<string>();
 
@@ -97,6 +98,12 @@ export const NodeId = Extension.create({
             const nodes = findChildrenInRange(newState.doc, newRange, (node) => types.includes(node.type.name));
 
             for (const [index, { node, pos }] of nodes.entries()) {
+              if (seenNodes.has(pos)) {
+                continue;
+              }
+
+              seenNodes.add(pos);
+
               const id = tr.doc.nodeAt(pos)?.attrs.nodeId;
               if (id === null) {
                 tr.setNodeMarkup(pos, undefined, {
