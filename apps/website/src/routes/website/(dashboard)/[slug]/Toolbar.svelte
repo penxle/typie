@@ -9,6 +9,7 @@
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
+  import FilePlusIcon from '~icons/lucide/file-plus';
   import FileUpIcon from '~icons/lucide/file-up';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
   import ImageIcon from '~icons/lucide/image';
@@ -298,6 +299,21 @@
       size="medium"
     />
 
+    {#if editor?.current.storage.page.layout}
+      <VerticalDivider style={css.raw({ height: '12px' })} />
+
+      <ToolbarButton
+        disabled={!editor?.current.can().setPageBreak()}
+        icon={FilePlusIcon}
+        keys={['Mod', 'Enter']}
+        label="페이지 나누기"
+        onclick={() => {
+          editor?.current.chain().focus().setPageBreak().run();
+        }}
+        size="medium"
+      />
+    {/if}
+
     <div class={css({ flexGrow: '1' })}></div>
 
     {#if editor}
@@ -310,7 +326,7 @@
           app.state.findReplaceOpen = !app.state.findReplaceOpen;
         }}
         size="medium"
-      ></ToolbarButton>
+      />
 
       <Spellcheck {editor} subscription={!!$site?.user.subscription} />
     {/if}
