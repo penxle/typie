@@ -1,8 +1,17 @@
-import { findChildrenInRange, findParentNodeClosestToPos, isNodeActive, mergeAttributes, Node } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import {
+  combineTransactionSteps,
+  findChildrenInRange,
+  findParentNodeClosestToPos,
+  getChangedRanges,
+  isNodeActive,
+  mergeAttributes,
+  Node,
+} from '@tiptap/core';
+import { Plugin } from '@tiptap/pm/state';
+import { ySyncPluginKey } from 'y-prosemirror';
 import { closest } from '../../utils';
 import { defaultValues, values } from '../values';
-import type { Attrs, Mark, NodeType, ResolvedPos } from '@tiptap/pm/model';
+import type { Mark, NodeType, ResolvedPos } from '@tiptap/pm/model';
 
 const textAligns = values.textAlign.map(({ value }) => value);
 type TextAlign = (typeof textAligns)[number];
@@ -12,8 +21,6 @@ type LineHeight = (typeof lineHeights)[number];
 
 const letterSpacings = values.letterSpacing.map(({ value }) => value);
 type LetterSpacing = (typeof letterSpacings)[number];
-
-const pluginKey = new PluginKey<{ attrs: Attrs | null; marks: Mark[] | null }>('paragraph');
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
@@ -31,7 +38,7 @@ export const Paragraph = Node.create({
   name: 'paragraph',
   group: 'block',
   content: 'inline*',
-  priority: 20_000,
+  priority: 255,
 
   addAttributes() {
     return {
@@ -165,61 +172,67 @@ export const Paragraph = Node.create({
 
   addProseMirrorPlugins() {
     return [
-      new Plugin<{ attrs: Attrs | null; marks: Mark[] | null }>({
-        key: pluginKey,
-        state: {
-          init: () => ({ attrs: null, marks: null }),
-          apply: (tr, value, oldState) => {
-            if (!tr.docChanged) {
-              return value;
-            }
+      new Plugin({
+        appendTransaction: (transactions, oldState, newState) => {
+          const docChanged = transactions.some((tr) => tr.docChanged) && !oldState.doc.eq(newState.doc);
+          const ySync = transactions.find((tr) => tr.getMeta(ySyncPluginKey));
+          const paste = transactions.find((tr) => tr.getMeta('paste'));
 
-            const { from, to } = oldState.selection;
-            let attrs: Attrs | null = null;
-            let marks: Mark[] | null = null;
-
-            oldState.doc.nodesBetween(from, to, (node, pos) => {
-              if (node.type === this.type && !attrs) {
-                attrs = node.attrs;
-              }
-
-              if (node.type === this.type && !marks) {
-                const pos$ = oldState.doc.resolve(pos + 1);
-                marks = [...pos$.marks()];
-              }
-            });
-
-            return { attrs, marks };
-          },
-        },
-        appendTransaction: (transactions, _, newState) => {
-          if (!transactions.some((tr) => tr.docChanged)) {
+          if (!docChanged || ySync || paste) {
             return;
           }
 
           const { tr } = newState;
-          const pluginState = pluginKey.getState(newState);
 
-          newState.doc.descendants((node, pos) => {
-            if (node.type === this.type && node.attrs.nodeId === null) {
-              if (pluginState?.attrs) {
-                tr.setNodeMarkup(pos, undefined, { ...pluginState.attrs, nodeId: null });
-              }
+          const transform = combineTransactionSteps(oldState.doc, [...transactions]);
+          for (const { oldRange, newRange } of getChangedRanges(transform)) {
+            const oldNodeIds = new Set<string>();
+            let oldAttrs: Record<string, unknown> | null = null;
+            let oldMarks: Mark[] | null = null;
 
-              if (pluginState?.marks) {
-                for (const mark of pluginState.marks) {
-                  tr.addMark(pos, pos + node.nodeSize, mark);
-                  tr.addStoredMark(mark);
+            oldState.doc.nodesBetween(oldRange.from, oldRange.to, (node, pos) => {
+              if (node.type === this.type) {
+                if (node.attrs.nodeId) {
+                  oldNodeIds.add(node.attrs.nodeId);
+                }
+
+                if (!oldAttrs) {
+                  oldAttrs = { ...node.attrs };
+                  delete oldAttrs.nodeId;
+                }
+
+                if (!oldMarks) {
+                  const pos$ = oldState.doc.resolve(pos + 1);
+                  const m = pos$.marks();
+                  if (m.length > 0) {
+                    oldMarks = [...m];
+                  }
                 }
               }
-            }
-          });
+            });
+
+            newState.doc.nodesBetween(newRange.from, newRange.to, (node, pos) => {
+              if (node.type === this.type) {
+                const isNewNode = !node.attrs.nodeId || (oldNodeIds.size > 0 && !oldNodeIds.has(node.attrs.nodeId));
+                if (isNewNode) {
+                  if (oldAttrs) {
+                    tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...oldAttrs });
+                  }
+
+                  if (oldMarks) {
+                    for (const mark of oldMarks) {
+                      tr.addMark(pos + 1, pos + node.content.size + 1, mark);
+                      tr.addStoredMark(mark);
+                    }
+                  }
+                }
+              }
+            });
+          }
 
           if (tr.docChanged) {
             return tr;
           }
-
-          return;
         },
       }),
 

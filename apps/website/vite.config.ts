@@ -8,9 +8,11 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   clearScreen: false,
   plugins: [
-    // @ts-expect-error type mismatch
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore type mismatch
     svg(),
-    // @ts-expect-error type mismatch
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore type mismatch
     icons({
       scale: 1,
       compiler: 'svelte',
@@ -18,7 +20,8 @@ export default defineConfig({
         typie: FileSystemIconLoader('./src/icons'),
       },
     }),
-    // @ts-expect-error type mismatch
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore type mismatch
     sark(),
     sveltekit(),
   ],
