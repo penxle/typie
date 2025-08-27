@@ -12,15 +12,8 @@ export default {
       '$assets/*': './src/assets/*',
       $graphql: './.sark',
     },
-    files: {
-      hooks: {
-        server: 'src/hooks/server',
-        client: 'src/hooks/client',
-        universal: 'src/hooks/universal',
-      },
-    },
     paths: { relative: false },
-    csrf: { checkOrigin: false },
+    csrf: { trustedOrigins: ['*'] },
     output: { preloadStrategy: 'preload-mjs' },
     typescript: {
       config: (config) => ({
