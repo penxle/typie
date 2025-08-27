@@ -1,4 +1,4 @@
-import './common';
+import '@typie/lib/dayjs';
 
 import * as Sentry from '@sentry/sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
