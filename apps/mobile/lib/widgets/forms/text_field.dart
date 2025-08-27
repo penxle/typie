@@ -28,6 +28,7 @@ class HookFormTextField extends HookWidget {
     this.maxLength,
     this.inputFormatters,
     this.onChanged,
+    this.suffix,
   });
 
   const factory HookFormTextField.collapsed({
@@ -62,6 +63,7 @@ class HookFormTextField extends HookWidget {
   final int? maxLength;
   final List<TextInputFormatter>? inputFormatters;
   final void Function(String)? onChanged;
+  final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +102,17 @@ class HookFormTextField extends HookWidget {
 
         final focusedColor = context.colors.borderStrong;
         final defaultColor = context.colors.borderDefault;
+
+        useEffect(() {
+          void listener() {
+            if (field.value != effectiveController.text) {
+              field.value = effectiveController.text;
+            }
+          }
+
+          effectiveController.addListener(listener);
+          return () => effectiveController.removeListener(listener);
+        }, [effectiveController]);
 
         useEffect(() {
           final begin = colorTween.value?.evaluate(curve);
@@ -141,8 +154,14 @@ class HookFormTextField extends HookWidget {
                     border: Border.all(color: color),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const Pad(horizontal: 16, vertical: 12),
-                  child: child,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Padding(padding: const Pad(horizontal: 16, vertical: 12), child: child),
+                      ),
+                      if (suffix != null) ...[Padding(padding: const EdgeInsets.only(right: 12), child: suffix)],
+                    ],
+                  ),
                 ),
               ],
             );
@@ -231,6 +250,17 @@ class _HookFormCollapsedTextField extends HookFormTextField {
       name: name,
       initialValue: initialValue,
       builder: (context, field) {
+        useEffect(() {
+          void listener() {
+            if (field.value != effectiveController.text) {
+              field.value = effectiveController.text;
+            }
+          }
+
+          effectiveController.addListener(listener);
+          return () => effectiveController.removeListener(listener);
+        }, [effectiveController]);
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

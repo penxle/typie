@@ -10,6 +10,7 @@
   import BanIcon from '~icons/lucide/ban';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
+  import Dice5Icon from '~icons/lucide/dice-5';
   import EyeIcon from '~icons/lucide/eye';
   import EyeOffIcon from '~icons/lucide/eye-off';
   import IdCardIcon from '~icons/lucide/id-card';
@@ -78,6 +79,7 @@
   let timer: NodeJS.Timeout | undefined;
 
   let showPassword = $state(false);
+  let isRolling = $state(false);
 
   const visibilityIndeterminate = $derived($posts.length > 1 && $posts.some((p) => p.entity.visibility !== $posts[0].entity.visibility));
   const availabilityIndeterminate = $derived(
@@ -148,6 +150,22 @@
       }
     };
   });
+
+  const generateRandomPassword = () => {
+    isRolling = true;
+
+    const digits = '0123456789';
+    let password = '';
+    for (let i = 0; i < 4; i++) {
+      password += digits.charAt(Math.floor(Math.random() * digits.length));
+    }
+    form.fields.password = password;
+    showPassword = true;
+
+    setTimeout(() => {
+      isRolling = false;
+    }, 500);
+  };
 
   const handleCopyLink = () => {
     if ($posts.length === 0) return;
@@ -323,7 +341,7 @@
                 borderWidth: '1px',
                 borderRadius: '6px',
                 paddingLeft: '12px',
-                paddingRight: '32px',
+                paddingRight: '56px',
                 width: 'full',
                 height: '32px',
                 fontFamily: 'mono',
@@ -341,9 +359,39 @@
               class={center({
                 position: 'absolute',
                 top: '1/2',
+                right: '32px',
+                size: '20px',
+                color: 'text.disabled',
+                userSelect: 'none',
+                translate: 'auto',
+                translateY: '-1/2',
+                _hover: { color: 'text.disabled' },
+              })}
+              onclick={generateRandomPassword}
+              type="button"
+              use:tooltip={{
+                message: '4자리 랜덤 비밀번호 생성',
+                placement: 'bottom',
+              }}
+            >
+              <Icon
+                class={css({
+                  animation: isRolling ? 'diceRoll 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)' : 'none',
+                  transformOrigin: 'center',
+                })}
+                icon={Dice5Icon}
+                size={16}
+              />
+            </button>
+
+            <button
+              class={center({
+                position: 'absolute',
+                top: '1/2',
                 right: '8px',
                 size: '20px',
                 color: 'text.disabled',
+                userSelect: 'none',
                 translate: 'auto',
                 translateY: '-1/2',
                 _hover: { color: 'text.disabled' },

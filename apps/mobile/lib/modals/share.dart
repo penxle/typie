@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
@@ -87,10 +88,42 @@ class SharePostsContent extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
+    final passwordController = useTextEditingController();
+    final rotationController = useAnimationController(duration: const Duration(milliseconds: 500));
+    final scaleController = useAnimationController(duration: const Duration(milliseconds: 250));
+    final random = Random();
+
+    final rotationAnimation = useMemoized(
+      () =>
+          Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: rotationController, curve: Curves.easeInOut)),
+      [rotationController],
+    );
+
+    final scaleAnimation = useMemoized(
+      () =>
+          Tween<double>(begin: 1, end: 1.2).animate(CurvedAnimation(parent: scaleController, curve: Curves.easeInOut)),
+      [scaleController],
+    );
 
     final initialPassword = posts.length > 1 && posts.any((p) => p.password != posts.first.password)
         ? null
         : posts.first.password;
+
+    useEffect(() {
+      if (initialPassword != null) {
+        passwordController.text = initialPassword;
+      }
+      return null;
+    }, [initialPassword]);
+
+    void generateRandomPassword() {
+      const digits = '0123456789';
+      final password = List.generate(4, (index) => digits[random.nextInt(digits.length)]).join();
+      passwordController.text = password;
+
+      unawaited(rotationController.forward(from: 0));
+      unawaited(scaleController.forward(from: 0).then((_) => scaleController.reverse()));
+    }
 
     return HookForm(
       submitMode: HookFormSubmitMode.onChange,
@@ -198,7 +231,22 @@ class SharePostsContent extends HookWidget {
                           label: '비밀번호',
                           placeholder: '비밀번호를 입력해주세요.',
                           keyboardType: TextInputType.visiblePassword,
+                          controller: passwordController,
                           initialValue: initialPassword,
+                          suffix: GestureDetector(
+                            onTap: generateRandomPassword,
+                            behavior: HitTestBehavior.opaque,
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: RotationTransition(
+                                turns: rotationAnimation,
+                                child: ScaleTransition(
+                                  scale: scaleAnimation,
+                                  child: Icon(LucideLightIcons.dice_5, size: 20, color: context.colors.textSubtle),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                     ],
                   ),
