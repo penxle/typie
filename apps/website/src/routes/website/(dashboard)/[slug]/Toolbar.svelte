@@ -2,7 +2,6 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
-  import { tooltip } from '@typie/ui/actions';
   import { HorizontalDivider, VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { defaultValues, values } from '@typie/ui/tiptap';
@@ -121,8 +120,9 @@
     class={flex({
       alignItems: 'center',
       gap: '4px',
-      paddingX: '16px',
-      paddingY: '8px',
+      paddingLeft: '16px',
+      paddingRight: '10px',
+      paddingY: '6px',
       overflowX: 'auto',
       scrollbarWidth: '[thin]',
     })}
@@ -134,7 +134,7 @@
       onclick={() => {
         editor?.current.chain().focus().setImage().run();
       }}
-      size="large"
+      size="medium"
     />
 
     <ToolbarButton
@@ -144,7 +144,7 @@
       onclick={() => {
         editor?.current.chain().focus().setFile().run();
       }}
-      size="large"
+      size="medium"
     />
 
     <ToolbarButton
@@ -154,14 +154,14 @@
       onclick={() => {
         editor?.current.chain().focus().setEmbed().run();
       }}
-      size="large"
+      size="medium"
     />
 
     <ToolbarDropdownButton
       active={editor?.current.isActive('horizontal_rule')}
       disabled={!editor?.current.can().setHorizontalRule()}
       label="구분선"
-      size="large"
+      size="medium"
     >
       {#snippet anchor()}
         <ToolbarIcon icon={HorizontalRuleIcon} />
@@ -188,7 +188,7 @@
       active={editor?.current.isActive('blockquote')}
       disabled={!editor?.current.can().toggleBlockquote()}
       label="인용구"
-      size="large"
+      size="medium"
     >
       {#snippet anchor()}
         <ToolbarIcon icon={QuoteIcon} />
@@ -218,7 +218,7 @@
       onclick={() => {
         editor?.current.chain().focus().toggleCallout().run();
       }}
-      size="large"
+      size="medium"
     />
 
     <ToolbarButton
@@ -228,7 +228,7 @@
       onclick={() => {
         editor?.current.chain().focus().toggleFold().run();
       }}
-      size="large"
+      size="medium"
     />
 
     <ToolbarButton
@@ -238,13 +238,13 @@
       onclick={() => {
         editor?.current.chain().focus().insertTable().run();
       }}
-      size="large"
+      size="medium"
     />
 
     <ToolbarDropdownButton
       disabled={!editor?.current || (!editor.current.can().toggleBulletList() && !editor.current.can().toggleOrderedList())}
       label="목록"
-      size="large"
+      size="medium"
     >
       {#snippet anchor()}
         <ToolbarIcon icon={ListIcon} />
@@ -286,7 +286,7 @@
       onclick={() => {
         editor?.current.chain().focus().setCodeBlock().run();
       }}
-      size="large"
+      size="medium"
     />
 
     <ToolbarButton
@@ -296,39 +296,33 @@
       onclick={() => {
         editor?.current.chain().focus().setHtmlBlock().run();
       }}
-      size="large"
+      size="medium"
     />
 
     <div class={css({ flexGrow: '1' })}></div>
 
     {#if editor}
-      <div
-        use:tooltip={{
-          message: '찾기, 바꾸기',
-          keys: ['Mod', 'F'],
+      <ToolbarDropdownButton
+        disabled={!editor.current}
+        keys={['Mod', 'F']}
+        label="찾기, 바꾸기"
+        onOpenChange={(opened) => {
+          app.state.findReplaceOpen = opened;
         }}
+        opened={app.state.findReplaceOpen}
+        placement="bottom-end"
+        size="medium"
       >
-        <ToolbarDropdownButton
-          disabled={!editor.current}
-          label="찾기"
-          onOpenChange={(opened) => {
-            app.state.findReplaceOpen = opened;
-          }}
-          opened={app.state.findReplaceOpen}
-          placement="bottom-end"
-          size="large"
-        >
-          {#snippet anchor()}
-            <ToolbarIcon icon={SearchIcon} />
-          {/snippet}
+        {#snippet anchor()}
+          <ToolbarIcon icon={SearchIcon} />
+        {/snippet}
 
-          {#snippet floating({ close })}
-            {#if editor}
-              <ToolbarFloatingFindReplace {close} {editor} />
-            {/if}
-          {/snippet}
-        </ToolbarDropdownButton>
-      </div>
+        {#snippet floating({ close })}
+          {#if editor}
+            <ToolbarFloatingFindReplace {close} {editor} />
+          {/if}
+        {/snippet}
+      </ToolbarDropdownButton>
 
       <Spellcheck {editor} subscription={!!$site?.user.subscription} />
     {/if}

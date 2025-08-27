@@ -8,7 +8,7 @@
 
   type Props = {
     style?: SystemStyleObject;
-    size: 'large' | 'small';
+    size: 'large' | 'medium' | 'small';
     icon: Component;
     label: string;
     keys?: TooltipParameter['keys'];
@@ -50,6 +50,35 @@
     <ToolbarIcon {icon} />
     <span class={css({ fontSize: '11px' })}>{label}</span>
   </button>
+{:else if size === 'medium'}
+  <button
+    class={css(
+      {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: '4px',
+        size: '28px',
+        color: 'text.subtle',
+        transition: 'common',
+        _enabled: {
+          _hover: { color: 'text.brand' },
+          _pressed: { color: 'text.brand' },
+        },
+        _disabled: { opacity: '50' },
+        flexShrink: '0',
+      },
+      style,
+    )}
+    aria-label={label}
+    aria-pressed={active}
+    {disabled}
+    {onclick}
+    type="button"
+    use:tooltip={{ message: label, keys, delay: 200, arrow: false }}
+  >
+    <ToolbarIcon {icon} />
+  </button>
 {:else if size === 'small'}
   <button
     class={css(
@@ -69,6 +98,7 @@
       },
       style,
     )}
+    aria-label={label}
     aria-pressed={active}
     {disabled}
     {onclick}

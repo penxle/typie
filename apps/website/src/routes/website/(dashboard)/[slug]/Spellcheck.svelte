@@ -212,13 +212,13 @@
 
 <PlanUpgradeModal bind:open={planUpgradeOpen} />
 
-{#if inflight}
-  <div class={center({ size: '48px' })}>
-    <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
-  </div>
-{:else}
-  <ToolbarButton icon={SpellCheckIcon} label="맞춤법" onclick={spellcheck} size="large" />
-{/if}
+<div class={center({ size: '28px' })}>
+  {#if inflight}
+    <RingSpinner style={css.raw({ size: '20px', color: 'text.faint' })} />
+  {:else}
+    <ToolbarButton icon={SpellCheckIcon} label="맞춤법" onclick={spellcheck} size="medium" />
+  {/if}
+</div>
 
 {#if activeError}
   <div class={flex({ alignItems: 'center', gap: '4px', zIndex: 'overEditor', wrap: 'wrap' })} use:floating>
