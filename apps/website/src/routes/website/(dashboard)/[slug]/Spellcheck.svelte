@@ -17,7 +17,7 @@
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import { graphql } from '$graphql';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
-  import ToolbarButton from './ToolbarButton.svelte';
+  import ToolbarButton from './@toolbar/ToolbarButton.svelte';
   import type { Ref } from '@typie/ui/utils';
 
   type Props = {

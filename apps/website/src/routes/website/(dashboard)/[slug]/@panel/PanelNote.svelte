@@ -7,7 +7,7 @@
   import ExpandIcon from '~icons/lucide/expand';
   import Minimize2Icon from '~icons/lucide/minimize-2';
   import NotebookTabsIcon from '~icons/lucide/notebook-tabs';
-  import { YState } from './state.svelte';
+  import { YState } from '../state.svelte';
   import type * as Y from 'yjs';
 
   type Props = {

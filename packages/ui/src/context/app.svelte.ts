@@ -6,6 +6,8 @@ type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   postsWidth: number;
   panelExpanded: boolean;
+  panelTab: 'info' | 'settings';
+
   noteExpanded: boolean;
   trashHeight: number;
 
@@ -93,6 +95,7 @@ export const setupAppContext = (userId: string) => {
       postsExpanded: false,
       postsWidth: 240,
       panelExpanded: true,
+      panelTab: 'info',
       noteExpanded: false,
       trashHeight: 300,
 
