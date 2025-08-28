@@ -157,7 +157,9 @@ export class App extends pulumi.ComponentResource {
           namespace,
           annotations: {
             'reloader.stakater.com/auto': 'true',
-            'notifications.argoproj.io/subscribe.on-rollout-completed.slack': 'activities',
+            ...(stack === 'prod' && {
+              'notifications.argoproj.io/subscribe.on-rollout-completed.slack': 'activities',
+            }),
           },
         },
         spec: {
