@@ -18,13 +18,18 @@
   let { tab, label, icon, keys }: Props = $props();
 
   const app = getAppContext();
+
+  const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
 </script>
 
 <button
   class={center({
+    flexDirection: 'column',
+    gap: '4px',
+    flexShrink: '0',
     borderRadius: '4px',
     width: '40px',
-    height: '24px',
+    minHeight: '24px',
     color: 'text.faint',
     transition: 'common',
     _hover: { backgroundColor: 'surface.subtle' },
@@ -52,11 +57,15 @@
   }}
   type="button"
   use:tooltip={{
-    message: label,
-    keys,
+    message: toolbarSize === 'medium' ? label : undefined,
+    keys: toolbarSize === 'medium' ? keys : undefined,
     arrow: false,
     delay: 1000,
   }}
 >
   <Icon style={css.raw({ color: 'text.faint' })} {icon} size={20} />
+
+  {#if toolbarSize === 'large'}
+    <span class={css({ fontSize: '11px' })}>{label}</span>
+  {/if}
 </button>

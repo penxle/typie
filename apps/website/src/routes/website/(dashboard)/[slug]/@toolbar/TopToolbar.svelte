@@ -59,6 +59,8 @@
   );
 
   const app = getAppContext();
+
+  const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
 </script>
 
 <div
@@ -90,7 +92,7 @@
     onclick={() => {
       editor?.current.chain().focus().setImage().run();
     }}
-    size="medium"
+    size={toolbarSize}
   />
 
   <ToolbarButton
@@ -100,7 +102,7 @@
     onclick={() => {
       editor?.current.chain().focus().setFile().run();
     }}
-    size="medium"
+    size={toolbarSize}
   />
 
   <ToolbarButton
@@ -110,14 +112,14 @@
     onclick={() => {
       editor?.current.chain().focus().setEmbed().run();
     }}
-    size="medium"
+    size={toolbarSize}
   />
 
   <ToolbarDropdownButton
     active={editor?.current.isActive('horizontal_rule')}
     disabled={!editor?.current.can().setHorizontalRule()}
     label="구분선"
-    size="medium"
+    size={toolbarSize}
   >
     {#snippet anchor()}
       <ToolbarIcon icon={HorizontalRuleIcon} />
@@ -144,7 +146,7 @@
     active={editor?.current.isActive('blockquote')}
     disabled={!editor?.current.can().toggleBlockquote()}
     label="인용구"
-    size="medium"
+    size={toolbarSize}
   >
     {#snippet anchor()}
       <ToolbarIcon icon={QuoteIcon} />
@@ -174,7 +176,7 @@
     onclick={() => {
       editor?.current.chain().focus().toggleCallout().run();
     }}
-    size="medium"
+    size={toolbarSize}
   />
 
   <ToolbarButton
@@ -184,7 +186,7 @@
     onclick={() => {
       editor?.current.chain().focus().toggleFold().run();
     }}
-    size="medium"
+    size={toolbarSize}
   />
 
   <ToolbarButton
@@ -194,13 +196,13 @@
     onclick={() => {
       editor?.current.chain().focus().insertTable().run();
     }}
-    size="medium"
+    size={toolbarSize}
   />
 
   <ToolbarDropdownButton
     disabled={!editor?.current || (!editor.current.can().toggleBulletList() && !editor.current.can().toggleOrderedList())}
     label="목록"
-    size="medium"
+    size={toolbarSize}
   >
     {#snippet anchor()}
       <ToolbarIcon icon={ListIcon} />
@@ -242,7 +244,7 @@
     onclick={() => {
       editor?.current.chain().focus().setCodeBlock().run();
     }}
-    size="medium"
+    size={toolbarSize}
   />
 
   <ToolbarButton
@@ -252,7 +254,7 @@
     onclick={() => {
       editor?.current.chain().focus().setHtmlBlock().run();
     }}
-    size="medium"
+    size={toolbarSize}
   />
 
   {#if editor?.current.storage.page.layout}
@@ -265,7 +267,7 @@
       onclick={() => {
         editor?.current.chain().focus().setPageBreak().run();
       }}
-      size="medium"
+      size={toolbarSize}
     />
   {/if}
 
@@ -276,19 +278,19 @@
       disabled={!editor.current}
       icon={SearchIcon}
       keys={['Mod', 'F']}
-      label="찾기, 바꾸기"
+      label="찾기"
       onclick={() => {
         app.state.findReplaceOpen = !app.state.findReplaceOpen;
       }}
-      size="medium"
+      size={toolbarSize}
     />
 
     <Spellcheck {editor} subscription={!!$site?.user.subscription} />
 
-    <VerticalDivider style={css.raw({ height: '16px', marginX: '8px' })} />
+    <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
   {/if}
 
-  <div class={flex({ alignItems: 'center' })}>
+  <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
     <ToolbarPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" />
   </div>

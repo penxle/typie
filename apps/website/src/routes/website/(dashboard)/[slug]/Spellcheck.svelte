@@ -7,6 +7,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { Icon, RingSpinner, Tooltip } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
@@ -45,6 +46,10 @@
 
   let errors = $state<SpellcheckError[]>([]);
   let activeError = $state<SpellcheckError>();
+
+  const app = getAppContext();
+
+  const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
 
   const checkSpelling = graphql(`
     mutation Editor_Spellcheck_CheckSpelling_Mutation($input: CheckSpellingInput!) {
@@ -212,11 +217,11 @@
 
 <PlanUpgradeModal bind:open={planUpgradeOpen} />
 
-<div class={center({ size: '28px' })}>
+<div class={center({ size: toolbarSize === 'medium' ? '28px' : '40px' })}>
   {#if inflight}
-    <RingSpinner style={css.raw({ size: '20px', color: 'text.faint' })} />
+    <RingSpinner style={css.raw({ size: toolbarSize === 'medium' ? '20px' : '24px', color: 'text.faint' })} />
   {:else}
-    <ToolbarButton icon={SpellCheckIcon} label="맞춤법" onclick={spellcheck} size="medium" />
+    <ToolbarButton icon={SpellCheckIcon} label="맞춤법" onclick={spellcheck} size={toolbarSize} />
   {/if}
 </div>
 

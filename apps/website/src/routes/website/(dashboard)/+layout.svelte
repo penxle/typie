@@ -26,6 +26,7 @@
         id
         name
         email
+        preferences
 
         avatar {
           id
@@ -139,6 +140,14 @@
     if ($query.me.referral && !app.preference.current.referralWelcomeModalShown) {
       referralWelcomeModalOpen = true;
       app.preference.current.referralWelcomeModalShown = true;
+    }
+
+    if ($query.me.preferences.initialPage) {
+      app.preference.current.initialPage = $query.me.preferences.initialPage;
+    }
+
+    if ($query.me.preferences.toolbarStyle) {
+      app.preference.current.toolbarStyle = $query.me.preferences.toolbarStyle;
     }
   });
 </script>
