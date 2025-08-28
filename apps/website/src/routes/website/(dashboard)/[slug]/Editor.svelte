@@ -818,6 +818,9 @@
                 backgroundColor: 'surface.default',
                 overflow: 'auto',
                 scrollbarGutter: 'stable',
+                '&:has([data-layout="page"])': {
+                  backgroundColor: 'surface.subtle/50',
+                },
               }),
             )}
             onmouseleave={() => {

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { css, cx } from '@typie/styled-system/css';
   import { PostLayoutMode } from '@/enums';
   import { GAP_HEIGHT_PX } from '../../tiptap';
   import { mmToPx } from '../../utils/unit';
@@ -14,7 +13,6 @@
     typewriterEnabled?: boolean;
     class?: string;
     mobile?: boolean;
-    zoomed?: boolean;
     container?: HTMLDivElement;
     children: Snippet;
   };
@@ -27,7 +25,6 @@
     typewriterEnabled = false,
     class: className,
     mobile = false,
-    zoomed = false,
     container = $bindable(),
     children,
   }: Props = $props();
@@ -48,20 +45,7 @@
         ? `${(1 - typewriterPosition) * 100}vh`
         : '20dvh'}
   style:--prosemirror-page-gap-height={`${GAP_HEIGHT_PX}px`}
-  class={cx(
-    css({
-      height: 'fit',
-      '&[data-layout="page"]': {
-        backgroundColor: 'surface.subtle/50',
-        ...(mobile && {
-          paddingX: '0',
-          touchAction: zoomed ? 'auto' : 'pan-y',
-          overflowX: zoomed ? 'auto' : 'hidden',
-        }),
-      },
-    }),
-    className,
-  )}
+  class={className}
   data-layout={layoutMode === PostLayoutMode.PAGE ? 'page' : 'scroll'}
 >
   {@render children()}

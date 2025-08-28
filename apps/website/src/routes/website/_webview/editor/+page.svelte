@@ -916,8 +916,23 @@
 />
 
 <div
+  bind:this={scrollContainer}
   style:--prosemirror-color-selection={token.var('colors.border.strong')}
-  class={cx('editor-scroll-container', css({ width: 'full', height: '[100dvh]', overflow: 'auto' }))}
+  class={cx(
+    'editor-scroll-container',
+    css({
+      width: 'full',
+      height: '[100dvh]',
+      overflow: 'auto',
+      WebkitTouchCallout: 'none',
+      WebkitOverflowScrolling: 'touch',
+      touchAction: 'pan-y',
+      '&:has([data-layout="page"])': {
+        backgroundColor: 'surface.subtle/50',
+        touchAction: editorZoomed ? 'auto' : 'pan-y',
+      },
+    }),
+  )}
 >
   <EditorLayout
     class={cx(
@@ -928,17 +943,15 @@
         paddingTop: '40px',
         paddingX: '20px',
         userSelect: 'text',
-        touchAction: 'pan-y',
-        WebkitTouchCallout: 'none',
-        WebkitOverflowScrolling: 'touch',
+        '&[data-layout="page"]': {
+          paddingX: '0',
+        },
       }),
     )}
     layoutMode={layoutMode.current}
     maxWidth={maxWidth.current}
     mobile={true}
     pageLayout={pageLayout.current}
-    zoomed={editorZoomed}
-    bind:container={scrollContainer}
   >
     <div
       style:width={editorZoomed && layoutMode.current === PostLayoutMode.PAGE
