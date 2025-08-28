@@ -48,7 +48,7 @@
     type="button"
   >
     <ToolbarIcon {icon} />
-    <span class={css({ fontSize: '11px' })}>{label}</span>
+    <span class={css({ fontSize: '11px', whiteSpace: 'nowrap' })}>{label}</span>
   </button>
 {:else if size === 'medium'}
   <button
