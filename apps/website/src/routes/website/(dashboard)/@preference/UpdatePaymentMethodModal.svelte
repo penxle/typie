@@ -83,9 +83,9 @@
           sites {
             id
 
-            ...Editor_Toolbar_site
+            ...Editor_TopToolbar_site
             ...Editor_Limit_site
-            ...Editor_Toolbar_FontFamily_site
+            ...Editor_BottomToolbar_FontFamily_site
           }
         }
       }
