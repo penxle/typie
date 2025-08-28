@@ -802,20 +802,21 @@
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
           <BottomToolbar $site={$query.entity.site} {editor} {undoManager} />
-          <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
+          <div
+            style:position={app.preference.current.zenModeEnabled ? 'fixed' : 'relative'}
+            style:top={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+            style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+            style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+            style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+            class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto', zIndex: 'editor' })}
+          >
             <div
               id="editor-container"
-              style:position={app.preference.current.zenModeEnabled ? 'fixed' : 'relative'}
-              style:top={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-              style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-              style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-              style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
               class={cx(
                 'editor-scroll-container',
                 flex({
                   position: 'relative',
                   flexGrow: '1',
-                  zIndex: 'editor',
                   backgroundColor: 'surface.default',
                   overflow: 'auto',
                   scrollbarGutter: 'stable',

@@ -58,6 +58,8 @@
     }
 
     if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       close();
       editor.current.commands.focus(undefined, { scrollIntoView: false });
     }
