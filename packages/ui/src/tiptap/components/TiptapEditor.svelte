@@ -63,7 +63,7 @@
 
       editorProps: {
         attributes: {
-          class: css({ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 'editor' }, style),
+          class: css({ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }, style),
           autocorrect: 'off',
           autocapitalize: 'off',
           spellcheck: 'false',
