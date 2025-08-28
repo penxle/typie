@@ -917,19 +917,16 @@
 
 <div
   style:--prosemirror-color-selection={token.var('colors.border.strong')}
-  class={css({ width: 'full', height: '[100dvh]', overflow: 'hidden' })}
+  class={cx('editor-scroll-container', css({ width: 'full', height: '[100dvh]', overflow: 'auto' }))}
 >
   <EditorLayout
     class={cx(
       'editor',
-      'editor-scroll-container',
       flex({
         flexDirection: 'column',
         alignItems: 'center',
         paddingTop: '40px',
         paddingX: '20px',
-        size: 'full',
-        overflowY: 'auto',
         userSelect: 'text',
         touchAction: 'pan-y',
         WebkitTouchCallout: 'none',
