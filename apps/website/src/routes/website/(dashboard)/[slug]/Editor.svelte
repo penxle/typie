@@ -809,14 +809,17 @@
             style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
             style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
             style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            class={flex({
-              position: 'relative',
-              flexGrow: '1',
-              zIndex: 'editor',
-              backgroundColor: 'surface.default',
-              overflow: 'auto',
-              scrollbarGutter: 'stable',
-            })}
+            class={cx(
+              'editor-scroll-container',
+              flex({
+                position: 'relative',
+                flexGrow: '1',
+                zIndex: 'editor',
+                backgroundColor: 'surface.default',
+                overflow: 'auto',
+                scrollbarGutter: 'stable',
+              }),
+            )}
             onmouseleave={() => {
               showAnchorOutline = false;
             }}

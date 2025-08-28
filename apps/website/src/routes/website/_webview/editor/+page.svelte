@@ -922,6 +922,7 @@
   <EditorLayout
     class={cx(
       'editor',
+      'editor-scroll-container',
       flex({
         flexDirection: 'column',
         alignItems: 'center',

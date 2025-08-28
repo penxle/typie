@@ -38,7 +38,7 @@
   });
 
   const handleClick = () => {
-    const editorEl = document.querySelector('#editor-container');
+    const editorEl = document.querySelector('.editor-scroll-container');
     if (!editor || !editorEl || !element) return;
 
     editorEl.scrollTo({
