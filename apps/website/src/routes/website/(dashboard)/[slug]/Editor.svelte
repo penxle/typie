@@ -802,262 +802,263 @@
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
           <BottomToolbar $site={$query.entity.site} {editor} {undoManager} />
-          <div
-            id="editor-container"
-            style:position={app.preference.current.zenModeEnabled ? 'fixed' : 'relative'}
-            style:top={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            class={cx(
-              'editor-scroll-container',
-              flex({
-                position: 'relative',
-                flexGrow: '1',
-                zIndex: 'editor',
-                backgroundColor: 'surface.default',
-                overflow: 'auto',
-                scrollbarGutter: 'stable',
-                '&:has([data-layout="page"])': {
-                  backgroundColor: 'surface.subtle/50',
-                },
-              }),
-            )}
-            onmouseleave={() => {
-              showAnchorOutline = false;
-            }}
-            onmousemove={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const mouseX = e.clientX - rect.left;
-              const width = rect.width;
-
-              showAnchorOutline = mouseX > width - 50;
-            }}
-            role="none"
-          >
-            <EditorLayout
+          <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
+            <div
+              id="editor-container"
+              style:position={app.preference.current.zenModeEnabled ? 'fixed' : 'relative'}
+              style:top={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+              style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+              style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+              style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
               class={cx(
-                'editor',
-                css({
+                'editor-scroll-container',
+                flex({
                   position: 'relative',
                   flexGrow: '1',
+                  zIndex: 'editor',
+                  backgroundColor: 'surface.default',
+                  overflow: 'auto',
+                  scrollbarGutter: 'stable',
+                  '&:has([data-layout="page"])': {
+                    backgroundColor: 'surface.subtle/50',
+                  },
                 }),
               )}
-              layoutMode={layoutMode.current}
-              maxWidth={maxWidth.current}
-              pageLayout={pageLayout.current}
-              typewriterEnabled={app.preference.current.typewriterEnabled}
-              typewriterPosition={app.preference.current.typewriterPosition}
+              onmouseleave={() => {
+                showAnchorOutline = false;
+              }}
+              onmousemove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const width = rect.width;
+
+                showAnchorOutline = mouseX > width - 50;
+              }}
+              role="none"
             >
-              <div
-                class={flex({
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  paddingTop: '60px',
-                  size: 'full',
-                })}
+              <EditorLayout
+                class={cx(
+                  'editor',
+                  css({
+                    position: 'relative',
+                    flexGrow: '1',
+                  }),
+                )}
+                layoutMode={layoutMode.current}
+                maxWidth={maxWidth.current}
+                pageLayout={pageLayout.current}
+                typewriterEnabled={app.preference.current.typewriterEnabled}
+                typewriterPosition={app.preference.current.typewriterPosition}
               >
-                <div class={center({ width: 'full', paddingX: '80px' })}>
-                  <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-                    <textarea
-                      bind:this={titleEl}
-                      class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-                      autocapitalize="off"
-                      autocomplete="off"
-                      maxlength="100"
-                      onfocus={() => {
-                        if (postId) {
-                          const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-                          selections[postId] = { type: 'element', element: 'title', timestamp: dayjs().valueOf() };
-                          localStorage.setItem('typie:selections', JSON.stringify(selections));
-                        }
+                <div
+                  class={flex({
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    paddingTop: '60px',
+                    size: 'full',
+                  })}
+                >
+                  <div class={center({ width: 'full', paddingX: '80px' })}>
+                    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
+                      <textarea
+                        bind:this={titleEl}
+                        class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                        autocapitalize="off"
+                        autocomplete="off"
+                        maxlength="100"
+                        onfocus={() => {
+                          if (postId) {
+                            const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+                            selections[postId] = { type: 'element', element: 'title', timestamp: dayjs().valueOf() };
+                            localStorage.setItem('typie:selections', JSON.stringify(selections));
+                          }
+                        }}
+                        onkeydown={(e) => {
+                          if (e.isComposing) {
+                            return;
+                          }
+
+                          if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
+                            e.preventDefault();
+                            subtitleEl?.focus();
+                          }
+                        }}
+                        placeholder="제목을 입력하세요"
+                        rows={1}
+                        spellcheck="false"
+                        bind:value={title.current}
+                        use:autosize
+                      ></textarea>
+
+                      <textarea
+                        bind:this={subtitleEl}
+                        class={css({
+                          marginTop: '4px',
+                          width: 'full',
+                          fontSize: '16px',
+                          fontWeight: 'medium',
+                          overflow: 'hidden',
+                          resize: 'none',
+                        })}
+                        autocapitalize="off"
+                        autocomplete="off"
+                        maxlength="100"
+                        onfocus={() => {
+                          if (postId) {
+                            const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+                            selections[postId] = { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() };
+                            localStorage.setItem('typie:selections', JSON.stringify(selections));
+                          }
+                        }}
+                        onkeydown={(e) => {
+                          if (e.isComposing) {
+                            return;
+                          }
+
+                          if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !subtitleEl?.value)) {
+                            e.preventDefault();
+                            titleEl?.focus();
+                          }
+
+                          if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
+                            e.preventDefault();
+                            const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+                            editor?.current
+                              .chain()
+                              .focus()
+                              .setTextSelection(2)
+                              .command(({ tr, dispatch }) => {
+                                tr.setStoredMarks(marks);
+                                dispatch?.(tr);
+                                return true;
+                              })
+                              .run();
+                          }
+                        }}
+                        placeholder="부제목을 입력하세요"
+                        rows={1}
+                        spellcheck="false"
+                        bind:value={subtitle.current}
+                        use:autosize
+                      ></textarea>
+
+                      <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                    </div>
+                  </div>
+
+                  <div class={css({ position: 'relative', flexGrow: '1', width: 'full', zIndex: 'editor' })}>
+                    <TiptapEditor
+                      style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
+                      {awareness}
+                      {doc}
+                      oncreate={() => {
+                        mounted = true;
                       }}
-                      onkeydown={(e) => {
-                        if (e.isComposing) {
+                      onfile={async ({ pos, file }) => {
+                        if (!editor) {
                           return;
                         }
 
-                        if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
+                        if (file.type.startsWith('image/')) {
+                          editor.current.chain().focus(pos).setImage().run();
+                          const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                          const url = URL.createObjectURL(file);
+                          nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
+
+                          try {
+                            const attrs = await uploadBlobAsImage(file);
+                            nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                          } catch {
+                            nodeView?.handle?.(new CustomEvent('error'));
+                          } finally {
+                            URL.revokeObjectURL(url);
+                          }
+                        } else {
+                          editor?.current.chain().focus(pos).setFile().run();
+                          const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                          nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
+
+                          try {
+                            const attrs = await uploadBlobAsFile(file);
+                            nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                          } catch {
+                            nodeView?.handle?.(new CustomEvent('error'));
+                          }
+                        }
+                      }}
+                      onkeydown={(view, e) => {
+                        const { doc, selection } = view.state;
+                        const { anchor } = selection;
+
+                        if (
+                          (((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+                          (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+                        ) {
                           e.preventDefault();
                           subtitleEl?.focus();
                         }
                       }}
-                      placeholder="제목을 입력하세요"
-                      rows={1}
-                      spellcheck="false"
-                      bind:value={title.current}
-                      use:autosize
-                    ></textarea>
+                      onpaste={(event) => {
+                        if (event.clipboardData?.getData('text/html')) {
+                          clipboardData = {
+                            html: event.clipboardData.getData('text/html'),
+                            text: event.clipboardData.getData('text/plain'),
+                          };
 
-                    <textarea
-                      bind:this={subtitleEl}
-                      class={css({
-                        marginTop: '4px',
-                        width: 'full',
-                        fontSize: '16px',
-                        fontWeight: 'medium',
-                        overflow: 'hidden',
-                        resize: 'none',
-                      })}
-                      autocapitalize="off"
-                      autocomplete="off"
-                      maxlength="100"
-                      onfocus={() => {
-                        if (postId) {
-                          const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-                          selections[postId] = { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() };
-                          localStorage.setItem('typie:selections', JSON.stringify(selections));
+                          return true;
                         }
+
+                        return false;
                       }}
-                      onkeydown={(e) => {
-                        if (e.isComposing) {
-                          return;
-                        }
-
-                        if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !subtitleEl?.value)) {
-                          e.preventDefault();
-                          titleEl?.focus();
-                        }
-
-                        if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
-                          e.preventDefault();
-                          const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
-                          editor?.current
-                            .chain()
-                            .focus()
-                            .setTextSelection(2)
-                            .command(({ tr, dispatch }) => {
-                              tr.setStoredMarks(marks);
-                              dispatch?.(tr);
-                              return true;
-                            })
-                            .run();
-                        }
+                      storage={{
+                        uploadBlobAsImage: (file) => {
+                          return uploadBlobAsImage(file);
+                        },
+                        uploadBlobAsFile: (file) => {
+                          return uploadBlobAsFile(file);
+                        },
+                        unfurlEmbed: (url) => {
+                          return unfurlEmbed({ url });
+                        },
                       }}
-                      placeholder="부제목을 입력하세요"
-                      rows={1}
-                      spellcheck="false"
-                      bind:value={subtitle.current}
-                      use:autosize
-                    ></textarea>
+                      {undoManager}
+                      bind:editor
+                    />
 
-                    <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                    {#if editor && mounted}
+                      <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
+                        <Placeholder $site={$query.entity.site} {doc} {editor} />
+                      </InEditorBody>
+                      {#if app.preference.current.lineHighlightEnabled}
+                        <Highlight {editor} />
+                      {/if}
+                    {/if}
                   </div>
                 </div>
 
-                <div class={css({ position: 'relative', flexGrow: '1', width: 'full', zIndex: 'editor' })}>
-                  <TiptapEditor
-                    style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
-                    {awareness}
-                    {doc}
-                    oncreate={() => {
-                      mounted = true;
-                    }}
-                    onfile={async ({ pos, file }) => {
-                      if (!editor) {
-                        return;
-                      }
-
-                      if (file.type.startsWith('image/')) {
-                        editor.current.chain().focus(pos).setImage().run();
-                        const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
-
-                        const url = URL.createObjectURL(file);
-                        nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
-
-                        try {
-                          const attrs = await uploadBlobAsImage(file);
-                          nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
-                        } catch {
-                          nodeView?.handle?.(new CustomEvent('error'));
-                        } finally {
-                          URL.revokeObjectURL(url);
-                        }
-                      } else {
-                        editor?.current.chain().focus(pos).setFile().run();
-                        const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
-
-                        nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
-
-                        try {
-                          const attrs = await uploadBlobAsFile(file);
-                          nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
-                        } catch {
-                          nodeView?.handle?.(new CustomEvent('error'));
-                        }
-                      }
-                    }}
-                    onkeydown={(view, e) => {
-                      const { doc, selection } = view.state;
-                      const { anchor } = selection;
-
-                      if (
-                        (((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
-                        (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
-                      ) {
-                        e.preventDefault();
-                        subtitleEl?.focus();
-                      }
-                    }}
-                    onpaste={(event) => {
-                      if (event.clipboardData?.getData('text/html')) {
-                        clipboardData = {
-                          html: event.clipboardData.getData('text/html'),
-                          text: event.clipboardData.getData('text/plain'),
-                        };
-
-                        return true;
-                      }
-
-                      return false;
-                    }}
-                    storage={{
-                      uploadBlobAsImage: (file) => {
-                        return uploadBlobAsImage(file);
-                      },
-                      uploadBlobAsFile: (file) => {
-                        return uploadBlobAsFile(file);
-                      },
-                      unfurlEmbed: (url) => {
-                        return unfurlEmbed({ url });
-                      },
-                    }}
-                    {undoManager}
-                    bind:editor
-                  />
-
-                  {#if editor && mounted}
-                    <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
-                      <Placeholder $site={$query.entity.site} {doc} {editor} />
-                    </InEditorBody>
-                    {#if app.preference.current.lineHighlightEnabled}
-                      <Highlight {editor} />
-                    {/if}
-                  {/if}
-                </div>
-              </div>
-
-              {#if showTimeline}
-                <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default' })}>
-                  <Timeline $post={$query.entity.node} {doc} />
-                </div>
-              {/if}
-            </EditorLayout>
-
+                {#if showTimeline}
+                  <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default' })}>
+                    <Timeline $post={$query.entity.node} {doc} />
+                  </div>
+                {/if}
+              </EditorLayout>
+            </div>
             {#if editor && app.state.findReplaceOpen}
               <FloatingFindReplace close={() => (app.state.findReplaceOpen = false)} {editor} />
             {/if}
+            <Anchors
+              anchors={anchors.current}
+              {editor}
+              showOutline={showAnchorOutline}
+              updateAnchorName={(nodeId, name) => {
+                const newAnchors = { ...anchors.current };
+                newAnchors[nodeId] = name;
+                anchors.current = newAnchors;
+              }}
+            />
           </div>
-          <Anchors
-            anchors={anchors.current}
-            {editor}
-            showOutline={showAnchorOutline}
-            updateAnchorName={(nodeId, name) => {
-              const newAnchors = { ...anchors.current };
-              newAnchors[nodeId] = name;
-              anchors.current = newAnchors;
-            }}
-          />
         </div>
         {#if app.preference.current.zenModeEnabled}
           <button
