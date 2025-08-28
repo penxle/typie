@@ -945,7 +945,7 @@
                   </div>
                 </div>
 
-                <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+                <div class={css({ position: 'relative', flexGrow: '1', width: 'full', zIndex: 'editor' })}>
                   <TiptapEditor
                     style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
                     {awareness}
