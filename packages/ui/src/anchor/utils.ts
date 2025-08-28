@@ -91,11 +91,13 @@ export const cleanOrphanAnchors = (editor: Editor, doc: Y.Doc): number => {
     return 0;
   }
 
-  const existingNodeIds = new Set(
-    [...editor.view.dom.querySelectorAll('[data-node-id]')]
-      .map((el) => (el as HTMLElement).dataset.nodeId)
-      .filter((id): id is string => id !== undefined),
-  );
+  const existingNodeIds = new Set<string>();
+
+  editor.state.doc.descendants((node) => {
+    if (node.attrs.nodeId) {
+      existingNodeIds.add(node.attrs.nodeId);
+    }
+  });
 
   const orphanNodeIds: string[] = [];
   const cleanedAnchors: Record<string, string | null> = {};
