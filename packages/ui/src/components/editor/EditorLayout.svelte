@@ -50,6 +50,7 @@
   style:--prosemirror-page-gap-height={`${GAP_HEIGHT_PX}px`}
   class={cx(
     css({
+      height: 'fit',
       '&[data-layout="page"]': {
         backgroundColor: 'surface.subtle/50',
         ...(mobile && {
