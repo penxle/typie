@@ -106,7 +106,11 @@ const misc = new aws.s3.Bucket('misc', {
   bucket: 'typie-misc',
 });
 
-export const buckets = { app, cdn, usercontents, uploads, misc };
+const logs = new aws.s3.Bucket('logs', {
+  bucket: 'typie-logs',
+});
+
+export const buckets = { app, cdn, usercontents, uploads, misc, logs };
 
 export const outputs = {
   AWS_S3_BUCKET_APP_ARN: app.arn,
