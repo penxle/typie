@@ -145,12 +145,12 @@ class BodySettingBottomSheet extends HookWidget {
             ),
           );
         } else {
-          await scope.webViewController.value?.emitEvent('setLayoutMode', {'mode': mode});
-          await mixpanel.track('toggle_post_page_layout', properties: {'enabled': mode});
+          await scope.webViewController.value?.emitEvent('setLayoutMode', {'mode': mode.name});
+          await mixpanel.track('toggle_post_page_layout', properties: {'enabled': mode.name});
         }
       } else {
-        await scope.webViewController.value?.emitEvent('setLayoutMode', {'mode': mode});
-        await mixpanel.track('toggle_post_page_layout', properties: {'enabled': mode});
+        await scope.webViewController.value?.emitEvent('setLayoutMode', {'mode': mode.name});
+        await mixpanel.track('toggle_post_page_layout', properties: {'enabled': mode.name});
       }
     }
 
