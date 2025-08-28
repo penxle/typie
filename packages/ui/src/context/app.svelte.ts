@@ -7,6 +7,7 @@ type AppPreference = {
   postsWidth: number;
   panelExpanded: boolean;
   panelTab: 'info' | 'settings';
+  panelWidth: number;
 
   toolbarStyle: 'compact' | 'classic';
 
@@ -98,6 +99,7 @@ export const setupAppContext = (userId: string) => {
       postsWidth: 240,
       panelExpanded: true,
       panelTab: 'info',
+      panelWidth: 250,
 
       toolbarStyle: 'compact',
 
