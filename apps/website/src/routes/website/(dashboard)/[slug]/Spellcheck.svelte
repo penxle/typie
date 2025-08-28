@@ -66,7 +66,7 @@
       hide({
         strategy: 'escaped',
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        boundary: document.querySelector('.editor')!,
+        boundary: document.querySelector('.editor-scroll-container')!,
         padding: 32,
       }),
       shift({ padding: 8 }),
