@@ -34,7 +34,7 @@ export const Typewriter = Extension.create({
 
           if (dispatch) {
             const coords = editor.view.coordsAtPos(pos);
-            const container = editor.view.dom.closest('.editor');
+            const container = editor.view.dom.closest('.editor-scroll-container');
             if (!container) return true;
 
             const containerRect = container.getBoundingClientRect();
@@ -108,7 +108,7 @@ export const Typewriter = Extension.create({
                 return;
               }
 
-              const container = view.dom.closest('.editor') as HTMLElement;
+              const container = view.dom.closest('.editor-scroll-container') as HTMLElement;
               if (!container) return false;
 
               const scrollTop = container.scrollTop;
