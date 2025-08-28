@@ -12,16 +12,16 @@
   import TypeIcon from '~icons/lucide/type';
   import { fragment, graphql } from '$graphql';
   import { uploadBlob } from '$lib/utils';
-  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
+  import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_Toolbar_FontFamily_site, Optional } from '$graphql';
+  import type { Editor_BottomToolbar_FontFamily_site, Optional } from '$graphql';
 
   type Props = {
-    $site: Optional<Editor_Toolbar_FontFamily_site>;
+    $site: Optional<Editor_BottomToolbar_FontFamily_site>;
     editor?: Ref<Editor>;
   };
 
@@ -32,7 +32,7 @@
   const site = fragment(
     _site,
     graphql(`
-      fragment Editor_Toolbar_FontFamily_site on Site {
+      fragment Editor_BottomToolbar_FontFamily_site on Site {
         id
 
         fonts {
@@ -52,7 +52,7 @@
   );
 
   const persistBlobAsFont = graphql(`
-    mutation Editor_Toolbar_FontFamily_PersistBlobAsFont_Mutation($input: PersistBlobAsFontInput!) {
+    mutation Editor_BottomToolbar_FontFamily_PersistBlobAsFont_Mutation($input: PersistBlobAsFontInput!) {
       persistBlobAsFont(input: $input) {
         id
         name
@@ -61,7 +61,7 @@
   `);
 
   const addSiteFont = graphql(`
-    mutation Editor_Toolbar_FontFamily_AddSiteFont_Mutation($input: AddSiteFontInput!) {
+    mutation Editor_BottomToolbar_FontFamily_AddSiteFont_Mutation($input: AddSiteFontInput!) {
       addSiteFont(input: $input) {
         id
 
