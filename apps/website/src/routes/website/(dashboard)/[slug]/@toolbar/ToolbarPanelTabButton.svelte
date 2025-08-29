@@ -38,7 +38,7 @@
     color: 'text.faint',
     transition: 'common',
     _hover: { backgroundColor: 'surface.subtle' },
-    _expanded: { backgroundColor: 'surface.muted!' },
+    _expanded: { backgroundColor: 'surface.muted!', color: 'text.default' },
   })}
   aria-expanded={app.preference.current.panelExpanded && app.preference.current.panelTab === tab}
   onclick={() => {

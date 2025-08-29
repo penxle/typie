@@ -9,7 +9,7 @@
     getAnchorElements,
     getLastNodeOffsetTop,
   } from '@typie/ui/anchor';
-  import { HorizontalDivider, Icon, RingSpinner } from '@typie/ui/components';
+  import { Icon, RingSpinner } from '@typie/ui/components';
   import { clamp } from '@typie/ui/utils';
   import { onMount, tick } from 'svelte';
   import ArrowDownToLineIcon from '~icons/lucide/arrow-down-to-line';
@@ -245,38 +245,12 @@
 <div
   class={flex({
     flexDirection: 'column',
-    paddingTop: '16px',
     minWidth: 'var(--min-width)',
     width: 'var(--width)',
     maxWidth: 'var(--max-width)',
     height: 'full',
   })}
 >
-  <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
-    <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-      <div class={flex({ alignItems: 'center', gap: '6px' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>북마크</div>
-        {#if anchors.length > 0}
-          <div
-            class={css({
-              borderRadius: '4px',
-              paddingX: '6px',
-              paddingY: '2px',
-              fontSize: '11px',
-              fontWeight: 'semibold',
-              color: 'text.default',
-              backgroundColor: 'surface.subtle',
-            })}
-          >
-            {anchors.length}
-          </div>
-        {/if}
-      </div>
-    </div>
-  </div>
-
-  <HorizontalDivider style={css.raw({ marginTop: '16px' })} color="secondary" />
-
   {#if isLoading}
     <div class={flex({ justifyContent: 'center', alignItems: 'center', paddingY: '40px' })}>
       <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />

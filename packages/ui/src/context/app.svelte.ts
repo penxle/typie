@@ -6,7 +6,9 @@ export type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   postsWidth: number;
   panelExpanded: boolean;
-  panelTab: 'info' | 'anchors' | 'spellcheck' | 'settings';
+  panelTab: 'info' | 'spellcheck' | 'settings';
+  panelInfoTab: 'post' | 'anchors';
+
   panelWidth: number;
 
   toolbarStyle: 'compact' | 'classic';
@@ -99,6 +101,7 @@ export const setupAppContext = (userId: string) => {
       postsWidth: 240,
       panelExpanded: true,
       panelTab: 'info',
+      panelInfoTab: 'post',
       panelWidth: 250,
 
       toolbarStyle: 'compact',
