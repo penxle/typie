@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { calculateAnchorPositions, cleanOrphanAnchors, getAnchorElements, getLastNodeOffsetTop } from '@typie/ui/anchor';
+  import {
+    calculateAnchorPositions,
+    cleanOrphanAnchors,
+    findAnchorableNode,
+    getAnchorElements,
+    getLastNodeOffsetTop,
+  } from '@typie/ui/anchor';
   import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
@@ -85,37 +91,29 @@
     window.__webview__?.setProcedure('getCurrentNodeV2', () => {
       if (!editor) return null;
 
-      const { from } = editor.current.state.selection;
-      const resolvedPos = editor.current.state.doc.resolve(from);
+      const { nodeId } = findAnchorableNode(editor.current);
 
-      let targetPos = from;
-      targetPos = resolvedPos.before(2);
+      if (!nodeId) return null;
 
-      const node = editor.current.state.doc.nodeAt(targetPos);
+      const element = document.querySelector(`[data-node-id="${nodeId}"]`);
+      if (!element) return null;
 
-      if (node && node.attrs.nodeId) {
-        const element = document.querySelector(`[data-node-id="${node.attrs.nodeId}"]`);
-        if (!element) return null;
+      const lastNodeOffsetTop = getLastNodeOffsetTop();
+      if (lastNodeOffsetTop === null) return null;
 
-        const lastNodeOffsetTop = getLastNodeOffsetTop();
-        if (lastNodeOffsetTop === null) return null;
+      const offsetTop = (element as HTMLElement).offsetTop;
+      const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
 
-        const offsetTop = (element as HTMLElement).offsetTop;
-        const position = lastNodeOffsetTop > 0 ? clamp(offsetTop / lastNodeOffsetTop, 0, 1) : 0;
-
-        return {
-          nodeId: node.attrs.nodeId,
-          name: null,
-          excerpt: element.textContent
-            ? element.textContent.length > 20
-              ? element.textContent.slice(0, 20) + '...'
-              : element.textContent
-            : '(내용 없음)',
-          position,
-        };
-      }
-
-      return null;
+      return {
+        nodeId,
+        name: null,
+        excerpt: element.textContent
+          ? element.textContent.length > 20
+            ? element.textContent.slice(0, 20) + '...'
+            : element.textContent
+          : '(내용 없음)',
+        position,
+      };
     });
 
     window.__webview__?.setProcedure('clickAnchor', (nodeId: string) => {
