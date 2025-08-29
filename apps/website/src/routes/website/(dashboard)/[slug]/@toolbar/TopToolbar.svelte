@@ -16,12 +16,11 @@
   import ListOrderedIcon from '~icons/lucide/list-ordered';
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
-  import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
+  import SpellCheckIcon from '~icons/lucide/spell-check';
   import TableIcon from '~icons/lucide/table';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
   import { fragment, graphql } from '$graphql';
-  import Spellcheck from '../Spellcheck.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
@@ -273,25 +272,11 @@
 
   <div class={css({ flexGrow: '1' })}></div>
 
-  {#if editor}
-    <ToolbarButton
-      disabled={!editor.current}
-      icon={SearchIcon}
-      keys={['Mod', 'F']}
-      label="찾기"
-      onclick={() => {
-        app.state.findReplaceOpen = !app.state.findReplaceOpen;
-      }}
-      size={toolbarSize}
-    />
-
-    <Spellcheck {editor} subscription={!!$site?.user.subscription} />
-
-    <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
-  {/if}
+  <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
+    <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" needPlanUpgrade={!$site?.user.subscription} tab="spellcheck" />
     <ToolbarPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" />
   </div>
 </div>

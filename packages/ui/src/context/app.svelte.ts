@@ -2,11 +2,11 @@ import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
 import type { PageLayout } from '../utils';
 
-type AppPreference = {
+export type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   postsWidth: number;
   panelExpanded: boolean;
-  panelTab: 'info' | 'settings';
+  panelTab: 'info' | 'spellcheck' | 'settings';
   panelWidth: number;
 
   toolbarStyle: 'compact' | 'classic';

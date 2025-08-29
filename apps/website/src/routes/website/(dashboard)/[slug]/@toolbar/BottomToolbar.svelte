@@ -9,6 +9,7 @@
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
   import RedoIcon from '~icons/lucide/redo';
+  import SearchIcon from '~icons/lucide/search';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import UnderlineIcon from '~icons/lucide/underline';
   import UndoIcon from '~icons/lucide/undo';
@@ -464,4 +465,19 @@
       {/snippet}
     </ToolbarDropdownButton>
   </div>
+
+  <div class={css({ flexGrow: '1' })}></div>
+
+  {#if editor}
+    <ToolbarButton
+      disabled={!editor.current}
+      icon={SearchIcon}
+      keys={['Mod', 'F']}
+      label="찾기, 바꾸기"
+      onclick={() => {
+        app.state.findReplaceOpen = !app.state.findReplaceOpen;
+      }}
+      size="small"
+    />
+  {/if}
 </div>
