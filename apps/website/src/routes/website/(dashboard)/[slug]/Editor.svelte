@@ -207,7 +207,6 @@
 
   const doc = new Y.Doc();
   let viewDoc = $state<Y.Doc>();
-
   const effectiveDoc = $derived(viewDoc || doc);
 
   const awareness = new YAwareness.Awareness(doc);
@@ -217,13 +216,23 @@
     deleteFilter: (item) => defaultDeleteFilter(item, defaultProtectedNodes),
   });
 
-  const title = $derived(new YState<string>(effectiveDoc, 'title', ''));
-  const subtitle = $derived(new YState<string>(effectiveDoc, 'subtitle', ''));
-  const maxWidth = $derived(new YState<number>(effectiveDoc, 'maxWidth', 800));
-  const pageLayout = $derived(new YState<PageLayout | undefined>(effectiveDoc, 'pageLayout', undefined));
-  const layoutMode = $derived(new YState<PostLayoutMode>(effectiveDoc, 'layoutMode', PostLayoutMode.SCROLL));
+  const title = new YState<string>(doc, 'title', '');
+  const subtitle = new YState<string>(doc, 'subtitle', '');
+  const maxWidth = new YState<number>(doc, 'maxWidth', 800);
+  const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
+  const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
 
-  const effectiveTitle = $derived(title.current || '(제목 없음)');
+  const viewTitle = $derived(viewDoc ? new YState<string>(viewDoc, 'title', '') : undefined);
+  const viewSubtitle = $derived(viewDoc ? new YState<string>(viewDoc, 'subtitle', '') : undefined);
+  const viewMaxWidth = $derived(viewDoc ? new YState<number>(viewDoc, 'maxWidth', 800) : undefined);
+  const viewPageLayout = $derived(viewDoc ? new YState<PageLayout | undefined>(viewDoc, 'pageLayout', undefined) : undefined);
+  const viewLayoutMode = $derived(viewDoc ? new YState<PostLayoutMode>(viewDoc, 'layoutMode', PostLayoutMode.SCROLL) : undefined);
+
+  const effectiveTitle = $derived(viewTitle ?? title);
+  const effectiveSubtitle = $derived(viewSubtitle ?? subtitle);
+  const effectiveMaxWidth = $derived(viewMaxWidth ?? maxWidth);
+  const effectivePageLayout = $derived(viewPageLayout ?? pageLayout);
+  const effectiveLayoutMode = $derived(viewLayoutMode ?? layoutMode);
 
   const persistSelection = () => {
     if (!editor?.current || !postId) return;
@@ -646,7 +655,7 @@
   }}
 />
 
-<Helmet title={`${effectiveTitle} 작성 중`} />
+<Helmet title={`${effectiveTitle.current} 작성 중`} />
 
 {#if $query.entity.node.__typename === 'Post'}
   <div class={flex({ height: 'full' })}>
@@ -691,7 +700,7 @@
             }}
             type="button"
           >
-            {effectiveTitle}
+            {effectiveTitle.current}
           </button>
         </div>
 
@@ -847,9 +856,9 @@
                     flexGrow: '1',
                   }),
                 )}
-                layoutMode={layoutMode.current}
-                maxWidth={maxWidth.current}
-                pageLayout={pageLayout.current}
+                layoutMode={effectiveLayoutMode.current}
+                maxWidth={effectiveMaxWidth.current}
+                pageLayout={effectivePageLayout.current}
                 typewriterEnabled={app.preference.current.typewriterEnabled}
                 typewriterPosition={app.preference.current.typewriterPosition}
               >
@@ -889,7 +898,7 @@
                         placeholder="제목을 입력하세요"
                         rows={1}
                         spellcheck="false"
-                        bind:value={title.current}
+                        bind:value={effectiveTitle.current}
                         use:autosize
                       ></textarea>
 
@@ -941,7 +950,7 @@
                         placeholder="부제목을 입력하세요"
                         rows={1}
                         spellcheck="false"
-                        bind:value={subtitle.current}
+                        bind:value={effectiveSubtitle.current}
                         use:autosize
                       ></textarea>
 
@@ -953,7 +962,7 @@
                     <TiptapEditor
                       style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
                       awareness={viewDoc ? undefined : awareness}
-                      doc={effectiveDoc}
+                      {doc}
                       editable={!viewDoc}
                       oncreate={() => {
                         mounted = true;
@@ -1032,7 +1041,7 @@
                     />
 
                     {#if editor && mounted}
-                      <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
+                      <InEditorBody {editor} pageLayout={effectivePageLayout.current ?? null}>
                         <Placeholder $site={$query.entity.site} doc={effectiveDoc} {editor} />
                       </InEditorBody>
                       {#if app.preference.current.lineHighlightEnabled}
