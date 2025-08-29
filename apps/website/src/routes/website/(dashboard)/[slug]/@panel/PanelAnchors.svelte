@@ -11,6 +11,7 @@
   } from '@typie/ui/anchor';
   import { Icon, RingSpinner } from '@typie/ui/components';
   import { clamp } from '@typie/ui/utils';
+  import mixpanel from 'mixpanel-browser';
   import { onMount, tick } from 'svelte';
   import ArrowDownToLineIcon from '~icons/lucide/arrow-down-to-line';
   import ArrowUpToLineIcon from '~icons/lucide/arrow-up-to-line';
@@ -156,9 +157,11 @@
     if (anchor.nodeId === 'top') {
       editor.current.commands.focus('start');
       editor.current.commands.scrollIntoView();
+      mixpanel.track('anchor_scroll_to_top');
     } else if (anchor.nodeId === 'bottom') {
       editor.current.commands.focus('end');
       editor.current.commands.scrollIntoView();
+      mixpanel.track('anchor_scroll_to_bottom');
     } else if (anchor.element) {
       anchor.element.scrollIntoView({
         behavior: 'smooth',
@@ -170,6 +173,7 @@
         .chain()
         .setNodeSelection(pos - 1)
         .run();
+      mixpanel.track('anchor_click');
     }
   };
 
@@ -180,12 +184,14 @@
       const { [anchor.nodeId]: removed, ...newAnchors } = docAnchors;
       void removed;
       editor.current.storage.anchors.current = newAnchors;
+      mixpanel.track('anchor_remove');
     } else {
       const newAnchors = {
         ...docAnchors,
         [anchor.nodeId]: anchor.name || null,
       };
       editor.current.storage.anchors.current = newAnchors;
+      mixpanel.track('anchor_add');
     }
   };
 
@@ -207,6 +213,8 @@
     editor.current.storage.anchors.current = newAnchors;
 
     editingAnchor = null;
+
+    mixpanel.track('anchor_rename');
   };
 
   $effect(() => {
@@ -346,6 +354,7 @@
                   } else if (e.key === 'Escape') {
                     e.preventDefault();
                     editingAnchor = null;
+                    mixpanel.track('anchor_reset');
                   }
                 }}
                 type="text"
