@@ -20,6 +20,7 @@
   import { getPostYjsAttrs } from '$lib/utils/yjs-post';
   import PdfExportModal from './PdfExportModal.svelte';
   import type { PageLayout } from '@typie/ui/utils';
+  import type { Snippet } from 'svelte';
 
   type Props = {
     post: {
@@ -37,9 +38,10 @@
     via: 'tree' | 'editor';
     pageLayout?: PageLayout;
     layoutMode?: PostLayoutMode;
+    children?: Snippet;
   };
 
-  let { post, entity, via, pageLayout, layoutMode }: Props = $props();
+  let { post, entity, via, pageLayout, layoutMode, children }: Props = $props();
 
   let showPdfExportModal = $state(false);
   let exportModalPageLayout = $state<PageLayout | undefined>();
@@ -236,6 +238,8 @@
 {:else if post.type === PostType.TEMPLATE}
   <MenuItem icon={ShapesIcon} onclick={() => handleTypeChange(PostType.NORMAL)}>포스트로 전환</MenuItem>
 {/if}
+
+{@render children?.()}
 
 {#if app.preference.current.experimental_pdfExportEnabled}
   <HorizontalDivider color="secondary" />

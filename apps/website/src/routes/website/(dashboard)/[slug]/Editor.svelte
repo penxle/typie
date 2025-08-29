@@ -201,6 +201,10 @@
   let clipboardData = $state<{ html: string; text?: string }>();
 
   const doc = new Y.Doc();
+  let viewDoc = $state<Y.Doc>();
+
+  const effectiveDoc = $derived(viewDoc || doc);
+
   const awareness = new YAwareness.Awareness(doc);
   const undoManager = new Y.UndoManager([doc.getMap('attrs'), doc.getXmlFragment('body')], {
     trackedOrigins: new Set([ySyncPluginKey, 'local']),
@@ -208,12 +212,12 @@
     deleteFilter: (item) => defaultDeleteFilter(item, defaultProtectedNodes),
   });
 
-  const title = new YState<string>(doc, 'title', '');
-  const subtitle = new YState<string>(doc, 'subtitle', '');
-  const maxWidth = new YState<number>(doc, 'maxWidth', 800);
-  const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
-  const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
-  const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
+  const title = $derived(new YState<string>(effectiveDoc, 'title', ''));
+  const subtitle = $derived(new YState<string>(effectiveDoc, 'subtitle', ''));
+  const maxWidth = $derived(new YState<number>(effectiveDoc, 'maxWidth', 800));
+  const anchors = $derived(new YState<Record<string, string | null>>(effectiveDoc, 'anchors', {}));
+  const pageLayout = $derived(new YState<PageLayout | undefined>(effectiveDoc, 'pageLayout', undefined));
+  const layoutMode = $derived(new YState<PostLayoutMode>(effectiveDoc, 'layoutMode', PostLayoutMode.SCROLL));
 
   const effectiveTitle = $derived(title.current || '(제목 없음)');
 
@@ -746,24 +750,22 @@
                   pageLayout={pageLayout.current}
                   post={$query.entity.node}
                   via="editor"
-                />
-              {/if}
-
-              <HorizontalDivider color="secondary" />
-
-              {#if $query.me.role === UserRole.ADMIN}
-                <MenuItem
-                  icon={IconClockFading}
-                  onclick={() => {
-                    showTimeline = !showTimeline;
-                  }}
                 >
-                  {#if showTimeline}
-                    타임라인 닫기
-                  {:else}
-                    타임라인
+                  {#if $query.me.role === UserRole.ADMIN}
+                    <MenuItem
+                      icon={IconClockFading}
+                      onclick={() => {
+                        showTimeline = !showTimeline;
+                      }}
+                    >
+                      {#if showTimeline}
+                        타임라인 닫기
+                      {:else}
+                        타임라인
+                      {/if}
+                    </MenuItem>
                   {/if}
-                </MenuItem>
+                </PostMenu>
               {/if}
             </Menu>
           {/if}
@@ -947,11 +949,12 @@
                     </div>
                   </div>
 
-                  <div class={css({ position: 'relative', flexGrow: '1', width: 'full', zIndex: 'editor' })}>
+                  <div class={css({ position: 'relative', flexGrow: '1', width: 'full', display: viewDoc ? 'none' : 'block' })}>
                     <TiptapEditor
                       style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
-                      {awareness}
-                      {doc}
+                      awareness={viewDoc ? undefined : awareness}
+                      doc={effectiveDoc}
+                      editable={!viewDoc}
                       oncreate={() => {
                         mounted = true;
                       }}
@@ -1030,19 +1033,27 @@
 
                     {#if editor && mounted}
                       <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
-                        <Placeholder $site={$query.entity.site} {doc} {editor} />
+                        <Placeholder $site={$query.entity.site} doc={effectiveDoc} {editor} />
                       </InEditorBody>
                       {#if app.preference.current.lineHighlightEnabled}
                         <Highlight {editor} />
                       {/if}
                     {/if}
                   </div>
+
+                  {#if viewDoc}
+                    <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
+                      <TiptapEditor
+                        style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
+                        doc={viewDoc}
+                        editable={false}
+                      />
+                    </div>
+                  {/if}
                 </div>
 
                 {#if showTimeline}
-                  <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'surface.default' })}>
-                    <Timeline $post={$query.entity.node} {doc} />
-                  </div>
+                  <Timeline $post={$query.entity.node} {doc} bind:viewDoc />
                 {/if}
               </EditorLayout>
             </div>
