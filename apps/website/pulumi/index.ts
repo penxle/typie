@@ -20,6 +20,10 @@ const app = new typie.App('website', {
     memory: '2Gi',
   },
 
+  secrets: {
+    token: config.requireSecret('doppler-token'),
+  },
+
   autoscale: {
     minCount: 4,
     maxCount: 20,

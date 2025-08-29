@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "exit 0",
-    "dev": "rps -- bun run --watch --no-clear-screen src/main.ts",
+    "dev": "doppler run -- bun run --watch --no-clear-screen src/main.ts",
     "dev:email": "email dev --port 3001 --dir src/email/templates",
     "lint:typecheck": "tsc",
     "start": "bun run src/main.ts"
@@ -95,7 +95,6 @@
     "@types/react": "^19.1.11",
     "@types/react-dom": "^19.1.8",
     "@typie/pulumi": "workspace:*",
-    "@typie/rps": "workspace:*",
     "drizzle-kit": "^0.31.4",
     "pdf-lib": "^1.17.1",
     "react-email": "^4.2.8"

@@ -1,0 +1,12 @@
+setup:
+  - path: apps/api
+    project: api
+    config: dev_local
+
+  - path: apps/mobile
+    project: mobile
+    config: dev_local
+
+  - path: apps/website
+    project: website
+    config: dev_local
