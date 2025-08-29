@@ -20,6 +20,9 @@ const app = new typie.App('api', {
   },
 
   env: [{ name: 'NO_WORKER', value: 'true' }],
+  secrets: {
+    token: config.requireSecret('doppler-token'),
+  },
 
   autoscale: {
     minCount: 4,
@@ -77,6 +80,10 @@ new typie.App('worker', {
   resources: {
     cpu: '4',
     memory: '8Gi',
+  },
+
+  secrets: {
+    token: config.requireSecret('doppler-token'),
   },
 
   autoscale: {
