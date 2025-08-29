@@ -130,15 +130,17 @@
     }}
   ></div>
 
-  {#if app.preference.current.panelTab === 'info'}
-    <PanelPost {$post} {$user} {doc} {editor} />
-  {/if}
+  {#if isExpanded}
+    {#if app.preference.current.panelTab === 'info'}
+      <PanelPost {$post} {$user} {doc} {editor} />
+    {/if}
 
-  {#if app.preference.current.panelTab === 'spellcheck'}
-    <PanelSpellcheck {$user} {editor} />
-  {/if}
+    {#if app.preference.current.panelTab === 'spellcheck'}
+      <PanelSpellcheck {$user} {editor} />
+    {/if}
 
-  {#if app.preference.current.panelTab === 'settings'}
-    <PanelBodySettings {doc} {editor} />
+    {#if app.preference.current.panelTab === 'settings'}
+      <PanelBodySettings {doc} {editor} />
+    {/if}
   {/if}
 </aside>
