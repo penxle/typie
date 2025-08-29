@@ -3,8 +3,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions, portal } from '@typie/ui/actions';
   import { Icon, RingSpinner } from '@typie/ui/components';
-  import { TiptapEditor } from '@typie/ui/tiptap';
-  import { clamp, Ref } from '@typie/ui/utils';
+  import { clamp } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { base64 } from 'rfc4648';
   import { untrack } from 'svelte';
@@ -12,17 +11,16 @@
   import * as Y from 'yjs';
   import IconClockFading from '~icons/lucide/clock-fading';
   import { fragment, graphql } from '$graphql';
-  import { YState } from './state.svelte';
-  import type { Editor } from '@tiptap/core';
   import type { PointerEventHandler } from 'svelte/elements';
   import type { Editor_Timeline_post } from '$graphql';
 
   type Props = {
     $post: Editor_Timeline_post;
     doc: Y.Doc;
+    viewDoc?: Y.Doc;
   };
 
-  let { $post: _post, doc }: Props = $props();
+  let { $post: _post, doc, viewDoc = $bindable() }: Props = $props();
 
   const post = fragment(
     _post,
@@ -60,15 +58,9 @@
   });
 
   let value = $state(0);
-  let editor = $state<Ref<Editor>>();
   let showTooltip = $state(false);
 
   const baseDoc = new Y.Doc({ gc: false });
-  const viewDoc = new Y.Doc({ gc: false });
-
-  const title = new YState<string>(viewDoc, 'title', '');
-  const subtitle = new YState<string>(viewDoc, 'subtitle', '');
-  const maxWidth = new YState<number>(viewDoc, 'maxWidth', 800);
 
   const max = $derived($query ? $query.post.snapshots.length - 1 : 0);
   const p = $derived(max > 0 ? `${(value / max) * 100}%` : '0%');
@@ -85,11 +77,18 @@
   };
 
   $effect(() => {
+    viewDoc = new Y.Doc({ gc: false });
+
     untrack(() => initialize());
+
+    return () => {
+      viewDoc?.destroy();
+      viewDoc = undefined;
+    };
   });
 
   $effect(() => {
-    if (!$query || !initialized) {
+    if (!$query || !initialized || !viewDoc) {
       return;
     }
 
@@ -142,49 +141,6 @@
   };
 </script>
 
-<div class={flex({ flexGrow: '1', overflowY: 'hidden' })}>
-  <div class={css({ position: 'relative', flexGrow: '1', height: 'full', overflowY: 'auto', scrollbarGutter: 'stable' })}>
-    <div
-      style:--prosemirror-max-width={`${maxWidth.current}px`}
-      class={flex({
-        flexDirection: 'column',
-        alignItems: 'center',
-        paddingTop: '60px',
-        paddingX: '80px',
-        size: 'full',
-      })}
-    >
-      <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-        <textarea
-          class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-          maxlength="100"
-          placeholder="제목을 입력하세요"
-          readonly
-          rows={1}
-          spellcheck="false"
-          value={title.current}
-        ></textarea>
-
-        <textarea
-          class={css({ marginTop: '4px', width: 'full', fontSize: '16px', fontWeight: 'medium', overflow: 'hidden', resize: 'none' })}
-          maxlength="100"
-          placeholder="부제목을 입력하세요"
-          readonly
-          rows={1}
-          spellcheck="false"
-          value={subtitle.current}
-        ></textarea>
-
-        <div class={css({ marginTop: '10px', marginBottom: '20px', borderBottomWidth: '1px', borderColor: 'gray.200' })}></div>
-      </div>
-
-      <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
-        <TiptapEditor style={css.raw({ size: 'full' })} doc={viewDoc} editable={false} bind:editor />
-      </div>
-    </div>
-  </div>
-</div>
-
 <div
   class={flex({
     position: 'fixed',
@@ -198,10 +154,10 @@
     backgroundColor: 'white',
     border: '1px solid',
     borderColor: 'gray.200',
-    zIndex: '30',
     translate: 'auto',
     translateX: '-1/2',
     boxShadow: '[0_8px_32px_rgba(0,0,0,0.08)]',
+    zIndex: 'overEditor',
   })}
   use:portal
   in:fly={{ y: 40, duration: 250 }}

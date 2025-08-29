@@ -53,7 +53,7 @@
       element,
       extensions: [
         ...baseExtensions,
-        ...(editable ? editorExtensions : []),
+        ...editorExtensions,
         ...(extensions ?? []),
         ...(doc ? [Collaboration.configure({ doc, awareness, undoManager })] : []),
       ],
