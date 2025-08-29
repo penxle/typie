@@ -824,6 +824,7 @@
                 'editor-scroll-container',
                 flex({
                   position: 'relative',
+                  zIndex: '[-10]',
                   flexGrow: '1',
                   backgroundColor: 'surface.default',
                   overflow: 'auto',
