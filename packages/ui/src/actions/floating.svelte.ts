@@ -5,7 +5,7 @@ import type { FloatingElement, Middleware, OffsetOptions, Placement, ReferenceEl
 import type { Action } from 'svelte/action';
 
 export type ReferenceAction = Action<ReferenceElement>;
-export type FloatingAction = Action<FloatingElement>;
+export type FloatingAction = Action<FloatingElement, { appendTo?: Element } | undefined>;
 export type ArrowAction = Action<HTMLElement>;
 export type UpdatePosition = () => Promise<void>;
 
@@ -154,14 +154,18 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     });
   };
 
-  const floatingAction: FloatingAction = (element) => {
+  const floatingAction: FloatingAction = (element, options = {}) => {
     $effect(() => {
-      // NOTE: top layer에 표시되는 조상 요소가 있다면 그 요소에 추가해서 floating element와 상호작용이 되도록 함
-      const topLayerElem = element.closest('dialog, [popover]');
-      if (topLayerElem) {
-        topLayerElem.append(element);
+      if (options.appendTo) {
+        options.appendTo.append(element);
       } else {
-        document.body.append(element);
+        // NOTE: top layer에 표시되는 조상 요소가 있다면 그 요소에 추가해서 floating element와 상호작용이 되도록 함
+        const topLayerElem = element.closest('dialog, [popover]');
+        if (topLayerElem) {
+          topLayerElem.append(element);
+        } else {
+          document.body.append(element);
+        }
       }
 
       Object.assign(element.style, {
