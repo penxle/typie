@@ -72,6 +72,12 @@
           ...Editor_Panel_user
         }
 
+        impersonation {
+          admin {
+            id
+          }
+        }
+
         entity(slug: $slug) {
           id
           slug
@@ -751,7 +757,7 @@
                   post={$query.entity.node}
                   via="editor"
                 >
-                  {#if $query.me.role === UserRole.ADMIN}
+                  {#if $query.me.role === UserRole.ADMIN || $query.impersonation}
                     <MenuItem
                       icon={IconClockFading}
                       onclick={() => {
