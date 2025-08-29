@@ -655,7 +655,7 @@
   }}
 />
 
-<Helmet title={`${effectiveTitle.current} 작성 중`} />
+<Helmet title={`${effectiveTitle.current || '(제목 없음)'} 작성 중`} />
 
 {#if $query.entity.node.__typename === 'Post'}
   <div class={flex({ height: 'full' })}>
@@ -700,7 +700,7 @@
             }}
             type="button"
           >
-            {effectiveTitle.current}
+            {effectiveTitle.current || '(제목 없음)'}
           </button>
         </div>
 
