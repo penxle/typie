@@ -1,30 +1,46 @@
 <script lang="ts">
   import { calculateAnchorPositions, getAnchorElements } from '@typie/ui/anchor';
+  import { onMount } from 'svelte';
+  import { YState } from '../state.svelte';
   import Anchor from './Anchor.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
+  import type * as Y from 'yjs';
 
   type Props = {
-    anchors: Record<string, string | null>;
+    doc: Y.Doc;
     editor: Ref<Editor> | undefined;
     showOutline?: boolean;
-    updateAnchorName: (nodeId: string, name: string | null) => void;
   };
 
-  let { anchors, editor, showOutline = false, updateAnchorName }: Props = $props();
+  let { doc, editor, showOutline = false }: Props = $props();
+
+  const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
 
   const anchorElements = $derived.by(() => {
     if (!editor) {
       return {};
     }
 
-    return getAnchorElements(Object.keys(anchors));
+    return getAnchorElements(Object.keys(anchors.current));
   });
 
   const anchorPositions = $derived.by(() => {
     if (!editor || Object.keys(anchorElements).length === 0) return [];
 
-    return calculateAnchorPositions(anchorElements, anchors);
+    return calculateAnchorPositions(anchorElements, anchors.current);
+  });
+
+  const updateAnchorName = (nodeId: string, name: string | null) => {
+    const newAnchors = { ...anchors.current };
+    newAnchors[nodeId] = name;
+    anchors.current = newAnchors;
+  };
+
+  onMount(() => {
+    if (editor) {
+      editor.current.storage.anchors = anchors;
+    }
   });
 </script>
 

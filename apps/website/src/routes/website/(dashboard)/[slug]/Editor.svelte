@@ -6,7 +6,6 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { cleanOrphanAnchors } from '@typie/ui/anchor';
   import { EditorLayout, Helmet, HorizontalDivider, Icon, InEditorBody, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
@@ -221,7 +220,6 @@
   const title = $derived(new YState<string>(effectiveDoc, 'title', ''));
   const subtitle = $derived(new YState<string>(effectiveDoc, 'subtitle', ''));
   const maxWidth = $derived(new YState<number>(effectiveDoc, 'maxWidth', 800));
-  const anchors = $derived(new YState<Record<string, string | null>>(effectiveDoc, 'anchors', {}));
   const pageLayout = $derived(new YState<PageLayout | undefined>(effectiveDoc, 'pageLayout', undefined));
   const layoutMode = $derived(new YState<PostLayoutMode>(effectiveDoc, 'layoutMode', PostLayoutMode.SCROLL));
 
@@ -508,11 +506,6 @@
       name: $query.me.name,
       color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
     });
-
-    if (editor?.current) {
-      editor.current.storage.anchors = anchors;
-      cleanOrphanAnchors(editor.current, doc);
-    }
 
     editor?.current.once('create', ({ editor }) => {
       const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
@@ -1067,16 +1060,7 @@
             {#if editor && app.state.findReplaceOpen}
               <FloatingFindReplace close={() => (app.state.findReplaceOpen = false)} {editor} />
             {/if}
-            <Anchors
-              anchors={anchors.current}
-              {editor}
-              showOutline={showAnchorOutline}
-              updateAnchorName={(nodeId, name) => {
-                const newAnchors = { ...anchors.current };
-                newAnchors[nodeId] = name;
-                anchors.current = newAnchors;
-              }}
-            />
+            <Anchors doc={effectiveDoc} {editor} showOutline={showAnchorOutline} />
           </div>
         </div>
         {#if app.preference.current.zenModeEnabled}
