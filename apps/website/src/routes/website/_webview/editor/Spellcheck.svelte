@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { posToDOMRect } from '@tiptap/core';
+  import { getChangedRanges, posToDOMRect } from '@tiptap/core';
   import { Plugin, PluginKey } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import { css } from '@typie/styled-system/css';
@@ -48,15 +48,9 @@
     const { binding } = ySyncPluginKey.getState(editor.view.state);
 
     if (transaction.docChanged) {
-      const changedRanges: { from: number; to: number }[] = [];
-      transaction.steps.forEach((_step, index) => {
-        const map = transaction.mapping.maps[index];
-        if (map) {
-          map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
-            changedRanges.push({ from: newStart, to: newEnd });
-          });
-        }
-      });
+      const ranges = getChangedRanges(transaction);
+      const meta = transaction.getMeta(ySyncPluginKey);
+      const isUndoRedo = meta?.isUndoRedoOperation;
 
       errors = errors
         .map((error) => {
@@ -67,9 +61,11 @@
             return null;
           }
 
-          for (const range of changedRanges) {
-            if (from <= range.to && to >= range.from) {
-              return null;
+          if (!isUndoRedo) {
+            for (const { newRange } of ranges) {
+              if (from <= newRange.to && to >= newRange.from) {
+                return null;
+              }
             }
           }
 
