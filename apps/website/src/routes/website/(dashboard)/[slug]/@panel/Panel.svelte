@@ -1,11 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import { fragment, graphql } from '$graphql';
-  import PanelAnchors from './PanelAnchors.svelte';
   import PanelBodySettings from './PanelBodySettings.svelte';
-  import PanelPost from './PanelPost.svelte';
+  import PanelInfo from './PanelInfo.svelte';
   import PanelSpellcheck from './PanelSpellcheck.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
@@ -42,7 +42,7 @@
       fragment Editor_Panel_post on Post {
         id
 
-        ...Editor_Panel_PanelPost_post
+        ...Editor_Panel_PanelInfo_post
       }
     `),
   );
@@ -66,8 +66,9 @@
   style:--min-width={`${minWidth}px`}
   style:--width={`${newWidth}px`}
   style:--max-width={`${maxWidth}px`}
-  class={css({
+  class={flex({
     position: 'relative',
+    flexDirection: 'column',
     flexShrink: '0',
     minWidth: isExpanded ? 'var(--min-width)' : '0',
     width: isExpanded ? 'var(--width)' : '0',
@@ -77,7 +78,7 @@
     transitionDuration: '200ms',
     transitionTimingFunction: 'ease',
     willChange: 'min-width, max-width, opacity',
-    overflowX: 'hidden',
+    overflow: 'hidden',
     borderLeftWidth: '1px',
     borderColor: 'border.subtle',
   })}
@@ -133,11 +134,7 @@
 
   {#if isExpanded}
     {#if app.preference.current.panelTab === 'info'}
-      <PanelPost {$post} {$user} {doc} {editor} />
-    {/if}
-
-    {#if app.preference.current.panelTab === 'anchors'}
-      <PanelAnchors {doc} {editor} />
+      <PanelInfo {$post} {$user} {doc} {editor} />
     {/if}
 
     {#if app.preference.current.panelTab === 'spellcheck'}
