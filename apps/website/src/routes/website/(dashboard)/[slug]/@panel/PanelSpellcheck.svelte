@@ -60,6 +60,8 @@
   let anchor: ReturnType<typeof createFloatingActions>['anchor'] | undefined = $state();
   let floating: ReturnType<typeof createFloatingActions>['floating'] | undefined = $state();
 
+  let scrollContainer: Element | undefined = $state();
+
   const checkSpelling = graphql(`
     mutation Editor_Panel_Spellcheck_CheckSpelling_Mutation($input: CheckSpellingInput!) {
       checkSpelling(input: $input) {
@@ -256,6 +258,9 @@
   });
 
   onMount(() => {
+    const container = document.querySelector('.editor-scroll-container');
+    if (!container) return;
+
     ({ anchor, floating } = createFloatingActions({
       placement: 'top',
       offset: 4,
@@ -263,13 +268,20 @@
         inline(),
         hide({
           strategy: 'escaped',
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          boundary: document.querySelector('.editor-scroll-container')!,
+          boundary: container,
           padding: 32,
         }),
         shift({ padding: 8 }),
       ],
     }));
+
+    scrollContainer = container;
+
+    return () => {
+      anchor = undefined;
+      floating = undefined;
+      scrollContainer = undefined;
+    };
   });
 </script>
 
@@ -560,8 +572,8 @@
   {/if}
 </div>
 
-{#if activeError && floating}
-  <div class={flex({ alignItems: 'center', gap: '4px', zIndex: 'overEditor', wrap: 'wrap' })} use:floating>
+{#if activeError && floating && editor?.current}
+  <div class={flex({ alignItems: 'center', gap: '4px', zIndex: 'overEditor', wrap: 'wrap' })} use:floating={{ appendTo: scrollContainer }}>
     {#each activeError.corrections as correction (correction)}
       <button
         class={flex({
