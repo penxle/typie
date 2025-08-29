@@ -17,6 +17,7 @@ type AppArgs = {
   };
 
   env?: { name: pulumi.Input<string>; value: pulumi.Input<string> }[];
+  secrets?: { token: pulumi.Input<string> };
 
   autoscale?: {
     minCount: pulumi.Input<number>;
@@ -95,38 +96,78 @@ export class App extends pulumi.ComponentResource {
       );
     }
 
-    const es = new k8s.apiextensions.CustomResource(
-      name,
-      {
-        apiVersion: 'external-secrets.io/v1',
-        kind: 'ExternalSecret',
-        metadata: {
-          name: args.name,
-          namespace,
+    let es;
+    if (args.secrets) {
+      const secret = new k8s.core.v1.Secret(
+        name,
+        {
+          metadata: {
+            name: pulumi.interpolate`${args.name}-doppler-token`,
+            namespace,
+          },
+          stringData: {
+            token: args.secrets.token,
+          },
         },
-        spec: {
-          refreshInterval: '5m',
+        { parent: this },
+      );
 
-          secretStoreRef: {
-            kind: 'ClusterSecretStore',
-            name: 'secrets-manager',
-          },
+      const ss = new k8s.apiextensions.CustomResource(
+        name,
+        {
+          apiVersion: 'external-secrets.io/v1',
+          kind: 'SecretStore',
 
-          target: {
+          metadata: {
             name: args.name,
+            namespace,
           },
 
-          dataFrom: [
-            {
-              extract: {
-                key: pulumi.interpolate`/apps/${project}/${stack}`,
+          spec: {
+            provider: {
+              doppler: {
+                auth: {
+                  secretRef: {
+                    dopplerToken: {
+                      name: secret.metadata.name,
+                      key: 'token',
+                    },
+                  },
+                },
               },
             },
-          ],
+          },
         },
-      },
-      { parent: this },
-    );
+        { parent: this },
+      );
+
+      es = new k8s.apiextensions.CustomResource(
+        name,
+        {
+          apiVersion: 'external-secrets.io/v1',
+          kind: 'ExternalSecret',
+          metadata: {
+            name: args.name,
+            namespace,
+          },
+          spec: {
+            refreshInterval: '1m',
+
+            secretStoreRef: {
+              kind: ss.kind,
+              name: ss.metadata.name,
+            },
+
+            target: {
+              name: args.name,
+            },
+
+            dataFrom: [{ find: { name: { regexp: '.*' } } }],
+          },
+        },
+        { parent: this },
+      );
+    }
 
     const labels = { app: args.name };
 
@@ -180,7 +221,7 @@ export class App extends pulumi.ComponentResource {
                     { name: 'AWS_REGION', value: 'ap-northeast-2' },
                     ...(args.env ?? []),
                   ],
-                  envFrom: [{ secretRef: { name: es.metadata.name } }],
+                  ...(es && { envFrom: [{ secretRef: { name: es.metadata.name } }] }),
                   resources: {
                     requests: { cpu: args.resources.cpu },
                     limits: { memory: args.resources.memory },
