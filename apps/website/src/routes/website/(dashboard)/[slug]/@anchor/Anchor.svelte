@@ -38,12 +38,11 @@
   });
 
   const handleClick = () => {
-    const editorEl = document.querySelector('.editor-scroll-container');
-    if (!editor || !editorEl || !element) return;
+    if (!editor || !element) return;
 
-    editorEl.scrollTo({
-      top: element.offsetTop,
+    element.scrollIntoView({
       behavior: 'smooth',
+      block: 'center',
     });
 
     const pos = editor.current.view.posAtDOM(element, 0);

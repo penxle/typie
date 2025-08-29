@@ -6,7 +6,7 @@ export type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   postsWidth: number;
   panelExpanded: boolean;
-  panelTab: 'info' | 'spellcheck' | 'settings';
+  panelTab: 'info' | 'anchors' | 'spellcheck' | 'settings';
   panelWidth: number;
 
   toolbarStyle: 'compact' | 'classic';

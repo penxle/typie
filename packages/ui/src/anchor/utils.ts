@@ -1,6 +1,10 @@
+import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from '../tiptap/extensions/node-commands';
 import { clamp } from '../utils';
 import type { Editor } from '@tiptap/core';
 import type * as Y from 'yjs';
+
+const LIST_NODE_TYPES = ['bullet_list', 'ordered_list'];
+const ANCHORABLE_NODE_TYPES = new Set([...WRAPPING_NODE_TYPES, ...TEXT_NODE_TYPES, ...LIST_NODE_TYPES]);
 
 const displayCache = new WeakMap<HTMLElement, string>();
 
@@ -80,6 +84,48 @@ export const calculateAnchorPositions = (
       };
     })
     .sort((a, b) => a.position - b.position);
+};
+
+export const findAnchorableNode = (editor: Editor, position?: number): { nodeId: string | null; pos: number | null } => {
+  const pos = position ?? editor.state.selection.from;
+  const resolvedPos = editor.state.doc.resolve(pos);
+
+  let newPos = null;
+  let nodeId = null;
+
+  // 현재 위치의 노드부터 확인
+  const currentNodeAtPos = editor.state.doc.nodeAt(pos);
+  if (currentNodeAtPos) {
+    const nodeType = currentNodeAtPos.type.name;
+    if (ANCHORABLE_NODE_TYPES.has(nodeType)) {
+      newPos = pos;
+      nodeId = currentNodeAtPos.attrs.nodeId;
+    }
+  }
+
+  // depth를 거슬러 올라가며 찾기
+  if (newPos === null) {
+    for (let depth = resolvedPos.depth; depth > 2; depth--) {
+      const node = resolvedPos.node(depth);
+      const nodeType = node.type.name;
+      if (ANCHORABLE_NODE_TYPES.has(nodeType)) {
+        newPos = resolvedPos.before(depth);
+        nodeId = node.attrs.nodeId;
+        break;
+      }
+    }
+  }
+
+  // depth 2 확인
+  if (newPos === null) {
+    newPos = resolvedPos.before(2);
+    const node = editor.state.doc.nodeAt(newPos);
+    if (node) {
+      nodeId = node.attrs.nodeId;
+    }
+  }
+
+  return { nodeId, pos: newPos };
 };
 
 // NOTE: 존재하지 않는 노드의 앵커를 제거

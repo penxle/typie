@@ -3,14 +3,11 @@ import { Extension, posToDOMRect } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { css } from '@typie/styled-system/css';
 import { mount, unmount } from 'svelte';
-import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from '../../extensions/node-commands';
+import { findAnchorableNode } from '../../../anchor';
 import Left from './Left.svelte';
 import Right from './Right.svelte';
 import type { VirtualElement } from '@floating-ui/dom';
 import type { EditorView } from '@tiptap/pm/view';
-
-const LIST_NODE_TYPES = ['bullet_list', 'ordered_list'];
-const FLOATING_NODE_TYPES = new Set([...WRAPPING_NODE_TYPES, ...TEXT_NODE_TYPES, ...LIST_NODE_TYPES]);
 
 type State = { pos: number | null };
 
@@ -305,34 +302,7 @@ export const FloatingMenu = Extension.create({
               }
 
               const pos = posAtCoords.inside;
-
-              const resolvedPos = view.state.doc.resolve(pos);
-
-              let newPos: number | null = null;
-
-              const currentNode = view.state.doc.nodeAt(pos);
-              if (currentNode) {
-                const nodeType = currentNode.type.name;
-                if (FLOATING_NODE_TYPES.has(nodeType)) {
-                  newPos = pos;
-                }
-              }
-
-              if (newPos === null) {
-                for (let depth = resolvedPos.depth; depth > 2; depth--) {
-                  const node = resolvedPos.node(depth);
-                  const nodeType = node.type.name;
-
-                  if (FLOATING_NODE_TYPES.has(nodeType)) {
-                    newPos = resolvedPos.before(depth);
-                    break;
-                  }
-                }
-              }
-
-              if (newPos === null) {
-                newPos = resolvedPos.before(2);
-              }
+              const { pos: newPos } = findAnchorableNode(this.editor, pos);
 
               const updateFn = (view as ViewWithUpdate).__updateFloatingMenu;
               if (updateFn) {

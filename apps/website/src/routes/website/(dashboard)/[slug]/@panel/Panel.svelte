@@ -3,6 +3,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import { fragment, graphql } from '$graphql';
+  import PanelAnchors from './PanelAnchors.svelte';
   import PanelBodySettings from './PanelBodySettings.svelte';
   import PanelPost from './PanelPost.svelte';
   import PanelSpellcheck from './PanelSpellcheck.svelte';
@@ -133,6 +134,10 @@
   {#if isExpanded}
     {#if app.preference.current.panelTab === 'info'}
       <PanelPost {$post} {$user} {doc} {editor} />
+    {/if}
+
+    {#if app.preference.current.panelTab === 'anchors'}
+      <PanelAnchors {doc} {editor} />
     {/if}
 
     {#if app.preference.current.panelTab === 'spellcheck'}
