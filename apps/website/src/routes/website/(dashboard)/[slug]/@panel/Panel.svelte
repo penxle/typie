@@ -5,6 +5,7 @@
   import { fragment, graphql } from '$graphql';
   import PanelBodySettings from './PanelBodySettings.svelte';
   import PanelPost from './PanelPost.svelte';
+  import PanelSpellcheck from './PanelSpellcheck.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
@@ -29,6 +30,7 @@
         id
 
         ...Editor_Panel_PanelPost_user
+        ...Editor_Panel_PanelSpellcheck_user
       }
     `),
   );
@@ -130,6 +132,10 @@
 
   {#if app.preference.current.panelTab === 'info'}
     <PanelPost {$post} {$user} {doc} {editor} />
+  {/if}
+
+  {#if app.preference.current.panelTab === 'spellcheck'}
+    <PanelSpellcheck {$user} {editor} />
   {/if}
 
   {#if app.preference.current.panelTab === 'settings'}

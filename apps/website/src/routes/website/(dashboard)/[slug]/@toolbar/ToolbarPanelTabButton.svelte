@@ -5,17 +5,22 @@
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
+  import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
+  import type { AppPreference } from '@typie/ui/context';
   import type { Component } from 'svelte';
 
   type Props = {
-    tab: 'info' | 'settings';
+    tab: AppPreference['panelTab'];
     label: string;
     icon: Component;
     keys?: TooltipParameter['keys'];
+    needPlanUpgrade?: boolean;
   };
 
-  let { tab, label, icon, keys }: Props = $props();
+  let { tab, label, icon, keys, needPlanUpgrade }: Props = $props();
+
+  let planUpgradeModalOpen = $state(false);
 
   const app = getAppContext();
 
@@ -37,6 +42,11 @@
   })}
   aria-expanded={app.preference.current.panelExpanded && app.preference.current.panelTab === tab}
   onclick={() => {
+    if (needPlanUpgrade) {
+      planUpgradeModalOpen = true;
+      return;
+    }
+
     if (app.preference.current.panelExpanded) {
       if (app.preference.current.panelTab === tab) {
         app.preference.current.panelExpanded = false;
@@ -69,3 +79,5 @@
     <span class={css({ fontSize: '11px' })}>{label}</span>
   {/if}
 </button>
+
+<PlanUpgradeModal bind:open={planUpgradeModalOpen} />
