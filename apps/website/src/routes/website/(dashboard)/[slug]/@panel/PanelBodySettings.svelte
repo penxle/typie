@@ -128,16 +128,26 @@
   class={flex({
     flexDirection: 'column',
     gap: '16px',
-    paddingTop: '16px',
     minWidth: 'var(--min-width)',
     width: 'var(--width)',
     maxWidth: 'var(--max-width)',
     height: 'full',
   })}
 >
-  <div class={css({ paddingX: '20px', fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>본문 설정</div>
-
-  <HorizontalDivider color="secondary" />
+  <div
+    class={flex({
+      height: '40px',
+      alignItems: 'center',
+      paddingX: '20px',
+      fontSize: '13px',
+      fontWeight: 'semibold',
+      color: 'text.subtle',
+      borderBottomWidth: '1px',
+      borderColor: 'surface.muted',
+    })}
+  >
+    본문 설정
+  </div>
 
   <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
     <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -337,7 +347,7 @@
     </div>
   {/if}
 
-  <HorizontalDivider style={css.raw({ marginY: '12px' })} />
+  <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
 
   <div class={flex({ flexDirection: 'column', gap: '8px', paddingX: '20px' })}>
     <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -383,7 +393,7 @@
     </div>
   </div>
 
-  <HorizontalDivider style={css.raw({ marginY: '12px' })} />
+  <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
 
   <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '20px' })}>
     <div class={flex({ alignItems: 'center', gap: '8px' })}>

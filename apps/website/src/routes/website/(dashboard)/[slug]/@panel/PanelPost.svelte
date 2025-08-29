@@ -6,7 +6,7 @@
   import { getAppContext } from '@typie/ui/context';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser/src/loaders/loader-module-core';
-  import { EntityAvailability, EntityVisibility, PostType } from '@/enums';
+  import { EntityAvailability, EntityVisibility } from '@/enums';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import { fragment, graphql } from '$graphql';
   import PanelCharacterCountChangeWidget from './PanelCharacterCountChangeWidget.svelte';
@@ -74,32 +74,6 @@
     height: 'full',
   })}
 >
-  <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
-    <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>
-        {#if $post.type === PostType.NORMAL}
-          포스트
-        {:else if $post.type === PostType.TEMPLATE}
-          템플릿
-        {/if}
-      </div>
-
-      {#if $user.id === $post.entity.user.id}
-        <a
-          class={cx('group', center({ size: '20px' }))}
-          href={$post.entity.url}
-          rel="noopener noreferrer"
-          target="_blank"
-          use:tooltip={{ message: '사이트에서 열기' }}
-        >
-          <Icon style={css.raw({ color: 'text.faint', _groupHover: { color: 'text.subtle' } })} icon={ExternalLinkIcon} size={14} />
-        </a>
-      {/if}
-    </div>
-  </div>
-
-  <HorizontalDivider color="secondary" />
-
   <div class={flex({ flexDirection: 'column', gap: '20px', paddingX: '20px' })}>
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
@@ -125,45 +99,59 @@
         {/if}
       </div>
 
-      {#if $post.entity.visibility === EntityVisibility.UNLISTED || $post.entity.availability === EntityAvailability.UNLISTED}
-        <div
-          class={css({
-            borderRadius: '4px',
-            paddingX: '8px',
-            paddingY: '4px',
-            width: 'fit',
-            fontSize: '12px',
-            fontWeight: 'semibold',
-            color: 'text.link',
-            backgroundColor: { base: 'blue.100', _dark: 'dark.blue.900' },
-            userSelect: 'none',
-          })}
-        >
-          {#if $post.entity.visibility === EntityVisibility.UNLISTED && $post.entity.availability === EntityAvailability.UNLISTED}
-            링크 조회/편집
-          {:else if $post.entity.visibility === EntityVisibility.UNLISTED}
-            링크 조회
-          {:else if $post.entity.availability === EntityAvailability.UNLISTED}
-            링크 편집
-          {/if}
-        </div>
-      {:else if $post.entity.visibility === EntityVisibility.PRIVATE}
-        <div
-          class={css({
-            borderRadius: '4px',
-            paddingX: '8px',
-            paddingY: '4px',
-            width: 'fit',
-            fontSize: '12px',
-            fontWeight: 'semibold',
-            color: 'text.muted',
-            backgroundColor: 'interactive.hover',
-            userSelect: 'none',
-          })}
-        >
-          비공개
-        </div>
-      {/if}
+      <div class={flex({ alignItems: 'center', gap: '4px' })}>
+        {#if $post.entity.visibility === EntityVisibility.UNLISTED || $post.entity.availability === EntityAvailability.UNLISTED}
+          <div
+            class={css({
+              borderRadius: '4px',
+              paddingX: '8px',
+              paddingY: '4px',
+              width: 'fit',
+              fontSize: '12px',
+              fontWeight: 'semibold',
+              color: 'text.link',
+              backgroundColor: { base: 'blue.100', _dark: 'dark.blue.900' },
+              userSelect: 'none',
+            })}
+          >
+            {#if $post.entity.visibility === EntityVisibility.UNLISTED && $post.entity.availability === EntityAvailability.UNLISTED}
+              링크 조회/편집
+            {:else if $post.entity.visibility === EntityVisibility.UNLISTED}
+              링크 조회
+            {:else if $post.entity.availability === EntityAvailability.UNLISTED}
+              링크 편집
+            {/if}
+          </div>
+        {:else if $post.entity.visibility === EntityVisibility.PRIVATE}
+          <div
+            class={css({
+              borderRadius: '4px',
+              paddingX: '8px',
+              paddingY: '4px',
+              width: 'fit',
+              fontSize: '12px',
+              fontWeight: 'semibold',
+              color: 'text.muted',
+              backgroundColor: 'interactive.hover',
+              userSelect: 'none',
+            })}
+          >
+            비공개
+          </div>
+        {/if}
+
+        {#if $user.id === $post.entity.user.id}
+          <a
+            class={cx('group', center({ size: '20px' }))}
+            href={$post.entity.url}
+            rel="noopener noreferrer"
+            target="_blank"
+            use:tooltip={{ message: '사이트에서 열기' }}
+          >
+            <Icon style={css.raw({ color: 'text.faint', _groupHover: { color: 'text.subtle' } })} icon={ExternalLinkIcon} size={14} />
+          </a>
+        {/if}
+      </div>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>

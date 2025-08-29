@@ -285,7 +285,6 @@
 <div
   class={flex({
     flexDirection: 'column',
-    paddingTop: '16px',
     minWidth: 'var(--min-width)',
     width: 'var(--width)',
     maxWidth: 'var(--max-width)',
@@ -294,7 +293,7 @@
 >
   <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-      <div class={flex({ alignItems: 'center', gap: '6px' })}>
+      <div class={flex({ height: '40px', alignItems: 'center', gap: '6px' })}>
         <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>맞춤법 검사</div>
         {#if hasChecked && !checkFailed && errors.length > 0}
           <div
@@ -331,7 +330,7 @@
     </div>
   </div>
 
-  <HorizontalDivider style={css.raw({ marginTop: '16px' })} color="secondary" />
+  <HorizontalDivider color="secondary" />
 
   {#if inflight}
     <div class={flex({ justifyContent: 'center', alignItems: 'center', paddingY: '40px' })}>

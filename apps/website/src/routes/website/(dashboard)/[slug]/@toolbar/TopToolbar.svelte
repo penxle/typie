@@ -4,15 +4,14 @@
   import { VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { values } from '@typie/ui/tiptap';
-  import BookmarkIcon from '~icons/lucide/bookmark';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import CodeIcon from '~icons/lucide/code';
   import CodeXmlIcon from '~icons/lucide/code-xml';
+  import FileIcon from '~icons/lucide/file';
   import FilePlusIcon from '~icons/lucide/file-plus';
   import FileUpIcon from '~icons/lucide/file-up';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
   import ImageIcon from '~icons/lucide/image';
-  import InfoIcon from '~icons/lucide/info';
   import ListIcon from '~icons/lucide/list';
   import ListOrderedIcon from '~icons/lucide/list-ordered';
   import PaperclipIcon from '~icons/lucide/paperclip';
@@ -276,8 +275,7 @@
   <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
-    <ToolbarPanelTabButton icon={BookmarkIcon} label="북마크" tab="anchors" />
+    <ToolbarPanelTabButton icon={FileIcon} label="포스트" tab="info" />
     <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" needPlanUpgrade={!$site?.user.subscription} tab="spellcheck" />
     <ToolbarPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" />
   </div>
