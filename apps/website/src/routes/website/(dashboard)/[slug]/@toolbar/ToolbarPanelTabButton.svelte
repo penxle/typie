@@ -33,7 +33,7 @@
     gap: '4px',
     flexShrink: '0',
     borderRadius: '4px',
-    width: '40px',
+    width: toolbarSize === 'large' ? '48px' : '40px',
     minHeight: '24px',
     color: 'text.faint',
     transition: 'common',
@@ -76,7 +76,7 @@
   <Icon style={css.raw({ color: 'text.faint' })} {icon} size={20} />
 
   {#if toolbarSize === 'large'}
-    <span class={css({ fontSize: '11px' })}>{label}</span>
+    <span class={css({ fontSize: '11px', whiteSpace: 'nowrap' })}>{label}</span>
   {/if}
 </button>
 
