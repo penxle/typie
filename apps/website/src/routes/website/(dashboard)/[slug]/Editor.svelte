@@ -818,7 +818,14 @@
             style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
             style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
             style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto', zIndex: 'editor' })}
+            class={flex({
+              position: 'relative',
+              flexDirection: 'column',
+              flexGrow: '1',
+              overflowX: 'auto',
+              zIndex: 'editor',
+              backgroundColor: 'surface.default',
+            })}
           >
             <div
               id="editor-container"
