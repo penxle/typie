@@ -1,8 +1,3 @@
-input AddSiteFontInput {
-  fontId: ID!
-  siteId: ID!
-}
-
 input AdminEnqueuePostCompactInput {
   postId: String!
 }
@@ -24,6 +19,10 @@ type AdminPostsResult {
 type AdminUsersResult {
   totalCount: Int!
   users: [User!]!
+}
+
+input ArchiveFontInput {
+  fontId: ID!
 }
 
 input AuthorizeSignUpEmailInput {
@@ -295,12 +294,24 @@ type FolderView implements IFolder {
 }
 
 type Font implements Blob {
+  family: FontFamily!
   fullName: String
   id: ID!
   name: String!
   size: Int!
   url: String!
   weight: Int!
+}
+
+type FontFamily {
+  fonts: [Font!]!
+  id: ID!
+  name: String!
+}
+
+enum FontFamilyState {
+  ACTIVE
+  ARCHIVED
 }
 
 enum FontState {
@@ -422,11 +433,11 @@ input MoveEntityInput {
 }
 
 type Mutation {
-  addSiteFont(input: AddSiteFontInput!): Site!
   adminEnqueuePostCompact(input: AdminEnqueuePostCompactInput!): Boolean!
   adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
   adminStopImpersonation: Boolean!
+  archiveFont(input: ArchiveFontInput!): Font!
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): String!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlanChange: Subscription_!
@@ -464,7 +475,6 @@ type Mutation {
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
   registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
-  removeSiteFont(input: RemoveSiteFontInput!): Site!
   renameFolder(input: RenameFolderInput!): Folder!
   reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
@@ -749,11 +759,6 @@ input RegisterPushNotificationTokenInput {
   token: String!
 }
 
-input RemoveSiteFontInput {
-  fontId: ID!
-  siteId: ID!
-}
-
 input RenameFolderInput {
   folderId: ID!
   name: String!
@@ -1002,6 +1007,7 @@ type User {
   createdAt: DateTime!
   credit: Int!
   email: String!
+  fontFamilies: [FontFamily!]!
   hasPassword: Boolean!
   id: ID!
   marketingConsent: Boolean!
