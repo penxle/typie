@@ -99,7 +99,6 @@
   });
 
   const errorMap = {
-    invalid_font_weight: '폰트가 너무 얇거나 두꺼워요.',
     invalid_font_style: '폰트가 기울어져 있어요.',
     duplicate_font_in_site: '이미 동일한 폰트가 업로드되어 있어요.',
   };
@@ -341,7 +340,7 @@
 
       <ul class={css({ listStyle: 'disc', paddingLeft: '20px', fontSize: '13px', color: 'text.faint' })}>
         <li>TTF, OTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
-        <li>너무 얇거나 너무 두꺼운 폰트, 기울어진 폰트는 업로드할 수 없어요.</li>
+        <li>기울어진 폰트는 업로드할 수 없어요.</li>
         <li>업로드된 폰트는 내 글이라면 어디서나 이용할 수 있어요.</li>
         <li>기존에 업로드한 폰트 목록은 설정 &gt; 사이트 탭에서 관리할 수 있어요.</li>
         <li>무료 폰트 혹은 이미 구매해 웹에서 사용할 수 있는 라이선스가 있는 폰트만 이용해 주세요.</li>
