@@ -8,7 +8,7 @@
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { siteSchema } from '@/validation';
-  import { fragment, graphql } from '$graphql';
+  import { cache, fragment, graphql } from '$graphql';
   import type { DashboardLayout_PreferenceModal_SiteTab_user } from '$graphql';
 
   type Props = {
@@ -54,16 +54,6 @@
     mutation DashboardLayout_PreferenceModal_SiteTab_ArchiveFont_Mutation($input: ArchiveFontInput!) {
       archiveFont(input: $input) {
         id
-
-        fontFamilies {
-          id
-          name
-
-          fonts {
-            id
-            weight
-          }
-        }
       }
     }
   `);
@@ -133,6 +123,7 @@
                 actionLabel: '삭제',
                 actionHandler: async () => {
                   await archiveFont({ fontId: id });
+                  cache.invalidate({ __typename: 'User', id: $user.id, fields: 'fontFamilies' });
                 },
               });
             }}

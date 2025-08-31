@@ -11,7 +11,7 @@
   import PlusIcon from '~icons/lucide/plus';
   import TypeIcon from '~icons/lucide/type';
   import UploadIcon from '~icons/lucide/upload';
-  import { fragment, graphql } from '$graphql';
+  import { cache, fragment, graphql } from '$graphql';
   import { uploadBlob } from '$lib/utils';
   import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -132,6 +132,8 @@
       try {
         const path = await uploadBlob(file);
         const resp = await persistBlobAsFont({ path });
+        cache.invalidate({ __typename: 'User', id: $user.id, fields: 'fontFamilies' });
+
         results.push({ name: resp.name, success: true });
       } catch (err) {
         let errorMessage = '폰트 업로드에 실패했어요.';

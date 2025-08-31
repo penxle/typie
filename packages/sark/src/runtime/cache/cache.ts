@@ -248,4 +248,11 @@ export class Cache {
   }
 }
 
-export const createCache = (): Cache => new Cache();
+const cache = new Cache();
+export const createCache = (): Cache => {
+  if (typeof window === 'undefined') {
+    return new Cache();
+  }
+
+  return cache;
+};

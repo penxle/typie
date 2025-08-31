@@ -1,3 +1,5 @@
+export type { Cache } from './cache';
+export { cache } from './cache';
 export { handleError } from './error';
 export { fragment, graphql } from './functions';
 export { loadQuery } from './load';

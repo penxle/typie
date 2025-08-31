@@ -162,7 +162,7 @@ export const writePublicAssets = async (outDir: string, artifacts: Artifact[]) =
     AST.b.importDeclaration.from({
       importKind: 'type',
       source: AST.b.stringLiteral('@typie/sark/internal'),
-      specifiers: [AST.b.importSpecifier.from({ imported: AST.b.identifier('CacheFacade') })],
+      specifiers: [AST.b.importSpecifier.from({ imported: AST.b.identifier('Cache') })],
     }),
     AST.b.exportNamedDeclaration.from({
       declaration: null,
@@ -193,7 +193,7 @@ export const writePublicAssets = async (outDir: string, artifacts: Artifact[]) =
               name: 'cache',
               typeAnnotation: AST.b.tsTypeAnnotation.from({
                 typeAnnotation: AST.b.tsTypeReference.from({
-                  typeName: AST.b.identifier('CacheFacade'),
+                  typeName: AST.b.identifier('Cache'),
                 }),
               }),
             }),
