@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
+  import { HorizontalDivider, Icon, Modal, RingSpinner } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { defaultValues, values } from '@typie/ui/tiptap';
   import { TypieError } from '@/errors';
@@ -10,6 +10,7 @@
   import InfoIcon from '~icons/lucide/info';
   import PlusIcon from '~icons/lucide/plus';
   import TypeIcon from '~icons/lucide/type';
+  import UploadIcon from '~icons/lucide/upload';
   import { fragment, graphql } from '$graphql';
   import { uploadBlob } from '$lib/utils';
   import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
@@ -75,11 +76,85 @@
 
   let open = $state(false);
   let inflight = $state(false);
+  let isDragging = $state(false);
 
   const errorMap = {
     invalid_font_weight: '폰트가 너무 얇거나 두꺼워요.',
     invalid_font_style: '폰트가 기울어져 있어요.',
     duplicate_font_in_site: '이미 동일한 폰트가 업로드되어 있어요.',
+  };
+
+  const processFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !$site) {
+      return;
+    }
+
+    inflight = true;
+
+    const results: { name: string; success: boolean; error?: string }[] = [];
+
+    // NOTE: 업로드 폭탄을 방지하기 위해 하나씩 업로드
+    for (const file of files) {
+      try {
+        const path = await uploadBlob(file);
+        const resp = await persistBlobAsFont({ path });
+        await addSiteFont({ siteId: $site.id, fontId: resp.id });
+        results.push({ name: resp.name, success: true });
+      } catch (err) {
+        let errorMessage = '폰트 업로드에 실패했어요.';
+        if (err instanceof TypieError) {
+          errorMessage = errorMap[err.code as never] ?? errorMessage;
+        }
+        results.push({
+          name: file.name,
+          success: false,
+          error: errorMessage,
+        });
+      }
+    }
+
+    inflight = false;
+
+    const successCount = results.filter((r) => r.success).length;
+    const failureCount = results.filter((r) => !r.success).length;
+
+    if (successCount > 0 && failureCount === 0) {
+      if (successCount === 1) {
+        Dialog.alert({
+          title: '폰트 업로드 완료',
+          message: `"${results[0].name}" 폰트가 추가되었어요. 업로드한 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
+        });
+      } else {
+        const fontNames = results
+          .filter((r) => r.success)
+          .map((r) => r.name)
+          .join(', ');
+        Dialog.alert({
+          title: '폰트 업로드 완료',
+          message: `${successCount}개의 폰트(${fontNames})가 추가되었어요. 업로드한 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
+        });
+      }
+      open = false;
+    } else if (successCount === 0) {
+      const errorMessages = results.map((r) => `• ${r.name}: ${r.error}`).join('\n');
+      Dialog.alert({
+        title: '폰트 업로드 실패',
+        message: `모든 폰트 업로드에 실패했어요.\n\n${errorMessages}`,
+      });
+    } else {
+      const successNames = results
+        .filter((r) => r.success)
+        .map((r) => `"${r.name}"`)
+        .join(', ');
+      const failureMessages = results
+        .filter((r) => !r.success)
+        .map((r) => `• ${r.name}: ${r.error}`)
+        .join('\n');
+      Dialog.alert({
+        title: '폰트 업로드 일부 완료',
+        message: `${successCount}개의 폰트(${successNames})가 추가되었어요.\n\n다음 ${failureCount}개의 폰트는 업로드에 실패했어요:\n${failureMessages}\n\n업로드된 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
+      });
+    }
   };
 
   const handleUpload = async () => {
@@ -89,80 +164,42 @@
     picker.multiple = true;
 
     picker.addEventListener('change', async () => {
-      const files = picker.files;
-      if (!files || files.length === 0 || !$site) {
-        return;
-      }
-
-      inflight = true;
-
-      const results: { name: string; success: boolean; error?: string }[] = [];
-
-      // NOTE: 업로드 폭탄을 방지하기 위해 하나씩 업로드
-      for (const file of files) {
-        try {
-          const path = await uploadBlob(file);
-          const resp = await persistBlobAsFont({ path });
-          await addSiteFont({ siteId: $site.id, fontId: resp.id });
-          results.push({ name: resp.name, success: true });
-        } catch (err) {
-          let errorMessage = '폰트 업로드에 실패했어요.';
-          if (err instanceof TypieError) {
-            errorMessage = errorMap[err.code as never] ?? errorMessage;
-          }
-          results.push({
-            name: file.name,
-            success: false,
-            error: errorMessage,
-          });
-        }
-      }
-
-      inflight = false;
-      open = false;
-
-      const successCount = results.filter((r) => r.success).length;
-      const failureCount = results.filter((r) => !r.success).length;
-
-      if (successCount > 0 && failureCount === 0) {
-        if (successCount === 1) {
-          Dialog.alert({
-            title: '폰트 업로드 완료',
-            message: `"${results[0].name}" 폰트가 추가되었어요. 업로드한 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
-          });
-        } else {
-          const fontNames = results
-            .filter((r) => r.success)
-            .map((r) => r.name)
-            .join(', ');
-          Dialog.alert({
-            title: '폰트 업로드 완료',
-            message: `${successCount}개의 폰트(${fontNames})가 추가되었어요. 업로드한 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
-          });
-        }
-      } else if (successCount === 0) {
-        const errorMessages = results.map((r) => `• ${r.name}: ${r.error}`).join('\n');
-        Dialog.alert({
-          title: '폰트 업로드 실패',
-          message: `모든 폰트 업로드에 실패했어요.\n\n${errorMessages}`,
-        });
-      } else {
-        const successNames = results
-          .filter((r) => r.success)
-          .map((r) => `"${r.name}"`)
-          .join(', ');
-        const failureMessages = results
-          .filter((r) => !r.success)
-          .map((r) => `• ${r.name}: ${r.error}`)
-          .join('\n');
-        Dialog.alert({
-          title: '폰트 업로드 일부 완료',
-          message: `${successCount}개의 폰트(${successNames})가 추가되었어요.\n\n다음 ${failureCount}개의 폰트는 업로드에 실패했어요:\n${failureMessages}\n\n업로드된 폰트는 설정 > 사이트 탭에서 관리할 수 있어요.`,
-        });
-      }
+      await processFiles(picker.files);
     });
 
     picker.click();
+  };
+
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    isDragging = true;
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    isDragging = false;
+  };
+
+  const handleDrop = async (e: DragEvent) => {
+    e.preventDefault();
+    isDragging = false;
+
+    const files = e.dataTransfer?.files;
+    if (!files) return;
+
+    const fontFiles = [...files].filter((file) => /\.(ttf|otf)$/i.test(file.name));
+
+    if (fontFiles.length === 0) {
+      Dialog.alert({
+        title: '올바른 폰트 파일이 아니에요',
+        message: 'TTF 또는 OTF 파일만 업로드할 수 있어요.',
+      });
+      return;
+    }
+
+    const dataTransfer = new DataTransfer();
+    fontFiles.forEach((file) => dataTransfer.items.add(file));
+    await processFiles(dataTransfer.files);
   };
 </script>
 
@@ -264,7 +301,7 @@
 
   <HorizontalDivider />
 
-  <div class={flex({ flexDirection: 'column', gap: '24px', paddingX: '24px', paddingY: '16px' })}>
+  <div class={flex({ flexDirection: 'column', gap: '18px', paddingX: '24px', paddingY: '16px' })}>
     <div
       class={flex({
         flexDirection: 'column',
@@ -290,6 +327,50 @@
       </ul>
     </div>
 
-    <Button loading={inflight} onclick={handleUpload}>파일 선택</Button>
+    <div
+      class={css({
+        position: 'relative',
+        borderRadius: '8px',
+        border: '2px dashed',
+        borderColor: isDragging ? 'accent.brand.default' : 'border.default',
+        backgroundColor: isDragging ? 'accent.brand.subtle' : 'surface.default',
+        padding: '24px',
+        textAlign: 'center',
+        transition: 'background',
+        cursor: inflight ? 'default' : 'pointer',
+        _hover: {
+          backgroundColor: isDragging ? 'accent.brand.subtle' : 'surface.subtle',
+        },
+      })}
+      aria-busy={inflight}
+      aria-disabled={inflight}
+      onclick={inflight ? undefined : handleUpload}
+      ondragleave={handleDragLeave}
+      ondragover={handleDragOver}
+      ondrop={inflight ? undefined : handleDrop}
+      onkeydown={(e) => {
+        if (!inflight && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          handleUpload();
+        }
+      }}
+      role="button"
+      tabindex={inflight ? -1 : 0}
+    >
+      <div class={flex({ flexDirection: 'column', gap: '12px', alignItems: 'center' })}>
+        {#if inflight}
+          <RingSpinner style={css.raw({ color: 'text.subtle', size: '24px' })} />
+          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.subtle' })}>폰트 업로드 중...</div>
+        {:else}
+          <Icon style={css.raw({ color: isDragging ? 'text.brand' : 'text.subtle' })} icon={UploadIcon} size={24} />
+          <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+            <div class={css({ fontSize: '14px', fontWeight: 'medium', color: isDragging ? 'text.brand' : 'text.subtle' })}>
+              클릭하거나 파일을 드래그해서 업로드
+            </div>
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>TTF, OTF 파일 (여러 개 가능)</div>
+          </div>
+        {/if}
+      </div>
+    </div>
   </div>
 </Modal>
