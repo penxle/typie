@@ -13,11 +13,11 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.36.2",
+    "@sveltejs/kit": "^2.37.0",
     "@types/bun": "^1.2.21",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
-    "hono": "^4.9.4",
+    "hono": "^4.9.5",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.3"
