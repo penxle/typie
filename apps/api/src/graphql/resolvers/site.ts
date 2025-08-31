@@ -3,7 +3,7 @@ import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, or, sql, sum 
 import { alias } from 'drizzle-orm/pg-core';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
-import { db, Entities, first, firstOrThrow, Fonts, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, FontFamilies, Fonts, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, FontState, PostType } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
@@ -30,9 +30,10 @@ ISite.implement({
       type: [Font],
       resolve: async (self) => {
         const fonts = await db
-          .select()
+          .select(getTableColumns(Fonts))
           .from(Fonts)
-          .where(and(eq(Fonts.siteId, self.id), eq(Fonts.state, FontState.ACTIVE)));
+          .innerJoin(FontFamilies, eq(Fonts.familyId, FontFamilies.id))
+          .where(and(eq(FontFamilies.userId, self.userId), eq(Fonts.state, FontState.ACTIVE)));
 
         return fonts.sort((a, b) => a.name.localeCompare(b.name));
       },
@@ -212,61 +213,6 @@ builder.mutationFields((t) => ({
       }
 
       return await db.update(Sites).set({ slug: input.slug }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
-    },
-  }),
-
-  addSiteFont: t.withAuth({ session: true }).fieldWithInput({
-    type: Site,
-    input: {
-      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
-      fontId: t.input.id({ validate: validateDbId(TableCode.FONTS) }),
-    },
-    resolve: async (_, { input }, ctx) => {
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: input.siteId,
-      });
-
-      const font = await db
-        .select({ name: Fonts.name, fullName: Fonts.fullName })
-        .from(Fonts)
-        .where(eq(Fonts.id, input.fontId))
-        .then(firstOrThrow);
-
-      const checkField = font.fullName ? Fonts.fullName : Fonts.name;
-      const checkValue = font.fullName || font.name;
-
-      const existingFont = await db
-        .select()
-        .from(Fonts)
-        .where(and(eq(Fonts.siteId, input.siteId), eq(checkField, checkValue), eq(Fonts.state, FontState.ACTIVE)))
-        .then(first);
-
-      if (existingFont) {
-        throw new TypieError({ code: 'duplicate_font_in_site' });
-      }
-
-      await db.update(Fonts).set({ siteId: input.siteId }).where(eq(Fonts.id, input.fontId));
-
-      return input.siteId;
-    },
-  }),
-
-  removeSiteFont: t.withAuth({ session: true }).fieldWithInput({
-    type: Site,
-    input: {
-      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
-      fontId: t.input.id({ validate: validateDbId(TableCode.FONTS) }),
-    },
-    resolve: async (_, { input }, ctx) => {
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: input.siteId,
-      });
-
-      await db.update(Fonts).set({ siteId: null }).where(eq(Fonts.id, input.fontId));
-
-      return input.siteId;
     },
   }),
 }));

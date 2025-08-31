@@ -46,14 +46,10 @@
     }
   `);
 
-  const removeSiteFont = graphql(`
-    mutation DashboardLayout_PreferenceModal_SiteTab_RemoveSiteFont_Mutation($input: RemoveSiteFontInput!) {
-      removeSiteFont(input: $input) {
+  const archiveFont = graphql(`
+    mutation DashboardLayout_PreferenceModal_SiteTab_ArchiveFont_Mutation($input: ArchiveFontInput!) {
+      archiveFont(input: $input) {
         id
-
-        fonts {
-          id
-        }
       }
     }
   `);
@@ -124,7 +120,7 @@
               action: 'danger',
               actionLabel: '삭제',
               actionHandler: async () => {
-                await removeSiteFont({ siteId: $user.sites[0].id, fontId: id });
+                await archiveFont({ fontId: id });
               },
             });
           }}

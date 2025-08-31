@@ -5,7 +5,6 @@
   import { HorizontalDivider, Icon, Modal, RingSpinner } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { defaultValues, values } from '@typie/ui/tiptap';
-  import * as R from 'remeda';
   import { TypieError } from '@/errors';
   import GemIcon from '~icons/lucide/gem';
   import InfoIcon from '~icons/lucide/info';
@@ -20,35 +19,35 @@
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_BottomToolbar_FontFamily_site, Optional } from '$graphql';
+  import type { Editor_BottomToolbar_FontFamily_user } from '$graphql';
 
   type Props = {
-    $site: Optional<Editor_BottomToolbar_FontFamily_site>;
+    $user: Editor_BottomToolbar_FontFamily_user;
     editor?: Ref<Editor>;
   };
 
-  let { $site: _site, editor }: Props = $props();
+  let { $user: _user, editor }: Props = $props();
 
   let planUpgradeOpen = $state(false);
 
-  const site = fragment(
-    _site,
+  const user = fragment(
+    _user,
     graphql(`
-      fragment Editor_BottomToolbar_FontFamily_site on Site {
+      fragment Editor_BottomToolbar_FontFamily_user on User {
         id
 
-        fonts {
+        fontFamilies {
           id
           name
-          weight
+
+          fonts {
+            id
+            weight
+          }
         }
 
-        user {
+        subscription {
           id
-
-          subscription {
-            id
-          }
         }
       }
     `),
@@ -63,48 +62,64 @@
     }
   `);
 
-  const addSiteFont = graphql(`
-    mutation Editor_BottomToolbar_FontFamily_AddSiteFont_Mutation($input: AddSiteFontInput!) {
-      addSiteFont(input: $input) {
-        id
-
-        fonts {
-          id
-          name
-          weight
-        }
-      }
-    }
-  `);
-
   let open = $state(false);
   let inflight = $state(false);
   let isDragging = $state(false);
 
-  const groupedFonts = $derived(() => {
-    if (!$site?.fonts) return [];
-
-    return R.pipe(
-      $site.fonts,
-      R.groupBy((font) => font.name),
-      R.values(),
-      R.map((fonts) => {
-        const regularFont = fonts.find((f) => f.weight === 400);
-        return {
-          regular: regularFont || fonts[0],
-          weights: fonts,
-        };
-      }),
-    );
-  });
-
   const errorMap = {
     invalid_font_style: '폰트가 기울어져 있어요.',
-    duplicate_font_in_site: '이미 동일한 폰트가 업로드되어 있어요.',
+  };
+
+  const currentFontFamily = $derived.by(() => {
+    const fonts = $user.fontFamilies.flatMap((f) => f.fonts);
+    if (fonts.length === 0) return null;
+
+    const fontIdOrFontFamilyId = editor?.current.getAttributes('text_style').fontFamily;
+    if (!fontIdOrFontFamilyId) return null;
+
+    const fontFamily = $user.fontFamilies.find(
+      ({ id, fonts }) => id === fontIdOrFontFamilyId || fonts.some(({ id }) => id === fontIdOrFontFamilyId),
+    );
+    if (!fontFamily) return null;
+
+    return fontFamily;
+  });
+
+  const getDefaultWeight = (fontFamilyOrId: string, fontWeight: number) => {
+    let weights: number[];
+
+    const systemFontFamily = values.fontFamily.find((f) => f.value === fontFamilyOrId);
+    if (systemFontFamily) {
+      weights = systemFontFamily.weights.toSorted((a, b) => a - b);
+    } else {
+      const userFontFamily = $user.fontFamilies.find((f) => f.id === fontFamilyOrId);
+      if (!userFontFamily) return null;
+
+      weights = userFontFamily.fonts.map((f) => f.weight).toSorted((a, b) => a - b);
+    }
+
+    if (weights.length === 0) return null;
+
+    if (weights.includes(fontWeight)) {
+      return fontWeight;
+    }
+
+    let closest = weights[0];
+    let minDiff = Math.abs(fontWeight - weights[0]);
+
+    for (const weight of weights) {
+      const diff = Math.abs(fontWeight - weight);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = weight;
+      }
+    }
+
+    return closest;
   };
 
   const processFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !$site) {
+    if (!files || files.length === 0) {
       return;
     }
 
@@ -117,7 +132,6 @@
       try {
         const path = await uploadBlob(file);
         const resp = await persistBlobAsFont({ path });
-        await addSiteFont({ siteId: $site.id, fontId: resp.id });
         results.push({ name: resp.name, success: true });
       } catch (err) {
         let errorMessage = '폰트 업로드에 실패했어요.';
@@ -233,7 +247,7 @@
     <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle', lineClamp: '1' })}>
       {values.fontFamily.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily))
         ?.label ??
-        $site?.fonts.find(({ id }) => id === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily))?.name ??
+        currentFontFamily?.name ??
         '(알 수 없는 폰트)'}
     </div>
   {/snippet}
@@ -244,7 +258,15 @@
         <ToolbarDropdownMenuItem
           active={(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily) === value}
           onclick={() => {
-            editor?.current.chain().focus().setFontFamily(value).run();
+            const fontWeight = editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight;
+            const defaultWeight = getDefaultWeight(value, fontWeight) ?? defaultValues.fontWeight;
+
+            editor?.current
+              .chain()
+              .focus()
+              .setFontFamily(value)
+              .setFontWeight(defaultWeight as never)
+              .run();
             close();
           }}
         >
@@ -252,28 +274,30 @@
         </ToolbarDropdownMenuItem>
       {/each}
 
-      {#if $site?.user.subscription}
-        {#each groupedFonts() as { regular, weights } (regular.id)}
+      {#if $user.subscription}
+        {#each $user.fontFamilies as fontFamily (fontFamily.id)}
           <ToolbarDropdownMenuItem
-            active={weights.some(
-              (weight) => weight.id === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily),
-            )}
+            active={currentFontFamily?.id === fontFamily.id}
             onclick={() => {
+              const fontWeight = editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight;
+              const defaultWeight = getDefaultWeight(fontFamily.id, fontWeight) ?? defaultValues.fontWeight;
+
               editor?.current
                 .chain()
                 .focus()
-                .setFontFamily(regular.id as never)
+                .setFontFamily(fontFamily.id as never)
+                .setFontWeight(defaultWeight as never)
                 .run();
               close();
             }}
           >
-            <div style:font-family={regular.id}>{regular.name}</div>
+            <div style:font-family={fontFamily.id}>{fontFamily.name}</div>
           </ToolbarDropdownMenuItem>
         {/each}
       {/if}
       <ToolbarDropdownMenuItem
         onclick={() => {
-          if ($site?.user.subscription) {
+          if ($user.subscription) {
             open = true;
           } else {
             planUpgradeOpen = true;

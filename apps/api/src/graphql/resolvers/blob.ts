@@ -2,11 +2,13 @@ import path from 'node:path';
 import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { getFontMetadata, toWoff2 } from '@typie/fondue';
+import { and, eq } from 'drizzle-orm';
 import qs from 'query-string';
 import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
-import { db, Files, firstOrThrow, Fonts, Images, TableCode, validateDbId } from '@/db';
+import { db, Files, first, firstOrThrow, FontFamilies, Fonts, Images, TableCode, validateDbId } from '@/db';
+import { FontFamilyState } from '@/enums';
 import { stack } from '@/env';
 import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
@@ -31,18 +33,6 @@ File.implement({
     name: t.exposeString('name'),
 
     url: t.string({ resolve: (blob) => `https://typie.net/files/${blob.path}` }),
-  }),
-});
-
-Font.implement({
-  isTypeOf: isTypeOf(TableCode.FONTS),
-  interfaces: [Blob],
-  fields: (t) => ({
-    name: t.exposeString('name'),
-    fullName: t.exposeString('fullName', { nullable: true }),
-    weight: t.exposeInt('weight'),
-
-    url: t.string({ resolve: (font) => `https://typie.net/fonts/${font.path}` }),
   }),
 });
 
@@ -288,20 +278,59 @@ builder.mutationFields((t) => ({
         }),
       );
 
-      return await db
-        .insert(Fonts)
-        .values({
-          userId: ctx.session.userId,
-          name,
-          familyName: metadata.familyName,
-          fullName: metadata.fullName,
-          postScriptName: metadata.postScriptName,
-          weight: metadata.weight,
-          size: woff2.length,
-          path: filePath,
-        })
-        .returning()
-        .then(firstOrThrow);
+      let familyId: string | null = null;
+      const familyName = metadata.familyName || name;
+
+      return await db.transaction(async (tx) => {
+        const fontFamily = await tx
+          .select({ id: FontFamilies.id, state: FontFamilies.state })
+          .from(FontFamilies)
+          .where(and(eq(FontFamilies.userId, ctx.session.userId), eq(FontFamilies.name, familyName)))
+          .then(first);
+
+        if (fontFamily) {
+          familyId = fontFamily.id;
+
+          if (fontFamily.state === FontFamilyState.ARCHIVED) {
+            await tx.update(FontFamilies).set({ state: FontFamilyState.ACTIVE }).where(eq(FontFamilies.id, familyId));
+          }
+        } else {
+          const fontFamily = await tx
+            .insert(FontFamilies)
+            .values({
+              userId: ctx.session.userId,
+              name: familyName,
+            })
+            .returning({ id: FontFamilies.id })
+            .then(firstOrThrow);
+
+          familyId = fontFamily.id;
+        }
+
+        const existingFont = await tx
+          .select({ id: Fonts.id })
+          .from(Fonts)
+          .where(and(eq(Fonts.familyId, familyId), eq(Fonts.weight, metadata.weight)))
+          .then(first);
+
+        if (existingFont) {
+          await tx.delete(Fonts).where(eq(Fonts.id, existingFont.id));
+        }
+
+        return await tx
+          .insert(Fonts)
+          .values({
+            familyId,
+            name,
+            fullName: metadata.fullName,
+            postScriptName: metadata.postScriptName,
+            weight: metadata.weight,
+            size: woff2.length,
+            path: filePath,
+          })
+          .returning()
+          .then(firstOrThrow);
+      });
     },
   }),
 }));

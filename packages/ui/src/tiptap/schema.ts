@@ -33,7 +33,7 @@ import {
   TableRow,
 } from './node-views';
 import { Body, BulletList, Doc, HardBreak, ListItem, OrderedList, Paragraph, Text } from './nodes';
-import { FontFamily, FontSize, TextBackgroundColor, TextColor } from './text-styles';
+import { FontFamily, FontSize, FontWeight, TextBackgroundColor, TextColor } from './text-styles';
 
 export const baseExtensions = [
   // special nodes
@@ -62,6 +62,7 @@ export const baseExtensions = [
   TextBackgroundColor,
   FontFamily,
   FontSize,
+  FontWeight,
 
   // node views
   Blockquote,

@@ -58,6 +58,7 @@ export const Entity = createObjectRef('Entity', T.Entities);
 export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
 export const Font = createObjectRef('Font', T.Fonts);
+export const FontFamily = createObjectRef('FontFamily', T.FontFamilies);
 export const Image = createObjectRef('Image', T.Images);
 export const Notification = createObjectRef('Notification', T.Notifications);
 export const PaymentInvoice = createObjectRef('PaymentInvoice', T.PaymentInvoices);

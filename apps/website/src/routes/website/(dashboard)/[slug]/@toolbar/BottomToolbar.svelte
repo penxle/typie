@@ -30,33 +30,29 @@
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
-  import type { Editor_BottomToolbar_site, Optional } from '$graphql';
+  import type { Editor_BottomToolbar_user } from '$graphql';
 
   type Props = {
-    $site?: Optional<Editor_BottomToolbar_site>;
+    $user: Editor_BottomToolbar_user;
     editor?: Ref<Editor>;
     undoManager: Y.UndoManager;
     style?: SystemStyleObject;
   };
 
-  let { $site: _site, editor, undoManager, style }: Props = $props();
+  let { $user: _user, editor, undoManager, style }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const user = fragment(
+    _user,
     graphql(`
-      fragment Editor_BottomToolbar_site on Site {
+      fragment Editor_BottomToolbar_user on User {
         id
 
-        user {
+        subscription {
           id
-
-          subscription {
-            id
-          }
         }
 
-        ...Editor_BottomToolbar_FontFamily_site
-        ...Editor_BottomToolbar_FontWeight_site
+        ...Editor_BottomToolbar_FontFamily_user
+        ...Editor_BottomToolbar_FontWeight_user
       }
     `),
   );
@@ -259,8 +255,8 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarFontFamily {$site} {editor} />
-    <ToolbarFontWeight {$site} {editor} />
+    <ToolbarFontFamily {$user} {editor} />
+    <ToolbarFontWeight {$user} {editor} />
 
     <ToolbarDropdownButton
       style={css.raw({ width: '60px' })}
@@ -298,7 +294,7 @@
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarButton
-      active={editor?.current.isActive('bold')}
+      active={editor?.current.isActive('text_style', { fontWeight: 700 })}
       disabled={!editor?.current.can().toggleBold()}
       icon={BoldIcon}
       keys={['Mod', 'B']}

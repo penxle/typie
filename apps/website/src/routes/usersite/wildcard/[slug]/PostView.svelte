@@ -104,6 +104,10 @@
             id
             weight
             url
+
+            family {
+              id
+            }
           }
         }
 
@@ -187,10 +191,10 @@
 
   const fontFaces = $derived(
     $entityView.site.fonts
-      .map(
-        (font) =>
-          `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
-      )
+      .flatMap((font) => [
+        `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+        `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+      ])
       .join('\n'),
   );
 

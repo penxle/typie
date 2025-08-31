@@ -154,14 +154,33 @@ export const Folders = pgTable(
   (t) => [index().on(t.entityId)],
 );
 
+export const FontFamilies = pgTable(
+  'font_families',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.FONT_FAMILIES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    state: E._FontFamilyState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.userId, t.name)],
+);
+
 export const Fonts = pgTable(
   'fonts',
   {
     id: text('id')
       .primaryKey()
       .$defaultFn(() => createDbId(TableCode.FONTS)),
-    userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    siteId: text('site_id').references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    familyId: text('family_id')
+      .notNull()
+      .references(() => FontFamilies.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     name: text('name').notNull(),
     familyName: text('family_name'),
     fullName: text('full_name'),
@@ -174,7 +193,7 @@ export const Fonts = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.siteId, t.state)],
+  (t) => [index().on(t.familyId, t.state)],
 );
 
 export const Embeds = pgTable('embeds', {

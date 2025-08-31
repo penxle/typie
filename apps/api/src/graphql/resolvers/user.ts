@@ -11,6 +11,7 @@ import {
   first,
   firstOrThrow,
   firstOrThrowWith,
+  FontFamilies,
   Notifications,
   PaymentInvoices,
   PostCharacterCountChanges,
@@ -37,6 +38,7 @@ import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import {
   CreditCodeState,
   EntityState,
+  FontFamilyState,
   PaymentInvoiceState,
   SingleSignOnProvider,
   SiteState,
@@ -54,6 +56,7 @@ import { builder } from '../builder';
 import {
   CharacterCountChange,
   Entity,
+  FontFamily,
   Image,
   isTypeOf,
   Notification,
@@ -293,6 +296,18 @@ User.implement({
           .then(first);
 
         return preference?.value ?? {};
+      },
+    }),
+
+    fontFamilies: t.field({
+      type: [FontFamily],
+      resolve: async (self) => {
+        const fontFamilies = await db
+          .select()
+          .from(FontFamilies)
+          .where(and(eq(FontFamilies.userId, self.id), eq(FontFamilies.state, FontFamilyState.ACTIVE)));
+
+        return fontFamilies.sort((a, b) => a.name.localeCompare(b.name));
       },
     }),
   }),

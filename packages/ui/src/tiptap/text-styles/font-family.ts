@@ -24,7 +24,11 @@ export const FontFamily = Extension.create({
           fontFamily: {
             parseHTML: (element) => {
               const fontFamily = element.style.fontFamily;
-              if (!fontFamily || (!(fontFamilies as string[]).includes(fontFamily) && !fontFamily.startsWith('FONT0'))) {
+              if (
+                !fontFamily ||
+                // spell-checker:disable-next-line
+                (!(fontFamilies as string[]).includes(fontFamily) && !fontFamily.startsWith('FNTF0') && !fontFamily.startsWith('FONT0'))
+              ) {
                 return null;
               }
 
@@ -50,7 +54,8 @@ export const FontFamily = Extension.create({
       setFontFamily:
         (fontFamily) =>
         ({ commands }) => {
-          if (!fontFamilies.includes(fontFamily) && !fontFamily.startsWith('FONT0')) {
+          // spell-checker:disable-next-line
+          if (!fontFamilies.includes(fontFamily) && !fontFamily.startsWith('FNTF0') && !fontFamily.startsWith('FONT0')) {
             return false;
           }
 

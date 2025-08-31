@@ -13,6 +13,7 @@ export const TableCode = {
   FOLDERS: 'F',
   FOLDER_OPTIONS: 'FO',
   FONTS: 'FONT',
+  FONT_FAMILIES: 'FNTF',
   IMAGES: 'IMG',
   NOTIFICATIONS: 'NT',
   PAYMENT_INVOICES: 'PYIV',

@@ -135,19 +135,23 @@
 
             fonts {
               id
-              name
               weight
               url
+
+              family {
+                id
+              }
             }
 
             ...Editor_Limit_site
             ...Editor_Placeholder_site
             ...Editor_TopToolbar_site
-            ...Editor_BottomToolbar_site
           }
 
           user {
             id
+
+            ...Editor_BottomToolbar_user
           }
 
           node {
@@ -245,10 +249,10 @@
 
   const fontFaces = $derived(
     $query.entity.site.fonts
-      .map(
-        (font) =>
-          `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
-      )
+      .flatMap((font) => [
+        `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+        `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+      ])
       .join('\n'),
   );
 
@@ -810,7 +814,7 @@
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-          <BottomToolbar $site={$query.entity.site} {editor} {undoManager} />
+          <BottomToolbar $user={$query.entity.user} {editor} {undoManager} />
           <div
             style:position={app.preference.current.zenModeEnabled ? 'fixed' : 'relative'}
             style:top={app.preference.current.zenModeEnabled ? '0' : 'auto'}
