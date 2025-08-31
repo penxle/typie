@@ -20,6 +20,10 @@
     if (!container) return;
 
     const handler = () => {
+      if ($effect.tracking()) {
+        return;
+      }
+
       const { selection } = editor.current.state;
       if (!selection.empty && !editor.current.view.composing) {
         visible = false;
