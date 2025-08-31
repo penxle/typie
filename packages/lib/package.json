@@ -18,18 +18,18 @@
   },
   "dependencies": {
     "@logtape/logtape": "^1.0.4",
-    "dayjs": "^1.11.13",
-    "hono": "^4.9.4",
+    "dayjs": "^1.11.18",
+    "hono": "^4.9.5",
     "ipaddr.js": "^2.2.0",
     "remeda": "^2.30.0",
     "ts-pattern": "^5.8.0"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.36.2",
+    "@sveltejs/kit": "^2.37.0",
     "@types/bun": "^1.2.21",
     "@typie/tsconfig": "workspace:*",
     "postcss": "^8.5.6",
-    "svelte": "^5.38.3",
+    "svelte": "^5.38.6",
     "svgo": "^4.0.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.3",
