@@ -24,6 +24,7 @@
   import ToolbarFloatingLink from './ToolbarFloatingLink.svelte';
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarFontFamily from './ToolbarFontFamily.svelte';
+  import ToolbarFontWeight from './ToolbarFontWeight.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -55,6 +56,7 @@
         }
 
         ...Editor_BottomToolbar_FontFamily_site
+        ...Editor_BottomToolbar_FontWeight_site
       }
     `),
   );
@@ -258,6 +260,7 @@
     </ToolbarDropdownButton>
 
     <ToolbarFontFamily {$site} {editor} />
+    <ToolbarFontWeight {$site} {editor} />
 
     <ToolbarDropdownButton
       style={css.raw({ width: '60px' })}
