@@ -5,6 +5,7 @@
   import { HorizontalDivider, Icon, Modal, RingSpinner } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { defaultValues, values } from '@typie/ui/tiptap';
+  import * as R from 'remeda';
   import { TypieError } from '@/errors';
   import GemIcon from '~icons/lucide/gem';
   import InfoIcon from '~icons/lucide/info';
@@ -39,6 +40,7 @@
         fonts {
           id
           name
+          weight
         }
 
         user {
@@ -69,6 +71,7 @@
         fonts {
           id
           name
+          weight
         }
       }
     }
@@ -77,6 +80,23 @@
   let open = $state(false);
   let inflight = $state(false);
   let isDragging = $state(false);
+
+  const groupedFonts = $derived(() => {
+    if (!$site?.fonts) return [];
+
+    return R.pipe(
+      $site.fonts,
+      R.groupBy((font) => font.name),
+      R.values(),
+      R.map((fonts) => {
+        const regularFont = fonts.find((f) => f.weight === 400);
+        return {
+          regular: regularFont || fonts[0],
+          weights: fonts,
+        };
+      }),
+    );
+  });
 
   const errorMap = {
     invalid_font_weight: '폰트가 너무 얇거나 두꺼워요.',
@@ -234,19 +254,21 @@
       {/each}
 
       {#if $site?.user.subscription}
-        {#each $site.fonts as { id, name } (id)}
+        {#each groupedFonts() as { regular, weights } (regular.id)}
           <ToolbarDropdownMenuItem
-            active={(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily) === name}
+            active={weights.some(
+              (weight) => weight.id === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily),
+            )}
             onclick={() => {
               editor?.current
                 .chain()
                 .focus()
-                .setFontFamily(id as never)
+                .setFontFamily(regular.id as never)
                 .run();
               close();
             }}
           >
-            <div style:font-family={id}>{name}</div>
+            <div style:font-family={regular.id}>{regular.name}</div>
           </ToolbarDropdownMenuItem>
         {/each}
       {/if}
