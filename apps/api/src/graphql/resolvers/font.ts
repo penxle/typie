@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { db, first, firstOrThrow, FontFamilies, Fonts, TableCode, validateDbId } from '@/db';
 import { FontFamilyState, FontState } from '@/enums';
 import { builder } from '../builder';
-import { Blob, Font, FontFamily, isTypeOf } from '../objects';
+import { Blob, Font, FontFamily, isTypeOf, User } from '../objects';
 
 Font.implement({
   isTypeOf: isTypeOf(TableCode.FONTS),
@@ -35,7 +35,7 @@ FontFamily.implement({
 
 builder.mutationFields((t) => ({
   archiveFont: t.withAuth({ session: true }).fieldWithInput({
-    type: Font,
+    type: User,
     input: { fontId: t.input.id({ validate: validateDbId(TableCode.FONTS) }) },
     resolve: async (_, { input }, ctx) => {
       const font = await db
@@ -57,7 +57,7 @@ builder.mutationFields((t) => ({
         await db.update(FontFamilies).set({ state: FontFamilyState.ARCHIVED }).where(eq(FontFamilies.id, font.familyId));
       }
 
-      return input.fontId;
+      return ctx.session.userId;
     },
   }),
 }));

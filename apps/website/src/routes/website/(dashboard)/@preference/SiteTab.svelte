@@ -26,11 +26,15 @@
         sites {
           id
           slug
+        }
+
+        fontFamilies {
+          id
+          name
 
           fonts {
             id
-            name
-            fullName
+            weight
           }
         }
       }
@@ -50,6 +54,16 @@
     mutation DashboardLayout_PreferenceModal_SiteTab_ArchiveFont_Mutation($input: ArchiveFontInput!) {
       archiveFont(input: $input) {
         id
+
+        fontFamilies {
+          id
+          name
+
+          fonts {
+            id
+            weight
+          }
+        }
       }
     }
   `);
@@ -103,33 +117,32 @@
   <div class={flex({ direction: 'column', gap: '16px' })}>
     <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>폰트</h3>
 
-    {#each $user.sites[0].fonts as { id, name, fullName } (id)}
-      <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <p class={css({ fontWeight: 'medium' })}>
-          {name}
-          {#if fullName}
-            <span class={css({ fontSize: '12px', color: 'text.faint' })}>({fullName})</span>
-          {/if}
-        </p>
+    {#each $user.fontFamilies as { id, name, fonts } (id)}
+      {#each fonts as { id, weight } (id)}
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <p class={css({ fontWeight: 'medium' })}>
+            {name} ({weight})
+          </p>
 
-        <Button
-          onclick={() => {
-            Dialog.confirm({
-              title: '폰트 삭제',
-              message: `"${name}" 폰트를 삭제하시겠어요?`,
-              action: 'danger',
-              actionLabel: '삭제',
-              actionHandler: async () => {
-                await archiveFont({ fontId: id });
-              },
-            });
-          }}
-          size="sm"
-          variant="secondary"
-        >
-          삭제
-        </Button>
-      </div>
+          <Button
+            onclick={() => {
+              Dialog.confirm({
+                title: '폰트 삭제',
+                message: `"${name}" 폰트를 삭제하시겠어요?`,
+                action: 'danger',
+                actionLabel: '삭제',
+                actionHandler: async () => {
+                  await archiveFont({ fontId: id });
+                },
+              });
+            }}
+            size="sm"
+            variant="secondary"
+          >
+            삭제
+          </Button>
+        </div>
+      {/each}
     {:else}
       <p class={css({ fontSize: '14px', color: 'text.faint' })}>에디터에서 업로드한 폰트가 여기 나타나요</p>
     {/each}
