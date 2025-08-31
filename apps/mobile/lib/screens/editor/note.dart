@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +27,8 @@ class Note extends HookWidget {
     final scope = EditorStateScope.of(context);
     final yjsState = useValueListenable(scope.yjsState);
     final mode = useValueListenable(scope.mode);
+
+    final debounceTimer = useRef<Timer?>(null);
 
     useEffect(() {
       if (controller.text.isEmpty) {
@@ -65,6 +69,12 @@ class Note extends HookWidget {
       return null;
     }, [mode]);
 
+    useEffect(() {
+      return () {
+        debounceTimer.value?.cancel();
+      };
+    }, []);
+
     return Screen(
       resizeToAvoidBottomInset: true,
       heading: Heading(
@@ -99,8 +109,11 @@ class Note extends HookWidget {
                   hintText: '포스트에 대해 기억할 내용이나 작성에 도움이 되는 내용이 있다면 자유롭게 적어보세요. \n\n글쓰기 중 상단바를 쓸어넘겨서 작성 노트를 열 수 있어요.',
                   hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
                 ),
-                onChanged: (value) async {
-                  await scope.command('note', attrs: {'note': value});
+                onChanged: (value) {
+                  debounceTimer.value?.cancel();
+                  debounceTimer.value = Timer(Duration.zero, () async {
+                    await scope.command('note', attrs: {'note': value});
+                  });
                 },
               ),
             ),
