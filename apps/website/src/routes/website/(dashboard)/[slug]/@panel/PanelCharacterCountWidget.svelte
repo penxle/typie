@@ -4,6 +4,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { comma } from '@typie/ui/utils';
+  import { untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { textSerializers } from '@/pm/serializer';
   import IconChevronRight from '~icons/lucide/chevron-right';
@@ -52,11 +53,29 @@
   };
 
   $effect(() => {
-    editor?.current.on('transaction', handler);
+    return untrack(() => {
+      if (editor) {
+        editor.current.on('transaction', handler);
 
-    return () => {
-      editor?.current.off('transaction', handler);
-    };
+        doc = getText(editor.current.state.doc, {
+          blockSeparator: '\n',
+          textSerializers,
+        });
+
+        selection = getTextBetween(
+          editor.current.state.doc,
+          { from: editor.current.state.selection.from, to: editor.current.state.selection.to },
+          {
+            blockSeparator: '\n',
+            textSerializers,
+          },
+        );
+
+        return () => {
+          editor?.current.off('transaction', handler);
+        };
+      }
+    });
   });
 </script>
 
