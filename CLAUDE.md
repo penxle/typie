@@ -41,15 +41,25 @@ Typie is a Korean writing platform that aims to be a "space for writing thoughts
 - **Framework**: Flutter/Dart
 - **GraphQL**: Ferry client
 
-### PandaCSS Token Usage
+### Styling Guidelines
+
+#### PandaCSS Token Usage
 
 ```typescript
 // Correct usage
-css({ paddingX: '16px', paddingY: '8px', color: 'text.primary', backgroundColor: 'surface.primary', lineHeight: '[1.6]' });
+css({ paddingX: '16px', paddingY: '8px', color: 'text.default', backgroundColor: 'surface.default', lineHeight: '[1.6]' });
 
 // Incorrect usage (hardcoded values, value without unit, shorthands, multiple values, arbitrary values without brackets)
 css({ p: '16 8', color: '#000000', bg: 'white', lineHeight: '1.6' });
 ```
+
+#### Color Tokens
+
+- **Web (PandaCSS)**: Always use semantic color tokens defined in `packages/styled-system/src/colors.ts`
+  - Examples: `text.default`, `surface.default`, `border.subtle`, `accent.brand.default`
+- **Mobile (Flutter)**: Use semantic colors from `apps/mobile/lib/styles/semantic_colors.dart`
+  - Access via `context.colors.textDefault` (using BuildContext extension from `lib/context/theme.dart`)
+  - Example: `Icon(Icons.check, color: context.colors.textDefault)`
 
 ## Workflow Guidelines
 
