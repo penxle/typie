@@ -159,11 +159,12 @@
         "textColor": { "default": null },
         "textBackgroundColor": { "default": null },
         "fontFamily": { "default": null },
-        "fontSize": { "default": null }
+        "fontSize": { "default": null },
+        "fontWeight": { "default": null }
       },
       "parseDOM": [{ "tag": "span" }]
     },
-    "bold": { "parseDOM": [{ "tag": "b" }, { "tag": "strong" }, { "style": "font-weight", "consuming": false }] },
+    "bold": {},
     "italic": { "parseDOM": [{ "tag": "i" }, { "tag": "em" }, { "style": "font-style", "consuming": false }] },
     "strike": { "parseDOM": [{ "tag": "s" }, { "tag": "del" }, { "style": "text-decoration-line", "consuming": false }] },
     "underline": { "parseDOM": [{ "tag": "u" }, { "style": "text-decoration-line", "consuming": false }] }

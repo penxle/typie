@@ -7,6 +7,7 @@ import './resolvers/canvas';
 import './resolvers/comment';
 import './resolvers/entity';
 import './resolvers/folder';
+import './resolvers/font';
 import './resolvers/internal';
 import './resolvers/notification';
 import './resolvers/stats';

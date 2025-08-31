@@ -1,104 +1,106 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { defaultValues } from '@typie/ui/tiptap';
+  import { defaultValues, values } from '@typie/ui/tiptap';
   import { fragment, graphql } from '$graphql';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_BottomToolbar_FontWeight_site, Optional } from '$graphql';
+  import type { Editor_BottomToolbar_FontWeight_user } from '$graphql';
 
   type Props = {
-    $site: Optional<Editor_BottomToolbar_FontWeight_site>;
+    $user: Editor_BottomToolbar_FontWeight_user;
     editor?: Ref<Editor>;
   };
 
-  let { $site: _site, editor }: Props = $props();
+  let { $user: _user, editor }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const user = fragment(
+    _user,
     graphql(`
-      fragment Editor_BottomToolbar_FontWeight_site on Site {
+      fragment Editor_BottomToolbar_FontWeight_user on User {
         id
 
-        fonts {
+        fontFamilies {
           id
           name
-          weight
+
+          fonts {
+            id
+            weight
+          }
         }
       }
     `),
   );
 
-  const weightLabels: Record<number, string> = {
-    100: '가장 얇게',
-    200: '얇게',
-    300: '조금 얇게',
-    400: '보통',
-    500: '조금 두껍게',
-    600: '두껍게',
-    700: '더 두껍게',
-    800: '많이 두껍게',
-    900: '가장 두껍게',
-  };
+  const currentFontFamilyAndWeights = $derived.by(() => {
+    const defaultFontFamilyAndWeights = {
+      family: defaultValues.fontFamily,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      weights: values.fontFamily.find((f) => f.value === defaultValues.fontFamily)!.weights.toSorted((a, b) => a - b),
+    };
 
-  const currentFontFamily = $derived(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily);
+    const fontOrFontIdOrFontFamilyId = editor?.current.getAttributes('text_style').fontFamily;
+    if (!fontOrFontIdOrFontFamilyId) return defaultFontFamilyAndWeights;
 
-  const currentFont = $derived.by(() => {
-    if (!$site?.fonts || !currentFontFamily) return null;
-    return $site.fonts.find((f) => f.id === currentFontFamily);
-  });
+    const systemFontFamily = values.fontFamily.find((f) => f.value === fontOrFontIdOrFontFamilyId);
+    if (systemFontFamily) {
+      return {
+        family: systemFontFamily.value,
+        weights: systemFontFamily.weights.toSorted((a, b) => a - b),
+      };
+    }
 
-  const availableWeights = $derived.by(() => {
-    const font = currentFont;
-    if (!font || !$site?.fonts) return [];
+    const userFonts = $user.fontFamilies.flatMap((f) => f.fonts);
+    if (userFonts.length === 0) return defaultFontFamilyAndWeights;
 
-    return $site.fonts.filter((f) => f.name === font.name).sort((a, b) => a.weight - b.weight);
-  });
+    const userFontFamily = $user.fontFamilies.find(
+      ({ id, fonts }) => id === fontOrFontIdOrFontFamilyId || fonts.some(({ id }) => id === fontOrFontIdOrFontFamilyId),
+    );
+    if (!userFontFamily) return defaultFontFamilyAndWeights;
 
-  const currentWeightLabel = $derived.by(() => {
-    const weight = currentFont?.weight || 400;
-    return weightLabels[weight] || weight.toString();
-  });
-
-  const shouldShow = $derived.by(() => {
-    return availableWeights.length > 1;
+    return {
+      family: userFontFamily.id,
+      weights: userFontFamily.fonts.map((f) => f.weight).toSorted((a, b) => a - b),
+    };
   });
 </script>
 
-{#if shouldShow}
-  <ToolbarDropdownButton
-    style={css.raw({ width: '100px' })}
-    chevron
-    disabled={!editor?.current.can().chain().focus().setFontFamily(defaultValues.fontFamily).run()}
-    label="폰트 두께"
-    size="small"
-  >
-    {#snippet anchor()}
-      <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle', lineClamp: '1' })}>
-        {currentWeightLabel}
-      </div>
-    {/snippet}
+<ToolbarDropdownButton
+  style={css.raw({ width: '100px' })}
+  chevron
+  disabled={!editor?.current.can().chain().focus().setFontFamily(defaultValues.fontFamily).run()}
+  label="폰트 두께"
+  size="small"
+>
+  {#snippet anchor()}
+    <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle', lineClamp: '1' })}>
+      {values.fontWeight.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight))
+        ?.label}
+    </div>
+  {/snippet}
 
-    {#snippet floating({ close })}
-      <ToolbarDropdownMenu>
-        {#each availableWeights as font (font.id)}
-          <ToolbarDropdownMenuItem
-            active={currentFont?.id === font.id}
-            onclick={() => {
-              editor?.current
-                .chain()
-                .focus()
-                .setFontFamily(font.id as never)
-                .run();
-              close();
-            }}
-          >
-            <div style:font-family={font.id}>{weightLabels[font.weight] || font.weight}</div>
-          </ToolbarDropdownMenuItem>
-        {/each}
-      </ToolbarDropdownMenu>
-    {/snippet}
-  </ToolbarDropdownButton>
-{/if}
+  {#snippet floating({ close })}
+    <ToolbarDropdownMenu>
+      {#each currentFontFamilyAndWeights.weights as weight (weight)}
+        <ToolbarDropdownMenuItem
+          active={(editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight) === weight}
+          onclick={() => {
+            editor?.current
+              .chain()
+              .focus()
+              .setFontWeight(weight as never)
+              .run();
+            close();
+          }}
+        >
+          <div style:font-family={currentFontFamilyAndWeights.family} style:font-weight={weight}>
+            {values.fontWeight.find(({ value }) => value === weight)?.label || weight}
+          </div>
+        </ToolbarDropdownMenuItem>
+      {/each}
+    </ToolbarDropdownMenu>
+  {/snippet}
+</ToolbarDropdownButton>
