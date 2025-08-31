@@ -92,7 +92,7 @@
     });
 
     return () => {
-      editor.current.commands.clearSearch();
+      editor?.current.commands.clearSearch();
     };
   });
 </script>
