@@ -303,10 +303,19 @@ builder.queryFields((t) => ({
   entities: t.withAuth({ session: true }).field({
     type: [Entity],
     args: {
-      entityIds: t.arg.idList({ required: true, validate: { items: validateDbId(TableCode.ENTITIES) } }),
+      entityIds: t.arg.idList({ required: false, validate: { items: validateDbId(TableCode.ENTITIES) } }),
+      slugs: t.arg.stringList({ required: false }),
     },
     resolve: async (_, args, ctx) => {
-      const entities = await db.select().from(Entities).where(inArray(Entities.id, args.entityIds));
+      if (!args.entityIds && !args.slugs) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const entities = await db
+        .select()
+        .from(Entities)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        .where(args.entityIds ? inArray(Entities.id, args.entityIds) : inArray(Entities.slug, args.slugs!));
 
       if (entities.length === 0) {
         return [];

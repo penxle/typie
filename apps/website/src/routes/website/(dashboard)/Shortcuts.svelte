@@ -2,6 +2,7 @@
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { fragment, graphql } from '$graphql';
+  import { getSplitViewContext } from './[slug]/@split-view/context.svelte';
   import type { DashboardLayout_Shortcuts_query } from '$graphql';
 
   type Props = {
@@ -11,6 +12,7 @@
   let { $query: _query }: Props = $props();
 
   const app = getAppContext();
+  const splitView = getSplitViewContext();
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = fragment(
@@ -42,7 +44,12 @@
 
       event.preventDefault();
 
-      app.preference.current.panelExpanded = !app.preference.current.panelExpanded;
+      const id = splitView.state.current.focusedViewId;
+      if (id) {
+        app.preference.current.panelExpandedByViewId[id] = !app.preference.current.panelExpandedByViewId[id];
+
+        app.preference.current.panelTabByViewId[id] ??= 'info';
+      }
 
       return;
     }
@@ -67,13 +74,15 @@
       if (!app.state.current) return;
 
       event.preventDefault();
-      app.state.findReplaceOpen = true;
+      if (splitView.state.current.focusedViewId) {
+        app.state.findReplaceOpenByViewId[splitView.state.current.focusedViewId] = true;
+      }
 
       return;
     }
 
     if (event.code === 'Escape') {
-      if (app.state.findReplaceOpen) {
+      if (splitView.state.current.focusedViewId && app.state.findReplaceOpenByViewId[splitView.state.current.focusedViewId]) {
         return;
       }
 

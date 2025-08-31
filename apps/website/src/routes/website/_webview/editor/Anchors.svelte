@@ -28,13 +28,13 @@
       return {};
     }
 
-    return getAnchorElements(Object.keys(anchors.current));
+    return getAnchorElements(editor.current, Object.keys(anchors.current));
   });
 
   const anchorPositions = $derived.by(() => {
     if (!editor || Object.keys(anchorElements).length === 0) return [];
 
-    return calculateAnchorPositions(anchorElements, anchors.current).map(({ nodeId, position, name, excerpt }) => ({
+    return calculateAnchorPositions(editor.current, anchorElements, anchors.current).map(({ nodeId, position, name, excerpt }) => ({
       nodeId,
       position,
       name,
@@ -69,10 +69,10 @@
       const node = editor.current.state.doc.nodeAt(targetPos);
 
       if (node && node.attrs.nodeId) {
-        const element = document.querySelector(`[data-node-id="${node.attrs.nodeId}"]`);
+        const element = editor.current.view.dom.querySelector(`[data-node-id="${node.attrs.nodeId}"]`);
         if (!element) return null;
 
-        const lastNodeOffsetTop = getLastNodeOffsetTop();
+        const lastNodeOffsetTop = getLastNodeOffsetTop(editor.current.view.dom);
         if (lastNodeOffsetTop === null) return null;
 
         const offsetTop = (element as HTMLElement).offsetTop;
@@ -95,10 +95,10 @@
 
       if (!nodeId) return null;
 
-      const element = document.querySelector(`[data-node-id="${nodeId}"]`);
+      const element = editor.current.view.dom.querySelector(`[data-node-id="${nodeId}"]`);
       if (!element) return null;
 
-      const lastNodeOffsetTop = getLastNodeOffsetTop();
+      const lastNodeOffsetTop = getLastNodeOffsetTop(editor.current.view.dom);
       if (lastNodeOffsetTop === null) return null;
 
       const offsetTop = (element as HTMLElement).offsetTop;
