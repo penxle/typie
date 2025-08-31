@@ -252,7 +252,7 @@ class AnchorBottomSheet extends HookWidget {
                               )
                             else
                               Container(
-                                width: 40,
+                                constraints: const BoxConstraints(minWidth: 40),
                                 alignment: Alignment.center,
                                 child: Text(
                                   isCurrent ? '현재' : '${(position * 100).toStringAsFixed(0)}%',
