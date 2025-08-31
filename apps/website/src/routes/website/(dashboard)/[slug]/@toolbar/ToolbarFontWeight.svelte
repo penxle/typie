@@ -32,9 +32,15 @@
   );
 
   const weightLabels: Record<number, string> = {
-    300: '가늘게',
+    100: '가장 얇게',
+    200: '얇게',
+    300: '조금 얇게',
     400: '보통',
-    500: '약간 굵게',
+    500: '조금 두껍게',
+    600: '두껍게',
+    700: '더 두껍게',
+    800: '많이 두껍게',
+    900: '가장 두껍게',
   };
 
   const currentFontFamily = $derived(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily);

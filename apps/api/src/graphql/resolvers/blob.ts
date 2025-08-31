@@ -260,9 +260,6 @@ builder.mutationFields((t) => ({
       const buffer = await object.Body!.transformToByteArray();
 
       const metadata = getFontMetadata(buffer);
-      if (metadata.weight < 300 || metadata.weight > 500) {
-        throw new TypieError({ code: 'invalid_font_weight' });
-      }
 
       if (metadata.style !== 'normal') {
         throw new TypieError({ code: 'invalid_font_style' });
