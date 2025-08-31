@@ -207,7 +207,6 @@
 
   const doc = new Y.Doc();
   let viewDoc = $state<Y.Doc>();
-  const effectiveDoc = $derived(viewDoc || doc);
 
   const awareness = new YAwareness.Awareness(doc);
   const undoManager = new Y.UndoManager([doc.getMap('attrs'), doc.getXmlFragment('body')], {
@@ -1049,7 +1048,7 @@
 
                     {#if editor && mounted}
                       <InEditorBody {editor} pageLayout={effectivePageLayout.current ?? null}>
-                        <Placeholder $site={$query.entity.site} doc={effectiveDoc} {editor} />
+                        <Placeholder $site={$query.entity.site} {doc} {editor} />
                       </InEditorBody>
                       {#if app.preference.current.lineHighlightEnabled}
                         <Highlight {editor} />
@@ -1073,10 +1072,12 @@
                 {/if}
               </EditorLayout>
             </div>
+
             {#if editor && app.state.findReplaceOpen}
               <FloatingFindReplace close={() => (app.state.findReplaceOpen = false)} {editor} />
             {/if}
-            <Anchors doc={effectiveDoc} {editor} showOutline={showAnchorOutline} />
+
+            <Anchors {doc} {editor} showOutline={showAnchorOutline} />
           </div>
         </div>
         {#if app.preference.current.zenModeEnabled}
