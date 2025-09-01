@@ -2,7 +2,6 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import Columns2Icon from '~icons/lucide/columns-2';
@@ -28,7 +27,6 @@
 
   let { canvas, entity, via }: Props = $props();
 
-  const app = getAppContext();
   const splitView = getSplitViewContext();
 
   const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
@@ -105,11 +103,9 @@
   </div>
 {/snippet}
 
-{#if app.preference.current.experimental_splitViewEnabled}
-  <MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
-  <MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
-  <HorizontalDivider color="secondary" />
-{/if}
+<MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
+<MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
+<HorizontalDivider color="secondary" />
 
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
 
