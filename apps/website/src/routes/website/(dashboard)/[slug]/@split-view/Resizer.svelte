@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getSplitViewContext } from './context.svelte';
-  import { VIEW_MIN_SIZE } from './utils';
+  import { getMinSizeForView } from './utils';
   import type { SplitView } from './context.svelte';
 
   type Props = {
@@ -81,7 +81,12 @@
 
     const deltaPercent = (deltaPixels / totalSize) * 100;
 
-    const minSizePercent = (VIEW_MIN_SIZE / totalSize) * 100;
+    const leftChild = view.children[index];
+    const rightChild = view.children[index + 1];
+    const leftMinSize = getMinSizeForView(leftChild, direction);
+    const rightMinSize = getMinSizeForView(rightChild, direction);
+    const leftMinSizePercent = (leftMinSize / totalSize) * 100;
+    const rightMinSizePercent = (rightMinSize / totalSize) * 100;
 
     const currentPercentages = { ...context.state.current.currentPercentages };
 
@@ -92,10 +97,10 @@
     let rightDesired = initialViewSizes[rightChildId] - deltaPercent;
 
     // NOTE: 왼쪽 뷰가 최소 크기에 도달했을 때, 추가 공간은 인접하지 않은 뷰들을 압축하여 확보
-    if (leftDesired < minSizePercent && deltaPercent < 0) {
-      currentPercentages[leftChildId] = minSizePercent;
+    if (leftDesired < leftMinSizePercent && deltaPercent < 0) {
+      currentPercentages[leftChildId] = leftMinSizePercent;
 
-      const totalAvailable = initialViewSizes[leftChildId] + initialViewSizes[rightChildId] - minSizePercent;
+      const totalAvailable = initialViewSizes[leftChildId] + initialViewSizes[rightChildId] - leftMinSizePercent;
       currentPercentages[rightChildId] = Math.min(totalAvailable, initialViewSizes[rightChildId] - deltaPercent);
 
       if (rightDesired > totalAvailable) {
@@ -106,7 +111,9 @@
           if (childId === leftChildId || childId === rightChildId) continue;
 
           const initialSize = initialViewSizes[childId];
-          const availableToCompress = Math.max(0, initialSize - minSizePercent);
+          const childMinSize = getMinSizeForView(view.children[i], direction);
+          const childMinSizePercent = (childMinSize / totalSize) * 100;
+          const availableToCompress = Math.max(0, initialSize - childMinSizePercent);
           const compressed = Math.min(availableToCompress, remainingNeeded);
 
           if (compressed > 0) {
@@ -117,10 +124,10 @@
         }
       }
       // NOTE: 오른쪽 뷰가 최소 크기에 도달했을 때
-    } else if (rightDesired < minSizePercent && deltaPercent > 0) {
-      currentPercentages[rightChildId] = minSizePercent;
+    } else if (rightDesired < rightMinSizePercent && deltaPercent > 0) {
+      currentPercentages[rightChildId] = rightMinSizePercent;
 
-      const totalAvailable = initialViewSizes[leftChildId] + initialViewSizes[rightChildId] - minSizePercent;
+      const totalAvailable = initialViewSizes[leftChildId] + initialViewSizes[rightChildId] - rightMinSizePercent;
       currentPercentages[leftChildId] = Math.min(totalAvailable, initialViewSizes[leftChildId] + deltaPercent);
 
       if (leftDesired > totalAvailable) {
@@ -131,7 +138,9 @@
           if (childId === leftChildId || childId === rightChildId) continue;
 
           const initialSize = initialViewSizes[childId];
-          const availableToCompress = Math.max(0, initialSize - minSizePercent);
+          const childMinSize = getMinSizeForView(view.children[i], direction);
+          const childMinSizePercent = (childMinSize / totalSize) * 100;
+          const availableToCompress = Math.max(0, initialSize - childMinSizePercent);
           const compressed = Math.min(availableToCompress, remainingNeeded);
 
           if (compressed > 0) {
@@ -142,8 +151,8 @@
         }
       }
     } else {
-      currentPercentages[leftChildId] = Math.max(minSizePercent, leftDesired);
-      currentPercentages[rightChildId] = Math.max(minSizePercent, rightDesired);
+      currentPercentages[leftChildId] = Math.max(leftMinSizePercent, leftDesired);
+      currentPercentages[rightChildId] = Math.max(rightMinSizePercent, rightDesired);
     }
 
     context.state.current = {

@@ -23,7 +23,8 @@
     "app.html",
     "naver*.html",
     "apps/mobile/android",
-    "apps/mobile/ios"
+    "apps/mobile/ios",
+    "packages/styled-system/styled-system"
   ],
   "dictionaries": ["cspell.txt"],
   "dictionaryDefinitions": [
