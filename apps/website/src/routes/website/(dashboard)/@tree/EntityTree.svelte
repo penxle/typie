@@ -602,6 +602,8 @@
         return;
       }
     }
+
+    endDragging(true);
   };
 
   const endDragging = (canceled = false) => {
