@@ -285,8 +285,29 @@
   const updateDropTarget = (clientX: number, clientY: number) => {
     if (!dragging || !tree) return;
 
+    const trashElement = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-type="trash"]');
+
+    if (trashElement) {
+      const rect = trashElement.getBoundingClientRect();
+      dragging.indicator = {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+        opacity: 0.5,
+        transform: undefined,
+      };
+      dragging.drop = { target: 'trash' };
+      return;
+    }
+
+    const targetElement =
+      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-id]') ??
+      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
+
     const splitViewElement = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-view-id]');
-    if (splitViewElement && dragging.eligible) {
+
+    if (!targetElement && splitViewElement && dragging.eligible) {
       if (dragDropContext && !dragDropContext.state.isDragging) {
         const entityType = dragging.element.dataset.type;
         const entitySlug = dragging.element.dataset.slug;
@@ -305,26 +326,12 @@
       return;
     }
 
-    const trashElement = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-type="trash"]');
-    if (trashElement) {
-      const rect = trashElement.getBoundingClientRect();
-      dragging.indicator = {
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        height: rect.height,
-        opacity: 0.5,
-        transform: undefined,
-      };
-      dragging.drop = { target: 'trash' };
+    if (!targetElement) {
       return;
     }
 
-    const targetElement =
-      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-id]') ??
-      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
-    if (!targetElement) {
-      return;
+    if (dragDropContext.state.isDragging) {
+      dragDropContext.cancelDrag();
     }
 
     const entityId = dragging.element.dataset.id;
@@ -717,7 +724,7 @@
         borderRadius: '2px',
         backgroundColor: 'accent.brand.subtle',
         pointerEvents: 'none',
-        zIndex: 'panel',
+        zIndex: 'sidebar',
       })}
       use:portal
       transition:fade|global={{ duration: 100 }}
@@ -745,7 +752,7 @@
           fontSize: '14px',
           fontWeight: 'bold',
           pointerEvents: 'none',
-          zIndex: 'overPanel',
+          zIndex: 'sidebar',
         })}
         use:portal
       >
@@ -777,7 +784,7 @@
           position: 'fixed',
           opacity: '[0.2]',
           pointerEvents: 'none',
-          zIndex: 'overPanel',
+          zIndex: 'sidebar',
         })}
         use:portal
       >

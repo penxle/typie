@@ -18,6 +18,7 @@ export const zIndex = defineTokens.zIndex({
   underPanel: { value: '68' },
   panel: { value: '70' },
   overPanel: { value: '72' },
+  sidebar: { value: '75' },
   menu: { value: '80' },
   modal: { value: '80' },
   tooltip: { value: '90' },
