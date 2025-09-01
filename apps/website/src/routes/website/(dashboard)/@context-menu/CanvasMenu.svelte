@@ -11,10 +11,9 @@
   import Rows2Icon from '~icons/lucide/rows-2';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
-  import { addSplitView } from '../[slug]/@split-view/utils';
+  import { addSplitViewToState } from '../[slug]/@split-view/utils';
 
   type Props = {
     canvas: {
@@ -31,6 +30,11 @@
 
   const app = getAppContext();
   const splitView = getSplitViewContext();
+
+  const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
+    addSplitViewToState(splitView.state, entity.slug, direction);
+    mixpanel.track('add_split_view', { via, direction });
+  };
 
   const duplicateCanvas = graphql(`
     mutation CanvasMenu_DuplicateCanvas_Mutation($input: DuplicateCanvasInput!) {
@@ -82,15 +86,6 @@
         mixpanel.track('delete_canvas', { via });
       },
     });
-  };
-
-  const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
-    if (page.params.slug && splitView.state.current.view) {
-      const { splitViews, focusedSplitViewId } = addSplitView(splitView.state.current.view, entity.slug, direction);
-      splitView.state.current.view = splitViews;
-      splitView.state.current.focusedViewId = focusedSplitViewId;
-      mixpanel.track('add_split_view', { via, direction });
-    }
   };
 </script>
 
