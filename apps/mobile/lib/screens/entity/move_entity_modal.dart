@@ -4,6 +4,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
@@ -296,10 +297,10 @@ class MoveEntityModal extends HookWidget {
                                 GEntityScreen_MoveEntities_MutationReq(
                                   (b) => b
                                     ..vars.input.entityIds.addAll(selectedItems)
-                                    ..vars.input.parentEntityId = currentEntity.value?.id
+                                    ..vars.input.parentEntityId = Value.present(currentEntity.value?.id)
                                     ..vars.input.lowerOrder = folderEntities.value!.isNotEmpty
-                                        ? folderEntities.value![folderEntities.value!.length - 1].order
-                                        : null,
+                                        ? Value.present(folderEntities.value![folderEntities.value!.length - 1].order)
+                                        : const Value.absent(),
                                 ),
                               );
 
@@ -318,10 +319,10 @@ class MoveEntityModal extends HookWidget {
                                 GEntityScreen_MoveEntity_MutationReq(
                                   (b) => b
                                     ..vars.input.entityId = singleEntity!.id
-                                    ..vars.input.parentEntityId = currentEntity.value?.id
+                                    ..vars.input.parentEntityId = Value.present(currentEntity.value?.id)
                                     ..vars.input.lowerOrder = folderEntities.value!.isNotEmpty
-                                        ? folderEntities.value![folderEntities.value!.length - 1].order
-                                        : null,
+                                        ? Value.present(folderEntities.value![folderEntities.value!.length - 1].order)
+                                        : const Value.absent(),
                                 ),
                               );
 

@@ -8,6 +8,7 @@ targets:
           when_extensions:
             when: true
             maybeWhen: true
+          tristate_optionals: true
           type_overrides:
             DateTime:
               name: Jiffy
@@ -29,3 +30,5 @@ targets:
           custom_serializers:
             - import: 'package:typie/graphql/serializer.dart'
               name: DateTimeSerializer
+            - import: 'package:built_value/src/json_object_serializer.dart'
+              name: JsonObjectSerializer

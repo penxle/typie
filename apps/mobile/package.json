@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "clean": "flutter clean && dart run build_runner clean && bun run clean:generated",
-    "clean:generated": "find . -name '__generated__' -type d -print -delete",
+    "clean:generated": "find . -name '__generated__' -type d -exec rm -rf {} +",
     "codegen:build": "doppler run -- dart run build_runner build --delete-conflicting-outputs",
     "codegen:watch": "doppler run -- dart run build_runner watch --delete-conflicting-outputs"
   },
