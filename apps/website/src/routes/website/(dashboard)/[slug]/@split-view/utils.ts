@@ -86,14 +86,14 @@ export const closeSplitView = (splitViews: SplitView, splitViewId: string): Spli
   return splitViews;
 };
 
-export const replaceSplitView = (view: SplitView, id: string, newSlug: string, newId: string): SplitView => {
+export const replaceSplitView = (view: SplitView, id: string, newSlug: string): SplitView => {
   if (view.type === 'item') {
-    return view.id === id ? { ...view, slug: newSlug, id: newId } : view;
+    return view.id === id ? { ...view, slug: newSlug } : view;
   }
 
   let changed = false;
   const children = view.children.map((child) => {
-    const next = replaceSplitView(child, id, newSlug, newId);
+    const next = replaceSplitView(child, id, newSlug);
     if (next !== child) changed = true;
     return next;
   });
@@ -188,10 +188,6 @@ export const addSplitViewToState = (state: Ref<SplitViewState>, slug: string, di
       [focusedSplitViewId]: newPercentages[focusedSplitViewId],
     };
   }
-};
-
-export const replaceViewInSplitView = (splitViews: SplitView, viewId: string, newSlug: string): SplitView => {
-  return replaceSplitView(splitViews, viewId, newSlug, viewId);
 };
 
 export const addViewToSplitView = (
