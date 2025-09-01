@@ -8,12 +8,48 @@ import 'package:typie/widgets/vertical_divider.dart';
 
 final editorValues = <String, List<Map<String, dynamic>>>{
   'fontFamily': [
-    {'label': '프리텐다드', 'value': 'Pretendard'},
-    {'label': '코펍월드돋움', 'value': 'KoPubWorldDotum'},
-    {'label': '나눔바른고딕', 'value': 'NanumBarunGothic'},
-    {'label': '리디바탕', 'value': 'RIDIBatang'},
-    {'label': '코펍월드바탕', 'value': 'KoPubWorldBatang'},
-    {'label': '나눔명조', 'value': 'NanumMyeongjo'},
+    {
+      'label': '프리텐다드',
+      'value': 'Pretendard',
+      'weights': [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    },
+    {
+      'label': '코펍월드돋움',
+      'value': 'KoPubWorldDotum',
+      'weights': [500, 700],
+    },
+    {
+      'label': '나눔바른고딕',
+      'value': 'NanumBarunGothic',
+      'weights': [400, 700],
+    },
+    {
+      'label': '리디바탕',
+      'value': 'RIDIBatang',
+      'weights': [400],
+    },
+    {
+      'label': '코펍월드바탕',
+      'value': 'KoPubWorldBatang',
+      'weights': [500, 700],
+    },
+    {
+      'label': '나눔명조',
+      'value': 'NanumMyeongjo',
+      'weights': [400, 700],
+    },
+  ],
+
+  'fontWeight': [
+    {'label': '가장 얇게', 'value': 100},
+    {'label': '얇게', 'value': 200},
+    {'label': '더 얇게', 'value': 300},
+    {'label': '보통', 'value': 400},
+    {'label': '조금 두껍게', 'value': 500},
+    {'label': '두껍게', 'value': 600},
+    {'label': '더 두껍게', 'value': 700},
+    {'label': '아주 두껍게', 'value': 800},
+    {'label': '가장 두껍게', 'value': 900},
   ],
 
   'fontSize': [
@@ -366,6 +402,7 @@ final editorValues = <String, List<Map<String, dynamic>>>{
 
 const editorDefaultValues = <String, dynamic>{
   'fontFamily': 'Pretendard',
+  'fontWeight': 400,
   'fontSize': 16,
   'textColor': 'black',
   'textBackgroundColor': 'none',
