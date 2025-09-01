@@ -202,7 +202,7 @@ class SettingsScreen extends HookWidget {
                     _Item(
                       label: '이용약관',
                       onTap: () async {
-                        final url = Uri.parse('https://help.typie.co/legal/terms');
+                        final url = Uri.parse('https://typie.co/legal/terms');
                         await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                       },
                     ),
@@ -210,7 +210,7 @@ class SettingsScreen extends HookWidget {
                     _Item(
                       label: '개인정보처리방침',
                       onTap: () async {
-                        final url = Uri.parse('https://help.typie.co/legal/privacy');
+                        final url = Uri.parse('https://typie.co/legal/privacy');
                         await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                       },
                     ),

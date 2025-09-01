@@ -184,7 +184,7 @@
   });
 
   const agreements = [
-    { name: '타이피 결제 이용약관', url: 'https://help.typie.co/legal/terms' },
+    { name: '타이피 결제 이용약관', url: 'https://typie.co/legal/terms' },
     { name: 'NICEPAY 전자금융거래 기본약관', url: 'https://www.nicepay.co.kr/cs/terms/policy1.do' },
   ];
 
