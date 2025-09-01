@@ -87,9 +87,7 @@
         splitView.state.current.focusedViewId = findViewIdBySlug(splitView.state.current.view, slug);
       } else {
         if (focusedSplitViewId) {
-          const newId = nanoid();
-          splitView.state.current.view = replaceSplitView(splitView.state.current.view, focusedSplitViewId, slug, newId);
-          splitView.state.current.focusedViewId = newId;
+          splitView.state.current.view = replaceSplitView(splitView.state.current.view, focusedSplitViewId, slug);
         } else {
           splitView.state.current.view = { id: nanoid(), slug, type: 'item' };
           splitView.state.current.focusedViewId = splitView.state.current.view.id;

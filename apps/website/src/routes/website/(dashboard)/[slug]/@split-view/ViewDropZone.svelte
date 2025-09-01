@@ -3,7 +3,7 @@
   import mixpanel from 'mixpanel-browser';
   import { getSplitViewContext } from './context.svelte';
   import { getDragDropContext } from './drag-context.svelte';
-  import { addViewToSplitView, calculateViewPercentages, getParentView, replaceViewInSplitView } from './utils';
+  import { addViewToSplitView, calculateViewPercentages, getParentView, replaceSplitView } from './utils';
   import type { SplitView, SplitViewItem } from './context.svelte';
   import type { DropZone } from './drag-context.svelte';
 
@@ -71,7 +71,7 @@
       let result: { splitViews: SplitView; focusedSplitViewId: string } | null = null;
 
       if (zone === 'center') {
-        const newView = replaceViewInSplitView(splitView.state.current.view, viewItem.id, droppedItem.slug);
+        const newView = replaceSplitView(splitView.state.current.view, viewItem.id, droppedItem.slug);
         splitView.state.current.view = newView;
         splitView.state.current.focusedViewId = viewItem.id;
 
