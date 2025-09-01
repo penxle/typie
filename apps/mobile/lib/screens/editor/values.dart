@@ -42,14 +42,14 @@ final editorValues = <String, List<Map<String, dynamic>>>{
 
   'fontWeight': [
     {'label': '가장 얇게', 'value': 100},
-    {'label': '얇게', 'value': 200},
-    {'label': '더 얇게', 'value': 300},
+    {'label': '아주 얇게', 'value': 200},
+    {'label': '얇게', 'value': 300},
     {'label': '보통', 'value': 400},
-    {'label': '조금 두껍게', 'value': 500},
-    {'label': '두껍게', 'value': 600},
-    {'label': '더 두껍게', 'value': 700},
-    {'label': '아주 두껍게', 'value': 800},
-    {'label': '가장 두껍게', 'value': 900},
+    {'label': '중간', 'value': 500},
+    {'label': '약간 굵게', 'value': 600},
+    {'label': '굵게', 'value': 700},
+    {'label': '아주 굵게', 'value': 800},
+    {'label': '가장 굵게', 'value': 900},
   ],
 
   'fontSize': [
