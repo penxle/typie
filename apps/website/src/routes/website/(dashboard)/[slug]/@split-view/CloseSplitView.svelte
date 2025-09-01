@@ -1,6 +1,7 @@
 <script lang="ts">
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
+  import mixpanel from 'mixpanel-browser';
   import { getSplitViewContext, getViewContext } from './context.svelte';
   import { closeSplitView } from './utils';
   import type { Snippet } from 'svelte';
@@ -40,6 +41,8 @@
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [splitViewId]: _removedBase, ...cleanedBasePercentages } = splitView.state.current.basePercentages;
       splitView.state.current.basePercentages = cleanedBasePercentages;
+
+      mixpanel.track('close_split_view');
     });
   }}
   type="button"

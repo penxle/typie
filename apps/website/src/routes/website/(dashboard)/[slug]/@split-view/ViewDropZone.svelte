@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cva } from '@typie/styled-system/css';
+  import mixpanel from 'mixpanel-browser';
   import { getSplitViewContext } from './context.svelte';
   import { getDragDropContext } from './drag-context.svelte';
   import { addViewToSplitView, calculateViewPercentages, getParentView, replaceViewInSplitView } from './utils';
@@ -73,6 +74,10 @@
         const newView = replaceViewInSplitView(splitView.state.current.view, viewItem.id, droppedItem.slug);
         splitView.state.current.view = newView;
         splitView.state.current.focusedViewId = viewItem.id;
+
+        mixpanel.track('replace_split_view', {
+          via: 'drag-drop',
+        });
       } else {
         const direction = zone === 'left' || zone === 'right' ? 'horizontal' : 'vertical';
         const position = zone === 'left' || zone === 'top' ? 'before' : 'after';
@@ -100,6 +105,12 @@
             [result.focusedSplitViewId]: newPercentages[result.focusedSplitViewId],
           };
         }
+
+        mixpanel.track('add_split_view', {
+          via: 'drag-drop',
+          direction,
+          position,
+        });
       }
 
       dropZone = null;
