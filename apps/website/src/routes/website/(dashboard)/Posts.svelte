@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { portal, tooltip } from '@typie/ui/actions';
+  import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
@@ -96,16 +96,26 @@
   let resizer = $state<Resizer | null>(null);
   let newWidth = $derived(clamp((app.preference.current.postsWidth ?? 240) + (resizer?.deltaX ?? 0), 240, 480));
   let containerElement = $state<HTMLElement | null>(null);
-</script>
 
-{#if app.state.postsOpen && !app.preference.current.postsExpanded}
-  <div
-    class={css({ position: 'fixed', inset: '0', zIndex: 'underPanel' })}
-    onclick={() => (app.state.postsOpen = false)}
-    role="none"
-    use:portal
-  ></div>
-{/if}
+  const onClickHandler = (event: MouseEvent) => {
+    const rect = containerElement?.getBoundingClientRect();
+    const isClickOutside =
+      rect && (event.clientX < rect?.left || event.clientX > rect?.right || event.clientY < rect?.top || event.clientY > rect?.bottom);
+    if (isClickOutside) {
+      app.state.postsOpen = false;
+    }
+  };
+
+  $effect(() => {
+    if (app.state.postsOpen && !app.preference.current.postsExpanded) {
+      setTimeout(() => {
+        window.addEventListener('click', onClickHandler);
+      });
+    } else {
+      window.removeEventListener('click', onClickHandler);
+    }
+  });
+</script>
 
 <div
   style:--min-width="240px"
@@ -136,7 +146,7 @@
           width: app.state.postsOpen ? 'var(--fixed-width, 0)' : '0',
           maxWidth: app.state.postsOpen ? 'var(--max-width)' : '0',
           opacity: app.state.postsOpen ? '100' : '0',
-          zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'panel',
+          zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'sidebar',
           transitionProperty: 'left, opacity, position, margin-block',
           overflow: 'var(--overflow)',
         },
@@ -318,7 +328,7 @@
       position: 'absolute',
       top: '0',
       right: '-6px',
-      zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'panel',
+      zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'sidebar',
       width: '12px',
       height: 'full',
       cursor: 'col-resize',
