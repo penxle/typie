@@ -92,7 +92,7 @@ class SharePostsContent extends HookWidget {
     final passwordController = useTextEditingController();
     final rotationController = useAnimationController(duration: const Duration(milliseconds: 500));
     final scaleController = useAnimationController(duration: const Duration(milliseconds: 250));
-    final random = Random();
+    final random = useRef(Random());
 
     final rotationAnimation = useMemoized(
       () =>
@@ -110,16 +110,9 @@ class SharePostsContent extends HookWidget {
         ? null
         : posts.first.password;
 
-    useEffect(() {
-      if (initialPassword != null) {
-        passwordController.text = initialPassword;
-      }
-      return null;
-    }, [initialPassword]);
-
     void generateRandomPassword() {
       const digits = '0123456789';
-      final password = List.generate(4, (index) => digits[random.nextInt(digits.length)]).join();
+      final password = List.generate(4, (index) => digits[random.value.nextInt(digits.length)]).join();
       passwordController.text = password;
 
       unawaited(rotationController.forward(from: 0));
@@ -140,17 +133,21 @@ class SharePostsContent extends HookWidget {
         if (dirtyData.containsKey('visibility')) {
           builder.vars.input.visibility = Value.present(form.data['visibility'] as GEntityVisibility);
         }
+
         if (dirtyData.containsKey('contentRating')) {
           builder.vars.input.contentRating = Value.present(form.data['contentRating'] as GPostContentRating);
         }
+
         if (dirtyData.containsKey('hasPassword') || dirtyData.containsKey('password')) {
           builder.vars.input.password = Value.present(
             form.data['hasPassword'] as bool ? form.data['password'] as String? : null,
           );
         }
+
         if (dirtyData.containsKey('allowReaction')) {
           builder.vars.input.allowReaction = Value.present(form.data['allowReaction'] as bool);
         }
+
         if (dirtyData.containsKey('protectContent')) {
           builder.vars.input.protectContent = Value.present(form.data['protectContent'] as bool);
         }
