@@ -224,7 +224,7 @@
                 textUnderlineOffset: '4px',
               },
             })}
-            href="https://help.typie.co/legal/terms"
+            href="https://typie.co/legal/terms"
             rel="noopener noreferrer"
             target="_blank"
           >
@@ -243,7 +243,7 @@
                 textUnderlineOffset: '4px',
               },
             })}
-            href="https://help.typie.co/legal/privacy"
+            href="https://typie.co/legal/privacy"
             rel="noopener noreferrer"
             target="_blank"
           >
