@@ -6,12 +6,13 @@
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
+  import { getViewContext } from '../@split-view/context.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { AppPreference } from '@typie/ui/context';
   import type { Component } from 'svelte';
 
   type Props = {
-    tab: AppPreference['panelTab'];
+    tab: AppPreference['panelTabByViewId'][string];
     label: string;
     icon: Component;
     keys?: TooltipParameter['keys'];
@@ -23,6 +24,11 @@
   let planUpgradeModalOpen = $state(false);
 
   const app = getAppContext();
+
+  const splitViewId = getViewContext().id;
+
+  const isExpanded = $derived(app.preference.current.panelExpandedByViewId[splitViewId]);
+  const isTab = $derived(app.preference.current.panelTabByViewId[splitViewId] === tab);
 
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
 </script>
@@ -40,28 +46,40 @@
     _hover: { backgroundColor: 'surface.subtle' },
     _expanded: { backgroundColor: 'surface.muted!', color: 'text.default' },
   })}
-  aria-expanded={app.preference.current.panelExpanded && app.preference.current.panelTab === tab}
+  aria-expanded={isExpanded && isTab}
   onclick={() => {
     if (needPlanUpgrade) {
       planUpgradeModalOpen = true;
       return;
     }
 
-    if (app.preference.current.panelExpanded) {
-      if (app.preference.current.panelTab === tab) {
-        app.preference.current.panelExpanded = false;
+    if (isExpanded) {
+      if (isTab) {
+        app.preference.current.panelExpandedByViewId = {
+          ...app.preference.current.panelExpandedByViewId,
+          [splitViewId]: false,
+        };
         mixpanel.track('toggle_panel_expanded', { expanded: false });
       } else {
-        app.preference.current.panelTab = tab;
-        mixpanel.track('toggle_panel_tab', { tab: app.preference.current.panelTab });
+        app.preference.current.panelTabByViewId = {
+          ...app.preference.current.panelTabByViewId,
+          [splitViewId]: tab,
+        };
+        mixpanel.track('toggle_panel_tab', { tab });
       }
     } else {
-      app.preference.current.panelExpanded = true;
-      if (app.preference.current.panelTab === tab) {
+      app.preference.current.panelExpandedByViewId = {
+        ...app.preference.current.panelExpandedByViewId,
+        [splitViewId]: true,
+      };
+      if (isTab) {
         mixpanel.track('toggle_panel_expanded', { expanded: true });
       } else {
-        app.preference.current.panelTab = tab;
-        mixpanel.track('toggle_panel_tab', { tab: app.preference.current.panelTab });
+        app.preference.current.panelTabByViewId = {
+          ...app.preference.current.panelTabByViewId,
+          [splitViewId]: tab,
+        };
+        mixpanel.track('toggle_panel_tab', { tab });
       }
     }
   }}

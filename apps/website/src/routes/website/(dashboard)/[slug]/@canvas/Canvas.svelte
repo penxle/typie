@@ -18,9 +18,12 @@
   import { CanvasSyncType } from '@/enums';
   import ElipsisIcon from '~icons/lucide/ellipsis';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
+  import XIcon from '~icons/lucide/x';
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import CanvasMenu from '../../@context-menu/CanvasMenu.svelte';
+  import { getSplitViewContext, getViewContext } from '../@split-view/context.svelte';
+  import { closeSplitView } from '../@split-view/utils';
   import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -31,9 +34,11 @@
 
   type Props = {
     $query: Canvas_query;
+    focused: boolean;
+    slug: string;
   };
 
-  let { $query: _query }: Props = $props();
+  let { $query: _query, focused, slug }: Props = $props();
 
   const query = fragment(
     _query,
@@ -45,7 +50,7 @@
           role
         }
 
-        entity(slug: $slug) {
+        entities(slugs: $slugs) {
           id
           slug
           url
@@ -95,8 +100,12 @@
 
   const app = getAppContext();
   const theme = getThemeContext();
+  const splitView = getSplitViewContext();
+  const splitViewId = getViewContext().id;
   const clientId = nanoid();
-  const canvasId = $derived($query && $query.entity.node.__typename === 'Canvas' ? $query.entity.node.id : null);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === slug))!;
+  const canvasId = $derived(entity.node.__typename === 'Canvas' ? entity.node.id : null);
 
   let canvas = $state<Canvas>();
 
@@ -266,8 +275,8 @@
     const persistence = new IndexeddbPersistence(`typie:canvas:${canvasId}`, doc);
     persistence.on('synced', () => forceSync());
 
-    if ($query.entity.node.__typename === 'Canvas') {
-      Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
+    if (entity.node.__typename === 'Canvas') {
+      Y.applyUpdateV2(doc, base64.parse(entity.node.update), 'remote');
     }
 
     awareness.setLocalStateField('user', {
@@ -281,9 +290,6 @@
         connectionStatus = 'disconnected';
       }
     }, 1000);
-
-    app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
-    app.state.current = $query.entity.id;
 
     if (canvas) {
       const { x, y, width, height } = canvas.scene.getLayer().getClientRect();
@@ -328,11 +334,20 @@
       canvas.stage.batchDraw();
     }
   });
+
+  $effect(() => {
+    if (focused) {
+      app.state.ancestors = entity.ancestors.map((ancestor) => ancestor.id);
+      app.state.current = entity.id;
+    }
+  });
 </script>
 
-<Helmet title={`${effectiveTitle} 그리는 중`} />
+{#if focused}
+  <Helmet title={`${effectiveTitle} 그리는 중`} />
+{/if}
 
-<div class={css({ position: 'relative', size: 'full', overflow: 'hidden' })}>
+<div class={css({ position: 'relative', flex: '1', overflowX: 'auto' })}>
   <CanvasEditor style={css.raw({ size: 'full' })} {awareness} {doc} bind:canvas />
 
   <div
@@ -410,34 +425,58 @@
       </button>
     {/if}
 
-    <Menu placement="bottom-start">
-      {#snippet button({ open })}
+    <div class={center({ gap: '4px' })}>
+      <Menu placement="bottom-start">
+        {#snippet button({ open })}
+          <button
+            class={center({
+              borderRadius: '4px',
+              size: '24px',
+              color: 'text.faint',
+              transition: 'common',
+              _hover: {
+                color: 'text.subtle',
+                backgroundColor: 'surface.muted',
+              },
+              _pressed: {
+                color: 'text.subtle',
+                backgroundColor: 'surface.muted',
+              },
+            })}
+            aria-pressed={open}
+            type="button"
+          >
+            <Icon icon={ElipsisIcon} size={16} />
+          </button>
+        {/snippet}
+
+        {#if entity.node.__typename === 'Canvas'}
+          <CanvasMenu canvas={entity.node} {entity} via="editor" />
+        {/if}
+      </Menu>
+      {#if splitView.state.current.enabled}
         <button
           class={center({
             borderRadius: '4px',
             size: '24px',
             color: 'text.faint',
             transition: 'common',
-            _hover: {
-              color: 'text.subtle',
-              backgroundColor: 'surface.muted',
-            },
-            _pressed: {
-              color: 'text.subtle',
-              backgroundColor: 'surface.muted',
-            },
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
-          aria-pressed={open}
+          onclick={() => {
+            // NOTE: setTimeout을 빼면 마지막 스플릿 뷰를 길게 눌러 닫을 때 unmount가 안 되는 이상한 버그가 있음
+            setTimeout(() => {
+              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+              splitView.state.current.view = closeSplitView(splitView.state.current.view!, splitViewId);
+            });
+          }}
           type="button"
+          use:tooltip={{ message: '스플릿 뷰 닫기' }}
         >
-          <Icon icon={ElipsisIcon} size={16} />
+          <Icon icon={XIcon} size={16} />
         </button>
-      {/snippet}
-
-      {#if $query.entity.node.__typename === 'Canvas'}
-        <CanvasMenu canvas={$query.entity.node} via="editor" />
       {/if}
-    </Menu>
+    </div>
   </div>
 
   {#if canvas}

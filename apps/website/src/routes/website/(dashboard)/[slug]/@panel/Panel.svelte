@@ -4,6 +4,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import { fragment, graphql } from '$graphql';
+  import { getViewContext } from '../@split-view/context.svelte';
   import PanelBodySettings from './PanelBodySettings.svelte';
   import PanelInfo from './PanelInfo.svelte';
   import PanelSpellcheck from './PanelSpellcheck.svelte';
@@ -49,7 +50,11 @@
 
   const app = getAppContext();
 
-  const isExpanded = $derived(app.preference.current.panelExpanded && app.preference.current.panelTab);
+  const splitViewId = getViewContext().id;
+
+  const isExpanded = $derived(
+    Boolean(app.preference.current.panelExpandedByViewId[splitViewId] && app.preference.current.panelTabByViewId[splitViewId]),
+  );
 
   type Resizer = {
     deltaX: number;
@@ -133,15 +138,15 @@
   ></div>
 
   {#if isExpanded}
-    {#if app.preference.current.panelTab === 'info'}
+    {#if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
       <PanelInfo {$post} {$user} {doc} {editor} />
     {/if}
 
-    {#if app.preference.current.panelTab === 'spellcheck'}
+    {#if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
       <PanelSpellcheck {$user} {editor} />
     {/if}
 
-    {#if app.preference.current.panelTab === 'settings'}
+    {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
       <PanelBodySettings {doc} {editor} />
     {/if}
   {/if}

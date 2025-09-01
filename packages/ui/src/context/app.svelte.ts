@@ -5,9 +5,9 @@ import type { PageLayout } from '../utils';
 export type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   postsWidth: number;
-  panelExpanded: boolean;
-  panelTab: 'info' | 'spellcheck' | 'settings';
-  panelInfoTab: 'post' | 'anchors';
+  panelExpandedByViewId: Record<string, boolean>;
+  panelTabByViewId: Record<string, 'info' | 'spellcheck' | 'settings'>;
+  panelInfoTabByViewId: Record<string, 'post' | 'anchors'>;
 
   panelWidth: number;
 
@@ -31,6 +31,7 @@ export type AppPreference = {
   searchMatchWholeWord: boolean;
 
   experimental_pdfExportEnabled: boolean;
+  experimental_splitViewEnabled: boolean;
 
   lastPdfPageLayout: PageLayout | null;
 
@@ -49,7 +50,7 @@ type AppState = {
   shareOpen: string[];
   statsOpen: boolean;
   upgradeOpen: boolean;
-  findReplaceOpen: boolean;
+  findReplaceOpenByViewId: Record<string, boolean>;
 
   progress: {
     totalCharacterCount: number;
@@ -87,7 +88,7 @@ export const setupAppContext = (userId: string) => {
     shareOpen: [],
     statsOpen: false,
     upgradeOpen: false,
-    findReplaceOpen: false,
+    findReplaceOpenByViewId: {},
 
     progress: {
       totalCharacterCount: 0,
@@ -99,9 +100,9 @@ export const setupAppContext = (userId: string) => {
     preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
       postsExpanded: false,
       postsWidth: 240,
-      panelExpanded: true,
-      panelTab: 'info',
-      panelInfoTab: 'post',
+      panelExpandedByViewId: {},
+      panelTabByViewId: {},
+      panelInfoTabByViewId: {},
       panelWidth: 250,
 
       toolbarStyle: 'compact',
@@ -122,6 +123,7 @@ export const setupAppContext = (userId: string) => {
       searchMatchWholeWord: false,
 
       experimental_pdfExportEnabled: false,
+      experimental_splitViewEnabled: false,
 
       lastPdfPageLayout: null,
 
