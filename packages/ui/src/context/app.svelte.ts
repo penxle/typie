@@ -31,7 +31,6 @@ export type AppPreference = {
   searchMatchWholeWord: boolean;
 
   experimental_pdfExportEnabled: boolean;
-  experimental_splitViewEnabled: boolean;
 
   lastPdfPageLayout: PageLayout | null;
 
@@ -123,7 +122,6 @@ export const setupAppContext = (userId: string) => {
       searchMatchWholeWord: false,
 
       experimental_pdfExportEnabled: false,
-      experimental_splitViewEnabled: false,
 
       lastPdfPageLayout: null,
 
