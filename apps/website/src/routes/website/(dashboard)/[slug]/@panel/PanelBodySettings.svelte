@@ -135,6 +135,7 @@
 >
   <div
     class={flex({
+      flexShrink: '0',
       height: '40px',
       alignItems: 'center',
       paddingX: '20px',

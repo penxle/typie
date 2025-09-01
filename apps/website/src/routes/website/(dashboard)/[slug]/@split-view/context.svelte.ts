@@ -18,10 +18,12 @@ export type SplitViewItem = {
   slug: string;
 };
 
-type SplitViewState = {
+export type SplitViewState = {
   view: SplitView | null;
   focusedViewId: string | null;
   enabled: boolean;
+  basePercentages: Record<string, number>;
+  currentPercentages: Record<string, number>;
 };
 
 type SplitViewContext = {
@@ -38,6 +40,8 @@ export const setupSplitViewContext = (userId: string) => {
       view: null,
       enabled: false,
       focusedViewId: null,
+      basePercentages: {},
+      currentPercentages: {},
     }),
   };
 

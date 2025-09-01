@@ -1,5 +1,8 @@
 import { nanoid } from 'nanoid';
-import type { SplitView } from './context.svelte';
+import type { Ref } from '@typie/ui/utils';
+import type { SplitView, SplitViewState } from './context.svelte';
+
+export const VIEW_MIN_SIZE = 210;
 
 export const collectSlug = (splitViews: SplitView | null): string[] => {
   if (!splitViews) {
@@ -53,7 +56,7 @@ export const closeSplitView = (splitViews: SplitView, splitViewId: string): Spli
     if (remainingChildren.length === 1) {
       return {
         ...remainingChildren[0],
-        id: nanoid(),
+        id: splitViews.id,
       };
     }
 
@@ -87,4 +90,82 @@ export const findViewIdBySlug = (splitViews: SplitView, slug: string): string | 
   }
 
   return null;
+};
+
+export const getParentView = (splitViews: SplitView, viewId: string): SplitView | null => {
+  if (splitViews.type === 'container' && splitViews.children) {
+    if (splitViews.children.some((child) => child.id === viewId)) {
+      return splitViews;
+    }
+
+    for (const child of splitViews.children) {
+      if (child.type === 'container') {
+        const parent = getParentView(child, viewId);
+        if (parent) {
+          return parent;
+        }
+      }
+    }
+  }
+
+  return null;
+};
+
+export const calculateViewPercentages = (
+  parentView: SplitView,
+  newViewId: string,
+  currentPercentages: Record<string, number>,
+): Record<string, number> => {
+  if (parentView.type !== 'container') {
+    return currentPercentages;
+  }
+
+  const existingChildren = parentView.children.filter((child) => child.id !== newViewId);
+  const newChildCount = parentView.children.length;
+
+  const newViewPercentage = 100 / newChildCount;
+  const remainingPercentage = 100 - newViewPercentage;
+
+  let currentTotal = 0;
+  existingChildren.forEach((child) => {
+    currentTotal += currentPercentages[child.id] || 100 / existingChildren.length;
+  });
+
+  const scaleFactor = currentTotal > 0 ? remainingPercentage / currentTotal : 0;
+
+  const newPercentages: Record<string, number> = {};
+
+  parentView.children.forEach((child) => {
+    if (child.id === newViewId) {
+      newPercentages[child.id] = newViewPercentage;
+    } else {
+      const currentPercentage = currentPercentages[child.id] || 100 / existingChildren.length;
+      newPercentages[child.id] = currentPercentage * scaleFactor;
+    }
+  });
+
+  return newPercentages;
+};
+
+export const addSplitViewToState = (state: Ref<SplitViewState>, slug: string, direction: 'horizontal' | 'vertical'): void => {
+  if (!state.current.view) return;
+
+  const { splitViews, focusedSplitViewId } = addSplitView(state.current.view, slug, direction);
+  state.current.view = splitViews;
+  state.current.focusedViewId = focusedSplitViewId;
+
+  const parentView = getParentView(splitViews, focusedSplitViewId);
+  if (parentView && parentView.type === 'container') {
+    const newPercentages = calculateViewPercentages(parentView, focusedSplitViewId, state.current.currentPercentages);
+
+    state.current.currentPercentages = {
+      ...state.current.currentPercentages,
+      ...newPercentages,
+    };
+
+    state.current.basePercentages = {
+      ...state.current.basePercentages,
+      [focusedSplitViewId]: newPercentages[focusedSplitViewId],
+    };
+  }
 };

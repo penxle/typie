@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon, RingSpinner } from '@typie/ui/components';
+  import { clamp } from '@typie/ui/utils';
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
   import { goto } from '$app/navigation';
@@ -10,6 +11,7 @@
   import Canvas from '../@canvas/Canvas.svelte';
   import Editor from '../Editor.svelte';
   import { getSplitViewContext, setupViewContext } from './context.svelte';
+  import { VIEW_MIN_SIZE } from './utils';
   import type { SplitViews_View_query } from '$graphql';
   import type { SplitViewItem } from './context.svelte';
 
@@ -46,6 +48,14 @@
 
   const splitView = getSplitViewContext();
 
+  const focused = $derived(viewItem.id === splitView.state.current.focusedViewId);
+  const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === viewItem.slug));
+
+  const sizePercentage = $derived.by(() => {
+    const v = splitView.state.current.currentPercentages?.[viewItem.id];
+    return v == null || Number.isNaN(v) ? 100 : clamp(v, 0, 100);
+  });
+
   const handleFocus = (viewItem: SplitViewItem) => {
     splitView.state.current.focusedViewId = viewItem.id;
     if (page.params.slug !== viewItem.slug) {
@@ -53,15 +63,15 @@
     }
   };
 
-  const focused = $derived(viewItem.id === splitView.state.current.focusedViewId);
-
   setupViewContext(viewItem);
-
-  const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === viewItem.slug));
 </script>
 
 <div
+  style:flex-basis={`${sizePercentage}%`}
+  style:min-width={`${VIEW_MIN_SIZE}px`}
+  style:min-height={`${VIEW_MIN_SIZE}px`}
   class={flex({
+    position: 'relative', // for debug
     flex: '1',
     size: 'full',
     backgroundColor: 'surface.default',

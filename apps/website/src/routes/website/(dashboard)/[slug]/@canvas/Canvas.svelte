@@ -22,8 +22,8 @@
   import { browser } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import CanvasMenu from '../../@context-menu/CanvasMenu.svelte';
-  import { getSplitViewContext, getViewContext } from '../@split-view/context.svelte';
-  import { closeSplitView } from '../@split-view/utils';
+  import CloseSplitView from '../@split-view/CloseSplitView.svelte';
+  import { getSplitViewContext } from '../@split-view/context.svelte';
   import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -101,7 +101,6 @@
   const app = getAppContext();
   const theme = getThemeContext();
   const splitView = getSplitViewContext();
-  const splitViewId = getViewContext().id;
   const clientId = nanoid();
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === slug))!;
@@ -455,26 +454,9 @@
         {/if}
       </Menu>
       {#if splitView.state.current.enabled}
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '24px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          })}
-          onclick={() => {
-            // NOTE: setTimeout을 빼면 마지막 스플릿 뷰를 길게 눌러 닫을 때 unmount가 안 되는 이상한 버그가 있음
-            setTimeout(() => {
-              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-              splitView.state.current.view = closeSplitView(splitView.state.current.view!, splitViewId);
-            });
-          }}
-          type="button"
-          use:tooltip={{ message: '스플릿 뷰 닫기' }}
-        >
+        <CloseSplitView>
           <Icon icon={XIcon} size={16} />
-        </button>
+        </CloseSplitView>
       {/if}
     </div>
   </div>
