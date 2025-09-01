@@ -4,7 +4,7 @@
   import { getSplitViewContext } from './context.svelte';
   import Resizer from './Resizer.svelte';
   import SplitViews from './SplitViews.svelte';
-  import { VIEW_MIN_SIZE } from './utils';
+  import { getMinSizeForView, VIEW_MIN_SIZE } from './utils';
   import View from './View.svelte';
   import type { SplitViews_View_query } from '$graphql';
   import type { SplitView } from './context.svelte';
@@ -24,6 +24,13 @@
     const v = context.state.current.currentPercentages?.[view.id];
     return v == null || Number.isNaN(v) ? 100 : clamp(v, 0, 100);
   });
+
+  let minSize = $derived.by(() => {
+    if (view.type === 'item') {
+      return VIEW_MIN_SIZE;
+    }
+    return getMinSizeForView(view, view.direction);
+  });
 </script>
 
 {#if view.type === 'item'}
@@ -32,8 +39,8 @@
   <div
     bind:this={containerRef}
     style:flex-basis={`${sizePercentage}%`}
-    style:min-width={`${VIEW_MIN_SIZE}px`}
-    style:min-height={`${VIEW_MIN_SIZE}px`}
+    style:min-width={view.direction === 'horizontal' ? `${minSize}px` : undefined}
+    style:min-height={view.direction === 'vertical' ? `${minSize}px` : undefined}
     class={flex({
       flexDirection: view.direction === 'horizontal' ? 'row' : 'column',
       flex: '1',
