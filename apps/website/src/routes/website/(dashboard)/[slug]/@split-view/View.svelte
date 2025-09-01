@@ -12,6 +12,7 @@
   import Editor from '../Editor.svelte';
   import { getSplitViewContext, setupViewContext } from './context.svelte';
   import { VIEW_MIN_SIZE } from './utils';
+  import ViewDropZone from './ViewDropZone.svelte';
   import type { SplitViews_View_query } from '$graphql';
   import type { SplitViewItem } from './context.svelte';
 
@@ -56,6 +57,8 @@
     return v == null || Number.isNaN(v) ? 100 : clamp(v, 0, 100);
   });
 
+  let viewElement = $state<HTMLElement>();
+
   const handleFocus = (viewItem: SplitViewItem) => {
     splitView.state.current.focusedViewId = viewItem.id;
     if (page.params.slug !== viewItem.slug) {
@@ -67,11 +70,12 @@
 </script>
 
 <div
+  bind:this={viewElement}
   style:flex-basis={`${sizePercentage}%`}
   style:min-width={`${VIEW_MIN_SIZE}px`}
   style:min-height={`${VIEW_MIN_SIZE}px`}
   class={flex({
-    position: 'relative', // for debug
+    position: 'relative',
     flex: '1',
     size: 'full',
     backgroundColor: 'surface.default',
@@ -96,6 +100,7 @@
   role="tabpanel"
   tabindex={0}
 >
+  <ViewDropZone {viewElement} {viewItem} />
   {#if entity}
     {#if entity.state === EntityState.ACTIVE}
       {#key entity.slug}

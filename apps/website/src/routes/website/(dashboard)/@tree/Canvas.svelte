@@ -91,6 +91,7 @@
   data-id={$canvas.entity.id}
   data-order={$canvas.entity.order}
   data-path-depth={$canvas.entity.depth}
+  data-slug={$canvas.entity.slug}
   data-type="canvas"
   draggable="false"
   href="/{$canvas.entity.slug}"

@@ -96,6 +96,7 @@
   data-id={$post.entity.id}
   data-order={$post.entity.order}
   data-path-depth={$post.entity.depth}
+  data-slug={$post.entity.slug}
   data-type="post"
   draggable="false"
   href="/{$post.entity.slug}"

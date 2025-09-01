@@ -13,6 +13,7 @@
   import FolderIcon from '~icons/lucide/folder';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { fragment, graphql } from '$graphql';
+  import { getDragDropContext } from '../[slug]/@split-view/drag-context.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { setupTreeContext } from './state.svelte';
@@ -133,11 +134,23 @@
     transform: string;
   };
 
-  type Drop = {
+  type TreeDrop = {
+    target: 'tree';
     parentId?: string;
     lowerOrder?: string;
     upperOrder?: string;
   };
+
+  type TrashDrop = {
+    target: 'trash';
+  };
+
+  type ViewDrop = {
+    target: 'view';
+    viewId: string;
+  };
+
+  type Drop = TreeDrop | TrashDrop | ViewDrop;
 
   type Dragging = {
     eligible: boolean;
@@ -163,6 +176,7 @@
 
   const app = getAppContext();
   const treeState = setupTreeContext();
+  const dragDropContext = getDragDropContext();
 
   $effect(() => {
     treeState.element = tree;
@@ -271,6 +285,26 @@
   const updateDropTarget = (clientX: number, clientY: number) => {
     if (!dragging || !tree) return;
 
+    const splitViewElement = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-view-id]');
+    if (splitViewElement && dragging.eligible) {
+      if (dragDropContext && !dragDropContext.state.isDragging) {
+        const entityType = dragging.element.dataset.type;
+        const entitySlug = dragging.element.dataset.slug;
+
+        if (entitySlug && entityType && ['post', 'canvas'].includes(entityType)) {
+          dragDropContext.startDrag({
+            slug: entitySlug,
+            type: entityType as 'post' | 'canvas',
+          });
+        }
+      }
+
+      dragging.indicator = {};
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      dragging.drop = { target: 'view' as const, viewId: splitViewElement.dataset.viewId! };
+      return;
+    }
+
     const trashElement = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-type="trash"]');
     if (trashElement) {
       const rect = trashElement.getBoundingClientRect();
@@ -282,7 +316,7 @@
         opacity: 0.5,
         transform: undefined,
       };
-      dragging.drop = { parentId: 'trash' };
+      dragging.drop = { target: 'trash' };
       return;
     }
 
@@ -337,6 +371,7 @@
       parentElement = targetElement;
 
       dragging.drop = {
+        target: 'tree',
         lowerOrder: [...targetElement.querySelectorAll<HTMLElement>('[data-id]')].at(-1)?.dataset.order,
       };
     } else {
@@ -348,6 +383,7 @@
         parentElement = thisElement.closest<HTMLElement>(`[data-id]:not([data-id="${thisElement.dataset.id}"])`);
 
         dragging.drop = {
+          target: 'tree',
           lowerOrder: offsetElement?.dataset.order,
           upperOrder: targetElement.dataset.order,
         };
@@ -359,6 +395,7 @@
           parentElement = targetElement.closest<HTMLElement>(`[data-id]:not([data-id="${targetElement.dataset.id}"])`);
 
           dragging.drop = {
+            target: 'tree',
             lowerOrder: targetElement.dataset.order,
           };
         } else {
@@ -369,6 +406,7 @@
           parentElement = thisElement.closest<HTMLElement>(`[data-id]:not([data-id="${thisElement.dataset.id}"])`);
 
           dragging.drop = {
+            target: 'tree',
             lowerOrder: targetElement.dataset.order,
             upperOrder: offsetElement?.dataset.order,
           };
@@ -390,6 +428,7 @@
     }
 
     if (parentElement) {
+      dragging.drop.target = 'tree';
       dragging.drop.parentId = parentElement.dataset.id;
 
       if (dragging.element.dataset.type === 'folder') {
@@ -424,6 +463,10 @@
       const containerRect = scrollContainer.getBoundingClientRect();
       const scrollZoneSize = 50;
       const maxScrollSpeed = 15;
+
+      if (lastPointerX < containerRect.left || lastPointerX > containerRect.right) {
+        return;
+      }
 
       if (lastPointerY < containerRect.top + scrollZoneSize) {
         const distance = containerRect.top + scrollZoneSize - lastPointerY;
@@ -469,7 +512,7 @@
 
     const isPostsPanelVisible = app.state.postsOpen || app.preference.current.postsExpanded === 'open';
     if (dragging.eligible && !isPostsPanelVisible) {
-      cancelDragging();
+      endDragging();
       return;
     }
 
@@ -514,15 +557,15 @@
     }
 
     if (dragging.drop) {
-      const { parentId, lowerOrder, upperOrder } = dragging.drop;
+      const { target } = dragging.drop;
 
       // NOTE: 기다림 없이 즉시 드래그 해제
-      cancelDragging();
+      endDragging();
 
       const isMultipleDrag = treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(entityId);
       const selectedIds = isMultipleDrag ? [...treeState.selectedEntityIds] : [entityId];
 
-      if (parentId === 'trash') {
+      if (target === 'trash') {
         try {
           await deleteEntities({ entityIds: selectedIds });
 
@@ -536,23 +579,26 @@
           Toast.error('삭제 중 오류가 발생했습니다');
         }
         return;
+      } else if (target === 'tree') {
+        const { parentId, lowerOrder, upperOrder } = dragging.drop;
+        await moveEntities({
+          entityIds: selectedIds,
+          parentEntityId: parentId ?? null,
+          lowerOrder,
+          upperOrder,
+        });
+        mixpanel.track('move_entities', { totalCount: selectedIds.length, parentEntityId: parentId ?? null, lowerOrder, upperOrder });
+        return;
+      } else if (target === 'view') {
+        // NOTE: DropZone 에서 처리
+        return;
       }
-
-      await moveEntities({
-        entityIds: selectedIds,
-        parentEntityId: parentId ?? null,
-        lowerOrder,
-        upperOrder,
-      });
-      mixpanel.track('move_entities', { totalCount: selectedIds.length, parentEntityId: parentId ?? null, lowerOrder, upperOrder });
-
-      return;
     }
 
-    cancelDragging();
+    endDragging(true);
   };
 
-  const cancelDragging = () => {
+  const endDragging = (canceled = false) => {
     if (!dragging) {
       return;
     }
@@ -564,6 +610,14 @@
 
     if (dragging.eligible && dragging.element.hasPointerCapture(dragging.event.pointerId)) {
       dragging.element.releasePointerCapture(dragging.event.pointerId);
+    }
+
+    if (dragDropContext.state.isDragging) {
+      if (canceled) {
+        dragDropContext.cancelDrag();
+      } else {
+        dragDropContext.endDrag();
+      }
     }
 
     dragging = null;
@@ -607,7 +661,7 @@
 <svelte:window
   oncontextmenu={(e) => {
     if (pointerType === 'mouse') {
-      cancelDragging();
+      endDragging(true);
     } else {
       e.preventDefault();
       e.stopPropagation();
@@ -615,7 +669,7 @@
   }}
   onkeydown={(e) => {
     if (e.key === 'Escape') {
-      cancelDragging();
+      endDragging(true);
     }
   }}
 />
