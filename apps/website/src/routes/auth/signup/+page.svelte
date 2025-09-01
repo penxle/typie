@@ -200,7 +200,7 @@
               <span class={flex({ wrap: 'wrap', fontSize: { base: '13px', lg: '14px' }, color: 'text.subtle' })}>
                 <a
                   class={css({ textDecoration: 'underline', color: 'text.default' })}
-                  href="https://help.typie.co/legal/terms"
+                  href="https://typie.co/legal/terms"
                   rel="noopener noreferrer"
                   target="_blank"
                 >
@@ -211,7 +211,7 @@
 
                 <a
                   class={css({ textDecoration: 'underline', color: 'text.default' })}
-                  href="https://help.typie.co/legal/privacy"
+                  href="https://typie.co/legal/privacy"
                   rel="noopener noreferrer"
                   target="_blank"
                 >
