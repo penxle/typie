@@ -387,12 +387,6 @@ export class Canvas {
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
       e.preventDefault();
       this.pasteShapesFromClipboard();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-      e.preventDefault();
-      this.undo();
-    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-      e.preventDefault();
-      this.redo();
     } else if (e.key === 'Alt') {
       e.preventDefault();
       this.setCursor('copy');

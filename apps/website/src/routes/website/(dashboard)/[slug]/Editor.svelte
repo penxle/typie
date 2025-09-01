@@ -663,6 +663,8 @@
 
 <svelte:window
   onkeydown={(e) => {
+    if (!focused) return;
+
     const modKey = isMacOS() || isiOS() ? e.metaKey : e.ctrlKey;
 
     if (modKey && e.key === 'z' && !e.shiftKey) {
