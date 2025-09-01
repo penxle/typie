@@ -4,6 +4,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
@@ -85,7 +86,7 @@ class HomeScreen extends HookWidget {
                           GHomeScreen_CreatePost_MutationReq(
                             (b) => b
                               ..vars.input.siteId = pref.siteId
-                              ..vars.input.parentEntityId = parentEntityId,
+                              ..vars.input.parentEntityId = Value.present(parentEntityId),
                           ),
                         );
 

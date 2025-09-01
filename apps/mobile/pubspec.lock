@@ -841,12 +841,13 @@ packages:
     source: hosted
     version: "1.0.0+1"
   gql_code_builder:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gql_code_builder
-      sha256: e8f82aff70d1e1f1defd760a20716bb71c615838de8a54fccc3a37c6431846c4
-      url: "https://pub.dev"
-    source: hosted
+      path: "codegen/gql_code_builder"
+      ref: fix-jsonobject-tristate-replace
+      resolved-ref: "484317f53af7811115eaf3aa280fc4a1e6c16790"
+      url: "https://github.com/devunt/gql.git"
+    source: git
     version: "0.15.0"
   gql_code_builder_serializers:
     dependency: "direct main"
@@ -897,7 +898,7 @@ packages:
     source: hosted
     version: "1.0.0"
   gql_tristate_value:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: gql_tristate_value
       sha256: ae045e7e272fbfd030084315140c683c9b032a9861a37165f68c2ecd8a759664

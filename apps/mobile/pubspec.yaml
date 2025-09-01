@@ -41,6 +41,7 @@ dependencies:
   gql_exec: ^1.0.0+1
   gql_link: ^1.0.0+1
   gql_transform_link: ^1.0.0
+  gql_tristate_value: ^1.0.0
   hive_ce: ^2.11.1
   hive_ce_flutter: ^2.3.0
   in_app_purchase: ^3.2.1
@@ -82,6 +83,13 @@ dev_dependencies:
   injectable_generator: ^2.7.0
   json_serializable: ^6.9.5
   leancode_lint: ^18.0.0
+
+dependency_overrides:
+  gql_code_builder:
+    git:
+      url: https://github.com/devunt/gql.git
+      ref: fix-jsonobject-tristate-replace
+      path: codegen/gql_code_builder
 
 flutter:
   uses-material-design: true

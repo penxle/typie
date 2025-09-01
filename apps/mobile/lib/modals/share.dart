@@ -7,6 +7,7 @@ import 'package:built_value/built_value.dart' show EnumClass;
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:typie/context/bottom_sheet.dart';
@@ -137,19 +138,21 @@ class SharePostsContent extends HookWidget {
         builder.vars.input.postIds.addAll(posts.map((p) => p.id));
 
         if (dirtyData.containsKey('visibility')) {
-          builder.vars.input.visibility = form.data['visibility'] as GEntityVisibility;
+          builder.vars.input.visibility = Value.present(form.data['visibility'] as GEntityVisibility);
         }
         if (dirtyData.containsKey('contentRating')) {
-          builder.vars.input.contentRating = form.data['contentRating'] as GPostContentRating;
+          builder.vars.input.contentRating = Value.present(form.data['contentRating'] as GPostContentRating);
         }
         if (dirtyData.containsKey('hasPassword') || dirtyData.containsKey('password')) {
-          builder.vars.input.password = form.data['hasPassword'] as bool ? form.data['password'] as String? : null;
+          builder.vars.input.password = Value.present(
+            form.data['hasPassword'] as bool ? form.data['password'] as String? : null,
+          );
         }
         if (dirtyData.containsKey('allowReaction')) {
-          builder.vars.input.allowReaction = form.data['allowReaction'] as bool;
+          builder.vars.input.allowReaction = Value.present(form.data['allowReaction'] as bool);
         }
         if (dirtyData.containsKey('protectContent')) {
-          builder.vars.input.protectContent = form.data['protectContent'] as bool;
+          builder.vars.input.protectContent = Value.present(form.data['protectContent'] as bool);
         }
 
         await client.request(builder.build());
@@ -362,7 +365,7 @@ class ShareFoldersContent extends HookWidget {
         builder.vars.input.folderIds.addAll(folders.map((f) => f.id));
 
         if (dirtyData.containsKey('visibility')) {
-          builder.vars.input.visibility = form.data['visibility'] as GEntityVisibility;
+          builder.vars.input.visibility = Value.present(form.data['visibility'] as GEntityVisibility);
         }
 
         await client.request(builder.build());
@@ -414,8 +417,8 @@ class ShareFoldersContent extends HookWidget {
                   GShareFolder_UpdateFoldersOption_MutationReq(
                     (b) => b
                       ..vars.input.folderIds.addAll(folders.map((f) => f.id))
-                      ..vars.input.visibility = visibility
-                      ..vars.input.recursive = true,
+                      ..vars.input.visibility = Value.present(visibility)
+                      ..vars.input.recursive = const Value.present(true),
                   ),
                 );
 
