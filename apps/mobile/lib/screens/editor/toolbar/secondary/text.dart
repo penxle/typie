@@ -75,7 +75,7 @@ class TextToolbar extends HookWidget {
                               editorDefaultValues['fontFamily']),
                     )?['label']
                     as String? ??
-                data?.post.entity.site.fonts
+                data?.me?.fontFamilies
                     .firstWhereOrNull(
                       (e) => e.id == proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String?,
                     )
@@ -83,6 +83,20 @@ class TextToolbar extends HookWidget {
                 '(알 수 없음)',
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.fontFamily;
+            },
+          ),
+          LabelToolbarButton(
+            color: context.colors.textSubtle,
+            text:
+                editorValues['fontWeight']?.firstWhere(
+                      (e) =>
+                          e['value'] ==
+                          (proseMirrorState?.getMarkAttributes('text_style')?['fontWeight'] as int? ??
+                              editorDefaultValues['fontWeight']),
+                    )['label']
+                    as String,
+            onTap: () {
+              scope.secondaryToolbarMode.value = SecondaryToolbarMode.fontWeight;
             },
           ),
           LabelToolbarButton(
