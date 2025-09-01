@@ -6,6 +6,7 @@ import 'package:built_value/json_object.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:transparent_image/transparent_image.dart';
@@ -105,10 +106,12 @@ class UpdateProfileScreen extends HookWidget {
                           GUpdateProfileScreen_PersistBlobAsImage_MutationReq(
                             (b) => b
                               ..vars.input.path = path
-                              ..vars.input.modification = JsonObject({
-                                'resize': {'width': 512, 'height': 512, 'fit': 'cover', 'withoutEnlargement': true},
-                                'format': 'png',
-                              }),
+                              ..vars.input.modification = Value.present(
+                                JsonObject({
+                                  'resize': {'width': 512, 'height': 512, 'fit': 'cover', 'withoutEnlargement': true},
+                                  'format': 'png',
+                                }),
+                              ),
                           ),
                         );
 

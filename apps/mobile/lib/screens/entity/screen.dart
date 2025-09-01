@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
@@ -264,7 +265,7 @@ class _EntityList extends HookWidget {
                                 GEntityScreen_CreatePost_MutationReq(
                                   (b) => b
                                     ..vars.input.siteId = pref.siteId
-                                    ..vars.input.parentEntityId = entity?.id,
+                                    ..vars.input.parentEntityId = Value.present(entity?.id),
                                 ),
                               );
 
@@ -284,7 +285,7 @@ class _EntityList extends HookWidget {
                                   GEntityScreen_CreateFolder_MutationReq(
                                     (b) => b
                                       ..vars.input.siteId = pref.siteId
-                                      ..vars.input.parentEntityId = entity?.id
+                                      ..vars.input.parentEntityId = Value.present(entity?.id)
                                       ..vars.input.name = '새 폴더',
                                   ),
                                 );
@@ -512,7 +513,7 @@ class _EntityList extends HookWidget {
                                         GEntityScreen_CreatePost_MutationReq(
                                           (b) => b
                                             ..vars.input.siteId = pref.siteId
-                                            ..vars.input.parentEntityId = entities[index].id,
+                                            ..vars.input.parentEntityId = Value.present(entities[index].id),
                                         ),
                                       );
 
@@ -534,7 +535,7 @@ class _EntityList extends HookWidget {
                                           GEntityScreen_CreateFolder_MutationReq(
                                             (b) => b
                                               ..vars.input.siteId = pref.siteId
-                                              ..vars.input.parentEntityId = entities[index].id
+                                              ..vars.input.parentEntityId = Value.present(entities[index].id)
                                               ..vars.input.name = '새 폴더',
                                           ),
                                         );
@@ -896,10 +897,9 @@ class _EntityList extends HookWidget {
                       GEntityScreen_MoveEntity_MutationReq(
                         (b) => b
                           ..vars.input.entityId = dragging.id
-                          ..vars.input.parentEntityId = entity?.id
-                          ..vars.input.lowerOrder = lowerOrder
-                          ..vars.input.upperOrder = upperOrder
-                          ..vars.input.treatEmptyParentIdAsRoot = true,
+                          ..vars.input.parentEntityId = Value.present(entity?.id)
+                          ..vars.input.lowerOrder = Value.present(lowerOrder)
+                          ..vars.input.upperOrder = Value.present(upperOrder),
                       ),
                     );
 
