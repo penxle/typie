@@ -48,7 +48,7 @@ extension BottomSheetExtension on BuildContext {
                     ),
                   ),
                   onTap: () async {
-                    await router.root.maybePop();
+                    await context.router.root.maybePop();
                   },
                 ),
               ),
