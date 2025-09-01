@@ -26,9 +26,9 @@ export const values = {
   ],
 
   fontWeight: [
-    { label: '가장 얇게', value: 100 },
-    { label: '아주 얇게', value: 200 },
-    { label: '얇게', value: 300 },
+    { label: '가장 가늘게', value: 100 },
+    { label: '아주 가늘게', value: 200 },
+    { label: '가늘게', value: 300 },
     { label: '보통', value: 400 },
     { label: '중간', value: 500 },
     { label: '약간 굵게', value: 600 },
