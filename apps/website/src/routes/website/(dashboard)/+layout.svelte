@@ -13,6 +13,7 @@
   import { graphql } from '$graphql';
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
+  import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
   import ShareModal from './@share/ShareModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -112,6 +113,7 @@
   const app = setupAppContext($query.me.id);
 
   setupSplitViewContext($query.me.id);
+  setupDragDropContext();
 
   let referralWelcomeModalOpen = $state(false);
 
