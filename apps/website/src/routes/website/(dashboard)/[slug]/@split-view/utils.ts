@@ -3,6 +3,24 @@ import type { Ref } from '@typie/ui/utils';
 import type { SplitView, SplitViewState } from './context.svelte';
 
 export const VIEW_MIN_SIZE = 210;
+export const RESIZER_SIZE = 4;
+export const BUFFER_SIZE = 4; // NOTE: 어쩐지 없으면 스크롤 생긴다
+
+export const getMinSizeForView = (view: SplitView, parentDirection: 'horizontal' | 'vertical'): number => {
+  if (view.type === 'item') {
+    return VIEW_MIN_SIZE;
+  }
+
+  // NOTE: 부모와 같은 방향: 자식들의 최소 크기 합산 + Resizer 크기들
+  if (view.direction === parentDirection) {
+    const childrenMinSize = view.children.reduce((sum, child) => sum + getMinSizeForView(child, parentDirection), 0);
+    const resizerCount = Math.max(0, view.children.length - 1);
+    return childrenMinSize + resizerCount * (RESIZER_SIZE + BUFFER_SIZE);
+  } else {
+    // NOTE: 부모와 다른 방향: 자식들 중 최대 크기
+    return Math.max(...view.children.map((child) => getMinSizeForView(child, parentDirection)));
+  }
+};
 
 export const collectSlug = (splitViews: SplitView | null): string[] => {
   if (!splitViews) {
