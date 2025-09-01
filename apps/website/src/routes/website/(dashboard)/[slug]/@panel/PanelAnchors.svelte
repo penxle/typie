@@ -19,6 +19,7 @@
   import CheckIcon from '~icons/lucide/check';
   import PenIcon from '~icons/lucide/pen';
   import BookmarkFilledIcon from '~icons/typie/bookmark-filled';
+  import { getViewContext } from '../@split-view/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { AnchorPosition } from '@typie/ui/anchor';
   import type { Ref } from '@typie/ui/utils';
@@ -38,6 +39,8 @@
 
   let { editor, doc }: Props = $props();
 
+  const view = getViewContext();
+
   let anchors = $state<Anchor[]>([]);
   let currentNode = $state<Anchor | null>(null);
   let isLoading = $state(true);
@@ -54,9 +57,9 @@
 
       cleanOrphanAnchors(editor.current, doc);
 
-      const anchorElements = getAnchorElements(Object.keys(docAnchors));
+      const anchorElements = getAnchorElements(editor.current, Object.keys(docAnchors));
 
-      const anchorPositions = calculateAnchorPositions(anchorElements, docAnchors);
+      const anchorPositions = calculateAnchorPositions(editor.current, anchorElements, docAnchors);
 
       anchors = anchorPositions.map((pos) => ({
         ...pos,
@@ -78,13 +81,13 @@
       return;
     }
 
-    const element = document.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement;
+    const element = editor.current.view.dom.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement;
     if (!element) {
       currentNode = null;
       return;
     }
 
-    const lastNodeOffsetTop = getLastNodeOffsetTop();
+    const lastNodeOffsetTop = getLastNodeOffsetTop(editor.current.view.dom);
     if (lastNodeOffsetTop === null) {
       currentNode = null;
       return;
@@ -226,7 +229,7 @@
   $effect(() => {
     if (currentNode) {
       setTimeout(() => {
-        const elementInPanel = document.querySelector(`[data-anchor-current="true"]`);
+        const elementInPanel = document.querySelector(`[data-view-id="${view.id}"] [data-anchor-current="true"]`);
         if (elementInPanel) {
           elementInPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }

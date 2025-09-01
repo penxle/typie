@@ -18,17 +18,17 @@
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
 
   const anchorElements = $derived.by(() => {
-    if (!editor) {
+    if (!editor?.current) {
       return {};
     }
 
-    return getAnchorElements(Object.keys(anchors.current));
+    return getAnchorElements(editor.current, Object.keys(anchors.current));
   });
 
   const anchorPositions = $derived.by(() => {
-    if (!editor || Object.keys(anchorElements).length === 0) return [];
+    if (!editor?.current || Object.keys(anchorElements).length === 0) return [];
 
-    return calculateAnchorPositions(anchorElements, anchors.current);
+    return calculateAnchorPositions(editor.current, anchorElements, anchors.current);
   });
 
   const updateAnchorName = (nodeId: string, name: string | null) => {

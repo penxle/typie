@@ -17,6 +17,7 @@
   import CopyXIcon from '~icons/lucide/copy-x';
   import XIcon from '~icons/lucide/x';
   import { fragment, graphql } from '$graphql';
+  import { getViewContext } from '../@split-view/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type { Editor_Panel_PanelSpellcheck_user } from '$graphql';
@@ -51,6 +52,8 @@
       }
     `),
   );
+
+  const view = getViewContext();
 
   let inflight = $state(false);
   let mounted = $state(false);
@@ -171,7 +174,7 @@
       if (newActiveError && newActiveError !== activeError) {
         activeError = newActiveError;
         setTimeout(() => {
-          const errorElement = document.querySelector(`[data-panel-spellcheck-error="${newActiveError.id}"]`);
+          const errorElement = document.querySelector(`[data-view-id="${view.id}"] [data-panel-spellcheck-error="${newActiveError.id}"]`);
           if (errorElement) {
             errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
@@ -255,7 +258,7 @@
   });
 
   onMount(() => {
-    const container = document.querySelector('.editor-scroll-container');
+    const container = document.querySelector(`[data-view-id="${view.id}"] .editor-scroll-container`);
     if (!container) return;
 
     ({ anchor, floating } = createFloatingActions({
@@ -399,7 +402,9 @@
               const prevError = errors[currentIndex - 1];
               if (prevError) {
                 scrollToError(prevError);
-                const prevElement = document.querySelector(`[data-panel-spellcheck-error="${prevError.id}"]`) as HTMLElement;
+                const prevElement = document.querySelector(
+                  `[data-view-id="${view.id}"] [data-panel-spellcheck-error="${prevError.id}"]`,
+                ) as HTMLElement;
                 prevElement?.focus();
               }
             } else if (e.key === 'ArrowDown') {
@@ -408,7 +413,9 @@
               const nextError = errors[currentIndex + 1];
               if (nextError) {
                 scrollToError(nextError);
-                const nextElement = document.querySelector(`[data-panel-spellcheck-error="${nextError.id}"]`) as HTMLElement;
+                const nextElement = document.querySelector(
+                  `[data-view-id="${view.id}"] [data-panel-spellcheck-error="${nextError.id}"]`,
+                ) as HTMLElement;
                 nextElement?.focus();
               }
             }

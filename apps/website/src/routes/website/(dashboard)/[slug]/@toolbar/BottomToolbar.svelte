@@ -17,6 +17,7 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
   import { fragment, graphql } from '$graphql';
+  import { getViewContext } from '../@split-view/context.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
@@ -58,6 +59,7 @@
   );
 
   const app = getAppContext();
+  const splitViewId = getViewContext().id;
 
   let canUndo = $state(false);
   let canRedo = $state(false);
@@ -474,7 +476,7 @@
       keys={['Mod', 'F']}
       label="찾기, 바꾸기"
       onclick={() => {
-        app.state.findReplaceOpen = !app.state.findReplaceOpen;
+        app.state.findReplaceOpenByViewId[splitViewId] = !app.state.findReplaceOpenByViewId[splitViewId];
       }}
       size="small"
     />

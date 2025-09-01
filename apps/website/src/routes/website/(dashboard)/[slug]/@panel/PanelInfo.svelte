@@ -5,6 +5,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { PostType } from '@/enums';
   import { fragment, graphql } from '$graphql';
+  import { getViewContext } from '../@split-view/context.svelte';
   import PanelAnchors from './PanelAnchors.svelte';
   import PanelPost from './PanelPost.svelte';
   import PanelSubTab from './PanelSubTab.svelte';
@@ -20,9 +21,17 @@
     doc: Y.Doc;
   };
 
+  let { $post: _post, $user: _user, doc, editor }: Props = $props();
+
   const app = getAppContext();
 
-  let { $post: _post, $user: _user, doc, editor }: Props = $props();
+  const splitViewId = getViewContext().id;
+
+  $effect(() => {
+    if (splitViewId && !app.preference.current.panelInfoTabByViewId[splitViewId]) {
+      app.preference.current.panelInfoTabByViewId[splitViewId] = 'post';
+    }
+  });
 
   const post = fragment(
     _post,
@@ -49,11 +58,11 @@
 <HorizontalDivider color="secondary" />
 
 <div class={flex({ overflowY: 'auto', flexGrow: '1' })}>
-  {#if app.preference.current.panelInfoTab === 'post'}
+  {#if app.preference.current.panelInfoTabByViewId[splitViewId] === 'post'}
     <PanelPost {$post} $user={_user} {doc} {editor} />
   {/if}
 
-  {#if app.preference.current.panelInfoTab === 'anchors'}
+  {#if app.preference.current.panelInfoTabByViewId[splitViewId] === 'anchors'}
     <PanelAnchors {doc} {editor} />
   {/if}
 </div>

@@ -8,11 +8,8 @@ const ANCHORABLE_NODE_TYPES = new Set([...WRAPPING_NODE_TYPES, ...TEXT_NODE_TYPE
 
 const displayCache = new WeakMap<HTMLElement, string>();
 
-export const getLastNodeOffsetTop = (): number | null => {
-  const editorEl = document.querySelector('.editor');
-  if (!editorEl) return null;
-
-  const allNodes = [...editorEl.querySelectorAll('[data-node-id]')];
+export const getLastNodeOffsetTop = (editorEl: HTMLElement): number | null => {
+  const allNodes = [...editorEl.querySelectorAll(`[data-node-id]`)];
   if (allNodes.length === 0) return null;
 
   // NOTE: inline 노드(특히 hard_break의 br)는 offsetTop이 0이거나 부정확한 값을 가질 수 있음
@@ -38,11 +35,11 @@ export const getLastNodeOffsetTop = (): number | null => {
   return lastNode.offsetTop;
 };
 
-export const getAnchorElements = (anchorIds: string[]): Record<string, HTMLElement> => {
+export const getAnchorElements = (editor: Editor, anchorIds: string[]): Record<string, HTMLElement> => {
   const elements: Record<string, HTMLElement> = {};
 
   for (const nodeId of anchorIds) {
-    const element = document.querySelector(`[data-node-id="${nodeId}"]`);
+    const element = editor.view.dom.querySelector(`[data-node-id="${nodeId}"]`);
     if (element) {
       elements[nodeId] = element as HTMLElement;
     }
@@ -60,10 +57,11 @@ export type AnchorPosition = {
 };
 
 export const calculateAnchorPositions = (
+  editor: Editor,
   anchorElements: Record<string, HTMLElement>,
   anchors: Record<string, string | null>,
 ): AnchorPosition[] => {
-  const lastNodeOffsetTop = getLastNodeOffsetTop();
+  const lastNodeOffsetTop = getLastNodeOffsetTop(editor.view.dom);
   if (lastNodeOffsetTop === null) return [];
 
   return Object.entries(anchorElements)

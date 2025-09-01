@@ -9,15 +9,20 @@
   import { EntityAvailability, EntityVisibility, ExportLayoutMode, PostLayoutMode, PostType } from '@/enums';
   import { TypieError } from '@/errors';
   import BlendIcon from '~icons/lucide/blend';
+  import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';
   import DownloadIcon from '~icons/lucide/download';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import InfoIcon from '~icons/lucide/info';
+  import Rows2Icon from '~icons/lucide/rows-2';
   import ShapesIcon from '~icons/lucide/shapes';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { getPostYjsAttrs } from '$lib/utils/yjs-post';
+  import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
+  import { addSplitView } from '../[slug]/@split-view/utils';
   import PdfExportModal from './PdfExportModal.svelte';
   import type { PageLayout } from '@typie/ui/utils';
   import type { Snippet } from 'svelte';
@@ -31,6 +36,7 @@
     };
     entity: {
       id: string;
+      slug: string;
       url: string;
       visibility: EntityVisibility;
       availability: EntityAvailability;
@@ -42,6 +48,9 @@
   };
 
   let { post, entity, via, pageLayout, layoutMode, children }: Props = $props();
+
+  const app = getAppContext();
+  const splitView = getSplitViewContext();
 
   let showPdfExportModal = $state(false);
   let exportModalPageLayout = $state<PageLayout | undefined>();
@@ -113,8 +122,6 @@
       }
     }
   `);
-
-  const app = getAppContext();
 
   const handleDuplicate = async () => {
     try {
@@ -197,6 +204,15 @@
       Toast.error('내보내기 중 오류가 발생했습니다');
     }
   };
+
+  const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
+    if (page.params.slug && splitView.state.current.view) {
+      const { splitViews, focusedSplitViewId } = addSplitView(splitView.state.current.view, entity.slug, direction);
+      splitView.state.current.view = splitViews;
+      splitView.state.current.focusedViewId = focusedSplitViewId;
+      mixpanel.track('add_split_view', { via, direction });
+    }
+  };
 </script>
 
 {#snippet deleteDetailsView()}
@@ -214,6 +230,11 @@
     <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
   </div>
 {/snippet}
+
+{#if app.preference.current.experimental_splitViewEnabled}
+  <MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
+  <MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
+{/if}
 
 <MenuItem external href={entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
 

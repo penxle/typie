@@ -36,6 +36,8 @@
   import Anchors from './@anchor/Anchors.svelte';
   import Panel from './@panel/Panel.svelte';
   import PanelNote from './@panel/PanelNote.svelte';
+  import { getSplitViewContext, getViewContext } from './@split-view/context.svelte';
+  import { closeSplitView } from './@split-view/utils';
   import BottomToolbar from './@toolbar/BottomToolbar.svelte';
   import TopToolbar from './@toolbar/TopToolbar.svelte';
   import FloatingFindReplace from './FloatingFindReplace.svelte';
@@ -53,9 +55,11 @@
 
   type Props = {
     $query: Editor_query;
+    slug: string;
+    focused: boolean;
   };
 
-  let { $query: _query }: Props = $props();
+  let { $query: _query, slug, focused }: Props = $props();
 
   const query = fragment(
     _query,
@@ -77,7 +81,7 @@
           }
         }
 
-        entity(slug: $slug) {
+        entities(slugs: $slugs) {
           id
           slug
           url
@@ -191,8 +195,13 @@
   setupEditorContext();
 
   const app = getAppContext();
+  const splitView = getSplitViewContext();
+  const splitViewId = getViewContext().id;
   const clientId = nanoid();
-  const postId = $derived($query && $query.entity.node.__typename === 'Post' ? $query.entity.node.id : null);
+
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === slug))!;
+  const postId = $derived(entity.node.__typename === 'Post' ? entity.node.id : null);
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -248,7 +257,7 @@
   };
 
   const fontFaces = $derived(
-    $query.entity.site.fonts
+    entity.site.fonts
       .flatMap((font) => [
         `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
         `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
@@ -427,8 +436,12 @@
     }
   });
 
+  const currentViewZenModeEnabled = $derived(
+    app.preference.current.zenModeEnabled && splitViewId === splitView.state.current.focusedViewId,
+  );
+
   $effect(() => {
-    if (app.preference.current.zenModeEnabled) {
+    if (currentViewZenModeEnabled) {
       Tip.show('editor.zen-mode.enabled', '집중 모드가 활성화되었어요. Esc 키를 눌러 빠져나올 수 있어요.');
     }
   });
@@ -506,8 +519,8 @@
 
     const persistence = new IndexeddbPersistence(`typie:editor:${postId}`, doc);
 
-    if ($query.entity.node.__typename === 'Post') {
-      Y.applyUpdateV2(doc, base64.parse($query.entity.node.update), 'remote');
+    if (entity.node.__typename === 'Post') {
+      Y.applyUpdateV2(doc, base64.parse(entity.node.update), 'remote');
 
       if (![PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode.current)) {
         layoutMode.current = PostLayoutMode.SCROLL;
@@ -559,6 +572,8 @@
     }, 1000);
 
     const off = on(globalThis.window, 'keydown', async (e) => {
+      if (!focused) return;
+
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         e.stopPropagation();
@@ -571,14 +586,14 @@
         e.preventDefault();
         e.stopPropagation();
 
-        const currentEntityId = $query.entity.id;
+        const currentEntityId = entity.id;
 
         let siblingEntities: { id: string; slug: string; node: { __typename: string } }[] = [];
 
-        if ($query.entity.parent) {
-          siblingEntities = $query.entity.parent.children.filter((child) => child.node.__typename === 'Post');
+        if (entity.parent) {
+          siblingEntities = entity.parent.children.filter((child) => child.node.__typename === 'Post');
         } else {
-          siblingEntities = $query.entity.site.entities.filter((entity) => entity.node.__typename === 'Post');
+          siblingEntities = entity.site.entities.filter((entity) => entity.node.__typename === 'Post');
         }
 
         const currentIndex = siblingEntities.findIndex((entity) => entity.id === currentEntityId);
@@ -599,9 +614,6 @@
         }
       }
     });
-
-    app.state.ancestors = $query.entity.ancestors.map((ancestor) => ancestor.id);
-    app.state.current = $query.entity.id;
 
     editor?.current.on('selectionUpdate', persistSelection);
 
@@ -635,6 +647,13 @@
       doc.destroy();
     };
   });
+
+  $effect(() => {
+    if (focused) {
+      app.state.ancestors = entity.ancestors.map((ancestor) => ancestor.id);
+      app.state.current = entity.id;
+    }
+  });
 </script>
 
 <svelte:head>
@@ -658,10 +677,12 @@
   }}
 />
 
-<Helmet title={`${effectiveTitle.current || '(제목 없음)'} 작성 중`} />
+{#if focused}
+  <Helmet title={`${effectiveTitle.current || '(제목 없음)'} 작성 중`} />
+{/if}
 
-{#if $query.entity.node.__typename === 'Post'}
-  <div class={flex({ height: 'full' })}>
+{#if entity.node.__typename === 'Post'}
+  <div class={flex({ height: 'full', flex: '1', overflowX: 'auto' })}>
     <div class={flex({ flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
       <div
         class={flex({
@@ -672,6 +693,7 @@
           paddingLeft: '24px',
           paddingRight: '8px',
           height: '36px',
+          backgroundColor: 'surface.default',
         })}
       >
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
@@ -680,7 +702,7 @@
           <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>내 포스트</div>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
 
-          {#each $query.entity.ancestors as ancestor (ancestor.id)}
+          {#each entity.ancestors as ancestor (ancestor.id)}
             {#if ancestor.node.__typename === 'Folder'}
               <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>
                 {ancestor.node.name}
@@ -729,7 +751,7 @@
             ></div>
           </div>
 
-          {#if $query.me.id === $query.entity.user.id}
+          {#if $query.me.id === entity.user.id}
             <Menu>
               {#snippet button({ open })}
                 <button
@@ -754,14 +776,8 @@
                 </button>
               {/snippet}
 
-              {#if $query.entity.node.__typename === 'Post'}
-                <PostMenu
-                  entity={$query.entity}
-                  layoutMode={layoutMode.current}
-                  pageLayout={pageLayout.current}
-                  post={$query.entity.node}
-                  via="editor"
-                >
+              {#if entity.node.__typename === 'Post'}
+                <PostMenu {entity} layoutMode={layoutMode.current} pageLayout={pageLayout.current} post={entity.node} via="editor">
                   {#if $query.me.role === UserRole.ADMIN || $query.impersonation}
                     <MenuItem
                       icon={IconClockFading}
@@ -787,7 +803,7 @@
               size: '24px',
               color: 'text.faint',
               transition: 'common',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
             })}
             onclick={() => {
               app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
@@ -803,30 +819,54 @@
               keys: ['Mod', 'Shift', 'M'],
             }}
           >
-            <Icon style={css.raw({ color: 'text.faint' })} icon={Maximize2Icon} size={16} />
+            <Icon icon={Maximize2Icon} size={16} />
           </button>
+          {#if splitView.state.current.enabled}
+            <button
+              class={center({
+                borderRadius: '4px',
+                size: '24px',
+                color: 'text.faint',
+                transition: 'common',
+                _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+              })}
+              onclick={() => {
+                // NOTE: setTimeout을 빼면 마지막 스플릿 뷰를 길게 눌러 닫을 때 unmount가 안 되는 이상한 버그가 있음
+                setTimeout(() => {
+                  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                  splitView.state.current.view = closeSplitView(splitView.state.current.view!, splitViewId);
+                });
+              }}
+              type="button"
+              use:tooltip={{
+                message: '스플릿 뷰 닫기',
+              }}
+            >
+              <Icon icon={XIcon} size={16} />
+            </button>
+          {/if}
         </div>
       </div>
 
       <HorizontalDivider color="secondary" />
 
-      <TopToolbar $site={$query.entity.site} {editor} />
+      <TopToolbar $site={entity.site} {editor} />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-          <BottomToolbar $user={$query.entity.user} {editor} {undoManager} />
+          <BottomToolbar $user={entity.user} {editor} {undoManager} />
           <div
-            style:position={app.preference.current.zenModeEnabled ? 'fixed' : 'relative'}
-            style:top={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            style:left={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            style:right={app.preference.current.zenModeEnabled ? '0' : 'auto'}
-            style:bottom={app.preference.current.zenModeEnabled ? '0' : 'auto'}
+            style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
+            style:top={currentViewZenModeEnabled ? '0' : 'auto'}
+            style:left={currentViewZenModeEnabled ? '0' : 'auto'}
+            style:right={currentViewZenModeEnabled ? '0' : 'auto'}
+            style:bottom={currentViewZenModeEnabled ? '0' : 'auto'}
             class={flex({
               position: 'relative',
               flexDirection: 'column',
               flexGrow: '1',
               overflowX: 'auto',
-              zIndex: 'editor',
+              zIndex: app.preference.current.zenModeEnabled && !currentViewZenModeEnabled ? 'underEditor' : 'editor',
               backgroundColor: 'surface.default',
             })}
           >
@@ -1052,7 +1092,7 @@
 
                     {#if editor && mounted}
                       <InEditorBody {editor} pageLayout={effectivePageLayout.current ?? null}>
-                        <Placeholder $site={$query.entity.site} {doc} {editor} />
+                        <Placeholder $site={entity.site} {doc} {editor} />
                       </InEditorBody>
                       {#if app.preference.current.lineHighlightEnabled}
                         <Highlight {editor} />
@@ -1072,19 +1112,18 @@
                 </div>
 
                 {#if showTimeline}
-                  <Timeline $post={$query.entity.node} {doc} bind:viewDoc />
+                  <Timeline $post={entity.node} {doc} bind:viewDoc />
                 {/if}
               </EditorLayout>
             </div>
-
-            {#if editor && app.state.findReplaceOpen}
-              <FloatingFindReplace close={() => (app.state.findReplaceOpen = false)} {editor} />
+            {#if editor && app.state.findReplaceOpenByViewId[splitViewId]}
+              <FloatingFindReplace close={() => (app.state.findReplaceOpenByViewId[splitViewId] = false)} {editor} />
             {/if}
 
             <Anchors {doc} {editor} showOutline={showAnchorOutline} />
           </div>
         </div>
-        {#if app.preference.current.zenModeEnabled}
+        {#if currentViewZenModeEnabled}
           <button
             class={css({
               position: 'fixed',
@@ -1129,13 +1168,13 @@
           </div>
         {/if}
 
-        <Panel $post={$query.entity.node} $user={$query.me} {doc} {editor} />
+        <Panel $post={entity.node} $user={$query.me} {doc} {editor} />
       </div>
     </div>
   </div>
 {/if}
 
-<Limit {$query} $site={$query.entity.site} {editor} />
+<Limit {$query} $site={entity.site} {editor} />
 <PasteModal
   onconfirm={(mode) => {
     if (!editor || !clipboardData) {

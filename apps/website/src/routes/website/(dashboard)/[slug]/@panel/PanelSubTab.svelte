@@ -2,10 +2,11 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
+  import { getViewContext } from '../@split-view/context.svelte';
   import type { AppPreference } from '@typie/ui/context';
 
   type Props = {
-    tab: AppPreference['panelInfoTab'];
+    tab: AppPreference['panelInfoTabByViewId'][string];
     label: string;
     badge?: number;
   };
@@ -13,6 +14,8 @@
   let { tab, label, badge }: Props = $props();
 
   const app = getAppContext();
+
+  const splitViewId = getViewContext().id;
 </script>
 
 <button
@@ -33,9 +36,9 @@
       backgroundColor: 'surface.muted',
     },
   })}
-  aria-pressed={app.preference.current.panelInfoTab === tab}
+  aria-pressed={app.preference.current.panelInfoTabByViewId[splitViewId] === tab}
   onclick={() => {
-    app.preference.current.panelInfoTab = tab;
+    app.preference.current.panelInfoTabByViewId[splitViewId] = tab;
   }}
   type="button"
 >

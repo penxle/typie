@@ -12,6 +12,7 @@
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { AdminImpersonateBanner } from '$lib/components/admin';
+  import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
   import ShareModal from './@share/ShareModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -109,6 +110,8 @@
   `);
 
   const app = setupAppContext($query.me.id);
+
+  setupSplitViewContext($query.me.id);
 
   let referralWelcomeModalOpen = $state(false);
 
@@ -245,15 +248,11 @@
       <Sidebar $user={$query.me} />
 
       <div
-        class={css({
+        class={flex({
           flexGrow: '1',
-          borderWidth: '[0.5px]',
           marginY: '8px',
           marginRight: '8px',
-          borderRadius: '4px',
-          backgroundColor: 'surface.default',
-          boxShadow: '[0 3px 6px -2px {colors.shadow.default/3}, 0 1px 1px {colors.shadow.default/5}]',
-          overflowY: 'auto',
+          overflow: 'auto',
         })}
       >
         {@render children()}
