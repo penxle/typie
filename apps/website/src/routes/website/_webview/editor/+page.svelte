@@ -605,18 +605,29 @@
       } else if (name === 'strike') {
         editor?.current.chain().focus().toggleStrike().run();
       } else if (name === 'text_style') {
+        let chain = editor?.current.chain().focus();
+
         if (attrs.fontFamily !== undefined) {
-          editor?.current.chain().focus().setFontFamily(attrs.fontFamily).run();
+          chain = chain?.setFontFamily(attrs.fontFamily);
         }
+
+        if (attrs.fontWeight !== undefined) {
+          chain = chain?.setFontWeight(attrs.fontWeight);
+        }
+
         if (attrs.fontSize !== undefined) {
-          editor?.current.chain().focus().setFontSize(attrs.fontSize).run();
+          chain = chain?.setFontSize(attrs.fontSize);
         }
+
         if (attrs.textColor !== undefined) {
-          editor?.current.chain().focus().setTextColor(attrs.textColor).run();
+          chain = chain?.setTextColor(attrs.textColor);
         }
+
         if (attrs.textBackgroundColor !== undefined) {
-          editor?.current.chain().focus().setTextBackgroundColor(attrs.textBackgroundColor).run();
+          chain = chain?.setTextBackgroundColor(attrs.textBackgroundColor);
         }
+
+        chain?.run();
       } else if (name === 'link') {
         if (!editor) return;
 
