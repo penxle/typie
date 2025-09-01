@@ -1,6 +1,7 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
+  import { isiOS, isMacOS } from '@tiptap/core';
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -341,6 +342,24 @@
     }
   });
 </script>
+
+<svelte:window
+  onkeydown={(e) => {
+    if (!focused) return;
+
+    const modKey = isMacOS() || isiOS() ? e.metaKey : e.ctrlKey;
+
+    if (modKey && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      canvas?.undo();
+    } else if ((modKey && e.key === 'y') || (modKey && e.key === 'z' && e.shiftKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      canvas?.redo();
+    }
+  }}
+/>
 
 {#if focused}
   <Helmet title={`${effectiveTitle} 그리는 중`} />
