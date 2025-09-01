@@ -12,6 +12,7 @@ enum SecondaryToolbarMode {
   textColor,
   textBackgroundColor,
   fontFamily,
+  fontWeight,
   fontSize,
   textAlign,
   lineHeight,

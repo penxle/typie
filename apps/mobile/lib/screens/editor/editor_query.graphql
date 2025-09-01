@@ -2,6 +2,16 @@ query EditorScreen_Query($slug: String!, $siteId: ID!) {
   me {
     id
 
+    fontFamilies {
+      id
+      name
+
+      fonts {
+        id
+        weight
+      }
+    }
+
     subscription {
       id
     }
@@ -22,11 +32,6 @@ query EditorScreen_Query($slug: String!, $siteId: ID!) {
 
       site {
         id
-
-        fonts {
-          id
-          name
-        }
       }
     }
 
