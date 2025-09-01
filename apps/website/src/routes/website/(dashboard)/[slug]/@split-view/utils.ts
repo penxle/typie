@@ -68,16 +68,18 @@ export const closeSplitView = (splitViews: SplitView, splitViewId: string): Spli
   return splitViews;
 };
 
-export const replaceSplitView = (splitViews: SplitView, id: string, newSlug: string, newId: string): SplitView => {
-  if (splitViews.type === 'item' && splitViews.id === id) {
-    return { ...splitViews, slug: newSlug, id: newId };
+export const replaceSplitView = (view: SplitView, id: string, newSlug: string, newId: string): SplitView => {
+  if (view.type === 'item') {
+    return view.id === id ? { ...view, slug: newSlug, id: newId } : view;
   }
 
-  if (splitViews.type === 'container' && splitViews.children) {
-    splitViews.children = splitViews.children.map((child) => replaceSplitView(child, id, newSlug, newId));
-  }
-
-  return splitViews;
+  let changed = false;
+  const children = view.children.map((child) => {
+    const next = replaceSplitView(child, id, newSlug, newId);
+    if (next !== child) changed = true;
+    return next;
+  });
+  return changed ? { ...view, children } : view;
 };
 
 export const findViewIdBySlug = (splitViews: SplitView, slug: string): string | null => {
@@ -168,4 +170,72 @@ export const addSplitViewToState = (state: Ref<SplitViewState>, slug: string, di
       [focusedSplitViewId]: newPercentages[focusedSplitViewId],
     };
   }
+};
+
+export const replaceViewInSplitView = (splitViews: SplitView, viewId: string, newSlug: string): SplitView => {
+  return replaceSplitView(splitViews, viewId, newSlug, viewId);
+};
+
+export const addViewToSplitView = (
+  splitViews: SplitView,
+  targetViewId: string,
+  newSlug: string,
+  direction: 'horizontal' | 'vertical',
+  position: 'before' | 'after',
+): { splitViews: SplitView; focusedSplitViewId: string } => {
+  const newViewId = nanoid();
+
+  const replaceWithContainer = (view: SplitView): SplitView => {
+    if (view.type === 'item' && view.id === targetViewId) {
+      const children =
+        position === 'before'
+          ? [
+              { id: newViewId, slug: newSlug, type: 'item' as const },
+              { ...view, id: nanoid() },
+            ]
+          : [
+              { ...view, id: nanoid() },
+              { id: newViewId, slug: newSlug, type: 'item' as const },
+            ];
+
+      return {
+        id: view.id,
+        type: 'container',
+        direction,
+        children,
+      };
+    }
+
+    if (view.type === 'container') {
+      const childIndex = view.children.findIndex((child) => child.id === targetViewId);
+
+      if (childIndex !== -1 && view.direction === direction) {
+        const newChild = { id: newViewId, slug: newSlug, type: 'item' as const };
+        const newChildren = [...view.children];
+
+        if (position === 'before') {
+          newChildren.splice(childIndex, 0, newChild);
+        } else {
+          newChildren.splice(childIndex + 1, 0, newChild);
+        }
+
+        return {
+          ...view,
+          children: newChildren,
+        };
+      }
+
+      return {
+        ...view,
+        children: view.children.map((child) => replaceWithContainer(child)),
+      };
+    }
+
+    return view;
+  };
+
+  return {
+    splitViews: replaceWithContainer(splitViews),
+    focusedSplitViewId: newViewId,
+  };
 };
