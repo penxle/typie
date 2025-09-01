@@ -18,11 +18,10 @@
   import ShapesIcon from '~icons/lucide/shapes';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import { graphql } from '$graphql';
   import { getPostYjsAttrs } from '$lib/utils/yjs-post';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
-  import { addSplitView } from '../[slug]/@split-view/utils';
+  import { addSplitViewToState } from '../[slug]/@split-view/utils';
   import PdfExportModal from './PdfExportModal.svelte';
   import type { PageLayout } from '@typie/ui/utils';
   import type { Snippet } from 'svelte';
@@ -206,12 +205,8 @@
   };
 
   const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
-    if (page.params.slug && splitView.state.current.view) {
-      const { splitViews, focusedSplitViewId } = addSplitView(splitView.state.current.view, entity.slug, direction);
-      splitView.state.current.view = splitViews;
-      splitView.state.current.focusedViewId = focusedSplitViewId;
-      mixpanel.track('add_split_view', { via, direction });
-    }
+    addSplitViewToState(splitView.state, entity.slug, direction);
+    mixpanel.track('add_split_view', { via, direction });
   };
 </script>
 

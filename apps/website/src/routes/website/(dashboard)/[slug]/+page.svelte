@@ -67,6 +67,11 @@
       splitView.state.current.view.type === 'container' &&
       splitView.state.current.view.children.length > 1
     );
+
+    if (!splitView.state.current.enabled) {
+      splitView.state.current.basePercentages = {};
+      splitView.state.current.currentPercentages = {};
+    }
   });
 
   const focusedEntity = $derived.by(() => $query && $query.entities.find((entity) => entity.slug === slug));
@@ -108,7 +113,7 @@
   };
 
   $effect(() => {
-    void splitView.state.current.view;
+    void view;
     load();
   });
 </script>

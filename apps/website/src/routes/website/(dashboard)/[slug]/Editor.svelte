@@ -36,8 +36,8 @@
   import Anchors from './@anchor/Anchors.svelte';
   import Panel from './@panel/Panel.svelte';
   import PanelNote from './@panel/PanelNote.svelte';
+  import CloseSplitView from './@split-view/CloseSplitView.svelte';
   import { getSplitViewContext, getViewContext } from './@split-view/context.svelte';
-  import { closeSplitView } from './@split-view/utils';
   import BottomToolbar from './@toolbar/BottomToolbar.svelte';
   import TopToolbar from './@toolbar/TopToolbar.svelte';
   import FloatingFindReplace from './FloatingFindReplace.svelte';
@@ -822,28 +822,9 @@
             <Icon icon={Maximize2Icon} size={16} />
           </button>
           {#if splitView.state.current.enabled}
-            <button
-              class={center({
-                borderRadius: '4px',
-                size: '24px',
-                color: 'text.faint',
-                transition: 'common',
-                _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-              })}
-              onclick={() => {
-                // NOTE: setTimeout을 빼면 마지막 스플릿 뷰를 길게 눌러 닫을 때 unmount가 안 되는 이상한 버그가 있음
-                setTimeout(() => {
-                  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                  splitView.state.current.view = closeSplitView(splitView.state.current.view!, splitViewId);
-                });
-              }}
-              type="button"
-              use:tooltip={{
-                message: '스플릿 뷰 닫기',
-              }}
-            >
+            <CloseSplitView>
               <Icon icon={XIcon} size={16} />
-            </button>
+            </CloseSplitView>
           {/if}
         </div>
       </div>
