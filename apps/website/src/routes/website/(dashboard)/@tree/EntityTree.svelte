@@ -559,14 +559,12 @@
     if (dragging.drop) {
       const { target } = dragging.drop;
 
-      // NOTE: 기다림 없이 즉시 드래그 해제
-      endDragging();
-
       const isMultipleDrag = treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(entityId);
       const selectedIds = isMultipleDrag ? [...treeState.selectedEntityIds] : [entityId];
 
       if (target === 'trash') {
         try {
+          endDragging();
           await deleteEntities({ entityIds: selectedIds });
 
           mixpanel.track('delete_entities', { totalCount: selectedIds.length, via: 'drag_and_drop' });
@@ -581,6 +579,8 @@
         return;
       } else if (target === 'tree') {
         const { parentId, lowerOrder, upperOrder } = dragging.drop;
+
+        endDragging();
         await moveEntities({
           entityIds: selectedIds,
           parentEntityId: parentId ?? null,
@@ -590,12 +590,11 @@
         mixpanel.track('move_entities', { totalCount: selectedIds.length, parentEntityId: parentId ?? null, lowerOrder, upperOrder });
         return;
       } else if (target === 'view') {
+        endDragging();
         // NOTE: DropZone 에서 처리
         return;
       }
     }
-
-    endDragging(true);
   };
 
   const endDragging = (canceled = false) => {
