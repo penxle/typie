@@ -45,4 +45,5 @@ export const TableCode = {
   USER_PUSH_NOTIFICATION_TOKENS: 'UPNT',
   USER_SESSIONS: 'USES',
   USER_SINGLE_SIGN_ONS: 'USSO',
+  USER_SURVEYS: 'USVY',
 } as const;
