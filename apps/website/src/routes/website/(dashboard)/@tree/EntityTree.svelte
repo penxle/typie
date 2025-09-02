@@ -6,6 +6,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
+  import { tick } from 'svelte';
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
@@ -170,6 +171,8 @@
   let dragging = $state<Dragging | null>(null);
   let pointerType = $state<PointerEvent['pointerType']>('mouse');
   let dragTimeout = $state<NodeJS.Timeout | null>(null);
+  let folderHoverTimeout = $state<NodeJS.Timeout | null>(null);
+  let hoveredFolderId = $state<string | null>(null);
 
   let lastPointerX = $state<number>(0);
   let lastPointerY = $state<number>(0);
@@ -282,6 +285,14 @@
     }
   };
 
+  const clearFolderHoverTimeout = () => {
+    if (folderHoverTimeout) {
+      clearTimeout(folderHoverTimeout);
+    }
+    folderHoverTimeout = null;
+    hoveredFolderId = null;
+  };
+
   const updateDropTarget = (clientX: number, clientY: number) => {
     if (!dragging || !tree) return;
 
@@ -298,6 +309,7 @@
         transform: undefined,
       };
       dragging.drop = { target: 'trash' };
+      clearFolderHoverTimeout();
       return;
     }
 
@@ -323,10 +335,12 @@
       dragging.indicator = {};
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       dragging.drop = { target: 'view' as const, viewId: splitViewElement.dataset.viewId! };
+      clearFolderHoverTimeout();
       return;
     }
 
     if (!targetElement) {
+      clearFolderHoverTimeout();
       return;
     }
 
@@ -381,7 +395,36 @@
         target: 'tree',
         lowerOrder: [...targetElement.querySelectorAll<HTMLElement>('[data-id]')].at(-1)?.dataset.order,
       };
+
+      const folderId = targetElement.dataset.id;
+      const detailsElement = targetElement.closest('details');
+
+      if (!folderId || !detailsElement) {
+        clearFolderHoverTimeout();
+        return;
+      }
+
+      if (hoveredFolderId !== folderId || !detailsElement.open) {
+        if (folderHoverTimeout) {
+          clearTimeout(folderHoverTimeout);
+          folderHoverTimeout = null;
+        }
+
+        hoveredFolderId = folderId;
+
+        if (!detailsElement.open) {
+          folderHoverTimeout = setTimeout(async () => {
+            if (hoveredFolderId === folderId && dragging?.eligible && detailsElement) {
+              detailsElement.open = true;
+              await tick();
+              updateDropTarget(clientX, clientY);
+            }
+          }, 500);
+        }
+      }
     } else {
+      clearFolderHoverTimeout();
+
       if (relativeY < anchorRect.height / 2) {
         offsetElement = getPreviousElement(tree, targetElement, '[data-id]');
         dragging.indicator.top = anchorRect.top;
@@ -615,6 +658,8 @@
       clearTimeout(dragTimeout);
       dragTimeout = null;
     }
+
+    clearFolderHoverTimeout();
 
     if (dragging.eligible && dragging.element.hasPointerCapture(dragging.event.pointerId)) {
       dragging.element.releasePointerCapture(dragging.event.pointerId);
