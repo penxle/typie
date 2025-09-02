@@ -370,8 +370,12 @@
             </div>
 
             {#if question.type === 'radio'}
+              {@const nonOtherOptions = question.options.filter((opt) => opt.value !== 'other')}
+              {@const otherOption = question.options.find((opt) => opt.value === 'other')}
+              {@const shuffledNonOther = [...nonOtherOptions].sort(() => Math.random() - 0.5)}
+              {@const displayOptions = otherOption ? [...shuffledNonOther, otherOption] : shuffledNonOther}
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                {#each question.options as option (option.value)}
+                {#each displayOptions as option (option.value)}
                   <label
                     class={flex({
                       alignItems: 'flex-start',
@@ -461,8 +465,12 @@
             {/if}
 
             {#if question.type === 'checkbox'}
+              {@const nonOtherOptions = question.options.filter((opt) => opt.value !== 'other')}
+              {@const otherOption = question.options.find((opt) => opt.value === 'other')}
+              {@const shuffledNonOther = [...nonOtherOptions].sort(() => Math.random() - 0.5)}
+              {@const displayOptions = otherOption ? [...shuffledNonOther, otherOption] : shuffledNonOther}
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                {#each question.options as option (option.value)}
+                {#each displayOptions as option (option.value)}
                   {@const isChecked = (surveyData[question.id as keyof SurveyData] as string[]).includes(option.value)}
                   <label
                     class={flex({
