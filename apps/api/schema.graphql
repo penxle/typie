@@ -472,6 +472,7 @@ type Mutation {
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   purgeEntities(input: PurgeEntitiesInput!): Site!
+  recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
   registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
@@ -740,6 +741,11 @@ type Query {
   site(siteId: ID!): Site!
   stats: JSON!
   welcome: Welcome!
+}
+
+input RecordSurveyInput {
+  name: String!
+  value: JSON!
 }
 
 input RecoverEntityInput {
@@ -1025,6 +1031,7 @@ type User {
   sites: [Site!]!
   state: UserState!
   subscription: Subscription_
+  surveys: [String!]!
   totalCharacterCount: Int!
   usage: UserUsage!
   uuid: String!

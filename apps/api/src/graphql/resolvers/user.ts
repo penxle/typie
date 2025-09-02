@@ -31,6 +31,7 @@ import {
   Users,
   UserSessions,
   UserSingleSignOns,
+  UserSurveys,
   validateDbId,
 } from '@/db';
 import { sendEmail } from '@/email';
@@ -308,6 +309,36 @@ User.implement({
           .where(and(eq(FontFamilies.userId, self.id), eq(FontFamilies.state, FontFamilyState.ACTIVE)));
 
         return fontFamilies.sort((a, b) => a.name.localeCompare(b.name));
+      },
+    }),
+
+    surveys: t.stringList({
+      resolve: async (self) => {
+        const survey = await db
+          .select({ id: UserSurveys.id })
+          .from(UserSurveys)
+          .where(and(eq(UserSurveys.userId, self.id), eq(UserSurveys.name, '202509_ir')))
+          .then(first);
+
+        if (survey) {
+          return [];
+        }
+
+        const subscription = await db
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .where(and(eq(Subscriptions.userId, self.id), eq(Subscriptions.state, SubscriptionState.ACTIVE)))
+          .then(first);
+
+        if (!subscription) {
+          return [];
+        }
+
+        if (self.createdAt.isAfter(dayjs().subtract(1, 'weeks'))) {
+          return [];
+        }
+
+        return ['202509_ir'];
       },
     }),
   }),
@@ -728,6 +759,29 @@ builder.mutationFields((t) => ({
         .onConflictDoUpdate({
           target: [UserPreferences.userId],
           set: { value },
+        });
+
+      return ctx.session.userId;
+    },
+  }),
+
+  recordSurvey: t.withAuth({ session: true }).fieldWithInput({
+    type: User,
+    input: {
+      name: t.input.string(),
+      value: t.input.field({ type: 'JSON' }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await db
+        .insert(UserSurveys)
+        .values({
+          userId: ctx.session.userId,
+          name: input.name,
+          value: input.value,
+        })
+        .onConflictDoUpdate({
+          target: [UserSurveys.userId, UserSurveys.name],
+          set: { value: input.value },
         });
 
       return ctx.session.userId;

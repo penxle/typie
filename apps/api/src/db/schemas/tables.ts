@@ -785,3 +785,21 @@ export const UserSingleSignOns = pgTable(
   },
   (t) => [unique().on(t.userId, t.provider), unique().on(t.provider, t.principal)],
 );
+
+export const UserSurveys = pgTable(
+  'user_surveys',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.USER_SURVEYS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    value: jsonb('value').notNull().default({}).$type<Record<string, unknown>>(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.userId, t.name)],
+);
