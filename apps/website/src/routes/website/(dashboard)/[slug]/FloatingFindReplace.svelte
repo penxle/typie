@@ -159,6 +159,9 @@
             color: 'accent.brand.default',
             backgroundColor: 'accent.brand.subtle',
           },
+          _focus: {
+            backgroundColor: 'surface.muted',
+          },
         })}
         aria-pressed={app.preference.current.searchMatchWholeWord}
         onclick={() => (app.preference.current.searchMatchWholeWord = !app.preference.current.searchMatchWholeWord)}
@@ -214,6 +217,9 @@
                 backgroundColor: 'transparent',
               },
             },
+            _focus: {
+              backgroundColor: 'surface.muted',
+            },
           })}
           disabled={!findText}
           onclick={() => editor.current.commands.findPrevious()}
@@ -239,6 +245,9 @@
               _hover: {
                 backgroundColor: 'transparent',
               },
+            },
+            _focus: {
+              backgroundColor: 'surface.muted',
             },
           })}
           disabled={!findText}
@@ -271,6 +280,9 @@
                 backgroundColor: 'transparent',
               },
             },
+            _focus: {
+              backgroundColor: 'surface.muted',
+            },
           })}
           disabled={!findText}
           onclick={() => editor.current.commands.replace(replaceText)}
@@ -297,6 +309,9 @@
                 backgroundColor: 'transparent',
               },
             },
+            _focus: {
+              backgroundColor: 'surface.muted',
+            },
           })}
           disabled={!findText}
           onclick={() => editor.current.commands.replaceAll(replaceText)}
@@ -318,8 +333,14 @@
           _hover: {
             backgroundColor: 'surface.muted',
           },
+          _focus: {
+            backgroundColor: 'surface.muted',
+          },
         })}
-        onclick={close}
+        onclick={() => {
+          close();
+          editor.current.commands.focus(undefined, { scrollIntoView: false });
+        }}
         type="button"
         use:tooltip={{ message: '닫기', keys: ['Esc'] }}
       >
