@@ -5,11 +5,13 @@
   import { clamp } from '@typie/ui/utils';
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
+  import XIcon from '~icons/lucide/x';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { fragment, graphql } from '$graphql';
   import Canvas from '../@canvas/Canvas.svelte';
   import Editor from '../Editor.svelte';
+  import CloseSplitView from './CloseSplitView.svelte';
   import { getSplitViewContext, setupViewContext } from './context.svelte';
   import { VIEW_MIN_SIZE } from './utils';
   import ViewDropZone from './ViewDropZone.svelte';
@@ -116,6 +118,12 @@
         <Helmet title={`삭제된 ${name}`} />
       {/if}
 
+      {#if splitView.state.current.enabled}
+        <CloseSplitView style={css.raw({ position: 'absolute', top: '6px', right: '8px' })}>
+          <Icon icon={XIcon} size={16} />
+        </CloseSplitView>
+      {/if}
+
       <div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>
         <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FileXIcon} />
 
@@ -131,6 +139,12 @@
     {/if}
   {:else}
     <div class={center({ size: 'full' })}>
+      {#if splitView.state.current.enabled}
+        <CloseSplitView style={css.raw({ position: 'absolute', top: '6px', right: '8px' })}>
+          <Icon icon={XIcon} size={16} />
+        </CloseSplitView>
+      {/if}
+
       <RingSpinner style={css.raw({ size: '24px', color: 'text.subtle' })} />
     </div>
   {/if}
