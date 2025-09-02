@@ -19,6 +19,7 @@
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
   import Sidebar from './Sidebar.svelte';
+  import UserSurveyModal from './UserSurveyModal.svelte';
 
   let { children } = $props();
 
@@ -43,6 +44,8 @@
         referral {
           id
         }
+
+        surveys
 
         ...DashboardLayout_Sidebar_user
         ...DashboardLayout_CommandPalette_user
@@ -116,6 +119,7 @@
   setupDragDropContext();
 
   let referralWelcomeModalOpen = $state(false);
+  let userSurveyModalOpen = $state(false);
 
   $effect(() => {
     return untrack(() => {
@@ -145,6 +149,13 @@
     if ($query.me.referral && !app.preference.current.referralWelcomeModalShown) {
       referralWelcomeModalOpen = true;
       app.preference.current.referralWelcomeModalShown = true;
+    }
+
+    const skipUntil = localStorage.getItem('surveySkipUntil');
+    const shouldShowSurvey = $query.me.surveys.includes('202509_ir') && (!skipUntil || new Date(skipUntil) < new Date());
+
+    if (shouldShowSurvey) {
+      userSurveyModalOpen = true;
     }
 
     if ($query.me.preferences.initialPage) {
@@ -268,3 +279,4 @@
 <Shortcuts {$query} />
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
+<UserSurveyModal bind:open={userSurveyModalOpen} />
