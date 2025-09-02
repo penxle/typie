@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { db, first, firstOrThrow, FontFamilies, Fonts, TableCode, validateDbId } from '@/db';
 import { FontFamilyState, FontState } from '@/enums';
 import { builder } from '../builder';
@@ -27,7 +27,7 @@ FontFamily.implement({
     fonts: t.field({
       type: [Font],
       resolve: async (self) => {
-        return await db.select().from(Fonts).where(eq(Fonts.familyId, self.id));
+        return await db.select().from(Fonts).where(eq(Fonts.familyId, self.id)).orderBy(asc(Fonts.weight));
       },
     }),
   }),
