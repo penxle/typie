@@ -1,6 +1,5 @@
 import { nanoid } from 'nanoid';
-import type { Ref } from '@typie/ui/utils';
-import type { SplitView, SplitViewState } from './context.svelte';
+import type { SplitView } from './context.svelte';
 
 export const VIEW_MIN_SIZE = 210;
 export const RESIZER_SIZE = 4;
@@ -33,54 +32,21 @@ export const collectSlug = (splitViews: SplitView | null): string[] => {
   return splitViews.children.flatMap((child) => collectSlug(child));
 };
 
-export const addSplitView = (
-  splitViews: SplitView,
-  slug: string,
-  direction: 'horizontal' | 'vertical',
-): { splitViews: SplitView; focusedSplitViewId: string } => {
-  const newSplitViewId = nanoid();
-
-  if (splitViews.type === 'container' && splitViews.direction === direction) {
-    return {
-      splitViews: {
-        ...splitViews,
-        children: [...splitViews.children, { id: newSplitViewId, slug, type: 'item' }],
-      },
-      focusedSplitViewId: newSplitViewId,
-    };
-  }
-
-  return {
-    splitViews: {
-      id: nanoid(),
-      type: 'container',
-      direction,
-      children: [splitViews, { id: newSplitViewId, slug, type: 'item' }],
-    },
-    focusedSplitViewId: newSplitViewId,
-  };
-};
-
 export const closeSplitView = (splitViews: SplitView, splitViewId: string): SplitView | null => {
   if (splitViews.type === 'item' && splitViews.id === splitViewId) {
     return null;
   }
 
   if (splitViews.type === 'container' && splitViews.children) {
-    splitViews.children = splitViews.children.map((child) => closeSplitView(child, splitViewId)).filter((child) => child !== null);
+    const remainingChildren = splitViews.children
+      .map((child) => closeSplitView(child, splitViewId))
+      .filter((child): child is SplitView => child !== null);
 
-    const remainingChildren = splitViews.children.filter((child) => child !== null);
-
-    if (remainingChildren.length === 1) {
-      return {
-        ...remainingChildren[0],
-        id: splitViews.id,
-      };
-    }
-
-    if (remainingChildren.length === 0) {
-      return null;
-    }
+    const newView = {
+      ...splitViews,
+      children: remainingChildren,
+    };
+    return flattenSplitView(newView);
   }
 
   return splitViews;
@@ -112,6 +78,57 @@ export const findViewIdBySlug = (splitViews: SplitView, slug: string): string | 
   return null;
 };
 
+export const findViewById = (splitViews: SplitView, viewId: string): SplitView | null => {
+  if (splitViews.id === viewId) {
+    return splitViews;
+  }
+
+  if (splitViews.type === 'container' && splitViews.children) {
+    for (const child of splitViews.children) {
+      const found = findViewById(child, viewId);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  return null;
+};
+
+const flattenSplitView = (view: SplitView): SplitView | null => {
+  if (view.type === 'item') {
+    return view;
+  }
+
+  // container인 경우 자식들을 재귀적으로 flatten
+  const flattenedChildren = view.children.map((child) => flattenSplitView(child)).filter((child): child is SplitView => child !== null);
+
+  if (flattenedChildren.length === 0) {
+    return null;
+  }
+
+  // NOTE: 자식이 하나만 남으면 승격
+  if (flattenedChildren.length === 1) {
+    return {
+      ...flattenedChildren[0],
+      id: view.id,
+    };
+  }
+
+  // NOTE: 방향이 같은 자식 container들을 부모 레벨로 병합
+  const mergedChildren = flattenedChildren.flatMap((child) => {
+    if (child.type === 'container' && child.direction === view.direction) {
+      return child.children;
+    }
+    return [child];
+  });
+
+  return {
+    ...view,
+    children: mergedChildren,
+  };
+};
+
 export const getParentView = (splitViews: SplitView, viewId: string): SplitView | null => {
   if (splitViews.type === 'container' && splitViews.children) {
     if (splitViews.children.some((child) => child.id === viewId)) {
@@ -131,7 +148,8 @@ export const getParentView = (splitViews: SplitView, viewId: string): SplitView 
   return null;
 };
 
-export const calculateViewPercentages = (
+// NOTE: 새 뷰가 추가될 때 새 뷰에 균등한 공간 할당하고, 기존 뷰는 남은 공간을 기존 비율대로 나눔
+export const calculateViewPercentagesForNewView = (
   parentView: SplitView,
   newViewId: string,
   currentPercentages: Record<string, number>,
@@ -167,89 +185,142 @@ export const calculateViewPercentages = (
   return newPercentages;
 };
 
-export const addSplitViewToState = (state: Ref<SplitViewState>, slug: string, direction: 'horizontal' | 'vertical'): void => {
-  if (!state.current.view) return;
-
-  const { splitViews, focusedSplitViewId } = addSplitView(state.current.view, slug, direction);
-  state.current.view = splitViews;
-  state.current.focusedViewId = focusedSplitViewId;
-
-  const parentView = getParentView(splitViews, focusedSplitViewId);
-  if (parentView && parentView.type === 'container') {
-    const newPercentages = calculateViewPercentages(parentView, focusedSplitViewId, state.current.currentPercentages);
-
-    state.current.currentPercentages = {
-      ...state.current.currentPercentages,
-      ...newPercentages,
-    };
-
-    state.current.basePercentages = {
-      ...state.current.basePercentages,
-      [focusedSplitViewId]: newPercentages[focusedSplitViewId],
-    };
+// NOTE: 뷰가 삭제되면 남은 공간을 기존 비율대로 나눠서 총합을 100%로 맞춤
+export const normalizeContainerPercentages = (parentView: SplitView, current: Record<string, number>): Record<string, number> => {
+  if (parentView.type !== 'container') return {};
+  const ids = parentView.children.map((c) => c.id);
+  const total = ids.reduce((s, id) => s + (current[id] ?? 0), 0);
+  if (!total) {
+    const equal = 100 / ids.length;
+    return ids.reduce<Record<string, number>>((acc, id) => ((acc[id] = equal), acc), {});
   }
+  const scale = 100 / total;
+  return ids.reduce<Record<string, number>>((acc, id) => ((acc[id] = (current[id] ?? 0) * scale), acc), {});
 };
 
-export const addViewToSplitView = (
+export const addViewAtRoot = (
   splitViews: SplitView,
-  targetViewId: string,
-  newSlug: string,
+  slug: string,
   direction: 'horizontal' | 'vertical',
-  position: 'before' | 'after',
 ): { splitViews: SplitView; focusedSplitViewId: string } => {
-  const newViewId = nanoid();
+  const newSplitViewId = nanoid();
 
-  const replaceWithContainer = (view: SplitView): SplitView => {
-    if (view.type === 'item' && view.id === targetViewId) {
-      const children =
-        position === 'before'
-          ? [
-              { id: newViewId, slug: newSlug, type: 'item' as const },
-              { ...view, id: nanoid() },
-            ]
-          : [
-              { ...view, id: nanoid() },
-              { id: newViewId, slug: newSlug, type: 'item' as const },
-            ];
+  if (splitViews.type === 'container' && splitViews.direction === direction) {
+    return {
+      splitViews: {
+        ...splitViews,
+        children: [...splitViews.children, { id: newSplitViewId, slug, type: 'item' }],
+      },
+      focusedSplitViewId: newSplitViewId,
+    };
+  }
 
-      return {
-        id: view.id,
+  return {
+    splitViews: {
+      id: nanoid(),
+      type: 'container',
+      direction,
+      children: [splitViews, { id: newSplitViewId, slug, type: 'item' }],
+    },
+    focusedSplitViewId: newSplitViewId,
+  };
+};
+
+export const moveView = (
+  splitViews: SplitView,
+  source:
+    | {
+        viewId: string;
+        delete: boolean;
+      }
+    | { slug: string },
+  target: {
+    viewId: string;
+    direction: 'horizontal' | 'vertical';
+    position: 'before' | 'after';
+  },
+): { splitViews: SplitView; focusedSplitViewId: string } | null => {
+  const isMove = 'viewId' in source;
+  const willDeleteSource = isMove && source.delete;
+  const newViewId = willDeleteSource ? source.viewId : nanoid();
+  const { viewId: targetViewId, direction, position } = target;
+
+  // NOTE: source 처리: viewId가 있으면 기존 뷰 이동, slug가 있으면 새 뷰 추가
+  let sourceViewId: string | null = null;
+  let sourceSlug: string;
+
+  if (isMove) {
+    sourceViewId = source.viewId;
+    const sourceView = findViewById(splitViews, sourceViewId);
+    if (!sourceView || sourceView.type !== 'item') {
+      return null;
+    }
+    sourceSlug = sourceView.slug;
+  } else {
+    sourceSlug = source.slug;
+  }
+
+  // NOTE: 루트가 단일 item이고 그것이 타겟인 경우 바로 처리
+  if (!sourceViewId && splitViews.type === 'item' && splitViews.id === targetViewId) {
+    const newView = { id: newViewId, slug: sourceSlug, type: 'item' as const };
+    const targetCopy = { ...splitViews, id: nanoid() };
+
+    const children = position === 'before' ? [newView, targetCopy] : [targetCopy, newView];
+
+    return {
+      splitViews: {
+        id: splitViews.id,
         type: 'container',
         direction,
         children,
-      };
-    }
+      },
+      focusedSplitViewId: newViewId,
+    };
+  }
 
-    if (view.type === 'container') {
-      const childIndex = view.children.findIndex((child) => child.id === targetViewId);
+  const processView = (view: SplitView): SplitView | null => {
+    if (view.type === 'item') {
+      if (sourceViewId && view.id === sourceViewId && willDeleteSource) {
+        return null;
+      }
 
-      if (childIndex !== -1 && view.direction === direction) {
-        const newChild = { id: newViewId, slug: newSlug, type: 'item' as const };
-        const newChildren = [...view.children];
+      // NOTE: 타겟 뷰는 새 뷰와 함께 container로 변환
+      if (view.id === targetViewId) {
+        const newView = { id: newViewId, slug: sourceSlug, type: 'item' as const };
+        const targetCopy = { ...view, id: nanoid() };
 
-        if (position === 'before') {
-          newChildren.splice(childIndex, 0, newChild);
-        } else {
-          newChildren.splice(childIndex + 1, 0, newChild);
-        }
+        const children = position === 'before' ? [newView, targetCopy] : [targetCopy, newView];
 
         return {
-          ...view,
-          children: newChildren,
+          id: view.id,
+          type: 'container',
+          direction,
+          children,
         };
       }
 
-      return {
-        ...view,
-        children: view.children.map((child) => replaceWithContainer(child)),
-      };
+      return view;
     }
 
-    return view;
+    const processedChildren = view.children.map((child) => processView(child)).filter((child): child is SplitView => child !== null);
+
+    return { ...view, children: processedChildren };
   };
 
+  const result = processView(splitViews);
+
+  if (!result) {
+    return null;
+  }
+
+  const flattened = flattenSplitView(result);
+
+  if (!flattened) {
+    return null;
+  }
+
   return {
-    splitViews: replaceWithContainer(splitViews),
+    splitViews: flattened,
     focusedSplitViewId: newViewId,
   };
 };

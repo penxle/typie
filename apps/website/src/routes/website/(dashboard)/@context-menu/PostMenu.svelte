@@ -21,7 +21,6 @@
   import { graphql } from '$graphql';
   import { getPostYjsAttrs } from '$lib/utils/yjs-post';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
-  import { addSplitViewToState } from '../[slug]/@split-view/utils';
   import PdfExportModal from './PdfExportModal.svelte';
   import type { PageLayout } from '@typie/ui/utils';
   import type { Snippet } from 'svelte';
@@ -205,7 +204,7 @@
   };
 
   const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
-    addSplitViewToState(splitView.state, entity.slug, direction);
+    splitView.addViewAtRoot(entity.slug, direction);
     mixpanel.track('add_split_view', { via, direction });
   };
 </script>

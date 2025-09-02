@@ -3,8 +3,7 @@
   import mixpanel from 'mixpanel-browser';
   import { getSplitViewContext } from './context.svelte';
   import { getDragDropContext } from './drag-context.svelte';
-  import { addViewToSplitView, calculateViewPercentages, getParentView, replaceSplitView } from './utils';
-  import type { SplitView, SplitViewItem } from './context.svelte';
+  import type { SplitViewItem } from './context.svelte';
   import type { DropZone } from './drag-context.svelte';
 
   type Props = {
@@ -20,6 +19,11 @@
   let dropZone = $state<DropZone | null>(null);
   const isDragging = $derived(dragDrop.state.isDragging);
   const isActive = $derived(isDragging && dropZone !== null);
+
+  const finalizeDrop = () => {
+    dropZone = null;
+    dragDrop.endDrag();
+  };
 
   const getDropZone = (mouseX: number, mouseY: number): DropZone | null => {
     if (!viewElement) return null;
@@ -68,53 +72,82 @@
       const droppedItem = dragDrop.state.droppedItem;
       if (!droppedItem || !splitView.state.current.view) return;
 
-      let result: { splitViews: SplitView; focusedSplitViewId: string } | null = null;
+      if (droppedItem.type === 'view') {
+        const draggedViewId = droppedItem.viewId;
 
-      if (zone === 'center') {
-        const newView = replaceSplitView(splitView.state.current.view, viewItem.id, droppedItem.slug);
-        splitView.state.current.view = newView;
-        splitView.state.current.focusedViewId = viewItem.id;
+        if (zone === 'center') {
+          if (draggedViewId === viewItem.id) {
+            finalizeDrop();
+            return;
+          }
 
-        mixpanel.track('replace_split_view', {
-          via: 'drag-drop',
-        });
-      } else {
-        const direction = zone === 'left' || zone === 'right' ? 'horizontal' : 'vertical';
-        const position = zone === 'left' || zone === 'top' ? 'before' : 'after';
+          const success = splitView.swapView(draggedViewId, viewItem.id);
+          if (!success) {
+            finalizeDrop();
+            return;
+          }
 
-        result = addViewToSplitView(splitView.state.current.view, viewItem.id, droppedItem.slug, direction, position);
+          mixpanel.track('move_split_view', {
+            via: 'drag-drop',
+            action: 'replace',
+          });
+        } else {
+          const direction = zone === 'left' || zone === 'right' ? 'horizontal' : 'vertical';
+          const position = zone === 'left' || zone === 'top' ? 'before' : 'after';
 
-        splitView.state.current.view = result.splitViews;
-        splitView.state.current.focusedViewId = result.focusedSplitViewId;
+          const isDuplicate = draggedViewId === viewItem.id;
+          const success = splitView.moveView({ viewId: draggedViewId, delete: !isDuplicate }, { viewId: viewItem.id, direction, position });
 
-        const parentView = getParentView(result.splitViews, result.focusedSplitViewId);
-        if (parentView && parentView.type === 'container') {
-          const newPercentages = calculateViewPercentages(
-            parentView,
-            result.focusedSplitViewId,
-            splitView.state.current.currentPercentages,
-          );
+          if (!success) {
+            finalizeDrop();
+            return;
+          }
 
-          splitView.state.current.currentPercentages = {
-            ...splitView.state.current.currentPercentages,
-            ...newPercentages,
-          };
-
-          splitView.state.current.basePercentages = {
-            ...splitView.state.current.basePercentages,
-            [result.focusedSplitViewId]: newPercentages[result.focusedSplitViewId],
-          };
+          if (isDuplicate) {
+            mixpanel.track('duplicate_split_view', {
+              via: 'drag-drop',
+              direction,
+              position,
+            });
+          } else {
+            mixpanel.track('move_split_view', {
+              via: 'drag-drop',
+              action: 'add',
+              direction,
+              position,
+            });
+          }
         }
+      } else if (droppedItem.type === 'post' || droppedItem.type === 'canvas') {
+        if (zone === 'center') {
+          const success = splitView.replaceSplitView(viewItem.id, droppedItem.slug);
+          if (!success) {
+            finalizeDrop();
+            return;
+          }
 
-        mixpanel.track('add_split_view', {
-          via: 'drag-drop',
-          direction,
-          position,
-        });
+          mixpanel.track('replace_split_view', {
+            via: 'drag-drop',
+          });
+        } else {
+          const direction = zone === 'left' || zone === 'right' ? 'horizontal' : 'vertical';
+          const position = zone === 'left' || zone === 'top' ? 'before' : 'after';
+
+          const success = splitView.moveView({ slug: droppedItem.slug }, { viewId: viewItem.id, direction, position });
+          if (!success) {
+            finalizeDrop();
+            return;
+          }
+
+          mixpanel.track('add_split_view', {
+            via: 'drag-drop',
+            direction,
+            position,
+          });
+        }
       }
 
-      dropZone = null;
-      dragDrop.endDrag();
+      finalizeDrop();
     };
 
     window.addEventListener('pointermove', handleGlobalPointerMove);

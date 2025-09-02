@@ -21,6 +21,7 @@ export const zIndex = defineTokens.zIndex({
   sidebar: { value: '75' },
   menu: { value: '80' },
   modal: { value: '80' },
+  ghost: { value: '85' },
   tooltip: { value: '90' },
   tip: { value: '100' },
   notification: { value: '150' },

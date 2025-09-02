@@ -38,6 +38,8 @@
   import PanelNote from './@panel/PanelNote.svelte';
   import CloseSplitView from './@split-view/CloseSplitView.svelte';
   import { getSplitViewContext, getViewContext } from './@split-view/context.svelte';
+  import { getDragDropContext } from './@split-view/drag-context.svelte';
+  import { dragView } from './@split-view/drag-view-action';
   import BottomToolbar from './@toolbar/BottomToolbar.svelte';
   import TopToolbar from './@toolbar/TopToolbar.svelte';
   import FloatingFindReplace from './FloatingFindReplace.svelte';
@@ -197,6 +199,8 @@
   const app = getAppContext();
   const splitView = getSplitViewContext();
   const splitViewId = getViewContext().id;
+  const dragDropContext = getDragDropContext();
+  const dragViewProps = $derived({ dragDropContext, viewId: splitViewId });
   const clientId = nanoid();
 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -696,7 +700,11 @@
           paddingRight: '8px',
           height: '36px',
           backgroundColor: 'surface.default',
+          borderRadius: '4px',
+          userSelect: 'none',
         })}
+        role="region"
+        use:dragView={dragViewProps}
       >
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
