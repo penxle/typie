@@ -133,7 +133,7 @@
           const direction = zone === 'left' || zone === 'right' ? 'horizontal' : 'vertical';
           const position = zone === 'left' || zone === 'top' ? 'before' : 'after';
 
-          const success = splitView.moveView({ slug: droppedItem.slug }, { viewId: viewItem.id, direction, position });
+          const success = splitView.addView(droppedItem.slug, { viewId: viewItem.id, direction, position });
           if (!success) {
             finalizeDrop();
             return;

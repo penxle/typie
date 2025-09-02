@@ -11,7 +11,7 @@
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
-  import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
+  import { getSplitViewContext, getViewContext } from '../[slug]/@split-view/context.svelte';
 
   type Props = {
     canvas: {
@@ -27,9 +27,18 @@
   let { canvas, entity, via }: Props = $props();
 
   const splitView = getSplitViewContext();
+  const view = getViewContext();
 
   const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
-    splitView.addViewAtRoot(entity.slug, direction);
+    if (view) {
+      splitView.addView(entity.slug, {
+        viewId: view.id,
+        direction,
+        position: 'after',
+      });
+    } else {
+      splitView.addViewAtRoot(entity.slug, direction);
+    }
     mixpanel.track('add_split_view', { via, direction });
   };
 

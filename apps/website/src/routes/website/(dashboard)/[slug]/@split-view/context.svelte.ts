@@ -6,7 +6,7 @@ import {
   closeSplitView,
   findViewById,
   getParentView,
-  moveView,
+  moveOrAddView,
   normalizeContainerPercentages,
   replaceSplitView,
 } from './utils';
@@ -41,7 +41,11 @@ type OmitFirst<T extends readonly unknown[]> = T extends readonly [unknown, ...i
 type SplitViewContext = {
   state: LocalStore<SplitViewState>;
   addViewAtRoot: (...args: OmitFirst<Parameters<typeof addViewAtRoot>>) => boolean;
-  moveView: (...args: OmitFirst<Parameters<typeof moveView>>) => boolean;
+  addView: (slug: string, target: { viewId: string; direction: 'horizontal' | 'vertical'; position: 'before' | 'after' }) => boolean;
+  moveView: (
+    source: { viewId: string; delete: boolean },
+    target: { viewId: string; direction: 'horizontal' | 'vertical'; position: 'before' | 'after' },
+  ) => boolean;
   swapView: (firstViewId: string, secondViewId: string) => boolean;
   closeSplitView: (viewId: string) => boolean;
   replaceSplitView: (...args: OmitFirst<Parameters<typeof replaceSplitView>>) => boolean;
@@ -109,13 +113,26 @@ export const setupSplitViewContext = (userId: string) => {
 
       return true;
     },
+    addView: (slug, target) => {
+      if (!context.state.current.view) return false;
+
+      const result = moveOrAddView(context.state.current.view, { slug }, target);
+
+      if (!result) return false;
+
+      context.state.current.view = result.splitViews;
+      context.state.current.focusedViewId = result.focusedSplitViewId;
+
+      updateViewPercentages(result.splitViews, result.focusedSplitViewId);
+
+      return true;
+    },
     moveView: (source, target) => {
       if (!context.state.current.view) return false;
 
-      const sourceParentId =
-        'viewId' in source && source.delete ? (getParentView(context.state.current.view, source.viewId)?.id ?? null) : null;
+      const sourceParentId = source.delete ? (getParentView(context.state.current.view, source.viewId)?.id ?? null) : null;
 
-      const result = moveView(context.state.current.view, source, target);
+      const result = moveOrAddView(context.state.current.view, source, target);
       if (!result) return false;
 
       context.state.current.view = result.splitViews;
