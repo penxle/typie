@@ -27,7 +27,11 @@ FontFamily.implement({
     fonts: t.field({
       type: [Font],
       resolve: async (self) => {
-        return await db.select().from(Fonts).where(eq(Fonts.familyId, self.id)).orderBy(asc(Fonts.weight));
+        return await db
+          .select()
+          .from(Fonts)
+          .where(and(eq(Fonts.familyId, self.id), eq(Fonts.state, FontState.ACTIVE)))
+          .orderBy(asc(Fonts.weight));
       },
     }),
   }),
