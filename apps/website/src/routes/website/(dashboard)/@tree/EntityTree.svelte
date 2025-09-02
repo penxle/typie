@@ -624,7 +624,7 @@
       if (canceled) {
         dragDropContext.cancelDrag();
       } else {
-        dragDropContext.endDrag();
+        dragDropContext.drop();
       }
     }
 
@@ -753,7 +753,7 @@
           fontSize: '14px',
           fontWeight: 'bold',
           pointerEvents: 'none',
-          zIndex: 'sidebar',
+          zIndex: 'ghost',
         })}
         use:portal
       >
@@ -785,7 +785,7 @@
           position: 'fixed',
           opacity: '[0.2]',
           pointerEvents: 'none',
-          zIndex: 'sidebar',
+          zIndex: 'ghost',
         })}
         use:portal
       >

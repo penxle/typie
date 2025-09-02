@@ -5,22 +5,27 @@ export type DragItem = {
   type: 'post' | 'canvas';
 };
 
+export type DragView = {
+  type: 'view';
+  viewId: string;
+};
+
 export type DropZone = 'center' | 'left' | 'right' | 'top' | 'bottom';
 
 type DragDropState = {
   isDragging: boolean;
-  dragItem: DragItem | null;
-  droppedItem: DragItem | null;
+  dragItem: DragItem | DragView | null;
+  droppedItem: DragItem | DragView | null;
 };
 
-class DragDropContext {
+export class DragDropContext {
   state = $state<DragDropState>({
     isDragging: false,
     dragItem: null,
     droppedItem: null,
   });
 
-  startDrag(item: DragItem) {
+  startDrag(item: DragItem | DragView) {
     this.state = {
       isDragging: true,
       dragItem: item,
@@ -36,12 +41,16 @@ class DragDropContext {
     };
   }
 
-  endDrag() {
+  drop() {
     this.state = {
       isDragging: false,
       dragItem: null,
       droppedItem: this.state.dragItem,
     };
+  }
+
+  endDrag() {
+    this.cancelDrag();
   }
 }
 
