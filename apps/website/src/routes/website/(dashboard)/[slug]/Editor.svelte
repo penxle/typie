@@ -706,7 +706,7 @@
         role="region"
         use:dragView={dragViewProps}
       >
-        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+        <div class={flex({ alignItems: 'center', gap: '4px', overflowX: 'hidden' })}>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
 
           <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>내 포스트</div>
