@@ -62,7 +62,7 @@
   const handleFocus = (viewItem: SplitViewItem) => {
     splitView.state.current.focusedViewId = viewItem.id;
     if (page.params.slug !== viewItem.slug) {
-      goto(`/${viewItem.slug}`);
+      goto(`/${viewItem.slug}`, { keepFocus: true });
     }
   };
 
