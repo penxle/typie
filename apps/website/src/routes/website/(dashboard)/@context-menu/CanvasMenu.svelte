@@ -12,7 +12,6 @@
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
-  import { addSplitViewToState } from '../[slug]/@split-view/utils';
 
   type Props = {
     canvas: {
@@ -30,7 +29,7 @@
   const splitView = getSplitViewContext();
 
   const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
-    addSplitViewToState(splitView.state, entity.slug, direction);
+    splitView.addViewAtRoot(entity.slug, direction);
     mixpanel.track('add_split_view', { via, direction });
   };
 

@@ -24,7 +24,9 @@
   import { fragment, graphql } from '$graphql';
   import CanvasMenu from '../../@context-menu/CanvasMenu.svelte';
   import CloseSplitView from '../@split-view/CloseSplitView.svelte';
-  import { getSplitViewContext } from '../@split-view/context.svelte';
+  import { getSplitViewContext, getViewContext } from '../@split-view/context.svelte';
+  import { getDragDropContext } from '../@split-view/drag-context.svelte.ts';
+  import { dragView } from '../@split-view/drag-view-action';
   import { YState } from '../state.svelte';
   import Panel from './Panel.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -102,6 +104,9 @@
   const app = getAppContext();
   const theme = getThemeContext();
   const splitView = getSplitViewContext();
+  const splitViewId = getViewContext().id;
+  const dragDropContext = getDragDropContext();
+  const dragViewProps = $derived({ dragDropContext, viewId: splitViewId });
   const clientId = nanoid();
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === slug))!;
@@ -380,7 +385,10 @@
       color: 'text.default',
       backgroundColor: 'surface.default',
       boxShadow: 'small',
+      userSelect: 'none',
     })}
+    role="region"
+    use:dragView={dragViewProps}
   >
     <Icon style={css.raw({ color: 'text.faint' })} icon={LineSquiggleIcon} size={16} />
 
@@ -430,7 +438,7 @@
       />
     {:else}
       <button
-        class={css({ fontSize: '14px', fontWeight: 'bold', cursor: 'text' })}
+        class={css({ fontSize: '14px', fontWeight: 'bold', cursor: 'text', whiteSpace: 'nowrap' })}
         ondblclick={async () => {
           titleEditingText = title.current;
           titleEditing = true;
