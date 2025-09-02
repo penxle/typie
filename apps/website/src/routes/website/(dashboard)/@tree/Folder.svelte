@@ -5,6 +5,7 @@
   import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
+  import { tick } from 'svelte';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -78,9 +79,9 @@
 
   $effect(() => {
     if (editing) {
-      setTimeout(() => {
+      tick().then(() => {
         inputEl?.select();
-      }, 0);
+      });
     }
   });
 
