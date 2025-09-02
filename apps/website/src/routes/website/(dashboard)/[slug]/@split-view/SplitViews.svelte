@@ -25,11 +25,17 @@
     return v == null || Number.isNaN(v) ? 100 : clamp(v, 0, 100);
   });
 
-  let minSize = $derived.by(() => {
+  const minParallelSize = $derived.by(() => {
     if (view.type === 'item') {
       return VIEW_MIN_SIZE;
     }
     return getMinSizeForView(view, view.direction);
+  });
+  const minPerpendicularSize = $derived.by(() => {
+    if (view.type === 'item') {
+      return VIEW_MIN_SIZE;
+    }
+    return getMinSizeForView(view, view.direction === 'horizontal' ? 'vertical' : 'horizontal');
   });
 </script>
 
@@ -39,8 +45,8 @@
   <div
     bind:this={containerRef}
     style:flex-basis={`${sizePercentage}%`}
-    style:min-width={view.direction === 'horizontal' ? `${minSize}px` : undefined}
-    style:min-height={view.direction === 'vertical' ? `${minSize}px` : undefined}
+    style:min-width={view.direction === 'horizontal' ? `${minParallelSize}px` : `${minPerpendicularSize}px`}
+    style:min-height={view.direction === 'vertical' ? `${minParallelSize}px` : `${minPerpendicularSize}px`}
     class={flex({
       flexDirection: view.direction === 'horizontal' ? 'row' : 'column',
       flex: '1',
