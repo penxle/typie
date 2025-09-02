@@ -226,14 +226,14 @@ export const addViewAtRoot = (
   };
 };
 
-export const moveView = (
+export const moveOrAddView = (
   splitViews: SplitView,
   source:
     | {
         viewId: string;
         delete: boolean;
-      }
-    | { slug: string },
+      } // move
+    | { slug: string }, // add
   target: {
     viewId: string;
     direction: 'horizontal' | 'vertical';
