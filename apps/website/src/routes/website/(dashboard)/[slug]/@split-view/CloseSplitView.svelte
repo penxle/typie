@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import mixpanel from 'mixpanel-browser';
   import { getSplitViewContext, getViewContext } from './context.svelte';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
 
   const splitView = getSplitViewContext();
@@ -11,22 +13,27 @@
   const splitViewId = $derived.by(() => view.id);
 
   type Props = {
+    style?: SystemStyleObject;
     children?: Snippet;
   };
 
-  let { children }: Props = $props();
+  let { children, style }: Props = $props();
 </script>
 
 <button
-  class={center({
-    borderRadius: '4px',
-    size: '24px',
-    color: 'text.faint',
-    transition: 'common',
-    _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-  })}
+  class={css(
+    center.raw({
+      borderRadius: '4px',
+      size: '24px',
+      color: 'text.faint',
+      transition: 'common',
+      _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+    }),
+    style,
+  )}
   aria-label="스플릿 뷰 닫기"
-  onclick={() => {
+  onclick={(e) => {
+    e.stopPropagation();
     // NOTE: setTimeout을 빼면 마지막 스플릿 뷰를 길게 눌러 닫을 때 unmount가 안 되는 이상한 버그가 있음
     setTimeout(() => {
       const success = splitView.closeSplitView(splitViewId);
@@ -34,6 +41,12 @@
 
       mixpanel.track('close_split_view');
     });
+  }}
+  onfocusin={(e) => {
+    e.stopPropagation();
+  }}
+  onkeydown={(e) => {
+    e.stopPropagation();
   }}
   type="button"
   use:tooltip={{ message: '스플릿 뷰 닫기' }}
