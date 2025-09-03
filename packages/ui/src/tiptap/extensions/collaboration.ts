@@ -85,6 +85,7 @@ export const Collaboration = Extension.create<CollaborationOptions>({
           fontSize: '13px',
           fontWeight: 'medium',
           lineHeight: 'none',
+          letterSpacing: '0',
           textIndent: '0',
           color: 'text.bright',
           backgroundColor: '[var(--user-color)]',
