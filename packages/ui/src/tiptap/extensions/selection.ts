@@ -150,6 +150,11 @@ export const Selection = Extension.create({
                   return true;
                 }
 
+                // NOTE: embed 노드는 선택 시 깜빡임 방지를 위해 직접 처리
+                if (node.type.name === 'embed') {
+                  return true;
+                }
+
                 const pos = offset + 1;
                 const selected = from <= pos && to >= pos + node.nodeSize;
                 if (!selected) {

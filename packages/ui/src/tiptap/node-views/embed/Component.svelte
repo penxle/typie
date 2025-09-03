@@ -21,6 +21,9 @@
     attrs = node.attrs;
   });
 
+  // NOTE: 선택 시 깜빡임 방지를 위해 selected-node로 감싸지 않고 직접 처리
+  const showSelectionOverlay = $derived(selected && editor?.current.isEditable);
+
   let inflightUrl = $state<string>();
   let inflight = $state(false);
   let pickerOpened = $state(false);
@@ -145,7 +148,7 @@
   });
 </script>
 
-<NodeView style={css.raw({ display: 'flex', justifyContent: 'center', width: 'full' })} {...HTMLAttributes}>
+<NodeView style={css.raw({ position: 'relative', display: 'flex', justifyContent: 'center', width: 'full' })} {...HTMLAttributes}>
   <div
     bind:this={containerEl}
     style:width={`${proportion * 100}%`}
@@ -359,6 +362,17 @@
       </div>
     {/if}
   </div>
+  {#if showSelectionOverlay}
+    <div
+      class={css({
+        position: 'absolute',
+        inset: '0',
+        borderRadius: '4px',
+        backgroundColor: '[var(--prosemirror-color-selection)/20]',
+        pointerEvents: 'none',
+      })}
+    ></div>
+  {/if}
 </NodeView>
 
 {#if pickerOpened && !attrs.id && !inflight && editor?.current.isEditable && !window.__webview__}
