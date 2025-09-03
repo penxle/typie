@@ -98,19 +98,15 @@
   let containerElement = $state<HTMLElement | null>(null);
 
   const onClickHandler = (event: MouseEvent) => {
-    const rect = containerElement?.getBoundingClientRect();
-    const isClickOutside =
-      rect && (event.clientX < rect?.left || event.clientX > rect?.right || event.clientY < rect?.top || event.clientY > rect?.bottom);
-    if (isClickOutside) {
+    const target = event.target as HTMLElement | null;
+    if (target && target.closest('.main-container')) {
       app.state.postsOpen = false;
     }
   };
 
   $effect(() => {
     if (app.state.postsOpen && !app.preference.current.postsExpanded) {
-      setTimeout(() => {
-        window.addEventListener('click', onClickHandler);
-      });
+      window.addEventListener('click', onClickHandler);
     } else {
       window.removeEventListener('click', onClickHandler);
     }
@@ -184,7 +180,7 @@
         ? {
             borderWidth: '[0.5px]',
             borderRadius: '4px',
-            boxShadow: '[0 3px 6px -2px {colors.shadow.default/3}, 0 1px 1px {colors.shadow.default/5}]',
+            boxShadow: 'card',
           }
         : {
             borderColor: 'border.subtle',

@@ -15,4 +15,7 @@ export const shadows = defineTokens.shadows({
       '0 8px 16px {colors.shadow.default/7}',
     ],
   },
+  card: {
+    value: ['0 3px 6px -2px {colors.shadow.default/3}', '0 1px 1px {colors.shadow.default/5}'],
+  },
 });
