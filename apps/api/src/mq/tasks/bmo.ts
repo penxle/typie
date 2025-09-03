@@ -55,116 +55,116 @@ const executeQuery = async (query: string) => {
 let schema: unknown | null = null;
 
 // spell-checker:disable
-const getSchemaQuery = `
-WITH table_info AS (
-  SELECT 
-    t.table_name,
-    obj_description(c.oid) as table_comment
-  FROM information_schema.tables t
-  LEFT JOIN pg_catalog.pg_class c ON c.relname = t.table_name AND c.relnamespace = (
-    SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = t.table_schema
-  )
-  WHERE t.table_schema = 'public' 
-    AND t.table_type = 'BASE TABLE'
-),
-column_info AS (
-  SELECT 
-    c.table_name,
-    c.column_name,
-    c.data_type,
-    c.is_nullable,
-    c.column_default,
-    c.ordinal_position,
-    col_description(pgc.oid, c.ordinal_position) as column_comment,
-    CASE 
-      WHEN fk.constraint_name IS NOT NULL THEN 
-        json_build_object(
-          'table', fk.foreign_table_name,
-          'column', fk.foreign_column_name
-        )
-      ELSE NULL
-    END as foreign_key
-  FROM information_schema.columns c
-  LEFT JOIN pg_catalog.pg_class pgc ON pgc.relname = c.table_name AND pgc.relnamespace = (
-    SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema
-  )
-  LEFT JOIN (
-    SELECT
-      kcu.table_name,
-      kcu.column_name,
-      ccu.table_name AS foreign_table_name,
-      ccu.column_name AS foreign_column_name,
-      tc.constraint_name
-    FROM information_schema.table_constraints tc
-    JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
-    JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
-    WHERE tc.constraint_type = 'FOREIGN KEY'
-  ) fk ON fk.table_name = c.table_name AND fk.column_name = c.column_name
-  WHERE c.table_schema = 'public'
-),
-index_info AS (
-  SELECT 
-    tablename as table_name,
-    indexname,
-    indexdef
-  FROM pg_indexes
-  WHERE schemaname = 'public'
-),
-enum_info AS (
-  SELECT 
-    t.typname as enum_name,
-    array_agg(e.enumlabel ORDER BY e.enumsortorder) as enum_values
-  FROM pg_type t
-  JOIN pg_enum e ON t.oid = e.enumtypid
-  JOIN pg_namespace n ON n.oid = t.typnamespace
-  WHERE n.nspname = 'public'
-    AND t.typtype = 'e'
-  GROUP BY t.typname
-)
-SELECT json_build_object(
-  'tables', (
-    SELECT json_agg(
-      json_build_object(
-        'table_name', t.table_name,
-        'table_comment', t.table_comment,
-        'columns', (
-          SELECT json_agg(
-            json_build_object(
-              'column_name', c.column_name,
-              'data_type', c.data_type,
-              'is_nullable', c.is_nullable = 'YES',
-              'column_default', c.column_default,
-              'column_comment', c.column_comment,
-              'foreign_key', c.foreign_key
-            ) ORDER BY c.ordinal_position
-          )
-          FROM column_info c
-          WHERE c.table_name = t.table_name
-        ),
-        'indexes', (
-          SELECT json_agg(
-            json_build_object(
-              'index_name', i.indexname,
-              'index_def', i.indexdef
-            )
-          )
-          FROM index_info i
-          WHERE i.table_name = t.table_name
-        )
-      ) ORDER BY t.table_name
+const getSchemaQuery = dedent`
+  WITH table_info AS (
+    SELECT 
+      t.table_name,
+      obj_description(c.oid) as table_comment
+    FROM information_schema.tables t
+    LEFT JOIN pg_catalog.pg_class c ON c.relname = t.table_name AND c.relnamespace = (
+      SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = t.table_schema
     )
-    FROM table_info t
+    WHERE t.table_schema = 'public' 
+      AND t.table_type = 'BASE TABLE'
   ),
-  'enums', (
-    SELECT json_agg(
-      json_build_object(
-        'enum_name', e.enum_name,
-        'enum_values', e.enum_values
-      ) ORDER BY e.enum_name
+  column_info AS (
+    SELECT 
+      c.table_name,
+      c.column_name,
+      c.data_type,
+      c.is_nullable,
+      c.column_default,
+      c.ordinal_position,
+      col_description(pgc.oid, c.ordinal_position) as column_comment,
+      CASE 
+        WHEN fk.constraint_name IS NOT NULL THEN 
+          json_build_object(
+            'table', fk.foreign_table_name,
+            'column', fk.foreign_column_name
+          )
+        ELSE NULL
+      END as foreign_key
+    FROM information_schema.columns c
+    LEFT JOIN pg_catalog.pg_class pgc ON pgc.relname = c.table_name AND pgc.relnamespace = (
+      SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema
     )
-    FROM enum_info e
+    LEFT JOIN (
+      SELECT
+        kcu.table_name,
+        kcu.column_name,
+        ccu.table_name AS foreign_table_name,
+        ccu.column_name AS foreign_column_name,
+        tc.constraint_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+      JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+    ) fk ON fk.table_name = c.table_name AND fk.column_name = c.column_name
+    WHERE c.table_schema = 'public'
+  ),
+  index_info AS (
+    SELECT 
+      tablename as table_name,
+      indexname,
+      indexdef
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+  ),
+  enum_info AS (
+    SELECT 
+      t.typname as enum_name,
+      array_agg(e.enumlabel ORDER BY e.enumsortorder) as enum_values
+    FROM pg_type t
+    JOIN pg_enum e ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typtype = 'e'
+    GROUP BY t.typname
   )
-) as schema;
+  SELECT json_build_object(
+    'tables', (
+      SELECT json_agg(
+        json_build_object(
+          'table_name', t.table_name,
+          'table_comment', t.table_comment,
+          'columns', (
+            SELECT json_agg(
+              json_build_object(
+                'column_name', c.column_name,
+                'data_type', c.data_type,
+                'is_nullable', c.is_nullable = 'YES',
+                'column_default', c.column_default,
+                'column_comment', c.column_comment,
+                'foreign_key', c.foreign_key
+              ) ORDER BY c.ordinal_position
+            )
+            FROM column_info c
+            WHERE c.table_name = t.table_name
+          ),
+          'indexes', (
+            SELECT json_agg(
+              json_build_object(
+                'index_name', i.indexname,
+                'index_def', i.indexdef
+              )
+            )
+            FROM index_info i
+            WHERE i.table_name = t.table_name
+          )
+        ) ORDER BY t.table_name
+      )
+      FROM table_info t
+    ),
+    'enums', (
+      SELECT json_agg(
+        json_build_object(
+          'enum_name', e.enum_name,
+          'enum_values', e.enum_values
+        ) ORDER BY e.enum_name
+      )
+      FROM enum_info e
+    )
+  ) as schema;
 `;
 // spell-checker:enable
 
@@ -181,12 +181,47 @@ const getDatabaseSchema = async () => {
 
 const SLACK_UPDATE_INTERVAL = 1000;
 const MIN_UPDATE_CHARS = 50;
+const SLACK_MESSAGE_LIMIT = 1000;
 
 export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (event: SlackAppMentionEventPayload) => {
   let messageTs: string | undefined;
+  let additionalMessageTs: string[] = [];
   let lastUpdateTime = Date.now();
   let lastUpdateText = '';
   let updateTimer: NodeJS.Timeout | null = null;
+
+  const splitTextIntoChunks = (text: string, limit: number): string[] => {
+    if (text.length <= limit) return [text];
+
+    const chunks: string[] = [];
+    let currentChunk = '';
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      if (line.length > limit) {
+        if (currentChunk) {
+          chunks.push(currentChunk);
+          currentChunk = '';
+        }
+        let remainingLine = line;
+        while (remainingLine.length > 0) {
+          chunks.push(remainingLine.slice(0, limit));
+          remainingLine = remainingLine.slice(limit);
+        }
+      } else if ((currentChunk + '\n' + line).length > limit) {
+        chunks.push(currentChunk);
+        currentChunk = line;
+      } else {
+        currentChunk = currentChunk ? currentChunk + '\n' + line : line;
+      }
+    }
+
+    if (currentChunk) {
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  };
 
   const updateSlackMessage = async (text: string, force = false) => {
     if (!messageTs) return;
@@ -196,11 +231,42 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
     const charsSinceUpdate = text.length - lastUpdateText.length;
 
     if (force || (timeSinceUpdate >= SLACK_UPDATE_INTERVAL && charsSinceUpdate >= MIN_UPDATE_CHARS)) {
+      const chunks = splitTextIntoChunks(text || '💭 생각 중...', SLACK_MESSAGE_LIMIT);
+
       await slack.chat.update({
         channel: event.channel,
         ts: messageTs,
-        text: text || '💭 생각 중...',
+        text: chunks[0],
       });
+
+      for (let i = 1; i < chunks.length; i++) {
+        if (i - 1 < additionalMessageTs.length) {
+          await slack.chat.update({
+            channel: event.channel,
+            ts: additionalMessageTs[i - 1],
+            text: chunks[i],
+          });
+        } else {
+          const newMessage = await slack.chat.postMessage({
+            channel: event.channel,
+            thread_ts: event.thread_ts || event.ts,
+            text: chunks[i],
+            reply_broadcast: false,
+          });
+          if (newMessage.ts) {
+            additionalMessageTs.push(newMessage.ts);
+          }
+        }
+      }
+
+      for (let i = chunks.length - 1; i < additionalMessageTs.length; i++) {
+        await slack.chat.delete({
+          channel: event.channel,
+          ts: additionalMessageTs[i],
+        });
+      }
+      additionalMessageTs = additionalMessageTs.slice(0, chunks.length - 1);
+
       lastUpdateTime = now;
       lastUpdateText = text;
     }
@@ -473,7 +539,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       for await (const chunk of stream) {
         if (chunk.type === 'content_block_start') {
           if (chunk.content_block.type === 'text') {
-            responseText = '';
+            responseText = chunk.content_block.text;
           } else if (chunk.content_block.type === 'tool_use') {
             hasToolUse = true;
             toolsToExecute.push({
