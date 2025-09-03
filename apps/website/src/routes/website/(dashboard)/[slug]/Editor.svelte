@@ -6,7 +6,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { EditorLayout, Helmet, HorizontalDivider, Icon, InEditorBody, Menu, MenuItem } from '@typie/ui/components';
+  import { EditorLayout, Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
@@ -46,8 +46,8 @@
   import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
   import PasteModal from './PasteModal.svelte';
-  import Placeholder from './Placeholder.svelte';
   import { YState } from './state.svelte';
+  import TemplateModal from './TemplateModal.svelte';
   import Timeline from './Timeline.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PageLayout, Ref } from '@typie/ui/utils';
@@ -1082,9 +1082,7 @@
                     />
 
                     {#if editor && mounted}
-                      <InEditorBody {editor} pageLayout={effectivePageLayout.current ?? null}>
-                        <Placeholder $site={entity.site} {doc} {editor} />
-                      </InEditorBody>
+                      <TemplateModal $site={entity.site} {doc} {editor} />
                       {#if app.preference.current.lineHighlightEnabled}
                         <Highlight {editor} />
                       {/if}
