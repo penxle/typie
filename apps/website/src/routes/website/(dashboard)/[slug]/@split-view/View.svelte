@@ -104,16 +104,14 @@
 >
   <ViewDropZone {viewElement} {viewItem} />
   {#if entity}
-    {#if entity.state === EntityState.ACTIVE}
-      {#key entity.slug}
-        {#if entity.node.__typename === 'Post'}
-          <Editor {$query} {focused} slug={entity.slug} />
-        {:else if entity.node.__typename === 'Canvas'}
-          <Canvas {$query} {focused} slug={entity.slug} />
-        {/if}
-      {/key}
+    {#if entity?.state === EntityState.ACTIVE}
+      {#if entity?.node.__typename === 'Post'}
+        <Editor {$query} {focused} slug={entity.slug} />
+      {:else if entity?.node.__typename === 'Canvas'}
+        <Canvas {$query} {focused} slug={entity.slug} />
+      {/if}
     {:else}
-      {@const name = entity.node.__typename === 'Post' ? '포스트' : '캔버스'}
+      {@const name = entity?.node.__typename === 'Post' ? '포스트' : '캔버스'}
       {#if focused}
         <Helmet title={`삭제된 ${name}`} />
       {/if}

@@ -11,7 +11,7 @@
   import dayjs from 'dayjs';
   import { nanoid } from 'nanoid';
   import { base64 } from 'rfc4648';
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
   import * as YAwareness from 'y-protocols/awareness';
@@ -109,7 +109,17 @@
   const dragViewProps = $derived({ dragDropContext, viewId: splitViewId });
   const clientId = nanoid();
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === slug))!;
+  let entity = $state<(typeof $query.entities)[number]>($query.entities.find((entity) => entity.slug === slug)!);
+
+  $effect(() => {
+    void slug;
+
+    untrack(() => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      entity = $query.entities.find((entity) => entity.slug === slug)!;
+    });
+  });
+
   const canvasId = $derived(entity.node.__typename === 'Canvas' ? entity.node.id : null);
 
   let canvas = $state<Canvas>();
