@@ -202,9 +202,18 @@
   const dragDropContext = getDragDropContext();
   const dragViewProps = $derived({ dragDropContext, viewId: splitViewId });
   const clientId = nanoid();
-
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === slug))!;
+  let entity = $state<(typeof $query.entities)[number]>($query.entities.find((entity) => entity.slug === slug)!);
+
+  $effect(() => {
+    void slug;
+
+    untrack(() => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      entity = $query.entities.find((entity) => entity.slug === slug)!;
+    });
+  });
+
   const postId = $derived(entity.node.__typename === 'Post' ? entity.node.id : null);
 
   let titleEl = $state<HTMLTextAreaElement>();
