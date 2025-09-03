@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { Button, HorizontalDivider } from '@typie/ui/components';
@@ -261,12 +261,15 @@
       <Sidebar $user={$query.me} />
 
       <div
-        class={flex({
-          flexGrow: '1',
-          marginY: '8px',
-          marginRight: '8px',
-          overflow: 'auto',
-        })}
+        class={cx(
+          'main-container',
+          flex({
+            flexGrow: '1',
+            marginY: '8px',
+            marginRight: '8px',
+            overflow: 'auto',
+          }),
+        )}
       >
         {@render children()}
       </div>
