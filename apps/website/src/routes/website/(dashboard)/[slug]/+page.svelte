@@ -1,12 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
-  import { RingSpinner } from '@typie/ui/components';
   import { nanoid } from 'nanoid';
   import { untrack } from 'svelte';
   import { EntityState } from '@/enums';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
+  import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
   import { fb } from '$lib/analytics';
   import { getSplitViewContext } from './@split-view/context.svelte';
@@ -123,11 +123,16 @@
     class={center({
       size: 'full',
       backgroundColor: 'surface.default',
-      borderWidth: '1px',
-      boxShadow: '[0 3px 6px -2px {colors.shadow.default/3}, 0 1px 1px {colors.shadow.default/5}]',
+      boxShadow: 'card',
       borderRadius: '4px',
     })}
   >
-    <RingSpinner style={css.raw({ size: '24px', color: 'text.subtle' })} />
+    <Logo
+      class={css({
+        size: '32px',
+        filter: '[grayscale(100%)]',
+        animation: 'pulse 2s ease-in-out infinite',
+      })}
+    />
   </div>
 {/if}
