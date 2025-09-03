@@ -22,6 +22,10 @@ export default defineConfig({
           '75%': { transform: 'rotate(540deg) scale(1.05)' },
           '100%': { transform: 'rotate(720deg) scale(1)' },
         },
+        pulse: {
+          '0%, 100%': { opacity: '60' },
+          '50%': { opacity: '100' },
+        },
       },
     },
   },
