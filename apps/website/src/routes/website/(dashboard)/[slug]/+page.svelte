@@ -119,7 +119,15 @@
 {#if loaded && $query && slug && view}
   <SplitViews {$query} {slug} {view} />
 {:else}
-  <div class={center({ size: 'full' })}>
+  <div
+    class={center({
+      size: 'full',
+      backgroundColor: 'surface.default',
+      borderWidth: '1px',
+      boxShadow: '[0 3px 6px -2px {colors.shadow.default/3}, 0 1px 1px {colors.shadow.default/5}]',
+      borderRadius: '4px',
+    })}
+  >
     <RingSpinner style={css.raw({ size: '24px', color: 'text.subtle' })} />
   </div>
 {/if}
