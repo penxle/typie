@@ -9,6 +9,7 @@
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
   import RedoIcon from '~icons/lucide/redo';
+  import RemoveFormattingIcon from '~icons/lucide/remove-formatting';
   import SearchIcon from '~icons/lucide/search';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import UnderlineIcon from '~icons/lucide/underline';
@@ -466,6 +467,19 @@
       {/snippet}
     </ToolbarDropdownButton>
   </div>
+
+  <VerticalDivider style={css.raw({ height: '12px' })} />
+
+  <ToolbarButton
+    disabled={!editor?.current.can().clearFormatting()}
+    icon={RemoveFormattingIcon}
+    keys={['Mod', '\\']}
+    label="서식 해제"
+    onclick={() => {
+      editor?.current.chain().focus().clearFormatting().run();
+    }}
+    size="small"
+  />
 
   <div class={css({ flexGrow: '1' })}></div>
 

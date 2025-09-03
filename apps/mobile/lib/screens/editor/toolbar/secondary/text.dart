@@ -234,6 +234,13 @@ class TextToolbar extends HookWidget {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.letterSpacing;
             },
           ),
+          AppVerticalDivider(color: context.colors.borderSubtle, height: 20),
+          IconToolbarButton(
+            icon: LucideLightIcons.remove_formatting,
+            onTap: () async {
+              await scope.command('clearFormatting');
+            },
+          ),
         ],
       ),
     );

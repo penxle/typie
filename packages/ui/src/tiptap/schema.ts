@@ -1,5 +1,6 @@
 import {
   Behavior,
+  ClearFormatting,
   Clipboard,
   Command,
   DropCursor,
@@ -94,6 +95,7 @@ export const editorExtensions = [
   // extensions
   Behavior,
   Command,
+  ClearFormatting,
   NodeCommands,
   DropCursor,
   Placeholder,
