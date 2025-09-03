@@ -177,8 +177,9 @@ export const Paragraph = Node.create({
           const docChanged = transactions.some((tr) => tr.docChanged) && !oldState.doc.eq(newState.doc);
           const ySync = transactions.find((tr) => tr.getMeta(ySyncPluginKey));
           const paste = transactions.find((tr) => tr.getMeta('paste'));
+          const template = transactions.some((tr) => tr.getMeta('template'));
 
-          if (!docChanged || ySync || paste) {
+          if (!docChanged || ySync || paste || template) {
             return;
           }
 
