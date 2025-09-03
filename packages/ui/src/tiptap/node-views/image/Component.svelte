@@ -8,11 +8,11 @@
   import { createFloatingActions } from '../../../actions';
   import { Button, Icon, Img, Menu, MenuItem, RingSpinner } from '../../../components';
   import { Toast } from '../../../notification';
-  import { clamp } from '../../../utils/number';
-  import { mmToPx } from '../../../utils/unit';
   import { getEditorContext, getNodeView, NodeView } from '../../lib';
+  import { calculateResizeProportion, checkAndAdjustProportion, getMaxContentHeight } from '../utils/resize';
   import Enlarge from './Enlarge.svelte';
   import type { NodeViewProps } from '../../lib';
+  import type { ResizeData } from '../utils/resize';
 
   type Props = NodeViewProps;
 
@@ -28,8 +28,7 @@
 
   const pageLayout = $derived(editor?.current.storage.page?.layout);
   const context = getEditorContext();
-
-  const maxContentHeight = $derived(pageLayout ? mmToPx(pageLayout.height - pageLayout.marginTop - pageLayout.marginBottom) : undefined);
+  const maxContentHeight = $derived(getMaxContentHeight(pageLayout));
 
   $effect(() => {
     if (pendingFiles.length > 0) {
@@ -38,8 +37,8 @@
   });
 
   $effect(() => {
-    if (maxContentHeight && (attrs.id || inflightUrl)) {
-      checkAndAdjustProportion();
+    if (pageLayout && (attrs.id || inflightUrl)) {
+      proportion = checkAndAdjustProportion(proportion, containerEl, pageLayout, updateAttributes);
     }
   });
 
@@ -136,53 +135,11 @@
   let containerEl = $state<HTMLDivElement>();
   let proportion = $state(node.attrs.proportion);
 
-  const calculateConstrainedProportion = (proposedProportion: number): { proportion: number; minProportion: number } => {
-    if (!maxContentHeight || !containerEl) {
-      return { proportion: proposedProportion, minProportion: 0.1 };
-    }
-
-    const imgElement = containerEl.querySelector('img') as HTMLImageElement;
-    if (!imgElement) {
-      return { proportion: proposedProportion, minProportion: 0.1 };
-    }
-
-    const parentWidth = containerEl.parentElement?.clientWidth || 0;
-    const proposedWidth = parentWidth * proposedProportion;
-
-    const currentRect = imgElement.getBoundingClientRect();
-    const aspectRatio = currentRect.width / currentRect.height;
-    const proposedHeight = proposedWidth / aspectRatio;
-
-    // NOTE: 이미지가 maxContentHeight를 넘지 않기 위한 최대 너비
-    const maxWidthForHeight = maxContentHeight * aspectRatio;
-    const minProportionForHeight = maxWidthForHeight / parentWidth;
-
-    // NOTE: 더 작은 값을 최소 proportion으로 사용
-    const minProportion = Math.min(0.1, minProportionForHeight);
-
-    let constrainedProportion = proposedProportion;
-    if (proposedHeight > maxContentHeight) {
-      constrainedProportion = maxWidthForHeight / parentWidth;
-    }
-
-    return { proportion: constrainedProportion, minProportion };
+  const handleCheckAndAdjustProportion = () => {
+    proportion = checkAndAdjustProportion(proportion, containerEl, pageLayout, updateAttributes);
   };
 
-  const checkAndAdjustProportion = () => {
-    const { proportion: constrainedProportion, minProportion } = calculateConstrainedProportion(proportion);
-    const clampedProportion = clamp(constrainedProportion, minProportion, 1);
-    if (clampedProportion !== proportion) {
-      proportion = clampedProportion;
-      updateAttributes({ proportion });
-    }
-  };
-
-  let initialResizeData: {
-    x: number;
-    width: number;
-    proportion: number;
-    reverse: boolean;
-  } | null = null;
+  let initialResizeData: ResizeData | null = null;
 
   const handleResizeStart = (event: PointerEvent, reverse: boolean) => {
     if (!containerEl) {
@@ -207,10 +164,7 @@
     }
 
     const dx = (event.clientX - initialResizeData.x) * (initialResizeData.reverse ? -1 : 1);
-    const proposedProportion = ((initialResizeData.width + dx * 2) / initialResizeData.width) * initialResizeData.proportion;
-
-    const { proportion: constrainedProportion, minProportion } = calculateConstrainedProportion(proposedProportion);
-    proportion = clamp(constrainedProportion, minProportion, 1);
+    proportion = calculateResizeProportion(dx, initialResizeData, containerEl, pageLayout);
   };
 
   const handleResizeEnd = (event: PointerEvent) => {
@@ -243,7 +197,7 @@
             style={css.raw({ width: 'full', borderRadius: '4px' }, !editor?.current.isEditable && { cursor: 'zoom-in' })}
             alt="본문 이미지"
             onclick={() => !editor?.current.isEditable && (enlarged = true)}
-            onload={checkAndAdjustProportion}
+            onload={() => handleCheckAndAdjustProportion()}
             placeholder={attrs.placeholder}
             progressive={!context?.pdf}
             ratio={attrs.ratio}
@@ -260,7 +214,7 @@
           onerror={(e) => {
             (e.currentTarget as HTMLImageElement).src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
           }}
-          onload={checkAndAdjustProportion}
+          onload={() => handleCheckAndAdjustProportion()}
           src={inflightUrl}
         />
         <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50', zIndex: 'editor' })}>

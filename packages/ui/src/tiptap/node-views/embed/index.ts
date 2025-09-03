@@ -27,6 +27,7 @@ export const Embed = createNodeView<unknown, Storage>(Component, {
       title: {},
       description: {},
       thumbnailUrl: {},
+      proportion: { default: 1 },
       html: {},
     };
   },
