@@ -606,6 +606,8 @@
         editor?.current.chain().focus().toggleUnderline().run();
       } else if (name === 'strike') {
         editor?.current.chain().focus().toggleStrike().run();
+      } else if (name === 'clearFormatting') {
+        editor?.current.chain().focus().clearFormatting().run();
       } else if (name === 'text_style') {
         let chain = editor?.current.chain().focus();
 
