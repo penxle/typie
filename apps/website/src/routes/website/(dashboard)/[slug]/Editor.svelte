@@ -1082,7 +1082,7 @@
                     />
 
                     {#if editor && mounted}
-                      <TemplateModal $site={entity.site} {doc} {editor} />
+                      <TemplateModal $site={entity.site} {doc} {editor} {focused} />
                       {#if app.preference.current.lineHighlightEnabled}
                         <Highlight {editor} />
                       {/if}
