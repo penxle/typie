@@ -2,7 +2,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
-  import { isBodyEmpty } from '@typie/ui/tiptap';
+  import { onMount } from 'svelte';
   import * as Y from 'yjs';
   import { PostLayoutMode } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -59,12 +59,16 @@
   const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
 
-  const emptyBody = $derived(isBodyEmpty(editor.current.state));
+  onMount(() => {
+    const handleOpenTemplateModal = () => {
+      open = true;
+    };
 
-  const paragraphIndent = $derived.by(() => {
-    const { doc } = editor.current.state;
-    const body = doc.child(0);
-    return body.attrs.paragraphIndent;
+    window.addEventListener('open-template-modal', handleOpenTemplateModal);
+
+    return () => {
+      window.removeEventListener('open-template-modal', handleOpenTemplateModal);
+    };
   });
 
   const loadTemplate = async (slug: string) => {
@@ -79,43 +83,6 @@
     open = false;
   };
 </script>
-
-{#if emptyBody}
-  <div
-    style:padding-left={`${paragraphIndent}em`}
-    class={flex({
-      position: 'relative',
-      flexDirection: 'column',
-      gap: '4px',
-      width: 'full',
-      maxWidth: 'var(--prosemirror-max-width)',
-      color: 'text.disabled',
-      lineHeight: '[1.6]',
-      pointerEvents: 'none',
-      zIndex: 'editor',
-    })}
-  >
-    <div class={css({ fontFamily: 'ui' })}>내용을 입력하거나 /를 입력해 블록 삽입하기...</div>
-
-    <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <div>혹은</div>
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '4px',
-          transition: 'common',
-          pointerEvents: 'auto',
-          _hover: { color: 'text.faint' },
-        })}
-        onclick={() => (open = true)}
-        type="button"
-      >
-        <Icon icon={ShapesIcon} size={16} />
-        <div>템플릿 사용하기</div>
-      </button>
-    </div>
-  </div>
-{/if}
 
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>
   <div class={center({ gap: '8px', padding: '12px' })}>

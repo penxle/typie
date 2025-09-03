@@ -8,7 +8,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { autosize } from '@typie/ui/actions';
-  import { EditorLayout, EditorZoom, InEditorBody } from '@typie/ui/components';
+  import { EditorLayout, EditorZoom } from '@typie/ui/components';
   import { getIncompatibleBlocks, getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import { clamp, createDefaultPageLayout, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import dayjs from 'dayjs';
@@ -30,7 +30,6 @@
   import FindReplace from './FindReplace.svelte';
   import Highlight from './Highlight.svelte';
   import Limit from './Limit.svelte';
-  import Placeholder from './Placeholder.svelte';
   import Spellcheck from './Spellcheck.svelte';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
@@ -524,6 +523,7 @@
       const isFocusable = features.includes('focusable') ? data.focusable : true;
 
       if (editor) {
+        console.log('features', features);
         editor.current.storage.webviewFeatures = features;
       }
 
@@ -1093,9 +1093,6 @@
         bind:editor
       />
       {#if editor && mounted}
-        <InEditorBody {editor} pageLayout={pageLayout.current ?? null}>
-          <Placeholder {editor} isTemplateActive={features.includes('template')} />
-        </InEditorBody>
         {#if settings.lineHighlightEnabled}
           <Highlight {editor} scale={editorScale} />
         {/if}
