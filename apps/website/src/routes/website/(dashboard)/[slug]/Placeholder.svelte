@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Mark } from '@tiptap/pm/model';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
@@ -46,6 +45,9 @@
         id
         body
         maxWidth
+        # TODO: 서버 업데이트 후 추가
+        # layoutMode
+        # pageLayout
         storedMarks
       }
     }
@@ -54,6 +56,9 @@
   let open = $state(false);
 
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
+  // TODO: 서버 업데이트 후 추가
+  // const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
+  // const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
 
   const emptyBody = $derived(isBodyEmpty(editor.current.state));
 
@@ -67,17 +72,11 @@
     const resp = await query.load({ slug });
 
     maxWidth.current = resp.post.maxWidth;
-    editor.current
-      .chain()
-      .focus(2)
-      .setContent(resp.post.body)
-      .setTextSelection(2)
-      .command(({ tr, dispatch }) => {
-        tr.setStoredMarks(resp.post.storedMarks.map((mark: unknown) => Mark.fromJSON(editor.current.state.schema, mark)));
-        dispatch?.(tr);
-        return true;
-      })
-      .run();
+    // TODO: 서버 업데이트 후 추가
+    // layoutMode.current = resp.post.layoutMode;
+    // pageLayout.current = resp.post.pageLayout;
+
+    editor.current.commands.loadTemplate(resp.post);
 
     open = false;
   };

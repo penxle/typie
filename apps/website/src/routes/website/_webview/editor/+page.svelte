@@ -865,20 +865,9 @@
       const resp = await postQuery.load({ slug: data.slug as string });
 
       if (!editor) return;
-      const currentEditor = editor.current;
 
       maxWidth.current = resp.post.maxWidth;
-      currentEditor
-        .chain()
-        .focus(2)
-        .setContent(resp.post.body)
-        .setTextSelection(2)
-        .command(({ tr, dispatch }) => {
-          tr.setStoredMarks(resp.post.storedMarks.map((mark: unknown) => Mark.fromJSON(currentEditor.state.schema, mark)));
-          dispatch?.(tr);
-          return true;
-        })
-        .run();
+      editor.current.commands.loadTemplate(resp.post);
     });
 
     return () => {
