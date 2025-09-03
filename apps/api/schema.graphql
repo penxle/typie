@@ -359,7 +359,9 @@ interface IPost {
   createdAt: DateTime!
   excerpt: String!
   id: ID!
+  layoutMode: PostLayoutMode!
   maxWidth: Int!
+  pageLayout: JSON
   protectContent: Boolean!
   subtitle: String
   title: String!
@@ -609,7 +611,9 @@ type Post implements IPost {
   entity: Entity!
   excerpt: String!
   id: ID!
+  layoutMode: PostLayoutMode!
   maxWidth: Int!
+  pageLayout: JSON
   password: String
   protectContent: Boolean!
   reactionCount: Int!
@@ -682,7 +686,9 @@ type PostView implements IPost {
   excerpt: String!
   hasPassword: Boolean!
   id: ID!
+  layoutMode: PostLayoutMode!
   maxWidth: Int!
+  pageLayout: JSON
   protectContent: Boolean!
   reactions: [PostReaction!]!
   subtitle: String
