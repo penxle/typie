@@ -132,6 +132,7 @@
       flexDirection: 'column',
       gap: '32px',
       width: 'full',
+      minWidth: 'fit',
       minHeight: 'full',
       padding: '32px',
       backgroundColor: 'surface.default',
