@@ -1,4 +1,5 @@
 export * from './behavior';
+export * from './clear-formatting';
 export * from './clipboard';
 export * from './collaboration';
 export * from './command';
