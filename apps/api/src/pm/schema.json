@@ -14,6 +14,7 @@
     "doc": { "content": "body" },
     "body": {
       "content": "block+",
+      "isolating": true,
       "attrs": { "nodeId": { "default": null }, "paragraphIndent": { "default": 1 }, "blockGap": { "default": 1 } }
     },
     "text": { "group": "inline", "inline": true },
@@ -30,12 +31,6 @@
       "linebreakReplacement": true,
       "attrs": { "nodeId": { "default": null } },
       "parseDOM": [{ "tag": "br" }]
-    },
-    "page_break": {
-      "group": "block",
-      "atom": true,
-      "selectable": true,
-      "parseDOM": [{ "tag": "node-view[data-node-view-type=page_break]" }]
     },
     "list_item": {
       "content": "paragraph{1,2} list*",
@@ -81,6 +76,7 @@
         "title": { "default": null },
         "description": { "default": null },
         "thumbnailUrl": { "default": null },
+        "proportion": { "default": 1 },
         "html": { "default": null }
       },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=embed]" }]
@@ -149,6 +145,12 @@
       "content": "table_cell+",
       "attrs": { "nodeId": { "default": null } },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=table_row]" }, { "tag": "tr" }]
+    },
+    "page_break": {
+      "group": "block",
+      "atom": true,
+      "selectable": true,
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=page_break]" }]
     }
   },
   "marks": {
