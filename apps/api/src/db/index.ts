@@ -8,11 +8,6 @@ import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
 const sql = postgres(env.DATABASE_URL, {
   max: dev ? 5 : 20,
-  ssl: { rejectUnauthorized: false },
-  connection: {
-    statement_timeout: 600_000,
-    lock_timeout: 600_000,
-  },
 });
 
 export const db = drizzle(sql, {
