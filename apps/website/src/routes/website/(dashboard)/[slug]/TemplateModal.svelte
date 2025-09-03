@@ -2,7 +2,6 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
-  import { onMount } from 'svelte';
   import * as Y from 'yjs';
   import { PostLayoutMode } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -17,9 +16,10 @@
     $site: Editor_Placeholder_site;
     editor: Ref<Editor>;
     doc: Y.Doc;
+    focused: boolean;
   };
 
-  let { $site: _site, editor, doc }: Props = $props();
+  let { $site: _site, editor, doc, focused }: Props = $props();
 
   const site = fragment(
     _site,
@@ -59,7 +59,9 @@
   const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
 
-  onMount(() => {
+  $effect(() => {
+    if (!focused) return;
+
     const handleOpenTemplateModal = () => {
       open = true;
     };
