@@ -11,6 +11,7 @@ import {
   Search,
   Selection,
   SyntaxHighlight,
+  TemplatePlaceholder,
   TrailingNode,
   Typewriter,
   Typography,
@@ -97,6 +98,7 @@ export const editorExtensions = [
   DropCursor,
   Placeholder,
   Search,
+  TemplatePlaceholder,
   Typewriter,
   Typography,
 

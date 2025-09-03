@@ -146,6 +146,7 @@ class Editor extends HookWidget {
               await context.showBottomSheet(intercept: true, child: const LimitBottomSheet());
             }
           case 'useTemplate':
+            await webViewController.clearFocus();
             if (context.mounted) {
               await context.showBottomSheet(intercept: true, child: _TemplateBottomSheet(scope: scope));
             }
