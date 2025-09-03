@@ -209,8 +209,10 @@
     void slug;
 
     untrack(() => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      entity = $query.entities.find((entity) => entity.slug === slug)!;
+      const next = $query.entities.find((entity) => entity.slug === slug);
+      if (next) {
+        entity = next;
+      }
     });
   });
 
