@@ -28,9 +28,9 @@ export const TemplatePlaceholder = Extension.create({
         () => {
           const container = document.createElement('div');
           container.style.position = 'absolute';
-          container.style.top = '0';
-          container.style.left = '0';
-          container.style.width = '100%';
+          container.style.top = 'var(--prosemirror-page-margin-top)';
+          container.style.left = 'var(--prosemirror-page-margin-left)';
+          container.style.maxWidth = 'var(--prosemirror-max-width)';
 
           const component = mount(TemplatePlaceholderWidget, {
             target: container,
