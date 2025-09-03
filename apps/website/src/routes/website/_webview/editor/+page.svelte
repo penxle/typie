@@ -101,6 +101,8 @@
         body
         maxWidth
         storedMarks
+        layoutMode
+        pageLayout
       }
     }
   `);
@@ -867,6 +869,8 @@
       if (!editor) return;
 
       maxWidth.current = resp.post.maxWidth;
+      layoutMode.current = resp.post.layoutMode;
+      pageLayout.current = resp.post.pageLayout;
       editor.current.commands.loadTemplate(resp.post);
     });
 

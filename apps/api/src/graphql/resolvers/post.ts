@@ -33,6 +33,7 @@ import {
   EntityVisibility,
   PostAvailableAction,
   PostContentRating,
+  PostLayoutMode,
   PostSyncType,
   PostType,
   PostViewBodyUnavailableReason,
@@ -102,6 +103,33 @@ IPost.implement({
         const text = content.text.replaceAll(/\s+/g, ' ').trim();
 
         return text.length <= 200 ? text : text.slice(0, 200) + '...';
+      },
+    }),
+
+    layoutMode: t.field({
+      type: PostLayoutMode,
+      resolve: async (self) => {
+        const content = await db
+          .select({ layoutMode: PostContents.layoutMode })
+          .from(PostContents)
+          .where(eq(PostContents.postId, self.id))
+          .then(firstOrThrow);
+
+        return content.layoutMode;
+      },
+    }),
+
+    pageLayout: t.field({
+      type: 'JSON',
+      nullable: true,
+      resolve: async (self) => {
+        const content = await db
+          .select({ pageLayout: PostContents.pageLayout })
+          .from(PostContents)
+          .where(eq(PostContents.postId, self.id))
+          .then(firstOrThrow);
+
+        return content.pageLayout;
       },
     }),
 

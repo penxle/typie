@@ -4,12 +4,13 @@
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
   import { isBodyEmpty } from '@typie/ui/tiptap';
   import * as Y from 'yjs';
+  import { PostLayoutMode } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import ShapesIcon from '~icons/lucide/shapes';
   import { fragment, graphql } from '$graphql';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
-  import type { Ref } from '@typie/ui/utils';
+  import type { PageLayout, Ref } from '@typie/ui/utils';
   import type { Editor_Placeholder_site } from '$graphql';
 
   type Props = {
@@ -45,9 +46,8 @@
         id
         body
         maxWidth
-        # TODO: 서버 업데이트 후 추가
-        # layoutMode
-        # pageLayout
+        layoutMode
+        pageLayout
         storedMarks
       }
     }
@@ -56,9 +56,8 @@
   let open = $state(false);
 
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
-  // TODO: 서버 업데이트 후 추가
-  // const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
-  // const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
+  const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
+  const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
 
   const emptyBody = $derived(isBodyEmpty(editor.current.state));
 
@@ -72,9 +71,8 @@
     const resp = await query.load({ slug });
 
     maxWidth.current = resp.post.maxWidth;
-    // TODO: 서버 업데이트 후 추가
-    // layoutMode.current = resp.post.layoutMode;
-    // pageLayout.current = resp.post.pageLayout;
+    layoutMode.current = resp.post.layoutMode;
+    pageLayout.current = resp.post.pageLayout;
 
     editor.current.commands.loadTemplate(resp.post);
 
