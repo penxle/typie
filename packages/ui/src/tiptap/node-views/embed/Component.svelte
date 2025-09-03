@@ -8,7 +8,9 @@
   import { createFloatingActions } from '../../../actions';
   import { Button, Icon, Menu, MenuItem, RingSpinner, TextInput } from '../../../components';
   import { NodeView } from '../../lib';
+  import { calculateResizeProportion, checkAndAdjustProportion, getMaxContentHeight } from '../utils/resize';
   import type { NodeViewProps } from '../../lib';
+  import type { ResizeData } from '../utils/resize';
 
   type Props = NodeViewProps;
 
@@ -24,6 +26,23 @@
   let pickerOpened = $state(false);
   let inputEl = $state<HTMLInputElement>();
   let embedContainerEl = $state<HTMLDivElement>();
+  let containerEl = $state<HTMLDivElement>();
+  let proportion = $state(node.attrs.proportion || 1);
+
+  const pageLayout = $derived(editor?.current.storage.page?.layout);
+  const maxContentHeight = $derived(getMaxContentHeight(pageLayout));
+
+  $effect(() => {
+    if (node.attrs.proportion !== undefined) {
+      proportion = node.attrs.proportion;
+    }
+  });
+
+  $effect(() => {
+    if (pageLayout && attrs.html && (attrs.id || inflight)) {
+      proportion = checkAndAdjustProportion(proportion, containerEl, pageLayout, updateAttributes);
+    }
+  });
 
   $effect(() => {
     pickerOpened = selected;
@@ -74,6 +93,40 @@
     }
   };
 
+  let initialResizeData: ResizeData | null = null;
+
+  const handleResizeStart = (event: PointerEvent, reverse: boolean) => {
+    if (!containerEl) {
+      return;
+    }
+
+    const target = event.currentTarget as HTMLElement;
+    target.setPointerCapture(event.pointerId);
+
+    initialResizeData = {
+      x: event.clientX,
+      width: containerEl.clientWidth,
+      proportion,
+      reverse,
+    };
+  };
+
+  const handleResize = (event: PointerEvent) => {
+    const target = event.currentTarget as HTMLElement;
+    if (!target.hasPointerCapture(event.pointerId) || !initialResizeData || !containerEl) {
+      return;
+    }
+
+    const dx = (event.clientX - initialResizeData.x) * (initialResizeData.reverse ? -1 : 1);
+    proportion = calculateResizeProportion(dx, initialResizeData, containerEl, pageLayout);
+  };
+
+  const handleResizeEnd = (event: PointerEvent) => {
+    const target = event.currentTarget as HTMLElement;
+    target.releasePointerCapture(event.pointerId);
+    updateAttributes({ proportion });
+  };
+
   onMount(() => {
     if (!document.querySelector('script#iframely-embed')) {
       const script = document.createElement('script');
@@ -92,11 +145,21 @@
   });
 </script>
 
-<NodeView data-drag-handle draggable {...HTMLAttributes}>
-  <div class={cx('group', css({ position: 'relative' }))}>
+<NodeView style={css.raw({ display: 'flex', justifyContent: 'center', width: 'full' })} {...HTMLAttributes}>
+  <div
+    bind:this={containerEl}
+    style:width={`${proportion * 100}%`}
+    class={cx('group', css({ position: 'relative' }))}
+    data-drag-handle
+    draggable
+  >
     {#if attrs.id}
       {#if attrs.html}
-        <div bind:this={embedContainerEl} class={css({ display: 'contents' }, editor?.current.isEditable && { pointerEvents: 'none' })}>
+        <div
+          bind:this={embedContainerEl}
+          style:max-height={maxContentHeight ? `${maxContentHeight}px` : undefined}
+          class={css({ display: 'contents' }, editor?.current.isEditable && { pointerEvents: 'none' })}
+        >
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html attrs.html}
         </div>
@@ -157,6 +220,80 @@
         >
           <Icon icon={Trash2Icon} size={16} />
         </button>
+
+        {#if attrs.html}
+          <div
+            class={flex({
+              position: 'absolute',
+              top: '0',
+              bottom: '0',
+              left: '10px',
+              alignItems: 'center',
+              pointerEvents: 'none',
+            })}
+          >
+            <button
+              class={css({
+                borderRadius: '4px',
+                backgroundColor: 'white/50',
+                mixBlendMode: 'difference',
+                width: '8px',
+                height: '1/3',
+                maxHeight: '72px',
+                cursor: 'col-resize',
+                opacity: '0',
+                transition: 'opacity',
+                pointerEvents: 'auto',
+                _hover: { backgroundColor: 'white/40' },
+                _groupHover: { opacity: '100' },
+              })}
+              aria-label="임베드 크기 조절"
+              onpointerdown={(event) => {
+                event.preventDefault();
+                handleResizeStart(event, true);
+              }}
+              onpointermove={handleResize}
+              onpointerup={handleResizeEnd}
+              type="button"
+            ></button>
+          </div>
+
+          <div
+            class={flex({
+              position: 'absolute',
+              top: '0',
+              bottom: '0',
+              right: '10px',
+              alignItems: 'center',
+              pointerEvents: 'none',
+            })}
+          >
+            <button
+              class={css({
+                borderRadius: '4px',
+                backgroundColor: 'white/50',
+                mixBlendMode: 'difference',
+                width: '8px',
+                height: '1/3',
+                maxHeight: '72px',
+                cursor: 'col-resize',
+                opacity: '0',
+                transition: 'opacity',
+                pointerEvents: 'auto',
+                _hover: { backgroundColor: 'white/40' },
+                _groupHover: { opacity: '100' },
+              })}
+              aria-label="임베드 크기 조절"
+              onpointerdown={(event) => {
+                event.preventDefault();
+                handleResizeStart(event, false);
+              }}
+              onpointermove={handleResize}
+              onpointerup={handleResizeEnd}
+              type="button"
+            ></button>
+          </div>
+        {/if}
       {/if}
     {:else}
       <div
