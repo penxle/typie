@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
-import { clamp, Ref } from '../utils';
+import { clamp, debounce, Ref } from '../utils';
 import { copyShapesToClipboard, getShapesFromClipboard, offsetShapes } from './clipboard';
 import { ARROW_MOVE_DISTANCE, ARROW_MOVE_DISTANCE_FAST, ARROW_PAN_DISTANCE, ARROW_PAN_DISTANCE_FAST } from './const';
 import { CursorManager } from './cursor-manager';
@@ -72,6 +72,7 @@ export class Canvas {
   #pointers = new SvelteMap<number, Pos>();
 
   #operation: Partial<OperationReturn> | null = null;
+  #debouncedResize: ReturnType<typeof debounce>;
 
   constructor(container: HTMLDivElement, doc?: Y.Doc, awareness?: Awareness) {
     this.#container = container;
@@ -94,7 +95,11 @@ export class Canvas {
       }
     }
 
-    this.#observer = new ResizeObserver(() => this.resize());
+    this.#debouncedResize = debounce(() => {
+      this.resize();
+    }, 16);
+
+    this.#observer = new ResizeObserver(() => this.#debouncedResize());
     this.#observer.observe(this.#container);
 
     this.#stage.on('pointerdown', (e) => this.#handlePointerDown(e));
