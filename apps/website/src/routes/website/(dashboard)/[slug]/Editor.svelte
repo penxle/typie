@@ -2,15 +2,14 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import { isiOS, isMacOS } from '@tiptap/core';
-  import { NodeSelection, Selection, TextSelection, Transaction } from '@tiptap/pm/state';
-  import { CellSelection } from '@tiptap/pm/tables';
+  import { Selection, Transaction } from '@tiptap/pm/state';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
   import { EditorLayout, Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
-  import { getNodeView, MultiNodeSelection, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
+  import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
@@ -564,23 +563,12 @@
         } else {
           try {
             const selection = Selection.fromJSON(editor.state.doc, selections[postId]);
-
-            if (selection instanceof TextSelection) {
-              editor.commands.setTextSelection({ from: selection.from, to: selection.to });
-            } else if (selection instanceof NodeSelection) {
-              editor.commands.setNodeSelection(selection.anchor);
-            } else if (selection instanceof MultiNodeSelection) {
-              editor.commands.setMultiNodeSelection(selection.anchor, selection.head);
-            } else if (selection instanceof CellSelection) {
-              editor.commands.setCellSelection({ anchorCell: selection.anchor, headCell: selection.head });
-            }
-
-            // editor.commands.command(({ tr, dispatch }) => {
-            //   tr.setSelection(selection);
-            //   tr.setMeta('initialSelection', true);
-            //   dispatch?.(tr);
-            //   return true;
-            // });
+            editor.commands.command(({ tr, dispatch }) => {
+              tr.setSelection(selection);
+              tr.setMeta('initialSelection', true);
+              dispatch?.(tr);
+              return true;
+            });
           } catch {
             // pass
           }
