@@ -110,7 +110,11 @@ const logs = new aws.s3.Bucket('logs', {
   bucket: 'typie-logs',
 });
 
-export const buckets = { app, cdn, usercontents, uploads, misc, logs };
+const backups = new aws.s3.Bucket('backups', {
+  bucket: 'typie-backups',
+});
+
+export const buckets = { app, cdn, usercontents, uploads, misc, logs, backups };
 
 export const outputs = {
   AWS_S3_BUCKET_APP_ARN: app.arn,

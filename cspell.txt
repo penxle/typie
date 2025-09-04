@@ -16,6 +16,7 @@ bullmq
 bunx
 bytea
 cdylib
+cnpg
 crds
 creds
 dmarc
@@ -29,6 +30,7 @@ iconify
 iframely
 ilike
 indexeddb
+initdb
 ipaddr
 kakao
 karpenter
@@ -53,7 +55,9 @@ oklch
 on+
 oslllo
 penxle
+pgbouncer
 plpgsql
+pooler
 pulumi
 remeda
 resizer
