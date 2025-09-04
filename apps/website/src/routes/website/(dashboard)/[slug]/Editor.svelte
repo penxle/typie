@@ -2,14 +2,15 @@
   import { random } from '@ctrl/tinycolor';
   import stringHash from '@sindresorhus/string-hash';
   import { isiOS, isMacOS } from '@tiptap/core';
-  import { Selection } from '@tiptap/pm/state';
+  import { NodeSelection, Selection, TextSelection, Transaction } from '@tiptap/pm/state';
+  import { CellSelection } from '@tiptap/pm/tables';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
   import { EditorLayout, Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
-  import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
+  import { getNodeView, MultiNodeSelection, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
@@ -261,10 +262,14 @@
   const effectivePageLayout = $derived(viewPageLayout ?? pageLayout);
   const effectiveLayoutMode = $derived(viewLayoutMode ?? layoutMode);
 
-  const persistSelection = () => {
+  const persistSelection = ({ transaction }: { transaction: Transaction }) => {
     if (!editor?.current || !postId) return;
 
-    const { selection } = editor.current.state;
+    if (transaction.getMeta('initialSelection')) {
+      return;
+    }
+
+    const { selection } = transaction;
 
     const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
     selections[postId] = { ...selection.toJSON(), timestamp: dayjs().valueOf() };
@@ -559,11 +564,23 @@
         } else {
           try {
             const selection = Selection.fromJSON(editor.state.doc, selections[postId]);
-            editor.commands.command(({ tr, dispatch }) => {
-              tr.setSelection(selection);
-              dispatch?.(tr);
-              return true;
-            });
+
+            if (selection instanceof TextSelection) {
+              editor.commands.setTextSelection({ from: selection.from, to: selection.to });
+            } else if (selection instanceof NodeSelection) {
+              editor.commands.setNodeSelection(selection.anchor);
+            } else if (selection instanceof MultiNodeSelection) {
+              editor.commands.setMultiNodeSelection(selection.anchor, selection.head);
+            } else if (selection instanceof CellSelection) {
+              editor.commands.setCellSelection({ anchorCell: selection.anchor, headCell: selection.head });
+            }
+
+            // editor.commands.command(({ tr, dispatch }) => {
+            //   tr.setSelection(selection);
+            //   tr.setMeta('initialSelection', true);
+            //   dispatch?.(tr);
+            //   return true;
+            // });
           } catch {
             // pass
           }
