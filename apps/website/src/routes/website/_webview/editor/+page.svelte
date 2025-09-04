@@ -551,6 +551,7 @@
               const selection = Selection.fromJSON(editor.current.state.doc, data.state.selection);
               editor.current.commands.command(({ tr, dispatch }) => {
                 tr.setSelection(selection);
+                tr.setMeta('initialSelection', true);
                 dispatch?.(tr);
                 return true;
               });
