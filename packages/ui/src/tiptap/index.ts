@@ -2,6 +2,7 @@ export * from './components';
 export * from './extensions/collaboration';
 export * from './extensions/notify-idle';
 export * from './extensions/page';
+export * from './extensions/selection';
 export * from './lib';
 export * from './menus';
 export * from './schema';

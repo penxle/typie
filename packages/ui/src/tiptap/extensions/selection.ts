@@ -8,6 +8,15 @@ import { Tip } from '../../notification';
 import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from './node-commands';
 import type { Mappable } from '@tiptap/pm/transform';
 
+declare module '@tiptap/core' {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface Commands<ReturnType> {
+    selection: {
+      setMultiNodeSelection: (anchor: number, head: number) => ReturnType;
+    };
+  }
+}
+
 export const Selection = Extension.create({
   name: 'selection',
 
@@ -123,6 +132,19 @@ export const Selection = Extension.create({
           return true;
         });
       },
+    };
+  },
+
+  addCommands() {
+    return {
+      setMultiNodeSelection:
+        (anchor, head) =>
+        ({ state, tr, dispatch }) => {
+          const s = MultiNodeSelection.create(state.doc, anchor, head);
+          tr.setSelection(s);
+          dispatch?.(tr);
+          return true;
+        },
     };
   },
 
