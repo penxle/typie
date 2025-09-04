@@ -9,6 +9,7 @@ type IAMServiceAccountArgs = {
     namespace: pulumi.Input<string>;
   };
   spec: {
+    serviceAccountName?: pulumi.Input<string>;
     policy: pulumi.Input<aws.iam.PolicyDocument>;
   };
 };
@@ -28,7 +29,7 @@ export class IAMServiceAccount extends pulumi.ComponentResource {
     const role = new aws.iam.Role(
       `${name}@eks`,
       {
-        name: pulumi.interpolate`${args.metadata.name}@eks`,
+        name: pulumi.interpolate`${args.metadata.name}+${args.metadata.namespace}@eks`,
         assumeRolePolicy: {
           Version: '2012-10-17',
           Statement: [
@@ -52,16 +53,23 @@ export class IAMServiceAccount extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    const serviceAccount = new k8s.core.v1.ServiceAccount(
-      name,
-      {
-        metadata: {
-          name: args.metadata.name,
-          namespace: args.metadata.namespace,
+    let serviceAccountName;
+    if (args.spec.serviceAccountName) {
+      serviceAccountName = args.spec.serviceAccountName;
+    } else {
+      const serviceAccount = new k8s.core.v1.ServiceAccount(
+        name,
+        {
+          metadata: {
+            name: args.metadata.name,
+            namespace: args.metadata.namespace,
+          },
         },
-      },
-      { parent: this },
-    );
+        { parent: this },
+      );
+
+      serviceAccountName = serviceAccount.metadata.name;
+    }
 
     const assoc = new aws.eks.PodIdentityAssociation(
       `${name}@eks`,
@@ -69,14 +77,14 @@ export class IAMServiceAccount extends pulumi.ComponentResource {
         clusterName: cluster.name,
         namespace: args.metadata.namespace,
         roleArn: role.arn,
-        serviceAccount: serviceAccount.metadata.name,
+        serviceAccount: serviceAccountName,
       },
       { parent: this },
     );
 
     this.metadata = pulumi.output({
-      name: serviceAccount.metadata.name,
-      namespace: serviceAccount.metadata.namespace,
+      name: serviceAccountName,
+      namespace: args.metadata.namespace,
       roleArn: assoc.roleArn,
     });
   }
