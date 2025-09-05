@@ -71,7 +71,7 @@
 <ToolbarDropdownButton
   style={css.raw({ width: '100px' })}
   chevron
-  disabled={!editor?.current.can().chain().focus().setFontFamily(defaultValues.fontFamily).run()}
+  disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
   label="폰트 두께"
   size="small"
 >
