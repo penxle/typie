@@ -247,7 +247,7 @@
 
 <div
   bind:this={containerRef}
-  style:width={`calc(var(--prosemirror-max-width) * ${editorScale()})`}
+  style:width={layoutMode === PostLayoutMode.PAGE && pageLayout ? `calc(var(--prosemirror-max-width) * ${editorScale()})` : '100%'}
   class={cx(
     className,
     flex({
