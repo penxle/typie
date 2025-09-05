@@ -12,6 +12,7 @@
   let { editor, HTMLAttributes, getPos }: Props = $props();
 
   const pageLayout = $derived(editor?.current.storage?.page?.layout);
+  const pageScale = $derived(editor?.current.storage?.page?.scale ?? 1);
   const hasPageLayout = $derived(!!pageLayout);
 
   let pageBreakEl = $state<HTMLElement>();
@@ -45,7 +46,7 @@
     for (const breaker of breakers) {
       const breakerRect = (breaker as HTMLElement).getBoundingClientRect();
       if (breakerRect.top > coords.top) {
-        return Math.max(0, breakerRect.top - coords.bottom);
+        return Math.max(0, (breakerRect.top - coords.bottom) / pageScale);
       }
     }
 
@@ -58,6 +59,7 @@
     if (pageBreakEl) {
       if (hasPageLayout) {
         void getPos();
+        void pageScale;
 
         const height = calculateRemainingHeight();
         pageBreakEl.style.height = `${height}px`;

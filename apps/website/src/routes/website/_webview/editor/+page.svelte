@@ -163,6 +163,12 @@
   let editorScale = $state(1);
   let editorZoomed = $state(false);
 
+  $effect(() => {
+    if (editor?.current) {
+      editor.current.chain().setPageScale(editorScale).run();
+    }
+  });
+
   let features = $state<string[]>([]);
   let settings = $state<{
     lineHighlightEnabled?: boolean;
