@@ -232,6 +232,10 @@ class Cluster extends pulumi.ComponentResource {
             size: args.storage.size,
           },
 
+          monitoring: {
+            enablePodMonitor: true,
+          },
+
           plugins: [
             {
               name: 'barman-cloud.cloudnative-pg.io',
