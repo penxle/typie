@@ -58,6 +58,7 @@ export default defineConfig([
       'svelte/no-target-blank': 'error',
       'svelte/block-lang': ['error', { script: ['ts'] }],
       'svelte/button-has-type': 'error',
+      'svelte/no-navigation-without-resolve': 'off',
       'svelte/prefer-writable-derived': 'off',
       'svelte/require-store-reactive-access': 'off',
       'svelte/sort-attributes': 'error',
