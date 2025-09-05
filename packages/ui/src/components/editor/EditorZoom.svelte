@@ -35,6 +35,12 @@
   let userScale = $state(1);
   let zoomOrigin = $state<{ x: number; y: number; scrollX: number; scrollY: number; scale: number } | null>(null);
 
+  $effect(() => {
+    if (layoutMode !== PostLayoutMode.PAGE) {
+      userScale = 1;
+    }
+  });
+
   let scrollContainerWidth = $state(0);
   let resizeObserver: ResizeObserver | null = null;
 
