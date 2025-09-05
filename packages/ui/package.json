@@ -15,6 +15,7 @@
     "./notification": "./src/notification/index.ts",
     "./state": "./src/state/index.ts",
     "./tiptap": "./src/tiptap/index.ts",
+    "./tiptap/values-base": "./src/tiptap/values-base.ts",
     "./transitions": "./src/transitions/index.ts",
     "./utils": "./src/utils/index.ts",
     "./styles.css": "./styles/index.css"

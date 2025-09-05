@@ -54,6 +54,7 @@
   let showPdfExportModal = $state(false);
   let exportModalPageLayout = $state<PageLayout | undefined>();
   let exportModalPageEnabled = $state<boolean>(false);
+  let loadingDocxExport = $state(false);
 
   const duplicatePost = graphql(`
     mutation PostMenu_DuplicatePost_Mutation($input: DuplicatePostInput!) {
@@ -122,6 +123,15 @@
     }
   `);
 
+  const exportPostAsDocx = graphql(`
+    mutation PostMenu_ExportPostAsDocx_Mutation($input: ExportPostAsDocxInput!) {
+      exportPostAsDocx(input: $input) {
+        data
+        filename
+      }
+    }
+  `);
+
   const handleDuplicate = async () => {
     try {
       const resp = await duplicatePost({ postId: post.id });
@@ -169,7 +179,7 @@
     });
   };
 
-  const handleExport = async () => {
+  const handlePdfExport = async () => {
     let layout = pageLayout;
 
     if (via === 'tree') {
@@ -187,7 +197,7 @@
     showPdfExportModal = true;
   };
 
-  const handleExportConfirm = async (layoutMode: ExportLayoutMode, pageLayout: PageLayout) => {
+  const handlePdfExportConfirm = async (layoutMode: ExportLayoutMode, pageLayout: PageLayout) => {
     try {
       const resp = await exportPostAsPdf({
         entityId: entity.id,
@@ -201,6 +211,25 @@
       mixpanel.track('export_post', { via, format: 'PDF', layoutMode });
     } catch {
       Toast.error('내보내기 중 오류가 발생했습니다');
+    }
+  };
+
+  const handleDocxExport = async () => {
+    loadingDocxExport = true;
+    try {
+      const resp = await exportPostAsDocx({
+        entityId: entity.id,
+      });
+
+      // cspell:ignore wordprocessingml
+      downloadFromBase64(resp.data, resp.filename, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+      Toast.success('DOCX 내보내기가 완료되었어요');
+      mixpanel.track('export_post', { via, format: 'DOCX' });
+    } catch {
+      Toast.error('내보내기 중 오류가 발생했습니다');
+    } finally {
+      loadingDocxExport = false;
     }
   };
 
@@ -264,10 +293,16 @@
 
 {@render children?.()}
 
-{#if app.preference.current.experimental_pdfExportEnabled}
+{#if app.preference.current.experimental_pdfExportEnabled || app.preference.current.experimental_docxExportEnabled}
   <HorizontalDivider color="secondary" />
+{/if}
 
-  <MenuItem icon={DownloadIcon} noCloseOnClick onclick={handleExport}>PDF로 내보내기</MenuItem>
+{#if app.preference.current.experimental_pdfExportEnabled}
+  <MenuItem icon={DownloadIcon} noCloseOnClick onclick={handlePdfExport}>PDF로 내보내기</MenuItem>
+{/if}
+
+{#if app.preference.current.experimental_docxExportEnabled}
+  <MenuItem icon={DownloadIcon} loading={loadingDocxExport} noCloseOnClick onclick={handleDocxExport}>DOCX로 내보내기</MenuItem>
 {/if}
 
 <HorizontalDivider color="secondary" />
@@ -280,7 +315,7 @@
   onClose={() => {
     showPdfExportModal = false;
   }}
-  onConfirm={handleExportConfirm}
+  onConfirm={handlePdfExportConfirm}
   bind:open={showPdfExportModal}
 />
 

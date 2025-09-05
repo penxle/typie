@@ -250,6 +250,15 @@ enum ExportLayoutMode {
   SCROLL
 }
 
+input ExportPostAsDocxInput {
+  entityId: ID!
+}
+
+type ExportPostAsDocxResult {
+  data: Binary!
+  filename: String!
+}
+
 input ExportPostAsPdfInput {
   entityId: ID!
   height: Float!
@@ -459,6 +468,7 @@ type Mutation {
   deleteUser: Boolean!
   duplicateCanvas(input: DuplicateCanvasInput!): Canvas!
   duplicatePost(input: DuplicatePostInput!): Post!
+  exportPostAsDocx(input: ExportPostAsDocxInput!): ExportPostAsDocxResult!
   exportPostAsPdf(input: ExportPostAsPdfInput!): ExportPostAsPdfResult!
   generateActivityImage: Binary!
   generateRandomName: String!
