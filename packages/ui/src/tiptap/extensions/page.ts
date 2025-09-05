@@ -77,13 +77,10 @@ export const Page = Extension.create<unknown, PageStorage>({
 
           return true;
         },
-      setPageScale:
-        (scale: number) =>
-        ({ tr, dispatch }) => {
-          this.storage.scale = scale;
-          dispatch?.(tr);
-          return true;
-        },
+      setPageScale: (scale: number) => () => {
+        this.storage.scale = scale;
+        return true;
+      },
       convertIncompatibleBlocks:
         () =>
         ({ tr, state }) => {
