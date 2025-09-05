@@ -14,6 +14,7 @@ export const GAP_HEIGHT_PX = 40;
 export type PageStorage = {
   layout?: PageLayout;
   forPdf?: boolean;
+  scale?: number;
 };
 
 export function getIncompatibleBlocks(editor: Editor): string[] {
@@ -33,6 +34,7 @@ declare module '@tiptap/core' {
       setPageLayout: (layout: PageLayout) => ReturnType;
       clearPageLayout: () => ReturnType;
       convertIncompatibleBlocks: () => ReturnType;
+      setPageScale: (scale: number) => ReturnType;
     };
   }
 
@@ -50,6 +52,7 @@ export const Page = Extension.create<unknown, PageStorage>({
   addStorage() {
     return {
       forPdf: false,
+      scale: 1,
     };
   },
 
@@ -72,6 +75,13 @@ export const Page = Extension.create<unknown, PageStorage>({
 
           dispatch?.(tr);
 
+          return true;
+        },
+      setPageScale:
+        (scale: number) =>
+        ({ tr, dispatch }) => {
+          this.storage.scale = scale;
+          dispatch?.(tr);
           return true;
         },
       convertIncompatibleBlocks:

@@ -266,6 +266,12 @@
   let editorScale = $state(1);
   let editorZoomed = $state(false);
 
+  $effect(() => {
+    if (editor?.current) {
+      editor.current.chain().setPageScale(editorScale).run();
+    }
+  });
+
   const persistSelection = ({ transaction }: { transaction: Transaction }) => {
     if (!editor?.current || !postId) return;
 
