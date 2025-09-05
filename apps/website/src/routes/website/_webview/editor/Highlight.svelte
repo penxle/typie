@@ -59,8 +59,8 @@
   <div
     style:top={`${top}px`}
     style:height={`${height}px`}
-    style:left={`calc(var(--prosemirror-max-width) * ${1 - scale} * -1/2)`}
-    style:right={`calc(var(--prosemirror-max-width) * ${1 - scale} * -1/2)`}
+    style:left={`calc(var(--prosemirror-max-width) * ${1 - scale} * -1/2 - 20px)`}
+    style:right={`calc(var(--prosemirror-max-width) * ${1 - scale} * -1/2 - 20px)`}
     class={css({ position: 'absolute', backgroundColor: 'surface.muted', zIndex: '[-1]' })}
   ></div>
 {/if}
