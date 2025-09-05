@@ -222,6 +222,22 @@ new aws.ec2.SecurityGroupRule('public-web.egress', {
   cidrBlocks: ['0.0.0.0/0'],
 });
 
+new aws.ec2.VpcEndpoint('s3', {
+  vpcId: vpc.id,
+  vpcEndpointType: 'Gateway',
+  serviceName: 'com.amazonaws.ap-northeast-2.s3',
+  routeTableIds: [privateAz1RouteTable.id, privateAz2RouteTable.id],
+  tags: { Name: 's3-endpoint' },
+});
+
+new aws.ec2.VpcEndpoint('dynamodb', {
+  vpcId: vpc.id,
+  vpcEndpointType: 'Gateway',
+  serviceName: 'com.amazonaws.ap-northeast-2.dynamodb',
+  routeTableIds: [privateAz1RouteTable.id, privateAz2RouteTable.id],
+  tags: { Name: 'dynamodb-endpoint' },
+});
+
 export { vpc };
 
 export const subnets = {
