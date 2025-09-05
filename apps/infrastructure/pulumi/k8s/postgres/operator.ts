@@ -7,4 +7,13 @@ new k8s.helm.v4.Chart('cloudnative-pg', {
   repositoryOpts: {
     repo: 'https://cloudnative-pg.github.io/charts',
   },
+  values: {
+    replicaCount: 2,
+    monitoring: {
+      podMonitorEnabled: true,
+      grafanaDashboard: {
+        create: true,
+      },
+    },
+  },
 });
