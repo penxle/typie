@@ -21,7 +21,7 @@ export const ClearFormatting = Extension.create({
         () =>
         ({ chain, state }) => {
           const { selection } = state;
-          const { from, to } = selection;
+          const { from, to, empty } = selection;
           const $from = state.doc.resolve(from);
           const $to = state.doc.resolve(to);
 
@@ -30,23 +30,35 @@ export const ClearFormatting = Extension.create({
             selection instanceof MultiNodeSelection ||
             ($from.parent.type.name === 'paragraph' && $to.parent.type.name === 'paragraph' && from === $from.start() && to === $to.end());
 
-          const commands = chain()
-            .unsetAllMarks()
-            .setTextColor(defaultValues.textColor)
-            .setTextBackgroundColor(defaultValues.textBackgroundColor)
-            .setFontFamily(defaultValues.fontFamily)
-            .setFontWeight(defaultValues.fontWeight)
-            .setFontSize(defaultValues.fontSize);
+          if (empty) {
+            return chain()
+              .command(({ tr, state }) => {
+                const storedMarks = state.storedMarks || state.selection.$from.marks();
+                storedMarks.forEach((mark) => {
+                  tr.removeStoredMark(mark);
+                });
+                return true;
+              })
+              .run();
+          } else {
+            const commands = chain()
+              .unsetAllMarks()
+              .setTextColor(defaultValues.textColor)
+              .setTextBackgroundColor(defaultValues.textBackgroundColor)
+              .setFontFamily(defaultValues.fontFamily)
+              .setFontWeight(defaultValues.fontWeight)
+              .setFontSize(defaultValues.fontSize);
 
-          // NOTE: 문단 전체가 선택되었을 때만 문단 속성 리셋
-          if (isParagraphSelected) {
-            commands
-              .setParagraphTextAlign(defaultValues.textAlign)
-              .setParagraphLineHeight(defaultValues.lineHeight)
-              .setParagraphLetterSpacing(defaultValues.letterSpacing);
+            // NOTE: 문단 전체가 선택되었을 때만 문단 속성 리셋
+            if (isParagraphSelected) {
+              commands
+                .setParagraphTextAlign(defaultValues.textAlign)
+                .setParagraphLineHeight(defaultValues.lineHeight)
+                .setParagraphLetterSpacing(defaultValues.letterSpacing);
+            }
+
+            return commands.run();
           }
-
-          return commands.run();
         },
     };
   },

@@ -471,7 +471,6 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <ToolbarButton
-    disabled={!editor?.current.can().clearFormatting()}
     icon={RemoveFormattingIcon}
     keys={['Mod', '\\']}
     label="서식 해제"
