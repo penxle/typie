@@ -27,6 +27,7 @@ export const TemplatePlaceholder = Extension.create({
         2,
         () => {
           const container = document.createElement('div');
+          container.contentEditable = 'false';
           container.style.position = 'absolute';
           container.style.top = 'var(--prosemirror-page-margin-top)';
           container.style.left = 'var(--prosemirror-page-margin-left)';
