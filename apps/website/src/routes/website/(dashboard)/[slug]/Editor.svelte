@@ -267,7 +267,7 @@
   let editorZoomed = $state(false);
 
   $effect(() => {
-    if (editor?.current) {
+    if (editor?.current && editor.current.storage?.page?.scale !== editorScale) {
       editor.current.chain().setPageScale(editorScale).run();
     }
   });
