@@ -43,7 +43,6 @@
         "@react-email/components": "^0.5.1",
         "@resvg/resvg-js": "^2.6.2",
         "@sentry/bun": "^10.8.0",
-        "@sesamecare-oss/redlock": "^1.4.0",
         "@sindresorhus/string-hash": "^2.0.0",
         "@slack/web-api": "^7.10.0",
         "@tiptap/core": "^3.3.0",
@@ -1657,8 +1656,6 @@
     "@sentry/sveltekit": ["@sentry/sveltekit@10.8.0", "", { "dependencies": { "@babel/parser": "7.26.9", "@sentry/cloudflare": "10.8.0", "@sentry/core": "10.8.0", "@sentry/node": "10.8.0", "@sentry/svelte": "10.8.0", "@sentry/vite-plugin": "^4.1.0", "magic-string": "0.30.7", "recast": "0.23.11", "sorcery": "1.0.0" }, "peerDependencies": { "@sveltejs/kit": "2.x", "vite": "*" }, "optionalPeers": ["vite"] }, "sha512-FudTueGuOB+/0o4GURfFJpqErjYy/C74Chsaw34eKlCPE25qn2KCDtNeUY2Cm/G4VV6ChKKFntsZvCYZQrGX6w=="],
 
     "@sentry/vite-plugin": ["@sentry/vite-plugin@4.1.1", "", { "dependencies": { "@sentry/bundler-plugin-core": "4.1.1", "unplugin": "1.0.1" } }, "sha512-kNIZiqRbFHJHzV0QF1RyuwMprwK2Lk354qs98P7DduU1TkzrNG3+2f8liYJaiYCrsjDvJlPHyVFBDF9IRhJGdA=="],
-
-    "@sesamecare-oss/redlock": ["@sesamecare-oss/redlock@1.4.0", "", { "peerDependencies": { "ioredis": ">=5" } }, "sha512-2z589R+yxKLN4CgKxP1oN4dsg6Y548SE4bVYam/R0kHk7Q9VrQ9l66q+k1ehhSLLY4or9hcchuF9/MhuuZdjJg=="],
 
     "@shikijs/core": ["@shikijs/core@3.12.0", "", { "dependencies": { "@shikijs/types": "3.12.0", "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.4", "hast-util-to-html": "^9.0.5" } }, "sha512-rPfCBd6gHIKBPpf2hKKWn2ISPSrmRKAFi+bYDjvZHpzs3zlksWvEwaF3Z4jnvW+xHxSRef7qDooIJkY0RpA9EA=="],
 

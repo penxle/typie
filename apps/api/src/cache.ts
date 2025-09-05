@@ -1,9 +1,7 @@
-import { Redlock } from '@sesamecare-oss/redlock';
 import { Redis } from 'ioredis';
-import { env, stack } from '@/env';
+import { env } from '@/env';
 
-export const redis = new Redis.Cluster([env.REDIS_URL], {
-  keyPrefix: `${stack}:`,
+export const redis = new Redis({
+  name: 'primary',
+  sentinels: [{ host: env.REDIS_URL }],
 });
-
-export const redlock = new Redlock([redis]);
