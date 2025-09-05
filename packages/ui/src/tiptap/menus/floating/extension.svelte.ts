@@ -1,4 +1,4 @@
-import { autoUpdate, computePosition, flip, hide, offset } from '@floating-ui/dom';
+import { autoUpdate, computePosition, hide, offset, shift } from '@floating-ui/dom';
 import { Extension, posToDOMRect } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { css } from '@typie/styled-system/css';
@@ -191,7 +191,7 @@ export const FloatingMenu = Extension.create({
 
               const { x, y, middlewareData } = await computePosition(referenceElement, leftDom, {
                 placement: 'left-start',
-                middleware: [offset(16), flip({ padding: 16 }), hide({ padding: 16, strategy: 'escaped' })],
+                middleware: [offset(16), shift({ crossAxis: true }), hide({ padding: 16, strategy: 'escaped' })],
               });
 
               leftDom.style.left = `${x}px`;
@@ -228,7 +228,7 @@ export const FloatingMenu = Extension.create({
 
               const { x, y, middlewareData } = await computePosition(referenceElement, rightDom, {
                 placement: 'right-start',
-                middleware: [offset(16), hide({ padding: 16, strategy: 'escaped' })],
+                middleware: [offset(16), shift({ crossAxis: true }), hide({ padding: 16, strategy: 'escaped' })],
               });
 
               const viewportWidth = window.innerWidth;
