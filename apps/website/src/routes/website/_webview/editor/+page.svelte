@@ -1059,7 +1059,7 @@
     </div>
 
     <EditorZoom
-      class={css({ position: 'relative', flexGrow: '1' })}
+      class={css({ position: 'relative', flexGrow: '1', ...(editorZoomed && { alignSelf: 'flex-start' }) })}
       layoutMode={layoutMode.current}
       pageLayout={pageLayout.current}
       {scrollContainer}
@@ -1105,5 +1105,25 @@
         <Anchors {doc} {editor} />
       {/if}
     </EditorZoom>
+
+    {#if editorScale < 1}
+      <div
+        class={css({
+          position: 'fixed',
+          left: '20px',
+          bottom: '20px',
+          paddingX: '12px',
+          paddingY: '8px',
+          backgroundColor: 'surface.subtle',
+          borderWidth: '1px',
+          borderColor: 'border.subtle',
+          borderRadius: '8px',
+          fontSize: '12px',
+          color: 'text.subtle',
+        })}
+      >
+        {Math.round(editorScale * 100)}%
+      </div>
+    {/if}
   </EditorLayout>
 </div>

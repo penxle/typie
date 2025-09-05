@@ -16,6 +16,7 @@
     scale?: number;
     zoomed?: boolean;
     children: Snippet;
+    marginX?: number;
   };
 
   let {
@@ -26,6 +27,7 @@
     scale = $bindable(1),
     zoomed = $bindable(false),
     children,
+    marginX = 0,
   }: Props = $props();
 
   let isPinching = $state(false);
@@ -33,12 +35,52 @@
   let userScale = $state(1);
   let zoomOrigin = $state<{ x: number; y: number; scrollX: number; scrollY: number; scale: number } | null>(null);
 
+  let scrollContainerWidth = $state(0);
+  let resizeObserver: ResizeObserver | null = null;
+
+  $effect(() => {
+    if (!scrollContainer || layoutMode !== PostLayoutMode.PAGE || !pageLayout) return;
+
+    scrollContainerWidth = scrollContainer.clientWidth;
+
+    resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === scrollContainer) {
+          const prevWidth = scrollContainerWidth;
+          const newWidth = entry.contentRect.width;
+          scrollContainerWidth = newWidth;
+
+          if (prevWidth > 0 && newWidth !== prevWidth && pageLayout) {
+            const pageWidthPx = mmToPx(pageLayout.width);
+            const prevAvailableWidth = Math.max(1, prevWidth - marginX * 2);
+            const newAvailableWidth = Math.max(1, newWidth - marginX * 2);
+            const prevBaseScale = Math.min(1, prevAvailableWidth / pageWidthPx);
+            const newBaseScale = Math.min(1, newAvailableWidth / pageWidthPx);
+
+            const currentTotalScale = prevBaseScale * userScale;
+            if (newBaseScale > 0) {
+              const newUserScale = currentTotalScale / newBaseScale;
+              userScale = clamp(newUserScale, 1, 1 / newBaseScale);
+            }
+          }
+        }
+      }
+    });
+
+    resizeObserver.observe(scrollContainer);
+
+    return () => {
+      resizeObserver?.disconnect();
+    };
+  });
+
   const baseScale = $derived(() => {
     if (!browser) return 1;
     if (!(layoutMode === PostLayoutMode.PAGE && pageLayout)) return 1;
-    const screenWidth = window.innerWidth;
+    if (!scrollContainer || scrollContainerWidth === 0) return 1;
     const pageWidthPx = mmToPx(pageLayout.width);
-    return Math.min(1, screenWidth / pageWidthPx);
+    const availableWidth = Math.max(1, scrollContainerWidth - marginX * 2);
+    return Math.min(1, availableWidth / pageWidthPx);
   });
 
   const editorScale = $derived(() => {
@@ -197,8 +239,6 @@
     }, 150);
   };
 
-  const alignSelf = $derived(editorScale() > baseScale() ? 'flex-start' : 'center');
-
   let containerRef = $state<HTMLDivElement>();
 
   onMount(() => {
@@ -220,15 +260,14 @@
 {#if layoutMode === PostLayoutMode.PAGE}
   <div
     bind:this={containerRef}
-    style:align-self={alignSelf}
-    style:width={editorScale() > baseScale() ? `calc(var(--prosemirror-max-width) * ${editorScale()})` : '100%'}
+    style:width={`calc(var(--prosemirror-max-width) * ${editorScale()})`}
     class={cx(
       className,
       flex({
         height: '[inherit]',
         direction: 'column',
         alignItems: 'center',
-        touchAction: '[pan-x pan-y]',
+        touchAction: 'auto',
       }),
     )}
     onwheel={handleWheel}
@@ -244,26 +283,6 @@
       {@render children()}
     </div>
   </div>
-
-  {#if editorScale() < 1}
-    <div
-      class={css({
-        position: 'fixed',
-        left: '20px',
-        bottom: '20px',
-        paddingX: '12px',
-        paddingY: '8px',
-        backgroundColor: 'surface.subtle',
-        borderWidth: '1px',
-        borderColor: 'border.subtle',
-        borderRadius: '8px',
-        fontSize: '12px',
-        color: 'text.subtle',
-      })}
-    >
-      {Math.round(editorScale() * 100)}%
-    </div>
-  {/if}
 {:else}
   <div class={cx(className, css({ width: 'full' }))}>
     {@render children()}

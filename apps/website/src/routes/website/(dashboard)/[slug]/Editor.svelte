@@ -6,7 +6,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { EditorLayout, Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { EditorLayout, EditorZoom, Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
@@ -260,6 +260,11 @@
   const effectiveMaxWidth = $derived(viewMaxWidth ?? maxWidth);
   const effectivePageLayout = $derived(viewPageLayout ?? pageLayout);
   const effectiveLayoutMode = $derived(viewLayoutMode ?? layoutMode);
+
+  let scrollContainer = $state<HTMLDivElement>();
+
+  let editorScale = $state(1);
+  let editorZoomed = $state(false);
 
   const persistSelection = ({ transaction }: { transaction: Transaction }) => {
     if (!editor?.current || !postId) return;
@@ -878,6 +883,7 @@
             })}
           >
             <div
+              bind:this={scrollContainer}
               id="editor-container"
               class={cx(
                 'editor-scroll-container',
@@ -886,6 +892,7 @@
                   zIndex: '[-10]',
                   flexGrow: '1',
                   backgroundColor: 'surface.default',
+                  width: 'full',
                   overflow: 'auto',
                   scrollbarGutter: 'stable',
                   '&:has([data-layout="page"])': {
@@ -908,8 +915,10 @@
               <EditorLayout
                 class={cx(
                   'editor',
-                  css({
+                  flex({
                     position: 'relative',
+                    flexDirection: 'column',
+                    alignItems: 'center',
                     flexGrow: '1',
                   }),
                 )}
@@ -927,182 +936,219 @@
                     size: 'full',
                   })}
                 >
-                  <div class={center({ width: 'full', paddingX: '80px' })}>
-                    <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-                      <textarea
-                        bind:this={titleEl}
-                        class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-                        autocapitalize="off"
-                        autocomplete="off"
-                        maxlength="100"
-                        onfocus={() => {
-                          if (postId) {
-                            const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-                            selections[postId] = { type: 'element', element: 'title', timestamp: dayjs().valueOf() };
-                            localStorage.setItem('typie:selections', JSON.stringify(selections));
-                          }
-                        }}
-                        onkeydown={(e) => {
-                          if (e.isComposing) {
-                            return;
-                          }
-
-                          if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
-                            e.preventDefault();
-                            subtitleEl?.focus();
-                          }
-                        }}
-                        placeholder="제목을 입력하세요"
-                        rows={1}
-                        spellcheck="false"
-                        bind:value={effectiveTitle.current}
-                        use:autosize
-                      ></textarea>
-
-                      <textarea
-                        bind:this={subtitleEl}
-                        class={css({
-                          marginTop: '4px',
-                          width: 'full',
-                          fontSize: '16px',
-                          fontWeight: 'medium',
-                          overflow: 'hidden',
-                          resize: 'none',
-                        })}
-                        autocapitalize="off"
-                        autocomplete="off"
-                        maxlength="100"
-                        onfocus={() => {
-                          if (postId) {
-                            const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-                            selections[postId] = { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() };
-                            localStorage.setItem('typie:selections', JSON.stringify(selections));
-                          }
-                        }}
-                        onkeydown={(e) => {
-                          if (e.isComposing) {
-                            return;
-                          }
-
-                          if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !subtitleEl?.value)) {
-                            e.preventDefault();
-                            titleEl?.focus();
-                          }
-
-                          if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
-                            e.preventDefault();
-                            const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
-                            editor?.current
-                              .chain()
-                              .focus()
-                              .setTextSelection(2)
-                              .command(({ tr, dispatch }) => {
-                                tr.setStoredMarks(marks);
-                                dispatch?.(tr);
-                                return true;
-                              })
-                              .run();
-                          }
-                        }}
-                        placeholder="부제목을 입력하세요"
-                        rows={1}
-                        spellcheck="false"
-                        bind:value={effectiveSubtitle.current}
-                        use:autosize
-                      ></textarea>
-
-                      <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
-                    </div>
-                  </div>
-
-                  <div class={css({ position: 'relative', flexGrow: '1', width: 'full', display: viewDoc ? 'none' : 'block' })}>
-                    <TiptapEditor
-                      style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
-                      awareness={viewDoc ? undefined : awareness}
-                      {doc}
-                      editable={!viewDoc}
-                      oncreate={() => {
-                        mounted = true;
+                  <div
+                    style:width={effectiveLayoutMode.current === PostLayoutMode.PAGE
+                      ? `calc(var(--prosemirror-max-width) * ${editorScale})`
+                      : '100%'}
+                    class={flex({
+                      flexDirection: 'column',
+                      flexShrink: '0',
+                      width: 'full',
+                      paddingX: '80px',
+                      '[data-layout="page"] &': {
+                        paddingX: '0',
+                        marginX: '40px',
+                      },
+                    })}
+                  >
+                    <textarea
+                      bind:this={titleEl}
+                      class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                      autocapitalize="off"
+                      autocomplete="off"
+                      maxlength="100"
+                      onfocus={() => {
+                        if (postId) {
+                          const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+                          selections[postId] = { type: 'element', element: 'title', timestamp: dayjs().valueOf() };
+                          localStorage.setItem('typie:selections', JSON.stringify(selections));
+                        }
                       }}
-                      onfile={async ({ pos, file }) => {
-                        if (!editor) {
+                      onkeydown={(e) => {
+                        if (e.isComposing) {
                           return;
                         }
 
-                        if (file.type.startsWith('image/')) {
-                          editor.current.chain().focus(pos).setImage().run();
-                          const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
-
-                          const url = URL.createObjectURL(file);
-                          nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
-
-                          try {
-                            const attrs = await uploadBlobAsImage(file);
-                            nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
-                          } catch {
-                            nodeView?.handle?.(new CustomEvent('error'));
-                          } finally {
-                            URL.revokeObjectURL(url);
-                          }
-                        } else {
-                          editor?.current.chain().focus(pos).setFile().run();
-                          const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
-
-                          nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
-
-                          try {
-                            const attrs = await uploadBlobAsFile(file);
-                            nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
-                          } catch {
-                            nodeView?.handle?.(new CustomEvent('error'));
-                          }
-                        }
-                      }}
-                      onkeydown={(view, e) => {
-                        const { doc, selection } = view.state;
-                        const { anchor } = selection;
-
-                        if (
-                          (((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
-                          (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
-                        ) {
+                        if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
                           e.preventDefault();
                           subtitleEl?.focus();
                         }
                       }}
-                      onpaste={(event) => {
-                        if (event.clipboardData?.getData('text/html')) {
-                          clipboardData = {
-                            html: event.clipboardData.getData('text/html'),
-                            text: event.clipboardData.getData('text/plain'),
-                          };
+                      placeholder="제목을 입력하세요"
+                      rows={1}
+                      spellcheck="false"
+                      bind:value={effectiveTitle.current}
+                      use:autosize
+                    ></textarea>
 
-                          return true;
+                    <textarea
+                      bind:this={subtitleEl}
+                      class={css({
+                        marginTop: '4px',
+                        width: 'full',
+                        fontSize: '16px',
+                        fontWeight: 'medium',
+                        overflow: 'hidden',
+                        resize: 'none',
+                      })}
+                      autocapitalize="off"
+                      autocomplete="off"
+                      maxlength="100"
+                      onfocus={() => {
+                        if (postId) {
+                          const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+                          selections[postId] = { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() };
+                          localStorage.setItem('typie:selections', JSON.stringify(selections));
+                        }
+                      }}
+                      onkeydown={(e) => {
+                        if (e.isComposing) {
+                          return;
                         }
 
-                        return false;
-                      }}
-                      storage={{
-                        uploadBlobAsImage: (file) => {
-                          return uploadBlobAsImage(file);
-                        },
-                        uploadBlobAsFile: (file) => {
-                          return uploadBlobAsFile(file);
-                        },
-                        unfurlEmbed: (url) => {
-                          return unfurlEmbed({ url });
-                        },
-                      }}
-                      {undoManager}
-                      bind:editor
-                    />
+                        if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !subtitleEl?.value)) {
+                          e.preventDefault();
+                          titleEl?.focus();
+                        }
 
-                    {#if editor && mounted}
-                      <TemplateModal $site={entity.site} {doc} {editor} {focused} />
-                      {#if app.preference.current.lineHighlightEnabled}
-                        <Highlight {editor} />
+                        if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
+                          e.preventDefault();
+                          const marks = editor?.current.state.storedMarks || editor?.current.state.selection.$anchor.marks() || null;
+                          editor?.current
+                            .chain()
+                            .focus()
+                            .setTextSelection(2)
+                            .command(({ tr, dispatch }) => {
+                              tr.setStoredMarks(marks);
+                              dispatch?.(tr);
+                              return true;
+                            })
+                            .run();
+                        }
+                      }}
+                      placeholder="부제목을 입력하세요"
+                      rows={1}
+                      spellcheck="false"
+                      bind:value={effectiveSubtitle.current}
+                      use:autosize
+                    ></textarea>
+
+                    <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                  </div>
+
+                  <div
+                    class={css({
+                      position: 'relative',
+                      flexGrow: '1',
+                      width: 'full',
+                      display: viewDoc ? 'none' : 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                    })}
+                  >
+                    <EditorZoom
+                      class={css({ flexGrow: '1', display: viewDoc ? 'none' : 'flex', '[data-layout="page"] &': { marginX: '40px' } })}
+                      layoutMode={effectiveLayoutMode.current}
+                      marginX={40}
+                      pageLayout={effectivePageLayout.current}
+                      {scrollContainer}
+                      bind:scale={editorScale}
+                      bind:zoomed={editorZoomed}
+                    >
+                      <TiptapEditor
+                        style={css.raw({
+                          size: 'full',
+                          paddingX: '80px',
+                          paddingTop: '20px',
+                          '[data-layout="page"] &': {
+                            paddingX: '0',
+                          },
+                        })}
+                        awareness={viewDoc ? undefined : awareness}
+                        {doc}
+                        editable={!viewDoc}
+                        oncreate={() => {
+                          mounted = true;
+                        }}
+                        onfile={async ({ pos, file }) => {
+                          if (!editor) {
+                            return;
+                          }
+
+                          if (file.type.startsWith('image/')) {
+                            editor.current.chain().focus(pos).setImage().run();
+                            const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                            const url = URL.createObjectURL(file);
+                            nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
+
+                            try {
+                              const attrs = await uploadBlobAsImage(file);
+                              nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                            } catch {
+                              nodeView?.handle?.(new CustomEvent('error'));
+                            } finally {
+                              URL.revokeObjectURL(url);
+                            }
+                          } else {
+                            editor?.current.chain().focus(pos).setFile().run();
+                            const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                            nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
+
+                            try {
+                              const attrs = await uploadBlobAsFile(file);
+                              nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                            } catch {
+                              nodeView?.handle?.(new CustomEvent('error'));
+                            }
+                          }
+                        }}
+                        onkeydown={(view, e) => {
+                          const { doc, selection } = view.state;
+                          const { anchor } = selection;
+
+                          if (
+                            (((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+                            (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+                          ) {
+                            e.preventDefault();
+                            subtitleEl?.focus();
+                          }
+                        }}
+                        onpaste={(event) => {
+                          if (event.clipboardData?.getData('text/html')) {
+                            clipboardData = {
+                              html: event.clipboardData.getData('text/html'),
+                              text: event.clipboardData.getData('text/plain'),
+                            };
+
+                            return true;
+                          }
+
+                          return false;
+                        }}
+                        storage={{
+                          uploadBlobAsImage: (file) => {
+                            return uploadBlobAsImage(file);
+                          },
+                          uploadBlobAsFile: (file) => {
+                            return uploadBlobAsFile(file);
+                          },
+                          unfurlEmbed: (url) => {
+                            return unfurlEmbed({ url });
+                          },
+                        }}
+                        {undoManager}
+                        bind:editor
+                      />
+                      {#if editor && mounted}
+                        <TemplateModal $site={entity.site} {doc} {editor} {focused} />
+                        {#if app.preference.current.lineHighlightEnabled}
+                          <Highlight {editor} scale={editorScale} />
+                        {/if}
                       {/if}
-                    {/if}
+                    </EditorZoom>
                   </div>
 
                   {#if viewDoc}
@@ -1121,11 +1167,32 @@
                 {/if}
               </EditorLayout>
             </div>
+            {#if editorScale < 1}
+              <div
+                class={css({
+                  position: 'absolute',
+                  left: '20px',
+                  bottom: '20px',
+                  paddingX: '12px',
+                  paddingY: '8px',
+                  backgroundColor: 'surface.subtle',
+                  borderWidth: '1px',
+                  borderColor: 'border.strong',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  color: 'text.default',
+                })}
+              >
+                {Math.round(editorScale * 100)}%
+              </div>
+            {/if}
             {#if editor && app.state.findReplaceOpenByViewId[splitViewId]}
               <FloatingFindReplace close={() => (app.state.findReplaceOpenByViewId[splitViewId] = false)} {editor} />
             {/if}
 
-            <Anchors {doc} {editor} showOutline={showAnchorOutline} />
+            {#if editor}
+              <Anchors {doc} {editor} showOutline={showAnchorOutline} />
+            {/if}
           </div>
         </div>
         {#if currentViewZenModeEnabled}
