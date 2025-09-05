@@ -11,8 +11,11 @@ const lane = dev ? os.hostname() : stack;
 const taskMap = Object.fromEntries([...jobs, ...crons].map((job) => [job.name, job.fn]));
 
 export const queue = new Queue(lane, {
-  prefix: `${stack}:{mq}`,
-  connection: new Redis.Cluster([env.REDIS_URL]),
+  connection: new Redis({
+    name: 'primary',
+    sentinels: [{ host: env.REDIS_URL }],
+    maxRetriesPerRequest: null,
+  }),
 
   defaultJobOptions: {
     removeOnComplete: true,
@@ -34,8 +37,12 @@ if (!process.env.SCRIPT && !process.env.NO_WORKER) {
       await fn?.(job.data);
     },
     {
-      prefix: `${stack}:{mq}`,
-      connection: new Redis.Cluster([env.REDIS_URL]),
+      connection: new Redis({
+        name: 'primary',
+        sentinels: [{ host: env.REDIS_URL }],
+        maxRetriesPerRequest: null,
+      }),
+
       concurrency: 50,
     },
   );

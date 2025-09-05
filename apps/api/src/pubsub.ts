@@ -11,7 +11,7 @@ export const pubsub = createPubSub<{
   'site:usage:update': [siteId: string, null];
 }>({
   eventTarget: createRedisEventTarget({
-    publishClient: new Redis(env.REDIS_URL),
-    subscribeClient: new Redis(env.REDIS_URL),
+    publishClient: new Redis({ name: 'primary', sentinels: [{ host: env.REDIS_URL }] }),
+    subscribeClient: new Redis({ name: 'primary', sentinels: [{ host: env.REDIS_URL }] }),
   }),
 });
