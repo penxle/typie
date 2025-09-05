@@ -1,10 +1,10 @@
-import { eq } from 'drizzle-orm';
-import { chromium } from 'playwright';
-import { db, Entities, firstOrThrowWith, Posts, TableCode, validateDbId } from '@/db';
-import { EntityVisibility, ExportLayoutMode } from '@/enums';
-import { env } from '@/env';
+import { and, eq, inArray } from 'drizzle-orm';
+import { db, Entities, firstOrThrowWith, FontFamilies, Fonts, PostContents, Posts, TableCode, validateDbId } from '@/db';
+import { EntityVisibility, ExportLayoutMode, FontState, PostLayoutMode } from '@/enums';
 import { NotFoundError } from '@/errors';
-import { mergePDFs } from '@/utils/pdf';
+import { generatePostDocx } from '@/export/docx/docx';
+import { extractFontIds, FontMapper } from '@/export/docx/utils/font-mapping';
+import { generatePostPDF } from '@/export/pdf';
 import { builder } from '../builder';
 
 /**
@@ -17,6 +17,18 @@ const ExportPostAsPdfResult = builder.objectRef<{
 }>('ExportPostAsPdfResult');
 
 ExportPostAsPdfResult.implement({
+  fields: (t) => ({
+    data: t.expose('data', { type: 'Binary' }),
+    filename: t.exposeString('filename'),
+  }),
+});
+
+const ExportPostAsDocxResult = builder.objectRef<{
+  data: Uint8Array;
+  filename: string;
+}>('ExportPostAsDocxResult');
+
+ExportPostAsDocxResult.implement({
   fields: (t) => ({
     data: t.expose('data', { type: 'Binary' }),
     filename: t.exposeString('filename'),
@@ -76,153 +88,130 @@ builder.mutationFields((t) => ({
       };
     },
   }),
-}));
+  exportPostAsDocx: t.withAuth({ session: true }).fieldWithInput({
+    type: ExportPostAsDocxResult,
+    input: {
+      entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db.select().from(Entities).where(eq(Entities.id, input.entityId)).then(firstOrThrowWith(new NotFoundError()));
 
-/**
- * * Utilities
- */
+      if (entity.visibility === EntityVisibility.PRIVATE && entity.userId !== ctx.session.userId) {
+        throw new NotFoundError();
+      }
 
-async function generatePostPDF(params: {
-  entitySlug: string;
-  accessToken?: string;
-  layoutMode: ExportLayoutMode;
-  pageLayout: {
-    width: number;
-    height: number;
-    marginTop: number;
-    marginBottom: number;
-    marginLeft: number;
-    marginRight: number;
-  };
-}): Promise<Uint8Array> {
-  const { entitySlug, accessToken, layoutMode, pageLayout } = params;
+      if (entity.type !== 'POST') {
+        throw new NotFoundError();
+      }
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+      const post = await db.select().from(Posts).where(eq(Posts.entityId, entity.id)).then(firstOrThrowWith(new NotFoundError()));
+      const postContent = await db
+        .select()
+        .from(PostContents)
+        .where(eq(PostContents.postId, post.id))
+        .then(firstOrThrowWith(new NotFoundError()));
 
-  try {
-    const urlParams =
-      layoutMode === ExportLayoutMode.PAGE
-        ? new URLSearchParams({
-            width: pageLayout.width.toString(),
-            height: pageLayout.height.toString(),
-            'margin-top': pageLayout.marginTop.toString(),
-            'margin-bottom': pageLayout.marginBottom.toString(),
-            'margin-left': pageLayout.marginLeft.toString(),
-            'margin-right': pageLayout.marginRight.toString(),
-          })
-        : new URLSearchParams();
+      const fontIds = extractFontIds(postContent.body);
 
-    const exportUrl = new URL(`/_internal/export/pdf/${entitySlug}`, env.WEBSITE_URL);
-    exportUrl.search = urlParams.toString();
+      const fontMapper = new FontMapper();
 
-    const websiteUrl = new URL(env.WEBSITE_URL);
+      if (fontIds.size > 0) {
+        const fontFamilyIds = [...fontIds].filter((id) => id.startsWith('FNTF'));
+        const directFontIds = [...fontIds].filter((id) => id.startsWith('FNTS'));
 
-    const context = await browser.newContext();
+        if (fontFamilyIds.length > 0) {
+          const fontFamilies = await db
+            .select({
+              id: FontFamilies.id,
+              name: FontFamilies.name,
+            })
+            .from(FontFamilies)
+            .where(inArray(FontFamilies.id, fontFamilyIds));
 
-    if (accessToken) {
-      await context.addCookies([
-        {
-          name: 'typie-at',
-          value: accessToken,
-          domain: websiteUrl.hostname,
-          path: '/',
-          httpOnly: true,
-          secure: websiteUrl.protocol === 'https:',
-          sameSite: 'Lax',
-        },
-      ]);
-    }
+          const familyNameMap = new Map<string, string>();
+          for (const family of fontFamilies) {
+            familyNameMap.set(family.id, family.name);
+            fontMapper.addCustomFont({
+              id: family.id,
+              fullName: family.name,
+              familyName: family.name,
+            });
+          }
 
-    const page = await context.newPage();
+          const fontsInFamilies = await db
+            .select({
+              id: Fonts.id,
+              familyId: Fonts.familyId,
+              familyName: Fonts.familyName,
+              fullName: Fonts.fullName,
+              postScriptName: Fonts.postScriptName,
+              weight: Fonts.weight,
+            })
+            .from(Fonts)
+            .where(and(inArray(Fonts.familyId, fontFamilyIds), eq(Fonts.state, FontState.ACTIVE)));
 
-    let resolveIdle: () => void;
-    const idlePromise = new Promise<void>((resolve) => {
-      resolveIdle = () => resolve();
-    });
-
-    let resolveFontsReady: () => void;
-    const fontsReadyPromise = new Promise<void>((resolve) => {
-      resolveFontsReady = () => resolve();
-    });
-
-    await page.exposeFunction('notifyIdle', () => {
-      resolveIdle();
-    });
-
-    // NOTE: 동적으로 삽입되는 폰트의 경우 page.evaluateHandle('document.fonts.ready')는 동작하지 않는듯
-    await page.exposeFunction('notifyFontsReady', () => {
-      resolveFontsReady();
-    });
-
-    await page.goto(exportUrl.toString(), {
-      waitUntil: 'load',
-    });
-
-    await Promise.race([
-      Promise.all([idlePromise, fontsReadyPromise]),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for idle and font readiness')), 10_000)),
-    ]);
-
-    if (layoutMode === ExportLayoutMode.SCROLL) {
-      // NOTE: scroll 방식인 경우 간단히 생성하고 반환
-      const pdfBuffer = await page.pdf({
-        printBackground: true,
-        displayHeaderFooter: false,
-        preferCSSPageSize: false,
-        scale: 1,
-        width: `${pageLayout.width}mm`,
-        height: `${pageLayout.height}mm`,
-        margin: {
-          top: `${pageLayout.marginTop}mm`,
-          bottom: `${pageLayout.marginBottom}mm`,
-          left: `${pageLayout.marginLeft}mm`,
-          right: `${pageLayout.marginRight}mm`,
-        },
-      });
-
-      return new Uint8Array(pdfBuffer);
-    }
-
-    // NOTE: page layout 방식인 경우 1페이지만큼씩 스크롤하며 PDF 생성하고 병합
-    // 웹에 렌더링된 크기와 출력한 PDF 크기가 다르기 때문에 오차가 누적되어 밀리는 현상을 우회하기 위한 동작
-    // known issue: https://github.com/puppeteer/puppeteer/issues/4015
-    const totalHeight = await page.evaluate(() => {
-      const exportPage = document.querySelector('.page-export-viewport');
-      return exportPage ? exportPage.scrollHeight : document.body.scrollHeight;
-    });
-
-    const pageHeightPx = pageLayout.height * 3.779_527_559_1; // NOTE: Convert mm to px (96 DPI)
-    const totalPages = Math.round(totalHeight / pageHeightPx);
-
-    const pdfBuffers: Uint8Array[] = [];
-
-    for (let i = 0; i < totalPages; i++) {
-      await page.evaluate((scrollY) => {
-        const exportPage = document.querySelector('.page-export-viewport');
-        if (exportPage) {
-          exportPage.scrollTop = scrollY;
-        } else {
-          window.scrollTo(0, scrollY);
+          for (const font of fontsInFamilies) {
+            const familyName = familyNameMap.get(font.familyId) || font.familyName;
+            fontMapper.addCustomFont({
+              id: font.familyId,
+              fullName: font.fullName,
+              familyName,
+              postScriptName: font.postScriptName,
+              weight: font.weight,
+            });
+          }
         }
-      }, i * pageHeightPx);
 
-      const pdfBuffer = await page.pdf({
-        printBackground: true,
-        displayHeaderFooter: false,
-        preferCSSPageSize: false,
-        scale: 1,
-        width: `${pageLayout.width}mm`,
-        height: `${pageLayout.height}mm`,
+        if (directFontIds.length > 0) {
+          const customFonts = await db
+            .select({
+              id: Fonts.id,
+              familyName: Fonts.familyName,
+              fullName: Fonts.fullName,
+              postScriptName: Fonts.postScriptName,
+              weight: Fonts.weight,
+            })
+            .from(Fonts)
+            .where(and(inArray(Fonts.id, directFontIds), eq(Fonts.state, FontState.ACTIVE)));
+
+          for (const font of customFonts) {
+            fontMapper.addCustomFont({
+              id: font.id,
+              familyName: font.familyName,
+              fullName: font.fullName,
+              postScriptName: font.postScriptName,
+              weight: font.weight,
+            });
+          }
+        }
+      }
+
+      const { layoutMode, pageLayout } = postContent;
+
+      const docxBuffer = await generatePostDocx({
+        title: post.title,
+        subtitle: post.subtitle,
+        content: postContent.body,
+        text: postContent.text,
+        fontMapper,
+        layoutMode,
+        pageLayout:
+          layoutMode === PostLayoutMode.PAGE && pageLayout
+            ? {
+                width: pageLayout.width,
+                height: pageLayout.height,
+                marginTop: pageLayout.marginTop,
+                marginBottom: pageLayout.marginBottom,
+                marginLeft: pageLayout.marginLeft,
+                marginRight: pageLayout.marginRight,
+              }
+            : undefined,
       });
 
-      pdfBuffers.push(new Uint8Array(pdfBuffer));
-    }
-
-    return mergePDFs(pdfBuffers);
-  } finally {
-    await browser.close();
-  }
-}
+      return {
+        data: docxBuffer,
+        filename: `${post.title || '(내용 없음)'}${post.subtitle ? ` - ${post.subtitle}` : ''}.docx`,
+      };
+    },
+  }),
+}));

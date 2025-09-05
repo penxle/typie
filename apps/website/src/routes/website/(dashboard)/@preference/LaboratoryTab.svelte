@@ -50,4 +50,21 @@
       bind:checked={app.preference.current.experimental_pdfExportEnabled}
     />
   </div>
+
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
+    <div>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>DOCX 내보내기</h3>
+      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>DOCX 내보내기 기능을 활성화합니다.</p>
+    </div>
+
+    <Switch
+      onchange={() => {
+        mixpanel.track('toggle_experimental_feature', {
+          feature: 'docx_export',
+          enabled: app.preference.current.experimental_docxExportEnabled,
+        });
+      }}
+      bind:checked={app.preference.current.experimental_docxExportEnabled}
+    />
+  </div>
 </div>
