@@ -242,6 +242,19 @@ export class App extends pulumi.ComponentResource {
                   },
                 },
               ],
+              affinity: {
+                podAntiAffinity: {
+                  preferredDuringSchedulingIgnoredDuringExecution: [
+                    {
+                      weight: 100,
+                      podAffinityTerm: {
+                        labelSelector: { matchExpressions: [{ key: 'app', operator: 'In', values: [args.name] }] },
+                        topologyKey: 'kubernetes.io/hostname',
+                      },
+                    },
+                  ],
+                },
+              },
             },
           },
           strategy: {
