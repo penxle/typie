@@ -947,10 +947,11 @@
                       ? `calc(var(--prosemirror-max-width) * ${editorScale})`
                       : '100%'}
                     class={flex({
+                      maxWidth: '[calc(var(--prosemirror-max-width) + 80px)]',
                       flexDirection: 'column',
                       flexShrink: '0',
                       width: 'full',
-                      paddingX: '80px',
+                      paddingX: '40px',
                       '[data-layout="page"] &': {
                         paddingX: '0',
                         marginX: '40px',
@@ -1064,7 +1065,7 @@
                       <TiptapEditor
                         style={css.raw({
                           size: 'full',
-                          paddingX: '80px',
+                          paddingX: '40px',
                           paddingTop: '20px',
                           '[data-layout="page"] &': {
                             paddingX: '0',
@@ -1160,7 +1161,7 @@
                   {#if viewDoc}
                     <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
                       <TiptapEditor
-                        style={css.raw({ size: 'full', paddingX: '80px', paddingTop: '20px' })}
+                        style={css.raw({ size: 'full', paddingX: '40px', paddingTop: '20px' })}
                         doc={viewDoc}
                         editable={false}
                       />

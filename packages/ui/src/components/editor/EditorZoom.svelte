@@ -4,7 +4,7 @@
   import { onMount, tick } from 'svelte';
   import { PostLayoutMode } from '@/enums';
   import { browser } from '$app/environment';
-  import { clamp, mmToPx } from '../../utils';
+  import { clamp, debounce, mmToPx } from '../../utils';
   import type { Snippet } from 'svelte';
   import type { PageLayout } from '../../utils/page-layout';
 
@@ -38,6 +38,10 @@
   let scrollContainerWidth = $state(0);
   let resizeObserver: ResizeObserver | null = null;
 
+  const handleResize = debounce((width: number) => {
+    scrollContainerWidth = width;
+  }, 16);
+
   $effect(() => {
     if (!scrollContainer || layoutMode !== PostLayoutMode.PAGE || !pageLayout) return;
 
@@ -46,23 +50,7 @@
     resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.target === scrollContainer) {
-          const prevWidth = scrollContainerWidth;
-          const newWidth = entry.contentRect.width;
-          scrollContainerWidth = newWidth;
-
-          if (prevWidth > 0 && newWidth !== prevWidth && pageLayout) {
-            const pageWidthPx = mmToPx(pageLayout.width);
-            const prevAvailableWidth = Math.max(1, prevWidth - marginX * 2);
-            const newAvailableWidth = Math.max(1, newWidth - marginX * 2);
-            const prevBaseScale = Math.min(1, prevAvailableWidth / pageWidthPx);
-            const newBaseScale = Math.min(1, newAvailableWidth / pageWidthPx);
-
-            const currentTotalScale = prevBaseScale * userScale;
-            if (newBaseScale > 0) {
-              const newUserScale = currentTotalScale / newBaseScale;
-              userScale = clamp(newUserScale, 1, 1 / newBaseScale);
-            }
-          }
+          handleResize(entry.contentRect.width);
         }
       }
     });
@@ -257,34 +245,28 @@
   });
 </script>
 
-{#if layoutMode === PostLayoutMode.PAGE}
+<div
+  bind:this={containerRef}
+  style:width={`calc(var(--prosemirror-max-width) * ${editorScale()})`}
+  class={cx(
+    className,
+    flex({
+      height: '[inherit]',
+      direction: 'column',
+      alignItems: 'center',
+      touchAction: 'auto',
+    }),
+  )}
+  onwheel={handleWheel}
+>
   <div
-    bind:this={containerRef}
-    style:width={`calc(var(--prosemirror-max-width) * ${editorScale()})`}
-    class={cx(
-      className,
-      flex({
-        height: '[inherit]',
-        direction: 'column',
-        alignItems: 'center',
-        touchAction: 'auto',
-      }),
-    )}
-    onwheel={handleWheel}
+    style:transform={`scale(${editorScale()})`}
+    style:transform-origin="center top"
+    style:will-change={editorScale() === 1 ? 'auto' : 'transform'}
+    class={css({
+      width: 'full',
+    })}
   >
-    <div
-      style:transform={`scale(${editorScale()})`}
-      style:transform-origin="center top"
-      style:will-change={editorScale() === 1 ? 'auto' : 'transform'}
-      class={css({
-        width: 'full',
-      })}
-    >
-      {@render children()}
-    </div>
-  </div>
-{:else}
-  <div class={cx(className, css({ width: 'full' }))}>
     {@render children()}
   </div>
-{/if}
+</div>
