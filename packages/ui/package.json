@@ -24,7 +24,7 @@
     "codegen": "svelte-kit sync",
     "lint:svelte": "svelte-check --fail-on-warnings"
   },
-  "devDependencies": {
+  "dependencies": {
     "@ctrl/tinycolor": "^4.1.0",
     "@floating-ui/dom": "^1.7.4",
     "@pandacss/dev": "^1.2.0",
