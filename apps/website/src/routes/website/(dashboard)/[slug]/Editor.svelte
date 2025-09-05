@@ -1174,7 +1174,7 @@
                 {/if}
               </EditorLayout>
             </div>
-            {#if editorScale < 1}
+            {#if editorScale !== 1}
               <div
                 class={css({
                   position: 'absolute',

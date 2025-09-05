@@ -1112,7 +1112,7 @@
       {/if}
     </EditorZoom>
 
-    {#if editorScale < 1}
+    {#if editorScale !== 1}
       <div
         class={css({
           position: 'fixed',
@@ -1122,10 +1122,10 @@
           paddingY: '8px',
           backgroundColor: 'surface.subtle',
           borderWidth: '1px',
-          borderColor: 'border.subtle',
+          borderColor: 'border.strong',
           borderRadius: '8px',
           fontSize: '12px',
-          color: 'text.subtle',
+          color: 'text.default',
         })}
       >
         {Math.round(editorScale * 100)}%
