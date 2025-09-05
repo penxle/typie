@@ -101,7 +101,7 @@ class Cluster extends pulumi.ComponentResource {
 
             wal: {
               compression: 'zstd',
-              maxParallel: 16,
+              maxParallel: 32,
             },
           },
         },
@@ -321,6 +321,7 @@ class Cluster extends pulumi.ComponentResource {
             parameters: {
               max_client_conn: '1000',
               default_pool_size: '20',
+              server_check_delay: '10',
               server_login_retry: '0',
             },
           },
