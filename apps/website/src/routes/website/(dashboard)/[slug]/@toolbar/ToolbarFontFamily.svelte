@@ -241,7 +241,7 @@
 <ToolbarDropdownButton
   style={css.raw({ width: '120px' })}
   chevron
-  disabled={!editor?.current.can().chain().focus().setFontFamily(defaultValues.fontFamily).run()}
+  disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
   label="글씨 서체"
   size="small"
 >
