@@ -301,12 +301,11 @@ class Cluster extends pulumi.ComponentResource {
             metadata: {
               annotations: {
                 'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-                'service.beta.kubernetes.io/aws-load-balancer-security-groups': 'internal',
               },
             },
             spec: {
               type: 'LoadBalancer',
-              loadBalancerClass: 'service.k8s.aws/nlb',
+              loadBalancerClass: 'tailscale',
             },
           },
 
