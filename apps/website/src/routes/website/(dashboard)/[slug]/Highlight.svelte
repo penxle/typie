@@ -70,7 +70,7 @@
     style:right={`calc(var(--prosemirror-max-width) * ${1 - scale} * -1/2)`}
     class={css({
       position: 'absolute',
-      backgroundColor: 'surface.subtle',
+      backgroundColor: 'surface.muted',
       zIndex: '[-1]',
     })}
   ></div>
