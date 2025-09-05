@@ -94,8 +94,15 @@ class Cluster extends pulumi.ComponentResource {
           configuration: {
             destinationPath: pulumi.interpolate`s3://${buckets.backups.bucket}/postgres/${args.namespace}`,
             s3Credentials: { inheritFromIAMRole: true },
-            data: { compression: 'bzip2' },
-            wal: { compression: 'zstd' },
+
+            data: {
+              compression: 'bzip2',
+            },
+
+            wal: {
+              compression: 'zstd',
+              maxParallel: 16,
+            },
           },
         },
       },
@@ -208,19 +215,19 @@ class Cluster extends pulumi.ComponentResource {
             podAntiAffinityType: 'required',
           },
 
-          topologySpreadConstraints: [
-            {
-              labelSelector: {
-                matchExpressions: [
-                  { key: 'cnpg.io/cluster', operator: 'In', values: [args.name] },
-                  { key: 'cnpg.io/podRole', operator: 'In', values: ['instance'] },
-                ],
-              },
-              topologyKey: 'topology.kubernetes.io/zone',
-              maxSkew: 1,
-              whenUnsatisfiable: 'ScheduleAnyway',
-            },
-          ],
+          // topologySpreadConstraints: [
+          //   {
+          //     labelSelector: {
+          //       matchExpressions: [
+          //         { key: 'cnpg.io/cluster', operator: 'In', values: [args.name] },
+          //         { key: 'cnpg.io/podRole', operator: 'In', values: ['instance'] },
+          //       ],
+          //     },
+          //     topologyKey: 'topology.kubernetes.io/zone',
+          //     maxSkew: 1,
+          //     whenUnsatisfiable: 'ScheduleAnyway',
+          //   },
+          // ],
 
           storage: {
             storageClass: 'gp3',
@@ -284,16 +291,16 @@ class Cluster extends pulumi.ComponentResource {
                   ],
                 },
               },
-              topologySpreadConstraints: [
-                {
-                  labelSelector: {
-                    matchExpressions: [{ key: 'cnpg.io/poolerName', operator: 'In', values: [`${args.name}-pooler`] }],
-                  },
-                  topologyKey: 'topology.kubernetes.io/zone',
-                  maxSkew: 1,
-                  whenUnsatisfiable: 'ScheduleAnyway',
-                },
-              ],
+              // topologySpreadConstraints: [
+              //   {
+              //     labelSelector: {
+              //       matchExpressions: [{ key: 'cnpg.io/poolerName', operator: 'In', values: [`${args.name}-pooler`] }],
+              //     },
+              //     topologyKey: 'topology.kubernetes.io/zone',
+              //     maxSkew: 1,
+              //     whenUnsatisfiable: 'ScheduleAnyway',
+              //   },
+              // ],
             },
           },
 
