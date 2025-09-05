@@ -398,9 +398,11 @@
     "packages/styled-system": {
       "name": "@typie/styled-system",
       "version": "0.0.1",
+      "dependencies": {
+        "@pandacss/preset-base": "^1.2.0",
+      },
       "devDependencies": {
         "@pandacss/dev": "^1.2.0",
-        "@pandacss/preset-base": "^1.2.0",
         "@typie/tsconfig": "workspace:*",
         "typescript": "^5.9.2",
       },
@@ -412,7 +414,7 @@
     "packages/ui": {
       "name": "@typie/ui",
       "version": "0.0.1",
-      "devDependencies": {
+      "dependencies": {
         "@ctrl/tinycolor": "^4.1.0",
         "@floating-ui/dom": "^1.7.4",
         "@pandacss/dev": "^1.2.0",
