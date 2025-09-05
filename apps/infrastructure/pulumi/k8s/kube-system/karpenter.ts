@@ -212,7 +212,7 @@ new k8s.apiextensions.CustomResource(
             {
               key: 'topology.kubernetes.io/zone',
               operator: 'In',
-              values: [subnets.private.az1.availabilityZone, subnets.private.az2.availabilityZone],
+              values: [subnets.private.az1.availabilityZone],
             },
           ],
 
