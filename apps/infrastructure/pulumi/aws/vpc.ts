@@ -74,14 +74,58 @@ new aws.ec2.RouteTableAssociation('public-az2', {
   routeTableId: publicRouteTable.id,
 });
 
-const privateAz1Eip = new aws.ec2.Eip('natgw-az1', {
-  tags: { Name: 'natgw-az1' },
+const fckNatAmi = aws.ec2.getAmiOutput({
+  owners: ['568608671756'],
+  filters: [
+    { name: 'name', values: ['fck-nat-al2023-*'] },
+    { name: 'architecture', values: ['arm64'] },
+  ],
+  mostRecent: true,
 });
 
-const privateAz1NatGateway = new aws.ec2.NatGateway('az1', {
+const fckNatSecurityGroup = new aws.ec2.SecurityGroup('fck-nat', {
+  vpcId: vpc.id,
+  name: 'fck-nat',
+  description: 'Security group for fck-nat instance',
+  tags: { Name: 'fck-nat' },
+});
+
+new aws.ec2.SecurityGroupRule('fck-nat.ingress', {
+  securityGroupId: fckNatSecurityGroup.id,
+  type: 'ingress',
+  protocol: '-1',
+  fromPort: 0,
+  toPort: 0,
+  cidrBlocks: [vpc.cidrBlock],
+});
+
+new aws.ec2.SecurityGroupRule('fck-nat.egress', {
+  securityGroupId: fckNatSecurityGroup.id,
+  type: 'egress',
+  protocol: '-1',
+  fromPort: 0,
+  toPort: 0,
+  cidrBlocks: ['0.0.0.0/0'],
+});
+
+const fckNatEipAz1 = new aws.ec2.Eip('fck-nat-az1', {
+  tags: { Name: 'fck-nat-az1' },
+});
+
+const fckNatInstanceAz1 = new aws.ec2.Instance('fck-nat-az1', {
+  ami: fckNatAmi.id,
+  instanceType: 't4g.nano',
   subnetId: publicAz1Subnet.id,
-  allocationId: privateAz1Eip.id,
-  tags: { Name: 'az1' },
+  vpcSecurityGroupIds: [fckNatSecurityGroup.id],
+  sourceDestCheck: false,
+  tags: {
+    Name: 'fck-nat-az1',
+  },
+});
+
+new aws.ec2.EipAssociation('fck-nat-az1', {
+  instanceId: fckNatInstanceAz1.id,
+  allocationId: fckNatEipAz1.id,
 });
 
 const privateAz1RouteTable = new aws.ec2.RouteTable('private-az1', {
@@ -89,7 +133,7 @@ const privateAz1RouteTable = new aws.ec2.RouteTable('private-az1', {
   routes: [
     {
       cidrBlock: '0.0.0.0/0',
-      natGatewayId: privateAz1NatGateway.id,
+      networkInterfaceId: fckNatInstanceAz1.primaryNetworkInterfaceId,
     },
   ],
   tags: { Name: 'private-az1' },
@@ -100,14 +144,24 @@ new aws.ec2.RouteTableAssociation('private-az1', {
   routeTableId: privateAz1RouteTable.id,
 });
 
-const privateAz2Eip = new aws.ec2.Eip('natgw-az2', {
-  tags: { Name: 'natgw-az2' },
+const fckNatEipAz2 = new aws.ec2.Eip('fck-nat-az2', {
+  tags: { Name: 'fck-nat-az2' },
 });
 
-const privateAz2NatGateway = new aws.ec2.NatGateway('az2', {
+const fckNatInstanceAz2 = new aws.ec2.Instance('fck-nat-az2', {
+  ami: fckNatAmi.id,
+  instanceType: 't4g.nano',
   subnetId: publicAz2Subnet.id,
-  allocationId: privateAz2Eip.id,
-  tags: { Name: 'az2' },
+  vpcSecurityGroupIds: [fckNatSecurityGroup.id],
+  sourceDestCheck: false,
+  tags: {
+    Name: 'fck-nat-az2',
+  },
+});
+
+new aws.ec2.EipAssociation('fck-nat-az2', {
+  instanceId: fckNatInstanceAz2.id,
+  allocationId: fckNatEipAz2.id,
 });
 
 const privateAz2RouteTable = new aws.ec2.RouteTable('private-az2', {
@@ -115,7 +169,7 @@ const privateAz2RouteTable = new aws.ec2.RouteTable('private-az2', {
   routes: [
     {
       cidrBlock: '0.0.0.0/0',
-      natGatewayId: privateAz2NatGateway.id,
+      networkInterfaceId: fckNatInstanceAz2.primaryNetworkInterfaceId,
     },
   ],
   tags: { Name: 'private-az2' },
