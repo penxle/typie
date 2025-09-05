@@ -37,7 +37,9 @@ class Note extends HookWidget {
           selection: const TextSelection.collapsed(offset: 0),
         );
       } else {
-        controller.text = yjsState?.note ?? '';
+        if (controller.text != yjsState?.note) {
+          controller.text = yjsState?.note ?? '';
+        }
       }
 
       return null;
