@@ -31,7 +31,7 @@ export type AppPreference = {
   searchMatchWholeWord: boolean;
 
   experimental_pdfExportEnabled: boolean;
-
+  experimental_docxExportEnabled: boolean;
   lastPdfPageLayout: PageLayout | null;
 
   referralWelcomeModalShown: boolean;
@@ -124,6 +124,8 @@ export const setupAppContext = (userId: string) => {
       experimental_pdfExportEnabled: false,
 
       lastPdfPageLayout: null,
+
+      experimental_docxExportEnabled: false,
 
       referralWelcomeModalShown: false,
 
