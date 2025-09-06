@@ -40,15 +40,6 @@ class Sentinel extends pulumi.ComponentResource {
           sentinel: {
             enabled: true,
             primarySet: 'primary',
-
-            service: {
-              type: 'LoadBalancer',
-              loadBalancerClass: 'tailscale',
-
-              annotations: {
-                'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-              },
-            },
           },
 
           primary: {
