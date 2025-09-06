@@ -268,9 +268,9 @@
   onwheel={handleWheel}
 >
   <div
-    style:transform={`scale(${editorScale()})`}
-    style:transform-origin="center top"
-    style:will-change={editorScale() === 1 ? 'auto' : 'transform'}
+    style:transform={editorScale() === 1 ? undefined : `scale(${editorScale()})`}
+    style:transform-origin={editorScale() === 1 ? undefined : 'center top'}
+    style:will-change={editorScale() === 1 ? undefined : 'transform'}
     style:width={layoutMode === PostLayoutMode.PAGE && pageLayout ? 'var(--prosemirror-max-width)' : '100%'}
   >
     {@render children()}
