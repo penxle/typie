@@ -297,7 +297,7 @@
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarButton
-      active={editor?.current.isActive('text_style', { fontWeight: 700 })}
+      active={(editor?.current.getAttributes('text_style').fontWeight ?? 400) >= 700}
       disabled={!editor?.current.can().toggleBold()}
       icon={BoldIcon}
       keys={['Mod', 'B']}
