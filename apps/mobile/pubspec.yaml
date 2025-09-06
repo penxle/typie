@@ -1,7 +1,7 @@
 name: typie
 description: Typie mobile app
 publish_to: none
-version: 1.2.7
+version: 1.2.8
 
 environment:
   sdk: ^3.8.0
