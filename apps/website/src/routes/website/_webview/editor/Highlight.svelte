@@ -59,8 +59,16 @@
   <div
     style:top={`${top}px`}
     style:height={`${height}px`}
-    style:left={`calc(var(--prosemirror-max-width) * ${1 - scale} * -1/2 - 20px)`}
-    style:right={`calc(var(--prosemirror-max-width) * ${1 - scale} * -1/2 - 20px)`}
-    class={css({ position: 'absolute', backgroundColor: 'surface.muted', zIndex: '[-1]' })}
+    class={css({
+      position: 'absolute',
+      backgroundColor: 'surface.muted',
+      '[data-layout="page"] &': {
+        insetX: '0',
+      },
+      '[data-layout="scroll"] &': {
+        insetX: '-20px',
+      },
+      zIndex: '[-1]',
+    })}
   ></div>
 {/if}
