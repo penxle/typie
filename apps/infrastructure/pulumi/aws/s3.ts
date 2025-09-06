@@ -117,8 +117,6 @@ const backups = new aws.s3.Bucket('backups', {
 export const buckets = { app, cdn, usercontents, uploads, misc, logs, backups };
 
 export const outputs = {
-  AWS_S3_BUCKET_APP_ARN: app.arn,
-  AWS_S3_BUCKET_CDN_ARN: cdn.arn,
   AWS_S3_BUCKET_USERCONTENTS_ARN: usercontents.arn,
   AWS_S3_BUCKET_UPLOADS_ARN: uploads.arn,
   AWS_S3_BUCKET_MISC_ARN: misc.arn,
