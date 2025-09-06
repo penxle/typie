@@ -423,9 +423,12 @@ class ActivityGrid extends HookWidget {
 
     final numbers = characterCountChanges.map((c) => c.additions).where((n) => n > 0).toList();
 
-    final min = numbers.isEmpty ? 0 : numbers.reduce((a, b) => a < b ? a : b);
-    final max = numbers.isEmpty ? 0 : numbers.reduce((a, b) => a > b ? a : b);
-    final range = max - min;
+    var p95 = 0;
+    if (numbers.isNotEmpty) {
+      final sorted = List<int>.from(numbers)..sort();
+      final index = (sorted.length * 0.95).floor();
+      p95 = sorted[index.clamp(0, sorted.length - 1)];
+    }
 
     for (var i = 1; i < startDate.dayOfWeek; i++) {
       activities.add(Activity(date: startDate.subtract(days: i), additions: -1, level: -1));
@@ -443,13 +446,15 @@ class ActivityGrid extends HookWidget {
         additions = change.additions;
         if (additions == 0) {
           level = 0;
-        } else if (range == 0) {
+        } else if (p95 == 0) {
           level = 3;
+        } else if (additions >= p95) {
+          level = 5;
         } else {
-          final value = (additions - min) / range;
-          level = (value * 5).floor() + 1;
-          if (level > 5) {
-            level = 5;
+          final ratio = additions / p95;
+          level = (ratio * 4).floor() + 1;
+          if (level > 4) {
+            level = 4;
           }
         }
       } else {
