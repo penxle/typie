@@ -183,7 +183,7 @@ export const Page = Extension.create<unknown, PageStorage>({
             if (!storage.layout) {
               return { decorations: DecorationSet.empty, pages: 0 };
             }
-            const decorations = createDecoration(state, storage.layout, storage.forPdf ?? false);
+            const decorations = createDecoration(state, storage.layout, storage.forPdf ?? false, storage.scale ?? 1);
             return {
               decorations: DecorationSet.create(state.doc, decorations),
               pages: decorations.length,
@@ -202,11 +202,11 @@ export const Page = Extension.create<unknown, PageStorage>({
             }
 
             const forceUpdate = tr.getMeta(key);
-            const pageCount = calculatePageCount(storage.layout, editor.view, storage.forPdf ?? false);
+            const pageCount = calculatePageCount(storage.layout, editor.view, storage.forPdf ?? false, storage.scale ?? 1);
             const currentPageCount = getExistingPageCount(editor.view);
 
             if (forceUpdate || Math.max(pageCount, 1) !== currentPageCount) {
-              const newDecorations = createDecoration(newState, storage.layout, storage.forPdf ?? false);
+              const newDecorations = createDecoration(newState, storage.layout, storage.forPdf ?? false, storage.scale ?? 1);
               return {
                 decorations: DecorationSet.create(newState.doc, newDecorations),
                 pages: newDecorations.length,
@@ -262,7 +262,7 @@ const getExistingPageCount = (view: EditorView) => {
   return 0;
 };
 
-const calculatePageCount = (layout: PageLayout, view: EditorView, forPdf?: boolean): number => {
+const calculatePageCount = (layout: PageLayout, view: EditorView, forPdf?: boolean, scale = 1): number => {
   const { height, marginTop, marginBottom } = layout;
   const PAGE_HEIGHT_PX = mmToPx(height);
   const MARGIN_TOP_PX = mmToPx(marginTop);
@@ -294,7 +294,7 @@ const calculatePageCount = (layout: PageLayout, view: EditorView, forPdf?: boole
 
     if (lastElementOfEditor && lastPageBreak) {
       const lastPageGap =
-        lastElementOfEditor.getBoundingClientRect().bottom - (lastPageBreak as HTMLElement).getBoundingClientRect().bottom;
+        (lastElementOfEditor.getBoundingClientRect().bottom - (lastPageBreak as HTMLElement).getBoundingClientRect().bottom) / scale;
 
       if (lastPageGap > 0) {
         // NOTE: 콘텐츠가 마지막 페이지 브레이크보다 아래에 있음 - 페이지 추가 필요
@@ -329,7 +329,7 @@ const calculatePageCount = (layout: PageLayout, view: EditorView, forPdf?: boole
   }
 };
 
-function createDecoration(_state: EditorState, pageOptions: PageLayout, forPdf?: boolean): Decoration[] {
+function createDecoration(_state: EditorState, pageOptions: PageLayout, forPdf?: boolean, scale = 1): Decoration[] {
   const { width, height, marginTop, marginBottom, marginLeft } = pageOptions;
   const PAGE_WIDTH_PX = mmToPx(width);
   const PAGE_HEIGHT_PX = mmToPx(height);
@@ -343,7 +343,7 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout, forPdf?:
   const pageWidget = Decoration.widget(
     1,
     (view) => {
-      const pageCount = calculatePageCount(pageOptions, view, forPdf);
+      const pageCount = calculatePageCount(pageOptions, view, forPdf, scale);
 
       const container = document.createElement('div');
       container.className = 'page-breaks-container';

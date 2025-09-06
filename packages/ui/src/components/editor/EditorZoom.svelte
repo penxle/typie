@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { css, cx } from '@typie/styled-system/css';
+  import { cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { onMount, tick } from 'svelte';
   import { PostLayoutMode } from '@/enums';
@@ -153,7 +153,8 @@
     const scaleDelta = delta * 0.01;
     const newUserScale = userScale + scaleDelta;
     const currentBaseScale = baseScale();
-    const clampedUserScale = clamp(newUserScale, 1, 1 / currentBaseScale);
+    const maxUserScale = 2 / currentBaseScale;
+    const clampedUserScale = clamp(newUserScale, 1, maxUserScale);
 
     if (currentBaseScale <= 1 && clampedUserScale !== userScale) {
       userScale = clampedUserScale;
@@ -208,7 +209,8 @@
     const scaleDelta = -e.deltaY * 0.01;
     const newUserScale = userScale + scaleDelta;
     const currentBaseScale = baseScale();
-    const clampedUserScale = clamp(newUserScale, 1, 1 / currentBaseScale);
+    const maxUserScale = 2 / currentBaseScale;
+    const clampedUserScale = clamp(newUserScale, 1, maxUserScale);
 
     if (currentBaseScale <= 1 && clampedUserScale !== userScale) {
       userScale = clampedUserScale;
@@ -269,9 +271,7 @@
     style:transform={`scale(${editorScale()})`}
     style:transform-origin="center top"
     style:will-change={editorScale() === 1 ? 'auto' : 'transform'}
-    class={css({
-      width: 'full',
-    })}
+    style:width={layoutMode === PostLayoutMode.PAGE && pageLayout ? 'var(--prosemirror-max-width)' : '100%'}
   >
     {@render children()}
   </div>
