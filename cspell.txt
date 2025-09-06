@@ -41,6 +41,7 @@ konva
 kubeconfig
 lucide
 luthor
+meili
 meilisearch
 msgpackr
 myeongjo
@@ -83,8 +84,8 @@ stibee
 tauri
 tini
 tsup
-typie
 twips
+typie
 udids
 unplugin
 unstub

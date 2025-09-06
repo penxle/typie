@@ -1,0 +1,94 @@
+import * as k8s from '@pulumi/kubernetes';
+import * as pulumi from '@pulumi/pulumi';
+import * as random from '@pulumi/random';
+
+type MeilisearchArgs = {
+  name: pulumi.Input<string>;
+  namespace: pulumi.Input<string>;
+};
+
+class Meilisearch extends pulumi.ComponentResource {
+  public readonly masterKey: pulumi.Output<string>;
+
+  constructor(name: string, args: MeilisearchArgs, opts?: pulumi.ComponentResourceOptions) {
+    super('typie:meilisearch:Meilisearch', name, args, opts);
+
+    const masterKey = new random.RandomPassword(
+      `${name}-master-key`,
+      {
+        length: 20,
+        special: false,
+      },
+      { parent: this },
+    );
+
+    const secret = new k8s.core.v1.Secret(
+      `${name}-master-key`,
+      {
+        metadata: {
+          name: `${args.name}-master-key`,
+          namespace: args.namespace,
+        },
+        stringData: {
+          MEILI_MASTER_KEY: masterKey.result,
+        },
+      },
+      { parent: this },
+    );
+
+    new k8s.helm.v4.Chart(
+      name,
+      {
+        name: args.name,
+
+        chart: 'meilisearch',
+        namespace: args.namespace,
+        repositoryOpts: {
+          repo: 'https://meilisearch.github.io/meilisearch-kubernetes',
+        },
+        values: {
+          image: {
+            tag: 'v1.19.1',
+          },
+
+          resources: {
+            requests: { cpu: '2' },
+            limits: { memory: '4Gi' },
+          },
+
+          auth: {
+            existingMasterKeySecret: secret.metadata.name,
+          },
+
+          environment: {
+            MEILI_ENV: 'production',
+          },
+
+          persistence: {
+            enabled: true,
+            storageClass: 'gp3',
+            size: '20Gi',
+          },
+        },
+      },
+      { parent: this },
+    );
+
+    this.masterKey = masterKey.result;
+  }
+}
+
+const dev = new Meilisearch('meilisearch@dev', {
+  name: 'meilisearch',
+  namespace: 'dev',
+});
+
+const prod = new Meilisearch('meilisearch@prod', {
+  name: 'meilisearch',
+  namespace: 'prod',
+});
+
+export const outputs = {
+  K8S_MEILISEARCH_DEV_MASTER_KEY: dev.masterKey,
+  K8S_MEILISEARCH_PROD_MASTER_KEY: prod.masterKey,
+};
