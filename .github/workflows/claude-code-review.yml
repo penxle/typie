@@ -13,7 +13,7 @@ on:
 jobs:
   claude-review:
     if: |
-      !contains(github.event.pull_request.labels.*.name, ':rocket:')
+      !contains(github.event.pull_request.labels.*.name, ':rocket:') && github.actor != 'graphite-app'
 
     runs-on: ubuntu-latest
     permissions:
