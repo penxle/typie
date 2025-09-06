@@ -1,7 +1,6 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as random from '@pulumi/random';
-import dedent from 'dedent';
 import { buckets } from '$aws/s3';
 import { IAMServiceAccount } from '$components';
 
@@ -133,48 +132,7 @@ class Cluster extends pulumi.ComponentResource {
               secret: {
                 name: secret.metadata.name,
               },
-
-              postInitApplicationSQL: [
-                'CREATE SCHEMA datadog',
-                'GRANT USAGE ON SCHEMA datadog TO datadog',
-                'GRANT USAGE ON SCHEMA public TO datadog',
-                // spell-checker:disable
-                dedent`
-                  CREATE OR REPLACE FUNCTION datadog.explain_statement(
-                    l_query TEXT,
-                    OUT explain JSON
-                  )
-                  RETURNS SETOF JSON AS
-                  $$
-                  DECLARE
-                  curs REFCURSOR;
-                  plan JSON;
-
-                  BEGIN
-                    OPEN curs FOR EXECUTE pg_catalog.concat('EXPLAIN (FORMAT JSON) ', l_query);
-                    FETCH curs INTO plan;
-                    CLOSE curs;
-                    RETURN QUERY SELECT plan;
-                  END;
-                  $$
-                  LANGUAGE 'plpgsql'
-                  RETURNS NULL ON NULL INPUT
-                  SECURITY DEFINER;
-                `,
-                // spell-checker:enable
-              ],
             },
-          },
-
-          managed: {
-            roles: [
-              {
-                name: 'datadog',
-                inRoles: ['pg_monitor'],
-                login: true,
-                disablePassword: true,
-              },
-            ],
           },
 
           primaryUpdateMethod: 'switchover',
@@ -201,8 +159,6 @@ class Cluster extends pulumi.ComponentResource {
               'pg_stat_statements.max': '10000',
               'pg_stat_statements.track_utility': '0',
             },
-
-            pg_hba: ['host all datadog all trust'],
           },
 
           replicationSlots: {
