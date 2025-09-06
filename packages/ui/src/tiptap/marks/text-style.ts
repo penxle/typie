@@ -1,4 +1,4 @@
-import { getMarkAttributes, Mark } from '@tiptap/core';
+import { Mark } from '@tiptap/core';
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
@@ -6,7 +6,6 @@ declare module '@tiptap/core' {
     textStyle: {
       isTextStyleAllowed: () => ReturnType;
       setTextStyle: (attributes: Record<string, unknown>) => ReturnType;
-      removeEmptyTextStyle: () => ReturnType;
     };
   }
 }
@@ -33,25 +32,12 @@ export const TextStyle = Mark.create({
 
       setTextStyle:
         (attributes) =>
-        ({ can, chain }) => {
+        ({ can, commands }) => {
           if (!can().isTextStyleAllowed()) {
             return false;
           }
 
-          return chain().setMark(this.type, attributes).removeEmptyTextStyle().run();
-        },
-
-      removeEmptyTextStyle:
-        () =>
-        ({ state, commands }) => {
-          const attributes = getMarkAttributes(state, this.type);
-          const hasStyles = Object.entries(attributes).some(([, value]) => !!value);
-
-          if (hasStyles) {
-            return true;
-          }
-
-          return commands.unsetMark(this.type);
+          return commands.setMark(this.type, attributes);
         },
     };
   },
