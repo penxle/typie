@@ -45,9 +45,13 @@
     const activities: Activity[] = [];
 
     const numbers = $user.characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
-    const min = Math.min(...numbers);
-    const max = Math.max(...numbers);
-    const range = max - min;
+
+    let p95 = 0;
+    if (numbers.length > 0) {
+      const sorted = [...numbers].sort((a, b) => a - b);
+      const index = Math.floor(sorted.length * 0.95);
+      p95 = sorted[Math.min(index, sorted.length - 1)];
+    }
 
     const changes = Object.fromEntries($user.characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
 
@@ -57,11 +61,13 @@
       if (change) {
         if (change.additions === 0) {
           activities.push({ date: currentDate, additions: 0, level: 0 });
-        } else if (range === 0) {
+        } else if (p95 === 0) {
           activities.push({ date: currentDate, additions: change.additions, level: 3 });
+        } else if (change.additions >= p95) {
+          activities.push({ date: currentDate, additions: change.additions, level: 5 });
         } else {
-          const value = (change.additions - min) / range;
-          const level = Math.min(Math.floor(value * 5) + 1, 5) as Level;
+          const ratio = change.additions / p95;
+          const level = Math.min(Math.floor(ratio * 4) + 1, 4) as Level;
           activities.push({ date: currentDate, additions: change.additions, level });
         }
       } else {

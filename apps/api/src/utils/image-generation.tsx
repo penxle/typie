@@ -134,9 +134,13 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
   const activities: { date: dayjs.Dayjs; additions: number; level: Level }[] = [];
 
   const numbers = characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
-  const min = numbers.length > 0 ? Math.min(...numbers) : 0;
-  const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-  const range = max - min;
+
+  let p95 = 0;
+  if (numbers.length > 0) {
+    const sorted = [...numbers].sort((a, b) => a - b);
+    const index = Math.floor(sorted.length * 0.95);
+    p95 = sorted[Math.min(index, sorted.length - 1)];
+  }
 
   const totalCharacters = characterCountChanges.reduce((sum, change) => sum + change.additions, 0);
 
@@ -148,11 +152,13 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
     if (change) {
       if (change.additions === 0) {
         activities.push({ date: currentDate, additions: 0, level: 0 });
-      } else if (range === 0) {
+      } else if (p95 === 0) {
         activities.push({ date: currentDate, additions: change.additions, level: 3 });
+      } else if (change.additions >= p95) {
+        activities.push({ date: currentDate, additions: change.additions, level: 5 });
       } else {
-        const value = (change.additions - min) / range;
-        const level = Math.min(Math.floor(value * 5) + 1, 5) as Level;
+        const ratio = change.additions / p95;
+        const level = Math.min(Math.floor(ratio * 4) + 1, 4) as Level;
         activities.push({ date: currentDate, additions: change.additions, level });
       }
     } else {
