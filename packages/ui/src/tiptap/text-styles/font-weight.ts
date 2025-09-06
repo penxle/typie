@@ -1,14 +1,11 @@
 import { Extension, getMarkAttributes } from '@tiptap/core';
 import { defaultValues, values } from '../values';
 
-const fontWeights = values.fontWeight.map(({ value }) => value);
-type FontWeight = (typeof fontWeights)[number];
-
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     fontWeight: {
-      setFontWeight: (fontWeight: FontWeight) => ReturnType;
+      setFontWeight: (fontWeight: number) => ReturnType;
       toggleBold: () => ReturnType;
     };
   }
@@ -25,7 +22,7 @@ export const FontWeight = Extension.create({
           fontWeight: {
             parseHTML: (element) => {
               const fontWeight = Number(element.style.fontWeight);
-              if (!fontWeight || !(fontWeights as number[]).includes(fontWeight)) {
+              if (!fontWeight) {
                 return null;
               }
 
@@ -50,32 +47,38 @@ export const FontWeight = Extension.create({
     return {
       setFontWeight:
         (fontWeight) =>
-        ({ commands }) => {
-          if (!fontWeights.includes(fontWeight)) {
-            return false;
-          }
-
+        ({ chain }) => {
           if (fontWeight === defaultValues.fontWeight) {
-            return commands.setTextStyle({ fontWeight: null });
+            return chain().unsetMark('bold').setTextStyle({ fontWeight: null }).run();
           } else {
-            return commands.setTextStyle({ fontWeight });
+            return chain().unsetMark('bold').setTextStyle({ fontWeight }).run();
           }
         },
 
       toggleBold:
         () =>
         ({ commands, state }) => {
-          const attributes = getMarkAttributes(state, 'text_style');
-          const fontWeight = attributes?.fontWeight;
-          if (!fontWeight) {
-            return commands.setFontWeight(700);
+          const { fontFamily, fontWeight } = getMarkAttributes(state, 'text_style');
+
+          const weights = values.fontFamily.find((f) => f.value === fontFamily)?.weights || [400, 700];
+          const findClosestWeight = (target: number) => {
+            return weights.reduce((prev, curr) => {
+              return Math.abs(curr - target) < Math.abs(prev - target) ? curr : prev;
+            });
+          };
+
+          const normalWeight = findClosestWeight(400);
+          const boldWeight = findClosestWeight(700);
+
+          if (normalWeight === boldWeight) {
+            return false;
           }
 
-          if (fontWeight >= 700) {
-            return commands.setFontWeight(400);
+          if (!fontWeight || fontWeight < boldWeight) {
+            return commands.setFontWeight(boldWeight);
           }
 
-          return commands.setFontWeight(700);
+          return commands.setFontWeight(normalWeight);
         },
     };
   },
