@@ -12,6 +12,8 @@ export const zIndex = defineTokens.zIndex({
   30: { value: '30' },
   40: { value: '40' },
   50: { value: '50' },
+  ground: { value: '-10' },
+  page: { value: '-1' },
   underEditor: { value: '40' },
   editor: { value: '50' },
   overEditor: { value: '60' },

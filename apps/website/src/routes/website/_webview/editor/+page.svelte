@@ -937,6 +937,8 @@
   class={cx(
     'editor-scroll-container',
     css({
+      position: 'relative',
+      zIndex: 'ground',
       width: 'full',
       height: '[100dvh]',
       overflow: 'auto',
@@ -956,6 +958,8 @@
       alignItems: 'center',
       paddingTop: '40px',
       userSelect: 'text',
+      minWidth: 'fit',
+      size: 'full',
     })}
     class="editor"
     bodyPadding={{
@@ -975,7 +979,6 @@
         flexDirection: 'column',
         flexShrink: '0',
         paddingX: '20px',
-        ...(editorZoomed && { alignSelf: 'flex-start' }),
       })}
     >
       <textarea
@@ -1063,7 +1066,7 @@
     </div>
 
     <EditorZoom
-      style={css.raw({ position: 'relative', flexGrow: '1', ...(editorZoomed && { alignSelf: 'flex-start' }) })}
+      style={css.raw({ position: 'relative', flexGrow: '1' })}
       layoutMode={layoutMode.current}
       pageLayout={pageLayout.current}
       {scrollContainer}

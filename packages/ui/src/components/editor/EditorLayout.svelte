@@ -44,7 +44,9 @@
   bind:this={container}
   style:--prosemirror-padding-top={`${bodyPadding.top}px`}
   style:--prosemirror-padding-x={`${bodyPadding.x}px`}
-  style:--prosemirror-max-width={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.width)}px` : `${maxWidth}px`}
+  style:--prosemirror-max-width={layoutMode === PostLayoutMode.PAGE && pageLayout
+    ? `${mmToPx(pageLayout.width)}px`
+    : `${maxWidth + bodyPadding.x * 2}px`}
   style:--prosemirror-page-margin-top={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
   style:--prosemirror-page-margin-bottom={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
   style:--prosemirror-page-margin-left={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
