@@ -303,6 +303,30 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                Tappable(
+                  onTap: () async {
+                    final url = Uri.parse('https://typie.co/changelog');
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: context.colors.borderStrong),
+                      borderRadius: BorderRadius.circular(8),
+                      color: context.colors.surfaceDefault,
+                    ),
+                    padding: const Pad(all: 16),
+                    child: const Row(
+                      spacing: 8,
+                      children: [
+                        Icon(LucideLightIcons.newspaper, size: 20),
+                        Expanded(
+                          child: Text('업데이트 노트', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                        ),
+                        Icon(LucideLightIcons.external_link, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           );
