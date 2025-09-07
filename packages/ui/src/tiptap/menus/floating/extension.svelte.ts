@@ -171,6 +171,7 @@ export const FloatingMenu = Extension.create({
               }
 
               const bodyRect = (body as HTMLElement).getBoundingClientRect();
+              const bodyPaddingLeft = Number.parseInt(getComputedStyle(body).paddingLeft, 10);
               const referenceElement: VirtualElement = {
                 getBoundingClientRect: () => {
                   let rect: DOMRect;
@@ -183,7 +184,7 @@ export const FloatingMenu = Extension.create({
                   }
                   return {
                     ...rect,
-                    left: bodyRect.left,
+                    left: bodyRect.left + bodyPaddingLeft,
                   };
                 },
                 contextElement: nodeDOM,
@@ -206,6 +207,7 @@ export const FloatingMenu = Extension.create({
               }
 
               const bodyRect = (body as HTMLElement).getBoundingClientRect();
+              const bodyPaddingRight = Number.parseInt(getComputedStyle(body).paddingRight, 10);
               let nodeRect: DOMRect;
               if (node?.type.name === 'paragraph') {
                 nodeRect = posToDOMRect(view, pos + 1, nodeEnd - 1);
@@ -218,9 +220,9 @@ export const FloatingMenu = Extension.create({
                   return {
                     ...nodeRect,
                     width: 1,
-                    left: bodyRect.right - 1,
+                    left: bodyRect.right - 1 - bodyPaddingRight,
                     right: bodyRect.right,
-                    x: bodyRect.right - 1,
+                    x: bodyRect.right - 1 - bodyPaddingRight,
                   };
                 },
                 contextElement: nodeDOM,
