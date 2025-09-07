@@ -919,15 +919,13 @@
               role="none"
             >
               <EditorLayout
-                class={cx(
-                  'editor',
-                  flex({
-                    position: 'relative',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    flexGrow: '1',
-                  }),
-                )}
+                style={flex.raw({
+                  position: 'relative',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  flexGrow: '1',
+                })}
+                class="editor"
                 layoutMode={effectiveLayoutMode.current}
                 maxWidth={effectiveMaxWidth.current}
                 pageLayout={effectivePageLayout.current}
@@ -1054,7 +1052,12 @@
                     })}
                   >
                     <EditorZoom
-                      class={css({ flexGrow: '1', display: viewDoc ? 'none' : 'flex', '[data-layout="page"] &': { marginX: '40px' } })}
+                      style={css.raw({
+                        position: 'relative',
+                        flexGrow: '1',
+                        display: viewDoc ? 'none' : 'flex',
+                        '[data-layout="page"] &': { marginX: '40px' },
+                      })}
                       layoutMode={effectiveLayoutMode.current}
                       marginX={40}
                       pageLayout={effectivePageLayout.current}

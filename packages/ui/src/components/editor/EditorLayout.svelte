@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { css, cx } from '@typie/styled-system/css';
   import { PostLayoutMode } from '@/enums';
   import { GAP_HEIGHT_PX } from '../../tiptap';
   import { mmToPx } from '../../utils/unit';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { PageLayout } from '../../utils/page-layout';
 
@@ -12,6 +14,7 @@
     typewriterPosition?: number;
     typewriterEnabled?: boolean;
     class?: string;
+    style?: SystemStyleObject;
     mobile?: boolean;
     container?: HTMLDivElement;
     children: Snippet;
@@ -24,6 +27,7 @@
     typewriterPosition = 0.8,
     typewriterEnabled = false,
     class: className,
+    style,
     mobile = false,
     container = $bindable(),
     children,
@@ -45,7 +49,7 @@
         ? `${(1 - typewriterPosition) * 100}vh`
         : '20dvh'}
   style:--prosemirror-page-gap-height={`${GAP_HEIGHT_PX}px`}
-  class={className}
+  class={cx(className, css(style))}
   data-layout={layoutMode === PostLayoutMode.PAGE ? 'page' : 'scroll'}
 >
   {@render children()}

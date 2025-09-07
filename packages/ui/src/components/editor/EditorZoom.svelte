@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { cx } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { onMount, tick } from 'svelte';
   import { PostLayoutMode } from '@/enums';
   import { browser } from '$app/environment';
   import { clamp, debounce, mmToPx } from '../../utils';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { PageLayout } from '../../utils/page-layout';
 
@@ -13,6 +14,7 @@
     pageLayout?: PageLayout;
     scrollContainer?: HTMLDivElement;
     class?: string;
+    style?: SystemStyleObject;
     scale?: number;
     zoomed?: boolean;
     children: Snippet;
@@ -24,6 +26,7 @@
     pageLayout,
     scrollContainer,
     class: className,
+    style,
     scale = $bindable(1),
     zoomed = $bindable(false),
     children,
@@ -258,6 +261,7 @@
   style:width={layoutMode === PostLayoutMode.PAGE && pageLayout ? `calc(var(--prosemirror-max-width) * ${editorScale()})` : '100%'}
   class={cx(
     className,
+    css(style),
     flex({
       height: '[inherit]',
       direction: 'column',
