@@ -952,19 +952,17 @@
   )}
 >
   <EditorLayout
-    class={cx(
-      'editor',
-      flex({
-        flexDirection: 'column',
-        alignItems: 'center',
-        paddingTop: '40px',
-        paddingX: '20px',
-        userSelect: 'text',
-        '&[data-layout="page"]': {
-          paddingX: '0',
-        },
-      }),
-    )}
+    style={flex.raw({
+      flexDirection: 'column',
+      alignItems: 'center',
+      paddingTop: '40px',
+      paddingX: '20px',
+      userSelect: 'text',
+      '&[data-layout="page"]': {
+        paddingX: '0',
+      },
+    })}
+    class="editor"
     layoutMode={layoutMode.current}
     maxWidth={maxWidth.current}
     mobile={true}
@@ -1065,7 +1063,7 @@
     </div>
 
     <EditorZoom
-      class={css({ position: 'relative', flexGrow: '1', ...(editorZoomed && { alignSelf: 'flex-start' }) })}
+      style={css.raw({ position: 'relative', flexGrow: '1', ...(editorZoomed && { alignSelf: 'flex-start' }) })}
       layoutMode={layoutMode.current}
       pageLayout={pageLayout.current}
       {scrollContainer}
