@@ -897,7 +897,7 @@
                 'editor-scroll-container',
                 flex({
                   position: 'relative',
-                  zIndex: '[-10]',
+                  zIndex: 'ground',
                   flexGrow: '1',
                   backgroundColor: 'surface.default',
                   width: 'full',
@@ -951,7 +951,7 @@
                       ? `calc(var(--prosemirror-max-width) * ${editorScale})`
                       : '100%'}
                     class={flex({
-                      maxWidth: '[calc(var(--prosemirror-max-width) + 80px)]',
+                      maxWidth: 'var(--prosemirror-max-width)',
                       flexDirection: 'column',
                       flexShrink: '0',
                       width: 'full',
