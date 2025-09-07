@@ -37,11 +37,16 @@ export const HtmlBlock = createNodeView(Component, {
               () => {
                 return chain()
                   .insertNode(this.type.create())
-                  .command(({ tr, state }) => {
+                  .command(({ tr, dispatch }) => {
                     // NOTE: 노드 삽입 후 내부로 커서 이동 (어째선지 code_block에서는 필요 없음)
-                    const { $from } = state.selection;
+                    const { $from } = tr.selection;
                     const pos = $from.pos + 1;
-                    tr.setSelection(TextSelection.create(state.doc, pos));
+
+                    if (dispatch) {
+                      tr.setSelection(TextSelection.create(tr.doc, pos));
+                      dispatch(tr);
+                    }
+
                     return true;
                   })
                   .run();
