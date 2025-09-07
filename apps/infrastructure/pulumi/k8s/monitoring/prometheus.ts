@@ -68,7 +68,17 @@ new k8s.helm.v4.Chart('prometheus', {
     },
 
     alertmanager: {
+      config: {
+        templates: ['/etc/alertmanager/configmaps/alertmanager-templates/*.tmpl'],
+      },
+
       alertmanagerSpec: {
+        configMaps: ['alertmanager-templates'],
+
+        alertmanagerConfigMatcherStrategy: {
+          type: 'None',
+        },
+
         storage: {
           volumeClaimTemplate: {
             spec: {
@@ -135,6 +145,80 @@ new k8s.helm.v4.Chart('prometheus', {
         hosts: ['grafana.typie.io'],
       },
     },
+  },
+});
+
+new k8s.apiextensions.CustomResource('alertmanager', {
+  apiVersion: 'monitoring.coreos.com/v1alpha1',
+  kind: 'AlertmanagerConfig',
+
+  metadata: {
+    name: 'alertmanager',
+    namespace: namespace.metadata.name,
+  },
+
+  spec: {
+    route: {
+      receiver: 'slack',
+
+      groupBy: ['namespace', 'alertname'],
+      matchers: [
+        { matchType: '!=', name: 'alertname', value: 'Watchdog' },
+        { matchType: '!=', name: 'alertname', value: 'InfoInhibitor' },
+      ],
+
+      groupWait: '10s',
+      groupInterval: '5m',
+      repeatInterval: '1h',
+    },
+
+    receivers: [
+      {
+        name: 'slack',
+        slackConfigs: [
+          {
+            channel: '#monitoring',
+            sendResolved: true,
+
+            apiURL: {
+              name: 'alertmanager-secrets',
+              key: 'slack-api-url',
+            },
+
+            httpConfig: {
+              authorization: {
+                type: 'Bearer',
+                credentials: {
+                  name: 'alertmanager-secrets',
+                  key: 'slack-bot-token',
+                },
+              },
+            },
+
+            title: '{{ template "slack.monzo.title" . }}',
+            color: '{{ template "slack.monzo.color" . }}',
+            text: '{{ template "slack.monzo.text" . }}',
+
+            actions: [
+              {
+                type: 'button',
+                name: 'alert',
+                value: 'text',
+                text: 'Alert :bell:',
+                url: 'https://grafana.typie.io/alerting/list?search={{ .CommonLabels.alertname | urlquery -}}',
+              },
+              {
+                type: 'button',
+                name: 'runbook',
+                value: 'text',
+                text: 'Runbook :green_book:',
+                url: '{{ (index .Alerts 0).Annotations.runbook_url }}',
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 });
 

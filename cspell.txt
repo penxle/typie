@@ -43,6 +43,7 @@ lucide
 luthor
 meili
 meilisearch
+monzo
 msgpackr
 myeongjo
 nanum
@@ -83,6 +84,7 @@ stakater
 stibee
 tauri
 tini
+tmpl
 tsup
 twips
 typie
