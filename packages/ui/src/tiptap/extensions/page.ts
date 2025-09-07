@@ -371,7 +371,7 @@ function createDecoration(_state: EditorState, pageOptions: PageLayout, forPdf?:
           position: absolute;
           top: ${i * (PAGE_HEIGHT_PX + GAP) - MARGIN_TOP_PX}px;
           left: -${MARGIN_LEFT_PX}px;
-          z-index: ${token('zIndex.page')};
+          z-index: -1;
           width: ${PAGE_WIDTH_PX}px;
           height: ${PAGE_HEIGHT_PX}px;
           background-color: ${token('colors.surface.default')};
