@@ -239,10 +239,11 @@
   type="button"
 >
   <div
-    style={direction === 'horizontal' ? 'left: -4px; right: -4px;' : 'top: -4px; bottom: -4px;'}
+    style={direction === 'horizontal' ? 'left: -3px; right: -3px;' : 'top: -3px; bottom: -3px;'}
     class={css({
       position: 'absolute',
       inset: '0',
+      zIndex: 'underPanel',
     })}
   ></div>
 </button>
