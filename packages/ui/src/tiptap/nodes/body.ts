@@ -51,12 +51,15 @@ export const Body = Node.create({
         class: cx(
           this.editor?.isEditable ? 'ProseMirror-editable ProseMirror-body' : 'ProseMirror-body',
           css({
+            paddingTop: 'var(--prosemirror-padding-top)',
+            paddingLeft: 'var(--prosemirror-padding-x)',
+            paddingRight: 'var(--prosemirror-padding-x)',
             '[data-layout="page"] &': {
               minWidth: 'var(--prosemirror-max-width)',
-              paddingTop: 'var(--prosemirror-page-margin-top)',
-              paddingLeft: 'var(--prosemirror-page-margin-left)',
+              paddingTop: '[calc(var(--prosemirror-page-margin-top) + var(--prosemirror-padding-top))]',
+              paddingLeft: '[calc(var(--prosemirror-page-margin-left) + var(--prosemirror-padding-x))]',
               paddingBottom: 'var(--prosemirror-page-margin-bottom)',
-              paddingRight: 'var(--prosemirror-page-margin-right)',
+              paddingRight: '[calc(var(--prosemirror-page-margin-right) + var(--prosemirror-padding-x))]',
             },
             '& > .paragraph-indent, & > .selected-node > .paragraph-indent': {
               textIndent: 'var(--prosemirror-paragraph-indent)',

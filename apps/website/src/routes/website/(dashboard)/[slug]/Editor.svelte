@@ -928,6 +928,10 @@
                   flexGrow: '1',
                 })}
                 class="editor"
+                bodyPadding={{
+                  top: 20,
+                  x: effectiveLayoutMode.current === PostLayoutMode.PAGE && effectivePageLayout.current ? 0 : 40,
+                }}
                 layoutMode={effectiveLayoutMode.current}
                 maxWidth={effectiveMaxWidth.current}
                 pageLayout={effectivePageLayout.current}
@@ -1070,11 +1074,6 @@
                       <TiptapEditor
                         style={css.raw({
                           size: 'full',
-                          paddingX: '40px',
-                          paddingTop: '20px',
-                          '[data-layout="page"] &': {
-                            paddingX: '0',
-                          },
                         })}
                         awareness={viewDoc ? undefined : awareness}
                         {doc}

@@ -11,6 +11,11 @@
     layoutMode: PostLayoutMode;
     pageLayout?: PageLayout;
     maxWidth: number;
+    // NOTE: 맨 앞에 드래그 앤 드랍하는 등의 사용사례를 위해 패딩을 받아서 prosemirror body에 넣어줌으로써 body 영역을 늘려줌
+    bodyPadding: {
+      top: number;
+      x: number;
+    };
     typewriterPosition?: number;
     typewriterEnabled?: boolean;
     class?: string;
@@ -24,6 +29,7 @@
     layoutMode,
     pageLayout,
     maxWidth,
+    bodyPadding,
     typewriterPosition = 0.8,
     typewriterEnabled = false,
     class: className,
@@ -36,6 +42,8 @@
 
 <div
   bind:this={container}
+  style:--prosemirror-padding-top={`${bodyPadding.top}px`}
+  style:--prosemirror-padding-x={`${bodyPadding.x}px`}
   style:--prosemirror-max-width={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.width)}px` : `${maxWidth}px`}
   style:--prosemirror-page-margin-top={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginTop)}px` : '0'}
   style:--prosemirror-page-margin-bottom={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}

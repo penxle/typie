@@ -956,13 +956,13 @@
       flexDirection: 'column',
       alignItems: 'center',
       paddingTop: '40px',
-      paddingX: '20px',
       userSelect: 'text',
-      '&[data-layout="page"]': {
-        paddingX: '0',
-      },
     })}
     class="editor"
+    bodyPadding={{
+      top: 40,
+      x: layoutMode.current === PostLayoutMode.PAGE && pageLayout.current ? 0 : 20,
+    }}
     layoutMode={layoutMode.current}
     maxWidth={maxWidth.current}
     mobile={true}
@@ -975,6 +975,7 @@
       class={flex({
         flexDirection: 'column',
         flexShrink: '0',
+        paddingX: '20px',
         ...(editorZoomed && { alignSelf: 'flex-start' }),
       })}
     >
@@ -1071,7 +1072,7 @@
       bind:zoomed={editorZoomed}
     >
       <TiptapEditor
-        style={css.raw({ size: 'full', paddingTop: '40px' })}
+        style={css.raw({ size: 'full' })}
         {awareness}
         {doc}
         onblur={() => {
