@@ -2,8 +2,8 @@ import { nanoid } from 'nanoid';
 import type { SplitView } from './context.svelte';
 
 export const VIEW_MIN_SIZE = 210;
-export const RESIZER_SIZE = 4;
-export const BUFFER_SIZE = 4; // NOTE: 어쩐지 없으면 스크롤 생긴다
+export const VIEW_BUFFER_SIZE = 4; // NOTE: 어쩐지 없으면 스크롤 생긴다
+const VIEW_RESIZER_SIZE = 4;
 
 export const getMinSizeForView = (view: SplitView, parentDirection: 'horizontal' | 'vertical'): number => {
   if (view.type === 'item') {
@@ -14,7 +14,7 @@ export const getMinSizeForView = (view: SplitView, parentDirection: 'horizontal'
   if (view.direction === parentDirection) {
     const childrenMinSize = view.children.reduce((sum, child) => sum + getMinSizeForView(child, parentDirection), 0);
     const resizerCount = Math.max(0, view.children.length - 1);
-    return childrenMinSize + resizerCount * (RESIZER_SIZE + BUFFER_SIZE);
+    return childrenMinSize + resizerCount * (VIEW_RESIZER_SIZE + VIEW_BUFFER_SIZE);
   } else {
     // NOTE: 부모와 다른 방향: 자식들 중 최대 크기
     return Math.max(...view.children.map((child) => getMinSizeForView(child, parentDirection)));

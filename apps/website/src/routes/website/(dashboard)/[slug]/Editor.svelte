@@ -40,6 +40,7 @@
   import { getSplitViewContext, getViewContext } from './@split-view/context.svelte';
   import { getDragDropContext } from './@split-view/drag-context.svelte';
   import { dragView } from './@split-view/drag-view-action';
+  import { VIEW_BUFFER_SIZE, VIEW_MIN_SIZE } from './@split-view/utils';
   import BottomToolbar from './@toolbar/BottomToolbar.svelte';
   import TopToolbar from './@toolbar/TopToolbar.svelte';
   import FloatingFindReplace from './FloatingFindReplace.svelte';
@@ -891,6 +892,7 @@
             <div
               bind:this={scrollContainer}
               id="editor-container"
+              style:min-width={`${VIEW_MIN_SIZE - VIEW_BUFFER_SIZE}px`}
               class={cx(
                 'editor-scroll-container',
                 flex({
@@ -1045,7 +1047,7 @@
                     class={css({
                       position: 'relative',
                       flexGrow: '1',
-                      width: 'full',
+                      size: 'full',
                       display: viewDoc ? 'none' : 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
