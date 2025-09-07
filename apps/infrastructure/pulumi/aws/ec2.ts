@@ -41,7 +41,7 @@ runcmd:
   - [ sh, -c, curl -fsSL https://tailscale.com/install.sh | sh ]
   - [ tailscale, up, --auth-key=${tailnet.authKey} ]
   - [ tailscale, set, --advertise-routes=${vpc.cidrBlock} ]
-  - [ tailscale, set, --hostname=t-awsvpc-router ]
+  - [ tailscale, set, --hostname=awsvpc-router ]
 `.apply((v) => v.trim()),
 
     tags: { Name: 'tailnet-vpc-router' },

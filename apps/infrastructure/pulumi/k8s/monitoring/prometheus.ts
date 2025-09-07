@@ -107,6 +107,14 @@ new k8s.helm.v4.Chart('prometheus', {
       metricLabelsAllowlist: ['nodes=[topology.kubernetes.io/zone]'],
     },
 
+    defaultRules: {
+      disabled: {
+        KubeCPUOvercommit: true,
+        KubeMemoryOvercommit: true,
+        NodeMemoryMajorPagesFaults: true,
+      },
+    },
+
     grafana: {
       'grafana.ini': {
         server: {
