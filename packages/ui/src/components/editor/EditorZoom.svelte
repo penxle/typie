@@ -9,6 +9,8 @@
   import type { Snippet } from 'svelte';
   import type { PageLayout } from '../../utils/page-layout';
 
+  const MAX_SCALE = 2;
+
   type Props = {
     layoutMode: PostLayoutMode;
     pageLayout?: PageLayout;
@@ -48,7 +50,18 @@
   let resizeObserver: ResizeObserver | null = null;
 
   const handleResize = debounce((width: number) => {
+    const prevWidth = scrollContainerWidth;
     scrollContainerWidth = width;
+
+    // NOTE: 컨테이너가 커졌을 때 userScale 조정하여 최대 200% 유지
+    if (prevWidth > 0 && width > prevWidth && userScale > 1) {
+      const currentScale = editorScale();
+      const newBaseScale = baseScale();
+
+      if (currentScale > MAX_SCALE) {
+        userScale = MAX_SCALE / newBaseScale;
+      }
+    }
   }, 16);
 
   $effect(() => {
@@ -156,7 +169,7 @@
     const scaleDelta = delta * 0.01;
     const newUserScale = userScale + scaleDelta;
     const currentBaseScale = baseScale();
-    const maxUserScale = 2 / currentBaseScale;
+    const maxUserScale = MAX_SCALE / currentBaseScale;
     const clampedUserScale = clamp(newUserScale, 1, maxUserScale);
 
     if (currentBaseScale <= 1 && clampedUserScale !== userScale) {
@@ -212,7 +225,7 @@
     const scaleDelta = -e.deltaY * 0.01;
     const newUserScale = userScale + scaleDelta;
     const currentBaseScale = baseScale();
-    const maxUserScale = 2 / currentBaseScale;
+    const maxUserScale = MAX_SCALE / currentBaseScale;
     const clampedUserScale = clamp(newUserScale, 1, maxUserScale);
 
     if (currentBaseScale <= 1 && clampedUserScale !== userScale) {
@@ -259,6 +272,7 @@
 <div
   bind:this={containerRef}
   style:width={layoutMode === PostLayoutMode.PAGE && pageLayout ? `calc(var(--prosemirror-max-width) * ${editorScale()})` : '100%'}
+  style:height={`calc(100% * ${editorScale()})`}
   class={cx(
     className,
     css(style),
