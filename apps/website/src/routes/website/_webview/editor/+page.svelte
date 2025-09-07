@@ -529,7 +529,6 @@
       const isFocusable = features.includes('focusable') ? data.focusable : true;
 
       if (editor) {
-        console.log('features', features);
         editor.current.storage.webviewFeatures = features;
       }
 
