@@ -958,7 +958,7 @@
       alignItems: 'center',
       paddingTop: '40px',
       userSelect: 'text',
-      minWidth: 'fit',
+      minWidth: editorZoomed ? 'fit' : 'full',
       size: 'full',
     })}
     class="editor"
