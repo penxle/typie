@@ -24,8 +24,7 @@ import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
 import { makeText } from '@/utils';
 import { compressZstd, decompressZstd } from '@/utils/compression';
-import { queue } from '../bullmq';
-import { enqueueJob } from '../index';
+import { enqueueJob } from '../publisher';
 import { defineCron, defineJob } from '../types';
 import type { Node } from '@tiptap/pm/model';
 import type { PageLayout } from '@/db/schemas/json';
@@ -216,12 +215,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
   const updatesLeft = await redis.scard(`post:sync:updates:${postId}`);
   if (updatesLeft > 0) {
-    await queue.removeDeduplicationKey(`post:sync:collect:${postId}`);
-    await enqueueJob('post:sync:collect', postId, {
-      deduplication: {
-        id: `post:sync:collect:${postId}`,
-      },
-    });
+    await enqueueJob('post:sync:collect', postId);
   }
 
   if (snapshotUpdated) {
@@ -235,12 +229,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
     pubsub.publish('site:usage:update', siteId, null);
 
-    await enqueueJob('post:index', postId, {
-      deduplication: {
-        id: postId,
-        ttl: 60 * 1000,
-      },
-    });
+    await enqueueJob('post:index', postId);
   }
 });
 
