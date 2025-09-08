@@ -1,26 +1,32 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { createFloatingActions, portal } from '@typie/ui/actions';
+  import { createFloatingActions } from '@typie/ui/actions';
   import { Icon, RingSpinner } from '@typie/ui/components';
-  import { clamp } from '@typie/ui/utils';
+  import { clamp, Ref } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { base64 } from 'rfc4648';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import * as Y from 'yjs';
+  import { PostLayoutMode } from '@/enums';
   import IconClockFading from '~icons/lucide/clock-fading';
   import { fragment, graphql } from '$graphql';
+  import type { Editor } from '@tiptap/core';
+  import type { PageLayout } from '@typie/ui/utils';
   import type { PointerEventHandler } from 'svelte/elements';
   import type { Editor_Timeline_post } from '$graphql';
 
   type Props = {
     $post: Editor_Timeline_post;
     doc: Y.Doc;
+    editor?: Ref<Editor>;
     viewDoc?: Y.Doc;
   };
 
-  let { $post: _post, doc, viewDoc = $bindable() }: Props = $props();
+  let { $post: _post, doc, editor, viewDoc = $bindable() }: Props = $props();
+
+  let internalViewDoc = $state<Y.Doc>();
 
   const post = fragment(
     _post,
@@ -77,35 +83,55 @@
   };
 
   $effect(() => {
-    viewDoc = new Y.Doc({ gc: false });
+    internalViewDoc = new Y.Doc({ gc: false });
 
     untrack(() => initialize());
 
     return () => {
+      internalViewDoc?.destroy();
+      internalViewDoc = undefined;
       viewDoc?.destroy();
       viewDoc = undefined;
     };
   });
 
   $effect(() => {
-    if (!$query || !initialized || !viewDoc) {
+    if (!$query || !initialized || !internalViewDoc) {
       return;
     }
 
     const snapshot = Y.decodeSnapshotV2(base64.parse($query.post.snapshots[value].snapshot));
     const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshot);
 
-    const currentStateVector = Y.encodeStateVector(viewDoc);
+    const currentStateVector = Y.encodeStateVector(internalViewDoc);
     const snapshotStateVector = Y.encodeStateVector(snapshotDoc);
 
-    const missingUpdate = Y.encodeStateAsUpdateV2(viewDoc, snapshotStateVector);
+    const missingUpdate = Y.encodeStateAsUpdateV2(internalViewDoc, snapshotStateVector);
 
     const undoManager = new Y.UndoManager(snapshotDoc, { trackedOrigins: new Set(['snapshot']) });
     Y.applyUpdateV2(snapshotDoc, missingUpdate, 'snapshot');
     undoManager.undo();
 
     const revertUpdate = Y.encodeStateAsUpdateV2(snapshotDoc, currentStateVector);
-    Y.applyUpdateV2(viewDoc, revertUpdate, 'snapshot');
+    Y.applyUpdateV2(internalViewDoc, revertUpdate, 'snapshot');
+
+    viewDoc = internalViewDoc;
+
+    untrack(() => {
+      // viewEditor가 렌더링될 때까지 대기
+      tick().then(() => {
+        if (editor?.current) {
+          const attrs = snapshotDoc.getMap('attrs');
+          const layoutMode = (attrs.get('layoutMode') as PostLayoutMode) ?? PostLayoutMode.SCROLL;
+          const pageLayout = (attrs.get('pageLayout') as PageLayout) ?? null;
+          if (layoutMode === PostLayoutMode.PAGE && pageLayout) {
+            editor.current.commands.setPageLayout(pageLayout);
+          } else {
+            editor.current.commands.clearPageLayout();
+          }
+        }
+      });
+    });
   });
 
   const restore = () => {
@@ -143,7 +169,7 @@
 
 <div
   class={flex({
-    position: 'fixed',
+    position: 'absolute',
     left: '1/2',
     bottom: '32px',
     align: 'center',
@@ -159,8 +185,7 @@
     boxShadow: '[0_8px_32px_rgba(0,0,0,0.08)]',
     zIndex: 'overEditor',
   })}
-  use:portal
-  in:fly={{ y: 40, duration: 250 }}
+  in:fly={{ y: 32, duration: 250 }}
 >
   <Icon style={css.raw({ color: 'gray.500' })} icon={IconClockFading} size={18} />
 
@@ -253,7 +278,7 @@
         textAlign: 'center',
       })}
     >
-      {dayjs($query.post.snapshots[value].createdAt).format('YYYY. MM. DD HH:mm')}
+      {dayjs($query.post.snapshots[value]?.createdAt).format('YYYY. MM. DD HH:mm')}
     </div>
 
     <div
@@ -275,7 +300,7 @@
       role="tooltip"
       use:floating
     >
-      {dayjs($query.post.snapshots[value].createdAt).format('YYYY. MM. DD HH:mm:ss')}
+      {dayjs($query.post.snapshots[value]?.createdAt).format('YYYY. MM. DD HH:mm:ss')}
       <div
         class={css({
           size: '6px',
@@ -289,6 +314,7 @@
     <button
       class={css({
         display: 'flex',
+        flexShrink: '0',
         alignItems: 'center',
         gap: '6px',
         paddingX: '14px',

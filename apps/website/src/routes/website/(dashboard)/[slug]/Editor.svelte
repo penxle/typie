@@ -223,6 +223,7 @@
   let subtitleEl = $state<HTMLTextAreaElement>();
 
   let editor = $state<Ref<Editor>>();
+  let viewEditor = $state<Ref<Editor>>();
 
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
   let lastHeartbeatAt = $state(dayjs());
@@ -932,9 +933,9 @@
                   top: 20,
                   x: effectiveLayoutMode.current === PostLayoutMode.PAGE && effectivePageLayout.current ? 0 : 40,
                 }}
-                layoutMode={effectiveLayoutMode.current}
-                maxWidth={effectiveMaxWidth.current}
-                pageLayout={effectivePageLayout.current}
+                layoutMode={effectiveLayoutMode}
+                maxWidth={effectiveMaxWidth}
+                pageLayout={effectivePageLayout}
                 typewriterEnabled={app.preference.current.typewriterEnabled}
               >
                 <div
@@ -1047,20 +1048,18 @@
                   </div>
 
                   <div
-                    class={css({
+                    class={flex({
                       position: 'relative',
                       flexGrow: '1',
                       size: 'full',
-                      display: viewDoc ? 'none' : 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                     })}
                   >
                     <EditorZoom
-                      style={css.raw({
+                      style={flex.raw({
                         position: 'relative',
                         flexGrow: '1',
-                        display: viewDoc ? 'none' : 'flex',
                         '[data-layout="page"] &': { marginX: '40px' },
                       })}
                       layoutMode={effectiveLayoutMode.current}
@@ -1070,111 +1069,103 @@
                       bind:scale={editorScale}
                       bind:zoomed={editorZoomed}
                     >
-                      <TiptapEditor
-                        style={css.raw({
-                          size: 'full',
-                        })}
-                        awareness={viewDoc ? undefined : awareness}
-                        {doc}
-                        editable={!viewDoc}
-                        oncreate={() => {
-                          mounted = true;
-                        }}
-                        onfile={async ({ pos, file }) => {
-                          if (!editor) {
-                            return;
-                          }
-
-                          if (file.type.startsWith('image/')) {
-                            editor.current.chain().focus(pos).setImage().run();
-                            const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
-
-                            const url = URL.createObjectURL(file);
-                            nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
-
-                            try {
-                              const attrs = await uploadBlobAsImage(file);
-                              nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
-                            } catch {
-                              nodeView?.handle?.(new CustomEvent('error'));
-                            } finally {
-                              URL.revokeObjectURL(url);
+                      <div class={css({ display: viewDoc ? 'none' : 'flex' })}>
+                        <TiptapEditor
+                          style={css.raw({
+                            size: 'full',
+                          })}
+                          awareness={viewDoc ? undefined : awareness}
+                          {doc}
+                          editable={!viewDoc}
+                          oncreate={() => {
+                            mounted = true;
+                          }}
+                          onfile={async ({ pos, file }) => {
+                            if (!editor) {
+                              return;
                             }
-                          } else {
-                            editor?.current.chain().focus(pos).setFile().run();
-                            const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
 
-                            nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
+                            if (file.type.startsWith('image/')) {
+                              editor.current.chain().focus(pos).setImage().run();
+                              const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
 
-                            try {
-                              const attrs = await uploadBlobAsFile(file);
-                              nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
-                            } catch {
-                              nodeView?.handle?.(new CustomEvent('error'));
+                              const url = URL.createObjectURL(file);
+                              nodeView?.handle?.(new CustomEvent('inflight', { detail: { url } }));
+
+                              try {
+                                const attrs = await uploadBlobAsImage(file);
+                                nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                              } catch {
+                                nodeView?.handle?.(new CustomEvent('error'));
+                              } finally {
+                                URL.revokeObjectURL(url);
+                              }
+                            } else {
+                              editor?.current.chain().focus(pos).setFile().run();
+                              const nodeView = getNodeView(editor.current.view, editor.current.state.selection.anchor);
+
+                              nodeView?.handle?.(new CustomEvent('inflight', { detail: { file } }));
+
+                              try {
+                                const attrs = await uploadBlobAsFile(file);
+                                nodeView?.handle?.(new CustomEvent('success', { detail: { attrs } }));
+                              } catch {
+                                nodeView?.handle?.(new CustomEvent('error'));
+                              }
                             }
-                          }
-                        }}
-                        onkeydown={(view, e) => {
-                          const { doc, selection } = view.state;
-                          const { anchor } = selection;
+                          }}
+                          onkeydown={(view, e) => {
+                            const { doc, selection } = view.state;
+                            const { anchor } = selection;
 
-                          if (
-                            (((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
-                            (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
-                          ) {
-                            e.preventDefault();
-                            subtitleEl?.focus();
-                          }
-                        }}
-                        onpaste={(event) => {
-                          if (event.clipboardData?.getData('text/html')) {
-                            clipboardData = {
-                              html: event.clipboardData.getData('text/html'),
-                              text: event.clipboardData.getData('text/plain'),
-                            };
+                            if (
+                              (((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Tab' && e.shiftKey)) && anchor === 2) ||
+                              (e.key === 'Backspace' && doc.child(0).childCount === 1 && doc.child(0).child(0).childCount === 0)
+                            ) {
+                              e.preventDefault();
+                              subtitleEl?.focus();
+                            }
+                          }}
+                          onpaste={(event) => {
+                            if (event.clipboardData?.getData('text/html')) {
+                              clipboardData = {
+                                html: event.clipboardData.getData('text/html'),
+                                text: event.clipboardData.getData('text/plain'),
+                              };
 
-                            return true;
-                          }
+                              return true;
+                            }
 
-                          return false;
-                        }}
-                        storage={{
-                          uploadBlobAsImage: (file) => {
-                            return uploadBlobAsImage(file);
-                          },
-                          uploadBlobAsFile: (file) => {
-                            return uploadBlobAsFile(file);
-                          },
-                          unfurlEmbed: (url) => {
-                            return unfurlEmbed({ url });
-                          },
-                        }}
-                        {undoManager}
-                        bind:editor
-                      />
-                      {#if editor && mounted}
-                        <TemplateModal $site={entity.site} {doc} {editor} {focused} />
-                        {#if app.preference.current.lineHighlightEnabled}
-                          <Highlight {editor} scale={editorScale} />
+                            return false;
+                          }}
+                          storage={{
+                            uploadBlobAsImage: (file) => {
+                              return uploadBlobAsImage(file);
+                            },
+                            uploadBlobAsFile: (file) => {
+                              return uploadBlobAsFile(file);
+                            },
+                            unfurlEmbed: (url) => {
+                              return unfurlEmbed({ url });
+                            },
+                          }}
+                          {undoManager}
+                          bind:editor
+                        />
+                        {#if editor && mounted}
+                          <TemplateModal $site={entity.site} {doc} {editor} {focused} />
+                          {#if app.preference.current.lineHighlightEnabled}
+                            <Highlight {editor} scale={editorScale} />
+                          {/if}
                         {/if}
+                      </div>
+
+                      {#if viewDoc}
+                        <TiptapEditor style={css.raw({ size: 'full' })} doc={viewDoc} editable={false} bind:editor={viewEditor} />
                       {/if}
                     </EditorZoom>
                   </div>
-
-                  {#if viewDoc}
-                    <div class={css({ position: 'relative', flexGrow: '1', width: 'full' })}>
-                      <TiptapEditor
-                        style={css.raw({ size: 'full', paddingX: '40px', paddingTop: '20px' })}
-                        doc={viewDoc}
-                        editable={false}
-                      />
-                    </div>
-                  {/if}
                 </div>
-
-                {#if showTimeline}
-                  <Timeline $post={entity.node} {doc} bind:viewDoc />
-                {/if}
               </EditorLayout>
             </div>
             {#if editorScale !== 1}
@@ -1202,6 +1193,10 @@
 
             {#if editor}
               <Anchors {doc} {editor} showOutline={showAnchorOutline} />
+            {/if}
+
+            {#if showTimeline}
+              <Timeline $post={entity.node} {doc} editor={viewEditor} bind:viewDoc />
             {/if}
           </div>
         </div>
