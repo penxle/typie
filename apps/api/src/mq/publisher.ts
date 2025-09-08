@@ -1,8 +1,6 @@
 import os from 'node:os';
-import nc from 'node-cron';
 import { dev } from '@/env';
 import { rabbit } from './connection';
-import { crons } from './tasks';
 import type { JobMap, JobName } from './tasks';
 import type { JobFn } from './types';
 
@@ -55,13 +53,3 @@ export const enqueueJob = async <N extends JobName, F extends JobMap[N]>(
     { name, data },
   );
 };
-
-for (const cron of crons) {
-  nc.schedule(
-    cron.pattern,
-    () => {
-      enqueueJob(cron.name as JobName, null as never);
-    },
-    { name: cron.name, timezone: 'Asia/Seoul' },
-  );
-}
