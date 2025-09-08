@@ -62,12 +62,7 @@
     class={css({
       position: 'absolute',
       backgroundColor: 'surface.muted',
-      '[data-layout="page"] &': {
-        insetX: '0',
-      },
-      '[data-layout="scroll"] &': {
-        insetX: '-20px',
-      },
+      insetX: '0',
       zIndex: '[-1]',
     })}
   ></div>
