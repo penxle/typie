@@ -334,9 +334,9 @@
         <div class={css({ width: '200px' })}>
           <SegmentButtons
             items={[
+              { label: '400px', value: 400 },
               { label: '600px', value: 600 },
               { label: '800px', value: 800 },
-              { label: '1000px', value: 1000 },
             ]}
             onselect={(value) => {
               maxWidth.current = value;
