@@ -1,20 +1,21 @@
 import os from 'node:os';
 import * as Sentry from '@sentry/bun';
 import { logger } from '@typie/lib';
-import { dev, stack } from '@/env';
+import { dev } from '@/env';
 import { rabbit } from './connection';
 import { crons, jobs } from './tasks';
 
 const log = logger.getChild('mq');
-const routingKey = dev ? os.hostname() : stack;
 const taskMap = Object.fromEntries([...jobs, ...crons].map((job) => [job.name, job.fn]));
+
+const queue = dev ? `tasks:local:${os.hostname()}` : 'tasks';
 
 const consumer = rabbit.createConsumer(
   {
-    queue: 'tasks',
-    queueOptions: { queue: 'tasks', durable: true, arguments: { 'x-queue-type': 'quorum' } },
-    queueBindings: [{ exchange: 'tasks', queue: 'tasks', routingKey }],
-    exchanges: [{ exchange: 'tasks', type: 'topic', durable: true }],
+    queue,
+    queueOptions: { queue, durable: true, arguments: { 'x-queue-type': 'quorum' } },
+    queueBindings: [{ exchange: 'tasks', queue, routingKey: queue }],
+    exchanges: [{ exchange: 'tasks', type: 'direct', durable: true }],
 
     qos: { prefetchCount: 2 },
     lazy: true,

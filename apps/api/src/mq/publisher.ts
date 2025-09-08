@@ -1,30 +1,35 @@
 import os from 'node:os';
 import nc from 'node-cron';
-import { dev, stack } from '@/env';
+import { dev } from '@/env';
 import { rabbit } from './connection';
 import { crons } from './tasks';
 import type { JobMap, JobName } from './tasks';
 import type { JobFn } from './types';
 
-const routingKey = dev ? os.hostname() : stack;
+const queue = dev ? `tasks:local:${os.hostname()}` : 'tasks';
+const delayedQueue = dev ? `tasks:delayed:local:${os.hostname()}` : 'tasks:delayed';
 
 export const publisher = rabbit.createPublisher({
   confirm: true,
   maxAttempts: 3,
 
   exchanges: [
-    { exchange: 'tasks', type: 'topic', durable: true },
-    { exchange: 'delayed-tasks', type: 'topic', durable: true },
+    { exchange: 'tasks', type: 'direct', durable: true },
+    { exchange: 'tasks:delayed', type: 'direct', durable: true },
   ],
 
   queues: [
-    { queue: 'tasks', durable: true, arguments: { 'x-queue-type': 'quorum' } },
-    { queue: 'delayed-tasks', durable: true, arguments: { 'x-queue-type': 'quorum', 'x-dead-letter-exchange': 'tasks' } },
+    { queue, durable: true, arguments: { 'x-queue-type': 'quorum' } },
+    {
+      queue: delayedQueue,
+      durable: true,
+      arguments: { 'x-queue-type': 'quorum', 'x-dead-letter-exchange': 'tasks', 'x-dead-letter-routing-key': queue },
+    },
   ],
 
   queueBindings: [
-    { exchange: 'tasks', queue: 'tasks', routingKey },
-    { exchange: 'delayed-tasks', queue: 'delayed-tasks', routingKey },
+    { exchange: 'tasks', queue, routingKey: queue },
+    { exchange: 'tasks:delayed', queue: delayedQueue, routingKey: delayedQueue },
   ],
 });
 
@@ -40,8 +45,8 @@ export const enqueueJob = async <N extends JobName, F extends JobMap[N]>(
 ) => {
   await publisher.send(
     {
-      exchange: options?.delay ? 'delayed-tasks' : 'tasks',
-      routingKey,
+      exchange: options?.delay ? 'tasks:delayed' : 'tasks',
+      routingKey: options?.delay ? delayedQueue : queue,
       durable: true,
       priority: options?.priority ?? 5,
       ...(options?.delay && { expiration: options.delay.toString() }),
