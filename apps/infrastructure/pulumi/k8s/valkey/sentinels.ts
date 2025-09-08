@@ -49,7 +49,7 @@ class Sentinel extends pulumi.ComponentResource {
 
               annotations: {
                 'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-                // 'tailscale.com/proxy-group': 'ingress',
+                'tailscale.com/proxy-group': 'ingress',
               },
             },
           },

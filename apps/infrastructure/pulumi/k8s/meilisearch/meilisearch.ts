@@ -86,7 +86,7 @@ class Meilisearch extends pulumi.ComponentResource {
           annotations: {
             'pulumi.com/patchForce': 'true',
             'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-            // 'tailscale.com/proxy-group': 'ingress',
+            'tailscale.com/proxy-group': 'ingress',
           },
         },
         spec: {
