@@ -188,6 +188,15 @@ const tailnetSecurityGroup = new aws.ec2.SecurityGroup('tailnet', {
   tags: { Name: 'tailnet' },
 });
 
+new aws.ec2.SecurityGroupRule('tailnet.ingress[udp:31667-31680]', {
+  securityGroupId: tailnetSecurityGroup.id,
+  type: 'ingress',
+  protocol: 'udp',
+  fromPort: 31_667,
+  toPort: 31_680,
+  cidrBlocks: ['0.0.0.0/0'],
+});
+
 new aws.ec2.SecurityGroupRule('tailnet.ingress[udp:41641]', {
   securityGroupId: tailnetSecurityGroup.id,
   type: 'ingress',
