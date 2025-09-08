@@ -11,7 +11,7 @@
     onselect?: (value: T) => void;
   };
 
-  let { style, value = $bindable(), items = [], size = 'md', onselect }: Props = $props();
+  let { style, value, items = [], size = 'md', onselect }: Props = $props();
 
   type Variants = RecipeVariant<typeof recipe>;
   const recipe = sva({
@@ -90,8 +90,7 @@
       class={css(classes.button)}
       aria-selected={value === item.value}
       onclick={() => {
-        value = item.value;
-        onselect?.(value);
+        onselect?.(item.value);
       }}
       role="tab"
       type="button"
