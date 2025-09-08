@@ -3,8 +3,10 @@
   import { PostLayoutMode } from '@/enums';
   import { GAP_HEIGHT_PX } from '../../tiptap';
   import { mmToPx } from '../../utils/unit';
+  import type { Editor } from '@tiptap/core';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
+  import type { Ref } from '../../utils';
   import type { PageLayout } from '../../utils/page-layout';
 
   type Props = {
@@ -20,8 +22,8 @@
     typewriterEnabled?: boolean;
     class?: string;
     style?: SystemStyleObject;
-    mobile?: boolean;
     container?: HTMLDivElement;
+    editor?: Ref<Editor>;
     children: Snippet;
   };
 
@@ -30,14 +32,48 @@
     pageLayout,
     maxWidth,
     bodyPadding,
-    typewriterPosition = 0.8,
+    typewriterPosition = 0.5,
     typewriterEnabled = false,
     class: className,
     style,
-    mobile = false,
     container = $bindable(),
+    editor,
     children,
   }: Props = $props();
+
+  const calculateLastPageRemainingHeight = () => {
+    if (layoutMode !== PostLayoutMode.PAGE || !pageLayout || !editor?.current) return 0;
+
+    const editorView = editor.current.view;
+    if (!editorView) return 0;
+
+    const lastPos = editor.current.state.doc.content.size - 1;
+    if (lastPos < 0) return 0;
+    const lastItemCoords = editorView.coordsAtPos(lastPos);
+
+    const breakers = editorView.dom.querySelectorAll('[data-page-break="true"] .breaker');
+    const lastBreaker = [...breakers].at(-1);
+    if (!lastBreaker) {
+      return 0;
+    }
+    const lastBreakerRect = lastBreaker.getBoundingClientRect();
+
+    return lastBreakerRect.bottom - lastItemCoords.bottom;
+  };
+
+  const dynamicPaddingBottom = $derived.by(() => {
+    if (typewriterEnabled) {
+      const typewriterVh = (1 - typewriterPosition) * 100;
+      if (layoutMode === PostLayoutMode.PAGE && pageLayout && editor?.current) {
+        const remainingHeight = calculateLastPageRemainingHeight();
+        return `calc(${typewriterVh}vh - ${remainingHeight}px)`;
+      } else {
+        return `${typewriterVh}vh`;
+      }
+    } else {
+      return '20dvh';
+    }
+  });
 </script>
 
 <div
@@ -51,13 +87,7 @@
   style:--prosemirror-page-margin-bottom={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginBottom)}px` : '0'}
   style:--prosemirror-page-margin-left={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginLeft)}px` : '0'}
   style:--prosemirror-page-margin-right={layoutMode === PostLayoutMode.PAGE && pageLayout ? `${mmToPx(pageLayout.marginRight)}px` : '0'}
-  style:--prosemirror-padding-bottom={mobile
-    ? '80dvh'
-    : layoutMode === PostLayoutMode.PAGE && pageLayout
-      ? '0'
-      : typewriterEnabled
-        ? `${(1 - typewriterPosition) * 100}vh`
-        : '20dvh'}
+  style:--prosemirror-padding-bottom={dynamicPaddingBottom}
   style:--prosemirror-page-gap-height={`${GAP_HEIGHT_PX}px`}
   class={cx(className, css(style))}
   data-layout={layoutMode === PostLayoutMode.PAGE ? 'page' : 'scroll'}
