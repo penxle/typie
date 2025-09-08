@@ -9,10 +9,10 @@
   import TrendingDownIcon from '~icons/lucide/trending-down';
   import TrendingUpIcon from '~icons/lucide/trending-up';
   import { fragment, graphql } from '$graphql';
-  import type { Editor_Panel_PanelPost_CharacterCountChangeWidget_post } from '$graphql';
+  import type { Editor_Panel_PanelInfo_CharacterCountChangeWidget_post } from '$graphql';
 
   type Props = {
-    $post: Editor_Panel_PanelPost_CharacterCountChangeWidget_post;
+    $post: Editor_Panel_PanelInfo_CharacterCountChangeWidget_post;
   };
 
   let { $post: _post }: Props = $props();
@@ -20,7 +20,7 @@
   const post = fragment(
     _post,
     graphql(`
-      fragment Editor_Panel_PanelPost_CharacterCountChangeWidget_post on Post {
+      fragment Editor_Panel_PanelInfo_CharacterCountChangeWidget_post on Post {
         id
 
         characterCountChange {

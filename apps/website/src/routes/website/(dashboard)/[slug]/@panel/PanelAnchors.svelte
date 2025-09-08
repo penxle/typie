@@ -262,6 +262,37 @@
     height: 'full',
   })}
 >
+  <div
+    class={flex({
+      flexShrink: '0',
+      gap: '6px',
+      height: '40px',
+      alignItems: 'center',
+      paddingX: '20px',
+      fontSize: '13px',
+      fontWeight: 'semibold',
+      color: 'text.subtle',
+      borderBottomWidth: '1px',
+      borderColor: 'surface.muted',
+    })}
+  >
+    북마크
+    {#if anchors.length > 0}
+      <div
+        class={css({
+          borderRadius: '4px',
+          paddingX: '6px',
+          paddingY: '2px',
+          fontSize: '11px',
+          fontWeight: 'semibold',
+          color: 'text.default',
+          backgroundColor: 'surface.muted',
+        })}
+      >
+        {anchors.length}
+      </div>
+    {/if}
+  </div>
   {#if isLoading}
     <div class={flex({ justifyContent: 'center', alignItems: 'center', paddingY: '40px' })}>
       <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
