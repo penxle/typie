@@ -54,11 +54,12 @@ export const Body = Node.create({
             paddingTop: 'var(--prosemirror-padding-top)',
             paddingLeft: 'var(--prosemirror-padding-x)',
             paddingRight: 'var(--prosemirror-padding-x)',
+            paddingBottom: 'var(--prosemirror-padding-bottom)',
             '[data-layout="page"] &': {
               minWidth: 'var(--prosemirror-max-width)',
               paddingTop: '[calc(var(--prosemirror-page-margin-top) + var(--prosemirror-padding-top))]',
               paddingLeft: '[calc(var(--prosemirror-page-margin-left) + var(--prosemirror-padding-x))]',
-              paddingBottom: 'var(--prosemirror-page-margin-bottom)',
+              paddingBottom: '[calc(var(--prosemirror-page-margin-bottom) + var(--prosemirror-padding-bottom))]',
               paddingRight: '[calc(var(--prosemirror-page-margin-right) + var(--prosemirror-padding-x))]',
             },
             '& > .paragraph-indent, & > .selected-node > .paragraph-indent': {
