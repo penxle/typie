@@ -966,9 +966,9 @@
       top: 40,
       x: layoutMode.current === PostLayoutMode.PAGE && pageLayout.current ? 0 : 20,
     }}
-    layoutMode={layoutMode.current}
-    maxWidth={maxWidth.current}
-    pageLayout={pageLayout.current}
+    {layoutMode}
+    {maxWidth}
+    {pageLayout}
     typewriterEnabled={settings.typewriterEnabled}
   >
     <div

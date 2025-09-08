@@ -192,7 +192,7 @@ export const FloatingMenu = Extension.create({
 
               const { x, y, middlewareData } = await computePosition(referenceElement, leftDom, {
                 placement: 'left-start',
-                middleware: [offset(16), shift({ crossAxis: true }), hide({ padding: 16, strategy: 'escaped' })],
+                middleware: [offset(16), shift({ crossAxis: true, mainAxis: false }), hide({ padding: 16, strategy: 'escaped' })],
               });
 
               leftDom.style.left = `${x}px`;
@@ -230,7 +230,7 @@ export const FloatingMenu = Extension.create({
 
               const { x, y, middlewareData } = await computePosition(referenceElement, rightDom, {
                 placement: 'right-start',
-                middleware: [offset(16), shift({ crossAxis: true }), hide({ padding: 16, strategy: 'escaped' })],
+                middleware: [offset(16), shift({ crossAxis: true, mainAxis: false }), hide({ padding: 16, strategy: 'escaped' })],
               });
 
               const viewportWidth = window.innerWidth;
