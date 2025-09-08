@@ -12,7 +12,6 @@ batang
 bbox
 bento
 buildx
-bullmq
 bunx
 bytea
 cdylib
@@ -63,6 +62,7 @@ pgbouncer
 plpgsql
 pooler
 pulumi
+rabbitmq
 remeda
 resizer
 resvg

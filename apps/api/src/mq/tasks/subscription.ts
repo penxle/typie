@@ -4,7 +4,7 @@ import { SUBSCRIPTION_GRACE_DAYS } from '@/const';
 import { db, firstOrThrow, PaymentInvoices, Plans, Subscriptions } from '@/db';
 import { PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@/enums';
 import { getSubscriptionExpiresAt, payInvoiceWithBillingKey } from '@/utils';
-import { enqueueJob } from '../index';
+import { enqueueJob } from '../publisher';
 import { defineCron, defineJob } from '../types';
 
 export const SubscriptionRenewalCron = defineCron('subscription:renewal', '0 10 * * *', async () => {
