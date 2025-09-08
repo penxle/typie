@@ -48,7 +48,9 @@
       {/if}
     </div>
 
-    <Button style={css.raw({ width: 'full', height: '40px' })} href="/" size="lg" type="link">홈으로 돌아가기</Button>
+    {#if typeof window !== 'undefined' && !window.__webview__}
+      <Button style={css.raw({ width: 'full', height: '40px' })} href="/" size="lg" type="link">홈으로 돌아가기</Button>
+    {/if}
 
     {#if error?.eventId}
       <p class={css({ fontFamily: 'mono', fontSize: '12px', color: 'text.disabled' })}>코드: {error.eventId}</p>
