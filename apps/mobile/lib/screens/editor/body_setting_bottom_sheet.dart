@@ -212,9 +212,9 @@ class BodySettingBottomSheet extends HookWidget {
                     name: 'maxWidth',
                     initialValue: yjsState?.maxWidth ?? 800,
                     items: const [
+                      HookFormSelectItem(label: '400px', value: 400),
                       HookFormSelectItem(label: '600px', value: 600),
                       HookFormSelectItem(label: '800px', value: 800),
-                      HookFormSelectItem(label: '1000px', value: 1000),
                     ],
                   ),
                 ),
