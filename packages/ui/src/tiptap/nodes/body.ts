@@ -59,7 +59,9 @@ export const Body = Node.create({
               minWidth: 'var(--prosemirror-max-width)',
               paddingTop: '[calc(var(--prosemirror-page-margin-top) + var(--prosemirror-padding-top))]',
               paddingLeft: '[calc(var(--prosemirror-page-margin-left) + var(--prosemirror-padding-x))]',
-              paddingBottom: '[calc(var(--prosemirror-page-margin-bottom) + var(--prosemirror-padding-bottom))]',
+              // NOTE: 마지막 페이지에도 breaker가 추가되므로 breaker의 높이(top + gap + bottom)에서 bottom을 제외하고 빼줌
+              paddingBottom:
+                '[calc(var(--prosemirror-padding-bottom) - var(--prosemirror-page-gap-height) - var(--prosemirror-page-margin-top))]',
               paddingRight: '[calc(var(--prosemirror-page-margin-right) + var(--prosemirror-padding-x))]',
             },
             '& > .paragraph-indent, & > .selected-node > .paragraph-indent': {

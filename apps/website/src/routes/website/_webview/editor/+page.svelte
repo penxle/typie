@@ -966,12 +966,10 @@
       top: 40,
       x: layoutMode.current === PostLayoutMode.PAGE && pageLayout.current ? 0 : 20,
     }}
-    {editor}
     layoutMode={layoutMode.current}
     maxWidth={maxWidth.current}
     pageLayout={pageLayout.current}
     typewriterEnabled={settings.typewriterEnabled}
-    typewriterPosition={settings.typewriterPosition}
   >
     <div
       style:width={editorZoomed && layoutMode.current === PostLayoutMode.PAGE

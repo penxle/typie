@@ -932,12 +932,10 @@
                   top: 20,
                   x: effectiveLayoutMode.current === PostLayoutMode.PAGE && effectivePageLayout.current ? 0 : 40,
                 }}
-                {editor}
                 layoutMode={effectiveLayoutMode.current}
                 maxWidth={effectiveMaxWidth.current}
                 pageLayout={effectivePageLayout.current}
                 typewriterEnabled={app.preference.current.typewriterEnabled}
-                typewriterPosition={app.preference.current.typewriterPosition}
               >
                 <div
                   class={flex({

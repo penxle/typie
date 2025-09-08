@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { clamp } from '../../utils';
 
 declare module '@tiptap/core' {
@@ -116,6 +117,35 @@ export const Typewriter = Extension.create({
                 container.scrollTop = scrollTop;
               });
             },
+          },
+
+          decorations: (state) => {
+            const position = this.editor.storage.typewriter.position;
+            if (position === undefined) {
+              return DecorationSet.empty;
+            }
+
+            const { doc } = state;
+            const decorations: Decoration[] = [];
+
+            const endPos = doc.content.size - 1;
+
+            const spacerHeight = `${(1 - position) * 100}vh`;
+            const spacerWidget = document.createElement('div');
+            const pageScale = this.editor.storage.page?.scale ?? 1;
+            spacerWidget.style.height = `calc(${spacerHeight} / ${pageScale})`;
+            spacerWidget.style.width = '100%';
+            spacerWidget.style.pointerEvents = 'none';
+            spacerWidget.dataset.typewriterSpacer = 'true';
+
+            decorations.push(
+              Decoration.widget(endPos, spacerWidget, {
+                side: 1,
+                key: 'typewriter-spacer',
+              }),
+            );
+
+            return DecorationSet.create(doc, decorations);
           },
         },
       }),
