@@ -4,29 +4,54 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        required: true
+        required: false
         type: string
-        description: 'Version to deploy'
+        description: 'Git hash'
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
+  get-version:
+    name: Get deployment version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=sha-${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            SHA=$(git rev-parse --short=7 HEAD)
+            echo "version=sha-${SHA}" >> $GITHUB_OUTPUT
+          fi
+          echo "Using version: $(cat $GITHUB_OUTPUT | grep version | cut -d'=' -f2)"
+
   deploy-prod-api:
     name: Deployment (prod-api)
+    needs: get-version
     uses: ./.github/workflows/deployment.yml
     with:
       stack: prod
       app: api
-      version: ${{ inputs.version }}
+      version: ${{ needs.get-version.outputs.version }}
     secrets: inherit
 
   deploy-prod-website:
     name: Deployment (prod-website)
+    needs: get-version
     uses: ./.github/workflows/deployment.yml
     with:
       stack: prod
       app: website
-      version: ${{ inputs.version }}
+      version: ${{ needs.get-version.outputs.version }}
     secrets: inherit
