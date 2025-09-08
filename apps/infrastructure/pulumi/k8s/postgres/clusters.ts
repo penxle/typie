@@ -260,6 +260,19 @@ class Cluster extends pulumi.ComponentResource {
             },
           },
 
+          serviceTemplate: {
+            metadata: {
+              annotations: {
+                'external-dns.alpha.kubernetes.io/hostname': args.hostname,
+                // 'tailscale.com/proxy-group': 'ingress',
+              },
+            },
+            spec: {
+              type: 'LoadBalancer',
+              loadBalancerClass: 'tailscale',
+            },
+          },
+
           pgbouncer: {
             poolMode: 'transaction',
             parameters: {

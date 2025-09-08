@@ -33,6 +33,8 @@ class Sentinel extends pulumi.ComponentResource {
             maxmemory-policy noeviction
           `,
 
+          useHostnames: false,
+
           auth: {
             enabled: false,
           },
@@ -40,6 +42,16 @@ class Sentinel extends pulumi.ComponentResource {
           sentinel: {
             enabled: true,
             primarySet: 'primary',
+
+            service: {
+              type: 'LoadBalancer',
+              loadBalancerClass: 'tailscale',
+
+              annotations: {
+                'external-dns.alpha.kubernetes.io/hostname': args.hostname,
+                // 'tailscale.com/proxy-group': 'ingress',
+              },
+            },
           },
 
           primary: {

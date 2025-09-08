@@ -184,6 +184,44 @@ const nodeClass = new k8s.apiextensions.CustomResource(
   { dependsOn: [chart] },
 );
 
+const nodeClassTailnet = new k8s.apiextensions.CustomResource(
+  'tailnet',
+  {
+    apiVersion: 'karpenter.k8s.aws/v1',
+    kind: 'EC2NodeClass',
+
+    metadata: {
+      name: 'tailnet',
+    },
+
+    spec: {
+      role: nodeRole.name,
+
+      amiSelectorTerms: [{ alias: 'al2023@latest' }],
+      subnetSelectorTerms: [{ id: subnets.public.az1.id }, { id: subnets.public.az2.id }],
+      securityGroupSelectorTerms: [{ id: securityGroups.tailnet.id }],
+
+      blockDeviceMappings: [
+        {
+          // spell-checker:disable-next-line
+          deviceName: '/dev/xvda',
+          ebs: {
+            volumeSize: '200Gi',
+            volumeType: 'gp3',
+            iops: 3000,
+            throughput: 125,
+          },
+        },
+      ],
+
+      tags: {
+        Name: 'tailnet@eks',
+      },
+    },
+  },
+  { dependsOn: [chart] },
+);
+
 new k8s.apiextensions.CustomResource(
   'workload',
   {
@@ -215,6 +253,58 @@ new k8s.apiextensions.CustomResource(
               values: [subnets.private.az1.availabilityZone],
             },
           ],
+
+          expireAfter: '720h', // 30 * 24h
+        },
+      },
+
+      limits: {
+        cpu: 1_000_000,
+        memory: '1000000Gi',
+      },
+
+      disruption: {
+        consolidationPolicy: 'WhenEmptyOrUnderutilized',
+        consolidateAfter: '5m',
+      },
+    },
+  },
+  { dependsOn: [chart] },
+);
+
+new k8s.apiextensions.CustomResource(
+  'tailnet',
+  {
+    apiVersion: 'karpenter.sh/v1',
+    kind: 'NodePool',
+
+    metadata: {
+      name: 'tailnet',
+    },
+
+    spec: {
+      template: {
+        spec: {
+          nodeClassRef: {
+            group: 'karpenter.k8s.aws',
+            kind: nodeClassTailnet.kind,
+            name: nodeClassTailnet.metadata.name,
+          },
+
+          requirements: [
+            { key: 'kubernetes.io/arch', operator: 'In', values: ['arm64'] },
+            { key: 'kubernetes.io/os', operator: 'In', values: ['linux'] },
+            { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['spot'] },
+            { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r'] },
+            { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['5'] },
+            {
+              key: 'topology.kubernetes.io/zone',
+              operator: 'In',
+              values: [subnets.public.az1.availabilityZone],
+            },
+          ],
+
+          taints: [{ key: 'karpenter.sh/nodepool', value: 'tailnet', effect: 'NoSchedule' }],
 
           expireAfter: '720h', // 30 * 24h
         },

@@ -5,6 +5,8 @@ import * as random from '@pulumi/random';
 type MeilisearchArgs = {
   name: pulumi.Input<string>;
   namespace: pulumi.Input<string>;
+
+  hostname: pulumi.Input<string>;
 };
 
 class Meilisearch extends pulumi.ComponentResource {
@@ -36,7 +38,7 @@ class Meilisearch extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    new k8s.helm.v4.Chart(
+    const chart = new k8s.helm.v4.Chart(
       name,
       {
         name: args.name,
@@ -74,6 +76,27 @@ class Meilisearch extends pulumi.ComponentResource {
       { parent: this },
     );
 
+    new k8s.core.v1.ServicePatch(
+      `${name}`,
+      {
+        metadata: {
+          name: args.name,
+          namespace: args.namespace,
+
+          annotations: {
+            'pulumi.com/patchForce': 'true',
+            'external-dns.alpha.kubernetes.io/hostname': args.hostname,
+            // 'tailscale.com/proxy-group': 'ingress',
+          },
+        },
+        spec: {
+          type: 'LoadBalancer',
+          loadBalancerClass: 'tailscale',
+        },
+      },
+      { parent: this, dependsOn: [chart] },
+    );
+
     this.masterKey = masterKey.result;
   }
 }
@@ -81,11 +104,15 @@ class Meilisearch extends pulumi.ComponentResource {
 const dev = new Meilisearch('meilisearch@dev', {
   name: 'meilisearch',
   namespace: 'dev',
+
+  hostname: 'dev.search.typie.io',
 });
 
 const prod = new Meilisearch('meilisearch@prod', {
   name: 'meilisearch',
   namespace: 'prod',
+
+  hostname: 'search.typie.io',
 });
 
 export const outputs = {
