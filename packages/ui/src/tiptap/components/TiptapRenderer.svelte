@@ -77,6 +77,8 @@
   style:--prosemirror-page-margin-left={pageLayout ? `${pageLayout.marginLeft}mm` : '0'}
   style:--prosemirror-page-margin-right={pageLayout ? `${pageLayout.marginRight}mm` : '0'}
   style:--prosemirror-page-gap-height={`${GAP_HEIGHT_PX}px`}
+  style:--prosemirror-padding-top="0px"
+  style:--prosemirror-padding-x="0px"
   class={css({ display: 'contents', fontFamily: 'prose', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-all' })}
   data-layout={pageLayout ? 'page' : 'scroll'}
 >

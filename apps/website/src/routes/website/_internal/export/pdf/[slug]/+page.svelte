@@ -79,6 +79,8 @@
       document.documentElement.style.setProperty('--page-margin-bottom', `${pageLayout.marginBottom}mm`);
       document.documentElement.style.setProperty('--page-margin-left', `${pageLayout.marginLeft}mm`);
       document.documentElement.style.setProperty('--page-margin-right', `${pageLayout.marginRight}mm`);
+      document.documentElement.style.setProperty('--prosemirror-padding-top', `0px`);
+      document.documentElement.style.setProperty('--prosemirror-padding-x', `0px`);
     }
   });
 
