@@ -17,7 +17,7 @@ const consumer = rabbit.createConsumer(
     queueBindings: [{ exchange: 'tasks', queue, routingKey: queue }],
     exchanges: [{ exchange: 'tasks', type: 'direct', durable: true }],
 
-    qos: { prefetchCount: 2 },
+    qos: { prefetchCount: 20 },
     lazy: true,
   },
   async (msg) => {

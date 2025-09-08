@@ -16,6 +16,7 @@ export const publisher = rabbit.createPublisher({
   exchanges: [
     { exchange: 'tasks', type: 'direct', durable: true },
     { exchange: 'tasks:delayed', type: 'direct', durable: true },
+    { exchange: 'pubsub', type: 'topic', durable: true },
   ],
 
   queues: [
