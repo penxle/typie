@@ -47,7 +47,7 @@ export const enqueueJob = async <N extends JobName, F extends JobMap[N]>(
       exchange: options?.delay ? 'tasks:delayed' : 'tasks',
       routingKey: options?.delay ? delayedQueue : queue,
       durable: true,
-      priority: options?.priority ?? 5,
+      priority: options?.priority ?? 1,
       ...(options?.delay && { expiration: options.delay.toString() }),
     },
     { name, data },
