@@ -16,8 +16,8 @@ const app = new typie.App('website', {
   },
 
   resources: {
-    cpu: '1',
-    memory: '2Gi',
+    cpu: '500m',
+    memory: '1Gi',
   },
 
   secrets: {

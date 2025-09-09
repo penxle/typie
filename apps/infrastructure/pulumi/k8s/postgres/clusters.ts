@@ -282,7 +282,9 @@ class Cluster extends pulumi.ComponentResource {
             poolMode: 'transaction',
             parameters: {
               max_client_conn: '1000',
-              default_pool_size: '100',
+              min_pool_size: '20',
+              default_pool_size: '50',
+              reserve_pool_size: '50',
               server_check_delay: '10',
               server_login_retry: '0',
             },

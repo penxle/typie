@@ -7,7 +7,8 @@ import * as tables from './schemas/tables';
 import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
 const sql = postgres(env.DATABASE_URL, {
-  max: dev ? 20 : 100,
+  max: dev ? 20 : 50,
+  prepare: false,
 });
 
 export const db = drizzle(sql, {
