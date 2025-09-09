@@ -8,6 +8,8 @@ import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
 const sql = postgres(env.DATABASE_URL, {
   max: dev ? 20 : 50,
+  connect_timeout: 5,
+  idle_timeout: 0,
   prepare: false,
 });
 
