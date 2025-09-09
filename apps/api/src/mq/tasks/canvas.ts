@@ -385,7 +385,7 @@ export const CanvasCompactScanCron = defineCron('canvas:compact:scan', '0 * * * 
   await Promise.all(
     canvases.map(({ canvasId }) =>
       enqueueJob('canvas:compact', canvasId, {
-        delay: Math.random() * 50 * 60 * 1000,
+        delay: Math.floor(Math.random() * 50 * 60 * 1000),
         priority: 0,
       }),
     ),

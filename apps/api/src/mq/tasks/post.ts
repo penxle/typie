@@ -473,7 +473,7 @@ export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', 
   await Promise.all(
     posts.map(({ postId }) =>
       enqueueJob('post:compact', postId, {
-        delay: Math.random() * 50 * 60 * 1000,
+        delay: Math.floor(Math.random() * 50 * 60 * 1000),
         priority: 0,
       }),
     ),
