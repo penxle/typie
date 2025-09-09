@@ -12,6 +12,7 @@ batang
 bbox
 bento
 buildx
+bullmq
 bunx
 bytea
 cdylib

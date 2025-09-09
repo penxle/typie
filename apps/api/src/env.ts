@@ -30,7 +30,6 @@ const schema = z.object({
   OIDC_JWK: z.string(),
   PORTONE_API_SECRET: z.string(),
   PORTONE_CHANNEL_KEY: z.string(),
-  RABBITMQ_URL: z.string(),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
   SLACK_BOT_TOKEN: z.string(),

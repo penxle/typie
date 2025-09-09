@@ -26,7 +26,7 @@ Typie is a Korean writing platform that aims to be a "space for writing thoughts
 - **GraphQL**: GraphQL Yoga + Pothos
 - **Database**: PostgreSQL with Drizzle ORM
 - **Real-time**: Yjs, Redis PubSub, WebSocket
-- **Queue**: RabbitMQ
+- **Queue**: BullMQ
 - **Search**: Meilisearch
 - **Auth**: Custom OIDC provider with JWT
 
