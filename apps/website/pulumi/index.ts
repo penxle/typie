@@ -27,7 +27,7 @@ const app = new typie.App('website', {
   autoscale: {
     minCount: 4,
     maxCount: 20,
-    averageCpuUtilization: 50,
+    averageCpuUtilization: 80,
   },
 });
 

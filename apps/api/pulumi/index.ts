@@ -27,7 +27,7 @@ const app = new typie.App('api', {
   autoscale: {
     minCount: 4,
     maxCount: 20,
-    averageCpuUtilization: 50,
+    averageCpuUtilization: 80,
   },
 
   iam: {
@@ -89,7 +89,7 @@ new typie.App('worker', {
   autoscale: {
     minCount: 4,
     maxCount: 20,
-    averageCpuUtilization: 50,
+    averageCpuUtilization: 80,
   },
 
   iam: {
