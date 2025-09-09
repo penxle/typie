@@ -6,7 +6,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { EditorLayout, EditorZoom, Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { EditorLayout, EditorZoom, Helmet, HorizontalDivider, Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
@@ -21,9 +21,8 @@
   import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from 'y-prosemirror';
   import * as YAwareness from 'y-protocols/awareness';
   import * as Y from 'yjs';
-  import { PostLayoutMode, PostSyncType, UserRole } from '@/enums';
+  import { PostLayoutMode, PostSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import IconClockFading from '~icons/lucide/clock-fading';
   import ElipsisIcon from '~icons/lucide/ellipsis';
   import FolderIcon from '~icons/lucide/folder';
   import Maximize2Icon from '~icons/lucide/maximize-2';
@@ -49,7 +48,6 @@
   import PasteModal from './PasteModal.svelte';
   import { YState } from './state.svelte';
   import TemplateModal from './TemplateModal.svelte';
-  import Timeline from './Timeline.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PageLayout, Ref } from '@typie/ui/utils';
   import type { Editor_query } from '$graphql';
@@ -76,12 +74,6 @@
           role
 
           ...Editor_Panel_user
-        }
-
-        impersonation {
-          admin {
-            id
-          }
         }
 
         entities(slugs: $slugs) {
@@ -171,7 +163,6 @@
               update
 
               ...Editor_Panel_post
-              ...Editor_Timeline_post
             }
           }
         }
@@ -195,7 +186,7 @@
     }
   `);
 
-  setupEditorContext();
+  const editorContext = setupEditorContext();
 
   const app = getAppContext();
   const splitView = getSplitViewContext();
@@ -230,7 +221,6 @@
 
   let mounted = $state(false);
 
-  let showTimeline = $state(false);
   let showAnchorOutline = $state(false);
 
   let clipboardData = $state<{ html: string; text?: string }>();
@@ -701,10 +691,12 @@
     const modKey = isMacOS() || isiOS() ? e.metaKey : e.ctrlKey;
 
     if (modKey && e.key === 'z' && !e.shiftKey) {
+      if (editorContext?.timeline) return;
       e.preventDefault();
       e.stopPropagation();
       undoManager.undo();
     } else if ((modKey && e.key === 'y') || (modKey && e.key === 'z' && e.shiftKey)) {
+      if (editorContext?.timeline) return;
       e.preventDefault();
       e.stopPropagation();
       undoManager.redo();
@@ -816,22 +808,8 @@
               {/snippet}
 
               {#if entity.node.__typename === 'Post'}
-                <PostMenu {entity} layoutMode={layoutMode.current} pageLayout={pageLayout.current} post={entity.node} via="editor">
-                  {#if $query.me.role === UserRole.ADMIN || $query.impersonation}
-                    <MenuItem
-                      icon={IconClockFading}
-                      onclick={() => {
-                        showTimeline = !showTimeline;
-                      }}
-                    >
-                      {#if showTimeline}
-                        타임라인 닫기
-                      {:else}
-                        타임라인
-                      {/if}
-                    </MenuItem>
-                  {/if}
-                </PostMenu>
+                <PostMenu {entity} layoutMode={layoutMode.current} pageLayout={pageLayout.current} post={entity.node} via="editor"
+                ></PostMenu>
               {/if}
             </Menu>
           {/if}
@@ -967,6 +945,7 @@
                       class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
                       autocapitalize="off"
                       autocomplete="off"
+                      disabled={editorContext?.timeline}
                       maxlength="100"
                       onfocus={() => {
                         if (postId) {
@@ -1004,6 +983,7 @@
                       })}
                       autocapitalize="off"
                       autocomplete="off"
+                      disabled={editorContext?.timeline}
                       maxlength="100"
                       onfocus={() => {
                         if (postId) {
@@ -1187,16 +1167,12 @@
                 {Math.round(editorScale * 100)}%
               </div>
             {/if}
-            {#if editor && app.state.findReplaceOpenByViewId[splitViewId]}
+            {#if editor && app.state.findReplaceOpenByViewId[splitViewId] && !editorContext?.timeline}
               <FloatingFindReplace close={() => (app.state.findReplaceOpenByViewId[splitViewId] = false)} {editor} />
             {/if}
 
-            {#if editor}
+            {#if editor && !editorContext?.timeline}
               <Anchors {doc} {editor} showOutline={showAnchorOutline} />
-            {/if}
-
-            {#if showTimeline}
-              <Timeline $post={entity.node} {doc} editor={viewEditor} bind:viewDoc />
             {/if}
           </div>
         </div>
@@ -1245,7 +1221,7 @@
           </div>
         {/if}
 
-        <Panel $post={entity.node} $user={$query.me} {doc} {editor} />
+        <Panel $post={entity.node} $user={$query.me} {doc} {editor} {viewEditor} bind:viewDoc />
       </div>
     </div>
   </div>

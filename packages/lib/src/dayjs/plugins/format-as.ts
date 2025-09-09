@@ -1,3 +1,4 @@
+import dayjs from 'dayjs';
 import type { PluginFunc } from 'dayjs';
 
 declare module 'dayjs' {
@@ -6,6 +7,7 @@ declare module 'dayjs' {
     formatAsDate: () => string;
     formatAsDateTime: () => string;
     formatAsTime: () => string;
+    formatAsSmart: () => string;
   }
 }
 
@@ -20,5 +22,19 @@ export const formatAs: PluginFunc = (_, Dayjs) => {
 
   Dayjs.prototype.formatAsTime = function () {
     return this.format('HH:mm');
+  };
+
+  Dayjs.prototype.formatAsSmart = function () {
+    const now = dayjs();
+
+    if (this.isSame(now, 'day')) {
+      return this.format('H시 mm분 ss초');
+    }
+
+    if (this.isSame(now, 'year')) {
+      return this.format('M월 D일 H시 mm분 ss초');
+    }
+
+    return this.format('YYYY년 M월 D일 H시 mm분 ss초');
   };
 };

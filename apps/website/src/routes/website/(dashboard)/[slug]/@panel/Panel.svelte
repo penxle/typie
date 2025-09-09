@@ -9,6 +9,7 @@
   import PanelBodySettings from './PanelBodySettings.svelte';
   import PanelInfo from './PanelInfo.svelte';
   import PanelSpellcheck from './PanelSpellcheck.svelte';
+  import PanelTimeline from './PanelTimeline.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
@@ -18,13 +19,15 @@
     $post: Editor_Panel_post;
     $user: Editor_Panel_user;
     editor?: Ref<Editor>;
+    viewEditor?: Ref<Editor>;
     doc: Y.Doc;
+    viewDoc?: Y.Doc;
   };
 
   const minWidth = 240;
   const maxWidth = 400;
 
-  let { $post: _post, $user: _user, editor, doc }: Props = $props();
+  let { $post: _post, $user: _user, editor, viewEditor, doc, viewDoc = $bindable() }: Props = $props();
 
   const user = fragment(
     _user,
@@ -45,6 +48,7 @@
         id
 
         ...Editor_Panel_PanelInfo_post
+        ...Editor_PanelTimeline_post
       }
     `),
   );
@@ -149,6 +153,10 @@
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
       <PanelSpellcheck {$user} {editor} />
+    {/if}
+
+    {#if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}
+      <PanelTimeline {$post} {doc} {editor} {viewEditor} bind:viewDoc />
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
