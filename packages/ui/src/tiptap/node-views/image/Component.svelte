@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ImageIcon from '~icons/lucide/image';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -37,9 +37,19 @@
   });
 
   $effect(() => {
-    if (pageLayout && (attrs.id || inflightUrl)) {
-      proportion = checkAndAdjustProportion(proportion, containerEl, pageLayout, updateAttributes);
+    if (node.attrs.proportion) {
+      proportion = node.attrs.proportion;
     }
+  });
+
+  $effect(() => {
+    void pageLayout;
+
+    untrack(() => {
+      if (pageLayout && (attrs.id || inflightUrl)) {
+        proportion = checkAndAdjustProportion(proportion, containerEl, pageLayout, updateAttributes);
+      }
+    });
   });
 
   const processPendingFiles = async () => {

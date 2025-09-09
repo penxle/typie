@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileUpIcon from '~icons/lucide/file-up';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -36,15 +36,19 @@
   const maxContentHeight = $derived(getMaxContentHeight(pageLayout));
 
   $effect(() => {
-    if (node.attrs.proportion !== undefined) {
+    if (node.attrs.proportion) {
       proportion = node.attrs.proportion;
     }
   });
 
   $effect(() => {
-    if (pageLayout && attrs.html && (attrs.id || inflight)) {
-      proportion = checkAndAdjustProportion(proportion, containerEl, pageLayout, updateAttributes);
-    }
+    void pageLayout;
+
+    untrack(() => {
+      if (pageLayout && attrs.html && (attrs.id || inflight)) {
+        proportion = checkAndAdjustProportion(proportion, containerEl, pageLayout, updateAttributes);
+      }
+    });
   });
 
   $effect(() => {
