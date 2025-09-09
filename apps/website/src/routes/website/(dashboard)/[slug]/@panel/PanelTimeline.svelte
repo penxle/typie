@@ -114,7 +114,7 @@
 
   const sliderIndex = $derived(selectedSnapshotId ? snapshots.findIndex((s) => s.id === selectedSnapshotId) : snapshots.length - 1);
   const max = $derived($query ? $query.post.snapshots.length - 1 : 0);
-  const p = $derived(max > 0 && sliderIndex >= 0 ? `${(sliderIndex / max) * 100}%` : '0%');
+  const p = $derived(max > 0 && sliderIndex >= 0 ? `${(sliderIndex / max) * 100}%` : '100%');
 
   // NOTE: 서버와 동일한 글자수 세기 로직
   const getCharacterCount = (doc: Y.Doc): number => {
