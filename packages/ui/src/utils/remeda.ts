@@ -14,8 +14,11 @@ export const debounce = <TArgs extends readonly unknown[]>(fn: (...args: TArgs) 
   return call;
 };
 
-export const throttle = <TArgs extends readonly unknown[]>(fn: (...args: TArgs) => void, delay: number): ((...args: TArgs) => void) => {
-  const { call } = R.funnel(
+export const throttle = <TArgs extends readonly unknown[]>(
+  fn: (...args: TArgs) => void,
+  delay: number,
+): { call: (...args: TArgs) => void; cancel: () => void } => {
+  const { call, cancel } = R.funnel(
     (args: TArgs) => {
       fn(...args);
     },
@@ -25,5 +28,5 @@ export const throttle = <TArgs extends readonly unknown[]>(fn: (...args: TArgs) 
       triggerAt: 'start',
     },
   );
-  return call;
+  return { call, cancel };
 };

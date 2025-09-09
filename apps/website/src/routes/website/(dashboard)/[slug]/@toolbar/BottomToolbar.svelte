@@ -4,7 +4,7 @@
   import { token } from '@typie/styled-system/tokens';
   import { VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { defaultValues, values } from '@typie/ui/tiptap';
+  import { defaultValues, getEditorContext, values } from '@typie/ui/tiptap';
   import BoldIcon from '~icons/lucide/bold';
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
@@ -60,6 +60,7 @@
   );
 
   const app = getAppContext();
+  const editorContext = getEditorContext();
   const splitViewId = getViewContext().id;
 
   let canUndo = $state(false);
@@ -102,6 +103,8 @@
       position: 'relative',
       zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor',
       backgroundColor: 'surface.default',
+      opacity: editorContext?.timeline ? '50' : '100',
+      pointerEvents: editorContext?.timeline ? 'none' : 'auto',
     },
     style,
   )}

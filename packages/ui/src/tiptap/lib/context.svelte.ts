@@ -4,6 +4,7 @@ const key: unique symbol = Symbol('EditorContext');
 
 type EditorContext = {
   pdf: boolean;
+  timeline: boolean;
 };
 
 export const getEditorContext = () => {
@@ -13,6 +14,7 @@ export const getEditorContext = () => {
 export const setupEditorContext = (value?: Partial<EditorContext>) => {
   const context = $state<EditorContext>({
     pdf: false,
+    timeline: false,
     ...value,
   });
 

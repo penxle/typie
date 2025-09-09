@@ -6,7 +6,7 @@ export type AppPreference = {
   postsExpanded: 'open' | 'closed' | false;
   postsWidth: number;
   panelExpandedByViewId: Record<string, boolean>;
-  panelTabByViewId: Record<string, 'info' | 'anchors' | 'spellcheck' | 'settings'>;
+  panelTabByViewId: Record<string, 'info' | 'anchors' | 'spellcheck' | 'timeline' | 'settings'>;
   hasOpenedPanelOnce: boolean;
 
   panelWidth: number;
