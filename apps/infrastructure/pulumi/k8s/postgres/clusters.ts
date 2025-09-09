@@ -146,6 +146,7 @@ class Cluster extends pulumi.ComponentResource {
 
           postgresql: {
             parameters: {
+              max_connections: '1000',
               shared_buffers: '4GB',
 
               wal_keep_size: '1GB',
@@ -273,11 +274,15 @@ class Cluster extends pulumi.ComponentResource {
             },
           },
 
+          monitoring: {
+            enablePodMonitor: true,
+          },
+
           pgbouncer: {
             poolMode: 'transaction',
             parameters: {
               max_client_conn: '1000',
-              default_pool_size: '20',
+              default_pool_size: '100',
               server_check_delay: '10',
               server_login_retry: '0',
             },
