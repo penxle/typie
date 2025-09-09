@@ -9,7 +9,7 @@ import { CanvasContents, Canvases, CanvasSnapshotContributors, CanvasSnapshots, 
 import { EntityState } from '@/enums';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
-import { enqueueJob } from '../publisher';
+import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
 import type { CanvasShape } from '@/db/schemas/json';
 
@@ -131,7 +131,11 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
 
   const updatesLeft = await redis.scard(`canvas:sync:updates:${canvasId}`);
   if (updatesLeft > 0) {
-    await enqueueJob('canvas:sync:collect', canvasId);
+    await enqueueJob('canvas:sync:collect', canvasId, {
+      deduplication: {
+        id: canvasId,
+      },
+    });
   }
 
   if (snapshotUpdated) {
@@ -145,7 +149,12 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
     pubsub.publish('site:usage:update', siteId, null);
 
-    await enqueueJob('canvas:index', canvasId);
+    await enqueueJob('canvas:index', canvasId, {
+      deduplication: {
+        id: canvasId,
+        ttl: 60 * 1000,
+      },
+    });
   }
 });
 

@@ -436,7 +436,11 @@ builder.mutationFields((t) => ({
           }),
         );
 
-        await enqueueJob('canvas:sync:collect', input.canvasId);
+        await enqueueJob('canvas:sync:collect', input.canvasId, {
+          deduplication: {
+            id: input.canvasId,
+          },
+        });
       } else if (input.type === CanvasSyncType.VECTOR) {
         const state = await getCanvasDocument(input.canvasId);
         const update = Y.diffUpdateV2(state.update, base64.parse(input.data));
