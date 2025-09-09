@@ -22,7 +22,9 @@ type SlackAppMentionEventPayload = {
   event_ts: string;
 };
 
-const sql = postgres(env.DATABASE_URL);
+const sql = postgres(env.DATABASE_URL, {
+  prepare: false,
+});
 
 const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 const slack = new WebClient(env.SLACK_BOT_TOKEN);

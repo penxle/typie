@@ -106,6 +106,25 @@ class Cluster extends pulumi.ComponentResource {
       { parent: this },
     );
 
+    new k8s.apiextensions.CustomResource(name, {
+      apiVersion: 'monitoring.coreos.com/v1',
+      kind: 'ServiceMonitor',
+
+      metadata: {
+        name: args.name,
+        namespace: args.namespace,
+      },
+
+      spec: {
+        endpoints: [
+          { port: 'prometheus', interval: '15s' },
+          { port: 'prometheus', path: '/metrics/detailed', interval: '15s', params: { family: ['queue_coarse_metrics', 'queue_metrics'] } },
+        ],
+
+        selector: { matchLabels: { 'app.kubernetes.io/name': args.name } },
+      },
+    });
+
     const user = new k8s.apiextensions.CustomResource(
       name,
       {

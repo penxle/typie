@@ -38,7 +38,7 @@ class Meilisearch extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    const chart = new k8s.helm.v4.Chart(
+    new k8s.helm.v4.Chart(
       name,
       {
         name: args.name,
@@ -66,6 +66,15 @@ class Meilisearch extends pulumi.ComponentResource {
             MEILI_ENV: 'production',
           },
 
+          service: {
+            type: 'LoadBalancer',
+            annotations: {
+              'external-dns.alpha.kubernetes.io/hostname': args.hostname,
+              'tailscale.com/expose': 'true',
+              'tailscale.com/proxy-group': 'ingress',
+            },
+          },
+
           persistence: {
             enabled: true,
             storageClass: 'gp3',
@@ -74,27 +83,6 @@ class Meilisearch extends pulumi.ComponentResource {
         },
       },
       { parent: this },
-    );
-
-    new k8s.core.v1.ServicePatch(
-      `${name}`,
-      {
-        metadata: {
-          name: args.name,
-          namespace: args.namespace,
-
-          annotations: {
-            'pulumi.com/patchForce': 'true',
-            'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-            'tailscale.com/proxy-group': 'ingress',
-          },
-        },
-        spec: {
-          type: 'LoadBalancer',
-          loadBalancerClass: 'tailscale',
-        },
-      },
-      { parent: this, dependsOn: [chart] },
     );
 
     this.masterKey = masterKey.result;
