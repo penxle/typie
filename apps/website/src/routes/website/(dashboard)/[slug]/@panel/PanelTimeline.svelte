@@ -254,20 +254,25 @@
     const revertUpdate = Y.encodeStateAsUpdateV2(snapshotDoc, currentStateVector);
     Y.applyUpdateV2(internalViewDoc, revertUpdate, 'snapshot');
 
-    viewDoc = internalViewDoc;
+    viewDoc?.destroy();
+    viewDoc = undefined;
+    // NOTE: 에디터 완전히 리렌더링. doc이 바뀌어도 특정 스냅샷이 prosemirror에 제대로 리렌더링되지 않는 버그가 있음.
+    tick().then(() => {
+      viewDoc = internalViewDoc;
 
-    untrack(() => {
-      tick().then(() => {
-        if (viewEditor?.current) {
-          const attrs = snapshotDoc.getMap('attrs');
-          const layoutMode = (attrs.get('layoutMode') as PostLayoutMode) ?? PostLayoutMode.SCROLL;
-          const pageLayout = (attrs.get('pageLayout') as PageLayout) ?? null;
-          if (layoutMode === PostLayoutMode.PAGE && pageLayout) {
-            viewEditor.current.commands.setPageLayout(pageLayout);
-          } else {
-            viewEditor.current.commands.clearPageLayout();
+      untrack(() => {
+        tick().then(() => {
+          if (viewEditor?.current) {
+            const attrs = snapshotDoc.getMap('attrs');
+            const layoutMode = (attrs.get('layoutMode') as PostLayoutMode) ?? PostLayoutMode.SCROLL;
+            const pageLayout = (attrs.get('pageLayout') as PageLayout) ?? null;
+            if (layoutMode === PostLayoutMode.PAGE && pageLayout) {
+              viewEditor.current.commands.setPageLayout(pageLayout);
+            } else {
+              viewEditor.current.commands.clearPageLayout();
+            }
           }
-        }
+        });
       });
     });
   }, 32);
@@ -511,7 +516,7 @@
 
 {#if editorContainer && $query && !isLoading}
   <div
-    class={center({ position: 'absolute', left: '0', right: '0', bottom: '32px' })}
+    class={center({ position: 'absolute', left: '0', right: '0', bottom: '32px', pointerEvents: 'none' })}
     use:portal={editorContainer}
     in:fly={{ y: 32, duration: 300 }}
   >
@@ -532,6 +537,7 @@
         borderColor: 'border.default',
         boxShadow: '[0 8px 32px rgba(0,0,0,0.08)]',
         zIndex: 'overEditor',
+        pointerEvents: 'auto',
       })}
     >
       <Icon style={css.raw({ color: 'gray.500' })} icon={IconClockFading} size={18} />
