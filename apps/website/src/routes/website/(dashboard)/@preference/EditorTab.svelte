@@ -113,4 +113,20 @@
       value={app.preference.current.pasteMode}
     />
   </div>
+
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
+    <div>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>선택 영역 둘러싸기</h3>
+      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>선택 영역 지정 후 따옴표나 괄호를 입력하면 둘러쌉니다.</p>
+    </div>
+
+    <Switch
+      onchange={() => {
+        mixpanel.track('toggle_auto_surround', {
+          enabled: app.preference.current.autoSurroundEnabled,
+        });
+      }}
+      bind:checked={app.preference.current.autoSurroundEnabled}
+    />
+  </div>
 </div>

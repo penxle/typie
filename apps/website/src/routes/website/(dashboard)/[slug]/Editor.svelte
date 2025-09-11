@@ -459,6 +459,16 @@
     }
   });
 
+  $effect(() => {
+    void app.preference.current.autoSurroundEnabled;
+
+    untrack(() => {
+      if (editor) {
+        editor.current.storage.autoSurround = { enabled: app.preference.current.autoSurroundEnabled };
+      }
+    });
+  });
+
   const currentViewZenModeEnabled = $derived(
     app.preference.current.zenModeEnabled && splitViewId === splitView.state.current.focusedViewId,
   );
