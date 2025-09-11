@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Slider, Switch } from '@typie/ui/components';
+  import { Select, Slider, Switch } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { fragment, graphql } from '$graphql';
@@ -86,6 +86,31 @@
         });
       }}
       bind:checked={app.preference.current.lineHighlightEnabled}
+    />
+  </div>
+
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
+    <div>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>붙여넣기 옵션</h3>
+      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>
+        붙여넣기 시 텍스트를 어떤 형식으로 붙여넣을지 설정합니다.
+      </p>
+    </div>
+
+    <Select
+      items={[
+        { value: 'ask', label: '매번 묻기', description: '붙여넣기 시 선택합니다.' },
+        { value: 'html', label: '원본 서식 유지', description: '복사한 텍스트의 서식을 그대로 유지해요.' },
+        { value: 'text', label: '문서 서식 적용', description: '현재 문서의 서식을 적용하여 붙여넣어요.' },
+      ] as const}
+      onselect={(value) => {
+        mixpanel.track('change_paste_mode', {
+          mode: app.preference.current.pasteMode,
+        });
+
+        app.preference.current.pasteMode = value;
+      }}
+      value={app.preference.current.pasteMode}
     />
   </div>
 </div>

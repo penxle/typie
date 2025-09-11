@@ -1,7 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Modal } from '@typie/ui/components';
+  import { Button, Checkbox, Modal } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
 
   type Props = {
     open: boolean;
@@ -9,6 +10,9 @@
   };
 
   let { open = $bindable(), onconfirm }: Props = $props();
+
+  const app = getAppContext();
+  let rememberChoice = $state(false);
 </script>
 
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>
@@ -28,12 +32,17 @@
       class={css({
         fontSize: '14px',
         color: 'text.subtle',
-        marginBottom: '20px',
+        marginBottom: '16px',
         lineHeight: '[1.5]',
       })}
     >
       텍스트를 어떤 형식으로 붙여넣으시겠어요?
     </p>
+
+    <label class={flex({ align: 'center', marginBottom: '20px', gap: '4px', cursor: 'pointer' })}>
+      <Checkbox label="이 선택 기억하기" size="md" bind:checked={rememberChoice} />
+      <span class={css({ fontSize: '12px', color: 'text.muted' })}>(설정 > 에디터에서 변경할 수 있어요.)</span>
+    </label>
 
     <div
       class={flex({
@@ -59,6 +68,10 @@
           },
         })}
         onclick={() => {
+          if (rememberChoice) {
+            app.preference.current.pasteMode = 'html';
+          }
+
           onconfirm?.('html');
         }}
         type="button"
@@ -100,6 +113,10 @@
           },
         })}
         onclick={() => {
+          if (rememberChoice) {
+            app.preference.current.pasteMode = 'text';
+          }
+
           onconfirm?.('text');
         }}
         type="button"
