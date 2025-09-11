@@ -26,6 +26,8 @@ export type AppPreference = {
 
   lineHighlightEnabled: boolean;
 
+  pasteMode: 'ask' | 'html' | 'text';
+
   zenModeEnabled: boolean;
 
   searchMatchWholeWord: boolean;
@@ -116,6 +118,8 @@ export const setupAppContext = (userId: string) => {
       typewriterPosition: 0.5,
 
       lineHighlightEnabled: true,
+
+      pasteMode: 'ask',
 
       zenModeEnabled: false,
 

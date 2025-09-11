@@ -224,6 +224,7 @@
   let showAnchorOutline = $state(false);
 
   let clipboardData = $state<{ html: string; text?: string }>();
+  let openPasteModal = $state(false);
 
   const doc = new Y.Doc();
   let viewDoc = $state<Y.Doc>();
@@ -480,6 +481,25 @@
       });
     }
   });
+
+  const onPasteConfirm = (mode: 'html' | 'text') => {
+    if (!editor || !clipboardData) {
+      return;
+    }
+
+    if (mode === 'html') {
+      editor.current.view.pasteHTML(clipboardData.html);
+    } else if (mode === 'text') {
+      if (clipboardData.text) {
+        editor?.current.view.pasteText(clipboardData.text);
+      } else {
+        const dom = new DOMParser().parseFromString(clipboardData.html, 'text/html');
+        editor.current.view.pasteText(dom.body.textContent);
+      }
+    }
+
+    clipboardData = undefined;
+  };
 
   onMount(() => {
     if (!postId) return;
@@ -1113,6 +1133,12 @@
                                 text: event.clipboardData.getData('text/plain'),
                               };
 
+                              if (app.preference.current.pasteMode === 'ask') {
+                                openPasteModal = true;
+                                return true;
+                              }
+
+                              onPasteConfirm(app.preference.current.pasteMode);
                               return true;
                             }
 
@@ -1230,28 +1256,15 @@
 <Limit {$query} $site={entity.site} {editor} />
 <PasteModal
   onconfirm={(mode) => {
-    if (!editor || !clipboardData) {
-      return;
-    }
-
-    if (mode === 'html') {
-      editor.current.view.pasteHTML(clipboardData.html);
-    } else if (mode === 'text') {
-      if (clipboardData.text) {
-        editor?.current.view.pasteText(clipboardData.text);
-      } else {
-        const dom = new DOMParser().parseFromString(clipboardData.html, 'text/html');
-        editor.current.view.pasteText(dom.body.textContent);
-      }
-    }
-
-    clipboardData = undefined;
+    onPasteConfirm(mode);
+    openPasteModal = false;
   }}
   bind:open={
-    () => !!clipboardData,
+    () => openPasteModal,
     (v) => {
       if (!v) {
         clipboardData = undefined;
+        openPasteModal = false;
       }
     }
   }
