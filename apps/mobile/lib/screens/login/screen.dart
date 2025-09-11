@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:airbridge_flutter_sdk/airbridge_flutter_sdk.dart';
+import 'package:appsflyer_sdk/appsflyer_sdk.dart';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:built_value/json_object.dart';
@@ -33,10 +33,11 @@ class LoginScreen extends HookWidget {
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final mixpanel = useService<Mixpanel>();
+    final appsflyer = useService<AppsflyerSdk>();
 
     final login = useCallback((GSingleSignOnProvider provider, Map<String, dynamic> params) async {
       unawaited(mixpanel.track('login_with_sso', properties: {'provider': provider.name.toLowerCase()}));
-      Airbridge.trackEvent(category: AirbridgeCategory.SIGN_IN);
+      unawaited(appsflyer.logEvent('sign_in', null));
 
       await client.request(
         GLoginScreen_AuthorizeSingleSignOn_MutationReq(

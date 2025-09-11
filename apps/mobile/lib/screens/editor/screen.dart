@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:airbridge_flutter_sdk/airbridge_flutter_sdk.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -40,12 +39,6 @@ class EditorScreen extends HookWidget {
 
     final pageController = usePageController();
     final drag = useRef<Drag?>(null);
-
-    useEffect(() {
-      Airbridge.trackEvent(category: AirbridgeCategory.PRODUCT_VIEWED);
-
-      return null;
-    }, []);
 
     useEffect(() {
       final listener = AppLifecycleListener(

@@ -11,6 +11,9 @@ abstract class Env {
   static String apiUrl = _Env.apiUrl;
 
   @EnviedField()
+  static String appsflyerKey = _Env.appsflyerKey;
+
+  @EnviedField()
   static String googleClientId = _Env.googleClientId;
 
   @EnviedField()
