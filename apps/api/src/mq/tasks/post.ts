@@ -30,7 +30,7 @@ import type { Node } from '@tiptap/pm/model';
 import type { PageLayout } from '@/db/schemas/json';
 
 const getCharacterCount = (text: string) => {
-  return [...text.replaceAll(/\s+/g, ' ').trim()].length;
+  return [...text.replaceAll('\u200B', '').replaceAll(/\s+/g, ' ').trim()].length;
 };
 
 const getBlobSize = (node: Node) => {

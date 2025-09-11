@@ -24,13 +24,16 @@
   let doc = $state('');
   let selection = $state('');
 
-  const docCountWithWhitespace = $derived([...doc.replaceAll(/\s+/g, ' ').trim()].length);
-  const docCountWithoutWhitespace = $derived([...doc.replaceAll(/\s/g, '').trim()].length);
-  const docCountWithoutWhitespaceAndPunctuation = $derived([...doc.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
+  const cleanDoc = $derived(doc.replaceAll('\u200B', ''));
+  const cleanSelection = $derived(selection.replaceAll('\u200B', ''));
 
-  const selectionCountWithWhitespace = $derived([...selection.replaceAll(/\s+/g, ' ').trim()].length);
-  const selectionCountWithoutWhitespace = $derived([...selection.replaceAll(/\s/g, '').trim()].length);
-  const selectionCountWithoutWhitespaceAndPunctuation = $derived([...selection.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
+  const docCountWithWhitespace = $derived([...cleanDoc.replaceAll(/\s+/g, ' ').trim()].length);
+  const docCountWithoutWhitespace = $derived([...cleanDoc.replaceAll(/\s/g, '').trim()].length);
+  const docCountWithoutWhitespaceAndPunctuation = $derived([...cleanDoc.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
+
+  const selectionCountWithWhitespace = $derived([...cleanSelection.replaceAll(/\s+/g, ' ').trim()].length);
+  const selectionCountWithoutWhitespace = $derived([...cleanSelection.replaceAll(/\s/g, '').trim()].length);
+  const selectionCountWithoutWhitespaceAndPunctuation = $derived([...cleanSelection.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
 
   const handler = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
     if (transaction.docChanged) {
