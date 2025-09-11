@@ -16,14 +16,15 @@ import type { Env } from '@/context';
 
 export const og = new Hono<Env>();
 
-const loadFonts = async <T extends string>(names: T[]) => {
-  const load = async (name: string) => {
-    const filePath = path.join('/tmp/fonts', `${name}.otf`);
+const loadFonts = async (filenames: string[]) => {
+  const load = async (filename: string) => {
+    const ext = path.extname(filename).slice(1);
+    const filePath = path.join('/tmp/fonts', filename);
 
     try {
       return await Bun.file(filePath).bytes();
     } catch {
-      const url = `https://cdn.typie.net/fonts/otf/${name}.otf`;
+      const url = `https://cdn.typie.net/fonts/${ext}/${filename}`;
       const resp = await ky.get(url).arrayBuffer();
 
       await Bun.write(filePath, resp);
@@ -32,16 +33,21 @@ const loadFonts = async <T extends string>(names: T[]) => {
     }
   };
 
-  return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await load(name)]))) as Record<T, ArrayBuffer>;
+  return Object.fromEntries(await Promise.all(filenames.map(async (filename) => [`${filename}`, await load(filename)]))) as Record<
+    string,
+    ArrayBuffer
+  >;
 };
 
 const fonts = await loadFonts([
-  'KoPubWorldDotum-Medium',
-  'KoPubWorldDotum-Bold',
-  'Pretendard-Medium',
-  'Pretendard-ExtraBold',
-  'SUIT-Medium',
-  'SUIT-ExtraBold',
+  'KoPubWorldDotum-Medium.otf',
+  'KoPubWorldDotum-Bold.otf',
+  'Pretendard-Medium.otf',
+  'Pretendard-ExtraBold.otf',
+  'SUIT-Medium.otf',
+  'SUIT-ExtraBold.otf',
+  'NotoSansKR-Medium.ttf',
+  'NotoSansKR-ExtraBold.ttf',
 ]);
 
 const colors = {
@@ -85,12 +91,14 @@ og.get('/:entityId', async (c) => {
     width: 1200,
     height: 630,
     fonts: [
-      { name: 'KoPubWorldDotum', data: fonts['KoPubWorldDotum-Medium'], weight: 500 },
-      { name: 'KoPubWorldDotum', data: fonts['KoPubWorldDotum-Bold'], weight: 800 },
-      { name: 'Pretendard', data: fonts['Pretendard-Medium'], weight: 500 },
-      { name: 'Pretendard', data: fonts['Pretendard-ExtraBold'], weight: 800 },
-      { name: 'SUIT', data: fonts['SUIT-Medium'], weight: 500 },
-      { name: 'SUIT', data: fonts['SUIT-ExtraBold'], weight: 800 },
+      { name: 'KoPubWorldDotum', data: fonts['KoPubWorldDotum-Medium.otf'], weight: 500 },
+      { name: 'KoPubWorldDotum', data: fonts['KoPubWorldDotum-Bold.otf'], weight: 800 },
+      { name: 'Pretendard', data: fonts['Pretendard-Medium.otf'], weight: 500 },
+      { name: 'Pretendard', data: fonts['Pretendard-ExtraBold.otf'], weight: 800 },
+      { name: 'SUIT', data: fonts['SUIT-Medium.otf'], weight: 500 },
+      { name: 'SUIT', data: fonts['SUIT-ExtraBold.otf'], weight: 800 },
+      { name: 'NotoSansKR', data: fonts['NotoSansKR-Medium.ttf'], weight: 500 },
+      { name: 'NotoSansKR', data: fonts['NotoSansKR-ExtraBold.ttf'], weight: 800 },
     ],
     loadAdditionalAsset: async (code, segment) => {
       const svg = await match(code)
@@ -143,7 +151,7 @@ const renderPost = async (entityId: string) => {
         gap: '60px',
         width: '1200px',
         height: '630px',
-        fontFamily: 'SUIT, Pretendard, KoPubWorldDotum',
+        fontFamily: 'SUIT, Pretendard, NotoSansKR, KoPubWorldDotum',
         color: colors.gray[950],
         lineHeight: '1.4',
         backgroundColor: colors.white,
@@ -203,7 +211,7 @@ const renderCanvas = async (entityId: string) => {
         justifyContent: 'center',
         width: '1200px',
         height: '630px',
-        fontFamily: 'SUIT, Pretendard, KoPubWorldDotum',
+        fontFamily: 'SUIT, Pretendard, NotoSansKR, KoPubWorldDotum',
         fontSize: '60px',
         fontWeight: 800,
         color: colors.gray[950],
