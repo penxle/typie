@@ -32,6 +32,7 @@ export const TemplatePlaceholder = Extension.create({
           container.style.top = 'calc(var(--prosemirror-page-margin-top) + var(--prosemirror-padding-top))';
           container.style.left = 'calc(var(--prosemirror-page-margin-left) + var(--prosemirror-padding-x))';
           container.style.maxWidth = 'var(--prosemirror-max-width)';
+          container.style.pointerEvents = 'none';
 
           const component = mount(TemplatePlaceholderWidget, {
             target: container,

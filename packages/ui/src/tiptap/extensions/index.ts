@@ -10,6 +10,7 @@ export * from './node-id';
 export * from './notify-idle';
 export * from './page';
 export * from './placeholder';
+export * from './safari-ime-fix';
 export * from './search';
 export * from './selection';
 export * from './syntax-highlight';
