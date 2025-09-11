@@ -1,8 +1,4 @@
 PODS:
-  - airbridge-ios-sdk (4.7.0)
-  - airbridge_flutter_sdk (4.7.0):
-    - airbridge-ios-sdk (= 4.7.0)
-    - Flutter
   - Alamofire (5.10.2)
   - AppAuth (2.0.0):
     - AppAuth/Core (= 2.0.0)
@@ -14,6 +10,14 @@ PODS:
     - GoogleUtilities/Environment (~> 8.0)
     - GoogleUtilities/UserDefaults (~> 8.0)
     - PromisesObjC (~> 2.4)
+  - appsflyer_sdk (6.17.3):
+    - appsflyer_sdk/Core (= 6.17.3)
+  - appsflyer_sdk/Core (6.17.3):
+    - AppsFlyerFramework (= 6.17.5)
+    - Flutter
+  - AppsFlyerFramework (6.17.5):
+    - AppsFlyerFramework/Main (= 6.17.5)
+  - AppsFlyerFramework/Main (6.17.5)
   - device_info_plus (0.0.1):
     - Flutter
   - DKImagePickerController/Core (4.3.9):
@@ -237,7 +241,7 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
-  - airbridge_flutter_sdk (from `.symlinks/plugins/airbridge_flutter_sdk/ios`)
+  - appsflyer_sdk (from `.symlinks/plugins/appsflyer_sdk/ios`)
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - firebase_analytics (from `.symlinks/plugins/firebase_analytics/ios`)
@@ -264,10 +268,10 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
-    - airbridge-ios-sdk
     - Alamofire
     - AppAuth
     - AppCheckCore
+    - AppsFlyerFramework
     - DKImagePickerController
     - DKPhotoGallery
     - Firebase
@@ -292,8 +296,8 @@ SPEC REPOS:
     - SwiftyGif
 
 EXTERNAL SOURCES:
-  airbridge_flutter_sdk:
-    :path: ".symlinks/plugins/airbridge_flutter_sdk/ios"
+  appsflyer_sdk:
+    :path: ".symlinks/plugins/appsflyer_sdk/ios"
   device_info_plus:
     :path: ".symlinks/plugins/device_info_plus/ios"
   file_picker:
@@ -342,11 +346,11 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
 
 SPEC CHECKSUMS:
-  airbridge-ios-sdk: f0f227bfde8baf7b85f956b4772e32a3a2821c5a
-  airbridge_flutter_sdk: 6ebbe21611ad479eb75ddff2f3881df4c28f0d2f
   Alamofire: 7193b3b92c74a07f85569e1a6c4f4237291e7496
   AppAuth: 1c1a8afa7e12f2ec3a294d9882dfa5ab7d3cb063
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
+  appsflyer_sdk: 23e08a1f2a2a0c3f5d58c91a5820dba768d738c8
+  AppsFlyerFramework: da52a40c07c9f81a7829952e0fd854b6eacf5a7d
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60

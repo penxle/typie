@@ -1,4 +1,3 @@
-import airbridge_flutter_sdk
 import Flutter
 import UIKit
 
@@ -18,8 +17,6 @@ import UIKit
 
     KeyboardPlugin.register(with: self.registrar(forPlugin: "co.typie.keyboard")!)
     
-    AirbridgeFlutter.initializeSDK(name: "typie", token: "cee38499c2ba42cc834503cd819573ac")
-
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }

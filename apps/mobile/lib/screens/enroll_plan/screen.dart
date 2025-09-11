@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:airbridge_flutter_sdk/airbridge_flutter_sdk.dart';
+import 'package:appsflyer_sdk/appsflyer_sdk.dart';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:collection/collection.dart';
@@ -38,6 +38,7 @@ class EnrollPlanScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
+    final appsflyer = useService<AppsflyerSdk>();
 
     final future = useMemoized(_fetchProductMap);
     final productDetailsMap = useFuture(future);
@@ -83,21 +84,13 @@ class EnrollPlanScreen extends HookWidget {
                         .details;
 
                     unawaited(mixpanel.track('enroll_plan', properties: {'productId': purchaseDetails.productID}));
-                    Airbridge.trackEvent(
-                      category: AirbridgeCategory.SUBSCRIBE,
-                      semanticAttributes: {
-                        AirbridgeAttribute.VALUE: productDetails?.rawPrice,
-                        AirbridgeAttribute.CURRENCY: productDetails?.currencyCode,
-                        AirbridgeAttribute.TRANSACTION_ID: purchaseDetails.purchaseID,
-                        AirbridgeAttribute.PRODUCTS: [
-                          {
-                            AirbridgeAttribute.PRODUCT_ID: productDetails?.id,
-                            AirbridgeAttribute.PRODUCT_NAME: productDetails?.title,
-                            AirbridgeAttribute.PRODUCT_PRICE: productDetails?.rawPrice,
-                            AirbridgeAttribute.PRODUCT_CURRENCY: productDetails?.currencyCode,
-                          },
-                        ],
-                      },
+                    unawaited(
+                      appsflyer.logEvent('complete_subscription', {
+                        'product_id': productDetails?.id,
+                        'product_name': productDetails?.title,
+                        'price': productDetails?.rawPrice,
+                        'currency': productDetails?.currencyCode,
+                      }),
                     );
 
                     if (context.mounted) {
@@ -249,6 +242,7 @@ class _PurchaseButton extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
+    final appsflyer = useService<AppsflyerSdk>();
 
     return Tappable(
       onTap: () {
@@ -257,19 +251,13 @@ class _PurchaseButton extends HookWidget {
         }
 
         unawaited(mixpanel.track('enroll_plan_try', properties: {'productId': product!.details.id}));
-        Airbridge.trackEvent(
-          category: AirbridgeCategory.INITIATE_CHECKOUT,
-          semanticAttributes: {
-            AirbridgeAttribute.PRODUCTS: [
-              {
-                AirbridgeAttribute.PRODUCT_ID: product!.details.id,
-                AirbridgeAttribute.PRODUCT_NAME: product!.details.title,
-                AirbridgeAttribute.PRODUCT_PRICE: product!.details.rawPrice,
-                AirbridgeAttribute.PRODUCT_QUANTITY: 1,
-                AirbridgeAttribute.PRODUCT_CURRENCY: product!.details.currencyCode,
-              },
-            ],
-          },
+        unawaited(
+          appsflyer.logEvent('initiate_subscription', {
+            'product_id': product!.details.id,
+            'product_name': product!.details.title,
+            'price': product!.details.rawPrice,
+            'currency': product!.details.currencyCode,
+          }),
         );
 
         onTap(product!);

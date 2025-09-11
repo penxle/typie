@@ -1,5 +1,6 @@
 // ignore_for_file: discarded_futures static initializations
 
+import 'package:appsflyer_sdk/appsflyer_sdk.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_http2_adapter/dio_http2_adapter.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
@@ -23,6 +24,10 @@ abstract class RegisterModule {
   @preResolve
   @singleton
   Future<Mixpanel> get mixpanel => Mixpanel.init(Env.mixpanelToken, trackAutomaticEvents: false);
+
+  @singleton
+  AppsflyerSdk get appsflyer =>
+      AppsflyerSdk(AppsFlyerOptions(afDevKey: Env.appsflyerKey, appId: '6745595771'))..initSdk();
 
   @singleton
   Dio get dio => kDebugMode
