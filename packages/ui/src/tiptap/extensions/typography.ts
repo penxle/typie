@@ -1,5 +1,6 @@
 import { Extension, textInputRule } from '@tiptap/core';
 
+// NOTE: 스마트 따옴표 변환은 AutoSurround에서도 처리함
 export const Typography = Extension.create({
   name: 'typography',
 

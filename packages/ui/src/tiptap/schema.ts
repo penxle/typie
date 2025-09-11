@@ -1,4 +1,5 @@
 import {
+  AutoSurround,
   Behavior,
   ClearFormatting,
   Clipboard,
@@ -95,6 +96,7 @@ export const baseExtensions = [
 
 export const editorExtensions = [
   // extensions
+  AutoSurround,
   Behavior,
   Command,
   ClearFormatting,

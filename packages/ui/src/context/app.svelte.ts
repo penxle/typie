@@ -28,6 +28,8 @@ export type AppPreference = {
 
   pasteMode: 'ask' | 'html' | 'text';
 
+  autoSurroundEnabled: boolean;
+
   zenModeEnabled: boolean;
 
   searchMatchWholeWord: boolean;
@@ -120,6 +122,8 @@ export const setupAppContext = (userId: string) => {
       lineHighlightEnabled: true,
 
       pasteMode: 'ask',
+
+      autoSurroundEnabled: true,
 
       zenModeEnabled: false,
 

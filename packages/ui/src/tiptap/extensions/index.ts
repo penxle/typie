@@ -1,3 +1,4 @@
+export * from './auto-surround';
 export * from './behavior';
 export * from './clear-formatting';
 export * from './clipboard';
