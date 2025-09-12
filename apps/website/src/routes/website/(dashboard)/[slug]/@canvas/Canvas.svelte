@@ -10,7 +10,6 @@
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import dayjs from 'dayjs';
   import { nanoid } from 'nanoid';
-  import { base64 } from 'rfc4648';
   import { onMount, tick, untrack } from 'svelte';
   import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
@@ -161,7 +160,7 @@
               clientId,
               canvasId,
               type: CanvasSyncType.UPDATE,
-              data: base64.stringify(pendingUpdate),
+              data: pendingUpdate.toBase64(),
             },
             { transport: 'ws' },
           );
@@ -204,7 +203,7 @@
               clientId,
               canvasId,
               type: CanvasSyncType.AWARENESS,
-              data: base64.stringify(update),
+              data: update.toBase64(),
             },
             { transport: 'ws' },
           );
@@ -225,7 +224,7 @@
         clientId,
         canvasId,
         type: CanvasSyncType.VECTOR,
-        data: base64.stringify(vector),
+        data: vector.toBase64(),
       },
       { transport: 'ws' },
     );
@@ -259,21 +258,21 @@
         lastHeartbeatAt = dayjs(payload.data);
         connectionStatus = 'connected';
       } else if (payload.type === CanvasSyncType.UPDATE) {
-        Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
+        Y.applyUpdateV2(doc, Uint8Array.fromBase64(payload.data), 'remote');
       } else if (payload.type === CanvasSyncType.VECTOR) {
-        const update = Y.encodeStateAsUpdateV2(doc, base64.parse(payload.data));
+        const update = Y.encodeStateAsUpdateV2(doc, Uint8Array.fromBase64(payload.data));
 
         await syncCanvas(
           {
             clientId,
             canvasId,
             type: CanvasSyncType.UPDATE,
-            data: base64.stringify(update),
+            data: update.toBase64(),
           },
           { transport: 'ws' },
         );
       } else if (payload.type === CanvasSyncType.AWARENESS) {
-        YAwareness.applyAwarenessUpdate(awareness, base64.parse(payload.data), 'remote');
+        YAwareness.applyAwarenessUpdate(awareness, Uint8Array.fromBase64(payload.data), 'remote');
       } else if (payload.type === CanvasSyncType.PRESENCE) {
         const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
 
@@ -282,7 +281,7 @@
             clientId,
             canvasId,
             type: CanvasSyncType.AWARENESS,
-            data: base64.stringify(update),
+            data: update.toBase64(),
           },
           { transport: 'ws' },
         );
@@ -293,7 +292,7 @@
     persistence.on('synced', () => forceSync());
 
     if (entity.node.__typename === 'Canvas') {
-      Y.applyUpdateV2(doc, base64.parse(entity.node.update), 'remote');
+      Y.applyUpdateV2(doc, Uint8Array.fromBase64(entity.node.update), 'remote');
     }
 
     awareness.setLocalStateField('user', {

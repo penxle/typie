@@ -7,7 +7,6 @@ import ZodPlugin from '@pothos/plugin-zod';
 import dayjs from 'dayjs';
 import { GraphQLJSON } from 'graphql-scalars';
 import * as R from 'remeda';
-import { base64 } from 'rfc4648';
 import { TypieError } from '@/errors';
 import type { SessionContext, UserContext } from '@/context';
 
@@ -61,10 +60,10 @@ builder.subscriptionType();
 builder.addScalarType('JSON', GraphQLJSON);
 
 builder.scalarType('Binary', {
-  serialize: (value) => base64.stringify(value),
+  serialize: (value) => value.toBase64(),
   parseValue: (value) => {
     if (typeof value === 'string') {
-      return base64.parse(value);
+      return Uint8Array.fromBase64(value);
     }
 
     throw new Error('Invalid binary value');

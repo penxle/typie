@@ -1,7 +1,6 @@
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
-import { base64 } from 'rfc4648';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
 import {
@@ -443,18 +442,18 @@ builder.mutationFields((t) => ({
         });
       } else if (input.type === CanvasSyncType.VECTOR) {
         const state = await getCanvasDocument(input.canvasId);
-        const update = Y.diffUpdateV2(state.update, base64.parse(input.data));
+        const update = Y.diffUpdateV2(state.update, Uint8Array.fromBase64(input.data));
 
         pubsub.publish('canvas:sync', input.canvasId, {
           target: input.clientId,
           type: CanvasSyncType.UPDATE,
-          data: base64.stringify(update),
+          data: update.toBase64(),
         });
 
         pubsub.publish('canvas:sync', input.canvasId, {
           target: input.clientId,
           type: CanvasSyncType.VECTOR,
-          data: base64.stringify(state.vector),
+          data: state.vector.toBase64(),
         });
       } else if (input.type === CanvasSyncType.AWARENESS) {
         pubsub.publish('canvas:sync', input.canvasId, {
@@ -571,7 +570,7 @@ const getCanvasDocument = async (canvasId: string) => {
 
   const pendingUpdates = updates.map((update) => {
     const { data } = JSON.parse(update);
-    return base64.parse(data);
+    return Uint8Array.fromBase64(data);
   });
 
   const updatedUpdate = Y.mergeUpdatesV2([update, ...pendingUpdates]);

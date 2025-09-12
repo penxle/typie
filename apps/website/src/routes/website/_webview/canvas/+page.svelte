@@ -2,7 +2,6 @@
   import { css } from '@typie/styled-system/css';
   import { Canvas, CanvasEditor } from '@typie/ui/canvas';
   import { Icon } from '@typie/ui/components';
-  import { base64 } from 'rfc4648';
   import { onMount } from 'svelte';
   import * as Y from 'yjs';
   import EyeIcon from '~icons/lucide/eye';
@@ -49,7 +48,7 @@
       const update = $query.entity.node.update;
 
       if (update) {
-        Y.applyUpdateV2(doc, base64.parse(update), 'remote');
+        Y.applyUpdateV2(doc, Uint8Array.fromBase64(update), 'remote');
       }
     }
   });

@@ -1,6 +1,5 @@
 import { getSchema } from '@tiptap/core';
 import { DOMSerializer, Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { base64url } from 'rfc4648';
 import { handleHTML, parseHTML } from 'zeed-dom';
 import type { Extensions, JSONContent } from '@tiptap/core';
 import type { Node, Window } from 'happy-dom';
@@ -53,5 +52,5 @@ export const renderHTML = (content: JSONContent, extensions: Extensions) => {
 
 const decoder = new TextDecoder();
 const decode = (value: string) => {
-  return decoder.decode(base64url.parse(value));
+  return decoder.decode(Uint8Array.fromBase64(value, { alphabet: 'base64url', lastChunkHandling: 'loose' }));
 };

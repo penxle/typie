@@ -4,7 +4,6 @@
   import { Button, Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { base64 } from 'rfc4648';
   import { graphql } from '$graphql';
   import ActivityChart from './ActivityChart.svelte';
   import ActivityGrid from './ActivityGrid.svelte';
@@ -42,7 +41,7 @@
 
   const copyActivityImage = async () => {
     const b64 = await generateActivityImage();
-    const blob = new Blob([new Uint8Array(base64.parse(b64))], { type: 'image/png' });
+    const blob = new Blob([Uint8Array.fromBase64(b64)], { type: 'image/png' });
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 
     Toast.success('이미지가 클립보드에 복사되었어요.');

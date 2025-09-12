@@ -1,7 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import qs from 'query-string';
-  import { base64 } from 'rfc4648';
   import { tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { thumbHashToDataURL } from 'thumbhash';
@@ -35,7 +34,7 @@
   const sizes = $derived(size === 'full' ? undefined : `${size}px`);
   const srcset = $derived(size === 'full' ? undefined : `${src} ${size}w, ${src2x} ${size * 2}w, ${src3x} ${size * 3}w`);
 
-  const placeholderUrl = $derived(placeholder ? thumbHashToDataURL(base64.parse(placeholder)) : undefined);
+  const placeholderUrl = $derived(placeholder ? thumbHashToDataURL(Uint8Array.fromBase64(placeholder)) : undefined);
 
   const load = () => {
     if (loaded) {

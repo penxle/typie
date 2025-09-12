@@ -1,5 +1,4 @@
 import { mergeAttributes, Node } from '@tiptap/core';
-import { base64url } from 'rfc4648';
 import { render } from 'svelte/server';
 import { SvelteNodeViewRenderer } from './renderer.svelte';
 import type { NodeConfig } from '@tiptap/core';
@@ -59,5 +58,5 @@ export const extendNodeToNodeView = <Options = any, Storage = any>(
 
 const encoder = new TextEncoder();
 const encode = (value: string) => {
-  return base64url.stringify(encoder.encode(value));
+  return encoder.encode(value).toBase64({ alphabet: 'base64url', omitPadding: true });
 };

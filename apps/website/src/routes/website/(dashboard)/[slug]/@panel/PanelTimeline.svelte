@@ -10,7 +10,6 @@
   import { clamp, debounce, throttle } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { base64 } from 'rfc4648';
   import { onMount, tick, untrack } from 'svelte';
   import { on } from 'svelte/events';
   import { fly } from 'svelte/transition';
@@ -135,7 +134,7 @@
       const result = await query.load({ slug: $post.entity.slug });
 
       baseDoc = new Y.Doc({ gc: false });
-      Y.applyUpdateV2(baseDoc, base64.parse(result.post.update));
+      Y.applyUpdateV2(baseDoc, Uint8Array.fromBase64(result.post.update));
 
       const counts: Record<string, number> = {};
       const snapshots = [...result.post.snapshots].toReversed();
@@ -150,7 +149,7 @@
 
         while (currentIndex < snapshots.length && deadline.timeRemaining() > 0) {
           const snapshot = snapshots[currentIndex];
-          const snapshotData = Y.decodeSnapshotV2(base64.parse(snapshot.snapshot));
+          const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshot.snapshot));
           const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshotData);
           counts[snapshot.id] = getCharacterCount(snapshotDoc);
           currentIndex++;
@@ -175,7 +174,7 @@
           const chunkSize = 5;
           for (let i = 0; i < chunkSize && currentIndex < snapshots.length; i++) {
             const snapshot = snapshots[currentIndex];
-            const snapshotData = Y.decodeSnapshotV2(base64.parse(snapshot.snapshot));
+            const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshot.snapshot));
             const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshotData);
             counts[snapshot.id] = getCharacterCount(snapshotDoc);
             currentIndex++;
@@ -239,7 +238,7 @@
       internalViewDoc = new Y.Doc({ gc: false });
     }
 
-    const snapshotData = Y.decodeSnapshotV2(base64.parse(snapshot.snapshot));
+    const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshot.snapshot));
     const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshotData);
 
     const currentStateVector = Y.encodeStateVector(internalViewDoc);
@@ -297,7 +296,7 @@
       return;
     }
 
-    const snapshot = Y.decodeSnapshotV2(base64.parse($query.post.snapshots[sliderIndex].snapshot));
+    const snapshot = Y.decodeSnapshotV2(Uint8Array.fromBase64($query.post.snapshots[sliderIndex].snapshot));
     const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshot);
 
     const currentStateVector = Y.encodeStateVector(doc);

@@ -13,7 +13,6 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
-  import { base64 } from 'rfc4648';
   import { onMount, untrack } from 'svelte';
   import { on } from 'svelte/events';
   import { match } from 'ts-pattern';
@@ -313,7 +312,7 @@
             clientId,
             postId,
             type: PostSyncType.UPDATE,
-            data: base64.stringify(pendingUpdate),
+            data: pendingUpdate.toBase64(),
           },
           { transport: 'ws' },
         );
@@ -330,7 +329,7 @@
                 clientId,
                 postId,
                 type: PostSyncType.UPDATE,
-                data: base64.stringify(pendingUpdate),
+                data: pendingUpdate.toBase64(),
               },
               { transport: 'ws' },
             );
@@ -378,7 +377,7 @@
             clientId,
             postId,
             type: PostSyncType.AWARENESS,
-            data: base64.stringify(update),
+            data: update.toBase64(),
           },
           { transport: 'ws' },
         );
@@ -401,7 +400,7 @@
                 clientId,
                 postId,
                 type: PostSyncType.AWARENESS,
-                data: base64.stringify(update),
+                data: update.toBase64(),
               },
               { transport: 'ws' },
             );
@@ -424,7 +423,7 @@
         clientId,
         postId,
         type: PostSyncType.VECTOR,
-        data: base64.stringify(vector),
+        data: vector.toBase64(),
       },
       { transport: 'ws' },
     );
@@ -439,7 +438,7 @@
       clientId,
       postId,
       type: PostSyncType.UPDATE,
-      data: base64.stringify(update),
+      data: update.toBase64(),
     });
   };
 
@@ -539,21 +538,21 @@
         lastHeartbeatAt = dayjs(payload.data);
         connectionStatus = 'connected';
       } else if (payload.type === PostSyncType.UPDATE) {
-        Y.applyUpdateV2(doc, base64.parse(payload.data), 'remote');
+        Y.applyUpdateV2(doc, Uint8Array.fromBase64(payload.data), 'remote');
       } else if (payload.type === PostSyncType.VECTOR) {
-        const update = Y.encodeStateAsUpdateV2(doc, base64.parse(payload.data));
+        const update = Y.encodeStateAsUpdateV2(doc, Uint8Array.fromBase64(payload.data));
 
         await syncPost(
           {
             clientId,
             postId,
             type: PostSyncType.UPDATE,
-            data: base64.stringify(update),
+            data: update.toBase64(),
           },
           { transport: 'ws' },
         );
       } else if (payload.type === PostSyncType.AWARENESS) {
-        YAwareness.applyAwarenessUpdate(awareness, base64.parse(payload.data), 'remote');
+        YAwareness.applyAwarenessUpdate(awareness, Uint8Array.fromBase64(payload.data), 'remote');
       } else if (payload.type === PostSyncType.PRESENCE) {
         const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
 
@@ -562,7 +561,7 @@
             clientId,
             postId,
             type: PostSyncType.AWARENESS,
-            data: base64.stringify(update),
+            data: update.toBase64(),
           },
           { transport: 'ws' },
         );
@@ -572,7 +571,7 @@
     const persistence = new IndexeddbPersistence(`typie:editor:${postId}`, doc);
 
     if (entity.node.__typename === 'Post') {
-      Y.applyUpdateV2(doc, base64.parse(entity.node.update), 'remote');
+      Y.applyUpdateV2(doc, Uint8Array.fromBase64(entity.node.update), 'remote');
 
       if (![PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode.current)) {
         layoutMode.current = PostLayoutMode.SCROLL;

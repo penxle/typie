@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import qs from 'query-string';
-import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
 import { db, firstOrThrow, Images } from '@/db';
@@ -38,7 +37,7 @@ export const persistBlobAsImage = async ({ userId, file }: PersistBlobAsImagePar
         width: metadata.width!,
         height: metadata.height!,
         path: key,
-        placeholder: base64.stringify(placeholder),
+        placeholder: placeholder.toBase64(),
       })
       .returning()
       .then(firstOrThrow);
