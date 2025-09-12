@@ -48,11 +48,11 @@ if (!process.env.SCRIPT && !process.env.NO_WORKER) {
   );
 
   worker.on('completed', (job) => {
-    log.info('Job completed {*}', { id: job.id, name: job.name });
+    log.info('Job completed {*}', { id: job.id, name: job.name, data: job.data });
   });
 
   worker.on('failed', (job, error) => {
-    log.error('Job failed {*}', { id: job?.id, name: job?.name, error });
+    log.error('Job failed {*}', { id: job?.id, name: job?.name, data: job?.data, error });
     Sentry.captureException(error);
   });
 
