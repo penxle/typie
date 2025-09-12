@@ -229,5 +229,5 @@ const toDataUri = async (path: string) => {
   const source = await object.Body!.transformToByteArray();
   const buffer = await sharp(source, { failOn: 'none' }).png().toBuffer();
 
-  return `data:image/png;base64,${buffer.toString('base64')}`;
+  return `data:image/png;base64,${Uint8Array.from(buffer).toBase64()}`;
 };

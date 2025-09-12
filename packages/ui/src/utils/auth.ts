@@ -1,10 +1,9 @@
-import { base64url } from 'rfc4648';
 import { decode, encode } from './text';
 
 export const serializeOAuthState = (state: unknown) => {
-  return base64url.stringify(encode(JSON.stringify(state)), { pad: false });
+  return encode(JSON.stringify(state)).toBase64({ alphabet: 'base64url', omitPadding: true });
 };
 
 export const deserializeOAuthState = (state: string) => {
-  return JSON.parse(decode(base64url.parse(state, { loose: true })));
+  return JSON.parse(decode(Uint8Array.fromBase64(state, { alphabet: 'base64url', lastChunkHandling: 'loose' })));
 };

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { base64 } from 'rfc4648';
   import { encode } from '../utils';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
@@ -16,11 +15,9 @@
   let { style, freq = 1.6, opacity = 1, seed = 2, children }: Props = $props();
 
   const url = $derived(
-    `url(data:image/svg+xml;base64,${base64.stringify(
-      encode(
-        `<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'><filter id='grain'><feTurbulence type='fractalNoise' baseFrequency='${freq}' numOctaves='4' seed='${seed}' /><feColorMatrix type='saturate' values='0' /><feComponentTransfer> <feFuncA type='discrete' tableValues='0 ${opacity}' /></feComponentTransfer></filter><rect width='100%' height='100%' filter='url(#grain)'/></svg>`,
-      ),
-    )})`,
+    `url(data:image/svg+xml;base64,${encode(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'><filter id='grain'><feTurbulence type='fractalNoise' baseFrequency='${freq}' numOctaves='4' seed='${seed}' /><feColorMatrix type='saturate' values='0' /><feComponentTransfer> <feFuncA type='discrete' tableValues='0 ${opacity}' /></feComponentTransfer></filter><rect width='100%' height='100%' filter='url(#grain)'/></svg>`,
+    ).toBase64()})`,
   );
 </script>
 

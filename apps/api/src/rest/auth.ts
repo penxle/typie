@@ -7,7 +7,6 @@ import { deleteCookie, getCookie } from 'hono/cookie';
 import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
-import { base64url } from 'rfc4648';
 import { redis } from '@/cache';
 import { db, first, UserSessions } from '@/db';
 import { env } from '@/env';
@@ -155,7 +154,7 @@ auth.post('/token', async (c) => {
       }
 
       const hash = createHash('sha256').update(code_verifier).digest();
-      const codeChallenge = base64url.stringify(hash, { pad: false });
+      const codeChallenge = new Uint8Array(hash).toBase64({ alphabet: 'base64url', omitPadding: true });
 
       if (codeChallenge !== authCode.codeChallenge) {
         return c.json({ error: 'invalid_grant', error_description: 'code_verifier is invalid.' }, 400);

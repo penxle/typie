@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import * as jose from 'jose';
-import { base64url } from 'rfc4648';
 
 if (!process.argv[2]) {
   console.error('Usage: node scripts/generate-jwk.ts <kid>');
@@ -21,4 +20,4 @@ console.log(JSON.stringify(jwk, undefined, 2));
 
 console.log();
 console.log('Environment variable representation:');
-console.log(base64url.stringify(new TextEncoder().encode(JSON.stringify(jwk)), { pad: false }));
+console.log(new TextEncoder().encode(JSON.stringify(jwk)).toBase64({ alphabet: 'base64url', omitPadding: true }));

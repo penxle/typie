@@ -192,8 +192,8 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
       activities: activitiesByMonth[monthKey],
     }));
 
-  const avatarBuffer = await ky(`https://typie.net/images/${user.avatarPath}?s=256&f=png`).arrayBuffer();
-  const avatarBase64 = Buffer.from(avatarBuffer).toString('base64');
+  const avatarBuffer = await ky(`https://typie.net/images/${user.avatarPath}?s=256&f=png`).bytes();
+  const avatarBase64 = avatarBuffer.toBase64();
 
   const node = (
     <div

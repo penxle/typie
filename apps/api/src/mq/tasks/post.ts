@@ -3,7 +3,6 @@ import dayjs from 'dayjs';
 import { and, asc, eq, gt, lt, lte, notInArray, or, sql } from 'drizzle-orm';
 import { rapidhash } from 'rapidhash-js';
 import * as R from 'remeda';
-import { base64 } from 'rfc4648';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
@@ -83,7 +82,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
     for (const [userId, data] of Object.entries(pendingUpdates)) {
       const prevSnapshot = Y.snapshot(doc);
-      const update = Y.mergeUpdatesV2(data.map(({ data }) => base64.parse(data)));
+      const update = Y.mergeUpdatesV2(data.map(({ data }) => Uint8Array.fromBase64(data)));
 
       Y.applyUpdateV2(doc, update);
       const snapshot = Y.snapshot(doc);

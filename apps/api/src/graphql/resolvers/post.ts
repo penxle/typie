@@ -3,7 +3,6 @@ import dayjs from 'dayjs';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
-import { base64 } from 'rfc4648';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
@@ -1058,18 +1057,18 @@ builder.mutationFields((t) => ({
         });
       } else if (input.type === PostSyncType.VECTOR) {
         const state = await getPostDocument(input.postId);
-        const update = Y.diffUpdateV2(state.update, base64.parse(input.data));
+        const update = Y.diffUpdateV2(state.update, Uint8Array.fromBase64(input.data));
 
         pubsub.publish('post:sync', input.postId, {
           target: input.clientId,
           type: PostSyncType.UPDATE,
-          data: base64.stringify(update),
+          data: update.toBase64(),
         });
 
         pubsub.publish('post:sync', input.postId, {
           target: input.clientId,
           type: PostSyncType.VECTOR,
-          data: base64.stringify(state.vector),
+          data: state.vector.toBase64(),
         });
       } else if (input.type === PostSyncType.AWARENESS) {
         pubsub.publish('post:sync', input.postId, {
@@ -1313,7 +1312,7 @@ const getPostDocument = async (postId: string) => {
 
   const pendingUpdates = updates.map((update) => {
     const { data } = JSON.parse(update);
-    return base64.parse(data);
+    return Uint8Array.fromBase64(data);
   });
 
   const updatedUpdate = Y.mergeUpdatesV2([update, ...pendingUpdates]);

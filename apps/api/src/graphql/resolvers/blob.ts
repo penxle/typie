@@ -4,7 +4,6 @@ import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { getFontMetadata, toWoff2 } from '@typie/fondue';
 import { and, eq } from 'drizzle-orm';
 import qs from 'query-string';
-import { base64 } from 'rfc4648';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
 import { db, Files, first, firstOrThrow, FontFamilies, Fonts, Images, TableCode, validateDbId } from '@/db';
@@ -227,7 +226,7 @@ builder.mutationFields((t) => ({
           width: info.width!,
           height: info.height!,
           path: input.path,
-          placeholder: base64.stringify(placeholder),
+          placeholder: placeholder.toBase64(),
         })
         .returning()
         .then(firstOrThrow);
