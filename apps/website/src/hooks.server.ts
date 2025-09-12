@@ -1,3 +1,4 @@
+import '$lib/polyfills';
 import '@typie/lib/dayjs';
 
 import * as Sentry from '@sentry/sveltekit';
