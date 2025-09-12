@@ -323,10 +323,14 @@ builder.queryFields((t) => ({
 
       const siteId = entities[0].siteId;
 
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId,
-      });
+      if (entities.some((entity) => entity.availability === EntityAvailability.PRIVATE)) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId,
+        }).catch(() => {
+          throw new NotFoundError();
+        });
+      }
 
       if (entities.some((entity) => entity.siteId !== siteId)) {
         throw new TypieError({ code: 'site_mismatch' });
