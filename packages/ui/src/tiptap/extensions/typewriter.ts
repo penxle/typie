@@ -31,7 +31,7 @@ export const Typewriter = Extension.create({
       scrollIntoViewFixed:
         (options = {}) =>
         ({ editor, dispatch }) => {
-          const { pos = editor.state.selection.from, animate = false, position = 0.5 } = options;
+          const { pos = editor.state.selection.$head.pos, animate = false, position = 0.5 } = options;
 
           if (dispatch) {
             const coords = editor.view.coordsAtPos(pos);
