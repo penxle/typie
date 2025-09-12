@@ -40,7 +40,6 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
   const response = await fetch(`${publicEnv.PUBLIC_API_URL}/auth/token`, {
     method: 'POST',
     headers: {
-      'Accept-Encoding': 'zstd',
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({
