@@ -5,7 +5,6 @@ const handler: RequestHandler = async ({ url, request, params }) => {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete('Host');
   requestHeaders.delete('Accept-Encoding');
-  requestHeaders.set('Accept-Encoding', 'zstd');
 
   const response = await fetch(`${env.PUBLIC_API_URL}/auth/${params.rest}${url.search}`, {
     method: request.method,
@@ -15,9 +14,6 @@ const handler: RequestHandler = async ({ url, request, params }) => {
   });
 
   const responseHeaders = new Headers(response.headers);
-  responseHeaders.delete('Content-Length');
-  responseHeaders.delete('Content-Encoding');
-  responseHeaders.delete('Transfer-Encoding');
 
   return new Response(response.body, {
     status: response.status,

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { compression, getClientAddress } from '@typie/lib';
+import { getClientAddress } from '@typie/lib';
 import { Hono } from 'hono';
 import { getMimeType } from 'hono/utils/mime';
 
@@ -22,8 +22,6 @@ export const serve = async ({ Server, manifest, prerendered }) => {
   await sveltekit.init({ env: process.env });
 
   const app = new Hono();
-
-  app.use('*', compression());
 
   app.get('/healthz', (c) => c.json({ '*': true }));
   app.get('/healthz/liveness', (c) => c.json({ '*': true }));

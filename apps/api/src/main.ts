@@ -2,7 +2,7 @@ import '@/instrument';
 import '@typie/lib/dayjs';
 import '@/mq';
 
-import { compression, logger } from '@typie/lib';
+import { logger } from '@typie/lib';
 import { websocket } from 'hono/bun';
 import { HTTPException } from 'hono/http-exception';
 import { app } from '@/app';
@@ -13,7 +13,6 @@ import { rest } from '@/rest';
 
 const log = logger.getChild('main');
 
-app.use('*', compression());
 app.use('*', async (c, next) => {
   const context = await deriveContext(c);
   c.set('context', context);
