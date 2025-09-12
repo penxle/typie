@@ -26,14 +26,14 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
     },
-    body: await request.blob(),
+    body: request.body,
   });
 
   if (response.status === 401) {
     cookies.delete('typie-at', { path: '/' });
   }
 
-  const responseBody = await response.blob();
+  const responseBody = response.body;
   const responseHeaders = new Headers(response.headers);
 
   return new Response(responseBody, {
