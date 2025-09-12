@@ -1,5 +1,5 @@
 export const compressZstd = async (data: Uint8Array): Promise<Uint8Array> => {
-  const buffer = await Bun.zstdCompress(data, { level: 19 });
+  const buffer = await Bun.zstdCompress(data, { level: 6 });
   return Uint8Array.from(buffer);
 };
 
