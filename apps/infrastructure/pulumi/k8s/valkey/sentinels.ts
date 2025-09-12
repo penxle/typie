@@ -29,7 +29,7 @@ class Sentinel extends pulumi.ComponentResource {
           architecture: 'replication',
 
           commonConfiguration: dedent`
-            maxmemory 2gb
+            maxmemory 1500mb
             maxmemory-policy noeviction
           `,
 
