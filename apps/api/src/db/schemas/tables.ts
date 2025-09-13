@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { boolean, index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
 import { TableCode } from './codes';
 import * as E from './enums';
 import { createDbId } from './id';
@@ -425,7 +425,7 @@ export const PostContents = pgTable(
     body: jsonb('body').notNull().$type<JSONContent>(),
     text: text('text').notNull(),
     characterCount: integer('character_count').notNull().default(0),
-    blobSize: integer('blob_size').notNull().default(0),
+    blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),
     storedMarks: jsonb('stored_marks').notNull().$type<unknown[]>().default([]),
     layoutMode: E._PostLayoutMode('layout_mode').notNull().default('SCROLL'),
     pageLayout: jsonb('page_layout').$type<PageLayout>(),
