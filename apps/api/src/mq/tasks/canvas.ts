@@ -153,6 +153,17 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
   }
 });
 
+export const CanvasSyncScanCron = defineCron('canvas:sync:scan', '* * * * *', async () => {
+  const keys = await redis.keys('canvas:sync:updates:*');
+
+  await Promise.all(
+    keys.map((key) =>
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      enqueueJob('canvas:sync:collect', key.split(':').at(-1)!),
+    ),
+  );
+});
+
 type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: string) => {

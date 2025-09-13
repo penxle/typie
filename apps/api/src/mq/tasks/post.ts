@@ -231,9 +231,21 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
     await enqueueJob('post:index', postId, {
       deduplication: {
         id: postId,
+        ttl: 60 * 1000,
       },
     });
   }
+});
+
+export const PostSyncScanCron = defineCron('post:sync:scan', '* * * * *', async () => {
+  const keys = await redis.keys('post:sync:updates:*');
+
+  await Promise.all(
+    keys.map((key) =>
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      enqueueJob('post:sync:collect', key.split(':').at(-1)!),
+    ),
+  );
 });
 
 export const PostIndexJob = defineJob('post:index', async (postId: string) => {
