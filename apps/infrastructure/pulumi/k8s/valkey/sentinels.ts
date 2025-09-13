@@ -58,8 +58,8 @@ class Sentinel extends pulumi.ComponentResource {
             replicaCount: 1,
 
             resources: {
-              requests: { cpu: '2' },
-              limits: { memory: '4Gi' },
+              requests: { cpu: '4' },
+              limits: { memory: '8Gi' },
             },
 
             persistence: {
@@ -71,8 +71,8 @@ class Sentinel extends pulumi.ComponentResource {
             replicaCount: args.replicas,
 
             resources: {
-              requests: { cpu: '2' },
-              limits: { memory: '4Gi' },
+              requests: { cpu: '4' },
+              limits: { memory: '8Gi' },
             },
 
             persistence: {
