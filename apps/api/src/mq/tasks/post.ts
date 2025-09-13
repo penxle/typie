@@ -214,11 +214,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
   const updatesLeft = await redis.scard(`post:sync:updates:${postId}`);
   if (updatesLeft > 0) {
-    await enqueueJob('post:sync:collect', postId, {
-      deduplication: {
-        id: postId,
-      },
-    });
+    await enqueueJob('post:sync:collect', postId);
   }
 
   if (snapshotUpdated) {

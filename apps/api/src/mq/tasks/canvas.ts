@@ -130,11 +130,7 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
 
   const updatesLeft = await redis.scard(`canvas:sync:updates:${canvasId}`);
   if (updatesLeft > 0) {
-    await enqueueJob('canvas:sync:collect', canvasId, {
-      deduplication: {
-        id: canvasId,
-      },
-    });
+    await enqueueJob('canvas:sync:collect', canvasId);
   }
 
   if (snapshotUpdated) {
