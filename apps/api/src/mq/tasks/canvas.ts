@@ -20,7 +20,7 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
 
   let snapshotUpdated = false;
 
-  const updates = await redis.smembers(`canvas:sync:updates:${canvasId}`);
+  const updates = await redis.srandmember(`canvas:sync:updates:${canvasId}`, 5);
   if (updates.length === 0) {
     return;
   }

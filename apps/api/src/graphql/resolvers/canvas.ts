@@ -441,8 +441,13 @@ builder.mutationFields((t) => ({
           },
         });
       } else if (input.type === CanvasSyncType.VECTOR) {
-        const state = await getCanvasDocument(input.canvasId);
-        const update = Y.diffUpdateV2(state.update, Uint8Array.fromBase64(input.data));
+        const contents = await db
+          .select({ update: CanvasContents.update, vector: CanvasContents.vector })
+          .from(CanvasContents)
+          .where(eq(CanvasContents.canvasId, input.canvasId))
+          .then(firstOrThrow);
+
+        const update = Y.diffUpdateV2(contents.update, Uint8Array.fromBase64(input.data));
 
         pubsub.publish('canvas:sync', input.canvasId, {
           target: input.clientId,
@@ -453,7 +458,7 @@ builder.mutationFields((t) => ({
         pubsub.publish('canvas:sync', input.canvasId, {
           target: input.clientId,
           type: CanvasSyncType.VECTOR,
-          data: state.vector.toBase64(),
+          data: contents.vector.toBase64(),
         });
       } else if (input.type === CanvasSyncType.AWARENESS) {
         pubsub.publish('canvas:sync', input.canvasId, {
@@ -548,36 +553,3 @@ builder.subscriptionFields((t) => ({
     },
   }),
 }));
-
-/**
- * * Utils
- */
-
-const getCanvasDocument = async (canvasId: string) => {
-  const { update, vector } = await db
-    .select({ update: CanvasContents.update, vector: CanvasContents.vector })
-    .from(CanvasContents)
-    .where(eq(CanvasContents.canvasId, canvasId))
-    .then(firstOrThrow);
-
-  const updates = await redis.smembers(`canvas:sync:updates:${canvasId}`);
-  if (updates.length === 0) {
-    return {
-      update,
-      vector,
-    };
-  }
-
-  const pendingUpdates = updates.map((update) => {
-    const { data } = JSON.parse(update);
-    return Uint8Array.fromBase64(data);
-  });
-
-  const updatedUpdate = Y.mergeUpdatesV2([update, ...pendingUpdates]);
-  const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
-
-  return {
-    update: updatedUpdate,
-    vector: updatedVector,
-  };
-};

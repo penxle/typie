@@ -79,6 +79,7 @@ setex
 shiki
 sindresorhus
 smembers
+srandmember
 srem
 sslmode
 stakater
