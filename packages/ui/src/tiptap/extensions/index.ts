@@ -14,6 +14,7 @@ export * from './placeholder';
 export * from './safari-ime-fix';
 export * from './search';
 export * from './selection';
+export * from './sentence-navigation';
 export * from './syntax-highlight';
 export * from './template-placeholder';
 export * from './trailing-node';

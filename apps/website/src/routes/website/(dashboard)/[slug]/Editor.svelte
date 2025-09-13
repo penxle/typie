@@ -27,7 +27,6 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import XIcon from '~icons/lucide/x';
   import { browser } from '$app/environment';
-  import { goto } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { unfurlEmbed, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import PostMenu from '../@context-menu/PostMenu.svelte';
@@ -632,38 +631,6 @@
 
         forceSync();
         Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
-      }
-
-      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const currentEntityId = entity.id;
-
-        let siblingEntities: { id: string; slug: string; node: { __typename: string } }[] = [];
-
-        if (entity.parent) {
-          siblingEntities = entity.parent.children.filter((child) => child.node.__typename === 'Post');
-        } else {
-          siblingEntities = entity.site.entities.filter((entity) => entity.node.__typename === 'Post');
-        }
-
-        const currentIndex = siblingEntities.findIndex((entity) => entity.id === currentEntityId);
-        if (currentIndex === -1) return;
-
-        let targetIndex;
-        if (e.key === 'ArrowUp') {
-          targetIndex = currentIndex - 1;
-          if (targetIndex < 0) targetIndex = siblingEntities.length - 1;
-        } else {
-          targetIndex = currentIndex + 1;
-          if (targetIndex >= siblingEntities.length) targetIndex = 0;
-        }
-
-        const targetEntity = siblingEntities[targetIndex];
-        if (targetEntity && targetEntity.slug) {
-          await goto(`/${targetEntity.slug}`);
-        }
       }
     });
 
