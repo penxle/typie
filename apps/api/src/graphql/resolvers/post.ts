@@ -1056,8 +1056,13 @@ builder.mutationFields((t) => ({
           },
         });
       } else if (input.type === PostSyncType.VECTOR) {
-        const state = await getPostDocument(input.postId);
-        const update = Y.diffUpdateV2(state.update, Uint8Array.fromBase64(input.data));
+        const contents = await db
+          .select({ update: PostContents.update, vector: PostContents.vector })
+          .from(PostContents)
+          .where(eq(PostContents.postId, input.postId))
+          .then(firstOrThrow);
+
+        const update = Y.diffUpdateV2(contents.update, Uint8Array.fromBase64(input.data));
 
         pubsub.publish('post:sync', input.postId, {
           target: input.clientId,
@@ -1068,7 +1073,7 @@ builder.mutationFields((t) => ({
         pubsub.publish('post:sync', input.postId, {
           target: input.clientId,
           type: PostSyncType.VECTOR,
-          data: state.vector.toBase64(),
+          data: contents.vector.toBase64(),
         });
       } else if (input.type === PostSyncType.AWARENESS) {
         pubsub.publish('post:sync', input.postId, {
@@ -1290,36 +1295,3 @@ builder.subscriptionFields((t) => ({
     },
   }),
 }));
-
-/**
- * * Utils
- */
-
-const getPostDocument = async (postId: string) => {
-  const { update, vector } = await db
-    .select({ update: PostContents.update, vector: PostContents.vector })
-    .from(PostContents)
-    .where(eq(PostContents.postId, postId))
-    .then(firstOrThrow);
-
-  const updates = await redis.smembers(`post:sync:updates:${postId}`);
-  if (updates.length === 0) {
-    return {
-      update,
-      vector,
-    };
-  }
-
-  const pendingUpdates = updates.map((update) => {
-    const { data } = JSON.parse(update);
-    return Uint8Array.fromBase64(data);
-  });
-
-  const updatedUpdate = Y.mergeUpdatesV2([update, ...pendingUpdates]);
-  const updatedVector = Y.encodeStateVectorFromUpdateV2(updatedUpdate);
-
-  return {
-    update: updatedUpdate,
-    vector: updatedVector,
-  };
-};

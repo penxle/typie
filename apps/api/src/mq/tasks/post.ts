@@ -47,7 +47,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
   let snapshotUpdated = false;
 
-  const updates = await redis.smembers(`post:sync:updates:${postId}`);
+  const updates = await redis.srandmember(`post:sync:updates:${postId}`, 5);
   if (updates.length === 0) {
     return;
   }
