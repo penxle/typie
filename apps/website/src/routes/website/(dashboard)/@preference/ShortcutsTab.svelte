@@ -30,6 +30,7 @@
 
   const isMac = typeof window !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
   const modKey = isMac ? 'Cmd' : 'Ctrl';
+  const altKey = isMac ? 'Option' : 'Alt';
 
   const shortcutCategories: ShortcutCategory[] = [
     {
@@ -51,6 +52,10 @@
         { keys: [modKey, 'V'], description: '붙여넣기' },
         { keys: [modKey, 'A'], description: '문단 선택 (반복시 전체 선택)' },
         { keys: [modKey, 'F'], description: '찾기, 바꾸기 열기' },
+        { keys: [altKey, '↑'], description: '이전 문장 경계로 이동' },
+        { keys: [altKey, '↓'], description: '다음 문장 경계로 이동' },
+        { keys: ['Shift', altKey, '↑'], description: '이전 문장 경계까지 선택' },
+        { keys: ['Shift', altKey, '↓'], description: '다음 문장 경계까지 선택' },
       ],
     },
     {
@@ -72,13 +77,6 @@
         { keys: [modKey, 'K'], description: '빠른 검색 열기' },
         { keys: ['/'], description: '슬래시 메뉴 열기' },
         { keys: ['Esc'], description: '열린 메뉴 닫기' },
-      ],
-    },
-    {
-      title: '내비게이션',
-      shortcuts: [
-        { keys: ['Alt', '↑'], description: '폴더 내 이전 포스트로 이동' },
-        { keys: ['Alt', '↓'], description: '폴더 내 다음 포스트로 이동' },
       ],
     },
     {
