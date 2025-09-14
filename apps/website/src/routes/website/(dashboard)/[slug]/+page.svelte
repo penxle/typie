@@ -96,12 +96,24 @@
     });
   });
 
-  afterNavigate(async () => {
-    if ($query && $query.me.id === focusedEntity?.user.id && focusedEntity?.state === EntityState.ACTIVE) {
-      await viewEntity({ entityId: focusedEntity.id });
+  let hasTrackedView = $state(false);
 
+  $effect(() => {
+    if (
+      focusedEntity &&
+      $query &&
+      $query.me.id === focusedEntity.user.id &&
+      focusedEntity.state === EntityState.ACTIVE &&
+      !hasTrackedView
+    ) {
+      hasTrackedView = true;
+      viewEntity({ entityId: focusedEntity.id });
       fb.track('ViewContent');
     }
+  });
+
+  afterNavigate(() => {
+    hasTrackedView = false;
   });
 
   let loaded = $state(false);
