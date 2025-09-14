@@ -5,17 +5,14 @@
   import Anchor from './Anchor.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type * as Y from 'yjs';
 
   type Props = {
-    doc: Y.Doc;
+    anchors: YState<Record<string, string | null>>;
     editor: Ref<Editor> | undefined;
     showOutline?: boolean;
   };
 
-  let { doc, editor, showOutline = false }: Props = $props();
-
-  const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
+  let { anchors, editor, showOutline = false }: Props = $props();
 
   const anchorElements = $derived.by(() => {
     if (!editor?.current) {
