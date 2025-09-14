@@ -40,7 +40,7 @@
   let isLoading = $state(true);
   let editingAnchor = $state<string | null>(null);
   let editingName = $state('');
-  let docAnchors = $derived(editor?.current?.storage.anchors.current || {});
+  let docAnchors = $derived(editor?.current?.storage?.anchors?.current || {});
   let inputEl = $state<HTMLInputElement>();
 
   const loadAnchors = async () => {

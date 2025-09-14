@@ -239,6 +239,7 @@
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
   const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
+  const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
 
   const viewTitle = $derived(viewDoc ? new YState<string>(viewDoc, 'title', '') : undefined);
   const viewSubtitle = $derived(viewDoc ? new YState<string>(viewDoc, 'subtitle', '') : undefined);
@@ -1173,8 +1174,8 @@
               <FloatingFindReplace close={() => (app.state.findReplaceOpenByViewId[splitViewId] = false)} {editor} />
             {/if}
 
-            {#if editor && !editorContext?.timeline}
-              <Anchors {doc} {editor} showOutline={showAnchorOutline} />
+            {#if editor && anchors && !editorContext?.timeline}
+              <Anchors {anchors} {editor} showOutline={showAnchorOutline} />
             {/if}
           </div>
         </div>
