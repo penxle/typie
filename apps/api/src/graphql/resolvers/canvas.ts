@@ -427,7 +427,7 @@ builder.mutationFields((t) => ({
           data: input.data,
         });
 
-        await redis.sadd(
+        await redis.lpush(
           `canvas:sync:updates:${input.canvasId}`,
           JSON.stringify({
             userId: ctx.session.userId,
@@ -435,11 +435,7 @@ builder.mutationFields((t) => ({
           }),
         );
 
-        await enqueueJob('canvas:sync:collect', input.canvasId, {
-          deduplication: {
-            id: input.canvasId,
-          },
-        });
+        await enqueueJob('canvas:sync:collect', input.canvasId);
       } else if (input.type === CanvasSyncType.VECTOR) {
         const contents = await db
           .select({ update: CanvasContents.update, vector: CanvasContents.vector })
