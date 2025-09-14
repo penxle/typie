@@ -1,7 +1,6 @@
 import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
 import { and, asc, eq, gt, lt, lte, notInArray, or, sql } from 'drizzle-orm';
-import { rapidhash } from 'rapidhash-js';
 import * as R from 'remeda';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
@@ -18,6 +17,7 @@ import {
   PostSnapshots,
 } from '@/db';
 import { EntityState, PostLayoutMode } from '@/enums';
+import { Lock } from '@/lock';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
@@ -40,18 +40,23 @@ const getBlobSize = (node: Node) => {
 };
 
 export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: string) => {
-  const updates = await redis.rpop(`post:sync:updates:${postId}`, 5);
-  if (updates === null || updates.length === 0) {
+  const lock = new Lock(`post:${postId}`);
+
+  const acquired = await lock.tryAcquire();
+  if (!acquired) {
     return;
   }
 
+  let updates: string[] = [];
   let snapshotUpdated = false;
 
   try {
-    await db.transaction(async (tx) => {
-      const hash = BigInt(rapidhash(postId)) % BigInt('9223372036854775807');
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
+    updates = (await redis.rpop(`post:sync:updates:${postId}`, 5)) ?? [];
+    if (updates.length === 0) {
+      return;
+    }
 
+    await db.transaction(async (tx) => {
       const post = await tx
         .select({
           id: Posts.id,
@@ -204,9 +209,15 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
             });
         }
       }
+
+      lock.signal.throwIfAborted();
     });
   } catch {
-    await redis.rpush(`post:sync:updates:${postId}`, ...updates);
+    if (updates.length > 0) {
+      await redis.rpush(`post:sync:updates:${postId}`, ...updates);
+    }
+  } finally {
+    await lock.release();
   }
 
   const updatesLeft = await redis.llen(`post:sync:updates:${postId}`);
@@ -279,186 +290,196 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
 type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
 
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
-  await db.transaction(async (tx) => {
-    const hash = BigInt(rapidhash(postId)) % BigInt('9223372036854775807');
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
+  const lock = new Lock(`post:${postId}`);
 
-    const snapshots = await tx
-      .select({ id: PostSnapshots.id, createdAt: PostSnapshots.createdAt })
-      .from(PostSnapshots)
-      .where(eq(PostSnapshots.postId, postId))
-      .orderBy(asc(PostSnapshots.createdAt), asc(PostSnapshots.order));
+  const acquired = await lock.tryAcquire();
+  if (!acquired) {
+    return;
+  }
 
-    if (snapshots.length === 0) {
-      await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
-      return;
-    }
+  try {
+    await db.transaction(async (tx) => {
+      const snapshots = await tx
+        .select({ id: PostSnapshots.id, createdAt: PostSnapshots.createdAt })
+        .from(PostSnapshots)
+        .where(eq(PostSnapshots.postId, postId))
+        .orderBy(asc(PostSnapshots.createdAt), asc(PostSnapshots.order));
 
-    const contributors = await tx
-      .select({ snapshotId: PostSnapshotContributors.snapshotId, userId: PostSnapshotContributors.userId })
-      .from(PostSnapshotContributors)
-      .innerJoin(PostSnapshots, eq(PostSnapshotContributors.snapshotId, PostSnapshots.id))
-      .where(eq(PostSnapshots.postId, postId));
-
-    const contributorsBySnapshotId = new Map<string, Set<string>>();
-    for (const contributor of contributors) {
-      const userIds = contributorsBySnapshotId.get(contributor.snapshotId) ?? new Set();
-      userIds.add(contributor.userId);
-      contributorsBySnapshotId.set(contributor.snapshotId, userIds);
-    }
-
-    const threshold24h = dayjs().subtract(24, 'hours');
-    const threshold2w = dayjs().subtract(2, 'weeks');
-    const windowedSnapshots = new Map<string, Snapshot>();
-
-    for (const snapshot of snapshots) {
-      const userIds = [...(contributorsBySnapshotId.get(snapshot.id) ?? [])];
-
-      const window = snapshot.createdAt.isAfter(threshold24h)
-        ? snapshot.createdAt.toISOString()
-        : snapshot.createdAt.isAfter(threshold2w)
-          ? snapshot.createdAt.startOf('minute').toISOString()
-          : snapshot.createdAt.startOf('hour').toISOString();
-
-      const windowedSnapshot = windowedSnapshots.get(window);
-
-      if (windowedSnapshot) {
-        windowedSnapshots.set(window, {
-          id: snapshot.id,
-          createdAt: snapshot.createdAt,
-          userIds: new Set([...windowedSnapshot.userIds, ...userIds]),
-        });
-      } else {
-        windowedSnapshots.set(window, {
-          id: snapshot.id,
-          createdAt: snapshot.createdAt,
-          userIds: new Set(userIds),
-        });
+      if (snapshots.length === 0) {
+        await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
+        return;
       }
-    }
 
-    const retainedSnapshots = [...windowedSnapshots.values()].sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
+      const contributors = await tx
+        .select({ snapshotId: PostSnapshotContributors.snapshotId, userId: PostSnapshotContributors.userId })
+        .from(PostSnapshotContributors)
+        .innerJoin(PostSnapshots, eq(PostSnapshotContributors.snapshotId, PostSnapshots.id))
+        .where(eq(PostSnapshots.postId, postId));
 
-    if (retainedSnapshots.length === snapshots.length) {
-      await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
-      return;
-    }
+      const contributorsBySnapshotId = new Map<string, Set<string>>();
+      for (const contributor of contributors) {
+        const userIds = contributorsBySnapshotId.get(contributor.snapshotId) ?? new Set();
+        userIds.add(contributor.userId);
+        contributorsBySnapshotId.set(contributor.snapshotId, userIds);
+      }
 
-    const content = await tx
-      .select({ update: PostContents.update })
-      .from(PostContents)
-      .where(eq(PostContents.postId, postId))
-      .then(firstOrThrow);
+      const threshold24h = dayjs().subtract(24, 'hours');
+      const threshold2w = dayjs().subtract(2, 'weeks');
+      const windowedSnapshots = new Map<string, Snapshot>();
 
-    const oldDoc = new Y.Doc({ gc: false });
-    Y.applyUpdateV2(oldDoc, content.update);
+      for (const snapshot of snapshots) {
+        const userIds = [...(contributorsBySnapshotId.get(snapshot.id) ?? [])];
 
-    await tx.delete(PostSnapshots).where(
-      and(
-        eq(PostSnapshots.postId, postId),
-        notInArray(
-          PostSnapshots.id,
-          retainedSnapshots.map(({ id }) => id),
+        const window = snapshot.createdAt.isAfter(threshold24h)
+          ? snapshot.createdAt.toISOString()
+          : snapshot.createdAt.isAfter(threshold2w)
+            ? snapshot.createdAt.startOf('minute').toISOString()
+            : snapshot.createdAt.startOf('hour').toISOString();
+
+        const windowedSnapshot = windowedSnapshots.get(window);
+
+        if (windowedSnapshot) {
+          windowedSnapshots.set(window, {
+            id: snapshot.id,
+            createdAt: snapshot.createdAt,
+            userIds: new Set([...windowedSnapshot.userIds, ...userIds]),
+          });
+        } else {
+          windowedSnapshots.set(window, {
+            id: snapshot.id,
+            createdAt: snapshot.createdAt,
+            userIds: new Set(userIds),
+          });
+        }
+      }
+
+      const retainedSnapshots = [...windowedSnapshots.values()].sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
+
+      if (retainedSnapshots.length === snapshots.length) {
+        await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
+        return;
+      }
+
+      const content = await tx
+        .select({ update: PostContents.update })
+        .from(PostContents)
+        .where(eq(PostContents.postId, postId))
+        .then(firstOrThrow);
+
+      const oldDoc = new Y.Doc({ gc: false });
+      Y.applyUpdateV2(oldDoc, content.update);
+
+      await tx.delete(PostSnapshots).where(
+        and(
+          eq(PostSnapshots.postId, postId),
+          notInArray(
+            PostSnapshots.id,
+            retainedSnapshots.map(({ id }) => id),
+          ),
         ),
-      ),
-    );
+      );
 
-    const newDoc = new Y.Doc({ gc: false });
-    let index = 0;
+      const newDoc = new Y.Doc({ gc: false });
+      let index = 0;
 
-    for (const snapshot of retainedSnapshots) {
-      const { snapshot: snapshotData } = await tx
-        .delete(PostSnapshots)
-        .where(eq(PostSnapshots.id, snapshot.id))
-        .returning({ snapshot: PostSnapshots.snapshot })
-        .then(firstOrThrow);
+      for (const snapshot of retainedSnapshots) {
+        const { snapshot: snapshotData } = await tx
+          .delete(PostSnapshots)
+          .where(eq(PostSnapshots.id, snapshot.id))
+          .returning({ snapshot: PostSnapshots.snapshot })
+          .then(firstOrThrow);
 
-      let snapshotDoc;
-      try {
-        const decompressedSnapshot = await decompressZstd(snapshotData);
-        snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
-      } catch {
-        continue;
+        let snapshotDoc;
+        try {
+          const decompressedSnapshot = await decompressZstd(snapshotData);
+          snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
+        } catch {
+          continue;
+        }
+
+        if (index === 0) {
+          Y.applyUpdateV2(newDoc, Y.encodeStateAsUpdateV2(snapshotDoc));
+        } else {
+          const newStateVector = Y.encodeStateVector(newDoc);
+          const snapshotStateVector = Y.encodeStateVector(snapshotDoc);
+
+          const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, snapshotStateVector);
+
+          const undoManager = new Y.UndoManager(snapshotDoc, { trackedOrigins: new Set(['snapshot']) });
+          Y.applyUpdateV2(snapshotDoc, missingUpdate, 'snapshot');
+          undoManager.undo();
+
+          const revertUpdate = Y.encodeStateAsUpdateV2(snapshotDoc, newStateVector);
+          Y.applyUpdateV2(newDoc, revertUpdate);
+        }
+
+        const newSnapshotData = Y.encodeSnapshotV2(Y.snapshot(newDoc));
+        const compressedNewSnapshot = await compressZstd(newSnapshotData);
+
+        const postSnapshot = await tx
+          .insert(PostSnapshots)
+          .values({
+            postId,
+            snapshot: compressedNewSnapshot,
+            createdAt: snapshot.createdAt,
+            order: 0,
+          })
+          .returning({ id: PostSnapshots.id })
+          .then(firstOrThrow);
+
+        if (snapshot.userIds.size > 0) {
+          await tx.insert(PostSnapshotContributors).values(
+            [...snapshot.userIds].map((userId) => ({
+              snapshotId: postSnapshot.id,
+              userId,
+            })),
+          );
+        }
+
+        index++;
       }
 
-      if (index === 0) {
-        Y.applyUpdateV2(newDoc, Y.encodeStateAsUpdateV2(snapshotDoc));
-      } else {
-        const newStateVector = Y.encodeStateVector(newDoc);
-        const snapshotStateVector = Y.encodeStateVector(snapshotDoc);
+      const beforeSnapshot = Y.snapshot(newDoc);
 
-        const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, snapshotStateVector);
+      const newStateVector = Y.encodeStateVector(newDoc);
+      const oldStateVector = Y.encodeStateVector(oldDoc);
 
-        const undoManager = new Y.UndoManager(snapshotDoc, { trackedOrigins: new Set(['snapshot']) });
-        Y.applyUpdateV2(snapshotDoc, missingUpdate, 'snapshot');
-        undoManager.undo();
+      const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, oldStateVector);
 
-        const revertUpdate = Y.encodeStateAsUpdateV2(snapshotDoc, newStateVector);
-        Y.applyUpdateV2(newDoc, revertUpdate);
-      }
+      const undoManager = new Y.UndoManager(oldDoc, { trackedOrigins: new Set(['snapshot']) });
+      Y.applyUpdateV2(oldDoc, missingUpdate, 'snapshot');
+      undoManager.undo();
 
-      const newSnapshotData = Y.encodeSnapshotV2(Y.snapshot(newDoc));
-      const compressedNewSnapshot = await compressZstd(newSnapshotData);
+      const revertUpdate = Y.encodeStateAsUpdateV2(oldDoc, newStateVector);
+      Y.applyUpdateV2(newDoc, revertUpdate);
 
-      const postSnapshot = await tx
-        .insert(PostSnapshots)
-        .values({
+      const afterSnapshot = Y.snapshot(newDoc);
+
+      if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
+        const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
+        const compressedFinalSnapshot = await compressZstd(finalSnapshotData);
+
+        await tx.insert(PostSnapshots).values({
           postId,
-          snapshot: compressedNewSnapshot,
-          createdAt: snapshot.createdAt,
+          snapshot: compressedFinalSnapshot,
           order: 0,
-        })
-        .returning({ id: PostSnapshots.id })
-        .then(firstOrThrow);
-
-      if (snapshot.userIds.size > 0) {
-        await tx.insert(PostSnapshotContributors).values(
-          [...snapshot.userIds].map((userId) => ({
-            snapshotId: postSnapshot.id,
-            userId,
-          })),
-        );
+        });
       }
 
-      index++;
-    }
+      await tx
+        .update(PostContents)
+        .set({
+          update: Y.encodeStateAsUpdateV2(newDoc),
+          vector: Y.encodeStateVector(newDoc),
+          compactedAt: dayjs(),
+        })
+        .where(eq(PostContents.postId, postId));
 
-    const beforeSnapshot = Y.snapshot(newDoc);
-
-    const newStateVector = Y.encodeStateVector(newDoc);
-    const oldStateVector = Y.encodeStateVector(oldDoc);
-
-    const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, oldStateVector);
-
-    const undoManager = new Y.UndoManager(oldDoc, { trackedOrigins: new Set(['snapshot']) });
-    Y.applyUpdateV2(oldDoc, missingUpdate, 'snapshot');
-    undoManager.undo();
-
-    const revertUpdate = Y.encodeStateAsUpdateV2(oldDoc, newStateVector);
-    Y.applyUpdateV2(newDoc, revertUpdate);
-
-    const afterSnapshot = Y.snapshot(newDoc);
-
-    if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
-      const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
-      const compressedFinalSnapshot = await compressZstd(finalSnapshotData);
-
-      await tx.insert(PostSnapshots).values({
-        postId,
-        snapshot: compressedFinalSnapshot,
-        order: 0,
-      });
-    }
-
-    await tx
-      .update(PostContents)
-      .set({
-        update: Y.encodeStateAsUpdateV2(newDoc),
-        vector: Y.encodeStateVector(newDoc),
-        compactedAt: dayjs(),
-      })
-      .where(eq(PostContents.postId, postId));
-  });
+      lock.signal.throwIfAborted();
+    });
+  } finally {
+    await lock.release();
+  }
 });
 
 export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', async () => {

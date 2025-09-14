@@ -11,6 +11,7 @@ amazonses
 batang
 bbox
 bento
+blpop
 buildx
 bullmq
 bunx
