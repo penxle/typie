@@ -435,7 +435,11 @@ builder.mutationFields((t) => ({
           }),
         );
 
-        await enqueueJob('canvas:sync:collect', input.canvasId);
+        await enqueueJob('canvas:sync:collect', input.canvasId, {
+          deduplication: {
+            id: input.canvasId,
+          },
+        });
       } else if (input.type === CanvasSyncType.VECTOR) {
         const contents = await db
           .select({ update: CanvasContents.update, vector: CanvasContents.vector })
