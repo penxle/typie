@@ -1042,7 +1042,7 @@ builder.mutationFields((t) => ({
           data: input.data,
         });
 
-        await redis.sadd(
+        await redis.lpush(
           `post:sync:updates:${input.postId}`,
           JSON.stringify({
             userId: ctx.session.userId,
@@ -1050,11 +1050,7 @@ builder.mutationFields((t) => ({
           }),
         );
 
-        await enqueueJob('post:sync:collect', input.postId, {
-          deduplication: {
-            id: input.postId,
-          },
-        });
+        await enqueueJob('post:sync:collect', input.postId);
       } else if (input.type === PostSyncType.VECTOR) {
         const contents = await db
           .select({ update: PostContents.update, vector: PostContents.vector })

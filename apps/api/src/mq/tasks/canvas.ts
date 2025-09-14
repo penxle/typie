@@ -8,127 +8,128 @@ import { CanvasContents, Canvases, CanvasSnapshotContributors, CanvasSnapshots, 
 import { EntityState } from '@/enums';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
+import { compressZstd, decompressZstd } from '@/utils/compression';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
 import type { CanvasShape } from '@/db/schemas/json';
 
 export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canvasId: string) => {
-  const updatesAvailable = await redis.scard(`canvas:sync:updates:${canvasId}`);
-  if (updatesAvailable === 0) {
+  const updates = await redis.rpop(`canvas:sync:updates:${canvasId}`, 5);
+  if (updates === null || updates.length === 0) {
     return;
   }
 
   let snapshotUpdated = false;
 
-  const updates = await redis.srandmember(`canvas:sync:updates:${canvasId}`, 5);
-  if (updates.length === 0) {
-    return;
-  }
+  try {
+    await db.transaction(async (tx) => {
+      const hash = BigInt(rapidhash(canvasId)) % BigInt('9223372036854775807');
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
 
-  await db.transaction(async (tx) => {
-    const hash = BigInt(rapidhash(canvasId)) % BigInt('9223372036854775807');
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(${hash})`);
-
-    const canvas = await tx
-      .select({
-        id: Canvases.id,
-        update: CanvasContents.update,
-        siteId: Entities.siteId,
-      })
-      .from(Canvases)
-      .innerJoin(CanvasContents, eq(Canvases.id, CanvasContents.canvasId))
-      .innerJoin(Entities, eq(Canvases.entityId, Entities.id))
-      .where(eq(Canvases.id, canvasId))
-      .then(firstOrThrow);
-
-    const pendingUpdates = R.groupBy(
-      updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
-      ({ userId }) => userId,
-    );
-
-    const doc = new Y.Doc({ gc: false });
-    Y.applyUpdateV2(doc, canvas.update);
-
-    let order = 0;
-
-    for (const [userId, data] of Object.entries(pendingUpdates)) {
-      const prevSnapshot = Y.snapshot(doc);
-      const update = Y.mergeUpdatesV2(data.map(({ data }) => Uint8Array.fromBase64(data)));
-
-      Y.applyUpdateV2(doc, update);
-      const snapshot = Y.snapshot(doc);
-
-      if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
-        snapshotUpdated = true;
-
-        const canvasSnapshot = await tx
-          .insert(CanvasSnapshots)
-          .values({
-            canvasId,
-            snapshot: Y.encodeSnapshotV2(snapshot),
-            order: order++,
-          })
-          .returning({ id: CanvasSnapshots.id })
-          .then(firstOrThrow);
-
-        await tx.insert(CanvasSnapshotContributors).values({
-          snapshotId: canvasSnapshot.id,
-          userId,
-        });
-      }
-    }
-
-    await tx
-      .update(CanvasContents)
-      .set({
-        update: Y.encodeStateAsUpdateV2(doc),
-        vector: Y.encodeStateVector(doc),
-      })
-      .where(eq(CanvasContents.canvasId, canvasId));
-
-    if (snapshotUpdated) {
-      const map = doc.getMap('attrs');
-      const title = (map.get('title') as string) || null;
-
-      const fragment = doc.getXmlFragment('shapes');
-      const shapes: CanvasShape[] = [];
-      fragment.forEach((element) => {
-        if (element instanceof Y.XmlElement) {
-          const type = element.nodeName;
-          const attrs: Record<string, unknown> = {};
-          for (const [key, value] of Object.entries(element.getAttributes())) {
-            if (value !== undefined && value !== null) {
-              attrs[key] = JSON.parse(value as string);
-            }
-          }
-
-          shapes.push({ type, attrs });
-        }
-      });
-
-      const updatedAt = dayjs();
-
-      await tx
-        .update(Canvases)
-        .set({
-          title,
-          updatedAt,
+      const canvas = await tx
+        .select({
+          id: Canvases.id,
+          update: CanvasContents.update,
+          siteId: Entities.siteId,
         })
-        .where(eq(Canvases.id, canvasId));
+        .from(Canvases)
+        .innerJoin(CanvasContents, eq(Canvases.id, CanvasContents.canvasId))
+        .innerJoin(Entities, eq(Canvases.entityId, Entities.id))
+        .where(eq(Canvases.id, canvasId))
+        .then(firstOrThrow);
+
+      const pendingUpdates = R.groupBy(
+        updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
+        ({ userId }) => userId,
+      );
+
+      const doc = new Y.Doc({ gc: false });
+      Y.applyUpdateV2(doc, canvas.update);
+
+      let order = 0;
+
+      for (const [userId, data] of Object.entries(pendingUpdates)) {
+        const prevSnapshot = Y.snapshot(doc);
+        const update = Y.mergeUpdatesV2(data.map(({ data }) => Uint8Array.fromBase64(data)));
+
+        Y.applyUpdateV2(doc, update);
+        const snapshot = Y.snapshot(doc);
+
+        if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
+          snapshotUpdated = true;
+
+          const snapshotData = Y.encodeSnapshotV2(snapshot);
+          const compressedSnapshot = await compressZstd(snapshotData);
+
+          const canvasSnapshot = await tx
+            .insert(CanvasSnapshots)
+            .values({
+              canvasId,
+              snapshot: compressedSnapshot,
+              order: order++,
+            })
+            .returning({ id: CanvasSnapshots.id })
+            .then(firstOrThrow);
+
+          await tx.insert(CanvasSnapshotContributors).values({
+            snapshotId: canvasSnapshot.id,
+            userId,
+          });
+        }
+      }
 
       await tx
         .update(CanvasContents)
         .set({
-          shapes,
-          updatedAt,
+          update: Y.encodeStateAsUpdateV2(doc),
+          vector: Y.encodeStateVector(doc),
         })
         .where(eq(CanvasContents.canvasId, canvasId));
-    }
-  });
 
-  await redis.srem(`canvas:sync:updates:${canvasId}`, ...updates);
+      if (snapshotUpdated) {
+        const map = doc.getMap('attrs');
+        const title = (map.get('title') as string) || null;
 
-  const updatesLeft = await redis.scard(`canvas:sync:updates:${canvasId}`);
+        const fragment = doc.getXmlFragment('shapes');
+        const shapes: CanvasShape[] = [];
+        fragment.forEach((element) => {
+          if (element instanceof Y.XmlElement) {
+            const type = element.nodeName;
+            const attrs: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(element.getAttributes())) {
+              if (value !== undefined && value !== null) {
+                attrs[key] = JSON.parse(value as string);
+              }
+            }
+
+            shapes.push({ type, attrs });
+          }
+        });
+
+        const updatedAt = dayjs();
+
+        await tx
+          .update(Canvases)
+          .set({
+            title,
+            updatedAt,
+          })
+          .where(eq(Canvases.id, canvasId));
+
+        await tx
+          .update(CanvasContents)
+          .set({
+            shapes,
+            updatedAt,
+          })
+          .where(eq(CanvasContents.canvasId, canvasId));
+      }
+    });
+  } catch {
+    await redis.rpush(`canvas:sync:updates:${canvasId}`, ...updates);
+  }
+
+  const updatesLeft = await redis.llen(`canvas:sync:updates:${canvasId}`);
   if (updatesLeft > 0) {
     await enqueueJob('canvas:sync:collect', canvasId);
   }
@@ -263,7 +264,8 @@ export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: str
 
       let snapshotDoc;
       try {
-        snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(snapshotData));
+        const decompressedSnapshot = await decompressZstd(snapshotData);
+        snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
       } catch {
         continue;
       }
@@ -284,11 +286,14 @@ export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: str
         Y.applyUpdateV2(newDoc, revertUpdate);
       }
 
+      const newSnapshotData = Y.encodeSnapshotV2(Y.snapshot(newDoc));
+      const compressedNewSnapshot = await compressZstd(newSnapshotData);
+
       const canvasSnapshot = await tx
         .insert(CanvasSnapshots)
         .values({
           canvasId,
-          snapshot: Y.encodeSnapshotV2(Y.snapshot(newDoc)),
+          snapshot: compressedNewSnapshot,
           createdAt: snapshot.createdAt,
           order: 0,
         })
@@ -324,9 +329,12 @@ export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: str
     const afterSnapshot = Y.snapshot(newDoc);
 
     if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
+      const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
+      const compressedFinalSnapshot = await compressZstd(finalSnapshotData);
+
       await tx.insert(CanvasSnapshots).values({
         canvasId,
-        snapshot: Y.encodeSnapshotV2(afterSnapshot),
+        snapshot: compressedFinalSnapshot,
         order: 0,
       });
     }

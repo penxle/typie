@@ -39,6 +39,8 @@ karpenter
 khtml
 konva
 kubeconfig
+llen
+lpush
 lucide
 luthor
 meili
@@ -70,6 +72,8 @@ resvg
 ridi
 rlib
 roughjs
+rpop
+rpush
 sadd
 saeeum
 sark
