@@ -2,13 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import {
-    calculateAnchorPositions,
-    cleanOrphanAnchors,
-    findAnchorableNode,
-    getAnchorElements,
-    getLastNodeOffsetTop,
-  } from '@typie/ui/anchor';
+  import { calculateAnchorPositions, findAnchorableNode, getAnchorElements, getLastNodeOffsetTop } from '@typie/ui/anchor';
   import { Icon, RingSpinner } from '@typie/ui/components';
   import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
@@ -54,8 +48,6 @@
 
     try {
       await tick();
-
-      cleanOrphanAnchors(editor.current, doc);
 
       const anchorElements = getAnchorElements(editor.current, Object.keys(docAnchors));
 
