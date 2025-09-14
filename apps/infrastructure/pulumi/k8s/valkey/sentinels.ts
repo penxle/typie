@@ -31,6 +31,11 @@ class Sentinel extends pulumi.ComponentResource {
           commonConfiguration: dedent`
             maxmemory 3gb
             maxmemory-policy noeviction
+
+            appendonly yes
+            appendfsync everysec
+
+            save ""
           `,
 
           useHostnames: false,
@@ -42,6 +47,11 @@ class Sentinel extends pulumi.ComponentResource {
           sentinel: {
             enabled: true,
             primarySet: 'primary',
+
+            resources: {
+              requests: { cpu: '500m' },
+              limits: { memory: '1Gi' },
+            },
 
             service: {
               type: 'LoadBalancer',
@@ -58,12 +68,26 @@ class Sentinel extends pulumi.ComponentResource {
             replicaCount: 1,
 
             resources: {
-              requests: { cpu: '4' },
-              limits: { memory: '8Gi' },
+              requests: { cpu: '2' },
+              limits: { memory: '4Gi' },
             },
 
             persistence: {
-              enabled: false,
+              storageClass: 'gp3',
+              size: '20Gi',
+            },
+
+            affinity: {
+              podAntiAffinity: {
+                requiredDuringSchedulingIgnoredDuringExecution: [
+                  {
+                    labelSelector: {
+                      matchExpressions: [{ key: 'app.kubernetes.io/name', operator: 'In', values: [args.name] }],
+                    },
+                    topologyKey: 'kubernetes.io/hostname',
+                  },
+                ],
+              },
             },
           },
 
@@ -71,12 +95,26 @@ class Sentinel extends pulumi.ComponentResource {
             replicaCount: args.replicas,
 
             resources: {
-              requests: { cpu: '4' },
-              limits: { memory: '8Gi' },
+              requests: { cpu: '2' },
+              limits: { memory: '4Gi' },
             },
 
             persistence: {
-              enabled: false,
+              storageClass: 'gp3',
+              size: '20Gi',
+            },
+
+            affinity: {
+              podAntiAffinity: {
+                requiredDuringSchedulingIgnoredDuringExecution: [
+                  {
+                    labelSelector: {
+                      matchExpressions: [{ key: 'app.kubernetes.io/name', operator: 'In', values: [args.name] }],
+                    },
+                    topologyKey: 'kubernetes.io/hostname',
+                  },
+                ],
+              },
             },
           },
 
@@ -85,6 +123,11 @@ class Sentinel extends pulumi.ComponentResource {
             serviceMonitor: { enabled: true },
             podMonitor: { enabled: true },
             prometheusRule: { enabled: true },
+
+            resources: {
+              requests: { cpu: '500m' },
+              limits: { memory: '1Gi' },
+            },
           },
         },
       },
