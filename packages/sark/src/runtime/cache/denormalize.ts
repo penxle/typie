@@ -1,7 +1,7 @@
 import { EntityLinkKey, RootFieldKey } from './types';
 import { deepMerge, getCompatibleTypes, isEntityLink, isKeyableEntity, isScalar, makeEntityKey, makeFieldKey } from './utils';
 import type { ArtifactSchema, FragmentSpreadSelection, InlineFragmentSelection, ObjectFieldSelection, Selection } from '../../types';
-import type { Data, EntityKey, FieldKey, Storage, Variables } from './types';
+import type { Data, FieldKey, Storage, StorageKey, Variables } from './types';
 
 export type DenormalizeResult = {
   data: Data;
@@ -12,7 +12,7 @@ export const denormalize = (
   schema: ArtifactSchema,
   variables: Variables,
   storage: Storage,
-  accessor?: (entityKey: EntityKey, fieldKey: FieldKey) => void,
+  accessor?: (storageKey: StorageKey, fieldKey: FieldKey) => void,
 ): DenormalizeResult => {
   let partial = false;
 
@@ -20,13 +20,14 @@ export const denormalize = (
     parent: ObjectFieldSelection | FragmentSpreadSelection | InlineFragmentSelection | null,
     children: Selection[],
     value: unknown,
+    key?: StorageKey,
   ): unknown => {
     if (isScalar(value)) {
       return value;
     }
 
     if (Array.isArray(value)) {
-      return value.map((item) => denormalizeField(parent, children, item));
+      return value.map((item) => denormalizeField(parent, children, item, key));
     }
 
     if (isEntityLink(value)) {
@@ -39,7 +40,7 @@ export const denormalize = (
         return null;
       }
 
-      return denormalizeField(parent, children, entity);
+      return denormalizeField(parent, children, entity, entityKey);
     }
 
     if (typeof value === 'object') {
@@ -70,7 +71,9 @@ export const denormalize = (
           case 'ObjectField': {
             const fieldKey = makeFieldKey(selection, variables);
 
-            if (isKeyableEntity(value)) {
+            if (key === RootFieldKey) {
+              accessor?.(RootFieldKey, fieldKey);
+            } else if (isKeyableEntity(value)) {
               const entityKey = makeEntityKey({ __typename: value.__typename ?? parent?.type.name, id: value.id });
               accessor?.(entityKey, fieldKey);
             }
@@ -80,14 +83,14 @@ export const denormalize = (
             if (fieldValue === undefined) {
               partial = true;
             } else {
-              fields[selection.alias || selection.name] = denormalizeField(selection, selection.children, fieldValue);
+              fields[selection.alias || selection.name] = denormalizeField(selection, selection.children, fieldValue, key);
             }
 
             break;
           }
 
           case 'FragmentSpread': {
-            const result = denormalizeField(selection, schema.selections.fragments[selection.name], value);
+            const result = denormalizeField(selection, schema.selections.fragments[selection.name], value, key);
             fields = deepMerge(fields, result, { arrayStrategy: 'merge' });
 
             break;
@@ -101,7 +104,7 @@ export const denormalize = (
 
             const compatibleTypes = getCompatibleTypes(selection.type);
             if (compatibleTypes.includes(typename)) {
-              const result = denormalizeField(selection, selection.children, value);
+              const result = denormalizeField(selection, selection.children, value, key);
               fields = deepMerge(fields, result, { arrayStrategy: 'merge' });
             }
 
@@ -116,7 +119,7 @@ export const denormalize = (
     throw new Error('Invalid value');
   };
 
-  const data = denormalizeField(null, schema.selections.operation, storage[RootFieldKey]) as Data;
+  const data = denormalizeField(null, schema.selections.operation, storage[RootFieldKey], RootFieldKey) as Data;
 
   return {
     data,

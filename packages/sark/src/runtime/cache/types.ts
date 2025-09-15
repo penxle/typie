@@ -28,4 +28,4 @@ export type Variables = Record<string, unknown>;
 
 export type QueryKey = `${string}$${string}`;
 
-export type DependencyKey = `${EntityKey}:${FieldKey}` | `${EntityKey}:*`;
+export type DependencyKey = `${EntityKey}:${FieldKey}` | `${EntityKey}:*` | `Query:${FieldKey}`;

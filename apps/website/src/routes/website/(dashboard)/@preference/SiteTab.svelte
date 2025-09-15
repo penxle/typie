@@ -123,7 +123,7 @@
                 actionLabel: '삭제',
                 actionHandler: async () => {
                   await archiveFont({ fontId: id });
-                  cache.invalidate({ __typename: 'User', id: $user.id, fields: 'fontFamilies' });
+                  cache.invalidate({ __typename: 'User', id: $user.id, field: 'fontFamilies' });
                 },
               });
             }}

@@ -1,29 +1,33 @@
 import { createCache } from './cache';
-import type { EntityKey, FieldKey } from './types';
+import { RootFieldKey } from './types';
+import { makeFieldKeyWithArgs } from './utils';
+import type { StorageKey } from './types';
 
 const cache = createCache();
 
 type InvalidateTarget =
-  | string
   | { __typename: string; id: string | number }
-  | { __typename: string; id: string | number; fields: string | string[] };
+  | { __typename: string; id: string | number; field: string; args?: Record<string, unknown> }
+  | { __typename: 'Query' }
+  | { __typename: 'Query'; field: string; args?: Record<string, unknown> };
 
 export const cacheOperations = {
   invalidate(...targets: InvalidateTarget[]) {
     for (const target of targets) {
-      if (typeof target === 'string') {
-        cache.invalidate(target as EntityKey);
-      } else {
-        const entityKey = `${target.__typename}:${target.id}` as EntityKey;
-
-        if ('fields' in target) {
-          const fields = Array.isArray(target.fields) ? target.fields : [target.fields];
-          for (const field of fields) {
-            cache.invalidate(entityKey, field as FieldKey);
-          }
+      if (target.__typename === 'Query') {
+        if ('field' in target) {
+          const fieldKey = makeFieldKeyWithArgs(target.field, target.args);
+          cache.invalidate(RootFieldKey, fieldKey);
         } else {
-          cache.invalidate(entityKey);
+          cache.invalidate(RootFieldKey);
         }
+      } else if ('field' in target && 'id' in target) {
+        const storageKey = `${target.__typename}:${target.id}` as StorageKey;
+        const fieldKey = makeFieldKeyWithArgs(target.field, target.args);
+        cache.invalidate(storageKey, fieldKey);
+      } else if ('id' in target) {
+        const storageKey = `${target.__typename}:${target.id}` as StorageKey;
+        cache.invalidate(storageKey);
       }
     }
   },

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { denormalize } from './denormalize';
 import { makeArtifactSchema, makeRootFieldKey } from './tests/utils';
 import { EntityLinkKey, RootFieldKey } from './types';
+import type { StorageKey } from './types';
 
 describe('denormalize', () => {
   test('ID로 정규화된 엔티티를 역정규화한다', () => {
@@ -1546,8 +1547,8 @@ describe('denormalize', () => {
       },
     };
 
-    const accessedEntities: { entityKey: string; fieldKey: string }[] = [];
-    const accessor = (entityKey: string, fieldKey: string) => {
+    const accessedEntities: { entityKey: StorageKey; fieldKey: string }[] = [];
+    const accessor = (entityKey: StorageKey, fieldKey: string) => {
       accessedEntities.push({ entityKey, fieldKey });
     };
 

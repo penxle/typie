@@ -42,6 +42,13 @@ export const makeQueryKey = (schema: ArtifactSchema, variables: Variables): Quer
   return `${schema.name}$${hashVariables(variables)}`;
 };
 
+export const makeFieldKeyWithArgs = (field: string, args?: Variables): FieldKey => {
+  if (!args || Object.keys(args).length === 0) {
+    return field;
+  }
+  return `${field}$${hashVariables(args)}`;
+};
+
 const hashVariables = (variables: Variables) => {
   return rapidhash(stringify(variables)).toString(16);
 };
