@@ -1,4 +1,4 @@
-import { env } from '$env/dynamic/public';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
 const handler: RequestHandler = async ({ url, request, params }) => {
@@ -6,7 +6,7 @@ const handler: RequestHandler = async ({ url, request, params }) => {
   requestHeaders.delete('Host');
   requestHeaders.delete('Accept-Encoding');
 
-  const response = await fetch(`${env.PUBLIC_API_URL}/auth/${params.rest}${url.search}`, {
+  const response = await fetch(`${env.PRIVATE_API_URL}/auth/${params.rest}${url.search}`, {
     method: request.method,
     headers: requestHeaders,
     body: request.method === 'POST' ? request.body : undefined,

@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { dev } from '$app/environment';
-import { env } from '$env/dynamic/public';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
@@ -18,7 +18,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     });
   }
 
-  const response = await fetch(`${env.PUBLIC_API_URL}/graphql`, {
+  const response = await fetch(`${env.PRIVATE_API_URL}/graphql`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
