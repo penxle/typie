@@ -8,9 +8,9 @@ import { RootFieldKey } from './types';
 import { deepMerge, entries, makeDependencyKey, makeQueryKey } from './utils';
 import type { Source, Subject } from 'wonka';
 import type { $ArtifactSchema, ArtifactSchema } from '../../types';
-import type { Data, DependencyKey, EntityKey, FieldKey, QueryKey, Storage, Variables } from './types';
+import type { Data, DependencyKey, EntityKey, FieldKey, QueryKey, Storage, StorageKey, Variables } from './types';
 
-type Path = `${EntityKey}.${FieldKey}`;
+type Path = `${EntityKey}.${FieldKey}` | `Query.${FieldKey}`;
 type Query = {
   schema: ArtifactSchema;
   paths: Set<Path>;
@@ -76,8 +76,8 @@ export class Cache {
       this.#queries.set(queryKey, { paths: new Set(), schema, variables });
     }
 
-    const result = denormalize(schema, variables, this.#storage, (entityKey, fieldKey) => {
-      this.#trackDependency(queryKey, entityKey, fieldKey);
+    const result = denormalize(schema, variables, this.#storage, (storageKey, fieldKey) => {
+      this.#trackDependency(queryKey, storageKey, fieldKey);
     });
 
     const resultHash = rapidhash(stringify(result.data)).toString();
@@ -118,29 +118,46 @@ export class Cache {
     });
   }
 
-  invalidate(entityKey: EntityKey, fieldKey?: FieldKey) {
-    if (fieldKey && this.#storage[entityKey] && typeof this.#storage[entityKey] === 'object') {
+  invalidate(storageKey: StorageKey, fieldKey?: FieldKey) {
+    if (fieldKey && this.#storage[storageKey] && typeof this.#storage[storageKey] === 'object') {
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-      delete this.#storage[entityKey][fieldKey];
+      delete this.#storage[storageKey][fieldKey];
 
-      const fieldUpdates = new Map<EntityKey, Set<FieldKey>>([[entityKey, new Set([fieldKey])]]);
-      this.#refreshAffectedQueries(fieldUpdates);
+      if (storageKey === RootFieldKey) {
+        const dependencyKey: DependencyKey = `Query:${fieldKey}`;
+        const affectedQueries = this.#dependencies.get(dependencyKey) ?? new Set();
+
+        for (const queryKey of affectedQueries) {
+          this.#refreshQuery(queryKey);
+        }
+      } else {
+        const fieldUpdates = new Map<EntityKey, Set<FieldKey>>([[storageKey as EntityKey, new Set([fieldKey])]]);
+        this.#refreshAffectedQueries(fieldUpdates);
+      }
     } else if (!fieldKey) {
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-      delete this.#storage[entityKey];
+      delete this.#storage[storageKey];
 
-      const affectedQueries = new Set<QueryKey>();
+      if (storageKey === RootFieldKey) {
+        this.#storage[RootFieldKey] = {};
 
-      for (const [dependencyKey, queryKeys] of this.#dependencies.entries()) {
-        if (dependencyKey.startsWith(`${entityKey}:`)) {
-          for (const queryKey of queryKeys) {
-            affectedQueries.add(queryKey);
+        for (const queryKey of this.#queries.keys()) {
+          this.#refreshQuery(queryKey);
+        }
+      } else {
+        const affectedQueries = new Set<QueryKey>();
+
+        for (const [dependencyKey, queryKeys] of this.#dependencies.entries()) {
+          if (dependencyKey.startsWith(`${storageKey}:`)) {
+            for (const queryKey of queryKeys) {
+              affectedQueries.add(queryKey);
+            }
           }
         }
-      }
 
-      for (const queryKey of affectedQueries) {
-        this.#refreshQuery(queryKey);
+        for (const queryKey of affectedQueries) {
+          this.#refreshQuery(queryKey);
+        }
       }
     }
   }
@@ -167,28 +184,38 @@ export class Cache {
       });
     }
 
-    return denormalize(schema, variables, this.#storage, (entityKey, fieldKey) => {
-      this.#trackDependency(queryKey, entityKey, fieldKey);
+    return denormalize(schema, variables, this.#storage, (storageKey, fieldKey) => {
+      this.#trackDependency(queryKey, storageKey, fieldKey);
     });
   }
 
-  #trackDependency(queryKey: QueryKey, entityKey: EntityKey, fieldKey: FieldKey) {
+  #trackDependency(queryKey: QueryKey, storageKey: StorageKey, fieldKey: FieldKey) {
     const dependency = this.#queries.get(queryKey);
     if (!dependency) {
       return;
     }
 
-    dependency.paths.add(`${entityKey}.${fieldKey}`);
+    if (storageKey === RootFieldKey) {
+      dependency.paths.add(`Query.${fieldKey}`);
 
-    const entityDependencyKey = makeDependencyKey(entityKey);
-    const entityDependencies = this.#dependencies.get(entityDependencyKey) ?? new Set();
-    entityDependencies.add(queryKey);
-    this.#dependencies.set(entityDependencyKey, entityDependencies);
+      const fieldDependencyKey: DependencyKey = `Query:${fieldKey}`;
+      const fieldDependencies = this.#dependencies.get(fieldDependencyKey) ?? new Set();
+      fieldDependencies.add(queryKey);
+      this.#dependencies.set(fieldDependencyKey, fieldDependencies);
+    } else {
+      const entityKey = storageKey as EntityKey;
+      dependency.paths.add(`${entityKey}.${fieldKey}`);
 
-    const fieldDependencyKey = makeDependencyKey(entityKey, fieldKey);
-    const fieldDependencies = this.#dependencies.get(fieldDependencyKey) ?? new Set();
-    fieldDependencies.add(queryKey);
-    this.#dependencies.set(fieldDependencyKey, fieldDependencies);
+      const entityDependencyKey = makeDependencyKey(entityKey);
+      const entityDependencies = this.#dependencies.get(entityDependencyKey) ?? new Set();
+      entityDependencies.add(queryKey);
+      this.#dependencies.set(entityDependencyKey, entityDependencies);
+
+      const fieldDependencyKey = makeDependencyKey(entityKey, fieldKey);
+      const fieldDependencies = this.#dependencies.get(fieldDependencyKey) ?? new Set();
+      fieldDependencies.add(queryKey);
+      this.#dependencies.set(fieldDependencyKey, fieldDependencies);
+    }
   }
 
   #refreshQuery(queryKey: QueryKey) {
@@ -199,8 +226,8 @@ export class Cache {
 
     query.paths.clear();
 
-    const result = denormalize(query.schema, query.variables, this.#storage, (entityKey, fieldKey) => {
-      this.#trackDependency(queryKey, entityKey, fieldKey);
+    const result = denormalize(query.schema, query.variables, this.#storage, (storageKey, fieldKey) => {
+      this.#trackDependency(queryKey, storageKey, fieldKey);
     });
 
     const resultHash = rapidhash(stringify(result.data)).toString();
