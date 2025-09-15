@@ -133,7 +133,7 @@
       gap: '32px',
       width: 'full',
       minWidth: 'fit',
-      minHeight: 'full',
+      minHeight: 'fit',
       padding: '32px',
       backgroundColor: 'surface.default',
       borderWidth: '1px',
