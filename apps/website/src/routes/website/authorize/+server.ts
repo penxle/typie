@@ -37,7 +37,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     return new Response('Missing code', { status: 400 });
   }
 
-  const response = await fetch(`${publicEnv.PUBLIC_API_URL}/auth/token`, {
+  const response = await fetch(`${privateEnv.PRIVATE_API_URL}/auth/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
