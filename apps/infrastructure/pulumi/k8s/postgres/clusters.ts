@@ -138,6 +138,7 @@ class Cluster extends pulumi.ComponentResource {
           primaryUpdateMethod: 'switchover',
 
           instances: args.instances,
+          enablePDB: pulumi.output(args.instances).apply((instances) => instances > 1),
 
           resources: {
             requests: { cpu: args.resources.cpu },
