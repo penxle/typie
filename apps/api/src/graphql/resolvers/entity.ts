@@ -321,20 +321,19 @@ builder.queryFields((t) => ({
         return [];
       }
 
-      const siteId = entities[0].siteId;
+      const privateEntities = entities.filter((entity) => entity.availability === EntityAvailability.PRIVATE);
+      const privateSiteIds = [...new Set(privateEntities.map((entity) => entity.siteId))];
 
-      if (entities.some((entity) => entity.availability === EntityAvailability.PRIVATE)) {
-        await assertSitePermission({
-          userId: ctx.session.userId,
-          siteId,
-        }).catch(() => {
-          throw new NotFoundError();
-        });
-      }
-
-      if (entities.some((entity) => entity.siteId !== siteId)) {
-        throw new TypieError({ code: 'site_mismatch' });
-      }
+      await Promise.all(
+        privateSiteIds.map((siteId) =>
+          assertSitePermission({
+            userId: ctx.session.userId,
+            siteId,
+          }).catch(() => {
+            throw new NotFoundError();
+          }),
+        ),
+      );
 
       return entities;
     },
