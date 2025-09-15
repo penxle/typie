@@ -74,11 +74,10 @@
         fontWeight: 'medium',
         textAlign: 'left',
         transition: 'common',
-        _enabled: {
-          _hover: { backgroundColor: 'surface.muted' },
-        },
+        _hover: { backgroundColor: 'surface.muted' },
         _disabled: {
-          color: 'text.disabled',
+          color: 'text.disabled!',
+          backgroundColor: 'transparent!',
         },
       },
     },
