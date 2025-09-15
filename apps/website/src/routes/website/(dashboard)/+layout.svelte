@@ -283,3 +283,16 @@
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <UserSurveyModal bind:open={userSurveyModalOpen} />
+
+<div
+  class={cx(
+    'tooltip-container',
+    css({
+      position: 'fixed',
+      inset: '0',
+      zIndex: 'tooltip',
+      pointerEvents: 'none',
+      overflow: 'hidden',
+    }),
+  )}
+></div>

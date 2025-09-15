@@ -5,7 +5,7 @@ import type { FloatingElement, Middleware, OffsetOptions, Placement, ReferenceEl
 import type { Action } from 'svelte/action';
 
 export type ReferenceAction = Action<ReferenceElement>;
-export type FloatingAction = Action<FloatingElement, { appendTo?: Element } | undefined>;
+export type FloatingAction = Action<FloatingElement, { appendTo?: Element | null } | undefined>;
 export type ArrowAction = Action<HTMLElement>;
 export type UpdatePosition = () => Promise<void>;
 
