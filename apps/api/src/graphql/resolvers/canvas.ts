@@ -13,14 +13,15 @@ import {
   first,
   firstOrThrow,
   firstOrThrowWith,
+  Notes,
   TableCode,
   validateDbId,
 } from '@/db';
-import { CanvasSyncType, EntityAvailability, EntityState, EntityType } from '@/enums';
+import { CanvasSyncType, EntityAvailability, EntityState, EntityType, NoteState } from '@/enums';
 import { NotFoundError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
-import { generateEntityOrder, generatePermalink, generateSlug, makeCanvasYDoc } from '@/utils';
+import { generateFractionalOrder, generatePermalink, generateSlug, makeCanvasYDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Canvas, CanvasSnapshot, CanvasView, Entity, EntityView, ICanvas, isTypeOf } from '../objects';
@@ -199,7 +200,7 @@ builder.mutationFields((t) => ({
             slug: generateSlug(),
             permalink: generatePermalink(),
             type: EntityType.CANVAS,
-            order: generateEntityOrder({ lower: last?.order, upper: null }),
+            order: generateFractionalOrder({ lower: last?.order, upper: null }),
             depth,
           })
           .returning({ id: Entities.id })
@@ -315,7 +316,7 @@ builder.mutationFields((t) => ({
             slug: generateSlug(),
             permalink: generatePermalink(),
             type: EntityType.CANVAS,
-            order: generateEntityOrder({ lower: entity.order, upper: nextEntity?.order }),
+            order: generateFractionalOrder({ lower: entity.order, upper: nextEntity?.order }),
             depth: entity.depth,
           })
           .returning({ id: Entities.id })
@@ -379,13 +380,20 @@ builder.mutationFields((t) => ({
         siteId: entity.siteId,
       });
 
-      await db
-        .update(Entities)
-        .set({
-          state: EntityState.DELETED,
-          deletedAt: dayjs(),
-        })
-        .where(eq(Entities.id, entity.id));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(Entities)
+          .set({
+            state: EntityState.DELETED,
+            deletedAt: dayjs(),
+          })
+          .where(eq(Entities.id, entity.id));
+
+        await tx
+          .update(Notes)
+          .set({ state: NoteState.DELETED_CASCADED })
+          .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)));
+      });
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });

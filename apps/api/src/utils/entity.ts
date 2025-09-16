@@ -1,7 +1,6 @@
 import { faker } from '@faker-js/faker';
 import { getText } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
-import { generateJitteredKeyBetween, indexCharacterSet } from 'fractional-indexing-jittered';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
 import { PostLayoutMode } from '@/enums';
@@ -75,12 +74,6 @@ export const makeCanvasYDoc = ({ title, shapes }: MakeCanvasYDocParams) => {
   });
 
   return doc;
-};
-
-const charSet = indexCharacterSet({ chars: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' });
-type GenerateEntityOrderParams = { lower: string | null | undefined; upper: string | null | undefined };
-export const generateEntityOrder = ({ lower, upper }: GenerateEntityOrderParams) => {
-  return generateJitteredKeyBetween(lower ?? null, upper ?? null, charSet);
 };
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });

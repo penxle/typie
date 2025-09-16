@@ -3,13 +3,13 @@ import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, sql } fro
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
-import { Canvases, db, Entities, first, firstOrThrow, firstOrThrowWith, Folders, Posts, Sites, TableCode, validateDbId } from '@/db';
-import { EntityAvailability, EntityState, EntityType, EntityVisibility, SiteState } from '@/enums';
+import { Canvases, db, Entities, first, firstOrThrow, firstOrThrowWith, Folders, Notes, Posts, Sites, TableCode, validateDbId } from '@/db';
+import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
-import { generateEntityOrder } from '@/utils';
+import { generateFractionalOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site, SiteView, User } from '../objects';
@@ -475,7 +475,7 @@ builder.mutationFields((t) => ({
           .set({
             parentId,
             depth,
-            order: generateEntityOrder({
+            order: generateFractionalOrder({
               lower: input.lowerOrder,
               upper: input.upperOrder,
             }),
@@ -621,7 +621,7 @@ builder.mutationFields((t) => ({
         for (const entity of entities) {
           const depthDelta = targetDepth - entity.depth;
 
-          const order = generateEntityOrder({
+          const order = generateFractionalOrder({
             lower: lastOrder,
             upper: input.upperOrder ?? null,
           });
@@ -721,6 +721,19 @@ builder.mutationFields((t) => ({
           )
           .returning();
 
+        await tx
+          .update(Notes)
+          .set({ state: NoteState.DELETED_CASCADED })
+          .where(
+            and(
+              inArray(
+                Notes.entityId,
+                entities.map(({ id }) => id),
+              ),
+              eq(Notes.state, NoteState.ACTIVE),
+            ),
+          );
+
         pubsub.publish('site:update', siteId, { scope: 'site' });
         pubsub.publish('site:usage:update', siteId, null);
 
@@ -804,7 +817,7 @@ builder.mutationFields((t) => ({
             .update(Entities)
             .set({
               parentId: null,
-              order: generateEntityOrder({ lower: rootLastChildOrder, upper: null }),
+              order: generateFractionalOrder({ lower: rootLastChildOrder, upper: null }),
             })
             .where(eq(Entities.id, entity.id));
         }
@@ -829,23 +842,36 @@ builder.mutationFields((t) => ({
           `,
         );
 
+        await tx
+          .update(Notes)
+          .set({ state: NoteState.ACTIVE })
+          .where(
+            and(
+              inArray(
+                Notes.entityId,
+                updatedEntities.map(({ id }) => id),
+              ),
+              eq(Notes.state, NoteState.DELETED_CASCADED),
+            ),
+          );
+
         pubsub.publish('site:update', entity.siteId, { scope: 'site' });
         pubsub.publish('site:usage:update', entity.siteId, null);
 
         const postEntityIds = updatedEntities.filter(({ type }) => type === EntityType.POST).map(({ id }) => id);
         if (postEntityIds.length > 0) {
           const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
-          for (const post of posts) {
-            await enqueueJob('post:index', post.id);
-          }
+          const postIds = posts.map(({ id }) => id);
+
+          await Promise.all(postIds.map((postId) => enqueueJob('post:index', postId)));
         }
 
         const canvasEntityIds = updatedEntities.filter(({ type }) => type === EntityType.CANVAS).map(({ id }) => id);
         if (canvasEntityIds.length > 0) {
           const canvases = await tx.select({ id: Canvases.id }).from(Canvases).where(inArray(Canvases.entityId, canvasEntityIds));
-          for (const canvas of canvases) {
-            await enqueueJob('canvas:index', canvas.id);
-          }
+          const canvasIds = canvases.map(({ id }) => id);
+
+          await Promise.all(canvasIds.map((canvasId) => enqueueJob('canvas:index', canvasId)));
         }
 
         return entity.id;

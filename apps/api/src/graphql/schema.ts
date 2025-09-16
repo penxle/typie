@@ -9,6 +9,7 @@ import './resolvers/entity';
 import './resolvers/folder';
 import './resolvers/font';
 import './resolvers/internal';
+import './resolvers/note';
 import './resolvers/notification';
 import './resolvers/stats';
 import './resolvers/payment';

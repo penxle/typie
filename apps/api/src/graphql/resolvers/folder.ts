@@ -1,11 +1,11 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import { Canvases, db, Entities, first, firstOrThrow, Folders, PostContents, Posts, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType, EntityVisibility } from '@/enums';
+import { Canvases, db, Entities, first, firstOrThrow, Folders, Notes, PostContents, Posts, TableCode, validateDbId } from '@/db';
+import { EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
-import { generateEntityOrder, generatePermalink, generateSlug } from '@/utils';
+import { generateFractionalOrder, generatePermalink, generateSlug } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
@@ -293,7 +293,7 @@ builder.mutationFields((t) => ({
             slug: generateSlug(),
             permalink: generatePermalink(),
             type: EntityType.FOLDER,
-            order: generateEntityOrder({ lower: last?.order, upper: null }),
+            order: generateFractionalOrder({ lower: last?.order, upper: null }),
             depth,
           })
           .returning({ id: Entities.id })
@@ -383,7 +383,14 @@ builder.mutationFields((t) => ({
 
       const entityIds = [folder.entityId, ...descendants.map(({ id }) => id)];
 
-      await db.update(Entities).set({ state: EntityState.DELETED, deletedAt: dayjs() }).where(inArray(Entities.id, entityIds));
+      await db.transaction(async (tx) => {
+        await tx.update(Entities).set({ state: EntityState.DELETED, deletedAt: dayjs() }).where(inArray(Entities.id, entityIds));
+
+        await tx
+          .update(Notes)
+          .set({ state: NoteState.DELETED_CASCADED })
+          .where(and(inArray(Notes.entityId, entityIds), eq(Notes.state, NoteState.ACTIVE)));
+      });
 
       pubsub.publish('site:update', folder.siteId, { scope: 'site' });
       for (const entityId of entityIds) {
