@@ -14,17 +14,15 @@
   import PanelNote from './PanelNote.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type * as Y from 'yjs';
   import type { Editor_Panel_PanelInfo_post, Editor_Panel_PanelInfo_user } from '$graphql';
 
   type Props = {
     $post: Editor_Panel_PanelInfo_post;
     $user: Editor_Panel_PanelInfo_user;
     editor?: Ref<Editor>;
-    doc: Y.Doc;
   };
 
-  let { $post: _post, $user: _user, editor, doc }: Props = $props();
+  let { $post: _post, $user: _user, editor }: Props = $props();
 
   const post = fragment(
     _post,
@@ -66,7 +64,6 @@
 <div
   class={flex({
     flexDirection: 'column',
-    gap: '16px',
     minWidth: 'var(--min-width)',
     width: 'var(--width)',
     maxWidth: 'var(--max-width)',
@@ -89,7 +86,7 @@
     정보
   </div>
 
-  <div class={flex({ flexDirection: 'column', gap: '20px', paddingX: '20px' })}>
+  <div class={flex({ flexDirection: 'column', gap: '20px', paddingX: '20px', paddingY: '16px' })}>
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
         <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>공유 및 게시</div>
@@ -192,6 +189,6 @@
   <HorizontalDivider color="secondary" />
 
   {#if !app.preference.current.noteExpanded}
-    <PanelNote {doc} />
+    <PanelNote entityId={$post.entity.id} />
   {/if}
 </div>

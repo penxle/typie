@@ -14,6 +14,7 @@
   import PlusIcon from '~icons/lucide/plus';
   import SearchIcon from '~icons/lucide/search';
   import ShieldUserIcon from '~icons/lucide/shield-user';
+  import StickyNoteIcon from '~icons/lucide/sticky-note';
   import { goto, pushState } from '$app/navigation';
   import { updated } from '$app/state';
   import FaviconDark from '$assets/logos/favicon-dark.svg?component';
@@ -131,6 +132,7 @@
       }}
     />
     <SidebarButton icon={SearchIcon} label="검색" onclick={() => (app.state.commandPaletteOpen = true)} />
+    <SidebarButton icon={StickyNoteIcon} label="노트" onclick={() => (app.state.notesOpen = true)} />
     <Notification {$user} />
   </div>
 

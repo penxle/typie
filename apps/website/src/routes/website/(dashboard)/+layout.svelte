@@ -14,6 +14,7 @@
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
   import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
+  import Notes from './@notes/Notes.svelte';
   import ShareModal from './@share/ShareModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -53,6 +54,7 @@
 
       ...AdminImpersonateBanner_query
       ...DashboardLayout_Shortcuts_query
+      ...DashboardLayout_Notes_query
     }
   `);
 
@@ -278,6 +280,7 @@
 {/if}
 
 <CommandPalette $user={$query.me} />
+<Notes {$query} />
 <ShareModal />
 <Shortcuts {$query} />
 
