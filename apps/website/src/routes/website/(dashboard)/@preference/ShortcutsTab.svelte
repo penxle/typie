@@ -75,6 +75,7 @@
       title: '메뉴',
       shortcuts: [
         { keys: [modKey, 'K'], description: '빠른 검색 열기' },
+        { keys: [modKey, 'J'], description: '노트 열기' },
         { keys: ['/'], description: '슬래시 메뉴 열기' },
         { keys: ['Esc'], description: '열린 메뉴 닫기' },
       ],

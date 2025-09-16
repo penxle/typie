@@ -144,7 +144,7 @@
 
   {#if isExpanded}
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
-      <PanelInfo {$post} {$user} {doc} {editor} />
+      <PanelInfo {$post} {$user} {editor} />
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'anchors'}

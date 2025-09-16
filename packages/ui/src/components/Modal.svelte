@@ -6,6 +6,7 @@
   import { focusTrap, portal } from '../actions';
   import RingSpinner from './RingSpinner.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { Options as FocusTrapOptions } from 'focus-trap';
   import type { Snippet } from 'svelte';
 
   type Props = {
@@ -14,9 +15,11 @@
     children: Snippet;
     style?: SystemStyleObject;
     onclose?: () => void;
+    overlayPadding?: number;
+    focusTrapOptions?: FocusTrapOptions;
   };
 
-  let { open = $bindable(), children, style, onclose, loading = false }: Props = $props();
+  let { open = $bindable(), children, style, onclose, loading = false, overlayPadding = 20, focusTrapOptions = {} }: Props = $props();
 
   const close = () => {
     open = false;
@@ -35,12 +38,14 @@
 
 {#if open}
   <div
-    class={center({ position: 'fixed', inset: '0', zIndex: 'modal', padding: '20px', userSelect: 'none' })}
+    style:padding={`${overlayPadding}px`}
+    class={center({ position: 'fixed', inset: '0', zIndex: 'modal', userSelect: 'none' })}
     use:focusTrap={{
       fallbackFocus: '[role="none"]',
       escapeDeactivates: false,
       returnFocusOnDeactivate: true,
       allowOutsideClick: true, // NOTE: downloadFromBase64 등 외부 클릭 허용
+      ...focusTrapOptions,
     }}
     use:portal
   >

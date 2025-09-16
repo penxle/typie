@@ -684,16 +684,15 @@
 <svelte:window
   onkeydown={(e) => {
     if (!focused) return;
+    if (editorContext?.timeline || app.state.notesOpen) return;
 
     const modKey = isMacOS() || isiOS() ? e.metaKey : e.ctrlKey;
 
     if (modKey && e.key === 'z' && !e.shiftKey) {
-      if (editorContext?.timeline) return;
       e.preventDefault();
       e.stopPropagation();
       undoManager.undo();
     } else if ((modKey && e.key === 'y') || (modKey && e.key === 'z' && e.shiftKey)) {
-      if (editorContext?.timeline) return;
       e.preventDefault();
       e.stopPropagation();
       undoManager.redo();
@@ -1213,14 +1212,11 @@
               flexShrink: '0',
               borderLeftWidth: '1px',
               borderColor: 'border.subtle',
-              paddingTop: '16px',
               width: '1/4',
               height: 'full',
-              overflowY: 'auto',
-              scrollbarGutter: 'stable',
             })}
           >
-            <PanelNote {doc} />
+            <PanelNote entityId={entity.id} />
           </div>
         {/if}
 
