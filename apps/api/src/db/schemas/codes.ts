@@ -15,6 +15,7 @@ export const TableCode = {
   FONTS: 'FONT',
   FONT_FAMILIES: 'FNTF',
   IMAGES: 'IMG',
+  NOTES: 'N',
   NOTIFICATIONS: 'NT',
   PAYMENT_INVOICES: 'PYIV',
   PAYMENT_METHODS: 'PYMT',

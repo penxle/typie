@@ -273,6 +273,34 @@ export const Images = pgTable('images', {
     .default(sql`now()`),
 });
 
+export const Notes = pgTable(
+  'notes',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.NOTES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    entityId: text('entity_id').references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    content: text('content').notNull(),
+    color: text('color').notNull(),
+    order: text('order').notNull(),
+    state: E._NoteState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    unique().on(t.userId, t.order).nullsNotDistinct(),
+    index().on(t.userId, t.state, t.order),
+    index().on(t.entityId, t.state, t.order),
+  ],
+);
+
 export const Notifications = pgTable(
   'notifications',
   {

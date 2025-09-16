@@ -120,6 +120,12 @@ input CreateFolderInput {
   siteId: ID!
 }
 
+input CreateNoteInput {
+  color: String!
+  content: String!
+  entityId: ID
+}
+
 input CreatePostInput {
   parentEntityId: ID
   siteId: ID!
@@ -157,6 +163,10 @@ input DeleteEntitiesInput {
 
 input DeleteFolderInput {
   folderId: ID!
+}
+
+input DeleteNoteInput {
+  noteId: ID!
 }
 
 input DeletePostInput {
@@ -443,6 +453,12 @@ input MoveEntityInput {
   upperOrder: String
 }
 
+input MoveNoteInput {
+  lowerOrder: String
+  noteId: ID!
+  upperOrder: String
+}
+
 type Mutation {
   adminEnqueuePostCompact(input: AdminEnqueuePostCompactInput!): Boolean!
   adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
@@ -457,6 +473,7 @@ type Mutation {
   createCanvas(input: CreateCanvasInput!): Canvas!
   createComment(input: CreateCommentInput!): Comment!
   createFolder(input: CreateFolderInput!): Folder!
+  createNote(input: CreateNoteInput!): Note!
   createPost(input: CreatePostInput!): Post!
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createWsSession: String!
@@ -464,6 +481,7 @@ type Mutation {
   deleteComment(input: DeleteCommentInput!): Comment!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
+  deleteNote(input: DeleteNoteInput!): Note!
   deletePost(input: DeletePostInput!): Post!
   deleteUser: Boolean!
   duplicateCanvas(input: DuplicateCanvasInput!): Canvas!
@@ -480,6 +498,7 @@ type Mutation {
   markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
   moveEntities(input: MoveEntitiesInput!): [Entity!]!
   moveEntity(input: MoveEntityInput!): Entity!
+  moveNote(input: MoveNoteInput!): Note!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
@@ -507,6 +526,7 @@ type Mutation {
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateFoldersOption(input: UpdateFoldersOptionInput!): [Folder!]!
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
+  updateNote(input: UpdateNoteInput!): Note!
   updatePassword(input: UpdatePasswordInput!): User!
   updatePostOption(input: UpdatePostOptionInput!): Post!
   updatePostType(input: UpdatePostTypeInput!): Post!
@@ -516,6 +536,23 @@ type Mutation {
   updateUser(input: UpdateUserInput!): User!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
   viewEntity(input: ViewEntityInput!): Entity!
+}
+
+type Note {
+  color: String!
+  content: String!
+  createdAt: DateTime!
+  entity: Entity
+  id: ID!
+  order: String!
+  updatedAt: DateTime!
+  user: User!
+}
+
+enum NoteState {
+  ACTIVE
+  DELETED
+  DELETED_CASCADED
 }
 
 type Notification {
@@ -749,6 +786,8 @@ type Query {
   image(imageId: ID!): Image!
   impersonation: Impersonation
   me: User
+  note(noteId: ID!): Note!
+  notes(entityId: ID): [Note!]!
   permalink(permalink: String!): Permalink!
   post(slug: String!): Post!
   randomName: String!
@@ -975,6 +1014,13 @@ input UpdateFoldersOptionInput {
 
 input UpdateMarketingConsentInput {
   marketingConsent: Boolean!
+}
+
+input UpdateNoteInput {
+  color: String
+  content: String
+  entityId: ID
+  noteId: ID!
 }
 
 input UpdatePasswordInput {

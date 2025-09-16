@@ -60,6 +60,13 @@ export const ExportLayoutMode = {
   PAGE: 'PAGE',
 } as const;
 
+export type NoteState = keyof typeof NoteState;
+export const NoteState = {
+  ACTIVE: 'ACTIVE',
+  DELETED: 'DELETED',
+  DELETED_CASCADED: 'DELETED_CASCADED',
+} as const;
+
 export type NotificationCategory = keyof typeof NotificationCategory;
 export const NotificationCategory = {
   ANNOUNCEMENT: 'ANNOUNCEMENT',

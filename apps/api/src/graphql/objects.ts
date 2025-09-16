@@ -60,6 +60,7 @@ export const Folder = createObjectRef('Folder', T.Folders);
 export const Font = createObjectRef('Font', T.Fonts);
 export const FontFamily = createObjectRef('FontFamily', T.FontFamilies);
 export const Image = createObjectRef('Image', T.Images);
+export const Note = createObjectRef('Note', T.Notes);
 export const Notification = createObjectRef('Notification', T.Notifications);
 export const PaymentInvoice = createObjectRef('PaymentInvoice', T.PaymentInvoices);
 export const Plan = createObjectRef('Plan', T.Plans);
