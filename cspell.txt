@@ -20,6 +20,8 @@ cdylib
 cnpg
 crds
 creds
+cxzv
+dearmor
 dmarc
 dotenv
 dotum
