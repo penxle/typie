@@ -1,10 +1,11 @@
 import * as k8s from '@pulumi/kubernetes';
-import { provider } from '$k8s-baremetal/provider';
+import { provider } from '$k8s-bm/provider';
 
 new k8s.helm.v4.Chart(
-  'metrics-server@baremetal',
+  'metrics-server@bm',
   {
     name: 'metrics-server',
+
     chart: 'metrics-server',
     namespace: 'kube-system',
     repositoryOpts: {

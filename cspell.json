@@ -24,6 +24,7 @@
     "naver*.html",
     "apps/mobile/android",
     "apps/mobile/ios",
+    "apps/infrastructure/scripts",
     "packages/styled-system/styled-system"
   ],
   "dictionaries": ["cspell.txt"],

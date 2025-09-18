@@ -1,6 +1,6 @@
 import * as aws from '@pulumi/aws';
 import * as k8s from '@pulumi/kubernetes';
-import { provider } from '$k8s-baremetal/provider';
+import { provider } from '$k8s-bm/provider';
 
 const user = new aws.iam.User('cert-manager@k8s', {
   name: 'cert-manager@k8s',
@@ -36,7 +36,7 @@ const accessKey = new aws.iam.AccessKey('cert-manager@k8s', {
 });
 
 const chart = new k8s.helm.v4.Chart(
-  'cert-manager@baremetal',
+  'cert-manager@bm',
   {
     name: 'cert-manager',
 
@@ -62,7 +62,7 @@ const chart = new k8s.helm.v4.Chart(
 );
 
 const selfSignedIssuer = new k8s.apiextensions.CustomResource(
-  'self-signed@baremetal',
+  'self-signed@bm',
   {
     apiVersion: 'cert-manager.io/v1',
     kind: 'ClusterIssuer',
@@ -79,7 +79,7 @@ const selfSignedIssuer = new k8s.apiextensions.CustomResource(
 );
 
 const letsencryptStagingIssuer = new k8s.apiextensions.CustomResource(
-  'letsencrypt-staging@baremetal',
+  'letsencrypt-staging@bm',
   {
     apiVersion: 'cert-manager.io/v1',
     kind: 'ClusterIssuer',
@@ -103,7 +103,7 @@ const letsencryptStagingIssuer = new k8s.apiextensions.CustomResource(
 );
 
 const letsencryptIssuer = new k8s.apiextensions.CustomResource(
-  'letsencrypt@baremetal',
+  'letsencrypt@bm',
   {
     apiVersion: 'cert-manager.io/v1',
     kind: 'ClusterIssuer',

@@ -1,9 +1,11 @@
 import * as k8s from '@pulumi/kubernetes';
-import { provider } from '$k8s-baremetal/provider';
+import { provider } from '$k8s-bm/provider';
 
 new k8s.helm.v4.Chart(
-  'cilium',
+  'cilium@bm',
   {
+    name: 'cilium',
+
     chart: 'cilium',
     namespace: 'kube-system',
     repositoryOpts: {
@@ -52,7 +54,7 @@ new k8s.helm.v4.Chart(
 );
 
 new k8s.apiextensions.CustomResource(
-  'default',
+  'default@bm',
   {
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumLoadBalancerIPPool',
@@ -68,7 +70,7 @@ new k8s.apiextensions.CustomResource(
 );
 
 new k8s.apiextensions.CustomResource(
-  'default',
+  'default@bm',
   {
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumBGPClusterConfig',
@@ -105,7 +107,7 @@ new k8s.apiextensions.CustomResource(
 );
 
 new k8s.apiextensions.CustomResource(
-  'default',
+  'default@bm',
   {
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumBGPPeerConfig',
@@ -124,7 +126,7 @@ new k8s.apiextensions.CustomResource(
 );
 
 new k8s.apiextensions.CustomResource(
-  'default',
+  'default@bm',
   {
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumBGPAdvertisement',

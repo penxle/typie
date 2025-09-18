@@ -1,0 +1,16 @@
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+skipPhases:
+  - addon/kube-proxy
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+caCertificateValidityPeriod: 876000h0m0s
+certificateValidityPeriod: 876000h0m0s
+controlPlaneEndpoint: controlplane.k8s.typie.io:6443
+networking:
+  serviceSubnet: 10.20.0.0/16
+apiServer:
+  extraArgs:
+    - name: enable-aggregator-routing
+      value: 'true'
