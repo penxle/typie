@@ -42,6 +42,7 @@ karpenter
 khtml
 konva
 kubeconfig
+kubelet
 llen
 lpush
 lucide
