@@ -3,8 +3,10 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal, Select } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { Toast } from '@typie/ui/notification';
   import { values } from '@typie/ui/tiptap/values-base';
-  import { clamp, debounce } from '@typie/ui/utils';
+  import { clamp } from '@typie/ui/utils';
+  import stringify from 'fast-json-stable-stringify';
   import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { match } from 'ts-pattern';
@@ -226,96 +228,120 @@
       .filter((hit): hit is NonNullable<typeof hit> => hit !== null),
   );
 
-  const notesRelatedToEntity = $derived($query.notes.filter((note) => selectedEntityId && note.entity?.id === selectedEntityId));
-  const notesNotRelatedToEntity = $derived($query.notes.filter((note) => note.entity?.id !== selectedEntityId));
-  const restNotes = $derived(notesRelatedToEntity.length > 0 ? notesNotRelatedToEntity : $query.notes);
+  const sortedNotes = $derived.by(() => {
+    if (localNoteOrder.length === 0) return $query.notes;
+    return [...$query.notes].sort((a, b) => {
+      const indexA = localNoteOrder.indexOf(a.id);
+      const indexB = localNoteOrder.indexOf(b.id);
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+  });
+
+  const notesRelatedToEntity = $derived(sortedNotes.filter((note) => selectedEntityId && note.entity?.id === selectedEntityId));
+  const notesNotRelatedToEntity = $derived(sortedNotes.filter((note) => note.entity?.id !== selectedEntityId));
+  const restNotes = $derived(notesRelatedToEntity.length > 0 ? notesNotRelatedToEntity : sortedNotes);
 
   let draggedNoteId = $state<string | null>(null);
   let dragOverNoteId = $state<string | null>(null);
-  let prevNotePositions = $state<Record<string, DOMRect>>({});
+  let localNoteOrder = $state<string[]>([]);
+  let draggedOriginalIndex = $state<number | null>(null);
 
-  const handleDragEnd = () => {
-    if (draggedNoteId) {
-      draggedNoteId = null;
-      dragOverNoteId = null;
+  const handleDragEnd = async () => {
+    if (draggedNoteId && draggedOriginalIndex !== null) {
+      const currentIndex = localNoteOrder.indexOf(draggedNoteId);
+
+      if (currentIndex !== -1 && draggedOriginalIndex !== -1 && currentIndex !== draggedOriginalIndex && sortedNotes.length > 1) {
+        const notes = sortedNotes;
+        let lowerNote, upperNote;
+
+        lowerNote = notes[currentIndex - 1] ?? null;
+        upperNote = notes[currentIndex + 1] ?? null;
+
+        try {
+          await moveNote({
+            noteId: draggedNoteId,
+            lowerOrder: lowerNote?.order,
+            upperOrder: upperNote?.order,
+          });
+          cache.invalidate({ __typename: 'Query', field: 'notes' });
+        } catch {
+          localNoteOrder = $query.notes.map((note) => note.id);
+          Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        }
+      }
     }
+
+    draggedNoteId = null;
+    dragOverNoteId = null;
+    draggedOriginalIndex = null;
   };
 
-  const handleNoteDragEnter = debounce(async (noteId: string) => {
+  const handleNoteDragEnter = (noteId: string) => {
     if (draggedNoteId && draggedNoteId !== noteId) {
       dragOverNoteId = noteId;
-      const draggedIndex = $query.notes.findIndex((n) => n.id === draggedNoteId);
-      const dropIndex = $query.notes.findIndex((n) => n.id === noteId);
-      if (draggedIndex !== -1 && dropIndex !== -1) {
-        const positions: Record<string, DOMRect> = {};
+      const draggedIndex = localNoteOrder.indexOf(draggedNoteId);
+      const dropIndex = localNoteOrder.indexOf(noteId);
+
+      if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
+        const firstPositions: Record<string, DOMRect> = {};
         const noteElements = document.querySelectorAll('[data-note-id]');
         noteElements.forEach((el) => {
           const id = (el as HTMLElement).dataset.noteId;
           if (id) {
-            positions[id] = el.getBoundingClientRect();
+            firstPositions[id] = el.getBoundingClientRect();
           }
         });
-        prevNotePositions = positions;
 
-        let lowerNote, upperNote;
+        const newOrder = [...localNoteOrder];
+        const [removed] = newOrder.splice(draggedIndex, 1);
+        newOrder.splice(dropIndex, 0, removed);
+        localNoteOrder = newOrder;
 
-        if (draggedIndex < dropIndex) {
-          lowerNote = $query.notes[dropIndex];
-          upperNote = $query.notes[dropIndex + 1] || null;
-        } else if (draggedIndex > dropIndex) {
-          lowerNote = dropIndex > 0 ? $query.notes[dropIndex - 1] : null;
-          upperNote = $query.notes[dropIndex];
-        } else {
-          return;
-        }
+        tick().then(() => {
+          const noteElements = document.querySelectorAll('[data-note-id]');
 
-        await moveNote({
-          noteId: draggedNoteId,
-          lowerOrder: lowerNote?.order,
-          upperOrder: upperNote?.order,
+          if (Object.keys(firstPositions).length === 0) return;
+
+          for (const el of noteElements) {
+            const id = (el as HTMLElement).dataset.noteId;
+            if (!id || !firstPositions[id]) continue;
+
+            const prevPos = firstPositions[id];
+            const lastPos = el.getBoundingClientRect();
+            const deltaX = prevPos.left - lastPos.left;
+            const deltaY = prevPos.top - lastPos.top;
+
+            if (Math.abs(deltaX) === 0 && Math.abs(deltaY) === 0) continue;
+
+            const htmlEl = el as HTMLElement;
+            htmlEl.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            htmlEl.style.transition = 'none';
+
+            requestAnimationFrame(() => {
+              htmlEl.style.transition = 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+              htmlEl.style.transform = '';
+              htmlEl.style.pointerEvents = 'none';
+              setTimeout(() => {
+                htmlEl.style.transition = 'none';
+                htmlEl.style.pointerEvents = 'auto';
+              }, 300);
+            });
+          }
         });
-        cache.invalidate({ __typename: 'Query', field: 'notes' });
       }
     }
-  }, 50);
+  };
 
+  let prevNoteIds = $state<string[]>([]);
   $effect(() => {
-    void $query.notes;
+    const noteIds = $query.notes.map((n) => n.id);
 
-    untrack(() => {
-      tick().then(() => {
-        const noteElements = document.querySelectorAll('[data-note-id]');
-
-        if (Object.keys(prevNotePositions).length === 0) return;
-
-        for (const el of noteElements) {
-          const id = (el as HTMLElement).dataset.noteId;
-          if (!id || !prevNotePositions[id]) continue;
-
-          const prevPos = prevNotePositions[id];
-          const lastPos = el.getBoundingClientRect();
-          const deltaX = prevPos.left - lastPos.left;
-          const deltaY = prevPos.top - lastPos.top;
-
-          if (Math.abs(deltaX) === 0 && Math.abs(deltaY) === 0) continue;
-
-          const htmlEl = el as HTMLElement;
-          htmlEl.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-          htmlEl.style.transition = 'none';
-
-          requestAnimationFrame(() => {
-            htmlEl.style.transition = 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)';
-            htmlEl.style.transform = '';
-            htmlEl.style.pointerEvents = 'none';
-            setTimeout(() => {
-              htmlEl.style.transition = 'none';
-              htmlEl.style.pointerEvents = 'auto';
-              prevNotePositions = {};
-            }, 300);
-          });
-        }
-      });
-    });
+    if (stringify(noteIds) !== stringify(prevNoteIds)) {
+      prevNoteIds = noteIds;
+      localNoteOrder = noteIds;
+    }
   });
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -612,8 +638,7 @@
           style={css.raw({ height: 'fit' })}
           ondrop={(e) => {
             e.preventDefault();
-            draggedNoteId = null;
-            dragOverNoteId = null;
+            // handleDragEnd가 먼저 실행되도록 함
           }}
         >
           {#each notesRelatedToEntity as note (note.id)}
@@ -629,6 +654,7 @@
               }}
               ondragstart={() => {
                 draggedNoteId = note.id;
+                draggedOriginalIndex = localNoteOrder.indexOf(note.id);
               }}
               onedit={editNote}
             />
@@ -658,8 +684,7 @@
       <Masonry
         ondrop={(e) => {
           e.preventDefault();
-          draggedNoteId = null;
-          dragOverNoteId = null;
+          // handleDragEnd가 먼저 실행되도록 함
         }}
       >
         {#each restNotes as note (note.id)}
@@ -675,6 +700,7 @@
             }}
             ondragstart={() => {
               draggedNoteId = note.id;
+              draggedOriginalIndex = localNoteOrder.indexOf(note.id);
             }}
             onedit={editNote}
           />
