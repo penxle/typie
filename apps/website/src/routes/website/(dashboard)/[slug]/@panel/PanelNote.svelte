@@ -7,6 +7,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { values } from '@typie/ui/tiptap/values-base';
   import { debounce } from '@typie/ui/utils';
+  import dayjs from 'dayjs';
   import ExpandIcon from '~icons/lucide/expand';
   import Minimize2Icon from '~icons/lucide/minimize-2';
   import PlusIcon from '~icons/lucide/plus';
@@ -55,6 +56,7 @@
       updateNote(input: $input) {
         id
         content
+        updatedAt
       }
     }
   `);
@@ -74,12 +76,15 @@
   const notes = $derived($notesQuery?.notes?.sort((a, b) => a.order.localeCompare(b.order)) || []);
 
   let noteContents = $state<Record<string, string>>({});
+  let noteLocalUpdatedAt = $state<Record<string, Date>>({});
 
   $effect(() => {
     if (notes) {
       notes.forEach((note) => {
-        if (!(note.id in noteContents)) {
+        const updatedAt = dayjs(note.updatedAt);
+        if (!noteLocalUpdatedAt[note.id] || updatedAt.isAfter(dayjs(noteLocalUpdatedAt[note.id]))) {
           noteContents[note.id] = note.content;
+          noteLocalUpdatedAt[note.id] = updatedAt.toDate();
         }
       });
     }
@@ -94,6 +99,7 @@
 
   const handleNoteChange = (noteId: string, value: string) => {
     noteContents[noteId] = value;
+    noteLocalUpdatedAt[noteId] = new Date();
     saveNote(noteId, value);
   };
 
