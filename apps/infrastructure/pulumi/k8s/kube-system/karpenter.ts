@@ -52,7 +52,7 @@ const serviceAccount = new IAMServiceAccount('karpenter', {
         },
         {
           Effect: 'Allow',
-          Action: ['iam:CreateInstanceProfile'],
+          Action: ['iam:CreateInstanceProfile', 'iam:ListInstanceProfiles'],
           Resource: '*',
         },
         {
@@ -135,6 +135,13 @@ const chart = new k8s.helm.v4.Chart('karpenter', {
     },
 
     podLabels: { app: 'karpenter' },
+
+    controller: {
+      resources: {
+        requests: { cpu: '250m', memory: '512Mi' },
+        limits: { cpu: '250m', memory: '512Mi' },
+      },
+    },
 
     settings: {
       clusterName: cluster.name,
