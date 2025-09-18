@@ -19,9 +19,15 @@
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       values.blockquote.find(({ type }) => type === defaultValues.blockquote)!,
   );
+
+  const attributes = $derived({
+    ...HTMLAttributes,
+    // NOTE: updateAttributes 이후 HTMLAttributes가 업데이트되지 않아서 직접 추가
+    'data-type': attrs.type,
+  });
 </script>
 
-<NodeView style={flex.raw({ gap: '16px' })} {...HTMLAttributes}>
+<NodeView style={flex.raw({ gap: '16px' })} {...attributes}>
   <Component />
 
   <NodeViewContentEditable style={css.raw({ flexGrow: '1', '& p': { textAlign: '[left!]', textIndent: '0!' } })} />

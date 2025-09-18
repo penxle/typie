@@ -197,7 +197,9 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '왼쪽 선',
       'type': 'left-line',
-      'widget': Builder(builder: (context) => AppVerticalDivider(color: context.colors.textDefault, width: 4)),
+      'widget': Builder(
+        builder: (context) => AppVerticalDivider(color: context.colors.borderDefault, width: 4, height: 24),
+      ),
     },
     {
       'label': '왼쪽 따옴표',
@@ -206,6 +208,8 @@ final editorValues = <String, List<Map<String, dynamic>>>{
         builder: (context) => SvgImage('icons/left-quote', height: 16, color: context.colors.textDefault),
       ),
     },
+    {'label': '보낸 메시지', 'type': 'message-sent'},
+    {'label': '받은 메시지', 'type': 'message-received'},
   ],
 
   'horizontalRule': [

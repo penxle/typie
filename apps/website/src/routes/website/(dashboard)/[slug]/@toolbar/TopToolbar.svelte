@@ -172,7 +172,7 @@
                 close();
               }}
             >
-              <Component />
+              <Component renderAsOption />
             </ToolbarDropdownMenuItem>
           {/each}
         </ToolbarDropdownMenu>
