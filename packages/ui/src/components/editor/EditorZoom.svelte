@@ -202,10 +202,10 @@
 
   const handleWheel = async (e: WheelEvent) => {
     if (!e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-
     if (!(layoutMode === PostLayoutMode.PAGE && pageLayout)) return;
     if (!scrollContainer) return;
+
+    e.preventDefault();
 
     const prevScale = editorScale();
     const rect = scrollContainer.getBoundingClientRect();
