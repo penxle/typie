@@ -1,5 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+
+  type Props = {
+    renderAsOption?: boolean;
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let { renderAsOption }: Props = $props();
 </script>
 
 <div

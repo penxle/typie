@@ -4,6 +4,8 @@ import IconAlignLeft from '~icons/lucide/align-left';
 import IconAlignRight from '~icons/lucide/align-right';
 import BlockquoteLeftLine from './assets/blockquote/left-line.svelte';
 import BlockquoteLeftQuote from './assets/blockquote/left-quote.svelte';
+import BlockquoteMessageReceived from './assets/blockquote/message-received.svelte';
+import BlockquoteMessageSent from './assets/blockquote/message-sent.svelte';
 import HorizontalRuleCircle from './assets/horizontal-rule/circle.svelte';
 import HorizontalRuleCircleLine from './assets/horizontal-rule/circle-line.svelte';
 import HorizontalRuleDashedLine from './assets/horizontal-rule/dashed-line.svelte';
@@ -28,6 +30,8 @@ export const values = {
   blockquote: [
     { label: '왼쪽 선', type: 'left-line', component: BlockquoteLeftLine },
     { label: '왼쪽 따옴표', type: 'left-quote', component: BlockquoteLeftQuote },
+    { label: '보낸 메시지', type: 'message-sent', component: BlockquoteMessageSent },
+    { label: '받은 메시지', type: 'message-received', component: BlockquoteMessageReceived },
   ],
 
   horizontalRule: [

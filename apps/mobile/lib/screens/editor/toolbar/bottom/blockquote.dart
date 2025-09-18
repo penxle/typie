@@ -34,7 +34,14 @@ class BlockquoteBottomToolbar extends HookWidget {
             }
           },
           isActive: proseMirrorState?.isNodeActive('blockquote', attrs: {'type': item['type']}) ?? false,
-          widget: Container(height: 48, alignment: Alignment.center, child: item['widget'] as Widget),
+          widget: SizedBox(
+            height: 48,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              spacing: 8,
+              children: [(item['widget'] as Widget?) ?? const SizedBox.shrink(), Text(item['label'] as String)],
+            ),
+          ),
         );
       },
       separatorBuilder: (context, index) {

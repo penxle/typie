@@ -115,6 +115,7 @@ const createDecoration = (from: number, to: number, placeholder: string) => {
         left: '0',
         color: 'text.disabled',
         pointerEvents: 'none',
+        lineClamp: '1',
       },
     }),
     'data-placeholder': placeholder,
