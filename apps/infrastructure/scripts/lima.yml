@@ -1,0 +1,22 @@
+base:
+  - template://_images/ubuntu-lts
+
+cpus: 10
+memory: 32GiB
+disk: 100GiB
+
+containerd:
+  system: false
+  user: false
+
+mounts:
+  - location: '~/data'
+    mountPoint: '/data'
+    writable: true
+
+timezone: UTC
+
+networks:
+  - lima: bridged
+    macAddress: '52:50:45:4e:58:01'
+    interface: 'en0'
