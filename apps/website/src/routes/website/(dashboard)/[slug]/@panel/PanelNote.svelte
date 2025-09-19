@@ -7,6 +7,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { debounce, getNoteColors, getRandomNoteColor } from '@typie/ui/utils';
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import ExpandIcon from '~icons/lucide/expand';
   import Minimize2Icon from '~icons/lucide/minimize-2';
   import PlusIcon from '~icons/lucide/plus';
@@ -107,7 +108,7 @@
     saveNote(noteId, value);
   };
 
-  const handleAddNote = async () => {
+  const handleAddNote = async (via: string) => {
     const randomColor = getRandomNoteColor();
     const result = await createNote({
       content: '',
@@ -117,12 +118,17 @@
 
     if (result?.id) {
       lastAddedNoteId = result.id;
+      mixpanel.track('create_note', {
+        relatedToEntity: true,
+        via,
+      });
       cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
     }
   };
 
   const handleDeleteNote = async (noteId: string) => {
     await deleteNote({ noteId });
+    mixpanel.track('delete_note');
     cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
   };
 
@@ -163,7 +169,7 @@
           _hover: { color: 'text.subtle' },
           cursor: 'pointer',
         })}
-        onclick={handleAddNote}
+        onclick={() => handleAddNote('button')}
         type="button"
         use:tooltip={{ message: '노트 추가', placement: 'top' }}
       >
@@ -227,7 +233,7 @@
           </p>
         </div>
 
-        <Button onclick={handleAddNote} size="sm" variant="secondary">노트 추가</Button>
+        <Button onclick={() => handleAddNote('button')} size="sm" variant="secondary">노트 추가</Button>
       </div>
     {:else}
       {#each notes as note (note.id)}
@@ -274,7 +280,7 @@
             onkeydown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
                 e.preventDefault();
-                handleAddNote();
+                handleAddNote('shortcut');
               }
             }}
             placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."

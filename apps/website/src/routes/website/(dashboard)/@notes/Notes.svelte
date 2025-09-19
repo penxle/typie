@@ -6,6 +6,7 @@
   import { Toast } from '@typie/ui/notification';
   import { clamp, getRandomNoteColor } from '@typie/ui/utils';
   import stringify from 'fast-json-stable-stringify';
+  import mixpanel from 'mixpanel-browser';
   import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { match } from 'ts-pattern';
@@ -261,6 +262,7 @@
             lowerOrder: lowerNote?.order,
             upperOrder: upperNote?.order,
           });
+          mixpanel.track('move_note');
           cache.invalidate({ __typename: 'Query', field: 'notes' });
         } catch {
           localNoteOrder = $query.notes.map((note) => note.id);
@@ -359,13 +361,17 @@
     }
   };
 
-  const handleAddNote = async () => {
+  const handleAddNote = async (via: string) => {
     if (!inputValue.trim()) return;
 
     await createNote({
       color: getRandomNoteColor(),
       content: inputValue,
       entityId: selectedEntityId,
+    });
+    mixpanel.track('create_note', {
+      relatedToEntity: !!selectedEntityId,
+      via,
     });
     cache.invalidate({ __typename: 'Query', field: 'notes' });
     if (selectedEntityId) {
@@ -378,6 +384,7 @@
 
   const handleDeleteNote = async (noteId: string) => {
     await deleteNote({ noteId });
+    mixpanel.track('delete_note');
     cache.invalidate({ __typename: 'Query', field: 'notes' });
 
     const note = $query.notes.find((n) => n.id === noteId);
@@ -402,6 +409,7 @@
         content: editingValue.trim(),
         entityId: editSelectedEntityId,
       });
+      mixpanel.track('update_note');
 
       closeEditModal();
     }
@@ -527,7 +535,7 @@
         onkeydown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
             e.preventDefault();
-            handleAddNote();
+            handleAddNote('shortcut');
           }
         }}
         placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
@@ -605,7 +613,13 @@
           </div>
         </div>
 
-        <Button style={css.raw({ flexShrink: '0' })} disabled={!inputValue.trim()} onclick={handleAddNote} size="sm" variant="secondary">
+        <Button
+          style={css.raw({ flexShrink: '0' })}
+          disabled={!inputValue.trim()}
+          onclick={() => handleAddNote('button')}
+          size="sm"
+          variant="secondary"
+        >
           추가
         </Button>
       </div>
