@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
@@ -7,6 +8,7 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
+  import { PlanId } from '@/const';
   import { SubscriptionState } from '@/enums';
   import { fragment, graphql } from '$graphql';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
@@ -44,6 +46,19 @@
             fee
           }
         }
+
+        nextSubscription {
+          id
+          state
+          startsAt
+          expiresAt
+
+          plan {
+            id
+            name
+            fee
+          }
+        }
       }
     `),
   );
@@ -61,6 +76,32 @@
   const cancelSubscriptionCancellation = graphql(`
     mutation DashboardLayout_PreferenceModal_BillingTab_CancelSubscriptionCancellation_Mutation {
       cancelSubscriptionCancellation {
+        id
+        state
+        expiresAt
+      }
+    }
+  `);
+
+  const schedulePlanChange = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_SchedulePlanChange_Mutation($input: SchedulePlanChangeInput!) {
+      schedulePlanChange(input: $input) {
+        id
+        state
+        startsAt
+        expiresAt
+        plan {
+          id
+          name
+          fee
+        }
+      }
+    }
+  `);
+
+  const cancelPlanChange = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_CancelPlanChange_Mutation {
+      cancelPlanChange {
         id
         state
         expiresAt
@@ -181,34 +222,125 @@
         </p>
 
         {#if $user.subscription.state === SubscriptionState.ACTIVE}
-          <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.faint' })}>
-            {dayjs($user.subscription.expiresAt).formatAsDate()}에 {comma($user.subscription.plan.fee)}원 결제 예정
-          </p>
+          <div class={flex({ align: 'center', justify: 'space-between', marginTop: '8px' })}>
+            <p class={css({ fontSize: '12px', color: 'text.faint' })}>
+              {dayjs($user.subscription.expiresAt).formatAsDate()}에 {comma($user.subscription.plan.fee)}원 결제 예정
+            </p>
+            {#if !$user.nextSubscription && $user.subscription.plan.id === PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY}
+              <Button
+                onclick={() => {
+                  Dialog.confirm({
+                    title: '연간 플랜으로 전환하시겠어요?',
+                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                    message: `다음 결제일(${dayjs($user.subscription!.expiresAt).formatAsDate()})부터 연간 플랜(49,000원/년)이 적용됩니다.`,
+                    actionLabel: '전환하기',
+                    actionHandler: async () => {
+                      await schedulePlanChange({ planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
+                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
+                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
+                      mixpanel.track('change_plan', { from: 'monthly', to: 'yearly' });
+                    },
+                  });
+                }}
+                size="sm"
+                variant="secondary"
+              >
+                연간 플랜으로 전환
+              </Button>
+            {:else if !$user.nextSubscription && $user.subscription.plan.id === PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY}
+              <Button
+                onclick={() => {
+                  Dialog.confirm({
+                    title: '월간 플랜으로 전환하시겠어요?',
+                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                    message: `다음 결제일(${dayjs($user.subscription!.expiresAt).formatAsDate()})부터 월간 플랜(4,900원/월)이 적용됩니다.`,
+                    actionLabel: '전환하기',
+                    actionHandler: async () => {
+                      await schedulePlanChange({ planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
+                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
+                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
+                      mixpanel.track('change_plan', { from: 'yearly', to: 'monthly' });
+                    },
+                  });
+                }}
+                size="sm"
+                variant="secondary"
+              >
+                월간 플랜으로 전환
+              </Button>
+            {/if}
+          </div>
         {:else if $user.subscription.state === SubscriptionState.WILL_EXPIRE}
           <div class={flex({ align: 'center', justify: 'space-between', marginTop: '8px' })}>
-            <p class={css({ fontSize: '12px', color: 'text.danger' })}>
-              {dayjs($user.subscription.expiresAt).formatAsDate()} 해지 예정
-            </p>
-            <Button
-              onclick={() => {
-                Dialog.confirm({
-                  title: '구독 해지를 취소하시겠어요?',
-                  message: '구독이 계속 유지되며, 다음 결제일에 자동으로 결제됩니다.',
-                  actionLabel: '해지 취소',
-                  actionHandler: async () => {
-                    await cancelSubscriptionCancellation();
-                    mixpanel.track('resume_subscription');
-                  },
-                });
-              }}
-              size="sm"
-              variant="secondary"
-            >
-              해지 취소
-            </Button>
+            {#if !$user.nextSubscription}
+              <p class={css({ fontSize: '12px', color: 'text.danger' })}>
+                {dayjs($user.subscription.expiresAt).formatAsDate()} 해지 예정
+              </p>
+              <Button
+                onclick={() => {
+                  Dialog.confirm({
+                    title: '구독 해지를 취소하시겠어요?',
+                    message: '구독이 계속 유지되며, 다음 결제일에 자동으로 결제됩니다.',
+                    actionLabel: '해지 취소',
+                    actionHandler: async () => {
+                      await cancelSubscriptionCancellation();
+                      mixpanel.track('resume_subscription');
+                    },
+                  });
+                }}
+                size="sm"
+                variant="secondary"
+              >
+                해지 취소
+              </Button>
+            {/if}
           </div>
         {/if}
       </div>
+
+      {#if $user.nextSubscription}
+        <div class={flex({ direction: 'column', gap: '8px', marginTop: '16px' })}>
+          <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>다음 플랜 (예정)</p>
+          <div
+            class={css({
+              borderRadius: '8px',
+              padding: '12px',
+              borderWidth: '1px',
+              borderColor: 'border.default',
+              backgroundColor: 'surface.subtle',
+              borderStyle: 'dashed',
+            })}
+          >
+            <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>
+              {$user.nextSubscription.plan.name} 플랜
+            </p>
+            <div class={flex({ align: 'center', justify: 'space-between', marginTop: '8px' })}>
+              <p class={css({ fontSize: '12px', color: 'text.muted' })}>
+                {dayjs($user.nextSubscription.startsAt).formatAsDate()}부터 시작
+              </p>
+              <Button
+                onclick={() => {
+                  Dialog.confirm({
+                    title: '플랜 전환을 취소하시겠어요?',
+                    message: '현재 플랜이 계속 유지됩니다.',
+                    actionLabel: '전환 취소',
+                    actionHandler: async () => {
+                      await cancelPlanChange();
+                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
+                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
+                      mixpanel.track('cancel_plan_change');
+                    },
+                  });
+                }}
+                size="sm"
+                variant="secondary"
+              >
+                전환 취소
+              </Button>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 

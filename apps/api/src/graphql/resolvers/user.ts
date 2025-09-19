@@ -141,6 +141,18 @@ User.implement({
       },
     }),
 
+    nextSubscription: t.field({
+      type: Subscription,
+      nullable: true,
+      resolve: async (self) => {
+        return await db
+          .select()
+          .from(Subscriptions)
+          .where(and(eq(Subscriptions.userId, self.id), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
+          .then(first);
+      },
+    }),
+
     recentPosts: t.field({
       type: [Post],
       resolve: async (self, _, ctx) => {
