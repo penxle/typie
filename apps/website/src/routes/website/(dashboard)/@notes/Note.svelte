@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { values } from '@typie/ui/tiptap/values-base';
@@ -72,11 +73,13 @@
     }
   });
 
-  const color = $derived(values.textBackgroundColor.find((color) => color.value === note.color)?.hex ?? '#fff');
+  const color = $derived(
+    values.textBackgroundColor.find((color) => color.value === note.color)?.color ?? token('colors.prosemirror.white'),
+  );
 </script>
 
 <div
-  style:background-color={`color-mix(in srgb, #fff, ${color} 75%)`}
+  style:background-color={`color-mix(in srgb, ${token('colors.prosemirror.white')}, ${color} 75%)`}
   style:grid-row-end={`span ${Math.max(noteHeight || 0, draggingNoteMinHeight || 0) || 'auto'}`}
   class={css({
     position: 'relative',

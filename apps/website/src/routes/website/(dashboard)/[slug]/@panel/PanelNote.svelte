@@ -2,6 +2,7 @@
   import { cache } from '@typie/sark/internal';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
   import { autosize, tooltip } from '@typie/ui/actions';
   import { Button, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
@@ -237,9 +238,9 @@
       </div>
     {:else}
       {#each notes as note (note.id)}
-        {@const color = getNoteColors().find((color) => color.value === note.color)?.hex ?? '#fff'}
+        {@const color = getNoteColors().find((color) => color.value === note.color)?.color ?? token('colors.prosemirror.white')}
         <div
-          style:background-color={`color-mix(in srgb, #fff, ${color} 75%)`}
+          style:background-color={`color-mix(in srgb, ${token('colors.prosemirror.white')}, ${color} 75%)`}
           class={cx(
             'group',
             flex({
