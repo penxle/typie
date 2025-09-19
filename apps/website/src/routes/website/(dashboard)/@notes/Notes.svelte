@@ -738,6 +738,17 @@
         borderRadius: '8px',
         resize: 'none',
       })}
+      oninput={(e) => {
+        const target = e.currentTarget;
+        const cursorPosition = target.selectionStart;
+        editingValue = target.value;
+        // NOTE: 원인은 알 수 없지만 중간에 입력하면 커서가 맨 뒤로 이동하는 문제를 해결하기 위한 workaround
+        tick().then(() => {
+          if (editInputEl && cursorPosition !== null) {
+            editInputEl.setSelectionRange(cursorPosition, cursorPosition);
+          }
+        });
+      }}
       onkeydown={(e) => {
         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
           e.preventDefault();
@@ -750,7 +761,7 @@
       }}
       placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
       rows={clamp(editingValue.split('\n').length, 5, 15)}
-      bind:value={editingValue}
+      value={editingValue}
     ></textarea>
 
     <div class={flex({ gap: '4px', alignItems: 'center', paddingX: '12px', paddingY: '6px' })}>
