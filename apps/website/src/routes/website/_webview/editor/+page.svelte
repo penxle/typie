@@ -10,8 +10,7 @@
   import { autosize } from '@typie/ui/actions';
   import { EditorLayout, EditorZoom } from '@typie/ui/components';
   import { getIncompatibleBlocks, getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
-  import { values } from '@typie/ui/tiptap/values-base';
-  import { clamp, createDefaultPageLayout, PAGE_SIZE_MAP } from '@typie/ui/utils';
+  import { clamp, createDefaultPageLayout, getRandomNoteColor, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import { nanoid } from 'nanoid';
@@ -243,9 +242,6 @@
   let noteUpdateTimeout: NodeJS.Timeout | null = null;
   let isNoteInitialized = $state(false);
 
-  const colors = values.textBackgroundColor.filter((color) => color.value !== 'none').map((color) => color.hex);
-  const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
-
   let syncUpdateTimeout: NodeJS.Timeout | null = null;
   let pendingUpdate: Uint8Array | null = null;
 
@@ -386,7 +382,7 @@
         const result = await createNote({
           entityId: $query.post.entity.id,
           content,
-          color: getRandomColor(),
+          color: getRandomNoteColor(),
         });
 
         currentNoteId = result.id;

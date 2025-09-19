@@ -4,8 +4,7 @@
   import { Button, Icon, Modal, Select } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { values } from '@typie/ui/tiptap/values-base';
-  import { clamp } from '@typie/ui/utils';
+  import { clamp, getRandomNoteColor } from '@typie/ui/utils';
   import stringify from 'fast-json-stable-stringify';
   import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -182,9 +181,6 @@
   `);
 
   const app = getAppContext();
-
-  const colors = values.textBackgroundColor.filter((color) => color.value !== 'none').map((color) => color.hex);
-  const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
 
   let inputValue = $state('');
   let inputEl = $state<HTMLTextAreaElement>();
@@ -367,7 +363,7 @@
     if (!inputValue.trim()) return;
 
     await createNote({
-      color: getRandomColor(),
+      color: getRandomNoteColor(),
       content: inputValue,
       entityId: selectedEntityId,
     });
