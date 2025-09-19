@@ -157,7 +157,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
         const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
         const layoutMode = (map.get('layoutMode') as PostLayoutMode) ?? PostLayoutMode.SCROLL;
         const pageLayout = (map.get('pageLayout') as PageLayout) ?? null;
-        const note = (map.get('note') as string) || '';
         const anchors = (map.get('anchors') as Record<string, string | null>) ?? {};
 
         const fragment = doc.getXmlFragment('body');
@@ -192,7 +191,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
             blobSize,
             layoutMode: effectiveLayoutMode,
             pageLayout,
-            note,
             updatedAt,
           })
           .where(eq(PostContents.postId, postId));
