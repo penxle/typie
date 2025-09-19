@@ -42,6 +42,8 @@
           user {
             id
           }
+
+          ...PanelNote_Notes_entity
         }
 
         ...Editor_Panel_PanelInfo_CharacterCountChangeWidget_post
@@ -189,6 +191,6 @@
   <HorizontalDivider color="secondary" />
 
   {#if !app.preference.current.noteExpanded}
-    <PanelNote entityId={$post.entity.id} />
+    <PanelNote $entity={$post.entity} />
   {/if}
 </div>

@@ -368,6 +368,9 @@
       entityId: selectedEntityId,
     });
     cache.invalidate({ __typename: 'Query', field: 'notes' });
+    if (selectedEntityId) {
+      cache.invalidate({ __typename: 'Entity', id: selectedEntityId, field: 'notes' });
+    }
 
     inputValue = '';
     inputEl?.focus();
@@ -376,6 +379,11 @@
   const handleDeleteNote = async (noteId: string) => {
     await deleteNote({ noteId });
     cache.invalidate({ __typename: 'Query', field: 'notes' });
+
+    const note = $query.notes.find((n) => n.id === noteId);
+    if (note?.entity?.id) {
+      cache.invalidate({ __typename: 'Entity', id: note.entity.id, field: 'notes' });
+    }
   };
 
   const editNote = (id: string) => {

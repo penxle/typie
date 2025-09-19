@@ -81,6 +81,8 @@
           visibility
           availability
 
+          ...PanelNote_Notes_entity
+
           parent {
             id
 
@@ -1216,7 +1218,7 @@
               height: 'full',
             })}
           >
-            <PanelNote entityId={entity.id} />
+            <PanelNote $entity={entity} />
           </div>
         {/if}
 

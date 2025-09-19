@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { cache } from '@typie/sark/internal';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Button, Icon, RingSpinner } from '@typie/ui/components';
+  import { Button, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { debounce, getNoteColors, getRandomNoteColor } from '@typie/ui/utils';
   import dayjs from 'dayjs';
@@ -11,29 +12,34 @@
   import PlusIcon from '~icons/lucide/plus';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import { graphql } from '$graphql';
+  import { fragment, graphql } from '$graphql';
+  import type { PanelNote_Notes_entity } from '$graphql';
 
   type Props = {
-    entityId: string;
+    $entity: PanelNote_Notes_entity;
   };
 
-  let { entityId }: Props = $props();
+  let { $entity: _entity }: Props = $props();
 
-  const notesQuery = graphql(`
-    query PanelNote_Notes_Query($entityId: ID!) @client {
-      notes(entityId: $entityId) {
+  const entity = fragment(
+    _entity,
+    graphql(`
+      fragment PanelNote_Notes_entity on Entity {
         id
-        content
-        color
-        order
-        createdAt
-        updatedAt
-        entity {
+        notes {
           id
+          content
+          color
+          order
+          createdAt
+          updatedAt
+          entity {
+            id
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
   const createNote = graphql(`
     mutation PanelNote_CreateNote_Mutation($input: CreateNoteInput!) {
@@ -69,11 +75,12 @@
 
   const app = getAppContext();
 
-  const isLoading = $derived(!$notesQuery);
-  const notes = $derived($notesQuery?.notes?.toSorted((a, b) => a.order.localeCompare(b.order)) || []);
+  const notes = $derived($entity.notes.toSorted((a, b) => a.order.localeCompare(b.order)) || []);
 
   let noteContents = $state<Record<string, string>>({});
   let noteLocalUpdatedAt = $state<Record<string, Date>>({});
+
+  let lastAddedNoteId = $state<string>();
 
   $effect(() => {
     if (notes) {
@@ -105,27 +112,28 @@
     const result = await createNote({
       content: '',
       color: randomColor,
-      entityId,
+      entityId: $entity.id,
     });
 
     if (result?.id) {
-      await notesQuery.load({ entityId });
-
-      // NOTE: 어째선지 tick으로 하면 동작하지 않는다
-      setTimeout(() => {
-        const noteElement = document.querySelector(`[data-related-note-id="${result.id}"] textarea`) as HTMLTextAreaElement;
-        noteElement?.focus();
-      });
+      lastAddedNoteId = result.id;
+      cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
     }
   };
 
   const handleDeleteNote = async (noteId: string) => {
     await deleteNote({ noteId });
-    notesQuery.load({ entityId });
+    cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
   };
 
   $effect(() => {
-    notesQuery.load({ entityId });
+    void $entity.notes;
+
+    const noteElement = document.querySelector(`[data-related-note-id="${lastAddedNoteId}"] textarea`) as HTMLTextAreaElement;
+    if (noteElement) {
+      noteElement.focus();
+      lastAddedNoteId = undefined;
+    }
   });
 </script>
 
@@ -190,11 +198,7 @@
       paddingBottom: '20px',
     })}
   >
-    {#if isLoading}
-      <div class={center({ paddingY: '40px' })}>
-        <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
-      </div>
-    {:else if notes.length === 0}
+    {#if notes.length === 0}
       <div
         class={flex({
           flexDirection: 'column',
