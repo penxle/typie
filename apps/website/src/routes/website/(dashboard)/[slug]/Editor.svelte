@@ -492,7 +492,7 @@
   });
 
   const onPasteConfirm = (mode: 'html' | 'text') => {
-    if (!editor || !clipboardData) {
+    if (!editor?.current || !clipboardData) {
       return;
     }
 
@@ -500,7 +500,7 @@
       editor.current.view.pasteHTML(clipboardData.html);
     } else if (mode === 'text') {
       if (clipboardData.text) {
-        editor?.current.view.pasteText(clipboardData.text);
+        editor.current.view.pasteText(clipboardData.text);
       } else {
         const dom = new DOMParser().parseFromString(clipboardData.html, 'text/html');
         editor.current.view.pasteText(dom.body.textContent);

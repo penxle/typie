@@ -32,6 +32,7 @@ import 'package:typie/screens/editor/body_setting_bottom_sheet.dart';
 import 'package:typie/screens/editor/find_replace.dart';
 import 'package:typie/screens/editor/floating/widgets/character_count_floating.dart';
 import 'package:typie/screens/editor/limit.dart';
+import 'package:typie/screens/editor/paste_option_bottom_sheet.dart';
 import 'package:typie/screens/editor/schema.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/spellcheck.dart';
@@ -123,11 +124,13 @@ class Editor extends HookWidget {
           case 'webviewReady':
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
-              'features': ['template', 'hide-table-delete-in-handle', 'focusable'],
+              'features': ['template', 'hide-table-delete-in-handle', 'focusable', 'paste-mode'],
               'settings': {
                 'lineHighlightEnabled': pref.lineHighlightEnabled,
                 'typewriterEnabled': pref.typewriterEnabled,
                 'typewriterPosition': pref.typewriterPosition,
+                'pasteMode': pref.pasteMode,
+                'autoSurroundEnabled': pref.autoSurroundEnabled,
               },
               'state': {'selection': jsonDecode(state.getSerializedPostSelection(slug) ?? 'null')},
               'focusable': !scope.isBottomSheetOpen.value,
@@ -172,6 +175,30 @@ class Editor extends HookWidget {
             final value = (event.data as num).toDouble();
             if (value != scope.scrollTop.value) {
               scope.scrollTop.value = value;
+            }
+          case 'openPasteModal':
+            await webViewController.clearFocus();
+            if (context.mounted) {
+              String? selectedMode;
+              final previousPasteMode = pref.pasteMode;
+
+              await context.showBottomSheet(
+                intercept: true,
+                child: PasteOptionBottomSheet(
+                  onConfirm: (mode) async {
+                    selectedMode = mode;
+                    await webViewController.emitEvent('pasteConfirm', {'mode': selectedMode});
+                  },
+                ),
+              );
+
+              if (previousPasteMode != pref.pasteMode) {
+                await webViewController.emitEvent('patchSettings', {'pasteMode': pref.pasteMode});
+              }
+
+              if (selectedMode == null) {
+                await webViewController.emitEvent('pasteCancel');
+              }
             }
         }
       });

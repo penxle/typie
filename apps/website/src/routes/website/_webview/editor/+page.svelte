@@ -173,7 +173,11 @@
     lineHighlightEnabled?: boolean;
     typewriterEnabled?: boolean;
     typewriterPosition?: number;
+    pasteMode?: string;
+    autoSurroundEnabled?: boolean;
   }>({});
+
+  let clipboardData = $state<{ html: string; text?: string }>();
 
   const doc = new Y.Doc();
   const awareness = new YAwareness.Awareness(doc);
@@ -288,6 +292,29 @@
       },
       { transport: 'ws' },
     );
+  };
+
+  const onPasteCancel = () => {
+    clipboardData = undefined;
+  };
+
+  const onPasteConfirm = (mode: 'html' | 'text') => {
+    if (!editor?.current || !clipboardData) {
+      return;
+    }
+
+    if (mode === 'html') {
+      editor.current.view.pasteHTML(clipboardData.html);
+    } else if (mode === 'text') {
+      if (clipboardData.text) {
+        editor.current.view.pasteText(clipboardData.text);
+      } else {
+        const dom = new DOMParser().parseFromString(clipboardData.html, 'text/html');
+        editor.current.view.pasteText(dom.body.textContent);
+      }
+    }
+
+    clipboardData = undefined;
   };
 
   const setYJSState = () => {
@@ -531,12 +558,12 @@
         editor.current.storage.webviewFeatures = features;
       }
 
-      if (settings.typewriterEnabled && settings.typewriterPosition !== undefined) {
-        if (editor) {
+      if (editor) {
+        editor.current.storage.autoSurround = { enabled: settings.autoSurroundEnabled ?? true };
+
+        if (settings.typewriterEnabled && settings.typewriterPosition !== undefined) {
           editor.current.storage.typewriter = { position: settings.typewriterPosition };
-        }
-      } else {
-        if (editor) {
+        } else {
           editor.current.storage.typewriter = { position: undefined };
         }
       }
@@ -881,6 +908,19 @@
       editor.current.commands.loadTemplate(resp.post);
     });
 
+    window.__webview__?.addEventListener('pasteConfirm', (data) => {
+      const mode = data.mode as 'html' | 'text';
+      onPasteConfirm(mode);
+    });
+
+    window.__webview__?.addEventListener('pasteCancel', () => {
+      onPasteCancel();
+    });
+
+    window.__webview__?.addEventListener('patchSettings', (data) => {
+      Object.assign(settings, data);
+    });
+
     return () => {
       clearInterval(forceSyncInterval);
       clearInterval(heartbeatCheckInterval);
@@ -1086,6 +1126,29 @@
         }}
         onfocus={() => {
           window.__webview__?.emitEvent('focus', { element: 'editor' });
+        }}
+        onpaste={(event) => {
+          if (event.clipboardData?.getData('text/html')) {
+            clipboardData = {
+              html: event.clipboardData.getData('text/html'),
+              text: event.clipboardData.getData('text/plain'),
+            };
+
+            if (!features.includes('paste-mode')) {
+              onPasteConfirm('html');
+              return true;
+            }
+
+            if (settings.pasteMode === 'ask') {
+              window.__webview__?.emitEvent('openPasteModal');
+              return true;
+            }
+
+            onPasteConfirm(settings.pasteMode as 'html' | 'text');
+            return true;
+          }
+
+          return false;
         }}
         storage={{
           uploadBlobAsImage: (file) => {
