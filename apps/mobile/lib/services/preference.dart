@@ -31,6 +31,12 @@ class Pref {
   bool get lineHighlightEnabled => _box.get('line_highlight_enabled', defaultValue: true) as bool;
   set lineHighlightEnabled(bool value) => _box.put('line_highlight_enabled', value);
 
+  String get pasteMode => _box.get('paste_mode', defaultValue: 'ask') as String;
+  set pasteMode(String value) => _box.put('paste_mode', value);
+
+  bool get autoSurroundEnabled => _box.get('auto_surround_enabled', defaultValue: true) as bool;
+  set autoSurroundEnabled(bool value) => _box.put('auto_surround_enabled', value);
+
   Map<String, double>? get characterCountFloatingPosition {
     final data = _box.get('character_count_floating_position');
     if (data == null) {

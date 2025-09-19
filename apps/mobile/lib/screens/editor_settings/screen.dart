@@ -10,6 +10,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/widgets/forms/form.dart';
+import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/slider.dart';
 import 'package:typie/widgets/forms/switch.dart';
 import 'package:typie/widgets/heading.dart';
@@ -128,6 +129,52 @@ class EditorSettingsScreen extends HookWidget {
                       label: '현재 줄 강조',
                       description: '현재 작성 중인 줄을 강조하여 화면에 표시합니다.',
                       trailing: HookFormSwitch(name: 'lineHighlightEnabled', initialValue: pref.lineHighlightEnabled),
+                    );
+                  },
+                ),
+              ],
+            ),
+            _Section(
+              title: '편집 설정',
+              children: [
+                HookForm(
+                  submitMode: HookFormSubmitMode.onChange,
+                  onSubmit: (form) async {
+                    final pasteMode = form.data['pasteMode'] as String;
+                    pref.pasteMode = pasteMode;
+
+                    unawaited(mixpanel.track('change_paste_mode', properties: {'mode': pasteMode}));
+                  },
+                  builder: (context, form) {
+                    return _Item(
+                      label: '붙여넣기 옵션',
+                      description: '텍스트를 어떻게 붙여넣을지 설정합니다.',
+                      trailing: HookFormSelect(
+                        name: 'pasteMode',
+                        initialValue: pref.pasteMode,
+                        items: const [
+                          HookFormSelectItem(value: 'ask', label: '매번 묻기', description: '붙여넣기 시 선택합니다.'),
+                          HookFormSelectItem(value: 'html', label: '원본 서식 유지', description: '복사한 텍스트의 서식을 그대로 유지해요.'),
+                          HookFormSelectItem(value: 'text', label: '문서 서식 적용', description: '현재 문서의 서식을 적용하여 붙여넣어요.'),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const _Divider(),
+                HookForm(
+                  submitMode: HookFormSubmitMode.onChange,
+                  onSubmit: (form) async {
+                    final autoSurroundEnabled = form.data['autoSurroundEnabled'] as bool;
+                    pref.autoSurroundEnabled = autoSurroundEnabled;
+
+                    unawaited(mixpanel.track('toggle_auto_surround', properties: {'enabled': autoSurroundEnabled}));
+                  },
+                  builder: (context, form) {
+                    return _Item(
+                      label: '선택 영역 둘러싸기',
+                      description: '따옴표나 괄호를 입력하면 선택 영역을 둘러쌉니다.',
+                      trailing: HookFormSwitch(name: 'autoSurroundEnabled', initialValue: pref.autoSurroundEnabled),
                     );
                   },
                 ),
