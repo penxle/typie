@@ -3,15 +3,18 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon, TextInput } from '@typie/ui/components';
   import { createForm, FormError } from '@typie/ui/form';
+  import { Toast } from '@typie/ui/notification';
   import { serializeOAuthState } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
+  import { onMount, tick } from 'svelte';
   import { z } from 'zod';
   import { SingleSignOnProvider } from '@/enums';
   import { TypieError } from '@/errors';
   import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
@@ -83,6 +86,20 @@
 
     location.href = url;
   };
+
+  onMount(() => {
+    const toast = page.url.searchParams.get('toast');
+    if (toast) {
+      tick().then(() => {
+        Toast.error(toast);
+
+        page.url.searchParams.delete('toast');
+        goto(page.url.href, {
+          replaceState: true,
+        });
+      });
+    }
+  });
 </script>
 
 <Helmet description="지금 타이피에 로그인하고 바로 글쓰기를 시작해보세요." title="로그인" />
