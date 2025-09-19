@@ -91,7 +91,7 @@
       paddingTop: '12px',
       paddingBottom: '20px',
       backgroundColor: 'surface.default',
-      transitionProperty: 'background-color',
+      transitionProperty: '[background-color]',
       transitionDuration: '250ms',
       transitionTimingFunction: 'ease',
       _hover: { backgroundColor: 'surface.subtle' },
@@ -121,7 +121,7 @@
             borderRightRadius: 'full',
             backgroundColor: 'accent.brand.default',
             maxWidth: 'full',
-            transitionProperty: 'width',
+            transitionProperty: '[width]',
             transitionDuration: '150ms',
             transitionTimingFunction: 'ease',
           })}
@@ -150,7 +150,7 @@
             borderRightRadius: 'full',
             backgroundColor: 'accent.brand.default',
             maxWidth: 'full',
-            transitionProperty: 'width',
+            transitionProperty: '[width]',
             transitionDuration: '150ms',
             transitionTimingFunction: 'ease',
           })}

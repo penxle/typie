@@ -184,7 +184,7 @@
       >
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
           <Icon
-            style={css.raw({ color: 'text.faint', transitionProperty: 'none', _groupHover: { color: 'text.brand' } })}
+            style={css.raw({ color: 'text.faint', transitionProperty: '[none]', _groupHover: { color: 'text.brand' } })}
             icon={PlusIcon}
             size={14}
           />

@@ -84,7 +84,7 @@
     width: isExpanded ? 'var(--width)' : '0',
     maxWidth: isExpanded ? 'var(--max-width)' : '0',
     opacity: isExpanded ? '100' : '0',
-    transitionProperty: 'min-width, max-width, opacity',
+    transitionProperty: '[min-width, max-width, opacity]',
     transitionDuration: '200ms',
     transitionTimingFunction: 'ease',
     willChange: 'min-width, max-width, opacity',

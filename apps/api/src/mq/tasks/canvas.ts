@@ -242,7 +242,7 @@ export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: str
         }
       }
 
-      const retainedSnapshots = [...windowedSnapshots.values()].sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
+      const retainedSnapshots = [...windowedSnapshots.values()].toSorted((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
 
       if (retainedSnapshots.length === snapshots.length) {
         await tx.update(CanvasContents).set({ compactedAt: dayjs() }).where(eq(CanvasContents.canvasId, canvasId));

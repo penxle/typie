@@ -17,22 +17,22 @@
     "lint:typecheck": "tsc"
   },
   "dependencies": {
-    "@logtape/logtape": "^1.0.4",
+    "@logtape/logtape": "^1.1.1",
     "dayjs": "^1.11.18",
-    "hono": "^4.9.6",
+    "hono": "^4.9.8",
     "ipaddr.js": "^2.2.0",
-    "remeda": "^2.30.0",
+    "remeda": "^2.32.0",
     "ts-pattern": "^5.8.0"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.37.0",
-    "@types/bun": "^1.2.21",
+    "@sveltejs/kit": "^2.42.2",
+    "@types/bun": "^1.2.22",
     "@typie/tsconfig": "workspace:*",
     "postcss": "^8.5.6",
-    "svelte": "^5.38.7",
+    "svelte": "^5.39.2",
     "svgo": "^4.0.0",
     "typescript": "^5.9.2",
-    "vite": "^7.1.4",
+    "vite": "^7.1.6",
     "xmlbuilder2": "^3.1.1"
   }
 }

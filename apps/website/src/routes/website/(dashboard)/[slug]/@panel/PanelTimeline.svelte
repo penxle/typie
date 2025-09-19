@@ -99,7 +99,7 @@
       groups.push({ date, snapshots: snapshotList });
     });
 
-    return groups.sort((a, b) => dayjs(b.snapshots[0].createdAt).valueOf() - dayjs(a.snapshots[0].createdAt).valueOf());
+    return groups.toSorted((a, b) => dayjs(b.snapshots[0].createdAt).valueOf() - dayjs(a.snapshots[0].createdAt).valueOf());
   });
 
   const { anchor, floating, arrow } = createFloatingActions({

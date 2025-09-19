@@ -117,7 +117,7 @@
       nodes.push(currentNode);
     }
 
-    const middleNodes = nodes.filter((node) => !node.isSpecial).sort((a, b) => a.position - b.position);
+    const middleNodes = nodes.filter((node) => !node.isSpecial).toSorted((a, b) => a.position - b.position);
 
     return [
       {

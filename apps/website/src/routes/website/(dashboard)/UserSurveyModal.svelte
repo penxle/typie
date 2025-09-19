@@ -372,7 +372,7 @@
             {#if question.type === 'radio'}
               {@const nonOtherOptions = question.options.filter((opt) => opt.value !== 'other')}
               {@const otherOption = question.options.find((opt) => opt.value === 'other')}
-              {@const shuffledNonOther = [...nonOtherOptions].sort(() => Math.random() - 0.5)}
+              {@const shuffledNonOther = [...nonOtherOptions].toSorted(() => Math.random() - 0.5)}
               {@const displayOptions = otherOption ? [...shuffledNonOther, otherOption] : shuffledNonOther}
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
                 {#each displayOptions as option (option.value)}
@@ -467,7 +467,7 @@
             {#if question.type === 'checkbox'}
               {@const nonOtherOptions = question.options.filter((opt) => opt.value !== 'other')}
               {@const otherOption = question.options.find((opt) => opt.value === 'other')}
-              {@const shuffledNonOther = [...nonOtherOptions].sort(() => Math.random() - 0.5)}
+              {@const shuffledNonOther = [...nonOtherOptions].toSorted(() => Math.random() - 0.5)}
               {@const displayOptions = otherOption ? [...shuffledNonOther, otherOption] : shuffledNonOther}
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
                 {#each displayOptions as option (option.value)}

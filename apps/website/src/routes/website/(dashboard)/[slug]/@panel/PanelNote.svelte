@@ -73,7 +73,7 @@
   const colors = values.textBackgroundColor.filter((color) => color.value !== 'none').map((color) => color.hex);
 
   const isLoading = $derived(!$notesQuery);
-  const notes = $derived($notesQuery?.notes?.sort((a, b) => a.order.localeCompare(b.order)) || []);
+  const notes = $derived($notesQuery?.notes?.toSorted((a, b) => a.order.localeCompare(b.order)) || []);
 
   let noteContents = $state<Record<string, string>>({});
   let noteLocalUpdatedAt = $state<Record<string, Date>>({});

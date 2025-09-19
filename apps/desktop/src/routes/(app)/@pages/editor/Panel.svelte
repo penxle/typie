@@ -73,7 +73,7 @@
     width: 'var(--width)',
     maxWidth: app.preference.current.panelExpanded ? 'var(--max-width)' : '0',
     opacity: app.preference.current.panelExpanded ? '100' : '0',
-    transitionProperty: 'min-width, max-width, opacity',
+    transitionProperty: '[min-width, max-width, opacity]',
     transitionDuration: '200ms',
     transitionTimingFunction: 'ease',
     willChange: 'min-width, max-width, opacity',
