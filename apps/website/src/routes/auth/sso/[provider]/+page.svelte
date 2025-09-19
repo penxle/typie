@@ -22,24 +22,36 @@
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const { referral_code } = deserializeOAuthState(page.url.searchParams.get('state')!);
 
-    const resp = await authorizeSingleSignOn({
-      provider: match(page.params.provider)
-        .with('google', () => SingleSignOnProvider.GOOGLE)
-        .with('kakao', () => SingleSignOnProvider.KAKAO)
-        .with('naver', () => SingleSignOnProvider.NAVER)
-        .run(),
-      params: Object.fromEntries(page.url.searchParams),
-      referralCode: referral_code,
-    });
+    try {
+      const resp = await authorizeSingleSignOn({
+        provider: match(page.params.provider)
+          .with('google', () => SingleSignOnProvider.GOOGLE)
+          .with('kakao', () => SingleSignOnProvider.KAKAO)
+          .with('naver', () => SingleSignOnProvider.NAVER)
+          .run(),
+        params: Object.fromEntries(page.url.searchParams),
+        referralCode: referral_code,
+      });
 
-    location.href = qs.stringifyUrl({
-      url: `${env.PUBLIC_AUTH_URL}/authorize`,
-      query: {
-        client_id: env.PUBLIC_OIDC_CLIENT_ID,
-        response_type: 'code',
-        ...deserializeOAuthState(resp),
-      },
-    });
+      location.href = qs.stringifyUrl({
+        url: `${env.PUBLIC_AUTH_URL}/authorize`,
+        query: {
+          client_id: env.PUBLIC_OIDC_CLIENT_ID,
+          response_type: 'code',
+          ...deserializeOAuthState(resp),
+        },
+      });
+    } catch {
+      const state = page.url.searchParams.get('state');
+      const loginUrl = qs.stringifyUrl({
+        url: `${env.PUBLIC_AUTH_URL}/login`,
+        query: {
+          ...(state ? deserializeOAuthState(state) : {}),
+          toast: '로그인 중 오류가 발생했습니다. 다시 시도해주세요.',
+        },
+      });
+      location.replace(loginUrl);
+    }
   });
 </script>
 
