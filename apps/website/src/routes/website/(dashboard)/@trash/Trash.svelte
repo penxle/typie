@@ -145,7 +145,7 @@
         flexGrow: '1',
         color: 'text.faint',
         transition: 'common',
-        transitionProperty: 'background-color',
+        transitionProperty: '[background-color]',
         cursor: 'pointer',
         userSelect: 'none',
         _hover: {
@@ -160,7 +160,7 @@
     >
       <Icon
         style={css.raw({
-          transitionProperty: 'transform',
+          transitionProperty: '[transform]',
           transform: app.state.trashOpen ? 'rotate(90deg)' : 'rotate(0deg)',
         })}
         icon={ChevronRightIcon}
@@ -190,7 +190,7 @@
           fontWeight: 'medium',
           userSelect: 'none',
           transition: 'common',
-          transitionProperty: 'color, background-color',
+          transitionProperty: '[color, background-color]',
           _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
         })}
         onclick={(e) => {
@@ -239,7 +239,7 @@
       opacity: app.state.trashOpen ? '100' : '0',
       transitionDuration: '150ms',
       transitionTimingFunction: 'ease',
-      transitionProperty: resizer ? 'none' : 'height, opacity',
+      transitionProperty: resizer ? '[none]' : '[height, opacity]',
     })}
   >
     <TrashTree {$site} />

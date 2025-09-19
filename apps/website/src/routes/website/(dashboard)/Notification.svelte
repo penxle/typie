@@ -99,7 +99,7 @@
     boxShadow: 'small',
     opacity: open ? '100' : '0',
     zIndex: 'notification',
-    transitionProperty: 'left, opacity',
+    transitionProperty: '[left, opacity]',
     transitionDuration: '100ms',
     transitionTimingFunction: 'cubic-bezier(0.33, 1, 0.68, 1)',
     overflowX: 'hidden',

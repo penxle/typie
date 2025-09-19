@@ -48,7 +48,7 @@
 
     let p95 = 0;
     if (numbers.length > 0) {
-      const sorted = [...numbers].sort((a, b) => a - b);
+      const sorted = [...numbers].toSorted((a, b) => a - b);
       const index = Math.floor(sorted.length * 0.95);
       p95 = sorted[Math.min(index, sorted.length - 1)];
     }

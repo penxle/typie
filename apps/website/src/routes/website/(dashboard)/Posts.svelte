@@ -132,7 +132,7 @@
           minWidth: app.preference.current.postsExpanded === 'open' ? 'var(--min-width)' : '0',
           maxWidth: app.preference.current.postsExpanded === 'open' ? 'var(--max-width)' : '0',
           opacity: app.preference.current.postsExpanded === 'open' ? '100' : '0',
-          transitionProperty: 'min-width, max-width, opacity, position, margin-block',
+          transitionProperty: '[min-width, max-width, opacity, position, margin-block]',
         }
       : {
           position: 'fixed',
@@ -143,7 +143,7 @@
           maxWidth: app.state.postsOpen ? 'var(--max-width)' : '0',
           opacity: app.state.postsOpen ? '100' : '0',
           zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'sidebar',
-          transitionProperty: 'left, opacity, position, margin-block',
+          transitionProperty: '[left, opacity, position, margin-block]',
           overflow: 'var(--overflow)',
         },
   )}
@@ -171,7 +171,7 @@
         maxWidth: 'var(--max-width)',
         height: 'full',
         backgroundColor: 'surface.default',
-        transitionProperty: 'border, border-radius, box-shadow',
+        transitionProperty: '[border, border-radius, box-shadow]',
         transitionDuration: '150ms',
         transitionTimingFunction: 'ease',
         overflow: 'hidden',

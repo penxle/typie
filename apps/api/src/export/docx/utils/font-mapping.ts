@@ -80,7 +80,7 @@ export class FontMapper {
 
         const supportedWeights = Object.keys(fontWeightMapping[fontId])
           .map(Number)
-          .sort((a, b) => a - b);
+          .toSorted((a, b) => a - b);
         if (supportedWeights.length > 0) {
           const closestWeight = weight >= 700 ? (supportedWeights.at(-1) ?? supportedWeights[0]) : supportedWeights[0];
 
@@ -120,7 +120,7 @@ export class FontMapper {
           return fontName;
         }
 
-        const weights = [...weightMap.keys()].sort((a, b) => a - b);
+        const weights = [...weightMap.keys()].toSorted((a, b) => a - b);
         const closestWeight = weights.reduce((prev, curr) => {
           return Math.abs(curr - targetWeight) < Math.abs(prev - targetWeight) ? curr : prev;
         });

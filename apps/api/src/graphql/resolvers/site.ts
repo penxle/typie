@@ -35,7 +35,7 @@ ISite.implement({
           .innerJoin(FontFamilies, eq(Fonts.familyId, FontFamilies.id))
           .where(and(eq(FontFamilies.userId, self.userId), eq(Fonts.state, FontState.ACTIVE)));
 
-        return fonts.sort((a, b) => a.name.localeCompare(b.name));
+        return fonts.toSorted((a, b) => a.name.localeCompare(b.name));
       },
     }),
   }),

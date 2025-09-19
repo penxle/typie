@@ -80,7 +80,7 @@ export const calculateAnchorPositions = (
           : '(내용 없음)',
       };
     })
-    .sort((a, b) => a.position - b.position);
+    .toSorted((a, b) => a.position - b.position);
 };
 
 export const findAnchorableNode = (editor: Editor, position?: number): { nodeId: string | null; pos: number | null } => {

@@ -308,7 +308,7 @@ User.implement({
           .from(FontFamilies)
           .where(and(eq(FontFamilies.userId, self.id), eq(FontFamilies.state, FontFamilyState.ACTIVE)));
 
-        return fontFamilies.sort((a, b) => a.name.localeCompare(b.name));
+        return fontFamilies.toSorted((a, b) => a.name.localeCompare(b.name));
       },
     }),
 

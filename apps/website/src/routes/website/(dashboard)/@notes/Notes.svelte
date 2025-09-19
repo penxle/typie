@@ -230,7 +230,7 @@
 
   const sortedNotes = $derived.by(() => {
     if (localNoteOrder.length === 0) return $query.notes;
-    return [...$query.notes].sort((a, b) => {
+    return [...$query.notes].toSorted((a, b) => {
       const indexA = localNoteOrder.indexOf(a.id);
       const indexB = localNoteOrder.indexOf(b.id);
       if (indexA === -1) return 1;

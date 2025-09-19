@@ -53,7 +53,7 @@
       textAlign: 'center',
       outlineOffset: '0',
       transition: 'colors',
-      transitionProperty: 'unset',
+      transitionProperty: '[unset]',
       userSelect: 'none',
       pointerEvents: { _disabled: 'none', _loading: 'none' },
     },

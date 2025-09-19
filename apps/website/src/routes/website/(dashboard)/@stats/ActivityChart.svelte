@@ -83,7 +83,7 @@
 
     if (allValues.length === 0) return { start: 0, end: 0 };
 
-    const sortedValues = [...allValues].sort((a, b) => a - b);
+    const sortedValues = [...allValues].toSorted((a, b) => a - b);
     const maxValue = sortedValues.at(-1);
 
     if (!maxValue) return { start: 0, end: 0 };

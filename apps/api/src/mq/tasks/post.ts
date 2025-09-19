@@ -353,7 +353,7 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         }
       }
 
-      const retainedSnapshots = [...windowedSnapshots.values()].sort((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
+      const retainedSnapshots = [...windowedSnapshots.values()].toSorted((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
 
       if (retainedSnapshots.length === snapshots.length) {
         await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
