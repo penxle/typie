@@ -40,6 +40,10 @@ class Sentinel extends pulumi.ComponentResource {
 
           useHostnames: false,
 
+          image: {
+            repository: 'bitnamilegacy/valkey',
+          },
+
           auth: {
             enabled: false,
           },
@@ -47,6 +51,10 @@ class Sentinel extends pulumi.ComponentResource {
           sentinel: {
             enabled: true,
             primarySet: 'primary',
+
+            image: {
+              repository: 'bitnamilegacy/valkey-sentinel',
+            },
 
             resources: {
               requests: { cpu: '500m' },
@@ -124,9 +132,25 @@ class Sentinel extends pulumi.ComponentResource {
             podMonitor: { enabled: true },
             prometheusRule: { enabled: true },
 
+            image: {
+              repository: 'bitnamilegacy/redis-exporter',
+            },
+
             resources: {
               requests: { cpu: '500m' },
               limits: { memory: '1Gi' },
+            },
+          },
+
+          volumePermissions: {
+            image: {
+              repository: 'bitnamilegacy/os-shell',
+            },
+          },
+
+          kubectl: {
+            image: {
+              repository: 'bitnamilegacy/kubectl',
             },
           },
         },
