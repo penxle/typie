@@ -243,6 +243,16 @@ builder.mutationFields((t) => ({
       const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
 
       return await db.transaction(async (tx) => {
+        const existingWillActivate = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
+          .then(first);
+
+        if (existingWillActivate) {
+          await tx.delete(Subscriptions).where(eq(Subscriptions.id, existingWillActivate.id));
+        }
+
         await tx.update(Subscriptions).set({ state: SubscriptionState.WILL_EXPIRE }).where(eq(Subscriptions.id, activeSubscription.id));
 
         return await tx
