@@ -639,7 +639,6 @@ builder.mutationFields((t) => ({
             layoutMode: PostContents.layoutMode,
             pageLayout: PostContents.pageLayout,
             storedMarks: PostContents.storedMarks,
-            note: PostContents.note,
           },
         })
         .from(Posts)
@@ -665,7 +664,6 @@ builder.mutationFields((t) => ({
         storedMarks: post.content.storedMarks,
         layoutMode: post.content.layoutMode,
         pageLayout: post.content.pageLayout,
-        note: post.content.note,
         anchors: Object.fromEntries(anchors.map((anchor) => [anchor.nodeId, anchor.name])),
       });
 
@@ -713,7 +711,6 @@ builder.mutationFields((t) => ({
           blobSize: post.content.blobSize,
           layoutMode: post.content.layoutMode,
           pageLayout: post.content.pageLayout,
-          note: post.content.note,
         });
 
         if (anchors.length > 0) {
