@@ -11,6 +11,7 @@ amazonses
 batang
 bbox
 bento
+bitnamilegacy
 blpop
 buildx
 bullmq

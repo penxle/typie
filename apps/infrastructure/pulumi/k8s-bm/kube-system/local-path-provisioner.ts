@@ -18,7 +18,7 @@ new k8s.helm.v4.Chart(
         defaultClass: true,
       },
 
-      nodePathMap: [{ node: 'DEFAULT_PATH_FOR_NON_LISTED_NODES', paths: ['/data'] }],
+      nodePathMap: [{ node: 'DEFAULT_PATH_FOR_NON_LISTED_NODES', paths: ['/var/mnt/data'] }],
     },
   },
   { provider },
