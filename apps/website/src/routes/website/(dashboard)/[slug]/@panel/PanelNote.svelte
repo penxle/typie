@@ -1,12 +1,10 @@
 <script lang="ts">
-  import { TinyColor } from '@ctrl/tinycolor';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
   import { Button, Icon, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { values } from '@typie/ui/tiptap/values-base';
-  import { debounce } from '@typie/ui/utils';
+  import { debounce, getNoteColors, getRandomNoteColor } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import ExpandIcon from '~icons/lucide/expand';
   import Minimize2Icon from '~icons/lucide/minimize-2';
@@ -70,7 +68,6 @@
   `);
 
   const app = getAppContext();
-  const colors = values.textBackgroundColor.filter((color) => color.value !== 'none').map((color) => color.hex);
 
   const isLoading = $derived(!$notesQuery);
   const notes = $derived($notesQuery?.notes?.toSorted((a, b) => a.order.localeCompare(b.order)) || []);
@@ -104,7 +101,7 @@
   };
 
   const handleAddNote = async () => {
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    const randomColor = getRandomNoteColor();
     const result = await createNote({
       content: '',
       color: randomColor,
@@ -230,8 +227,9 @@
       </div>
     {:else}
       {#each notes as note (note.id)}
+        {@const color = getNoteColors().find((color) => color.value === note.color)?.hex ?? '#fff'}
         <div
-          style:background-color={`color-mix(in srgb, #fff, ${new TinyColor(note.color).toRgbString()} 75%)`}
+          style:background-color={`color-mix(in srgb, #fff, ${color} 75%)`}
           class={cx(
             'group',
             flex({
