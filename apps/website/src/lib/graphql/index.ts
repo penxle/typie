@@ -52,6 +52,10 @@ export default createClient({
   ],
   onError: (err, event) => {
     if (err instanceof TypieError) {
+      if (err.extensions?.status === 401) {
+        redirect(302, `${env.PUBLIC_AUTH_URL}/login`);
+      }
+
       error(err.status, {
         message: err.message,
         code: err.code,
