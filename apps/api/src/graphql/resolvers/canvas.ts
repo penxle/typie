@@ -256,6 +256,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const entity = await db
         .select({
+          id: Entities.id,
           siteId: Entities.siteId,
           parentEntityId: Entities.parentId,
           order: Entities.order,
@@ -296,6 +297,16 @@ builder.mutationFields((t) => ({
         .innerJoin(CanvasContents, eq(Canvases.id, CanvasContents.canvasId))
         .where(eq(Canvases.id, input.canvasId))
         .then(firstOrThrow);
+
+      const notes = await db
+        .select({
+          content: Notes.content,
+          color: Notes.color,
+          order: Notes.order,
+        })
+        .from(Notes)
+        .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)))
+        .orderBy(asc(Notes.order));
 
       const title = `(사본) ${canvas.title || '(제목 없음)'}`;
 
@@ -351,6 +362,20 @@ builder.mutationFields((t) => ({
           snapshotId: canvasSnapshot.id,
           userId: ctx.session.userId,
         });
+
+        if (notes.length > 0) {
+          await tx.insert(Notes).values(
+            notes.map((note) => ({
+              userId: ctx.session.userId,
+              entityId: newEntity.id,
+              content: note.content,
+              color: note.color,
+              order: note.order,
+              createdAt: dayjs(),
+              updatedAt: dayjs(),
+            })),
+          );
+        }
 
         return newCanvas;
       });

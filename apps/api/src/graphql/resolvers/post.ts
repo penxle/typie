@@ -592,6 +592,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const entity = await db
         .select({
+          id: Entities.id,
           siteId: Entities.siteId,
           parentEntityId: Entities.parentId,
           order: Entities.order,
@@ -653,6 +654,16 @@ builder.mutationFields((t) => ({
         .select({ nodeId: PostAnchors.nodeId, name: PostAnchors.name })
         .from(PostAnchors)
         .where(eq(PostAnchors.postId, input.postId));
+
+      const notes = await db
+        .select({
+          content: Notes.content,
+          color: Notes.color,
+          order: Notes.order,
+        })
+        .from(Notes)
+        .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)))
+        .orderBy(asc(Notes.order));
 
       const title = `(사본) ${post.title ?? '(제목 없음)'}`;
 
@@ -733,6 +744,20 @@ builder.mutationFields((t) => ({
           snapshotId: postSnapshot.id,
           userId: ctx.session.userId,
         });
+
+        if (notes.length > 0) {
+          await tx.insert(Notes).values(
+            notes.map((note) => ({
+              userId: ctx.session.userId,
+              entityId: newEntity.id,
+              content: note.content,
+              color: note.color,
+              order: note.order,
+              createdAt: dayjs(),
+              updatedAt: dayjs(),
+            })),
+          );
+        }
 
         return newPost;
       });
