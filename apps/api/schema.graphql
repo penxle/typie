@@ -199,6 +199,7 @@ type Entity implements IEntity {
   descendants: [Entity!]!
   id: ID!
   node: EntityNode!
+  notes: [Note!]!
   order: String!
   parent: Entity
   permalink: String!

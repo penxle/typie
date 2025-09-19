@@ -10,6 +10,7 @@
   import { autosize } from '@typie/ui/actions';
   import { EditorLayout, EditorZoom } from '@typie/ui/components';
   import { getIncompatibleBlocks, getNodeViewByNodeId, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
+  import { values } from '@typie/ui/tiptap/values-base';
   import { clamp, createDefaultPageLayout, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
@@ -64,6 +65,12 @@
 
         entity {
           id
+
+          notes {
+            id
+            content
+            color
+          }
 
           site {
             id
@@ -144,6 +151,34 @@
     }
   `);
 
+  const createNote = graphql(`
+    mutation WebViewEditor_CreateNote_Mutation($input: CreateNoteInput!) {
+      createNote(input: $input) {
+        id
+        content
+        color
+      }
+    }
+  `);
+
+  const updateNote = graphql(`
+    mutation WebViewEditor_UpdateNote_Mutation($input: UpdateNoteInput!) {
+      updateNote(input: $input) {
+        id
+        content
+        color
+      }
+    }
+  `);
+
+  const deleteNote = graphql(`
+    mutation WebViewEditor_DeleteNote_Mutation($input: DeleteNoteInput!) {
+      deleteNote(input: $input) {
+        id
+      }
+    }
+  `);
+
   setupEditorContext();
 
   const clientId = nanoid();
@@ -191,7 +226,6 @@
   const subtitle = new YState<string>(doc, 'subtitle', '');
   const maxWidth = new YState<number>(doc, 'maxWidth', 800);
   const storedMarks = new YState<unknown[]>(doc, 'storedMarks', []);
-  const note = new YState(doc, 'note', '');
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
   const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
 
@@ -203,6 +237,14 @@
       ])
       .join('\n'),
   );
+
+  let noteContent = $state('');
+  let currentNoteId = $state<string>();
+  let noteUpdateTimeout: NodeJS.Timeout | null = null;
+  let isNoteInitialized = $state(false);
+
+  const colors = values.textBackgroundColor.filter((color) => color.value !== 'none').map((color) => color.hex);
+  const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
 
   let syncUpdateTimeout: NodeJS.Timeout | null = null;
   let pendingUpdate: Uint8Array | null = null;
@@ -320,7 +362,7 @@
   const setYJSState = () => {
     window.__webview__?.emitEvent('setYJSState', {
       maxWidth: maxWidth.current,
-      note: note.current,
+      note: noteContent,
       layoutMode: layoutMode.current,
       pageLayout: pageLayout.current,
     });
@@ -328,6 +370,39 @@
 
   $effect(() => {
     window.__webview__?.emitEvent('connectionStatus', connectionStatus);
+  });
+
+  $effect(() => {
+    const content = noteContent.trim();
+
+    if (!isNoteInitialized) return;
+
+    if (noteUpdateTimeout) {
+      clearTimeout(noteUpdateTimeout);
+    }
+
+    noteUpdateTimeout = setTimeout(async () => {
+      if (content && !currentNoteId) {
+        const result = await createNote({
+          entityId: $query.post.entity.id,
+          content,
+          color: getRandomColor(),
+        });
+
+        currentNoteId = result.id;
+      } else if (content && currentNoteId) {
+        await updateNote({
+          noteId: currentNoteId,
+          content,
+        });
+      } else if (!content && currentNoteId) {
+        await deleteNote({
+          noteId: currentNoteId,
+        });
+
+        currentNoteId = undefined;
+      }
+    }, 1000);
   });
 
   $effect(() => {
@@ -366,6 +441,14 @@
   });
 
   onMount(() => {
+    const existingNote = $query.post.entity.notes?.[0];
+    if (existingNote) {
+      noteContent = existingNote.content;
+      currentNoteId = existingNote.id;
+    }
+
+    isNoteInitialized = true;
+
     viewEntity({ entityId: $query.post.entity.id });
 
     const heartbeatCheckInterval = setInterval(() => {
@@ -771,7 +854,7 @@
           editor?.current.chain().focus().setBodyBlockGap(attrs.blockGap).run();
         }
       } else if (name === 'note') {
-        note.current = attrs.note;
+        noteContent = attrs.note;
       }
     });
 
@@ -931,6 +1014,10 @@
 
       if (syncAwarenessTimeout) {
         clearTimeout(syncAwarenessTimeout);
+      }
+
+      if (noteUpdateTimeout) {
+        clearTimeout(noteUpdateTimeout);
       }
 
       window.removeEventListener('online', handleOnline);

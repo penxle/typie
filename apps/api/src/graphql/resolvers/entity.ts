@@ -12,7 +12,7 @@ import { pubsub } from '@/pubsub';
 import { generateFractionalOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Site, SiteView, User } from '../objects';
+import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Note, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -168,6 +168,17 @@ Entity.implement({
         `);
 
         return rows.map(({ id }) => id);
+      },
+    }),
+
+    notes: t.field({
+      type: [Note],
+      resolve: async (self) => {
+        return await db
+          .select()
+          .from(Notes)
+          .where(and(eq(Notes.entityId, self.id), eq(Notes.state, NoteState.ACTIVE)))
+          .orderBy(asc(Notes.order));
       },
     }),
   }),
