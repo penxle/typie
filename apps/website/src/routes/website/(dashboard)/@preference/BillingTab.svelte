@@ -8,8 +8,8 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { PlanId } from '@/const';
-  import { SubscriptionState } from '@/enums';
+  import { PlanPair } from '@/const';
+  import { PlanInterval, SubscriptionState } from '@/enums';
   import { fragment, graphql } from '$graphql';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
@@ -44,6 +44,7 @@
             id
             name
             fee
+            interval
           }
         }
 
@@ -57,6 +58,7 @@
             id
             name
             fee
+            interval
           }
         }
       }
@@ -226,47 +228,34 @@
             <p class={css({ fontSize: '12px', color: 'text.faint' })}>
               {dayjs($user.subscription.expiresAt).formatAsDate()}에 {comma($user.subscription.plan.fee)}원 결제 예정
             </p>
-            {#if !$user.nextSubscription && $user.subscription.plan.id === PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY}
+            {#if !$user.nextSubscription && PlanPair[$user.subscription.plan.id as keyof typeof PlanPair]}
+              {@const targetPlanId = PlanPair[$user.subscription.plan.id as keyof typeof PlanPair]}
+              {@const isMonthly = $user.subscription.plan.interval === PlanInterval.MONTHLY}
               <Button
                 onclick={() => {
                   Dialog.confirm({
-                    title: '연간 플랜으로 전환하시겠어요?',
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    message: `다음 결제일(${dayjs($user.subscription!.expiresAt).formatAsDate()})부터 연간 플랜(49,000원/년)이 적용됩니다.`,
+                    title: isMonthly ? '연간 플랜으로 전환하시겠어요?' : '월간 플랜으로 전환하시겠어요?',
+                    message: isMonthly
+                      ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                        `다음 결제일(${dayjs($user.subscription!.expiresAt).formatAsDate()})부터 연간 플랜(49,000원/년)이 적용됩니다.`
+                      : // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                        `다음 결제일(${dayjs($user.subscription!.expiresAt).formatAsDate()})부터 월간 플랜(4,900원/월)이 적용됩니다.`,
                     actionLabel: '전환하기',
                     actionHandler: async () => {
-                      await schedulePlanChange({ planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
+                      await schedulePlanChange({ planId: targetPlanId });
                       cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
                       cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
-                      mixpanel.track('change_plan', { from: 'monthly', to: 'yearly' });
+                      mixpanel.track('change_plan', {
+                        from: isMonthly ? 'monthly' : 'yearly',
+                        to: isMonthly ? 'yearly' : 'monthly',
+                      });
                     },
                   });
                 }}
                 size="sm"
                 variant="secondary"
               >
-                연간 플랜으로 전환
-              </Button>
-            {:else if !$user.nextSubscription && $user.subscription.plan.id === PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY}
-              <Button
-                onclick={() => {
-                  Dialog.confirm({
-                    title: '월간 플랜으로 전환하시겠어요?',
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    message: `다음 결제일(${dayjs($user.subscription!.expiresAt).formatAsDate()})부터 월간 플랜(4,900원/월)이 적용됩니다.`,
-                    actionLabel: '전환하기',
-                    actionHandler: async () => {
-                      await schedulePlanChange({ planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
-                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
-                      mixpanel.track('change_plan', { from: 'yearly', to: 'monthly' });
-                    },
-                  });
-                }}
-                size="sm"
-                variant="secondary"
-              >
-                월간 플랜으로 전환
+                {isMonthly ? '연간 플랜으로 전환' : '월간 플랜으로 전환'}
               </Button>
             {/if}
           </div>
