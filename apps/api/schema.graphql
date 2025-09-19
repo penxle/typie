@@ -1080,6 +1080,7 @@ type User {
   id: ID!
   marketingConsent: Boolean!
   name: String!
+  nextSubscription: Subscription_
   notifications: [Notification!]!
   personalIdentity: UserPersonalIdentity
   postCount: Int!
