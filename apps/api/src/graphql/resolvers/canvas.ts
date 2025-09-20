@@ -308,6 +308,19 @@ builder.mutationFields((t) => ({
         .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)))
         .orderBy(asc(Notes.order));
 
+      let lastOrder: string | null = null;
+      if (notes.length > 0) {
+        const lastUserNote = await db
+          .select({ order: Notes.order })
+          .from(Notes)
+          .where(and(eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+          .orderBy(desc(Notes.order))
+          .limit(1)
+          .then(first);
+
+        lastOrder = lastUserNote?.order ?? null;
+      }
+
       const title = `(사본) ${canvas.title || '(제목 없음)'}`;
 
       const doc = makeCanvasYDoc({
@@ -364,17 +377,25 @@ builder.mutationFields((t) => ({
         });
 
         if (notes.length > 0) {
-          await tx.insert(Notes).values(
-            notes.map((note) => ({
+          const notesWithNewOrder = notes.map((note) => {
+            const newOrder = generateFractionalOrder({
+              lower: lastOrder,
+              upper: null,
+            });
+            lastOrder = newOrder;
+
+            return {
               userId: ctx.session.userId,
               entityId: newEntity.id,
               content: note.content,
               color: note.color,
-              order: note.order,
+              order: newOrder,
               createdAt: dayjs(),
               updatedAt: dayjs(),
-            })),
-          );
+            };
+          });
+
+          await tx.insert(Notes).values(notesWithNewOrder);
         }
 
         return newCanvas;
