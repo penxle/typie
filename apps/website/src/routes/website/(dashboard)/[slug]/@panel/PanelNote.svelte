@@ -119,8 +119,7 @@
 
     if (result?.id) {
       lastAddedNoteId = result.id;
-      mixpanel.track('create_note', {
-        relatedToEntity: true,
+      mixpanel.track('create_related_note', {
         via,
       });
       cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
@@ -129,7 +128,7 @@
 
   const handleDeleteNote = async (noteId: string) => {
     await deleteNote({ noteId });
-    mixpanel.track('delete_note');
+    mixpanel.track('delete_related_note');
     cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
   };
 
