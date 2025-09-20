@@ -8,6 +8,11 @@ type SentinelArgs = {
 
   replicas: pulumi.Input<number>;
   hostname: pulumi.Input<string>;
+
+  resources: {
+    cpu: pulumi.Input<string>;
+    memory: pulumi.Input<string>;
+  };
 };
 
 class Sentinel extends pulumi.ComponentResource {
@@ -57,8 +62,8 @@ class Sentinel extends pulumi.ComponentResource {
             },
 
             resources: {
-              requests: { cpu: '500m' },
-              limits: { memory: '1Gi' },
+              requests: { cpu: '100m' },
+              limits: { memory: '256Mi' },
             },
 
             service: {
@@ -76,8 +81,8 @@ class Sentinel extends pulumi.ComponentResource {
             replicaCount: 1,
 
             resources: {
-              requests: { cpu: '2' },
-              limits: { memory: '4Gi' },
+              requests: { cpu: args.resources.cpu },
+              limits: { memory: args.resources.memory },
             },
 
             persistence: {
@@ -103,8 +108,8 @@ class Sentinel extends pulumi.ComponentResource {
             replicaCount: args.replicas,
 
             resources: {
-              requests: { cpu: '2' },
-              limits: { memory: '4Gi' },
+              requests: { cpu: args.resources.cpu },
+              limits: { memory: args.resources.memory },
             },
 
             persistence: {
@@ -137,8 +142,8 @@ class Sentinel extends pulumi.ComponentResource {
             },
 
             resources: {
-              requests: { cpu: '500m' },
-              limits: { memory: '1Gi' },
+              requests: { cpu: '100m' },
+              limits: { memory: '256Mi' },
             },
           },
 
@@ -166,6 +171,11 @@ new Sentinel('redis@dev', {
 
   replicas: 1,
   hostname: 'dev.redis.typie.io',
+
+  resources: {
+    cpu: '200m',
+    memory: '512Mi',
+  },
 });
 
 new Sentinel('redis@prod', {
@@ -174,4 +184,9 @@ new Sentinel('redis@prod', {
 
   replicas: 3,
   hostname: 'redis.typie.io',
+
+  resources: {
+    cpu: '500m',
+    memory: '1Gi',
+  },
 });
