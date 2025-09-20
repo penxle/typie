@@ -7,6 +7,11 @@ type MeilisearchArgs = {
   namespace: pulumi.Input<string>;
 
   hostname: pulumi.Input<string>;
+
+  resources: {
+    cpu: pulumi.Input<string>;
+    memory: pulumi.Input<string>;
+  };
 };
 
 class Meilisearch extends pulumi.ComponentResource {
@@ -54,8 +59,8 @@ class Meilisearch extends pulumi.ComponentResource {
           },
 
           resources: {
-            requests: { cpu: '2' },
-            limits: { memory: '4Gi' },
+            requests: { cpu: args.resources.cpu },
+            limits: { memory: args.resources.memory },
           },
 
           auth: {
@@ -94,6 +99,11 @@ const dev = new Meilisearch('meilisearch@dev', {
   namespace: 'dev',
 
   hostname: 'dev.search.typie.io',
+
+  resources: {
+    cpu: '200m',
+    memory: '1Gi',
+  },
 });
 
 const prod = new Meilisearch('meilisearch@prod', {
@@ -101,6 +111,11 @@ const prod = new Meilisearch('meilisearch@prod', {
   namespace: 'prod',
 
   hostname: 'search.typie.io',
+
+  resources: {
+    cpu: '500m',
+    memory: '2Gi',
+  },
 });
 
 export const outputs = {
