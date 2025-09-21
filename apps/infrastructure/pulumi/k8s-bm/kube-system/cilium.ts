@@ -1,7 +1,7 @@
 import * as k8s from '@pulumi/kubernetes';
 import { provider } from '$k8s-bm/provider';
 
-new k8s.helm.v4.Chart(
+const chart = new k8s.helm.v4.Chart(
   'cilium@bm',
   {
     name: 'cilium',
@@ -89,7 +89,7 @@ new k8s.apiextensions.CustomResource(
       blocks: [{ cidr: '10.30.0.0/16' }],
     },
   },
-  { provider },
+  { provider, dependsOn: [chart] },
 );
 
 new k8s.apiextensions.CustomResource(
@@ -126,7 +126,7 @@ new k8s.apiextensions.CustomResource(
       ],
     },
   },
-  { provider },
+  { provider, dependsOn: [chart] },
 );
 
 new k8s.apiextensions.CustomResource(
@@ -145,7 +145,7 @@ new k8s.apiextensions.CustomResource(
       },
     },
   },
-  { provider },
+  { provider, dependsOn: [chart] },
 );
 
 new k8s.apiextensions.CustomResource(
@@ -176,5 +176,5 @@ new k8s.apiextensions.CustomResource(
       ],
     },
   },
-  { provider },
+  { provider, dependsOn: [chart] },
 );
