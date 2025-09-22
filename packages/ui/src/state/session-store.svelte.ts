@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { safeJsonParse } from '../utils';
 
 export class SessionStore<T> {
   #key: string;
@@ -11,12 +12,14 @@ export class SessionStore<T> {
     if (browser) {
       const item = sessionStorage.getItem(this.#key);
       if (item) {
-        this.current = JSON.parse(item);
+        this.current = safeJsonParse<T>(item, value);
       }
     }
 
     $effect(() => {
-      sessionStorage.setItem(this.#key, JSON.stringify(this.current));
+      if (this.current !== undefined) {
+        sessionStorage.setItem(this.#key, JSON.stringify(this.current));
+      }
     });
   }
 }

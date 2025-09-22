@@ -1,4 +1,5 @@
 import { toast as sonner } from 'svelte-sonner';
+import { safeJsonParse } from '../../utils';
 import Item from './Item.svelte';
 
 export type TipOptions = {
@@ -10,7 +11,7 @@ const append = (key: string, message: string, options?: TipOptions) => {
     throw new TypeError('tip can only be used in browser');
   }
 
-  const saved = JSON.parse(localStorage.getItem('typie:tips') ?? '[]') as string[];
+  const saved = safeJsonParse<string[]>(localStorage.getItem('typie:tips'), []);
   if (saved.includes(key)) {
     return;
   }
