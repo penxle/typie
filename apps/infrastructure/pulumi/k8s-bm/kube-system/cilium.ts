@@ -19,11 +19,7 @@ const chart = new k8s.helm.v4.Chart(
       kubeProxyReplacement: true,
 
       ipam: {
-        mode: 'cluster-pool',
-        operator: {
-          clusterPoolIPv4PodCIDRList: '10.10.0.0/16',
-          clusterPoolIPv4MaskSize: 24,
-        },
+        mode: 'kubernetes',
       },
 
       bgpControlPlane: {
@@ -61,6 +57,14 @@ const chart = new k8s.helm.v4.Chart(
         },
       },
       // spell-checker:enable
+
+      cgroup: {
+        autoMount: {
+          enabled: false,
+        },
+
+        hostRoot: '/sys/fs/cgroup',
+      },
 
       hubble: {
         relay: {
