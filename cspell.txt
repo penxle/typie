@@ -105,6 +105,8 @@ unplugin
 unstub
 unsubscriber
 vcpu
+virtio
+virtiofs
 vite
 wonka
 xact

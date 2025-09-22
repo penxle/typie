@@ -341,7 +341,7 @@ const cluster = new Cluster('db@prod', {
   },
 
   storage: {
-    size: '200Gi',
+    size: '400Gi',
   },
 });
 
