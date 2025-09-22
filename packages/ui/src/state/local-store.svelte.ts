@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { safeJsonParse } from '../utils';
 
 export class LocalStore<T> {
   #key: string;
@@ -11,13 +12,15 @@ export class LocalStore<T> {
     if (browser) {
       const item = localStorage.getItem(this.#key);
       if (item) {
-        const value = JSON.parse(item);
+        const value = safeJsonParse<T>(item, defaultValue);
         this.current = { ...defaultValue, ...value };
       }
     }
 
     $effect(() => {
-      localStorage.setItem(this.#key, JSON.stringify(this.current));
+      if (this.current !== undefined) {
+        localStorage.setItem(this.#key, JSON.stringify(this.current));
+      }
     });
   }
 }

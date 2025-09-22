@@ -9,6 +9,7 @@
   import { EditorLayout, EditorZoom, Helmet, HorizontalDivider, Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
+  import { LocalStore } from '@typie/ui/state';
   import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
@@ -197,6 +198,18 @@
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   let entity = $state<(typeof $query.entities)[number]>($query.entities.find((entity) => entity.slug === slug)!);
 
+  const selectionsStore = new LocalStore<
+    Record<
+      string,
+      {
+        selection?: unknown;
+        type?: string;
+        element?: string;
+        timestamp: number;
+      }
+    >
+  >('typie:selections', {});
+
   $effect(() => {
     void slug;
 
@@ -275,9 +288,10 @@
 
     const { selection } = transaction;
 
-    const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-    selections[postId] = { ...selection.toJSON(), timestamp: dayjs().valueOf() };
-    localStorage.setItem('typie:selections', JSON.stringify(selections));
+    selectionsStore.current = {
+      ...selectionsStore.current,
+      [postId]: { ...selection.toJSON(), timestamp: dayjs().valueOf() },
+    };
   };
 
   const fontFaces = $derived(
@@ -586,7 +600,7 @@
     });
 
     editor?.current.once('create', ({ editor }) => {
-      const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
+      const selections = selectionsStore.current;
       if (postId && selections[postId]) {
         if (selections[postId].type === 'element') {
           if (selections[postId].element === 'title') {
@@ -947,9 +961,10 @@
                       maxlength="100"
                       onfocus={() => {
                         if (postId) {
-                          const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-                          selections[postId] = { type: 'element', element: 'title', timestamp: dayjs().valueOf() };
-                          localStorage.setItem('typie:selections', JSON.stringify(selections));
+                          selectionsStore.current = {
+                            ...selectionsStore.current,
+                            [postId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
+                          };
                         }
                       }}
                       onkeydown={(e) => {
@@ -985,9 +1000,10 @@
                       maxlength="100"
                       onfocus={() => {
                         if (postId) {
-                          const selections = JSON.parse(localStorage.getItem('typie:selections') || '{}');
-                          selections[postId] = { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() };
-                          localStorage.setItem('typie:selections', JSON.stringify(selections));
+                          selectionsStore.current = {
+                            ...selectionsStore.current,
+                            [postId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
+                          };
                         }
                       }}
                       onkeydown={(e) => {
