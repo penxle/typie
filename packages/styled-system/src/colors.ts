@@ -216,7 +216,9 @@ export const semanticColors = defineSemanticTokens.colors({
   'callout.danger': { value: { base: '#dc2626', _dark: '#f04444' } },
 
   'prosemirror.black': { value: { base: '{colors.gray.900}', _dark: '{colors.dark.gray.50}' } },
+  'prosemirror.darkgray': { value: { base: '{colors.gray.600}', _dark: '{colors.dark.gray.300}' } },
   'prosemirror.gray': { value: { base: '#71717a' } },
+  'prosemirror.lightgray': { value: { base: '{colors.gray.300}', _dark: '{colors.dark.gray.600}' } },
   'prosemirror.white': { value: { base: '{colors.white}', _dark: '{colors.dark.gray.900}' } },
   'prosemirror.red': { value: { base: '#ef4444' } },
   'prosemirror.orange': { value: { base: '#f97316' } },

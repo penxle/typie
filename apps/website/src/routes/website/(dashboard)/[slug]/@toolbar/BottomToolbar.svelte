@@ -157,7 +157,7 @@
       {/snippet}
 
       {#snippet floating({ close })}
-        <div class={grid({ columns: 10, gap: '8px', padding: '8px' })}>
+        <div class={grid({ columns: 11, gap: '8px', padding: '8px' })}>
           {#each values.textColor as { label, value, color } (value)}
             <button
               style:background-color={color}

@@ -40,7 +40,9 @@ export const values = {
 
   textColor: [
     { label: '블랙', value: 'black', hex: '#18181b', color: token('colors.prosemirror.black') },
+    { label: '다크 그레이', value: 'darkgray', hex: '#52525c', color: token('colors.prosemirror.darkgray') },
     { label: '그레이', value: 'gray', hex: '#71717a', color: token('colors.prosemirror.gray') },
+    { label: '라이트 그레이', value: 'lightgray', hex: '#d4d4d8', color: token('colors.prosemirror.lightgray') },
     { label: '화이트', value: 'white', hex: '#ffffff', color: token('colors.prosemirror.white') },
     { label: '레드', value: 'red', hex: '#ef4444', color: token('colors.prosemirror.red') },
     { label: '오렌지', value: 'orange', hex: '#f97316', color: token('colors.prosemirror.orange') },
