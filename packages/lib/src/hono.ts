@@ -18,6 +18,11 @@ export const getClientAddress = (c: Context) => {
       return IPAddr.parse(sveltekit).toString();
     }
 
+    const envoy = c.req.header('X-Envoy-External-Address');
+    if (envoy) {
+      return IPAddr.parse(envoy).toString();
+    }
+
     const xff = c.req.header('X-Forwarded-For');
     if (xff) {
       const ip = R.pipe(
