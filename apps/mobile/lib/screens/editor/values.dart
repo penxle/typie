@@ -70,7 +70,9 @@ final editorValues = <String, List<Map<String, dynamic>>>{
 
   'textColor': [
     {'label': '블랙', 'value': 'black', 'color': (BuildContext context) => context.colors.prosemirrorBlack},
+    {'label': '다크 그레이', 'value': 'darkgray', 'color': (BuildContext context) => context.colors.prosemirrorDarkgray},
     {'label': '그레이', 'value': 'gray', 'color': (BuildContext context) => const Color(0xFF71717A)},
+    {'label': '라이트 그레이', 'value': 'lightgray', 'color': (BuildContext context) => context.colors.prosemirrorLightgray},
     {'label': '화이트', 'value': 'white', 'color': (BuildContext context) => context.colors.prosemirrorWhite},
     {'label': '레드', 'value': 'red', 'color': (BuildContext context) => const Color(0xFFEF4444)},
     {'label': '오렌지', 'value': 'orange', 'color': (BuildContext context) => const Color(0xFFF97316)},

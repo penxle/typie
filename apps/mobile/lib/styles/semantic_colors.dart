@@ -31,6 +31,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.overlayDefault,
 
     required this.prosemirrorBlack,
+    required this.prosemirrorDarkgray,
+    required this.prosemirrorLightgray,
     required this.prosemirrorWhite,
   });
 
@@ -61,6 +63,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   final Color overlayDefault;
 
   final Color prosemirrorBlack;
+  final Color prosemirrorDarkgray;
+  final Color prosemirrorLightgray;
   final Color prosemirrorWhite;
 
   static const light = SemanticColors(
@@ -91,6 +95,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     overlayDefault: AppColors.black,
 
     prosemirrorBlack: AppColors.gray_900,
+    prosemirrorDarkgray: AppColors.gray_600,
+    prosemirrorLightgray: AppColors.gray_300,
     prosemirrorWhite: AppColors.white,
   );
 
@@ -122,6 +128,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     overlayDefault: AppColors.black,
 
     prosemirrorBlack: AppColors.dark.gray_50,
+    prosemirrorDarkgray: AppColors.dark.gray_300,
+    prosemirrorLightgray: AppColors.dark.gray_600,
     prosemirrorWhite: AppColors.dark.gray_900,
   );
 
@@ -154,6 +162,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     Color? overlayDefault,
 
     Color? prosemirrorBlack,
+    Color? prosemirrorDarkgray,
+    Color? prosemirrorLightgray,
     Color? prosemirrorWhite,
   }) {
     return SemanticColors(
@@ -184,6 +194,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       overlayDefault: overlayDefault ?? this.overlayDefault,
 
       prosemirrorBlack: prosemirrorBlack ?? this.prosemirrorBlack,
+      prosemirrorDarkgray: prosemirrorDarkgray ?? this.prosemirrorDarkgray,
+      prosemirrorLightgray: prosemirrorLightgray ?? this.prosemirrorLightgray,
       prosemirrorWhite: prosemirrorWhite ?? this.prosemirrorWhite,
     );
   }
@@ -221,6 +233,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       overlayDefault: Color.lerp(overlayDefault, other.overlayDefault, t)!,
 
       prosemirrorBlack: Color.lerp(prosemirrorBlack, other.prosemirrorBlack, t)!,
+      prosemirrorDarkgray: Color.lerp(prosemirrorDarkgray, other.prosemirrorDarkgray, t)!,
+      prosemirrorLightgray: Color.lerp(prosemirrorLightgray, other.prosemirrorLightgray, t)!,
       prosemirrorWhite: Color.lerp(prosemirrorWhite, other.prosemirrorWhite, t)!,
     );
   }
