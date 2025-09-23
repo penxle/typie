@@ -31,9 +31,10 @@ const chart = new k8s.helm.v4.Chart(
         loadBalancerMode: 'shared',
 
         service: {
-          type: 'NodePort',
-          insecureNodePort: 32_080,
-          secureNodePort: 32_443,
+          type: 'LoadBalancer',
+          labels: {
+            'cilium.typie.io/advertise-bgp': 'true',
+          },
         },
       },
 
@@ -89,8 +90,7 @@ new k8s.apiextensions.CustomResource(
       name: 'default',
     },
     spec: {
-      allowFirstLastIPs: 'No',
-      blocks: [{ cidr: '10.30.0.0/16' }],
+      blocks: [{ start: '10.30.0.10', stop: '10.30.0.20' }],
     },
   },
   { provider, dependsOn: [chart] },
@@ -144,6 +144,19 @@ new k8s.apiextensions.CustomResource(
     },
 
     spec: {
+      families: [
+        {
+          afi: 'ipv4',
+          safi: 'unicast',
+
+          advertisements: {
+            matchLabels: {
+              advertise: 'bgp',
+            },
+          },
+        },
+      ],
+
       gracefulRestart: {
         enabled: true,
       },
@@ -160,6 +173,9 @@ new k8s.apiextensions.CustomResource(
 
     metadata: {
       name: 'default',
+      labels: {
+        advertise: 'bgp',
+      },
     },
 
     spec: {
@@ -169,6 +185,16 @@ new k8s.apiextensions.CustomResource(
 
           service: {
             addresses: ['LoadBalancerIP'],
+          },
+
+          selector: {
+            matchExpressions: [
+              {
+                key: 'cilium.typie.io/advertise-bgp',
+                operator: 'In',
+                values: ['true'],
+              },
+            ],
           },
 
           attributes: {

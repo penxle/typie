@@ -1,39 +1,39 @@
-import * as aws from '@pulumi/aws';
 import * as k8s from '@pulumi/kubernetes';
+import { IAMUserSecret } from '$components';
 import { provider } from '$k8s-bm/provider';
 
-const user = new aws.iam.User('cert-manager@k8s', {
-  name: 'cert-manager@k8s',
-});
-
-new aws.iam.UserPolicy('cert-manager@k8s', {
-  user: user.name,
-
-  policy: {
-    Version: '2012-10-17',
-    Statement: [
-      {
-        Effect: 'Allow',
-        Action: 'route53:GetChange',
-        Resource: 'arn:aws:route53:::change/*',
+const secret = new IAMUserSecret(
+  'cert-manager',
+  {
+    metadata: {
+      name: 'cert-manager',
+      namespace: 'kube-system',
+    },
+    spec: {
+      policy: {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Action: 'route53:GetChange',
+            Resource: 'arn:aws:route53:::change/*',
+          },
+          {
+            Effect: 'Allow',
+            Action: ['route53:ChangeResourceRecordSets', 'route53:ListResourceRecordSets'],
+            Resource: 'arn:aws:route53:::hostedzone/*',
+          },
+          {
+            Effect: 'Allow',
+            Action: 'route53:ListHostedZonesByName',
+            Resource: '*',
+          },
+        ],
       },
-      {
-        Effect: 'Allow',
-        Action: ['route53:ChangeResourceRecordSets', 'route53:ListResourceRecordSets'],
-        Resource: 'arn:aws:route53:::hostedzone/*',
-      },
-      {
-        Effect: 'Allow',
-        Action: 'route53:ListHostedZonesByName',
-        Resource: '*',
-      },
-    ],
+    },
   },
-});
-
-const accessKey = new aws.iam.AccessKey('cert-manager@k8s', {
-  user: user.name,
-});
+  { provider },
+);
 
 const chart = new k8s.helm.v4.Chart(
   'cert-manager@bm',
@@ -52,9 +52,9 @@ const chart = new k8s.helm.v4.Chart(
       },
 
       extraEnv: [
-        { name: 'AWS_REGION', value: 'ap-northeast-2' },
-        { name: 'AWS_ACCESS_KEY_ID', value: accessKey.id },
-        { name: 'AWS_SECRET_ACCESS_KEY', value: accessKey.secret },
+        { name: 'AWS_REGION', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_REGION' } } },
+        { name: 'AWS_ACCESS_KEY_ID', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_ACCESS_KEY_ID' } } },
+        { name: 'AWS_SECRET_ACCESS_KEY', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_SECRET_ACCESS_KEY' } } },
       ],
     },
   },
