@@ -12,16 +12,16 @@ jobs:
       image: debian:12-slim
 
     env:
-      SHARP_VERSION: 0.34.1
-      VIPS_VERSION: 8.16.1
+      SHARP_VERSION: 0.34.2
+      VIPS_VERSION: 8.17.2
 
-      MOZJPEG_VERSION: 4.0.0
+      MOZJPEG_VERSION: 4.1.1
       SPNG_VERSION: 0.7.4
       CGIF_VERSION: 0.5.0
       DE265_VERSION: 1.0.16
       X265_VERSION: 4.1
-      AOM_VERSION: 3.12.1
-      HEIF_VERSION: 1.19.8
+      AOM_VERSION: 3.13.1
+      HEIF_VERSION: 1.20.2
       FFTW_VERSION: 3.3.10
 
       CC: clang
