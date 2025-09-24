@@ -30,7 +30,7 @@ new aws.iam.GroupPolicy('team', {
       },
       {
         Effect: 'Allow',
-        Action: ['s3:GetObject', 's3:PutObject'],
+        Action: ['s3:GetObject', 's3:PutObject', 's3:GetObjectTagging', 's3:PutObjectTagging'],
         Resource: [pulumi.concat(buckets.misc.arn, '/*')],
       },
       {

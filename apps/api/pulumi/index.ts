@@ -46,7 +46,7 @@ const app = new typie.App('api', {
         },
         {
           Effect: 'Allow',
-          Action: ['s3:GetObject', 's3:PutObject'],
+          Action: ['s3:GetObject', 's3:PutObject', 's3:GetObjectTagging', 's3:PutObjectTagging'],
           Resource: [pulumi.concat(ref.requireOutput('AWS_S3_BUCKET_MISC_ARN'), '/*')],
         },
         {
