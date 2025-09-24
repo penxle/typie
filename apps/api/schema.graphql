@@ -173,6 +173,10 @@ input DeletePostInput {
   postId: ID!
 }
 
+input DumpLocalStorageInput {
+  data: JSON!
+}
+
 input DuplicateCanvasInput {
   canvasId: ID!
 }
@@ -485,6 +489,7 @@ type Mutation {
   deleteNote(input: DeleteNoteInput!): Note!
   deletePost(input: DeletePostInput!): Post!
   deleteUser: Boolean!
+  dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicateCanvas(input: DuplicateCanvasInput!): Canvas!
   duplicatePost(input: DuplicatePostInput!): Post!
   exportPostAsDocx(input: ExportPostAsDocxInput!): ExportPostAsDocxResult!

@@ -1,7 +1,9 @@
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import qs from 'query-string';
 import * as uuid from 'uuid';
 import { redis } from '@/cache';
 import {
@@ -47,8 +49,9 @@ import {
   UserRole,
   UserState,
 } from '@/enums';
-import { env } from '@/env';
+import { env, stack } from '@/env';
 import { TypieError } from '@/errors';
+import * as aws from '@/external/aws';
 import * as portone from '@/external/portone';
 import { delay } from '@/utils/promise';
 import { getUserUsage } from '@/utils/user';
@@ -789,6 +792,32 @@ builder.mutationFields((t) => ({
           target: [UserPreferences.userId],
           set: { value },
         });
+
+      return ctx.session.userId;
+    },
+  }),
+
+  dumpLocalStorage: t.withAuth({ session: true }).fieldWithInput({
+    type: User,
+    input: { data: t.input.field({ type: 'JSON' }) },
+    resolve: async (_, { input }, ctx) => {
+      const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
+      const key = `localstorage-dump/${ctx.session.userId}-${timestamp}.json`;
+
+      const prettyJson = JSON.stringify(input.data, null, 2);
+
+      await aws.s3.send(
+        new PutObjectCommand({
+          Bucket: 'typie-misc',
+          Key: key,
+          Body: prettyJson,
+          ContentType: 'application/json',
+          Tagging: qs.stringify({
+            UserId: ctx.session.userId,
+            Environment: stack,
+          }),
+        }),
+      );
 
       return ctx.session.userId;
     },
