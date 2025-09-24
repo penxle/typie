@@ -3,7 +3,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Switch, TextInput } from '@typie/ui/components';
   import { createForm } from '@typie/ui/form';
-  import { Dialog } from '@typie/ui/notification';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
@@ -73,6 +73,22 @@
   const deleteUser = graphql(`
     mutation DashboardLayout_PreferenceModal_DeleteUser_Mutation {
       deleteUser
+    }
+  `);
+
+  const dumpLocalStorage = graphql(`
+    mutation DashboardLayout_PreferenceModal_DumpLocalStorage_Mutation($input: DumpLocalStorageInput!) {
+      dumpLocalStorage(input: $input) {
+        id
+      }
+    }
+  `);
+
+  const resetPreferences = graphql(`
+    mutation DashboardLayout_PreferenceModal_ResetPreferences_Mutation {
+      resetPreferences {
+        id
+      }
     }
   `);
 
@@ -274,6 +290,55 @@
   </div>
 
   <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
+
+  <button
+    class={css({
+      alignSelf: 'flex-start',
+      paddingX: '8px',
+      paddingY: '4px',
+      fontSize: '13px',
+      color: 'text.faint',
+      width: 'fit',
+      borderRadius: '4px',
+      transition: 'common',
+      _hover: { color: 'text.default', backgroundColor: 'surface.subtle' },
+    })}
+    onclick={async () => {
+      Dialog.confirm({
+        title: '설정을 초기화하시겠습니까?',
+        message:
+          '에디터, 화면, 실험실 설정이 모두 초기화됩니다. 이 과정에서 진단을 위해 브라우저 로컬 저장소 항목 일부가 서버로 전송될 수 있어요. 이 작업은 취소할 수 없어요.',
+        action: 'danger',
+        actionLabel: '초기화',
+        actionHandler: async () => {
+          try {
+            const localStorageData: Record<string, string | null> = {};
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key?.startsWith('typie:')) {
+                localStorageData[key] = localStorage.getItem(key);
+                localStorage.removeItem(key);
+              }
+            }
+
+            await dumpLocalStorage({ data: localStorageData });
+
+            await resetPreferences();
+
+            await new Promise((resolve) => mixpanel.track('reset_preferences', {}, resolve));
+
+            globalThis.location.reload();
+          } catch (err) {
+            console.error(err);
+            Toast.error('설정 초기화에 실패했어요. 잠시 후 다시 시도해주세요.');
+          }
+        },
+      });
+    }}
+    type="button"
+  >
+    설정 초기화
+  </button>
 
   <button
     class={css({
