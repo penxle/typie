@@ -511,6 +511,7 @@ type Mutation {
   renameFolder(input: RenameFolderInput!): Folder!
   reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
+  resetPreferences: User!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
   scheduleSubscriptionCancellation: Subscription_!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
