@@ -1,3 +1,4 @@
+import { usePrometheus } from '@graphql-yoga/plugin-prometheus';
 import { GraphQLError } from 'graphql';
 import { CloseCode, makeServer } from 'graphql-ws';
 import { createYoga, useExecutionCancellation } from 'graphql-yoga';
@@ -19,7 +20,14 @@ const app = createYoga<{ c: ServerContext }, UserContext>({
   cors: false,
   maskedErrors: false,
   landingPage: false,
-  plugins: [useExecutionCancellation(), useLogger(), useError()],
+  plugins: [
+    useExecutionCancellation(),
+    useLogger(),
+    useError(),
+    usePrometheus({
+      endpoint: '/graphql/metrics',
+    }),
+  ],
 });
 
 const server = makeServer<{ session: string }, { c: ServerContext }>({
@@ -120,6 +128,11 @@ graphql.get(
 );
 
 graphql.on(['GET', 'POST'], '/', async (c) => {
+  const response = await app.handle(c.req.raw, { c });
+  return c.newResponse(response.body, response);
+});
+
+graphql.get('/metrics', async (c) => {
   const response = await app.handle(c.req.raw, { c });
   return c.newResponse(response.body, response);
 });
