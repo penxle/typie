@@ -53,7 +53,7 @@ export const Paragraph = Node.create({
           return textAlign;
         },
         renderHTML: ({ textAlign }) => ({
-          style: `text-align: ${textAlign}`,
+          style: `text-align: ${textAlign};${textAlign === 'justify' ? 'white-space-collapse: collapse' : ''}`,
         }),
       },
 
