@@ -47,6 +47,8 @@ const chart = new k8s.helm.v4.Chart(
     },
 
     values: {
+      enableCertificateOwnerRef: true,
+
       crds: {
         enabled: true,
       },
