@@ -32,9 +32,17 @@ const chart = new k8s.helm.v4.Chart(
 
         service: {
           type: 'LoadBalancer',
+
+          annotations: {
+            'lbipam.cilium.io/ips': '115.68.42.155',
+            'pulumi.com/skipAwait': 'true',
+          },
+
           labels: {
             'cilium.typie.io/advertise-bgp': 'true',
           },
+
+          allocateLoadBalancerNodePorts: false,
         },
       },
 
@@ -90,7 +98,16 @@ new k8s.apiextensions.CustomResource(
       name: 'default',
     },
     spec: {
-      blocks: [{ start: '10.30.0.10', stop: '10.30.0.20' }],
+      blocks: [{ start: '115.68.42.155', stop: '115.68.42.158' }],
+      serviceSelector: {
+        matchExpressions: [
+          {
+            key: 'cilium.typie.io/advertise-bgp',
+            operator: 'In',
+            values: ['true'],
+          },
+        ],
+      },
     },
   },
   { provider, dependsOn: [chart] },
@@ -113,8 +130,8 @@ new k8s.apiextensions.CustomResource(
           localASN: 65_001,
           peers: [
             {
-              name: '65000',
-              peerASN: 65_000,
+              name: '65001',
+              peerASN: 65_001,
               autoDiscovery: {
                 mode: 'DefaultGateway',
                 defaultGateway: {
@@ -199,7 +216,7 @@ new k8s.apiextensions.CustomResource(
 
           attributes: {
             communities: {
-              standard: ['65000:100'],
+              standard: ['65001:100'],
             },
           },
         },
