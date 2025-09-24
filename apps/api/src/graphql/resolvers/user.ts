@@ -777,6 +777,23 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  resetPreferences: t.withAuth({ session: true }).field({
+    type: User,
+    resolve: async (_, __, ctx) => {
+      const value = {};
+
+      await db
+        .insert(UserPreferences)
+        .values({ userId: ctx.session.userId, value })
+        .onConflictDoUpdate({
+          target: [UserPreferences.userId],
+          set: { value },
+        });
+
+      return ctx.session.userId;
+    },
+  }),
+
   recordSurvey: t.withAuth({ session: true }).fieldWithInput({
     type: User,
     input: {
