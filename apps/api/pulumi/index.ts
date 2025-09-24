@@ -131,6 +131,24 @@ new typie.App('worker', {
   },
 });
 
+new k8s.apiextensions.CustomResource('api', {
+  apiVersion: 'monitoring.coreos.com/v1',
+  kind: 'ServiceMonitor',
+  metadata: {
+    name: 'api',
+    namespace: app.service.metadata.namespace,
+  },
+  spec: {
+    selector: {
+      matchLabels: app.service.metadata.labels,
+    },
+    endpoints: [
+      { port: 'http', path: '/metrics/bullmq' },
+      { port: 'http', path: '/graphql/metrics' },
+    ],
+  },
+});
+
 new k8s.networking.v1.Ingress('api', {
   metadata: {
     name: 'api',
@@ -155,7 +173,7 @@ new k8s.networking.v1.Ingress('api', {
               backend: {
                 service: {
                   name: app.service.metadata.name,
-                  port: { number: app.service.spec.ports[0].port },
+                  port: { name: 'http' },
                 },
               },
             },

@@ -181,7 +181,7 @@ export class App extends pulumi.ComponentResource {
         spec: {
           type: 'NodePort',
           selector: labels,
-          ports: [{ port: 3000 }],
+          ports: [{ name: 'http', port: 3000 }],
         },
       },
       { parent: this },
