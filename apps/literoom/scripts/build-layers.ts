@@ -6,7 +6,7 @@ await fs.mkdir('dist/layers/sharp/nodejs', { recursive: true });
 
 const $$ = $({ cwd: 'dist/layers/sharp' });
 
-await $$`tar xJf ../../../../../vendor/sharp.tar.xz`;
+await $$`tar xJf ../../../../../vendor/sharp-al2023.tar.xz`;
 await $$`mv node_modules nodejs`;
 await $$`zip -r ../sharp.zip .`;
 
