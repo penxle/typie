@@ -1,0 +1,10 @@
+mutation UpdateNote_Mutation($input: UpdateNoteInput!) {
+  updateNote(input: $input) {
+    id
+    content
+    color
+    order
+    createdAt
+    updatedAt
+  }
+}

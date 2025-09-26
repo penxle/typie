@@ -1,0 +1,10 @@
+mutation CreateNote_Mutation($input: CreateNoteInput!) {
+  createNote(input: $input) {
+    id
+    content
+    color
+    order
+    createdAt
+    updatedAt
+  }
+}
