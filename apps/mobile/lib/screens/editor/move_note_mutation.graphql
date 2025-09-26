@@ -1,0 +1,6 @@
+mutation MoveNote_Mutation($input: MoveNoteInput!) {
+  moveNote(input: $input) {
+    id
+    order
+  }
+}

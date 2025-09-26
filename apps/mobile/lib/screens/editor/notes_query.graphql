@@ -1,0 +1,13 @@
+query NotesScreen_Query($entityId: ID!) {
+  entity(entityId: $entityId) {
+    id
+    notes {
+      id
+      content
+      color
+      order
+      createdAt
+      updatedAt
+    }
+  }
+}
