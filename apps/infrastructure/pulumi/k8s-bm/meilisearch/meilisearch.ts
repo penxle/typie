@@ -1,6 +1,7 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as random from '@pulumi/random';
+import { provider } from '$k8s-bm/provider';
 
 type MeilisearchArgs = {
   name: pulumi.Input<string>;
@@ -11,6 +12,10 @@ type MeilisearchArgs = {
   resources: {
     cpu: pulumi.Input<string>;
     memory: pulumi.Input<string>;
+  };
+
+  storage: {
+    size: pulumi.Input<string>;
   };
 };
 
@@ -55,7 +60,7 @@ class Meilisearch extends pulumi.ComponentResource {
         },
         values: {
           image: {
-            tag: 'v1.19.1',
+            tag: 'v1.22.0',
           },
 
           resources: {
@@ -72,18 +77,15 @@ class Meilisearch extends pulumi.ComponentResource {
           },
 
           service: {
-            type: 'LoadBalancer',
             annotations: {
-              'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-              'tailscale.com/expose': 'true',
-              'tailscale.com/proxy-group': 'ingress',
+              'external-dns.alpha.kubernetes.io/internal-hostname': args.hostname,
             },
           },
 
           persistence: {
             enabled: true,
-            storageClass: 'gp3',
-            size: '20Gi',
+            storageClass: 'local-ssd',
+            size: args.storage.size,
           },
         },
       },
@@ -94,18 +96,43 @@ class Meilisearch extends pulumi.ComponentResource {
   }
 }
 
-const prod = new Meilisearch('meilisearch@prod', {
-  name: 'meilisearch',
-  namespace: 'prod',
+const dev = new Meilisearch(
+  'meilisearch@dev@bm',
+  {
+    name: 'meilisearch',
+    namespace: 'dev',
 
-  hostname: 'search.typie.io',
+    hostname: 'dev.search.typie.io',
 
-  resources: {
-    cpu: '500m',
-    memory: '2Gi',
+    resources: {
+      cpu: '200m',
+      memory: '1Gi',
+    },
+
+    storage: {
+      size: '10Gi',
+    },
   },
-});
+  { providers: [provider] },
+);
+
+// const prod = new Meilisearch('meilisearch@prod', {
+//   name: 'meilisearch',
+//   namespace: 'prod',
+
+//   hostname: 'search.typie.io',
+
+//   resources: {
+//     cpu: '500m',
+//     memory: '2Gi',
+//   },
+
+//   storage: {
+//     size: '20Gi',
+//   },
+// });
 
 export const outputs = {
-  K8S_MEILISEARCH_PROD_MASTER_KEY: prod.masterKey,
+  K8S_BM_MEILISEARCH_DEV_MASTER_KEY: dev.masterKey,
+  // K8S_BM_MEILISEARCH_PROD_MASTER_KEY: prod.masterKey,
 };

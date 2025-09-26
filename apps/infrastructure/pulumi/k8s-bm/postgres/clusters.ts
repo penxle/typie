@@ -2,7 +2,8 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as random from '@pulumi/random';
 import { buckets } from '$aws/s3';
-import { IAMServiceAccount } from '$components';
+import { IAMUserSecret } from '$components';
+import { provider } from '$k8s-bm/provider';
 
 type ClusterArgs = {
   name: pulumi.Input<string>;
@@ -37,7 +38,7 @@ class Cluster extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    const secret = new k8s.core.v1.Secret(
+    const credentials = new k8s.core.v1.Secret(
       `${name}-credentials`,
       {
         metadata: {
@@ -53,7 +54,7 @@ class Cluster extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    const serviceAccount = new IAMServiceAccount(
+    const iam = new IAMUserSecret(
       name,
       {
         metadata: {
@@ -61,7 +62,6 @@ class Cluster extends pulumi.ComponentResource {
           namespace: args.namespace,
         },
         spec: {
-          serviceAccountName: args.name,
           policy: {
             Version: '2012-10-17',
             Statement: [
@@ -77,6 +77,47 @@ class Cluster extends pulumi.ComponentResource {
       { parent: this },
     );
 
+    // const backupObjectStore = new k8s.apiextensions.CustomResource(
+    //   `${name}-backup`,
+    //   {
+    //     apiVersion: 'barmancloud.cnpg.io/v1',
+    //     kind: 'ObjectStore',
+
+    //     metadata: {
+    //       name: pulumi.interpolate`${args.name}-backup`,
+    //       namespace: args.namespace,
+    //     },
+
+    //     spec: {
+    //       retentionPolicy: '30d',
+    //       configuration: {
+    //         destinationPath: pulumi.interpolate`s3://${buckets.backups.bucket}/postgres/${args.namespace}`,
+
+    //         s3Credentials: {
+    //           accessKeyId: {
+    //             name: iam.metadata.name,
+    //             key: 'AWS_ACCESS_KEY_ID',
+    //           },
+    //           secretAccessKey: {
+    //             name: iam.metadata.name,
+    //             key: 'AWS_SECRET_ACCESS_KEY',
+    //           },
+    //         },
+
+    //         data: {
+    //           compression: 'bzip2',
+    //         },
+
+    //         wal: {
+    //           compression: 'zstd',
+    //           maxParallel: 32,
+    //         },
+    //       },
+    //     },
+    //   },
+    //   { parent: this },
+    // );
+
     const objectStore = new k8s.apiextensions.CustomResource(
       name,
       {
@@ -91,8 +132,18 @@ class Cluster extends pulumi.ComponentResource {
         spec: {
           retentionPolicy: '30d',
           configuration: {
-            destinationPath: pulumi.interpolate`s3://${buckets.backups.bucket}/postgres/${args.namespace}`,
-            s3Credentials: { inheritFromIAMRole: true },
+            destinationPath: pulumi.interpolate`s3://${buckets.backups.bucket}/postgres-bm/${args.namespace}`,
+
+            s3Credentials: {
+              accessKeyId: {
+                name: iam.metadata.name,
+                key: 'AWS_ACCESS_KEY_ID',
+              },
+              secretAccessKey: {
+                name: iam.metadata.name,
+                key: 'AWS_SECRET_ACCESS_KEY',
+              },
+            },
 
             data: {
               compression: 'bzip2',
@@ -130,10 +181,29 @@ class Cluster extends pulumi.ComponentResource {
           bootstrap: {
             initdb: {
               secret: {
-                name: secret.metadata.name,
+                name: credentials.metadata.name,
               },
             },
+            // recovery: {
+            //   source: 'origin',
+            //   secret: {
+            //     name: credentials.metadata.name,
+            //   },
+            // },
           },
+
+          // externalClusters: [
+          //   {
+          //     name: 'origin',
+          //     plugin: {
+          //       name: 'barman-cloud.cloudnative-pg.io',
+          //       parameters: {
+          //         barmanObjectName: backupObjectStore.metadata.name,
+          //         serverName: 'db',
+          //       },
+          //     },
+          //   },
+          // ],
 
           primaryUpdateMethod: 'switchover',
 
@@ -169,36 +239,28 @@ class Cluster extends pulumi.ComponentResource {
             },
           },
 
-          affinity: {
-            podAntiAffinityType: 'required',
-          },
-
-          // topologySpreadConstraints: [
-          //   {
-          //     labelSelector: {
-          //       matchExpressions: [
-          //         { key: 'cnpg.io/cluster', operator: 'In', values: [args.name] },
-          //         { key: 'cnpg.io/podRole', operator: 'In', values: ['instance'] },
-          //       ],
-          //     },
-          //     topologyKey: 'topology.kubernetes.io/zone',
-          //     maxSkew: 1,
-          //     whenUnsatisfiable: 'ScheduleAnyway',
-          //   },
-          // ],
+          topologySpreadConstraints: [
+            {
+              maxSkew: 1,
+              topologyKey: 'kubernetes.io/hostname',
+              whenUnsatisfiable: 'DoNotSchedule',
+              labelSelector: {
+                matchLabels: {
+                  'cnpg.io/cluster': args.name,
+                  'cnpg.io/podRole': 'instance',
+                },
+              },
+            },
+          ],
 
           storage: {
-            storageClass: 'gp3',
+            storageClass: 'local-ssd',
             size: args.storage.size,
           },
 
           walStorage: {
-            storageClass: 'gp3',
+            storageClass: 'local-ssd',
             size: args.storage.size,
-          },
-
-          monitoring: {
-            enablePodMonitor: true,
           },
 
           plugins: [
@@ -212,7 +274,7 @@ class Cluster extends pulumi.ComponentResource {
           ],
         },
       },
-      { parent: this, dependsOn: [serviceAccount] },
+      { parent: this },
     );
 
     new k8s.apiextensions.CustomResource(
@@ -237,46 +299,27 @@ class Cluster extends pulumi.ComponentResource {
           template: {
             spec: {
               containers: [],
-              affinity: {
-                podAntiAffinity: {
-                  requiredDuringSchedulingIgnoredDuringExecution: [
-                    {
-                      labelSelector: {
-                        matchExpressions: [{ key: 'cnpg.io/poolerName', operator: 'In', values: [`${args.name}-pooler`] }],
-                      },
-                      topologyKey: 'kubernetes.io/hostname',
+              topologySpreadConstraints: [
+                {
+                  maxSkew: 1,
+                  topologyKey: 'kubernetes.io/hostname',
+                  whenUnsatisfiable: 'DoNotSchedule',
+                  labelSelector: {
+                    matchLabels: {
+                      'cnpg.io/poolerName': `${args.name}-pooler`,
                     },
-                  ],
+                  },
                 },
-              },
-              // topologySpreadConstraints: [
-              //   {
-              //     labelSelector: {
-              //       matchExpressions: [{ key: 'cnpg.io/poolerName', operator: 'In', values: [`${args.name}-pooler`] }],
-              //     },
-              //     topologyKey: 'topology.kubernetes.io/zone',
-              //     maxSkew: 1,
-              //     whenUnsatisfiable: 'ScheduleAnyway',
-              //   },
-              // ],
+              ],
             },
           },
 
           serviceTemplate: {
             metadata: {
               annotations: {
-                'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-                'tailscale.com/proxy-group': 'ingress',
+                'external-dns.alpha.kubernetes.io/internal-hostname': args.hostname,
               },
             },
-            spec: {
-              type: 'LoadBalancer',
-              loadBalancerClass: 'tailscale',
-            },
-          },
-
-          monitoring: {
-            enablePodMonitor: true,
           },
 
           pgbouncer: {
@@ -327,24 +370,47 @@ class Cluster extends pulumi.ComponentResource {
   }
 }
 
-const cluster = new Cluster('db@prod', {
-  name: 'db',
-  namespace: 'prod',
+// const cluster = new Cluster('db@prod', {
+//   name: 'db',
+//   namespace: 'prod',
 
-  instances: 3,
+//   instances: 3,
 
-  hostname: 'db.typie.io',
+//   hostname: 'db.typie.io',
 
-  resources: {
-    cpu: '2',
-    memory: '16Gi',
+//   resources: {
+//     cpu: '2',
+//     memory: '16Gi',
+//   },
+
+//   storage: {
+//     size: '400Gi',
+//   },
+// });
+
+const devCluster = new Cluster(
+  'db@dev@bm',
+  {
+    name: 'db',
+    namespace: 'dev',
+
+    instances: 1,
+
+    hostname: 'dev.db.typie.io',
+
+    resources: {
+      cpu: '1',
+      memory: '2Gi',
+    },
+
+    storage: {
+      size: '10Gi',
+    },
   },
-
-  storage: {
-    size: '400Gi',
-  },
-});
+  { provider },
+);
 
 export const outputs = {
-  K8S_POSTGRES_PROD_PASSWORD: cluster.password,
+  // K8S_POSTGRES_PROD_PASSWORD: cluster.password,
+  K8S_BM_POSTGRES_DEV_PASSWORD: devCluster.password,
 };

@@ -49,3 +49,21 @@ const createRepository = (name: string) => {
 
 createRepository('api');
 createRepository('website');
+
+const user = new aws.iam.User('ecr-credential-provider@k8s', {
+  name: 'ecr-credential-provider@k8s',
+});
+
+new aws.iam.UserPolicyAttachment('ecr-credential-provider@k8s', {
+  user: user.name,
+  policyArn: aws.iam.ManagedPolicy.AmazonEC2ContainerRegistryReadOnly,
+});
+
+const accessKey = new aws.iam.AccessKey('ecr-credential-provider@k8s', {
+  user: user.name,
+});
+
+export const outputs = {
+  ECR_CREDENTIAL_PROVIDER_ACCESS_KEY_ID: accessKey.id,
+  ECR_CREDENTIAL_PROVIDER_SECRET_ACCESS_KEY: accessKey.secret,
+};

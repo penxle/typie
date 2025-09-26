@@ -51,7 +51,7 @@ jobs:
           use-cache: 'true'
 
       - name: Setup kubeconfig
-        run: aws eks update-kubeconfig --name typie
+        run: tailscale configure kubeconfig k8s
 
       - name: Apply infrastructure
         uses: pulumi/actions@v6

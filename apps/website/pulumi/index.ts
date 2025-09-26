@@ -7,108 +7,108 @@ const stack = pulumi.getStack();
 const config = new pulumi.Config();
 const ref = new pulumi.StackReference('typie/infrastructure/base');
 
-const app = new typie.App('website', {
-  name: 'website',
-
-  image: {
-    name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/website',
-    version: config.require('version'),
-  },
-
-  resources: {
-    cpu: '1',
-    memory: '2Gi',
-  },
-
-  secrets: {
-    token: config.requireSecret('doppler-token'),
-  },
-
-  autoscale: {
-    minCount: 4,
-    maxCount: 20,
-    averageCpuUtilization: 80,
-  },
-});
-
-const ingress = new k8s.networking.v1.Ingress('website', {
-  metadata: {
-    name: 'website',
-    namespace: app.service.metadata.namespace,
-    annotations: {
-      'alb.ingress.kubernetes.io/group.name': 'public-alb',
-      'alb.ingress.kubernetes.io/group.order': stack === 'prod' ? '20' : '120',
-      'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
-      'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
-      ...(stack === 'prod' && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
-    },
-  },
-  spec: {
-    ingressClassName: 'alb',
-    rules: (stack === 'prod'
-      ? ['typie.co', 'auth.typie.co', 'typie.me', '*.typie.me']
-      : ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev']
-    ).map((host) => ({
-      host,
-      http: {
-        paths: [
-          {
-            path: '/',
-            pathType: 'Prefix',
-            backend: {
-              service: {
-                name: app.service.metadata.name,
-                port: { number: app.service.spec.ports[0].port },
-              },
-            },
-          },
-        ],
-      },
-    })),
-  },
-});
-
-new k8s.networking.v1.Ingress('www.website', {
-  metadata: {
-    name: 'www.website',
-    namespace: app.service.metadata.namespace,
-    annotations: {
-      'alb.ingress.kubernetes.io/group.name': 'public-alb',
-      'alb.ingress.kubernetes.io/group.order': stack === 'prod' ? '21' : '121',
-      'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
-      'alb.ingress.kubernetes.io/actions.redirect': pulumi.jsonStringify({
-        type: 'redirect',
-        redirectConfig: {
-          host: stack === 'prod' ? 'typie.co' : 'typie.dev',
-          path: '/',
-          statusCode: 'HTTP_301',
-        },
-      }),
-    },
-  },
-  spec: {
-    ingressClassName: 'alb',
-    rules: (stack === 'prod' ? ['www.typie.co', 'www.typie.me'] : ['www.typie.dev']).map((host) => ({
-      host,
-      http: {
-        paths: [
-          {
-            path: '/',
-            pathType: 'Prefix',
-            backend: {
-              service: {
-                name: 'redirect',
-                port: { name: 'use-annotation' },
-              },
-            },
-          },
-        ],
-      },
-    })),
-  },
-});
-
 if (stack === 'prod') {
+  const app = new typie.App('website', {
+    name: 'website',
+
+    image: {
+      name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/website',
+      version: config.require('version'),
+    },
+
+    resources: {
+      cpu: '1',
+      memory: '2Gi',
+    },
+
+    secrets: {
+      token: config.requireSecret('doppler-token'),
+    },
+
+    autoscale: {
+      minCount: 4,
+      maxCount: 20,
+      averageCpuUtilization: 80,
+    },
+  });
+
+  const ingress = new k8s.networking.v1.Ingress('website', {
+    metadata: {
+      name: 'website',
+      namespace: app.service.metadata.namespace,
+      annotations: {
+        'alb.ingress.kubernetes.io/group.name': 'public-alb',
+        'alb.ingress.kubernetes.io/group.order': stack === 'prod' ? '20' : '120',
+        'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
+        'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
+        ...(stack === 'prod' && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
+      },
+    },
+    spec: {
+      ingressClassName: 'alb',
+      rules: (stack === 'prod'
+        ? ['typie.co', 'auth.typie.co', 'typie.me', '*.typie.me']
+        : ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev']
+      ).map((host) => ({
+        host,
+        http: {
+          paths: [
+            {
+              path: '/',
+              pathType: 'Prefix',
+              backend: {
+                service: {
+                  name: app.service.metadata.name,
+                  port: { number: app.service.spec.ports[0].port },
+                },
+              },
+            },
+          ],
+        },
+      })),
+    },
+  });
+
+  new k8s.networking.v1.Ingress('www.website', {
+    metadata: {
+      name: 'www.website',
+      namespace: app.service.metadata.namespace,
+      annotations: {
+        'alb.ingress.kubernetes.io/group.name': 'public-alb',
+        'alb.ingress.kubernetes.io/group.order': stack === 'prod' ? '21' : '121',
+        'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
+        'alb.ingress.kubernetes.io/actions.redirect': pulumi.jsonStringify({
+          type: 'redirect',
+          redirectConfig: {
+            host: stack === 'prod' ? 'typie.co' : 'typie.dev',
+            path: '/',
+            statusCode: 'HTTP_301',
+          },
+        }),
+      },
+    },
+    spec: {
+      ingressClassName: 'alb',
+      rules: (stack === 'prod' ? ['www.typie.co', 'www.typie.me'] : ['www.typie.dev']).map((host) => ({
+        host,
+        http: {
+          paths: [
+            {
+              path: '/',
+              pathType: 'Prefix',
+              backend: {
+                service: {
+                  name: 'redirect',
+                  port: { name: 'use-annotation' },
+                },
+              },
+            },
+          ],
+        },
+      })),
+    },
+  });
+
   const typie_co = new aws.cloudfront.Distribution('typie.co', {
     enabled: true,
     aliases: ['typie.co', 'auth.typie.co'],
@@ -252,4 +252,77 @@ if (stack === 'prod') {
       },
     ],
   });
+} else if (stack === 'dev') {
+  const provider = new k8s.Provider('bm', {
+    kubeconfig: '~/.kube/config',
+  });
+
+  const app = new typie.App2(
+    'website@bm',
+    {
+      name: 'website',
+
+      image: {
+        name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/website',
+        version: config.require('version'),
+      },
+
+      resources: {
+        cpu: '1',
+        memory: '2Gi',
+      },
+
+      secrets: {
+        token: config.requireSecret('doppler-token'),
+      },
+
+      autoscale: {
+        minCount: 4,
+        maxCount: 20,
+        averageCpuUtilization: 80,
+      },
+    },
+    { provider },
+  );
+
+  new k8s.networking.v1.Ingress(
+    'website@bm',
+    {
+      metadata: {
+        name: 'website',
+        namespace: app.service.metadata.namespace,
+        annotations: {
+          'ingress.cilium.io/loadbalancer-mode': 'shared',
+          'cert-manager.io/cluster-issuer': 'letsencrypt',
+        },
+      },
+      spec: {
+        ingressClassName: 'cilium',
+        rules: ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev'].map((host) => ({
+          host,
+          http: {
+            paths: [
+              {
+                path: '/',
+                pathType: 'Prefix',
+                backend: {
+                  service: {
+                    name: app.service.metadata.name,
+                    port: { name: 'http' },
+                  },
+                },
+              },
+            ],
+          },
+        })),
+        tls: [
+          {
+            hosts: ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev'],
+            secretName: 'website-tls',
+          },
+        ],
+      },
+    },
+    { provider },
+  );
 }

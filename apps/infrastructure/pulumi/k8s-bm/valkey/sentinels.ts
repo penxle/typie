@@ -1,6 +1,7 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import dedent from 'dedent';
+import { provider } from '$k8s-bm/provider';
 
 type SentinelArgs = {
   name: pulumi.Input<string>;
@@ -8,6 +9,8 @@ type SentinelArgs = {
 
   replicas: pulumi.Input<number>;
   hostname: pulumi.Input<string>;
+
+  maxmemory: pulumi.Input<string>;
 
   resources: {
     cpu: pulumi.Input<string>;
@@ -33,15 +36,15 @@ class Sentinel extends pulumi.ComponentResource {
         values: {
           architecture: 'replication',
 
-          commonConfiguration: dedent`
-            maxmemory 3gb
+          commonConfiguration: pulumi.interpolate`
+            maxmemory ${args.maxmemory}
             maxmemory-policy noeviction
 
             appendonly yes
             appendfsync everysec
 
             save ""
-          `,
+          `.apply((v) => dedent(v)),
 
           useHostnames: false,
 
@@ -67,12 +70,8 @@ class Sentinel extends pulumi.ComponentResource {
             },
 
             service: {
-              type: 'LoadBalancer',
-              loadBalancerClass: 'tailscale',
-
               annotations: {
-                'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-                'tailscale.com/proxy-group': 'ingress',
+                'external-dns.alpha.kubernetes.io/internal-hostname': args.hostname,
               },
             },
           },
@@ -86,22 +85,22 @@ class Sentinel extends pulumi.ComponentResource {
             },
 
             persistence: {
-              storageClass: 'gp3',
-              size: '20Gi',
+              storageClass: 'local-ssd',
+              size: '10Gi',
             },
 
-            affinity: {
-              podAntiAffinity: {
-                requiredDuringSchedulingIgnoredDuringExecution: [
-                  {
-                    labelSelector: {
-                      matchExpressions: [{ key: 'app.kubernetes.io/name', operator: 'In', values: [args.name] }],
-                    },
-                    topologyKey: 'kubernetes.io/hostname',
+            topologySpreadConstraints: [
+              {
+                maxSkew: 1,
+                topologyKey: 'kubernetes.io/hostname',
+                whenUnsatisfiable: 'DoNotSchedule',
+                labelSelector: {
+                  matchLabels: {
+                    'app.kubernetes.io/name': args.name,
                   },
-                ],
+                },
               },
-            },
+            ],
           },
 
           replica: {
@@ -113,39 +112,39 @@ class Sentinel extends pulumi.ComponentResource {
             },
 
             persistence: {
-              storageClass: 'gp3',
-              size: '20Gi',
+              storageClass: 'local-ssd',
+              size: '10Gi',
             },
 
-            affinity: {
-              podAntiAffinity: {
-                requiredDuringSchedulingIgnoredDuringExecution: [
-                  {
-                    labelSelector: {
-                      matchExpressions: [{ key: 'app.kubernetes.io/name', operator: 'In', values: [args.name] }],
-                    },
-                    topologyKey: 'kubernetes.io/hostname',
+            topologySpreadConstraints: [
+              {
+                maxSkew: 1,
+                topologyKey: 'kubernetes.io/hostname',
+                whenUnsatisfiable: 'DoNotSchedule',
+                labelSelector: {
+                  matchLabels: {
+                    'app.kubernetes.io/name': args.name,
                   },
-                ],
+                },
               },
-            },
+            ],
           },
 
-          metrics: {
-            enabled: true,
-            serviceMonitor: { enabled: true },
-            podMonitor: { enabled: true },
-            prometheusRule: { enabled: true },
+          // metrics: {
+          //   enabled: true,
+          //   serviceMonitor: { enabled: true },
+          //   podMonitor: { enabled: true },
+          //   prometheusRule: { enabled: true },
 
-            image: {
-              repository: 'bitnamilegacy/redis-exporter',
-            },
+          //   image: {
+          //     repository: 'bitnamilegacy/redis-exporter',
+          //   },
 
-            resources: {
-              requests: { cpu: '100m' },
-              limits: { memory: '256Mi' },
-            },
-          },
+          //   resources: {
+          //     requests: { cpu: '100m' },
+          //     limits: { memory: '256Mi' },
+          //   },
+          // },
 
           volumePermissions: {
             image: {
@@ -165,15 +164,36 @@ class Sentinel extends pulumi.ComponentResource {
   }
 }
 
-new Sentinel('redis@prod', {
-  name: 'valkey',
-  namespace: 'prod',
+new Sentinel(
+  'redis@dev@bm',
+  {
+    name: 'valkey',
+    namespace: 'dev',
 
-  replicas: 3,
-  hostname: 'redis.typie.io',
+    replicas: 1,
+    hostname: 'dev.redis.typie.io',
 
-  resources: {
-    cpu: '500m',
-    memory: '1Gi',
+    maxmemory: '256mb',
+
+    resources: {
+      cpu: '200m',
+      memory: '512Mi',
+    },
   },
-});
+  { provider },
+);
+
+// new Sentinel('redis@prod', {
+//   name: 'valkey',
+//   namespace: 'prod',
+
+//   replicas: 3,
+//   hostname: 'redis.typie.io',
+
+//   maxmemory: '512mb',
+
+//   resources: {
+//     cpu: '500m',
+//     memory: '1Gi',
+//   },
+// });

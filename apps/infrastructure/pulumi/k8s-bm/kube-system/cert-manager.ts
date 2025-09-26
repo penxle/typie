@@ -97,7 +97,23 @@ const letsencryptStagingIssuer = new k8s.apiextensions.CustomResource(
         privateKeySecretRef: {
           name: 'letsencrypt-staging',
         },
-        solvers: [{ dns01: { route53: {} } }],
+        solvers: [
+          {
+            http01: {
+              ingress: {
+                serviceType: 'ClusterIP',
+                ingressClassName: 'cilium',
+                ingressTemplate: {
+                  metadata: {
+                    annotations: {
+                      'ingress.cilium.io/loadbalancer-mode': 'shared',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
       },
     },
   },
@@ -121,7 +137,23 @@ const letsencryptIssuer = new k8s.apiextensions.CustomResource(
         privateKeySecretRef: {
           name: 'letsencrypt',
         },
-        solvers: [{ dns01: { route53: {} } }],
+        solvers: [
+          {
+            http01: {
+              ingress: {
+                serviceType: 'ClusterIP',
+                ingressClassName: 'cilium',
+                ingressTemplate: {
+                  metadata: {
+                    annotations: {
+                      'ingress.cilium.io/loadbalancer-mode': 'shared',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
       },
     },
   },
