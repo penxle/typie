@@ -46,13 +46,14 @@ jobs:
         uses: tailscale/github-action@v3
         with:
           use-cache: 'true'
+          version: latest
           oauth-client-id: ${{ vars.TAILSCALE_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           tags: tag:github-actions
           targets: k8s.fish-shark.ts.net
 
       - name: Setup kubeconfig
-        run: tailscale configure kubeconfig https://k8s.fish-shark.ts.net
+        run: tailscale configure kubeconfig k8s
 
       - name: Apply infrastructure
         uses: pulumi/actions@v6
