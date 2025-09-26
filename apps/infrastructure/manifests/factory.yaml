@@ -1,0 +1,8 @@
+customization:
+  extraKernelArgs:
+    - cpufreq.default_governor=performance
+    - iommu.passthrough=1
+
+  systemExtensions:
+    officialExtensions:
+      - siderolabs/ecr-credential-provider

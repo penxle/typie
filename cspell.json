@@ -16,6 +16,7 @@
     ".cursor",
     "node_modules",
     "bun.lock",
+    "*.yaml",
     "*.svg",
     "**/vendor/**",
     "CODEOWNERS",

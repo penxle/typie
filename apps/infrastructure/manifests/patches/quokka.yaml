@@ -1,0 +1,6 @@
+machine:
+  network:
+    hostname: quokka
+
+  nodeLabels:
+    volumes.typie.io/attach: 'true'

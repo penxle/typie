@@ -1,0 +1,6 @@
+machine:
+  network:
+    hostname: ferret
+
+  nodeLabels:
+    volumes.typie.io/attach: 'true'

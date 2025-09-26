@@ -1,0 +1,3 @@
+creation_rules:
+  - path_regex: apps/infrastructure/manifests/.*secrets\.yaml$
+    age: age1wzv50a4hrumzwgjykyd56uj7hhqa724spymy7vgw98s7p2u3sdss6vxf2a

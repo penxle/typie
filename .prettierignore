@@ -22,3 +22,5 @@ Dockerfile
 **/.pub/**
 
 **/src-tauri/**
+
+**/*.enc.yaml
