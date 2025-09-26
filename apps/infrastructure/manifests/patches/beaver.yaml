@@ -1,0 +1,6 @@
+machine:
+  network:
+    hostname: beaver
+
+  nodeLabels:
+    volumes.typie.io/attach: 'true'

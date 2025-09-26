@@ -97,6 +97,7 @@ srem
 sslmode
 stakater
 stibee
+talosctl
 tauri
 tini
 tmpl

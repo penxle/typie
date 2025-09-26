@@ -1,0 +1,10 @@
+machine:
+  network:
+    interfaces:
+      - deviceSelector:
+          busPath: '0*'
+        vip:
+          ip: 115.68.42.145
+
+  certSANs:
+    - talos.k8s.typie.io

@@ -10,6 +10,9 @@ out/
 .env.local
 kubeconfig
 
+apps/infrastructure/manifests/secrets.yaml
+apps/infrastructure/manifests/patches/secrets.yaml
+
 .svelte-kit/
 .sark/
 styled-system/

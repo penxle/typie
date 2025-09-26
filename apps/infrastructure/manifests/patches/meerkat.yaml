@@ -1,0 +1,6 @@
+machine:
+  network:
+    hostname: meerkat
+
+  nodeLabels:
+    volumes.typie.io/attach: 'true'
