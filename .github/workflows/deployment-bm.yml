@@ -53,7 +53,9 @@ jobs:
           targets: k8s.fish-shark.ts.net
 
       - name: Setup kubeconfig
-        run: sudo -E tailscale configure kubeconfig k8s
+        run: |
+          sudo -E tailscale configure kubeconfig k8s
+          sudo chown -R "$(id -u)":"$(id -g)" ~/.kube
 
       - name: Apply infrastructure
         uses: pulumi/actions@v6
