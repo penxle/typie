@@ -13,6 +13,8 @@ const chart = new k8s.helm.v4.Chart(
     },
 
     values: {
+      devices: ['enp0s1'],
+
       k8sServiceHost: 'localhost',
       k8sServicePort: 7445,
 
