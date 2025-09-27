@@ -171,7 +171,7 @@ export class App2 extends pulumi.ComponentResource {
           namespace,
         },
         spec: {
-          type: 'NodePort',
+          type: 'ClusterIP',
           selector: labels,
           ports: [{ name: 'http', port: 3000 }],
         },
@@ -179,9 +179,12 @@ export class App2 extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    const deployment = new k8s.apps.v1.Deployment(
+    const rollout = new k8s.apiextensions.CustomResource(
       name,
       {
+        apiVersion: 'argoproj.io/v1alpha1',
+        kind: 'Rollout',
+
         metadata: {
           name: args.name,
           namespace,
@@ -192,6 +195,7 @@ export class App2 extends pulumi.ComponentResource {
         spec: {
           ...(stack === 'dev' && { replicas: 1 }),
           selector: { matchLabels: labels },
+          revisionHistoryLimit: 2,
           template: {
             metadata: { labels },
             spec: {
@@ -244,6 +248,12 @@ export class App2 extends pulumi.ComponentResource {
               ],
             },
           },
+          strategy: {
+            blueGreen: {
+              activeService: service.metadata.name,
+              scaleDownDelaySeconds: 10,
+            },
+          },
         },
       },
       {
@@ -261,9 +271,9 @@ export class App2 extends pulumi.ComponentResource {
           },
           spec: {
             scaleTargetRef: {
-              apiVersion: 'apps/v1',
-              kind: 'Deployment',
-              name: deployment.metadata.name,
+              apiVersion: rollout.apiVersion,
+              kind: rollout.kind,
+              name: rollout.metadata.name,
             },
             minReplicas: args.autoscale?.minCount ?? 2,
             maxReplicas: args.autoscale?.maxCount ?? 10,

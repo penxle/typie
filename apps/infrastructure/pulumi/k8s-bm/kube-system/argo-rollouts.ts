@@ -2,21 +2,21 @@ import * as k8s from '@pulumi/kubernetes';
 import { provider } from '$k8s-bm/provider';
 
 new k8s.helm.v4.Chart(
-  'reloader@bm',
+  'argo-rollouts@bm',
   {
-    name: 'reloader',
+    name: 'argo-rollouts',
 
-    chart: 'reloader',
+    chart: 'argo-rollouts',
     namespace: 'kube-system',
     repositoryOpts: {
-      repo: 'https://stakater.github.io/stakater-charts',
+      repo: 'https://argoproj.github.io/argo-helm',
     },
 
     values: {
-      reloader: {
-        isArgoRollouts: true,
-        reloadOnCreate: true,
-        syncAfterRestart: true,
+      notifications: {
+        secret: {
+          create: true,
+        },
       },
     },
   },
