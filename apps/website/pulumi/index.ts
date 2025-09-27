@@ -46,10 +46,7 @@ if (stack === 'prod') {
     },
     spec: {
       ingressClassName: 'alb',
-      rules: (stack === 'prod'
-        ? ['typie.co', 'auth.typie.co', 'typie.me', '*.typie.me']
-        : ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev']
-      ).map((host) => ({
+      rules: ['typie.co', 'auth.typie.co', 'typie.me', '*.typie.me'].map((host) => ({
         host,
         http: {
           paths: [
@@ -285,40 +282,83 @@ if (stack === 'prod') {
     { provider },
   );
 
-  new k8s.networking.v1.Ingress(
+  new k8s.apiextensions.CustomResource(
     'website@bm',
     {
+      apiVersion: 'gateway.networking.k8s.io/v1',
+      kind: 'HTTPRoute',
       metadata: {
         name: 'website',
         namespace: app.service.metadata.namespace,
         annotations: {
-          'ingress.cilium.io/loadbalancer-mode': 'shared',
-          'cert-manager.io/cluster-issuer': 'letsencrypt',
+          'external-dns.typie.io/enabled': 'true',
         },
       },
       spec: {
-        ingressClassName: 'cilium',
-        rules: ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev'].map((host) => ({
-          host,
-          http: {
-            paths: [
+        parentRefs: [{ name: 'http', namespace: 'infra' }],
+        hostnames: ['typie.dev', 'auth.typie.dev', 'typie.app', '*.typie.app'],
+        rules: [
+          {
+            backendRefs: [
               {
-                path: '/',
-                pathType: 'Prefix',
-                backend: {
-                  service: {
-                    name: app.service.metadata.name,
-                    port: { name: 'http' },
-                  },
+                name: app.service.metadata.name,
+                port: app.service.spec.ports[0].port,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    { provider },
+  );
+
+  new k8s.apiextensions.CustomResource(
+    'www-redirect@bm',
+    {
+      apiVersion: 'gateway.networking.k8s.io/v1',
+      kind: 'HTTPRoute',
+      metadata: {
+        name: 'www-redirect',
+        namespace: app.service.metadata.namespace,
+        annotations: {
+          'external-dns.typie.io/enabled': 'true',
+        },
+      },
+      spec: {
+        parentRefs: [{ name: 'http', namespace: 'infra' }],
+        hostnames: ['www.typie.dev', 'www.typie.app'],
+        rules: [
+          {
+            matches: [
+              {
+                headers: [{ name: 'Host', value: 'www.typie.dev' }],
+              },
+            ],
+            filters: [
+              {
+                type: 'RequestRedirect',
+                requestRedirect: {
+                  hostname: 'typie.dev',
+                  statusCode: 301,
                 },
               },
             ],
           },
-        })),
-        tls: [
           {
-            hosts: ['typie.dev', 'auth.typie.dev', 'usersite.typie.dev', '*.usersite.typie.dev'],
-            secretName: 'website-tls',
+            matches: [
+              {
+                headers: [{ name: 'Host', value: 'www.typie.app' }],
+              },
+            ],
+            filters: [
+              {
+                type: 'RequestRedirect',
+                requestRedirect: {
+                  hostname: 'typie.app',
+                  statusCode: 301,
+                },
+              },
+            ],
           },
         ],
       },

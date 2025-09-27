@@ -53,6 +53,8 @@ const chart = new k8s.helm.v4.Chart(
         enabled: true,
       },
 
+      extraArgs: ['--enable-gateway-api=true'],
+
       extraEnv: [
         { name: 'AWS_REGION', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_REGION' } } },
         { name: 'AWS_ACCESS_KEY_ID', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_ACCESS_KEY_ID' } } },
@@ -97,23 +99,7 @@ const letsencryptStagingIssuer = new k8s.apiextensions.CustomResource(
         privateKeySecretRef: {
           name: 'letsencrypt-staging',
         },
-        solvers: [
-          {
-            http01: {
-              ingress: {
-                serviceType: 'ClusterIP',
-                ingressClassName: 'cilium',
-                ingressTemplate: {
-                  metadata: {
-                    annotations: {
-                      'ingress.cilium.io/loadbalancer-mode': 'shared',
-                    },
-                  },
-                },
-              },
-            },
-          },
-        ],
+        solvers: [{ dns01: { route53: {} } }],
       },
     },
   },
@@ -137,23 +123,7 @@ const letsencryptIssuer = new k8s.apiextensions.CustomResource(
         privateKeySecretRef: {
           name: 'letsencrypt',
         },
-        solvers: [
-          {
-            http01: {
-              ingress: {
-                serviceType: 'ClusterIP',
-                ingressClassName: 'cilium',
-                ingressTemplate: {
-                  metadata: {
-                    annotations: {
-                      'ingress.cilium.io/loadbalancer-mode': 'shared',
-                    },
-                  },
-                },
-              },
-            },
-          },
-        ],
+        solvers: [{ dns01: { route53: {} } }],
       },
     },
   },

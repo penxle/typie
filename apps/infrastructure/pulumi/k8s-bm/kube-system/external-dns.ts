@@ -47,7 +47,8 @@ new k8s.helm.v4.Chart(
 
       interval: '1m',
       triggerLoopOnEvent: true,
-      sources: ['ingress', 'service'],
+      sources: ['ingress', 'service', 'gateway-httproute'],
+      annotationFilter: 'external-dns.typie.io/enabled=true',
 
       registry: 'txt',
       txtOwnerId: 'k8s',

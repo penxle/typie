@@ -40,8 +40,9 @@ const createCertificate = (zoneId: pulumi.Input<string>, domain: string, ...subj
 
 export const certificates = {
   typie_co: createCertificate(zones.typie_co.zoneId, 'typie.co'),
-  typie_dev: createCertificate(zones.typie_dev.zoneId, 'typie.dev', '*.usersite.typie.dev'),
+  typie_dev: createCertificate(zones.typie_dev.zoneId, 'typie.dev'),
   typie_me: createCertificate(zones.typie_me.zoneId, 'typie.me'),
+  typie_app: createCertificate(zones.typie_app.zoneId, 'typie.app'),
   typie_net: createCertificate(zones.typie_net.zoneId, 'typie.net'),
   typie_io: createCertificate(zones.typie_io.zoneId, 'typie.io'),
 };
