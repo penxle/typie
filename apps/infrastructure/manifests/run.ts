@@ -27,7 +27,7 @@ try {
   await $`sops -d secrets.enc.yaml > ${tempDir}/secrets.yaml`.quiet();
   await $`sops -d patches/secrets.enc.yaml > ${tempDir}/patches-secrets.yaml`.quiet();
 
-  await $`cd ${tempDir} && talosctl gen config typie https://controlplane.k8s.typie.io:6443 --with-secrets secrets.yaml --kubernetes-version 1.34.1`.quiet();
+  await $`cd ${tempDir} && talosctl gen config k8s https://controlplane.k8s.typie.io:6443 --with-secrets secrets.yaml --kubernetes-version 1.34.1`.quiet();
 
   await Promise.all(
     NODES.map(async ([name, type]) => {

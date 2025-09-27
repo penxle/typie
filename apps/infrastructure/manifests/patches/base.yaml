@@ -38,5 +38,13 @@ cluster:
             enforce: privileged
             warn: privileged
 
+  controllerManager:
+    extraArgs:
+      bind-address: 0.0.0.0
+
+  scheduler:
+    extraArgs:
+      bind-address: 0.0.0.0
+
   proxy:
     disabled: true
