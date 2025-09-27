@@ -13,12 +13,18 @@ const chart = new k8s.helm.v4.Chart(
     },
 
     values: {
+      tunnelProtocol: 'geneve',
       devices: ['enp0s1'],
+      ipv4NativeRoutingCIDR: '10.0.0.0/16',
 
       k8sServiceHost: 'localhost',
       k8sServicePort: 7445,
 
       kubeProxyReplacement: true,
+
+      bpf: {
+        masquerade: true,
+      },
 
       ipam: {
         mode: 'kubernetes',
@@ -26,6 +32,11 @@ const chart = new k8s.helm.v4.Chart(
 
       bgpControlPlane: {
         enabled: true,
+      },
+
+      loadBalancer: {
+        mode: 'hybrid',
+        dsrDispatch: 'geneve',
       },
 
       ingressController: {
