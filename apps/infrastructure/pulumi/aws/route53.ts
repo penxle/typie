@@ -10,6 +10,7 @@ export const zones = {
   typie_co: createZone('typie.co'),
   typie_dev: createZone('typie.dev'),
   typie_me: createZone('typie.me'),
+  typie_app: createZone('typie.app'),
   typie_net: createZone('typie.net'),
   typie_io: createZone('typie.io'),
 };
@@ -40,6 +41,7 @@ export const outputs = {
   AWS_ROUTE53_TYPIE_CO_ZONE_ID: zones.typie_co.zoneId,
   AWS_ROUTE53_TYPIE_DEV_ZONE_ID: zones.typie_dev.zoneId,
   AWS_ROUTE53_TYPIE_ME_ZONE_ID: zones.typie_me.zoneId,
+  AWS_ROUTE53_TYPIE_APP_ZONE_ID: zones.typie_app.zoneId,
   AWS_ROUTE53_TYPIE_NET_ZONE_ID: zones.typie_net.zoneId,
   AWS_ROUTE53_TYPIE_IO_ZONE_ID: zones.typie_io.zoneId,
 };

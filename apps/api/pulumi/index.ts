@@ -322,42 +322,29 @@ if (stack === 'prod') {
     { provider },
   );
 
-  new k8s.networking.v1.Ingress(
+  new k8s.apiextensions.CustomResource(
     'api@bm',
     {
+      apiVersion: 'gateway.networking.k8s.io/v1',
+      kind: 'HTTPRoute',
       metadata: {
         name: 'api',
         namespace: app.service.metadata.namespace,
         annotations: {
-          'ingress.cilium.io/loadbalancer-mode': 'shared',
-          'cert-manager.io/cluster-issuer': 'letsencrypt',
+          'external-dns.typie.io/enabled': 'true',
         },
       },
       spec: {
-        ingressClassName: 'cilium',
+        parentRefs: [{ name: 'http', namespace: 'infra' }],
+        hostnames: ['api.typie.dev'],
         rules: [
           {
-            host: 'api.typie.dev',
-            http: {
-              paths: [
-                {
-                  path: '/',
-                  pathType: 'Prefix',
-                  backend: {
-                    service: {
-                      name: app.service.metadata.name,
-                      port: { name: 'http' },
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        ],
-        tls: [
-          {
-            hosts: ['api.typie.dev'],
-            secretName: 'api-tls',
+            backendRefs: [
+              {
+                name: app.service.metadata.name,
+                port: app.service.spec.ports[0].port,
+              },
+            ],
           },
         ],
       },

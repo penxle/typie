@@ -39,24 +39,8 @@ const chart = new k8s.helm.v4.Chart(
         dsrDispatch: 'geneve',
       },
 
-      ingressController: {
+      gatewayAPI: {
         enabled: true,
-        loadBalancerMode: 'shared',
-
-        service: {
-          type: 'LoadBalancer',
-
-          annotations: {
-            'lbipam.cilium.io/ips': '115.68.42.155',
-            'pulumi.com/skipAwait': 'true',
-          },
-
-          labels: {
-            'cilium.typie.io/advertise-bgp': 'true',
-          },
-
-          allocateLoadBalancerNodePorts: false,
-        },
       },
 
       // spell-checker:disable

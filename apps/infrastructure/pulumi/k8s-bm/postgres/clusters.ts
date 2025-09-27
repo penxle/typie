@@ -317,6 +317,7 @@ class Cluster extends pulumi.ComponentResource {
           serviceTemplate: {
             metadata: {
               annotations: {
+                'external-dns.typie.io/enabled': 'true',
                 'external-dns.alpha.kubernetes.io/internal-hostname': args.hostname,
               },
             },

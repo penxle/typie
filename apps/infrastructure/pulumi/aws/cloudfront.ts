@@ -20,8 +20,9 @@ const createCertificate = (domain: string, ...subjectAlternativeNames: string[])
 
 export const certificates = {
   typie_co: createCertificate('typie.co'),
-  typie_dev: createCertificate('typie.dev', '*.usersite.typie.dev'),
+  typie_dev: createCertificate('typie.dev'),
   typie_me: createCertificate('typie.me'),
+  typie_app: createCertificate('typie.app'),
   typie_net: createCertificate('typie.net'),
   typie_io: createCertificate('typie.io'),
 };

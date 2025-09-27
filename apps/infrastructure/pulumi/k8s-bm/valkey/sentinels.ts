@@ -71,6 +71,7 @@ class Sentinel extends pulumi.ComponentResource {
 
             service: {
               annotations: {
+                'external-dns.typie.io/enabled': 'true',
                 'external-dns.alpha.kubernetes.io/internal-hostname': args.hostname,
               },
             },
