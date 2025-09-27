@@ -97,6 +97,16 @@ const chart = new k8s.helm.v4.Chart(
           enabled: true,
         },
       },
+
+      prometheus: {
+        enabled: true,
+      },
+
+      operator: {
+        prometheus: {
+          enabled: true,
+        },
+      },
     },
   },
   { provider },
