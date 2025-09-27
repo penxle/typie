@@ -173,7 +173,7 @@ export class App2 extends pulumi.ComponentResource {
         spec: {
           type: 'ClusterIP',
           selector: labels,
-          ports: [{ name: 'http', port: 3000 }],
+          ports: [{ name: 'http', port: 80, targetPort: 3000 }],
         },
       },
       { parent: this },
