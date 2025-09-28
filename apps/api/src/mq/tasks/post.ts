@@ -183,11 +183,14 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
           })
           .where(eq(Posts.id, postId));
 
+        const sanitizedText = text.replaceAll('\u0000', '');
+        const sanitizedBody = JSON.parse(JSON.stringify(body).replaceAll(String.raw`\u0000`, ''));
+
         await tx
           .update(PostContents)
           .set({
-            body,
-            text,
+            body: sanitizedBody,
+            text: sanitizedText,
             characterCount,
             blobSize,
             layoutMode: effectiveLayoutMode,
