@@ -218,7 +218,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
     Sentry.captureException(err);
 
     if (updates.length > 0) {
-      await redis.rpush(`post:sync:updates:${postId}`, ...updates);
+      await redis.rpush(`post:sync:updates:${postId}`, ...updates.toReversed());
     }
   } finally {
     await lock.release();
