@@ -139,7 +139,7 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
     Sentry.captureException(err);
 
     if (updates.length > 0) {
-      await redis.rpush(`canvas:sync:updates:${canvasId}`, ...updates);
+      await redis.rpush(`canvas:sync:updates:${canvasId}`, ...updates.toReversed());
     }
   } finally {
     await lock.release();
