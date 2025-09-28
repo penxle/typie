@@ -251,7 +251,6 @@ export class App2 extends pulumi.ComponentResource {
           strategy: {
             blueGreen: {
               activeService: service.metadata.name,
-              scaleDownDelaySeconds: 10,
             },
           },
         },
