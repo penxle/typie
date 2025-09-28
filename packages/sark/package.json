@@ -22,22 +22,22 @@
     "test": "vitest"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.42.2",
+    "@sveltejs/kit": "^2.43.5",
     "@typie/tsconfig": "workspace:*",
     "fast-glob": "^3.3.3",
     "fast-json-stable-stringify": "^2.1.0",
     "graphql": "^16.11.0",
     "graphql-sse": "^2.5.4",
     "graphql-ws": "^6.0.6",
-    "nanoid": "^5.1.5",
+    "nanoid": "^5.1.6",
     "rapidhash-js": "^2.2.0",
     "recast": "^0.23.11",
     "remeda": "^2.32.0",
-    "svelte": "^5.39.2",
+    "svelte": "^5.39.6",
     "ts-pattern": "^5.8.0",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
-    "vite": "^7.1.6",
+    "vite": "^7.1.7",
     "vitest": "^3.2.4",
     "wonka": "^6.3.5"
   }
