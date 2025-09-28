@@ -20,7 +20,13 @@ type ClusterArgs = {
 
   storage: {
     size: pulumi.Input<string>;
+    walSize: pulumi.Input<string>;
   };
+
+  walSegmentSize: pulumi.Input<number>;
+
+  dbParameters: pulumi.Input<Record<string, string>>;
+  poolerParameters: pulumi.Input<Record<string, string>>;
 };
 
 class Cluster extends pulumi.ComponentResource {
@@ -77,47 +83,6 @@ class Cluster extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    // const backupObjectStore = new k8s.apiextensions.CustomResource(
-    //   `${name}-backup`,
-    //   {
-    //     apiVersion: 'barmancloud.cnpg.io/v1',
-    //     kind: 'ObjectStore',
-
-    //     metadata: {
-    //       name: pulumi.interpolate`${args.name}-backup`,
-    //       namespace: args.namespace,
-    //     },
-
-    //     spec: {
-    //       retentionPolicy: '30d',
-    //       configuration: {
-    //         destinationPath: pulumi.interpolate`s3://${buckets.backups.bucket}/postgres/${args.namespace}`,
-
-    //         s3Credentials: {
-    //           accessKeyId: {
-    //             name: iam.metadata.name,
-    //             key: 'AWS_ACCESS_KEY_ID',
-    //           },
-    //           secretAccessKey: {
-    //             name: iam.metadata.name,
-    //             key: 'AWS_SECRET_ACCESS_KEY',
-    //           },
-    //         },
-
-    //         data: {
-    //           compression: 'bzip2',
-    //         },
-
-    //         wal: {
-    //           compression: 'zstd',
-    //           maxParallel: 32,
-    //         },
-    //       },
-    //     },
-    //   },
-    //   { parent: this },
-    // );
-
     const objectStore = new k8s.apiextensions.CustomResource(
       name,
       {
@@ -130,7 +95,7 @@ class Cluster extends pulumi.ComponentResource {
         },
 
         spec: {
-          retentionPolicy: '30d',
+          retentionPolicy: '7d',
           configuration: {
             destinationPath: pulumi.interpolate`s3://${buckets.backups.bucket}/postgres-bm/${args.namespace}`,
 
@@ -151,7 +116,7 @@ class Cluster extends pulumi.ComponentResource {
 
             wal: {
               compression: 'zstd',
-              maxParallel: 32,
+              maxParallel: 8,
             },
           },
         },
@@ -180,27 +145,32 @@ class Cluster extends pulumi.ComponentResource {
 
           bootstrap: {
             initdb: {
+              walSegmentSize: args.walSegmentSize,
+
               secret: {
                 name: credentials.metadata.name,
               },
+
+              // import: {
+              //   type: 'microservice',
+              //   databases: ['app'],
+              //   source: {
+              //     externalCluster: 'origin',
+              //   },
+              // },
             },
-            // recovery: {
-            //   source: 'origin',
-            //   secret: {
-            //     name: credentials.metadata.name,
-            //   },
-            // },
           },
 
           // externalClusters: [
           //   {
           //     name: 'origin',
-          //     plugin: {
-          //       name: 'barman-cloud.cloudnative-pg.io',
-          //       parameters: {
-          //         barmanObjectName: backupObjectStore.metadata.name,
-          //         serverName: 'db',
-          //       },
+          //     connectionParameters: {
+          //       host: '',
+          //       user: 'app',
+          //     },
+          //     password: {
+          //       name: 'db-origin-credentials',
+          //       key: 'password',
           //     },
           //   },
           // ],
@@ -216,21 +186,7 @@ class Cluster extends pulumi.ComponentResource {
           },
 
           postgresql: {
-            parameters: {
-              max_connections: '1000',
-              shared_buffers: '4GB',
-
-              wal_keep_size: '1GB',
-              max_wal_size: '8GB',
-              checkpoint_timeout: '15min',
-
-              default_toast_compression: 'lz4',
-
-              track_activity_query_size: '4096',
-              'pg_stat_statements.track': 'ALL',
-              'pg_stat_statements.max': '10000',
-              'pg_stat_statements.track_utility': '0',
-            },
+            parameters: args.dbParameters,
           },
 
           replicationSlots: {
@@ -260,7 +216,7 @@ class Cluster extends pulumi.ComponentResource {
 
           walStorage: {
             storageClass: 'local-ssd',
-            size: args.storage.size,
+            size: args.storage.walSize,
           },
 
           plugins: [
@@ -325,14 +281,7 @@ class Cluster extends pulumi.ComponentResource {
 
           pgbouncer: {
             poolMode: 'transaction',
-            parameters: {
-              max_client_conn: '1000',
-              min_pool_size: '20',
-              default_pool_size: '50',
-              reserve_pool_size: '50',
-              server_check_delay: '10',
-              server_login_retry: '0',
-            },
+            parameters: args.poolerParameters,
           },
         },
       },
@@ -371,23 +320,69 @@ class Cluster extends pulumi.ComponentResource {
   }
 }
 
-// const cluster = new Cluster('db@prod', {
-//   name: 'db',
-//   namespace: 'prod',
+// const prodCluster = new Cluster(
+//   'db@prod@bm',
+//   {
+//     name: 'db',
+//     namespace: 'prod',
 
-//   instances: 3,
+//     instances: 3,
 
-//   hostname: 'db.typie.io',
+//     hostname: 'db.typie.io',
 
-//   resources: {
-//     cpu: '2',
-//     memory: '16Gi',
+//     resources: {
+//       cpu: '2',
+//       memory: '16Gi',
+//     },
+
+//     storage: {
+//       size: '400Gi',
+//       walSize: '100Gi',
+//     },
+
+//     walSegmentSize: 256,
+
+//     dbParameters: {
+//       max_connections: '1000',
+
+//       wal_buffers: '512MB',
+//       wal_keep_size: '4GB',
+//       max_wal_size: '16GB',
+//       min_wal_size: '4GB',
+//       wal_writer_delay: '1000ms',
+//       wal_writer_flush_after: '64MB',
+
+//       checkpoint_timeout: '30min',
+//       checkpoint_completion_target: '0.9',
+
+//       shared_buffers: '4GB',
+//       effective_cache_size: '12GB',
+//       work_mem: '64MB',
+//       maintenance_work_mem: '1GB',
+
+//       max_worker_processes: '8',
+//       max_parallel_workers: '8',
+//       max_parallel_workers_per_gather: '4',
+
+//       default_toast_compression: 'lz4',
+
+//       track_activity_query_size: '4096',
+//       'pg_stat_statements.track': 'ALL',
+//       'pg_stat_statements.max': '10000',
+//       'pg_stat_statements.track_utility': '0',
+//     },
+
+//     poolerParameters: {
+//       max_client_conn: '1000',
+//       min_pool_size: '20',
+//       default_pool_size: '50',
+//       reserve_pool_size: '50',
+//       server_check_delay: '10',
+//       server_login_retry: '0',
+//     },
 //   },
-
-//   storage: {
-//     size: '400Gi',
-//   },
-// });
+//   { provider },
+// );
 
 const devCluster = new Cluster(
   'db@dev@bm',
@@ -405,13 +400,55 @@ const devCluster = new Cluster(
     },
 
     storage: {
-      size: '10Gi',
+      size: '20Gi',
+      walSize: '20Gi',
+    },
+
+    walSegmentSize: 16,
+
+    dbParameters: {
+      max_connections: '100',
+
+      wal_buffers: '4MB',
+      wal_keep_size: '1GB',
+      max_wal_size: '1GB',
+      min_wal_size: '80MB',
+      wal_writer_delay: '1000ms',
+      wal_writer_flush_after: '1MB',
+
+      checkpoint_timeout: '15min',
+      checkpoint_completion_target: '0.9',
+
+      shared_buffers: '256MB',
+      effective_cache_size: '1GB',
+      work_mem: '4MB',
+      maintenance_work_mem: '64MB',
+
+      max_worker_processes: '2',
+      max_parallel_workers: '2',
+      max_parallel_workers_per_gather: '1',
+
+      default_toast_compression: 'lz4',
+
+      track_activity_query_size: '4096',
+      'pg_stat_statements.track': 'ALL',
+      'pg_stat_statements.max': '10000',
+      'pg_stat_statements.track_utility': '0',
+    },
+
+    poolerParameters: {
+      max_client_conn: '100',
+      min_pool_size: '5',
+      default_pool_size: '10',
+      reserve_pool_size: '10',
+      server_check_delay: '10',
+      server_login_retry: '0',
     },
   },
   { provider },
 );
 
 export const outputs = {
-  // K8S_POSTGRES_PROD_PASSWORD: cluster.password,
+  // K8S_BM_POSTGRES_PROD_PASSWORD: prodCluster.password,
   K8S_BM_POSTGRES_DEV_PASSWORD: devCluster.password,
 };

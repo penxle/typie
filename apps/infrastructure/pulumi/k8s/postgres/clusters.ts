@@ -19,6 +19,7 @@ type ClusterArgs = {
 
   storage: {
     size: pulumi.Input<string>;
+    walSize: pulumi.Input<string>;
   };
 };
 
@@ -89,7 +90,7 @@ class Cluster extends pulumi.ComponentResource {
         },
 
         spec: {
-          retentionPolicy: '30d',
+          retentionPolicy: '7d',
           configuration: {
             destinationPath: pulumi.interpolate`s3://${buckets.backups.bucket}/postgres/${args.namespace}`,
             s3Credentials: { inheritFromIAMRole: true },
@@ -100,7 +101,7 @@ class Cluster extends pulumi.ComponentResource {
 
             wal: {
               compression: 'zstd',
-              maxParallel: 32,
+              maxParallel: 8,
             },
           },
         },
@@ -148,11 +149,25 @@ class Cluster extends pulumi.ComponentResource {
           postgresql: {
             parameters: {
               max_connections: '1000',
-              shared_buffers: '4GB',
 
-              wal_keep_size: '1GB',
-              max_wal_size: '8GB',
-              checkpoint_timeout: '15min',
+              wal_buffers: '32MB',
+              wal_keep_size: '4GB',
+              max_wal_size: '2GB',
+              min_wal_size: '512MB',
+              wal_writer_delay: '1000ms',
+              wal_writer_flush_after: '4MB',
+
+              checkpoint_timeout: '30min',
+              checkpoint_completion_target: '0.9',
+
+              shared_buffers: '4GB',
+              effective_cache_size: '12GB',
+              work_mem: '64MB',
+              maintenance_work_mem: '1GB',
+
+              max_worker_processes: '8',
+              max_parallel_workers: '8',
+              max_parallel_workers_per_gather: '4',
 
               default_toast_compression: 'lz4',
 
@@ -194,7 +209,7 @@ class Cluster extends pulumi.ComponentResource {
 
           walStorage: {
             storageClass: 'gp3',
-            size: args.storage.size,
+            size: args.storage.walSize,
           },
 
           monitoring: {
@@ -342,6 +357,7 @@ const cluster = new Cluster('db@prod', {
 
   storage: {
     size: '400Gi',
+    walSize: '400Gi',
   },
 });
 
