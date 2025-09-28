@@ -122,10 +122,12 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
           })
           .where(eq(Canvases.id, canvasId));
 
+        const sanitizedShapes = JSON.parse(JSON.stringify(shapes).replaceAll(String.raw`\u0000`, ''));
+
         await tx
           .update(CanvasContents)
           .set({
-            shapes,
+            shapes: sanitizedShapes,
             updatedAt,
           })
           .where(eq(CanvasContents.canvasId, canvasId));
