@@ -13,9 +13,8 @@ const chart = new k8s.helm.v4.Chart(
     },
 
     values: {
-      tunnelProtocol: 'geneve',
       devices: ['enp0s1'],
-      ipv4NativeRoutingCIDR: '10.0.0.0/16',
+      tunnelProtocol: 'geneve',
 
       k8sServiceHost: 'localhost',
       k8sServicePort: 7445,
@@ -222,6 +221,7 @@ new k8s.apiextensions.CustomResource(
           },
 
           attributes: {
+            localPreference: 100,
             communities: {
               standard: ['65001:100'],
             },

@@ -226,7 +226,7 @@ const httpGateway = new k8s.apiextensions.CustomResource(
 );
 
 new k8s.apiextensions.CustomResource(
-  'httpbin@bm',
+  'http-redirect@bm',
   {
     apiVersion: 'gateway.networking.k8s.io/v1',
     kind: 'HTTPRoute',
@@ -239,6 +239,7 @@ new k8s.apiextensions.CustomResource(
         {
           name: httpGateway.metadata.name,
           namespace: httpGateway.metadata.namespace,
+          sectionName: 'http',
         },
       ],
       rules: [
