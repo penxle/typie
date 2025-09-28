@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { match } from 'ts-pattern';
 import { db, first, firstOrThrow, Plans, Subscriptions, UserInAppPurchases } from '@/db';
 import { InAppPurchaseStore, PlanAvailability, SubscriptionState } from '@/enums';
+import { production } from '@/env';
 import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
 import * as slack from '@/external/slack';
@@ -27,7 +28,7 @@ iap.post('/appstore', async (c) => {
     return c.json({ error: 'invalid_request' }, 400);
   }
 
-  const { userId } = await db
+  const inAppPurchase = await db
     .select({
       userId: UserInAppPurchases.userId,
     })
@@ -45,7 +46,7 @@ iap.post('/appstore', async (c) => {
     .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
     .where(
       and(
-        eq(Subscriptions.userId, userId),
+        eq(Subscriptions.userId, inAppPurchase.userId),
         eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
         inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
       ),
@@ -64,7 +65,7 @@ iap.post('/appstore', async (c) => {
           .where(eq(Subscriptions.id, subscription.id));
       } else {
         await db.insert(Subscriptions).values({
-          userId,
+          userId: inAppPurchase.userId,
           planId,
           startsAt: dayjs(notification.data.transaction?.purchaseDate),
           expiresAt: dayjs(notification.data.transaction?.expiresDate),
@@ -122,7 +123,7 @@ iap.post('/googleplay', async (c) => {
       return c.json({ error: 'invalid_request' }, 400);
     }
 
-    const { userId } = await db
+    const inAppPurchase = await db
       .select({
         userId: UserInAppPurchases.userId,
       })
@@ -133,7 +134,18 @@ iap.post('/googleplay', async (c) => {
           eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY),
         ),
       )
-      .then(firstOrThrow);
+      .then(first);
+
+    // 구글 플레이는 발생한 알림이 환경 상관 없이 prod/dev 모두 발송됨
+    if (!inAppPurchase) {
+      if (production) {
+        // prod 환경에서는 inAppPurchase 없을 시 오류 반환하고 pubsub에 재시도 맡김
+        return c.json({ error: 'invalid_request' }, 400);
+      } else {
+        // dev 환경에서는 inAppPurchase 없어도 무시함
+        return c.json({}, 200);
+      }
+    }
 
     const subscription = await db
       .select({
@@ -145,7 +157,7 @@ iap.post('/googleplay', async (c) => {
       .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(
         and(
-          eq(Subscriptions.userId, userId),
+          eq(Subscriptions.userId, inAppPurchase.userId),
           eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
           inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
         ),
@@ -164,7 +176,7 @@ iap.post('/googleplay', async (c) => {
             .where(eq(Subscriptions.id, subscription.id));
         } else {
           await db.insert(Subscriptions).values({
-            userId,
+            userId: inAppPurchase.userId,
             planId,
             startsAt: dayjs(googlePlaySubscription.startTime),
             expiresAt: dayjs(item.expiryTime),
