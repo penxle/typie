@@ -27,6 +27,8 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
     },
     body: request.body,
+    // @ts-expect-error Node type issues
+    duplex: 'half',
   });
 
   if (response.status === 401) {
