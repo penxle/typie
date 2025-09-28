@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/bun';
 import dayjs from 'dayjs';
 import { and, asc, eq, gt, lt, lte, notInArray, or } from 'drizzle-orm';
 import * as R from 'remeda';
@@ -132,7 +133,9 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
 
       lock.signal.throwIfAborted();
     });
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err);
+
     if (updates.length > 0) {
       await redis.rpush(`canvas:sync:updates:${canvasId}`, ...updates);
     }

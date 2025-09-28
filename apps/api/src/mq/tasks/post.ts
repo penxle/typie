@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/bun';
 import { findChildren } from '@tiptap/core';
 import dayjs from 'dayjs';
 import { and, asc, eq, gt, lt, lte, notInArray, or, sql } from 'drizzle-orm';
@@ -210,7 +211,9 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 
       lock.signal.throwIfAborted();
     });
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err);
+
     if (updates.length > 0) {
       await redis.rpush(`post:sync:updates:${postId}`, ...updates);
     }
