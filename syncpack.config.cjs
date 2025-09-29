@@ -5,6 +5,11 @@ module.exports = {
   semverGroups: [
     {
       packages: ['**'],
+      dependencies: ['@pulumi/pulumi'],
+      range: '',
+    },
+    {
+      packages: ['**'],
       dependencies: ['**'],
       range: '^',
     },
