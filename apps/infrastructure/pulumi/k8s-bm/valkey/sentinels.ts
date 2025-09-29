@@ -16,6 +16,10 @@ type SentinelArgs = {
     cpu: pulumi.Input<string>;
     memory: pulumi.Input<string>;
   };
+
+  storage: {
+    size: pulumi.Input<string>;
+  };
 };
 
 class Sentinel extends pulumi.ComponentResource {
@@ -86,8 +90,8 @@ class Sentinel extends pulumi.ComponentResource {
             },
 
             persistence: {
-              storageClass: 'local-ssd',
-              size: '10Gi',
+              storageClass: 'zfs',
+              size: args.storage.size,
             },
 
             topologySpreadConstraints: [
@@ -113,8 +117,8 @@ class Sentinel extends pulumi.ComponentResource {
             },
 
             persistence: {
-              storageClass: 'local-ssd',
-              size: '10Gi',
+              storageClass: 'zfs',
+              size: args.storage.size,
             },
 
             topologySpreadConstraints: [
@@ -179,6 +183,10 @@ new Sentinel(
     resources: {
       cpu: '200m',
       memory: '512Mi',
+    },
+
+    storage: {
+      size: '10Gi',
     },
   },
   { provider },

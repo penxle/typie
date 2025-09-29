@@ -29,7 +29,7 @@ class Repository extends pulumi.ComponentResource {
               selection: {
                 tagStatus: 'any',
                 countType: 'imageCountMoreThan',
-                countNumber: 5,
+                countNumber: 20,
               },
               action: {
                 type: 'expire',

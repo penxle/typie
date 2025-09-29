@@ -13,7 +13,6 @@ const chart = new k8s.helm.v4.Chart(
     },
 
     values: {
-      devices: ['enp0s1'],
       tunnelProtocol: 'geneve',
 
       k8sServiceHost: 'localhost',

@@ -6,3 +6,4 @@ customization:
   systemExtensions:
     officialExtensions:
       - siderolabs/ecr-credential-provider
+      - siderolabs/zfs

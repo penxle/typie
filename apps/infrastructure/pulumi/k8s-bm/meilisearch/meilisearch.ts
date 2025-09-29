@@ -85,7 +85,7 @@ class Meilisearch extends pulumi.ComponentResource {
 
           persistence: {
             enabled: true,
-            storageClass: 'local-ssd',
+            storageClass: 'zfs',
             size: args.storage.size,
           },
         },

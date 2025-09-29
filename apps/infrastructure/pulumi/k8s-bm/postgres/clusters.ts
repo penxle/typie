@@ -210,12 +210,12 @@ class Cluster extends pulumi.ComponentResource {
           ],
 
           storage: {
-            storageClass: 'local-ssd',
+            storageClass: 'zfs',
             size: args.storage.size,
           },
 
           walStorage: {
-            storageClass: 'local-ssd',
+            storageClass: 'zfs',
             size: args.storage.walSize,
           },
 
@@ -400,8 +400,8 @@ const devCluster = new Cluster(
     },
 
     storage: {
-      size: '20Gi',
-      walSize: '20Gi',
+      size: '10Gi',
+      walSize: '10Gi',
     },
 
     walSegmentSize: 16,

@@ -4,3 +4,4 @@ machine:
 
   nodeLabels:
     volumes.typie.io/attach: 'true'
+    volumes.typie.io/zfs: 'true'
