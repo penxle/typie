@@ -92,7 +92,7 @@
   "devDependencies": {
     "@pulumi/aws": "^7.7.0",
     "@pulumi/kubernetes": "^4.23.0",
-    "@pulumi/pulumi": "^3.198.0",
+    "@pulumi/pulumi": "3.197.0",
     "@types/bun": "^1.2.22",
     "@types/image-size": "^0.8.0",
     "@types/react": "^19.1.14",
