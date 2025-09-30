@@ -15,7 +15,7 @@ new k8s.apiextensions.CustomResource('k8s-apiserver', {
     replicas: 2,
     kubeAPIServer: {
       mode: 'auth',
-      hostname: 'k8s',
+      hostname: 'k8s-controlplane',
     },
   },
 });

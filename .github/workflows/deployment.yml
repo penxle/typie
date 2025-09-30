@@ -50,11 +50,11 @@ jobs:
           oauth-client-id: ${{ vars.TAILSCALE_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           tags: tag:github-actions
-          targets: k8s.fish-shark.ts.net
+          targets: k8s-controlplane.fish-shark.ts.net
 
       - name: Setup kubeconfig
         run: |
-          sudo -E tailscale configure kubeconfig k8s
+          sudo -E tailscale configure kubeconfig k8s-controlplane
           sudo chown -R "$(id -u)":"$(id -g)" ~/.kube
 
       - name: Apply infrastructure
