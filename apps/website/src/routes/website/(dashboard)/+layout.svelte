@@ -17,7 +17,6 @@
   import Notes from './@notes/Notes.svelte';
   import ShareModal from './@share/ShareModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
-  import MaintenanceBanner from './MaintenanceBanner.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -251,7 +250,6 @@
 {:else}
   <div class={flex({ flexDirection: 'column', height: '[100dvh]' })}>
     <AdminImpersonateBanner {$query} />
-    <MaintenanceBanner />
 
     <div
       class={flex({
