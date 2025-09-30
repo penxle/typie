@@ -25,7 +25,7 @@ jobs:
   deploy-dev-api:
     name: Deployment (dev-api)
     needs: build-api
-    uses: ./.github/workflows/deployment-bm.yml
+    uses: ./.github/workflows/deployment.yml
     with:
       stack: dev
       app: api
@@ -35,7 +35,7 @@ jobs:
   deploy-dev-website:
     name: Deployment (dev-website)
     needs: build-website
-    uses: ./.github/workflows/deployment-bm.yml
+    uses: ./.github/workflows/deployment.yml
     with:
       stack: dev
       app: website

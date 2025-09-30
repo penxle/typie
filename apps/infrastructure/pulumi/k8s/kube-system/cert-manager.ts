@@ -1,7 +1,7 @@
 import * as k8s from '@pulumi/kubernetes';
-import { IAMServiceAccount } from '$components';
+import { IAMUserSecret } from '$components';
 
-const serviceAccount = new IAMServiceAccount('cert-manager', {
+const secret = new IAMUserSecret('cert-manager', {
   metadata: {
     name: 'cert-manager',
     namespace: 'kube-system',
@@ -30,7 +30,7 @@ const serviceAccount = new IAMServiceAccount('cert-manager', {
   },
 });
 
-new k8s.helm.v4.Chart('cert-manager', {
+const chart = new k8s.helm.v4.Chart('cert-manager', {
   chart: 'cert-manager',
   namespace: 'kube-system',
   repositoryOpts: {
@@ -38,69 +38,86 @@ new k8s.helm.v4.Chart('cert-manager', {
   },
 
   values: {
+    enableCertificateOwnerRef: true,
+
     crds: {
       enabled: true,
     },
 
-    serviceAccount: {
-      create: false,
-      name: serviceAccount.metadata.name,
+    extraArgs: ['--enable-gateway-api=true'],
+
+    extraEnv: [
+      { name: 'AWS_REGION', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_REGION' } } },
+      { name: 'AWS_ACCESS_KEY_ID', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_ACCESS_KEY_ID' } } },
+      { name: 'AWS_SECRET_ACCESS_KEY', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_SECRET_ACCESS_KEY' } } },
+    ],
+  },
+});
+
+const selfSignedIssuer = new k8s.apiextensions.CustomResource(
+  'self-signed',
+  {
+    apiVersion: 'cert-manager.io/v1',
+    kind: 'ClusterIssuer',
+
+    metadata: {
+      name: 'self-signed',
+    },
+
+    spec: {
+      selfSigned: {},
     },
   },
-});
+  { dependsOn: chart },
+);
 
-const selfSignedIssuer = new k8s.apiextensions.CustomResource('self-signed', {
-  apiVersion: 'cert-manager.io/v1',
-  kind: 'ClusterIssuer',
+const letsencryptStagingIssuer = new k8s.apiextensions.CustomResource(
+  'letsencrypt-staging',
+  {
+    apiVersion: 'cert-manager.io/v1',
+    kind: 'ClusterIssuer',
 
-  metadata: {
-    name: 'self-signed',
-  },
+    metadata: {
+      name: 'letsencrypt-staging',
+    },
 
-  spec: {
-    selfSigned: {},
-  },
-});
-
-const letsencryptStagingIssuer = new k8s.apiextensions.CustomResource('letsencrypt-staging', {
-  apiVersion: 'cert-manager.io/v1',
-  kind: 'ClusterIssuer',
-
-  metadata: {
-    name: 'letsencrypt-staging',
-  },
-
-  spec: {
-    acme: {
-      server: 'https://acme-staging-v02.api.letsencrypt.org/directory',
-      email: 'cert@penxle.io',
-      privateKeySecretRef: {
-        name: 'letsencrypt-staging',
+    spec: {
+      acme: {
+        server: 'https://acme-staging-v02.api.letsencrypt.org/directory',
+        email: 'cert@penxle.io',
+        privateKeySecretRef: {
+          name: 'letsencrypt-staging',
+        },
+        solvers: [{ dns01: { route53: {} } }],
       },
-      solvers: [{ dns01: { route53: {} } }],
     },
   },
-});
+  { dependsOn: chart },
+);
 
-const letsencryptIssuer = new k8s.apiextensions.CustomResource('letsencrypt', {
-  apiVersion: 'cert-manager.io/v1',
-  kind: 'ClusterIssuer',
+const letsencryptIssuer = new k8s.apiextensions.CustomResource(
+  'letsencrypt',
+  {
+    apiVersion: 'cert-manager.io/v1',
+    kind: 'ClusterIssuer',
 
-  metadata: {
-    name: 'letsencrypt',
-  },
+    metadata: {
+      name: 'letsencrypt',
+    },
 
-  spec: {
-    acme: {
-      server: 'https://acme-v02.api.letsencrypt.org/directory',
-      email: 'cert@penxle.io',
-      privateKeySecretRef: {
-        name: 'letsencrypt',
+    spec: {
+      acme: {
+        server: 'https://acme-v02.api.letsencrypt.org/directory',
+        email: 'cert@penxle.io',
+        privateKeySecretRef: {
+          name: 'letsencrypt',
+        },
+        solvers: [{ dns01: { route53: {} } }],
       },
-      solvers: [{ dns01: { route53: {} } }],
     },
   },
-});
+  { dependsOn: chart },
+);
 
 export const issuers = {
   selfSigned: selfSignedIssuer,

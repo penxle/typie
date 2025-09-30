@@ -44,52 +44,44 @@ export class App extends pulumi.ComponentResource {
       .with('dev', () => 'dev')
       .run();
 
-    let serviceAccount;
+    let iamSecret;
     if (args.iam) {
-      const role = new aws.iam.Role(
-        `${name}+${namespace}@eks`,
+      const user = new aws.iam.User(
+        `${name}@k8s`,
         {
-          name: pulumi.interpolate`${args.name}+${namespace}@eks`,
-          assumeRolePolicy: {
-            Version: '2012-10-17',
-            Statement: [
-              {
-                Effect: 'Allow',
-                Principal: { Service: 'pods.eks.amazonaws.com' },
-                Action: ['sts:AssumeRole', 'sts:TagSession'],
-              },
-            ],
-          },
+          name: pulumi.interpolate`${args.name}+${namespace}@k8s`,
         },
         { parent: this },
       );
 
-      new aws.iam.RolePolicy(
-        `${name}+${namespace}@eks`,
+      new aws.iam.UserPolicy(
+        `${name}@k8s`,
         {
-          role: role.name,
+          user: user.name,
           policy: args.iam.policy,
         },
         { parent: this },
       );
 
-      const assoc = new aws.eks.PodIdentityAssociation(
-        `${name}+${namespace}@eks`,
+      const accessKey = new aws.iam.AccessKey(
+        `${name}@k8s`,
         {
-          clusterName: 'typie',
-          namespace,
-          roleArn: role.arn,
-          serviceAccount: args.name,
+          user: user.name,
         },
         { parent: this },
       );
 
-      serviceAccount = new k8s.core.v1.ServiceAccount(
-        name,
+      iamSecret = new k8s.core.v1.Secret(
+        `${name}@iam`,
         {
           metadata: {
-            name: assoc.serviceAccount,
+            name: pulumi.interpolate`${args.name}-iam`,
             namespace,
+          },
+          stringData: {
+            AWS_REGION: 'ap-northeast-2',
+            AWS_ACCESS_KEY_ID: accessKey.id,
+            AWS_SECRET_ACCESS_KEY: accessKey.secret,
           },
         },
         { parent: this },
@@ -179,9 +171,9 @@ export class App extends pulumi.ComponentResource {
           namespace,
         },
         spec: {
-          type: 'NodePort',
+          type: 'ClusterIP',
           selector: labels,
-          ports: [{ name: 'http', port: 3000 }],
+          ports: [{ name: 'http', port: 80, targetPort: 3000 }],
         },
       },
       { parent: this },
@@ -198,18 +190,15 @@ export class App extends pulumi.ComponentResource {
           namespace,
           annotations: {
             'reloader.stakater.com/auto': 'true',
-            ...(stack === 'prod' && {
-              'notifications.argoproj.io/subscribe.on-rollout-completed.slack': 'activities',
-            }),
           },
         },
         spec: {
           ...(stack === 'dev' && { replicas: 1 }),
           selector: { matchLabels: labels },
+          revisionHistoryLimit: 2,
           template: {
             metadata: { labels },
             spec: {
-              ...(serviceAccount && { serviceAccountName: serviceAccount.metadata.name }),
               containers: [
                 {
                   name: 'app',
@@ -221,7 +210,10 @@ export class App extends pulumi.ComponentResource {
                     { name: 'AWS_REGION', value: 'ap-northeast-2' },
                     ...(args.env ?? []),
                   ],
-                  ...(es && { envFrom: [{ secretRef: { name: es.metadata.name } }] }),
+                  envFrom: [
+                    ...(es ? [{ secretRef: { name: es.metadata.name } }] : []),
+                    ...(iamSecret ? [{ secretRef: { name: iamSecret.metadata.name } }] : []),
+                  ],
                   resources: {
                     requests: { cpu: args.resources.cpu },
                     limits: { memory: args.resources.memory },
@@ -242,19 +234,18 @@ export class App extends pulumi.ComponentResource {
                   },
                 },
               ],
-              affinity: {
-                podAntiAffinity: {
-                  preferredDuringSchedulingIgnoredDuringExecution: [
-                    {
-                      weight: 100,
-                      podAffinityTerm: {
-                        labelSelector: { matchExpressions: [{ key: 'app', operator: 'In', values: [args.name] }] },
-                        topologyKey: 'kubernetes.io/hostname',
-                      },
+              topologySpreadConstraints: [
+                {
+                  maxSkew: 1,
+                  topologyKey: 'kubernetes.io/hostname',
+                  whenUnsatisfiable: 'ScheduleAnyway',
+                  labelSelector: {
+                    matchLabels: {
+                      app: args.name,
                     },
-                  ],
+                  },
                 },
-              },
+              ],
             },
           },
           strategy: {

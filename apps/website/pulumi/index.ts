@@ -32,77 +32,76 @@ if (stack === 'prod') {
     },
   });
 
-  const ingress = new k8s.networking.v1.Ingress('website', {
+  new k8s.apiextensions.CustomResource('api', {
+    apiVersion: 'gateway.networking.k8s.io/v1',
+    kind: 'HTTPRoute',
     metadata: {
       name: 'website',
       namespace: app.service.metadata.namespace,
-      annotations: {
-        'alb.ingress.kubernetes.io/group.name': 'public-alb',
-        'alb.ingress.kubernetes.io/group.order': stack === 'prod' ? '20' : '120',
-        'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
-        'alb.ingress.kubernetes.io/healthcheck-path': '/healthz',
-        ...(stack === 'prod' && { 'external-dns.alpha.kubernetes.io/ingress-hostname-source': 'annotation-only' }),
-      },
     },
     spec: {
-      ingressClassName: 'alb',
-      rules: ['typie.co', 'auth.typie.co', 'typie.me', '*.typie.me'].map((host) => ({
-        host,
-        http: {
-          paths: [
+      parentRefs: [{ name: 'http', namespace: 'infra' }],
+      hostnames: ['typie.co', 'auth.typie.co', 'typie.me', '*.typie.me'],
+      rules: [
+        {
+          backendRefs: [
             {
-              path: '/',
-              pathType: 'Prefix',
-              backend: {
-                service: {
-                  name: app.service.metadata.name,
-                  port: { number: app.service.spec.ports[0].port },
-                },
-              },
+              name: app.service.metadata.name,
+              port: app.service.spec.ports[0].port,
             },
           ],
         },
-      })),
+      ],
     },
   });
 
-  new k8s.networking.v1.Ingress('www.website', {
+  new k8s.apiextensions.CustomResource('www-redirect', {
+    apiVersion: 'gateway.networking.k8s.io/v1',
+    kind: 'HTTPRoute',
     metadata: {
-      name: 'www.website',
+      name: 'www-redirect',
       namespace: app.service.metadata.namespace,
       annotations: {
-        'alb.ingress.kubernetes.io/group.name': 'public-alb',
-        'alb.ingress.kubernetes.io/group.order': stack === 'prod' ? '21' : '121',
-        'alb.ingress.kubernetes.io/listen-ports': JSON.stringify([{ HTTPS: 443 }]),
-        'alb.ingress.kubernetes.io/actions.redirect': pulumi.jsonStringify({
-          type: 'redirect',
-          redirectConfig: {
-            host: stack === 'prod' ? 'typie.co' : 'typie.dev',
-            path: '/',
-            statusCode: 'HTTP_301',
-          },
-        }),
+        'external-dns.typie.io/enabled': 'true',
       },
     },
     spec: {
-      ingressClassName: 'alb',
-      rules: (stack === 'prod' ? ['www.typie.co', 'www.typie.me'] : ['www.typie.dev']).map((host) => ({
-        host,
-        http: {
-          paths: [
+      parentRefs: [{ name: 'http', namespace: 'infra' }],
+      hostnames: ['www.typie.co', 'www.typie.me'],
+      rules: [
+        {
+          matches: [
             {
-              path: '/',
-              pathType: 'Prefix',
-              backend: {
-                service: {
-                  name: 'redirect',
-                  port: { name: 'use-annotation' },
-                },
+              headers: [{ name: 'Host', value: 'www.typie.co' }],
+            },
+          ],
+          filters: [
+            {
+              type: 'RequestRedirect',
+              requestRedirect: {
+                hostname: 'typie.co',
+                statusCode: 301,
               },
             },
           ],
         },
-      })),
+        {
+          matches: [
+            {
+              headers: [{ name: 'Host', value: 'www.typie.me' }],
+            },
+          ],
+          filters: [
+            {
+              type: 'RequestRedirect',
+              requestRedirect: {
+                hostname: 'typie.me',
+                statusCode: 301,
+              },
+            },
+          ],
+        },
+      ],
     },
   });
 
@@ -114,7 +113,7 @@ if (stack === 'prod') {
     origins: [
       {
         originId: 'alb',
-        domainName: ingress.status.loadBalancer.ingress[0].hostname,
+        domainName: 'ingress.k8s.typie.io',
         customOriginConfig: {
           httpPort: 80,
           httpsPort: 443,
@@ -160,7 +159,7 @@ if (stack === 'prod') {
     origins: [
       {
         originId: 'alb',
-        domainName: ingress.status.loadBalancer.ingress[0].hostname,
+        domainName: 'ingress.k8s.typie.io',
         customOriginConfig: {
           httpPort: 80,
           httpsPort: 443,
@@ -250,119 +249,103 @@ if (stack === 'prod') {
     ],
   });
 } else if (stack === 'dev') {
-  const provider = new k8s.Provider('bm', {
-    kubeconfig: '~/.kube/config',
+  const app = new typie.App('website@bm', {
+    name: 'website',
+
+    image: {
+      name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/website',
+      version: config.require('version'),
+    },
+
+    resources: {
+      cpu: '1',
+      memory: '2Gi',
+    },
+
+    secrets: {
+      token: config.requireSecret('doppler-token'),
+    },
+
+    autoscale: {
+      minCount: 4,
+      maxCount: 20,
+      averageCpuUtilization: 80,
+    },
   });
 
-  const app = new typie.App2(
-    'website@bm',
-    {
+  new k8s.apiextensions.CustomResource('website', {
+    apiVersion: 'gateway.networking.k8s.io/v1',
+    kind: 'HTTPRoute',
+    metadata: {
       name: 'website',
-
-      image: {
-        name: '509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/website',
-        version: config.require('version'),
-      },
-
-      resources: {
-        cpu: '1',
-        memory: '2Gi',
-      },
-
-      secrets: {
-        token: config.requireSecret('doppler-token'),
-      },
-
-      autoscale: {
-        minCount: 4,
-        maxCount: 20,
-        averageCpuUtilization: 80,
+      namespace: app.service.metadata.namespace,
+      annotations: {
+        'external-dns.typie.io/enabled': 'true',
       },
     },
-    { provider },
-  );
-
-  new k8s.apiextensions.CustomResource(
-    'website@bm',
-    {
-      apiVersion: 'gateway.networking.k8s.io/v1',
-      kind: 'HTTPRoute',
-      metadata: {
-        name: 'website',
-        namespace: app.service.metadata.namespace,
-        annotations: {
-          'external-dns.typie.io/enabled': 'true',
+    spec: {
+      parentRefs: [{ name: 'http', namespace: 'infra' }],
+      hostnames: ['typie.dev', 'auth.typie.dev', 'typie.app', '*.typie.app'],
+      rules: [
+        {
+          backendRefs: [
+            {
+              name: app.service.metadata.name,
+              port: app.service.spec.ports[0].port,
+            },
+          ],
         },
-      },
-      spec: {
-        parentRefs: [{ name: 'http', namespace: 'infra' }],
-        hostnames: ['typie.dev', 'auth.typie.dev', 'typie.app', '*.typie.app'],
-        rules: [
-          {
-            backendRefs: [
-              {
-                name: app.service.metadata.name,
-                port: app.service.spec.ports[0].port,
-              },
-            ],
-          },
-        ],
-      },
+      ],
     },
-    { provider },
-  );
+  });
 
-  new k8s.apiextensions.CustomResource(
-    'www-redirect@bm',
-    {
-      apiVersion: 'gateway.networking.k8s.io/v1',
-      kind: 'HTTPRoute',
-      metadata: {
-        name: 'www-redirect',
-        namespace: app.service.metadata.namespace,
-        annotations: {
-          'external-dns.typie.io/enabled': 'true',
-        },
-      },
-      spec: {
-        parentRefs: [{ name: 'http', namespace: 'infra' }],
-        hostnames: ['www.typie.dev', 'www.typie.app'],
-        rules: [
-          {
-            matches: [
-              {
-                headers: [{ name: 'Host', value: 'www.typie.dev' }],
-              },
-            ],
-            filters: [
-              {
-                type: 'RequestRedirect',
-                requestRedirect: {
-                  hostname: 'typie.dev',
-                  statusCode: 301,
-                },
-              },
-            ],
-          },
-          {
-            matches: [
-              {
-                headers: [{ name: 'Host', value: 'www.typie.app' }],
-              },
-            ],
-            filters: [
-              {
-                type: 'RequestRedirect',
-                requestRedirect: {
-                  hostname: 'typie.app',
-                  statusCode: 301,
-                },
-              },
-            ],
-          },
-        ],
+  new k8s.apiextensions.CustomResource('www-redirect', {
+    apiVersion: 'gateway.networking.k8s.io/v1',
+    kind: 'HTTPRoute',
+    metadata: {
+      name: 'www-redirect',
+      namespace: app.service.metadata.namespace,
+      annotations: {
+        'external-dns.typie.io/enabled': 'true',
       },
     },
-    { provider },
-  );
+    spec: {
+      parentRefs: [{ name: 'http', namespace: 'infra' }],
+      hostnames: ['www.typie.dev', 'www.typie.app'],
+      rules: [
+        {
+          matches: [
+            {
+              headers: [{ name: 'Host', value: 'www.typie.dev' }],
+            },
+          ],
+          filters: [
+            {
+              type: 'RequestRedirect',
+              requestRedirect: {
+                hostname: 'typie.dev',
+                statusCode: 301,
+              },
+            },
+          ],
+        },
+        {
+          matches: [
+            {
+              headers: [{ name: 'Host', value: 'www.typie.app' }],
+            },
+          ],
+          filters: [
+            {
+              type: 'RequestRedirect',
+              requestRedirect: {
+                hostname: 'typie.app',
+                statusCode: 301,
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
 }
