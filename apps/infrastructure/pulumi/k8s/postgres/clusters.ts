@@ -2,7 +2,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as random from '@pulumi/random';
 import { buckets } from '$aws/s3';
-import { IAMServiceAccount } from '$components';
+import { IAMUserSecret } from '$components';
 
 type ClusterArgs = {
   name: pulumi.Input<string>;
@@ -21,6 +21,11 @@ type ClusterArgs = {
     size: pulumi.Input<string>;
     walSize: pulumi.Input<string>;
   };
+
+  walSegmentSize: pulumi.Input<number>;
+
+  dbParameters: pulumi.Input<Record<string, string>>;
+  poolerParameters: pulumi.Input<Record<string, string>>;
 };
 
 class Cluster extends pulumi.ComponentResource {
@@ -38,7 +43,7 @@ class Cluster extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    const secret = new k8s.core.v1.Secret(
+    const credentials = new k8s.core.v1.Secret(
       `${name}-credentials`,
       {
         metadata: {
@@ -54,7 +59,7 @@ class Cluster extends pulumi.ComponentResource {
       { parent: this },
     );
 
-    const serviceAccount = new IAMServiceAccount(
+    const iam = new IAMUserSecret(
       name,
       {
         metadata: {
@@ -62,14 +67,18 @@ class Cluster extends pulumi.ComponentResource {
           namespace: args.namespace,
         },
         spec: {
-          serviceAccountName: args.name,
           policy: {
             Version: '2012-10-17',
             Statement: [
               {
                 Effect: 'Allow',
                 Action: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-                Resource: [buckets.backups.arn, pulumi.concat(buckets.backups.arn, '/*')],
+                Resource: [
+                  buckets.backups.arn,
+                  pulumi.concat(buckets.backups.arn, '/*'),
+                  buckets.postgres.arn,
+                  pulumi.concat(buckets.postgres.arn, '/*'),
+                ],
               },
             ],
           },
@@ -92,8 +101,18 @@ class Cluster extends pulumi.ComponentResource {
         spec: {
           retentionPolicy: '7d',
           configuration: {
-            destinationPath: pulumi.interpolate`s3://${buckets.backups.bucket}/postgres/${args.namespace}`,
-            s3Credentials: { inheritFromIAMRole: true },
+            destinationPath: pulumi.interpolate`s3://${buckets.postgres.bucket}/${args.namespace}`,
+
+            s3Credentials: {
+              accessKeyId: {
+                name: iam.metadata.name,
+                key: 'AWS_ACCESS_KEY_ID',
+              },
+              secretAccessKey: {
+                name: iam.metadata.name,
+                key: 'AWS_SECRET_ACCESS_KEY',
+              },
+            },
 
             data: {
               compression: 'bzip2',
@@ -130,8 +149,10 @@ class Cluster extends pulumi.ComponentResource {
 
           bootstrap: {
             initdb: {
+              walSegmentSize: args.walSegmentSize,
+
               secret: {
-                name: secret.metadata.name,
+                name: credentials.metadata.name,
               },
             },
           },
@@ -147,35 +168,7 @@ class Cluster extends pulumi.ComponentResource {
           },
 
           postgresql: {
-            parameters: {
-              max_connections: '1000',
-
-              wal_buffers: '32MB',
-              wal_keep_size: '4GB',
-              max_wal_size: '2GB',
-              min_wal_size: '512MB',
-              wal_writer_delay: '1000ms',
-              wal_writer_flush_after: '4MB',
-
-              checkpoint_timeout: '30min',
-              checkpoint_completion_target: '0.9',
-
-              shared_buffers: '4GB',
-              effective_cache_size: '12GB',
-              work_mem: '64MB',
-              maintenance_work_mem: '1GB',
-
-              max_worker_processes: '8',
-              max_parallel_workers: '8',
-              max_parallel_workers_per_gather: '4',
-
-              default_toast_compression: 'lz4',
-
-              track_activity_query_size: '4096',
-              'pg_stat_statements.track': 'ALL',
-              'pg_stat_statements.max': '10000',
-              'pg_stat_statements.track_utility': '0',
-            },
+            parameters: args.dbParameters,
           },
 
           replicationSlots: {
@@ -184,36 +177,28 @@ class Cluster extends pulumi.ComponentResource {
             },
           },
 
-          affinity: {
-            podAntiAffinityType: 'required',
-          },
-
-          // topologySpreadConstraints: [
-          //   {
-          //     labelSelector: {
-          //       matchExpressions: [
-          //         { key: 'cnpg.io/cluster', operator: 'In', values: [args.name] },
-          //         { key: 'cnpg.io/podRole', operator: 'In', values: ['instance'] },
-          //       ],
-          //     },
-          //     topologyKey: 'topology.kubernetes.io/zone',
-          //     maxSkew: 1,
-          //     whenUnsatisfiable: 'ScheduleAnyway',
-          //   },
-          // ],
+          topologySpreadConstraints: [
+            {
+              maxSkew: 1,
+              topologyKey: 'kubernetes.io/hostname',
+              whenUnsatisfiable: 'DoNotSchedule',
+              labelSelector: {
+                matchLabels: {
+                  'cnpg.io/cluster': args.name,
+                  'cnpg.io/podRole': 'instance',
+                },
+              },
+            },
+          ],
 
           storage: {
-            storageClass: 'gp3',
+            storageClass: 'zfs',
             size: args.storage.size,
           },
 
           walStorage: {
-            storageClass: 'gp3',
+            storageClass: 'zfs',
             size: args.storage.walSize,
-          },
-
-          monitoring: {
-            enablePodMonitor: true,
           },
 
           plugins: [
@@ -227,7 +212,7 @@ class Cluster extends pulumi.ComponentResource {
           ],
         },
       },
-      { parent: this, dependsOn: [serviceAccount] },
+      { parent: this },
     );
 
     new k8s.apiextensions.CustomResource(
@@ -252,58 +237,33 @@ class Cluster extends pulumi.ComponentResource {
           template: {
             spec: {
               containers: [],
-              affinity: {
-                podAntiAffinity: {
-                  requiredDuringSchedulingIgnoredDuringExecution: [
-                    {
-                      labelSelector: {
-                        matchExpressions: [{ key: 'cnpg.io/poolerName', operator: 'In', values: [`${args.name}-pooler`] }],
-                      },
-                      topologyKey: 'kubernetes.io/hostname',
+              topologySpreadConstraints: [
+                {
+                  maxSkew: 1,
+                  topologyKey: 'kubernetes.io/hostname',
+                  whenUnsatisfiable: 'DoNotSchedule',
+                  labelSelector: {
+                    matchLabels: {
+                      'cnpg.io/poolerName': `${args.name}-pooler`,
                     },
-                  ],
+                  },
                 },
-              },
-              // topologySpreadConstraints: [
-              //   {
-              //     labelSelector: {
-              //       matchExpressions: [{ key: 'cnpg.io/poolerName', operator: 'In', values: [`${args.name}-pooler`] }],
-              //     },
-              //     topologyKey: 'topology.kubernetes.io/zone',
-              //     maxSkew: 1,
-              //     whenUnsatisfiable: 'ScheduleAnyway',
-              //   },
-              // ],
+              ],
             },
           },
 
           serviceTemplate: {
             metadata: {
               annotations: {
-                'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-                'tailscale.com/proxy-group': 'ingress',
+                'external-dns.typie.io/enabled': 'true',
+                'external-dns.alpha.kubernetes.io/internal-hostname': args.hostname,
               },
             },
-            spec: {
-              type: 'LoadBalancer',
-              loadBalancerClass: 'tailscale',
-            },
-          },
-
-          monitoring: {
-            enablePodMonitor: true,
           },
 
           pgbouncer: {
             poolMode: 'transaction',
-            parameters: {
-              max_client_conn: '1000',
-              min_pool_size: '20',
-              default_pool_size: '50',
-              reserve_pool_size: '50',
-              server_check_delay: '10',
-              server_login_retry: '0',
-            },
+            parameters: args.poolerParameters,
           },
         },
       },
@@ -342,7 +302,7 @@ class Cluster extends pulumi.ComponentResource {
   }
 }
 
-const cluster = new Cluster('db@prod', {
+const prodCluster = new Cluster('db-prod', {
   name: 'db',
   namespace: 'prod',
 
@@ -356,11 +316,113 @@ const cluster = new Cluster('db@prod', {
   },
 
   storage: {
-    size: '400Gi',
-    walSize: '400Gi',
+    size: '200Gi',
+    walSize: '50Gi',
+  },
+
+  walSegmentSize: 256,
+
+  dbParameters: {
+    max_connections: '1000',
+
+    wal_buffers: '512MB',
+    wal_keep_size: '4GB',
+    max_wal_size: '16GB',
+    min_wal_size: '4GB',
+    wal_writer_delay: '1000ms',
+    wal_writer_flush_after: '64MB',
+
+    checkpoint_timeout: '30min',
+    checkpoint_completion_target: '0.9',
+
+    shared_buffers: '4GB',
+    effective_cache_size: '12GB',
+    work_mem: '64MB',
+    maintenance_work_mem: '1GB',
+
+    max_worker_processes: '8',
+    max_parallel_workers: '8',
+    max_parallel_workers_per_gather: '4',
+
+    default_toast_compression: 'lz4',
+
+    track_activity_query_size: '4096',
+    'pg_stat_statements.track': 'ALL',
+    'pg_stat_statements.max': '10000',
+    'pg_stat_statements.track_utility': '0',
+  },
+
+  poolerParameters: {
+    max_client_conn: '1000',
+    min_pool_size: '20',
+    default_pool_size: '50',
+    reserve_pool_size: '50',
+    server_check_delay: '10',
+    server_login_retry: '0',
+  },
+});
+
+const devCluster = new Cluster('db-dev', {
+  name: 'db',
+  namespace: 'dev',
+
+  instances: 1,
+
+  hostname: 'dev.db.typie.io',
+
+  resources: {
+    cpu: '1',
+    memory: '2Gi',
+  },
+
+  storage: {
+    size: '10Gi',
+    walSize: '10Gi',
+  },
+
+  walSegmentSize: 16,
+
+  dbParameters: {
+    max_connections: '100',
+
+    wal_buffers: '4MB',
+    wal_keep_size: '1GB',
+    max_wal_size: '1GB',
+    min_wal_size: '80MB',
+    wal_writer_delay: '1000ms',
+    wal_writer_flush_after: '1MB',
+
+    checkpoint_timeout: '15min',
+    checkpoint_completion_target: '0.9',
+
+    shared_buffers: '256MB',
+    effective_cache_size: '1GB',
+    work_mem: '4MB',
+    maintenance_work_mem: '64MB',
+
+    max_worker_processes: '2',
+    max_parallel_workers: '2',
+    max_parallel_workers_per_gather: '1',
+
+    default_toast_compression: 'lz4',
+
+    track_activity_query_size: '4096',
+    'pg_stat_statements.track': 'ALL',
+    'pg_stat_statements.max': '10000',
+    'pg_stat_statements.track_utility': '0',
+  },
+
+  poolerParameters: {
+    max_client_conn: '100',
+    min_pool_size: '5',
+    default_pool_size: '10',
+    reserve_pool_size: '10',
+    server_check_delay: '10',
+    server_login_retry: '0',
   },
 });
 
 export const outputs = {
-  K8S_POSTGRES_PROD_PASSWORD: cluster.password,
+  K8S_POSTGRES_PROD_PASSWORD: prodCluster.password,
+  K8S_POSTGRES_DEV_PASSWORD: devCluster.password,
 };

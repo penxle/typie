@@ -1,5 +1,5 @@
 import * as k8s from '@pulumi/kubernetes';
 
-export const namespace = new k8s.core.v1.Namespace('postgres', {
-  metadata: { name: 'postgres' },
+export const namespace = new k8s.core.v1.Namespace('cnpg-system', {
+  metadata: { name: 'cnpg-system' },
 });

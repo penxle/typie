@@ -241,18 +241,18 @@ END $$;
 
 -- 6. Create indexes CONCURRENTLY (no table locks)
 -- Primary key index
-CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "post_snapshot_contributors_pkey" 
+CREATE UNIQUE INDEX IF NOT EXISTS "post_snapshot_contributors_pkey" 
 ON "post_snapshot_contributors"("id");
 
 -- Composite unique index
-CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "post_snapshot_contributors_snapshot_id_user_id_idx" 
+CREATE UNIQUE INDEX IF NOT EXISTS "post_snapshot_contributors_snapshot_id_user_id_idx" 
 ON "post_snapshot_contributors"("snapshot_id", "user_id");
 
 -- Foreign key indexes
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_post_snapshot_contributors_snapshot_id" 
+CREATE INDEX IF NOT EXISTS "idx_post_snapshot_contributors_snapshot_id" 
 ON "post_snapshot_contributors"("snapshot_id");
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_post_snapshot_contributors_user_id" 
+CREATE INDEX IF NOT EXISTS "idx_post_snapshot_contributors_user_id" 
 ON "post_snapshot_contributors"("user_id");
 
 -- 7. Add constraints using existing indexes (fast operation)

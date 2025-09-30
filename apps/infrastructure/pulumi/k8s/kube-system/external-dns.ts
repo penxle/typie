@@ -1,8 +1,7 @@
 import * as k8s from '@pulumi/kubernetes';
-import { tables } from '$aws/dynamodb';
-import { IAMServiceAccount } from '$components';
+import { IAMUserSecret } from '$components';
 
-const serviceAccount = new IAMServiceAccount('external-dns', {
+const secret = new IAMUserSecret('external-dns', {
   metadata: {
     name: 'external-dns',
     namespace: 'kube-system',
@@ -20,11 +19,6 @@ const serviceAccount = new IAMServiceAccount('external-dns', {
           Effect: 'Allow',
           Action: ['route53:ListHostedZones', 'route53:ListResourceRecordSets', 'route53:ListTagsForResource'],
           Resource: ['*'],
-        },
-        {
-          Effect: 'Allow',
-          Action: ['DynamoDB:DescribeTable', 'DynamoDB:PartiQLDelete', 'DynamoDB:PartiQLInsert', 'DynamoDB:PartiQLUpdate', 'DynamoDB:Scan'],
-          Resource: [tables.externalDns.arn],
         },
       ],
     },
@@ -44,16 +38,19 @@ new k8s.helm.v4.Chart('external-dns', {
 
     interval: '1m',
     triggerLoopOnEvent: true,
-    sources: ['ingress', 'service'],
+    sources: ['ingress', 'service', 'gateway-httproute'],
+    annotationFilter: 'external-dns.typie.io/enabled=true',
 
-    registry: 'dynamodb',
-    txtOwnerId: 'eks',
+    registry: 'txt',
+    txtOwnerId: 'k8s',
+    txtPrefix: 'ed-',
 
     extraArgs: ['--aws-zones-cache-duration=1h'],
 
-    serviceAccount: {
-      create: false,
-      name: serviceAccount.metadata.name,
-    },
+    env: [
+      { name: 'AWS_REGION', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_REGION' } } },
+      { name: 'AWS_ACCESS_KEY_ID', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_ACCESS_KEY_ID' } } },
+      { name: 'AWS_SECRET_ACCESS_KEY', valueFrom: { secretKeyRef: { name: secret.metadata.name, key: 'AWS_SECRET_ACCESS_KEY' } } },
+    ],
   },
 });

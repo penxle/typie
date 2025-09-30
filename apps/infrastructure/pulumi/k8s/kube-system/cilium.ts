@@ -1,101 +1,94 @@
 import * as k8s from '@pulumi/kubernetes';
-import { provider } from '$k8s-bm/provider';
 
-const chart = new k8s.helm.v4.Chart(
-  'cilium@bm',
-  {
-    name: 'cilium',
+const chart = new k8s.helm.v4.Chart('cilium', {
+  chart: 'cilium',
+  namespace: 'kube-system',
+  repositoryOpts: {
+    repo: 'https://helm.cilium.io/',
+  },
 
-    chart: 'cilium',
-    namespace: 'kube-system',
-    repositoryOpts: {
-      repo: 'https://helm.cilium.io/',
+  values: {
+    tunnelProtocol: 'geneve',
+
+    k8sServiceHost: 'localhost',
+    k8sServicePort: 7445,
+
+    kubeProxyReplacement: true,
+
+    bpf: {
+      masquerade: true,
     },
 
-    values: {
-      tunnelProtocol: 'geneve',
+    ipam: {
+      mode: 'kubernetes',
+    },
 
-      k8sServiceHost: 'localhost',
-      k8sServicePort: 7445,
+    bgpControlPlane: {
+      enabled: true,
+    },
 
-      kubeProxyReplacement: true,
+    loadBalancer: {
+      mode: 'hybrid',
+      dsrDispatch: 'geneve',
+    },
 
-      bpf: {
-        masquerade: true,
+    gatewayAPI: {
+      enabled: true,
+    },
+
+    // spell-checker:disable
+    securityContext: {
+      capabilities: {
+        ciliumAgent: [
+          'CHOWN',
+          'KILL',
+          'NET_ADMIN',
+          'NET_RAW',
+          'IPC_LOCK',
+          'SYS_ADMIN',
+          'SYS_RESOURCE',
+          'DAC_OVERRIDE',
+          'FOWNER',
+          'SETGID',
+          'SETUID',
+        ],
+        cleanCiliumState: ['NET_ADMIN', 'SYS_ADMIN', 'SYS_RESOURCE'],
+      },
+    },
+    // spell-checker:enable
+
+    cgroup: {
+      autoMount: {
+        enabled: false,
       },
 
-      ipam: {
-        mode: 'kubernetes',
-      },
+      hostRoot: '/sys/fs/cgroup',
+    },
 
-      bgpControlPlane: {
+    hubble: {
+      relay: {
         enabled: true,
       },
 
-      loadBalancer: {
-        mode: 'hybrid',
-        dsrDispatch: 'geneve',
-      },
-
-      gatewayAPI: {
+      ui: {
         enabled: true,
       },
+    },
 
-      // spell-checker:disable
-      securityContext: {
-        capabilities: {
-          ciliumAgent: [
-            'CHOWN',
-            'KILL',
-            'NET_ADMIN',
-            'NET_RAW',
-            'IPC_LOCK',
-            'SYS_ADMIN',
-            'SYS_RESOURCE',
-            'DAC_OVERRIDE',
-            'FOWNER',
-            'SETGID',
-            'SETUID',
-          ],
-          cleanCiliumState: ['NET_ADMIN', 'SYS_ADMIN', 'SYS_RESOURCE'],
-        },
-      },
-      // spell-checker:enable
+    prometheus: {
+      enabled: true,
+    },
 
-      cgroup: {
-        autoMount: {
-          enabled: false,
-        },
-
-        hostRoot: '/sys/fs/cgroup',
-      },
-
-      hubble: {
-        relay: {
-          enabled: true,
-        },
-
-        ui: {
-          enabled: true,
-        },
-      },
-
+    operator: {
       prometheus: {
         enabled: true,
       },
-
-      operator: {
-        prometheus: {
-          enabled: true,
-        },
-      },
     },
   },
-  { provider },
-);
+});
 
 new k8s.apiextensions.CustomResource(
-  'default@bm',
+  'default',
   {
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumLoadBalancerIPPool',
@@ -115,11 +108,11 @@ new k8s.apiextensions.CustomResource(
       },
     },
   },
-  { provider, dependsOn: [chart] },
+  { dependsOn: [chart] },
 );
 
 new k8s.apiextensions.CustomResource(
-  'default@bm',
+  'default',
   {
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumBGPClusterConfig',
@@ -152,11 +145,11 @@ new k8s.apiextensions.CustomResource(
       ],
     },
   },
-  { provider, dependsOn: [chart] },
+  { dependsOn: [chart] },
 );
 
 new k8s.apiextensions.CustomResource(
-  'default@bm',
+  'default',
   {
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumBGPPeerConfig',
@@ -184,11 +177,11 @@ new k8s.apiextensions.CustomResource(
       },
     },
   },
-  { provider, dependsOn: [chart] },
+  { dependsOn: [chart] },
 );
 
 new k8s.apiextensions.CustomResource(
-  'default@bm',
+  'default',
   {
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumBGPAdvertisement',
@@ -229,5 +222,5 @@ new k8s.apiextensions.CustomResource(
       ],
     },
   },
-  { provider, dependsOn: [chart] },
+  { dependsOn: [chart] },
 );

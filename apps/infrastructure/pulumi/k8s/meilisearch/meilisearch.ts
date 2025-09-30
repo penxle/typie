@@ -12,6 +12,10 @@ type MeilisearchArgs = {
     cpu: pulumi.Input<string>;
     memory: pulumi.Input<string>;
   };
+
+  storage: {
+    size: pulumi.Input<string>;
+  };
 };
 
 class Meilisearch extends pulumi.ComponentResource {
@@ -55,7 +59,7 @@ class Meilisearch extends pulumi.ComponentResource {
         },
         values: {
           image: {
-            tag: 'v1.19.1',
+            tag: 'v1.22.0',
           },
 
           resources: {
@@ -72,18 +76,16 @@ class Meilisearch extends pulumi.ComponentResource {
           },
 
           service: {
-            type: 'LoadBalancer',
             annotations: {
-              'external-dns.alpha.kubernetes.io/hostname': args.hostname,
-              'tailscale.com/expose': 'true',
-              'tailscale.com/proxy-group': 'ingress',
+              'external-dns.typie.io/enabled': 'true',
+              'external-dns.alpha.kubernetes.io/internal-hostname': args.hostname,
             },
           },
 
           persistence: {
             enabled: true,
-            storageClass: 'gp3',
-            size: '20Gi',
+            storageClass: 'zfs',
+            size: args.storage.size,
           },
         },
       },
@@ -94,7 +96,23 @@ class Meilisearch extends pulumi.ComponentResource {
   }
 }
 
-const prod = new Meilisearch('meilisearch@prod', {
+const dev = new Meilisearch('meilisearch-dev', {
+  name: 'meilisearch',
+  namespace: 'dev',
+
+  hostname: 'dev.search.typie.io',
+
+  resources: {
+    cpu: '200m',
+    memory: '1Gi',
+  },
+
+  storage: {
+    size: '10Gi',
+  },
+});
+
+const prod = new Meilisearch('meilisearch-prod', {
   name: 'meilisearch',
   namespace: 'prod',
 
@@ -104,8 +122,13 @@ const prod = new Meilisearch('meilisearch@prod', {
     cpu: '500m',
     memory: '2Gi',
   },
+
+  storage: {
+    size: '20Gi',
+  },
 });
 
 export const outputs = {
+  K8S_MEILISEARCH_DEV_MASTER_KEY: dev.masterKey,
   K8S_MEILISEARCH_PROD_MASTER_KEY: prod.masterKey,
 };

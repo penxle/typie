@@ -6,4 +6,8 @@ new k8s.helm.v4.Chart('metrics-server', {
   repositoryOpts: {
     repo: 'https://kubernetes-sigs.github.io/metrics-server',
   },
+
+  values: {
+    args: ['--kubelet-insecure-tls'],
+  },
 });

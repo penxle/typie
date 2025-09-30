@@ -114,7 +114,11 @@ const backups = new aws.s3.Bucket('backups', {
   bucket: 'typie-backups',
 });
 
-export const buckets = { app, cdn, usercontents, uploads, misc, logs, backups };
+const postgres = new aws.s3.Bucket('postgres', {
+  bucket: 'typie-postgres',
+});
+
+export const buckets = { app, cdn, usercontents, uploads, misc, logs, backups, postgres };
 
 export const outputs = {
   AWS_S3_BUCKET_USERCONTENTS_ARN: usercontents.arn,

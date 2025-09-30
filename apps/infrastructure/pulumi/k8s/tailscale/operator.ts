@@ -7,4 +7,16 @@ new k8s.helm.v4.Chart('tailscale-operator', {
   repositoryOpts: {
     repo: 'https://pkgs.tailscale.com/helmcharts',
   },
+
+  values: {
+    operatorConfig: {
+      hostname: 'k8s-operator',
+      nodeSelector: { 'node-role.kubernetes.io/control-plane': '' },
+      tolerations: [{ key: 'node-role.kubernetes.io/control-plane', operator: 'Exists' }],
+    },
+
+    apiServerProxyConfig: {
+      allowImpersonation: 'true',
+    },
+  },
 });
