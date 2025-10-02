@@ -206,10 +206,35 @@ class NoteFooterEntity extends StatelessWidget {
   }
 }
 
+class NoteFooterEmptyEntity extends StatelessWidget {
+  const NoteFooterEmptyEntity({super.key, required this.onSelectEntity});
+
+  final VoidCallback onSelectEntity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tappable(
+      onTap: onSelectEntity,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '관련 항목 없음',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: context.colors.textFaint),
+          ),
+          const SizedBox(width: 4),
+          Icon(LucideLightIcons.chevron_down, size: 14, color: context.colors.textSubtle),
+        ],
+      ),
+    );
+  }
+}
+
 class NoteFooter extends StatelessWidget {
   const NoteFooter({
     super.key,
     this.entity,
+    this.emptyEntity,
     required this.isExpanded,
     required this.onDelete,
     required this.onCollapse,
@@ -217,6 +242,7 @@ class NoteFooter extends StatelessWidget {
   });
 
   final NoteFooterEntity? entity;
+  final NoteFooterEmptyEntity? emptyEntity;
   final bool isExpanded;
   final VoidCallback onDelete;
   final VoidCallback onCollapse;
@@ -228,7 +254,12 @@ class NoteFooter extends StatelessWidget {
       padding: const Pad(horizontal: 12, bottom: 8),
       child: Row(
         children: [
-          if (entity != null) Expanded(child: entity!) else const Spacer(),
+          if (entity != null)
+            Expanded(child: entity!)
+          else if (isExpanded && emptyEntity != null)
+            Expanded(child: emptyEntity!)
+          else
+            const Spacer(),
           const SizedBox(width: 8),
           if (isExpanded) ...[
             Tappable(

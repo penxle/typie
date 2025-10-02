@@ -1,0 +1,23 @@
+mutation NotesScreen_UpdateNote_Mutation($input: UpdateNoteInput!) {
+  updateNote(input: $input) {
+    id
+    content
+    updatedAt
+    entity {
+      id
+      slug
+      node {
+        __typename
+        ... on Post {
+          id
+          title
+          type
+        }
+        ... on Canvas {
+          id
+          title
+        }
+      }
+    }
+  }
+}

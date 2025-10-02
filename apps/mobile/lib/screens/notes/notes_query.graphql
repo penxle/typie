@@ -1,0 +1,46 @@
+query NotesScreen_Query {
+  me {
+    id
+    recentlyViewedEntities {
+      id
+      slug
+      node {
+        __typename
+        ... on Post {
+          id
+          title
+          type
+        }
+        ... on Canvas {
+          id
+          title
+        }
+      }
+    }
+  }
+
+  notes {
+    id
+    content
+    createdAt
+    updatedAt
+    order
+    color
+    entity {
+      id
+      slug
+      node {
+        __typename
+        ... on Post {
+          id
+          title
+          type
+        }
+        ... on Canvas {
+          id
+          title
+        }
+      }
+    }
+  }
+}
