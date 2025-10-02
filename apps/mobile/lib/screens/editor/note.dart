@@ -13,6 +13,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/error.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/debounce.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/__generated__/create_note_mutation.req.gql.dart';
@@ -84,11 +85,11 @@ class _NoteContent extends HookWidget {
     final mode = useValueListenable(scope.mode);
     final client = useService<GraphQLClient>();
     final mixpanel = useService<Mixpanel>();
+    final debounce = useDebounce<void>(const Duration(milliseconds: 500));
 
     final noteControllers = useState<Map<String, TextEditingController>>({});
     final noteLocalUpdatedAt = useState<Map<String, DateTime>>({});
     final focusedNoteId = useRef<String?>(null);
-    final debounceTimers = useRef<Map<String, Timer>>({});
     final focusNodes = useState<Map<String, FocusNode>>({});
 
     final focusedNoteIdState = useState<String?>(null);
@@ -137,9 +138,9 @@ class _NoteContent extends HookWidget {
         }
         return false;
       });
-      debounceTimers.value.removeWhere((id, timer) {
+      debounce.timers().removeWhere((id, _) {
         if (!currentIds.contains(id)) {
-          timer.cancel();
+          debounce.cancel(id);
           return true;
         }
         return false;
@@ -172,9 +173,7 @@ class _NoteContent extends HookWidget {
 
     useEffect(() {
       return () {
-        for (final timer in debounceTimers.value.values) {
-          timer.cancel();
-        }
+        debounce.timers().keys.toList().forEach(debounce.cancel);
         for (final controller in noteControllers.value.values) {
           controller.dispose();
         }
@@ -229,8 +228,7 @@ class _NoteContent extends HookWidget {
     Future<void> handleUpdateNote(String noteId, String content) async {
       noteLocalUpdatedAt.value[noteId] = DateTime.now();
 
-      debounceTimers.value[noteId]?.cancel();
-      debounceTimers.value[noteId] = Timer(const Duration(milliseconds: 500), () async {
+      debounce.call(() async {
         final request = GPostRelatedNotesScreen_UpdateNote_MutationReq(
           (b) => b
             ..vars.input.noteId = noteId
@@ -238,7 +236,7 @@ class _NoteContent extends HookWidget {
         );
 
         await client.request(request);
-      });
+      }, noteId);
     }
 
     Future<void> handleDeleteNote(String noteId) async {
@@ -249,7 +247,7 @@ class _NoteContent extends HookWidget {
           confirmText: '삭제',
           confirmBackgroundColor: context.colors.accentDanger,
           onConfirm: () async {
-            debounceTimers.value.remove(noteId)?.cancel();
+            debounce.cancel(noteId);
             noteLocalUpdatedAt.value.remove(noteId);
 
             final request = GPostRelatedNotesScreen_DeleteNote_MutationReq((b) => b..vars.input.noteId = noteId);
