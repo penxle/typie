@@ -9,11 +9,11 @@ release:
     @cargo build --release
     @codesign --entitlements entitlements.plist -s - ../../target/release/vermuda
 
-run: build
-    @../../target/debug/vermuda
+run *args: build
+    @VM_HOME={{justfile_directory()}} ../../target/debug/vermuda {{args}}
 
-run-release: release
-    @../../target/release/vermuda
+run-release *args: release
+    @VM_HOME={{justfile_directory()}} ../../target/release/vermuda {{args}}
 
 clean:
     @cargo clean

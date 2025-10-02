@@ -11,6 +11,7 @@ mod window_delegate;
 
 use anyhow::{Context, Result, anyhow};
 use app_delegate::VermudaAppDelegate;
+use clap::Parser;
 use config::VmConfig;
 use disk::DiskImage;
 use error::VermudaError;
@@ -30,8 +31,17 @@ use vm::VmInstance;
 
 use crate::main_thread::run_on_main;
 
+#[derive(Parser, Debug)]
+#[command(name = "vermuda")]
+struct Args {
+    #[arg(long)]
+    iso: Option<PathBuf>,
+}
+
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    let args = Args::parse();
 
     let mtm = MainThreadMarker::new().expect("Application must start on the main thread");
 
@@ -41,7 +51,7 @@ fn main() -> Result<()> {
     let _delegate_guard = delegate;
 
     VermudaAppDelegate::set_exit_sender(app_exit_tx);
-    let runtime_handle = spawn_runtime_thread(app_exit_rx);
+    let runtime_handle = spawn_runtime_thread(app_exit_rx, args);
 
     app.run();
 
@@ -82,7 +92,10 @@ fn setup_appkit(
     Ok((delegate, app))
 }
 
-fn spawn_runtime_thread(app_exit_rx: oneshot::Receiver<()>) -> thread::JoinHandle<Result<()>> {
+fn spawn_runtime_thread(
+    app_exit_rx: oneshot::Receiver<()>,
+    args: Args,
+) -> thread::JoinHandle<Result<()>> {
     thread::spawn(move || {
         let runtime = RuntimeBuilder::new_multi_thread()
             .enable_all()
@@ -91,7 +104,7 @@ fn spawn_runtime_thread(app_exit_rx: oneshot::Receiver<()>) -> thread::JoinHandl
             .build()
             .context("Failed to create Tokio runtime")?;
 
-        let result = runtime.block_on(run_runtime_tasks(app_exit_rx));
+        let result = runtime.block_on(run_runtime_tasks(app_exit_rx, args));
 
         if let Err(ref err) = result {
             error!("Runtime task failed: {}", err);
@@ -101,34 +114,42 @@ fn spawn_runtime_thread(app_exit_rx: oneshot::Receiver<()>) -> thread::JoinHandl
     })
 }
 
-async fn run_runtime_tasks(app_exit_rx: oneshot::Receiver<()>) -> Result<()> {
+async fn run_runtime_tasks(app_exit_rx: oneshot::Receiver<()>, args: Args) -> Result<()> {
     info!("Initializing VM environment");
 
-    let disk_path = PathBuf::from("disk.img");
-    let disk = DiskImage::new(&disk_path, 10.0);
-    disk.ensure_exists()?;
+    let initialize = async move {
+        let vm_home = config::get_vm_home()?;
+        info!("VM_HOME: {}", vm_home.display());
 
-    let iso_path = PathBuf::from("metal-arm64.iso");
-    if !iso_path.exists() {
-        return Err(anyhow!("Boot ISO not found: {}", iso_path.display()));
-    }
+        std::fs::create_dir_all(&vm_home).with_context(|| {
+            format!("Failed to create VM_HOME directory: {}", vm_home.display())
+        })?;
 
-    let boot_path = PathBuf::from("../vermuda-boot/vermuda-boot.img");
-    if !boot_path.exists() {
-        return Err(anyhow!("Boot image not found: {}", boot_path.display()));
-    }
+        let config_path = config::get_config_path()?;
+        info!("Loading VM configuration from {}", config_path.display());
+        let mut config = VmConfig::load()?;
 
-    info!("Building VM configuration (4 CPUs, 4GB RAM)");
-    let builder = VmConfig::builder()
-        .cpu_count(4)
-        .memory_gb(4.0)
-        .with_boot(boot_path)
-        .with_root(disk.path().to_path_buf(), disk.size_gb())
-        .with_iso(iso_path)
-        .with_network("en0".into(), "52:54:00:12:34:56".into())
-        .with_display(1920, 1080, 144);
+        if let Some(iso) = args.iso {
+            info!("ISO path overridden from CLI: {}", iso.display());
+            config = config.with_iso_override(Some(iso));
+        }
 
-    let config = builder.build()?;
+        if let Some(root) = config.root() {
+            let disk_path = root.get_path()?;
+            let disk = DiskImage::new(&disk_path, root.size);
+            disk.ensure_exists()?;
+        }
+
+        Ok::<VmConfig, anyhow::Error>(config)
+    };
+
+    let config = match initialize.await {
+        Ok(config) => config,
+        Err(err) => {
+            error!("Initialization failed: {}", err);
+            process::exit(1);
+        }
+    };
 
     info!("Creating VM instance");
     let mut vm = VmInstance::new(config).await?;

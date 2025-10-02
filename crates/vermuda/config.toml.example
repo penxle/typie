@@ -1,0 +1,30 @@
+[cpu]
+count = 4
+
+[memory]
+size = "4Gi"
+
+[boot]
+# path = "/Users/username/.vm/boot.img"
+
+[root]
+# path = "/Users/username/.vm/disk.img"
+size = "10Gi"
+
+# [iso]
+# path = "/path/to/metal-arm64.iso"
+
+[network]
+interface = "en0"
+mac_address = "52:54:00:12:34:56"
+
+[display]
+# width = 1024
+# height = 768
+# ppi = 96
+
+# [[disks]]
+# path = "/dev/disk4"
+
+# [[disks]]
+# path = "/dev/disk5"
