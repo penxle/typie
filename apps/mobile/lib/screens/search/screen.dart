@@ -3,10 +3,12 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/route_resumed.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
@@ -46,19 +48,11 @@ class SearchScreen extends HookWidget {
       return null;
     }, [value.text]);
 
-    // NOTE: 서치 탭으로 오면 최근 본 항목 새로고침
-    useEffect(() {
-      final tabsRouter = AutoTabsRouter.of(context);
-
-      void onTabChange() {
-        if (tabsRouter.activeIndex == 1 && value.text.isEmpty) {
-          recentlyViewedRefreshNotifier.refresh();
-        }
+    useRouteResumed(context, () {
+      if (value.text.isEmpty) {
+        recentlyViewedRefreshNotifier.refresh();
       }
-
-      tabsRouter.addListener(onTabChange);
-      return () => tabsRouter.removeListener(onTabChange);
-    }, [value.text]);
+    }, tabIndex: RouteTabsIndex.search);
 
     return Screen(
       heading: Heading(

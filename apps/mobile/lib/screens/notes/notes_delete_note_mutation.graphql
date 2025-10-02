@@ -1,0 +1,5 @@
+mutation NotesScreen_DeleteNote_Mutation($input: DeleteNoteInput!) {
+  deleteNote(input: $input) {
+    id
+  }
+}

@@ -37,7 +37,7 @@ class HomeScreen extends HookWidget {
     }, []);
 
     return AutoTabsRouter(
-      routes: const [EntityRouter(), SearchRoute(), InboxRoute(), ProfileRoute()],
+      routes: const [EntityRouter(), NotesRoute(), SearchRoute(), ProfileRoute()],
       duration: Duration.zero,
       transitionBuilder: (context, child, animation) => child,
       builder: (context, child) {
@@ -68,8 +68,8 @@ class HomeScreen extends HookWidget {
                     ),
                     _Button(
                       index: 1,
-                      icon: Icon(LucideLightIcons.search, size: 24, color: context.colors.textSubtle),
-                      activeIcon: Icon(TypieIcons.search_filled, size: 24, color: context.colors.textDefault),
+                      icon: Icon(LucideLightIcons.sticky_note, size: 24, color: context.colors.textSubtle),
+                      activeIcon: Icon(TypieIcons.sticky_note_filled, size: 24, color: context.colors.textDefault),
                     ),
                     Tappable(
                       padding: const Pad(horizontal: 16),
@@ -100,8 +100,8 @@ class HomeScreen extends HookWidget {
                     ),
                     _Button(
                       index: 2,
-                      icon: Icon(LucideLightIcons.inbox, size: 24, color: context.colors.textSubtle),
-                      activeIcon: Icon(TypieIcons.inbox_filled, size: 24, color: context.colors.textDefault),
+                      icon: Icon(LucideLightIcons.search, size: 24, color: context.colors.textSubtle),
+                      activeIcon: Icon(TypieIcons.search_filled, size: 24, color: context.colors.textDefault),
                     ),
                     _Button(
                       index: 3,

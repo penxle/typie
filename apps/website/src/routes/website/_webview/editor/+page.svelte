@@ -202,7 +202,7 @@
     }
   });
 
-  let features = $state<string[]>([]);
+  let features = $state<string[] | undefined>();
   let settings = $state<{
     lineHighlightEnabled?: boolean;
     typewriterEnabled?: boolean;
@@ -372,6 +372,7 @@
     const content = noteContent.trim();
 
     if (!isNoteInitialized) return;
+    if (!features || features.includes('notes')) return;
 
     if (noteUpdateTimeout) {
       clearTimeout(noteUpdateTimeout);
@@ -631,7 +632,9 @@
       lastAppActiveAt = dayjs();
       features = data.features || [];
       settings = data.settings || {};
-      const isFocusable = features.includes('focusable') ? data.focusable : true;
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const isFocusable = features!.includes('focusable') ? data.focusable : true;
 
       if (editor) {
         editor.current.storage.webviewFeatures = features;
@@ -1217,7 +1220,7 @@
               text: event.clipboardData.getData('text/plain'),
             };
 
-            if (!features.includes('paste-mode')) {
+            if (features?.includes('paste-mode')) {
               onPasteConfirm('html');
               return true;
             }

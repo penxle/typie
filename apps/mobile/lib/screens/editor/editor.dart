@@ -124,7 +124,7 @@ class Editor extends HookWidget {
           case 'webviewReady':
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
-              'features': ['template', 'hide-table-delete-in-handle', 'focusable', 'paste-mode'],
+              'features': ['template', 'hide-table-delete-in-handle', 'focusable', 'paste-mode', 'notes'],
               'settings': {
                 'lineHighlightEnabled': pref.lineHighlightEnabled,
                 'typewriterEnabled': pref.typewriterEnabled,

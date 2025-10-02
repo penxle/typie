@@ -1,0 +1,6 @@
+mutation NotesScreen_MoveNote_Mutation($input: MoveNoteInput!) {
+  moveNote(input: $input) {
+    id
+    order
+  }
+}

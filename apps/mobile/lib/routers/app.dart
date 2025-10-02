@@ -34,7 +34,7 @@ class AppRouter extends RootStackRouter {
                   children: [AutoRoute(page: EntityRoute.page, initial: true)],
                 ),
                 AutoRoute(page: SearchRoute.page),
-                AutoRoute(page: InboxRoute.page),
+                AutoRoute(page: NotesRoute.page),
                 AutoRoute(page: ProfileRoute.page),
               ],
             ),

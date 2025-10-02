@@ -87,7 +87,7 @@ class _NoteContent extends HookWidget {
     final client = useService<GraphQLClient>();
     final mixpanel = useService<Mixpanel>();
     final debounce = useDebounce<void>(const Duration(milliseconds: 500));
-
+    final scrollController = useScrollController();
     final noteControllers = useState<Map<String, TextEditingController>>({});
     final noteLocalUpdatedAt = useState<Map<String, DateTime>>({});
     final focusedNoteId = useRef<String?>(null);
@@ -281,6 +281,9 @@ class _NoteContent extends HookWidget {
     useEffect(() {
       if (focusedNoteId.value != null && focusNodes.value.containsKey(focusedNoteId.value)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scrollController.hasClients) {
+            scrollController.jumpTo(0);
+          }
           focusNodes.value[focusedNoteId.value]?.requestFocus();
           focusedNoteId.value = null;
         });
@@ -338,6 +341,7 @@ class _NoteContent extends HookWidget {
               ),
             )
           : ReorderableListView.builder(
+              scrollController: scrollController,
               padding: Pad(horizontal: 20, top: 12, bottom: MediaQuery.viewPaddingOf(context).bottom + 20),
               itemCount: sortedNotes.length,
               buildDefaultDragHandles: false,

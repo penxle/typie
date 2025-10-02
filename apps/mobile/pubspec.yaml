@@ -30,6 +30,7 @@ dependencies:
   flutter_hooks: ^0.21.2
   flutter_local_notifications: ^19.2.0
   flutter_secure_storage: ^9.2.4
+  flutter_sticky_header: ^0.8.0
   flutter_svg: ^2.1.0
   freezed_annotation: ^3.0.0
   gap: ^3.0.1

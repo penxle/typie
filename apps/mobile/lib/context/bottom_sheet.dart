@@ -320,3 +320,58 @@ class BottomMenuItem extends StatelessWidget {
     );
   }
 }
+
+class AppDraggableBottomSheet extends StatelessWidget {
+  const AppDraggableBottomSheet({
+    required this.builder,
+    super.key,
+    this.initialChildSize = 0.4,
+    this.minChildSize = 0.25,
+    this.maxChildSize = 0.8,
+  });
+
+  final Widget Function(BuildContext context, ScrollController scrollController) builder;
+  final double initialChildSize;
+  final double minChildSize;
+  final double maxChildSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: initialChildSize,
+      minChildSize: minChildSize,
+      maxChildSize: maxChildSize,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: context.colors.surfaceSubtle,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            border: Border(
+              top: BorderSide(color: context.colors.borderStrong),
+              left: BorderSide(color: context.colors.borderStrong),
+              right: BorderSide(color: context.colors.borderStrong),
+            ),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              SizedBox(
+                width: 60,
+                height: 4,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: context.colors.borderDefault,
+                    borderRadius: const BorderRadius.all(Radius.circular(999)),
+                  ),
+                ),
+              ),
+              const Gap(16),
+              Expanded(child: builder(context, scrollController)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
