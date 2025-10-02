@@ -1,6 +1,7 @@
 export * from './auth';
 export * from './device';
 export * from './download';
+export * from './drag-scroll';
 export * from './escape-stack';
 export * from './json';
 export * from './note-colors';
