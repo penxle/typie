@@ -300,7 +300,7 @@ class _NoteContent extends HookWidget {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    '떠오르는 생각이나 아이디어를\n자유롭게 기록해보세요.\n\n글쓰기 중 상단바를 쓸어넘겨서 작성 노트를 열 수 있어요.',
+                    '떠오르는 생각이나 아이디어를\n자유롭게 기록해보세요.\n\n글쓰기 중 상단바를 쓸어넘겨서 이 포스트 관련 노트를 볼 수 있어요.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, color: context.colors.textFaint),
                   ),
