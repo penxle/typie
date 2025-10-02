@@ -351,7 +351,7 @@ class Editor extends HookWidget {
                               );
                             },
                           ),
-                          BottomMenuItem(icon: LucideLightIcons.notebook_tabs, label: '작성 노트', onTap: goToNote),
+                          BottomMenuItem(icon: LucideLightIcons.sticky_note, label: '이 포스트 관련 노트', onTap: goToNote),
                           BottomMenuItem(
                             icon: LucideLightIcons.settings,
                             label: '본문 설정',
