@@ -25,6 +25,7 @@ import 'package:typie/screens/editor/__generated__/update_note_mutation.req.gql.
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/values.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/note.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -91,6 +92,7 @@ class _NoteContent extends HookWidget {
     final noteLocalUpdatedAt = useState<Map<String, DateTime>>({});
     final focusedNoteId = useRef<String?>(null);
     final focusNodes = useState<Map<String, FocusNode>>({});
+    final expandedNotes = useState<Set<String>>({});
 
     final focusedNoteIdState = useState<String?>(null);
 
@@ -194,19 +196,6 @@ class _NoteContent extends HookWidget {
       return colors[random.nextInt(colors.length)]['value'] as String;
     }
 
-    Color getNoteBackgroundColor(String? color) {
-      final backgroundColors = editorValues['textBackgroundColor']!;
-
-      final colorMap = backgroundColors.firstWhere((item) => item['value'] == color, orElse: () => {'color': null});
-
-      final colorFunc = colorMap['color'] as Color Function(BuildContext)?;
-      if (colorFunc != null) {
-        return colorFunc(context);
-      }
-
-      return context.colors.prosemirrorWhite;
-    }
-
     Future<void> handleAddNote() async {
       final randomColor = getRandomNoteColor();
 
@@ -220,6 +209,7 @@ class _NoteContent extends HookWidget {
       final response = await client.request(request);
       final newNoteId = response.createNote.id;
       focusedNoteId.value = newNoteId;
+      expandedNotes.value = {...expandedNotes.value, newNoteId};
 
       unawaited(mixpanel.track('create_related_note', properties: {'via': 'button'}));
       refreshNotifier.refresh();
@@ -259,6 +249,32 @@ class _NoteContent extends HookWidget {
           },
         ),
       );
+    }
+
+    Future<void> handleMoveNote(int oldIndex, int newIndex) async {
+      if (oldIndex < newIndex) {
+        newIndex -= 1;
+      }
+
+      final movedNoteId = sortedNotes[oldIndex].id;
+
+      final movedNote = sortedNotes.removeAt(oldIndex);
+      sortedNotes.insert(newIndex, movedNote);
+
+      final lowerNote = newIndex > 0 ? sortedNotes[newIndex - 1] : null;
+      final upperNote = newIndex < sortedNotes.length - 1 ? sortedNotes[newIndex + 1] : null;
+
+      final request = GPostRelatedNotesScreen_MoveNote_MutationReq(
+        (b) => b
+          ..vars.input.noteId = movedNoteId
+          ..vars.input.lowerOrder = Value.present(lowerNote?.order)
+          ..vars.input.upperOrder = Value.present(upperNote?.order),
+      );
+
+      await client.request(request);
+
+      unawaited(mixpanel.track('move_related_note'));
+      refreshNotifier.refresh();
     }
 
     // NOTE: 노트 추가 후 포커스
@@ -302,7 +318,7 @@ class _NoteContent extends HookWidget {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    '떠오르는 생각이나 아이디어를\n자유롭게 기록해보세요.\n\n글쓰기 중 상단바를 쓸어넘겨서 이 포스트 관련 노트를 볼 수 있어요.',
+                    '떠오르는 생각이나 아이디어를\n자유롭게 기록해보세요.\n\n글쓰기 중 상단바를 쓸어넘겨서 \n이 포스트 관련 노트를 볼 수 있어요.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, color: context.colors.textFaint),
                   ),
@@ -332,164 +348,45 @@ class _NoteContent extends HookWidget {
               onReorderEnd: (index) async {
                 await HapticFeedback.lightImpact();
               },
-              onReorder: (oldIndex, newIndex) async {
-                if (oldIndex < newIndex) {
-                  newIndex -= 1;
-                }
-
-                final movedNoteId = sortedNotes[oldIndex].id;
-
-                final movedNote = sortedNotes.removeAt(oldIndex);
-                sortedNotes.insert(newIndex, movedNote);
-
-                final lowerNote = newIndex > 0 ? sortedNotes[newIndex - 1] : null;
-                final upperNote = newIndex < sortedNotes.length - 1 ? sortedNotes[newIndex + 1] : null;
-
-                final request = GPostRelatedNotesScreen_MoveNote_MutationReq(
-                  (b) => b
-                    ..vars.input.noteId = movedNoteId
-                    ..vars.input.lowerOrder = Value.present(lowerNote?.order)
-                    ..vars.input.upperOrder = Value.present(upperNote?.order),
-                );
-
-                await client.request(request);
-
-                unawaited(mixpanel.track('move_related_note'));
-                refreshNotifier.refresh();
-              },
+              onReorder: handleMoveNote,
               itemBuilder: (context, index) {
                 final note = sortedNotes[index];
                 final controller = noteControllers.value[note.id];
                 final focusNode = focusNodes.value[note.id];
+                final isExpanded = expandedNotes.value.contains(note.id);
 
                 return Padding(
                   key: ValueKey(note.id),
-                  padding: const Pad(bottom: 12),
-                  child: Stack(
-                    children: [
-                      ClipPath(
-                        clipper: _NoteFoldClipper(),
-                        child: Material(
-                          color: getNoteBackgroundColor(note.color),
-                          child: IntrinsicHeight(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ReorderableDragStartListener(
-                                  index: index,
-                                  child: Container(
-                                    width: 32,
-                                    padding: const Pad(horizontal: 8, vertical: 12),
-                                    child: Icon(
-                                      LucideLightIcons.grip_vertical,
-                                      color: context.colors.textFaint,
-                                      size: 16,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Padding(
-                                    padding: const Pad(top: 12, right: 12, bottom: 12),
-                                    child: TextField(
-                                      controller: controller,
-                                      focusNode: focusNode,
-                                      smartDashesType: SmartDashesType.disabled,
-                                      smartQuotesType: SmartQuotesType.disabled,
-                                      autocorrect: false,
-                                      keyboardType: TextInputType.multiline,
-                                      maxLines: null,
-                                      minLines: 3,
-                                      decoration: InputDecoration.collapsed(
-                                        hintText: '기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요.',
-                                        hintStyle: TextStyle(fontSize: 14, color: context.colors.textDisabled),
-                                      ),
-                                      style: TextStyle(fontSize: 14, color: context.colors.textDefault),
-                                      onChanged: (value) {
-                                        unawaited(handleUpdateNote(note.id, value));
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (focusedNoteIdState.value == note.id)
-                        Positioned(
-                          bottom: 12,
-                          right: 12,
-                          child: Tappable(
-                            onTap: () => handleDeleteNote(note.id),
-                            child: Container(
-                              padding: const Pad(all: 4),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(4),
-                                color: Colors.transparent,
-                              ),
-                              child: Icon(LucideLightIcons.trash_2, color: context.colors.textDefault, size: 16),
-                            ),
-                          ),
-                        ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: ClipPath(
-                          clipper: _TriangleClipper(),
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Colors.black.withValues(alpha: 0.05), Colors.black.withValues(alpha: 0.15)],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  padding: Pad(bottom: index == sortedNotes.length - 1 ? 0 : 12),
+                  child: NoteCard(
+                    color: note.color,
+                    index: index,
+                    controller: controller,
+                    focusNode: focusNode,
+                    isExpanded: isExpanded,
+                    onExpand: () {
+                      expandedNotes.value = {...expandedNotes.value, note.id};
+                      focusNode?.requestFocus();
+                    },
+                    onUpdateContent: (value) {
+                      unawaited(handleUpdateNote(note.id, value));
+                    },
+                    footer: NoteFooter(
+                      isExpanded: isExpanded,
+                      onDelete: () => handleDeleteNote(note.id),
+                      onCollapse: () {
+                        expandedNotes.value = expandedNotes.value.where((id) => id != note.id).toSet();
+                        focusNode?.unfocus();
+                      },
+                      onExpand: () {
+                        expandedNotes.value = {...expandedNotes.value, note.id};
+                        focusNode?.requestFocus();
+                      },
+                    ),
                   ),
                 );
               },
             ),
     );
   }
-}
-
-class _NoteFoldClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    const foldSize = 12.0;
-
-    path
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width, size.height - foldSize)
-      ..lineTo(size.width - foldSize, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    return path;
-  }
-
-  @override
-  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
-}
-
-class _TriangleClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(0, size.height)
-      ..close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
