@@ -1,4 +1,4 @@
-mutation CreateNote_Mutation($input: CreateNoteInput!) {
+mutation PostRelatedNotesScreen_CreateNote_Mutation($input: CreateNoteInput!) {
   createNote(input: $input) {
     id
     content

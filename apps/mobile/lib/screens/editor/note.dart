@@ -17,8 +17,8 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/__generated__/create_note_mutation.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/delete_note_mutation.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/move_note_mutation.req.gql.dart';
-import 'package:typie/screens/editor/__generated__/notes_query.data.gql.dart';
-import 'package:typie/screens/editor/__generated__/notes_query.req.gql.dart';
+import 'package:typie/screens/editor/__generated__/post_related_notes_query.data.gql.dart';
+import 'package:typie/screens/editor/__generated__/post_related_notes_query.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/update_note_mutation.req.gql.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/values.dart';
@@ -44,11 +44,11 @@ class Note extends HookWidget {
     final refreshNotifier = useMemoized(RefreshNotifier.new, []);
 
     return GraphQLOperation(
-      operation: GNotesScreen_QueryReq((b) => b..vars.entityId = entityId),
+      operation: GPostRelatedNotesScreen_QueryReq((b) => b..vars.entityId = entityId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, queryData) {
         final notes = queryData.entity.notes.toList();
-        final sortedNotes = List<GNotesScreen_QueryData_entity_notes>.from(notes)
+        final sortedNotes = List<GPostRelatedNotesScreen_QueryData_entity_notes>.from(notes)
           ..sort((a, b) => a.order.compareTo(b.order));
 
         return _NoteContent(
@@ -70,7 +70,7 @@ class _NoteContent extends HookWidget {
     required this.refreshNotifier,
   });
 
-  final List<GNotesScreen_QueryData_entity_notes> sortedNotes;
+  final List<GPostRelatedNotesScreen_QueryData_entity_notes> sortedNotes;
   final String entityId;
   final void Function() onBack;
   final RefreshNotifier refreshNotifier;
@@ -209,7 +209,7 @@ class _NoteContent extends HookWidget {
     Future<void> handleAddNote() async {
       final randomColor = getRandomNoteColor();
 
-      final request = GCreateNote_MutationReq(
+      final request = GPostRelatedNotesScreen_CreateNote_MutationReq(
         (b) => b
           ..vars.input.entityId = Value.present(entityId)
           ..vars.input.content = ''
@@ -228,7 +228,7 @@ class _NoteContent extends HookWidget {
 
       debounceTimers.value[noteId]?.cancel();
       debounceTimers.value[noteId] = Timer(const Duration(milliseconds: 500), () async {
-        final request = GUpdateNote_MutationReq(
+        final request = GPostRelatedNotesScreen_UpdateNote_MutationReq(
           (b) => b
             ..vars.input.noteId = noteId
             ..vars.input.content = Value.present(content),
@@ -249,7 +249,7 @@ class _NoteContent extends HookWidget {
             debounceTimers.value.remove(noteId)?.cancel();
             noteLocalUpdatedAt.value.remove(noteId);
 
-            final request = GDeleteNote_MutationReq((b) => b..vars.input.noteId = noteId);
+            final request = GPostRelatedNotesScreen_DeleteNote_MutationReq((b) => b..vars.input.noteId = noteId);
 
             await client.request(request);
 
@@ -343,7 +343,7 @@ class _NoteContent extends HookWidget {
                 final lowerNote = newIndex > 0 ? sortedNotes[newIndex - 1] : null;
                 final upperNote = newIndex < sortedNotes.length - 1 ? sortedNotes[newIndex + 1] : null;
 
-                final request = GMoveNote_MutationReq(
+                final request = GPostRelatedNotesScreen_MoveNote_MutationReq(
                   (b) => b
                     ..vars.input.noteId = movedNoteId
                     ..vars.input.lowerOrder = Value.present(lowerNote?.order)

@@ -1,4 +1,4 @@
-mutation DeleteNote_Mutation($input: DeleteNoteInput!) {
+mutation PostRelatedNotesScreen_DeleteNote_Mutation($input: DeleteNoteInput!) {
   deleteNote(input: $input) {
     id
   }

@@ -1,4 +1,4 @@
-query NotesScreen_Query($entityId: ID!) {
+query PostRelatedNotesScreen_Query($entityId: ID!) {
   entity(entityId: $entityId) {
     id
     notes {
