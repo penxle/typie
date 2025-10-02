@@ -24,14 +24,13 @@ try {
 
   if (/\.(ts|tsx|js|jsx|svelte)$/.test(filePath)) {
     await run(['bun', 'eslint', '--fix', filePath]);
+    await run(['bun', 'prettier', '--write', filePath]);
   }
 
   if (/\.(dart)$/.test(filePath)) {
     await run(['dart', 'fix', '--apply', filePath]);
     await run(['dart', 'format', filePath]);
   }
-
-  await run(['bun', 'prettier', '--write', filePath]);
 
   process.exit(0);
 } catch (err) {

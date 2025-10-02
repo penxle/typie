@@ -2,4 +2,5 @@
 bun = "latest"
 ruby = "latest"
 rust = "stable"
+terraform = "latest"
 zig = "latest"
