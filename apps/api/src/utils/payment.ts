@@ -1,8 +1,8 @@
 import * as Sentry from '@sentry/bun';
 import dayjs from 'dayjs';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { match } from 'ts-pattern';
-import { first, firstOrThrow, PaymentInvoices, PaymentRecords, UserBillingKeys, UserPaymentCredits, Users } from '@/db';
+import { first, firstOrThrow, PaymentInvoices, PaymentRecords, Referrals, UserBillingKeys, UserPaymentCredits, Users } from '@/db';
 import { PaymentOutcome, PlanInterval } from '@/enums';
 import * as portone from '@/external/portone';
 import type { Transaction } from '@/db';
@@ -19,6 +19,40 @@ export const getSubscriptionExpiresAt = (startsAt: dayjs.Dayjs, interval: PlanIn
     .exhaustive();
 
   return expiresAtMonth.date(Math.min(startsAt.kst().date(), expiresAtMonth.daysInMonth()));
+};
+
+const compensateReferrer = async (tx: Transaction, refereeId: string) => {
+  const referral = await tx
+    .select({ id: Referrals.id, referrerId: Referrals.referrerId })
+    .from(Referrals)
+    .where(and(eq(Referrals.refereeId, refereeId), isNull(Referrals.referrerCompensatedAt)))
+    .for('no key update')
+    .then(first);
+
+  if (!referral) {
+    return;
+  }
+
+  const existingCredit = await tx
+    .select({ id: UserPaymentCredits.id, amount: UserPaymentCredits.amount })
+    .from(UserPaymentCredits)
+    .where(eq(UserPaymentCredits.userId, referral.referrerId))
+    .for('no key update')
+    .then(first);
+
+  if (existingCredit) {
+    await tx
+      .update(UserPaymentCredits)
+      .set({ amount: existingCredit.amount + 4900 })
+      .where(eq(UserPaymentCredits.id, existingCredit.id));
+  } else {
+    await tx.insert(UserPaymentCredits).values({
+      userId: referral.referrerId,
+      amount: 4900,
+    });
+  }
+
+  await tx.update(Referrals).set({ referrerCompensatedAt: dayjs() }).where(eq(Referrals.id, referral.id));
 };
 
 export const payInvoiceWithBillingKey = async (tx: Transaction, invoiceId: string) => {
@@ -78,6 +112,8 @@ export const payInvoiceWithBillingKey = async (tx: Transaction, invoiceId: strin
             .set({ amount: paymentCredit.amount - creditAmount })
             .where(eq(UserPaymentCredits.id, paymentCredit.id));
         }
+
+        await compensateReferrer(tx, invoice.userId);
 
         return true;
       } else if (result.status === 'failed') {
