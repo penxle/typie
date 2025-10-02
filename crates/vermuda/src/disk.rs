@@ -4,33 +4,41 @@ use std::fs::OpenOptions;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+fn format_size(size_mb: u64) -> String {
+    if size_mb >= 1024 {
+        format!("{:.1}GB", size_mb as f64 / 1024.0)
+    } else {
+        format!("{}MB", size_mb)
+    }
+}
+
 pub struct DiskImage {
     path: PathBuf,
-    size_gb: f64,
+    size: u64,
 }
 
 impl DiskImage {
-    pub fn new<P: AsRef<Path>>(path: P, size_gb: f64) -> Self {
+    pub fn new<P: AsRef<Path>>(path: P, size: u64) -> Self {
         Self {
             path: path.as_ref().to_path_buf(),
-            size_gb,
+            size,
         }
     }
 
     pub fn ensure_exists(&self) -> Result<()> {
         if self.path.exists() {
             info!(
-                "Using existing disk image: {} ({:.1}GB)",
+                "Using existing disk image: {} ({})",
                 self.path.display(),
-                self.size_gb
+                format_size(self.size)
             );
             return Ok(());
         }
 
         info!(
-            "Creating disk image: {} ({:.1}GB)",
+            "Creating disk image: {} ({})",
             self.path.display(),
-            self.size_gb
+            format_size(self.size)
         );
         self.create_raw_image()?;
         info!("Disk image created successfully");
@@ -38,7 +46,7 @@ impl DiskImage {
     }
 
     fn create_raw_image(&self) -> Result<()> {
-        let size_bytes = (self.size_gb * 1024.0 * 1024.0 * 1024.0) as u64;
+        let size_bytes = self.size * 1024 * 1024;
 
         let mut file = OpenOptions::new()
             .create(true)
@@ -57,13 +65,5 @@ impl DiskImage {
             .context("Failed to sync disk image to storage")?;
 
         Ok(())
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn size_gb(&self) -> f64 {
-        self.size_gb
     }
 }

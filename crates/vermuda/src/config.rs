@@ -3,12 +3,74 @@ use log::{error, info};
 use objc2::{AnyThread, rc::Retained};
 use objc2_foundation::{NSArray, NSFileHandle, NSString, NSUInteger, NSURL};
 use objc2_virtualization::*;
-use serde::{Deserialize, Serialize};
-use std::fs::OpenOptions;
+use serde::{Deserialize, Deserializer, Serialize};
+use std::env;
+use std::fs::{self, OpenOptions};
 use std::os::unix::io::IntoRawFd;
 use std::path::{Path, PathBuf};
 
 const EFI_VARIABLE_STORE_NAME: &str = "efivars.bin";
+
+fn parse_size_mb<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    let s = String::deserialize(deserializer)?;
+    let s = s.trim();
+
+    if let Ok(num) = s.parse::<f64>() {
+        return Ok((num * 1024.0) as u64);
+    }
+
+    let (num_str, unit) = if s.len() >= 2 {
+        let split_pos = s
+            .chars()
+            .position(|c| c.is_alphabetic())
+            .ok_or_else(|| D::Error::custom(format!("Invalid size format: {}", s)))?;
+        let (num, unit) = s.split_at(split_pos);
+        (num.trim(), unit.trim())
+    } else {
+        return Err(D::Error::custom(format!("Invalid size format: {}", s)));
+    };
+
+    let num: f64 = num_str
+        .parse()
+        .map_err(|_| D::Error::custom(format!("Invalid number: {}", num_str)))?;
+
+    let mb = match unit {
+        "Gi" => num * 1024.0,
+        "Mi" => num,
+        "Ti" => num * 1024.0 * 1024.0,
+        _ => {
+            return Err(D::Error::custom(format!(
+                "Unknown size unit: {}. Supported units: Mi, Gi, Ti",
+                unit
+            )));
+        }
+    };
+
+    Ok(mb as u64)
+}
+
+pub fn get_vm_home() -> Result<PathBuf> {
+    if let Ok(vm_home) = env::var("VM_HOME") {
+        Ok(PathBuf::from(vm_home))
+    } else {
+        let home = env::var("HOME")
+            .map_err(|_| VermudaError::validation_failed("HOME environment variable not found"))?;
+        Ok(PathBuf::from(home).join(".vm"))
+    }
+}
+
+pub fn get_config_path() -> Result<PathBuf> {
+    Ok(get_vm_home()?.join("config.toml"))
+}
+
+pub fn get_efi_store_path() -> Result<PathBuf> {
+    Ok(get_vm_home()?.join(EFI_VARIABLE_STORE_NAME))
+}
 
 #[derive(Debug, Default)]
 pub struct VmContext {
@@ -34,6 +96,7 @@ pub struct VmConfig {
     memory: MemoryConfig,
     boot: Option<BootConfig>,
     root: Option<RootConfig>,
+    #[serde(default)]
     disks: Vec<DiskConfig>,
     iso: Option<IsoConfig>,
     network: Option<NetworkConfig>,
@@ -45,7 +108,7 @@ impl Default for VmConfig {
         Self {
             cpu: CpuConfig::default(),
             memory: MemoryConfig::default(),
-            boot: None,
+            boot: Some(BootConfig { path: None }),
             root: None,
             disks: Vec::new(),
             iso: None,
@@ -68,24 +131,54 @@ impl Default for CpuConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryConfig {
-    size_gb: f64,
+    #[serde(deserialize_with = "parse_size_mb")]
+    size: u64,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self { size_gb: 2.0 }
+        Self { size: 2048 }
+    }
+}
+
+impl MemoryConfig {
+    pub fn size_bytes(&self) -> u64 {
+        self.size * 1024 * 1024
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootConfig {
-    path: PathBuf,
+    #[serde(default)]
+    path: Option<PathBuf>,
+}
+
+impl BootConfig {
+    pub fn get_path(&self) -> Result<PathBuf> {
+        if let Some(ref path) = self.path {
+            Ok(path.clone())
+        } else {
+            Ok(get_vm_home()?.join("boot.img"))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RootConfig {
-    path: PathBuf,
-    size_gb: f64,
+    #[serde(default)]
+    pub path: Option<PathBuf>,
+    #[serde(deserialize_with = "parse_size_mb")]
+    pub size: u64,
+}
+
+impl RootConfig {
+    pub fn get_path(&self) -> Result<PathBuf> {
+        if let Some(ref path) = self.path {
+            Ok(path.clone())
+        } else {
+            Ok(get_vm_home()?.join("disk.img"))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,9 +194,24 @@ pub struct NetworkConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplayConfig {
+    #[serde(default = "default_display_width")]
     pub width: u32,
+    #[serde(default = "default_display_height")]
     pub height: u32,
+    #[serde(default = "default_display_ppi")]
     pub ppi: u32,
+}
+
+fn default_display_width() -> u32 {
+    1024
+}
+
+fn default_display_height() -> u32 {
+    768
+}
+
+fn default_display_ppi() -> u32 {
+    96
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,75 +219,31 @@ pub struct DiskConfig {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Default)]
-pub struct VmConfigBuilder {
-    config: VmConfig,
-}
-
-impl VmConfigBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
-    pub fn cpu_count(mut self, count: u32) -> Self {
-        self.config.cpu.count = count;
-        self
-    }
-
-    #[must_use]
-    pub fn memory_gb(mut self, size: f64) -> Self {
-        self.config.memory.size_gb = size;
-        self
-    }
-
-    #[must_use]
-    pub fn with_boot(mut self, path: PathBuf) -> Self {
-        self.config.boot = Some(BootConfig { path });
-        self
-    }
-
-    #[must_use]
-    pub fn with_root(mut self, path: PathBuf, size_gb: f64) -> Self {
-        self.config.root = Some(RootConfig { path, size_gb });
-        self
-    }
-
-    #[must_use]
-    pub fn with_iso(mut self, path: PathBuf) -> Self {
-        self.config.iso = Some(IsoConfig { path });
-        self
-    }
-
-    #[must_use]
-    pub fn with_network(mut self, interface: String, mac_address: String) -> Self {
-        self.config.network = Some(NetworkConfig {
-            interface,
-            mac_address,
-        });
-        self
-    }
-
-    #[must_use]
-    pub fn with_display(mut self, width: u32, height: u32, ppi: u32) -> Self {
-        self.config.display = Some(DisplayConfig { width, height, ppi });
-        self
-    }
-
-    #[must_use]
-    pub fn with_disk(mut self, path: PathBuf) -> Self {
-        self.config.disks.push(DiskConfig { path });
-        self
-    }
-
-    pub fn build(self) -> Result<VmConfig> {
-        Ok(self.config)
-    }
-}
-
 impl VmConfig {
-    pub fn builder() -> VmConfigBuilder {
-        VmConfigBuilder::new()
+    pub fn load() -> Result<Self> {
+        let config_path = get_config_path()?;
+        Self::from_toml_file(&config_path)
+    }
+
+    pub fn from_toml_file(path: &Path) -> Result<Self> {
+        let content = fs::read_to_string(path).map_err(|e| {
+            VermudaError::validation_failed(format!(
+                "Failed to read config file ({}): {}",
+                path.display(),
+                e
+            ))
+        })?;
+
+        toml::from_str(&content).map_err(|e| {
+            VermudaError::validation_failed(format!("Failed to parse config file: {}", e))
+        })
+    }
+
+    pub fn with_iso_override(mut self, iso_path: Option<PathBuf>) -> Self {
+        if let Some(path) = iso_path {
+            self.iso = Some(IsoConfig { path });
+        }
+        self
     }
 
     pub fn display(&self) -> Option<&DisplayConfig> {
@@ -188,6 +252,10 @@ impl VmConfig {
 
     pub fn network(&self) -> Option<&NetworkConfig> {
         self.network.as_ref()
+    }
+
+    pub fn root(&self) -> Option<&RootConfig> {
+        self.root.as_ref()
     }
 
     pub fn to_platform_config(
@@ -218,8 +286,7 @@ impl VmConfig {
     fn configure_cpu_and_memory(&self, config: &VZVirtualMachineConfiguration) {
         unsafe {
             config.setCPUCount(self.cpu.count as NSUInteger);
-            let memory_bytes = gigabytes_to_bytes(self.memory.size_gb);
-            config.setMemorySize(memory_bytes);
+            config.setMemorySize(self.memory.size_bytes());
         }
     }
 
@@ -241,7 +308,7 @@ impl VmConfig {
     }
 
     fn create_or_load_variable_store(&self) -> Result<Retained<VZEFIVariableStore>> {
-        let store_path = PathBuf::from(EFI_VARIABLE_STORE_NAME);
+        let store_path = get_efi_store_path()?;
         let url = path_to_url(&store_path);
 
         unsafe {
@@ -251,7 +318,10 @@ impl VmConfig {
                     &url,
                 ))
             } else {
-                info!("Creating new EFI variable store");
+                info!(
+                    "Creating new EFI variable store at {}",
+                    store_path.display()
+                );
                 VZEFIVariableStore::initCreatingVariableStoreAtURL_options_error(
                     VZEFIVariableStore::alloc(),
                     &url,
@@ -282,8 +352,23 @@ impl VmConfig {
     fn configure_storages(&self, config: &VZVirtualMachineConfiguration) -> Result<()> {
         let mut devices: Vec<Retained<VZStorageDeviceConfiguration>> = Vec::new();
 
+        if let Some(boot) = &self.boot {
+            let path = boot.get_path()?;
+            if path.exists() {
+                let attachment = self.disk_attachment(&path, true)?;
+                let block = unsafe {
+                    VZVirtioBlockDeviceConfiguration::initWithAttachment(
+                        VZVirtioBlockDeviceConfiguration::alloc(),
+                        &attachment,
+                    )
+                };
+                devices.push(Retained::into_super(block));
+            }
+        }
+
         if let Some(root) = &self.root {
-            let attachment = self.disk_attachment(&root.path, false)?;
+            let path = root.get_path()?;
+            let attachment = self.disk_attachment(&path, false)?;
             let block = unsafe {
                 VZVirtioBlockDeviceConfiguration::initWithAttachment(
                     VZVirtioBlockDeviceConfiguration::alloc(),
@@ -302,17 +387,6 @@ impl VmConfig {
                 )
             };
             devices.push(Retained::into_super(usb));
-        }
-
-        if let Some(boot) = &self.boot {
-            let attachment = self.disk_attachment(&boot.path, true)?;
-            let block = unsafe {
-                VZVirtioBlockDeviceConfiguration::initWithAttachment(
-                    VZVirtioBlockDeviceConfiguration::alloc(),
-                    &attachment,
-                )
-            };
-            devices.push(Retained::into_super(block));
         }
 
         for disk in &self.disks {
@@ -504,8 +578,4 @@ impl VmConfig {
 fn path_to_url(path: &Path) -> Retained<NSURL> {
     let path_string = path.to_string_lossy();
     NSURL::fileURLWithPath(&NSString::from_str(&path_string))
-}
-
-fn gigabytes_to_bytes(size_gb: f64) -> u64 {
-    (size_gb * 1024.0 * 1024.0 * 1024.0) as u64
 }
