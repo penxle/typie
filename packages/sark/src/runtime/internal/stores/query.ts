@@ -52,14 +52,21 @@ export function createQueryStore<T extends $ArtifactSchema<'query'>>(schema: Art
     },
 
     subscribe: (run: Subscriber<T['$output'] | undefined>) => {
-      if (data === undefined && schema.meta.client !== 'true') {
+      const isClientQuery = schema.meta.client === 'true'; // @client
+      const isDataLoaded = data !== undefined;
+
+      if (!isDataLoaded && !isClientQuery) {
         throw new Error('Data is not loaded');
       }
 
       run(data);
 
+      // NOTE: @client 쿼리이고 data가 없으면 load 호출 대기 (초기 실행 건너뜀)
+      const shouldSkipInitialExecution = !isDataLoaded && isClientQuery;
+      const source = shouldSkipInitialExecution ? variables$.source : concat([fromValue(variables), variables$.source]);
+
       const subscription = pipe(
-        concat([fromValue(variables), variables$.source]),
+        source,
         switchMap((variables) => {
           const operation = client.createOperation({
             schema,
