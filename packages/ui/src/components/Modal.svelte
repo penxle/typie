@@ -4,6 +4,7 @@
   import { sineOut } from 'svelte/easing';
   import { fade, fly } from 'svelte/transition';
   import { focusTrap, portal } from '../actions';
+  import { pushEscapeHandler } from '../utils';
   import RingSpinner from './RingSpinner.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Options as FocusTrapOptions } from 'focus-trap';
@@ -25,16 +26,19 @@
     open = false;
     onclose?.();
   };
-</script>
 
-<svelte:window
-  onkeydown={(e) => {
-    if (open && e.key === 'Escape') {
-      e.stopPropagation();
-      close();
+  $effect(() => {
+    if (open) {
+      return pushEscapeHandler(() => {
+        if (open) {
+          close();
+          return true;
+        }
+        return false;
+      });
     }
-  }}
-/>
+  });
+</script>
 
 {#if open}
   <div
