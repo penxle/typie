@@ -41,6 +41,10 @@ Typie is a Korean writing platform that aims to be a "space for writing thoughts
 - **Framework**: Flutter/Dart
 - **GraphQL**: Ferry client
 
+#### Dart/Flutter Guidelines
+
+- **Import Order**: NEVER add import statements before writing the code that uses them. The linter automatically removes unused imports, so imports added before their usage will be deleted immediately. Always follow this order: (1) write the code that needs the import, (2) then add the import statement.
+
 ### Styling Guidelines
 
 #### PandaCSS Token Usage
