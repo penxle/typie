@@ -407,7 +407,11 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId, refer
       .then(first);
 
     if (referrer) {
-      await tx.insert(Referrals).values({ referrerId: referrer.userId, refereeId: user.id });
+      await tx.insert(Referrals).values({
+        referrerId: referrer.userId,
+        refereeId: user.id,
+        refereeCompensatedAt: dayjs(),
+      });
       await tx.insert(UserPaymentCredits).values({ userId: user.id, amount: 4900 });
     }
   }
