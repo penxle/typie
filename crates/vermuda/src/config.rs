@@ -1,9 +1,11 @@
 use crate::error::{Result, VermudaError};
 use log::{error, info};
 use objc2::{AnyThread, rc::Retained};
-use objc2_foundation::{NSArray, NSString, NSUInteger, NSURL};
+use objc2_foundation::{NSArray, NSFileHandle, NSString, NSUInteger, NSURL};
 use objc2_virtualization::*;
 use serde::{Deserialize, Serialize};
+use std::fs::OpenOptions;
+use std::os::unix::io::IntoRawFd;
 use std::path::{Path, PathBuf};
 
 const EFI_VARIABLE_STORE_NAME: &str = "efivars.bin";
@@ -32,6 +34,7 @@ pub struct VmConfig {
     memory: MemoryConfig,
     boot: Option<BootConfig>,
     root: Option<RootConfig>,
+    disks: Vec<DiskConfig>,
     iso: Option<IsoConfig>,
     network: Option<NetworkConfig>,
     display: Option<DisplayConfig>,
@@ -44,6 +47,7 @@ impl Default for VmConfig {
             memory: MemoryConfig::default(),
             boot: None,
             root: None,
+            disks: Vec::new(),
             iso: None,
             network: None,
             display: None,
@@ -102,6 +106,11 @@ pub struct DisplayConfig {
     pub ppi: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiskConfig {
+    pub path: PathBuf,
+}
+
 #[derive(Debug, Default)]
 pub struct VmConfigBuilder {
     config: VmConfig,
@@ -154,6 +163,12 @@ impl VmConfigBuilder {
     #[must_use]
     pub fn with_display(mut self, width: u32, height: u32, ppi: u32) -> Self {
         self.config.display = Some(DisplayConfig { width, height, ppi });
+        self
+    }
+
+    #[must_use]
+    pub fn with_disk(mut self, path: PathBuf) -> Self {
+        self.config.disks.push(DiskConfig { path });
         self
     }
 
@@ -300,6 +315,17 @@ impl VmConfig {
             devices.push(Retained::into_super(block));
         }
 
+        for disk in &self.disks {
+            let attachment = self.device_attachment(&disk.path)?;
+            let block = unsafe {
+                VZNVMExpressControllerDeviceConfiguration::initWithAttachment(
+                    VZNVMExpressControllerDeviceConfiguration::alloc(),
+                    &attachment,
+                )
+            };
+            devices.push(Retained::into_super(block));
+        }
+
         if devices.is_empty() {
             return Ok(());
         }
@@ -329,6 +355,42 @@ impl VmConfig {
             .map_err(|error| {
                 VermudaError::validation_failed(format!(
                     "Failed to create disk attachment: {:?}",
+                    error
+                ))
+            })
+        }
+    }
+
+    fn device_attachment(
+        &self,
+        path: &Path,
+    ) -> Result<Retained<VZDiskBlockDeviceStorageDeviceAttachment>> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| {
+                VermudaError::validation_failed(format!(
+                    "Failed to open block device {}: {}",
+                    path.display(),
+                    e
+                ))
+            })?;
+
+        let fd = file.into_raw_fd();
+        let file_handle =
+            NSFileHandle::initWithFileDescriptor_closeOnDealloc(NSFileHandle::alloc(), fd, true);
+
+        unsafe {
+            VZDiskBlockDeviceStorageDeviceAttachment::initWithFileHandle_readOnly_synchronizationMode_error(
+                VZDiskBlockDeviceStorageDeviceAttachment::alloc(),
+                &file_handle,
+                false,
+                VZDiskSynchronizationMode::Full,
+            )
+            .map_err(|error| {
+                VermudaError::validation_failed(format!(
+                    "Failed to create block device attachment: {:?}",
                     error
                 ))
             })
