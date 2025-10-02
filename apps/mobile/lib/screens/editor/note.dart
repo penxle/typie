@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/error.dart';
@@ -82,6 +83,7 @@ class _NoteContent extends HookWidget {
     final scope = EditorStateScope.of(context);
     final mode = useValueListenable(scope.mode);
     final client = useService<GraphQLClient>();
+    final mixpanel = useService<Mixpanel>();
 
     final noteControllers = useState<Map<String, TextEditingController>>({});
     final noteLocalUpdatedAt = useState<Map<String, DateTime>>({});
@@ -220,6 +222,7 @@ class _NoteContent extends HookWidget {
       final newNoteId = response.createNote.id;
       focusedNoteId.value = newNoteId;
 
+      unawaited(mixpanel.track('create_related_note', properties: {'via': 'button'}));
       refreshNotifier.refresh();
     }
 
@@ -253,6 +256,7 @@ class _NoteContent extends HookWidget {
 
             await client.request(request);
 
+            unawaited(mixpanel.track('delete_related_note'));
             refreshNotifier.refresh();
           },
         ),
@@ -352,6 +356,7 @@ class _NoteContent extends HookWidget {
 
                 await client.request(request);
 
+                unawaited(mixpanel.track('move_related_note'));
                 refreshNotifier.refresh();
               },
               itemBuilder: (context, index) {
