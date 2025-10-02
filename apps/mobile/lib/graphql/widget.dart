@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:ferry/ferry.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
@@ -71,6 +72,10 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
     final error = snapshot.error ?? snapshot.data?.graphqlErrors ?? snapshot.data?.linkException;
     if (error != null) {
       unawaited(Sentry.captureException(error));
+
+      if (kDebugMode) {
+        debugPrint(error.toString());
+      }
 
       return Material(
         color: initialBackgroundColor ?? Colors.transparent,
