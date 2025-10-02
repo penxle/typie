@@ -2,8 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
-  import { tooltip } from '@typie/ui/actions';
-  import { Icon } from '@typie/ui/components';
+  import { Icon, Popover } from '@typie/ui/components';
   import { values } from '@typie/ui/tiptap/values-base';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -202,8 +201,8 @@
       {/if}
     </div>
     <div class={flex({ gap: '4px' })}>
-      <button
-        class={center({
+      <Popover
+        style={center.raw({
           size: '24px',
           borderRadius: '4px',
           cursor: 'pointer',
@@ -218,12 +217,40 @@
             backgroundColor: 'surface.dark/20',
           },
         })}
-        onclick={() => ondelete(note.id)}
-        type="button"
-        use:tooltip={{ message: '노트 삭제', placement: 'top' }}
+        contentStyle={css.raw({ paddingX: '0', paddingY: '0' })}
       >
-        <Icon icon={Trash2Icon} size={16} />
-      </button>
+        {#snippet trigger()}
+          <Icon icon={Trash2Icon} size={16} />
+        {/snippet}
+        {#snippet children({ close })}
+          <button
+            class={flex({
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '12px',
+              paddingY: '8px',
+              fontSize: '14px',
+              fontWeight: 'medium',
+              color: 'text.default',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              transition: 'common',
+              _hover: {
+                backgroundColor: 'accent.danger.subtle',
+                color: 'accent.danger.default',
+              },
+            })}
+            onclick={() => {
+              ondelete(note.id);
+              close();
+            }}
+            type="button"
+          >
+            <Icon icon={Trash2Icon} size={16} />
+            노트 삭제
+          </button>
+        {/snippet}
+      </Popover>
     </div>
   </div>
   <p
