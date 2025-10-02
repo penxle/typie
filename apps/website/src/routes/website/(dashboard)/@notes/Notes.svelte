@@ -5,7 +5,6 @@
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { clamp, getRandomNoteColor } from '@typie/ui/utils';
-  import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -225,6 +224,13 @@
       .filter((hit): hit is NonNullable<typeof hit> => hit !== null),
   );
 
+  let dragging = $state<{
+    noteId: string;
+    originalIndex: number;
+    dropTargetNoteId: string | null;
+  } | null>(null);
+  let localNoteOrder = $state<string[]>([]);
+
   const sortedNotes = $derived.by(() => {
     if (localNoteOrder.length === 0) return $query.notes;
     return [...$query.notes].toSorted((a, b) => {
@@ -240,46 +246,39 @@
   const notesNotRelatedToEntity = $derived(sortedNotes.filter((note) => note.entity?.id !== selectedEntityId));
   const restNotes = $derived(notesRelatedToEntity.length > 0 ? notesNotRelatedToEntity : sortedNotes);
 
-  let draggedNoteId = $state<string | null>(null);
-  let dragOverNoteId = $state<string | null>(null);
-  let localNoteOrder = $state<string[]>([]);
-  let draggedOriginalIndex = $state<number | null>(null);
-
   const handleDragEnd = async () => {
-    if (draggedNoteId && draggedOriginalIndex !== null) {
-      const currentIndex = localNoteOrder.indexOf(draggedNoteId);
+    if (!dragging) return;
 
-      if (currentIndex !== -1 && draggedOriginalIndex !== -1 && currentIndex !== draggedOriginalIndex && sortedNotes.length > 1) {
-        const notes = sortedNotes;
-        let lowerNote, upperNote;
+    const currentIndex = localNoteOrder.indexOf(dragging.noteId);
 
-        lowerNote = notes[currentIndex - 1] ?? null;
-        upperNote = notes[currentIndex + 1] ?? null;
+    if (currentIndex !== -1 && dragging.originalIndex !== -1 && currentIndex !== dragging.originalIndex && sortedNotes.length > 1) {
+      const notes = sortedNotes;
+      let lowerNote, upperNote;
 
-        try {
-          await moveNote({
-            noteId: draggedNoteId,
-            lowerOrder: lowerNote?.order,
-            upperOrder: upperNote?.order,
-          });
-          mixpanel.track('move_note');
-          cache.invalidate({ __typename: 'Query', field: 'notes' });
-        } catch {
-          localNoteOrder = $query.notes.map((note) => note.id);
-          Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
-        }
+      lowerNote = notes[currentIndex - 1] ?? null;
+      upperNote = notes[currentIndex + 1] ?? null;
+
+      try {
+        await moveNote({
+          noteId: dragging.noteId,
+          lowerOrder: lowerNote?.order,
+          upperOrder: upperNote?.order,
+        });
+        mixpanel.track('move_note');
+        cache.invalidate({ __typename: 'Query', field: 'notes' });
+      } catch {
+        localNoteOrder = $query.notes.map((note) => note.id);
+        Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     }
 
-    draggedNoteId = null;
-    dragOverNoteId = null;
-    draggedOriginalIndex = null;
+    dragging = null;
   };
 
   const handleNoteDragEnter = (noteId: string) => {
-    if (draggedNoteId && draggedNoteId !== noteId) {
-      dragOverNoteId = noteId;
-      const draggedIndex = localNoteOrder.indexOf(draggedNoteId);
+    if (dragging && dragging.noteId !== noteId) {
+      dragging.dropTargetNoteId = noteId;
+      const draggedIndex = localNoteOrder.indexOf(dragging.noteId);
       const dropIndex = localNoteOrder.indexOf(noteId);
 
       if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
@@ -335,8 +334,10 @@
   let prevNoteIds = $state<string[]>([]);
   $effect(() => {
     const noteIds = $query.notes.map((n) => n.id);
+    const noteIdsStr = noteIds.join(',');
+    const prevNoteIdsStr = prevNoteIds.join(',');
 
-    if (stringify(noteIds) !== stringify(prevNoteIds)) {
+    if (noteIdsStr !== prevNoteIdsStr) {
       prevNoteIds = noteIds;
       localNoteOrder = noteIds;
     }
@@ -661,18 +662,21 @@
         >
           {#each notesRelatedToEntity as note (note.id)}
             <NoteComponent
-              dropTargetNoteId={dragOverNoteId}
-              isDragging={draggedNoteId === note.id}
+              dropTargetNoteId={dragging?.dropTargetNoteId ?? null}
+              isDragging={dragging?.noteId === note.id}
               {note}
               ondelete={handleDeleteNote}
               ondragenter={() => {
-                if (draggedNoteId !== note.id) {
+                if (dragging?.noteId !== note.id) {
                   handleNoteDragEnter(note.id);
                 }
               }}
               ondragstart={() => {
-                draggedNoteId = note.id;
-                draggedOriginalIndex = localNoteOrder.indexOf(note.id);
+                dragging = {
+                  noteId: note.id,
+                  originalIndex: localNoteOrder.indexOf(note.id),
+                  dropTargetNoteId: null,
+                };
               }}
               onedit={editNote}
             />
@@ -707,18 +711,21 @@
       >
         {#each restNotes as note (note.id)}
           <NoteComponent
-            dropTargetNoteId={dragOverNoteId}
-            isDragging={draggedNoteId === note.id}
+            dropTargetNoteId={dragging?.dropTargetNoteId ?? null}
+            isDragging={dragging?.noteId === note.id}
             {note}
             ondelete={handleDeleteNote}
             ondragenter={() => {
-              if (draggedNoteId !== note.id) {
+              if (dragging?.noteId !== note.id) {
                 handleNoteDragEnter(note.id);
               }
             }}
             ondragstart={() => {
-              draggedNoteId = note.id;
-              draggedOriginalIndex = localNoteOrder.indexOf(note.id);
+              dragging = {
+                noteId: note.id,
+                originalIndex: localNoteOrder.indexOf(note.id),
+                dropTargetNoteId: null,
+              };
             }}
             onedit={editNote}
           />

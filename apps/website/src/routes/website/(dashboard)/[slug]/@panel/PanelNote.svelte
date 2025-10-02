@@ -6,9 +6,11 @@
   import { autosize, tooltip } from '@typie/ui/actions';
   import { Button, Icon, Popover } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { debounce, getNoteColors, getRandomNoteColor } from '@typie/ui/utils';
+  import { Toast } from '@typie/ui/notification';
+  import { debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
+  import { tick } from 'svelte';
   import ExpandIcon from '~icons/lucide/expand';
   import Minimize2Icon from '~icons/lucide/minimize-2';
   import PlusIcon from '~icons/lucide/plus';
@@ -75,9 +77,38 @@
     }
   `);
 
+  const moveNote = graphql(`
+    mutation PanelNote_MoveNote_Mutation($input: MoveNoteInput!) {
+      moveNote(input: $input) {
+        id
+        order
+      }
+    }
+  `);
+
   const app = getAppContext();
 
-  const notes = $derived($entity.notes.toSorted((a, b) => a.order.localeCompare(b.order)) || []);
+  let dragging = $state<{
+    noteId: string;
+    originalIndex: number;
+  } | null>(null);
+  let localNoteOrder = $state<string[]>([]);
+  let scrollContainer = $state<HTMLElement | null>(null);
+
+  const sortedNotes = $derived.by(() => {
+    if (localNoteOrder.length === 0) {
+      return $entity.notes.toSorted((a, b) => a.order.localeCompare(b.order));
+    }
+    return [...$entity.notes].toSorted((a, b) => {
+      const indexA = localNoteOrder.indexOf(a.id);
+      const indexB = localNoteOrder.indexOf(b.id);
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+  });
+
+  const notes = $derived(sortedNotes || []);
 
   let noteContents = $state<Record<string, string>>({});
   let noteLocalUpdatedAt = $state<Record<string, Date>>({});
@@ -132,14 +163,114 @@
     cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
   };
 
+  const handleDragStart = (noteId: string) => {
+    dragging = {
+      noteId,
+      originalIndex: localNoteOrder.indexOf(noteId),
+    };
+  };
+
+  const handleDragEnter = (noteId: string) => {
+    if (dragging && dragging.noteId !== noteId) {
+      const draggedIndex = localNoteOrder.indexOf(dragging.noteId);
+      const dropIndex = localNoteOrder.indexOf(noteId);
+
+      if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
+        const firstPositions: Record<string, DOMRect> = {};
+        const noteElements = document.querySelectorAll('[data-related-note-id]');
+        noteElements.forEach((el) => {
+          const id = (el as HTMLElement).dataset.relatedNoteId;
+          if (id) {
+            firstPositions[id] = el.getBoundingClientRect();
+          }
+        });
+
+        const newOrder = [...localNoteOrder];
+        const [removed] = newOrder.splice(draggedIndex, 1);
+        newOrder.splice(dropIndex, 0, removed);
+        localNoteOrder = newOrder;
+
+        tick().then(() => {
+          const noteElements = document.querySelectorAll('[data-related-note-id]');
+
+          if (Object.keys(firstPositions).length === 0) return;
+
+          for (const el of noteElements) {
+            const id = (el as HTMLElement).dataset.relatedNoteId;
+            if (!id || !firstPositions[id]) continue;
+
+            const prevPos = firstPositions[id];
+            const lastPos = el.getBoundingClientRect();
+            const deltaX = prevPos.left - lastPos.left;
+            const deltaY = prevPos.top - lastPos.top;
+
+            if (Math.abs(deltaX) === 0 && Math.abs(deltaY) === 0) continue;
+
+            const htmlEl = el as HTMLElement;
+            htmlEl.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            htmlEl.style.transition = 'none';
+
+            requestAnimationFrame(() => {
+              htmlEl.style.transition = 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+              htmlEl.style.transform = '';
+              htmlEl.style.pointerEvents = 'none';
+              setTimeout(() => {
+                htmlEl.style.transition = 'none';
+                htmlEl.style.pointerEvents = 'auto';
+              }, 300);
+            });
+          }
+        });
+      }
+    }
+  };
+
+  const handleDragEnd = async () => {
+    if (!dragging) return;
+
+    const currentIndex = localNoteOrder.indexOf(dragging.noteId);
+
+    if (currentIndex !== -1 && dragging.originalIndex !== -1 && currentIndex !== dragging.originalIndex && sortedNotes.length > 1) {
+      const lowerNote = sortedNotes[currentIndex - 1] ?? null;
+      const upperNote = sortedNotes[currentIndex + 1] ?? null;
+
+      try {
+        await moveNote({
+          noteId: dragging.noteId,
+          lowerOrder: lowerNote?.order,
+          upperOrder: upperNote?.order,
+        });
+        mixpanel.track('move_related_note');
+        cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
+      } catch {
+        localNoteOrder = $entity.notes.map((note) => note.id);
+        Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
+    }
+
+    dragging = null;
+  };
+
+  let prevNoteIds = $state<string[]>([]);
   $effect(() => {
-    void $entity.notes;
+    const noteIds = $entity.notes.map((n) => n.id);
+    const noteIdsStr = noteIds.join(',');
+    const prevNoteIdsStr = prevNoteIds.join(',');
+
+    if (noteIdsStr !== prevNoteIdsStr) {
+      prevNoteIds = noteIds;
+      localNoteOrder = noteIds;
+    }
 
     const noteElement = document.querySelector(`[data-related-note-id="${lastAddedNoteId}"] textarea`) as HTMLTextAreaElement;
     if (noteElement) {
       noteElement.focus();
       lastAddedNoteId = undefined;
     }
+  });
+
+  $effect(() => {
+    return handleDragScroll(scrollContainer, !!dragging);
   });
 </script>
 
@@ -194,6 +325,7 @@
   </div>
 
   <div
+    bind:this={scrollContainer}
     class={flex({
       flexDirection: 'column',
       gap: '6px',
@@ -238,8 +370,10 @@
     {:else}
       {#each notes as note (note.id)}
         {@const color = getNoteColors().find((color) => color.value === note.color)?.color ?? token('colors.prosemirror.white')}
+        {@const isDragging = dragging?.noteId === note.id}
         <div
           style:background-color={`color-mix(in srgb, ${token('colors.prosemirror.white')}, ${color} 75%)`}
+          style:opacity={isDragging ? '0.5' : '1'}
           class={cx(
             'group',
             flex({
@@ -261,6 +395,57 @@
             }),
           )}
           data-related-note-id={note.id}
+          draggable="true"
+          ondragend={handleDragEnd}
+          ondragenter={() => handleDragEnter(note.id)}
+          ondragover={(e) => {
+            e.preventDefault();
+          }}
+          ondragstart={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'TEXTAREA') {
+              e.preventDefault();
+              return;
+            }
+
+            if (e.dataTransfer) {
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text', noteContents[note.id] || '');
+
+              const currentTarget = e.currentTarget as HTMLElement;
+              const rect = currentTarget.getBoundingClientRect();
+              const ghost = document.createElement('div');
+
+              const cloned = currentTarget.cloneNode(true) as HTMLElement;
+              cloned.style.pointerEvents = 'none';
+              cloned.style.transform = 'rotate(1.5deg) scale(1.05)';
+              cloned.style.opacity = '0.8';
+              cloned.style.width = '100%';
+              cloned.style.height = '100%';
+              ghost.append(cloned);
+
+              ghost.style.position = 'absolute';
+              ghost.style.width = `${rect.width}px`;
+              ghost.style.height = `${rect.height}px`;
+              ghost.style.minHeight = `${rect.height}px`;
+              ghost.style.top = '-1000px';
+              ghost.style.left = '-1000px';
+
+              document.body.append(ghost);
+
+              const offsetX = e.clientX - rect.left;
+              const offsetY = e.clientY - rect.top;
+
+              e.dataTransfer.setDragImage(ghost, offsetX, offsetY);
+
+              setTimeout(() => {
+                ghost.remove();
+              });
+            }
+
+            handleDragStart(note.id);
+          }}
+          role="listitem"
         >
           <textarea
             class={css({
@@ -271,11 +456,6 @@
               backgroundColor: 'transparent',
               resize: 'none',
             })}
-            onblur={() => {
-              if (noteContents[note.id] === '' && notes.length !== 1) {
-                handleDeleteNote(note.id);
-              }
-            }}
             oninput={(e) => handleNoteChange(note.id, e.currentTarget.value)}
             onkeydown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {

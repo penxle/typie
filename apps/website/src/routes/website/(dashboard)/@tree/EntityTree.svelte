@@ -5,6 +5,7 @@
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
+  import { handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
   import { on } from 'svelte/events';
@@ -500,51 +501,15 @@
     }
   };
 
-  // NOTE: 위, 아래 끝에서 드래그 중 자동 스크롤
   $effect(() => {
     if (!dragging?.eligible || !tree) return;
 
     const scrollContainer = tree.parentElement;
     if (!scrollContainer) return;
 
-    let animationId: number | null = null;
-
-    const scroll = () => {
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const scrollZoneSize = 50;
-      const maxScrollSpeed = 15;
-
-      if (lastPointerX < containerRect.left || lastPointerX > containerRect.right) {
-        return;
-      }
-
-      if (lastPointerY < containerRect.top + scrollZoneSize) {
-        const distance = containerRect.top + scrollZoneSize - lastPointerY;
-        const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
-        scrollContainer.scrollBy(0, -scrollSpeed);
-        updateDropTarget(lastPointerX, lastPointerY);
-        animationId = requestAnimationFrame(scroll);
-      } else if (lastPointerY > containerRect.bottom - scrollZoneSize) {
-        const distance = lastPointerY - (containerRect.bottom - scrollZoneSize);
-        const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
-        scrollContainer.scrollBy(0, scrollSpeed);
-        updateDropTarget(lastPointerX, lastPointerY);
-        animationId = requestAnimationFrame(scroll);
-      }
-    };
-
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const scrollZoneSize = 50;
-
-    if (lastPointerY < containerRect.top + scrollZoneSize || lastPointerY > containerRect.bottom - scrollZoneSize) {
-      animationId = requestAnimationFrame(scroll);
-    }
-
-    return () => {
-      if (animationId !== null) {
-        cancelAnimationFrame(animationId);
-      }
-    };
+    return handleDragScroll(scrollContainer, true, {
+      onScroll: () => updateDropTarget(lastPointerX, lastPointerY),
+    });
   });
 
   const handlePointerMove: PointerEventHandler<HTMLDivElement> = (e) => {
