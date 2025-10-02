@@ -202,7 +202,7 @@
   let editInputEl = $state<HTMLTextAreaElement>();
   let editSelectedEntityId = $state<string | null>(null);
 
-  const currentEntity = $derived($currentEntityQuery && page.params.slug ? $currentEntityQuery.entity : null);
+  const currentEntity = $derived(page.params.slug && $currentEntityQuery ? $currentEntityQuery.entity : null);
   const recentlyViewedEntities = $derived(
     $query.me.recentlyViewedEntities
       .slice(0, 10)
