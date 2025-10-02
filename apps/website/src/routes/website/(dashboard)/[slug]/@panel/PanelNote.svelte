@@ -4,7 +4,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Button, Icon } from '@typie/ui/components';
+  import { Button, Icon, Popover } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { debounce, getNoteColors, getRandomNoteColor } from '@typie/ui/utils';
   import dayjs from 'dayjs';
@@ -289,12 +289,12 @@
             use:autosize
           ></textarea>
 
-          <button
-            class={center({
+          <Popover
+            style={center.raw({
               position: 'absolute',
               bottom: '8px',
               right: '8px',
-              size: '20px',
+              size: '24px',
               borderRadius: '4px',
               color: 'text.faint',
               cursor: 'pointer',
@@ -313,12 +313,40 @@
                 backgroundColor: 'surface.dark/10',
               },
             })}
-            onclick={() => handleDeleteNote(note.id)}
-            type="button"
-            use:tooltip={{ message: '노트 삭제', placement: 'top' }}
+            contentStyle={css.raw({ paddingX: '0', paddingY: '0' })}
           >
-            <Icon icon={Trash2Icon} size={12} />
-          </button>
+            {#snippet trigger()}
+              <Icon icon={Trash2Icon} size={14} />
+            {/snippet}
+            {#snippet children({ close })}
+              <button
+                class={flex({
+                  alignItems: 'center',
+                  gap: '8px',
+                  paddingX: '12px',
+                  paddingY: '8px',
+                  fontSize: '13px',
+                  fontWeight: 'medium',
+                  color: 'text.default',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'common',
+                  _hover: {
+                    backgroundColor: 'accent.danger.subtle',
+                    color: 'accent.danger.default',
+                  },
+                })}
+                onclick={() => {
+                  handleDeleteNote(note.id);
+                  close();
+                }}
+                type="button"
+              >
+                <Icon icon={Trash2Icon} size={14} />
+                노트 삭제
+              </button>
+            {/snippet}
+          </Popover>
         </div>
       {/each}
     {/if}
