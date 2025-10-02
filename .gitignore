@@ -19,3 +19,7 @@ styled-system/
 !packages/styled-system/
 
 vite.config.ts.timestamp-*
+
+*.img
+*.iso
+*.bin

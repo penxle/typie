@@ -1,0 +1,12 @@
+[package]
+name = "vermuda-boot"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+uefi = { version = "0.35", features = ["panic_handler", "logger"] }
+chacha20 = { version = "0.9" }
+log = "0.4"
+fatfs = "0.3"
+fscommon = "0.1"
+cargo_metadata = "0.23"

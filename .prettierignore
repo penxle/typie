@@ -6,6 +6,7 @@ docs/*
 !docs/*.md
 *.dart
 *.rs
+*.plist
 
 apps/api/drizzle/*
 apps/mobile/android/*
