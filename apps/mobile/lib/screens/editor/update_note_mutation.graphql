@@ -1,4 +1,4 @@
-mutation UpdateNote_Mutation($input: UpdateNoteInput!) {
+mutation PostRelatedNotesScreen_UpdateNote_Mutation($input: UpdateNoteInput!) {
   updateNote(input: $input) {
     id
     content
