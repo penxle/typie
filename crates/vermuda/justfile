@@ -1,0 +1,19 @@
+default:
+    @just --list
+
+build:
+    @cargo build
+    @codesign --entitlements entitlements.plist -s - ../../target/debug/vermuda
+
+release:
+    @cargo build --release
+    @codesign --entitlements entitlements.plist -s - ../../target/release/vermuda
+
+run: build
+    @../../target/debug/vermuda
+
+run-release: release
+    @../../target/release/vermuda
+
+clean:
+    @cargo clean

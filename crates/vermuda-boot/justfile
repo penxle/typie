@@ -1,0 +1,10 @@
+default:
+    @just --list
+
+build:
+    @cargo build --release --target aarch64-unknown-uefi
+    @cargo run --release --bin pack
+
+clean:
+    @cargo clean
+    @rm -f vermuda-boot.img

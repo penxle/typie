@@ -64,6 +64,7 @@ noreferrer
 nori
 nsis
 nums
+objc
 observablehq
 oklch
 on+
@@ -110,6 +111,7 @@ unplugin
 unstub
 unsubscriber
 vcpu
+vermuda
 virtio
 virtiofs
 vite
