@@ -4,6 +4,7 @@
   import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
   import { createFloatingActions, focusTrap, portal } from '../actions';
+  import { pushEscapeHandler } from '../utils';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
@@ -71,6 +72,18 @@
     }
   });
 
+  $effect(() => {
+    if (open) {
+      return pushEscapeHandler(() => {
+        if (open) {
+          close();
+          return true;
+        }
+        return false;
+      });
+    }
+  });
+
   const getMenuItems = () => {
     return menuEl?.querySelectorAll('[role="menuitem"], [role="menuitemradio"]');
   };
@@ -80,13 +93,6 @@
     if (open) {
       const focusInList = menuEl?.contains(target);
       const focusInButton = buttonEl?.contains(target);
-
-      if (e.key === 'Escape' && (focusInList || focusInButton)) {
-        e.preventDefault();
-        e.stopPropagation();
-        close();
-        return;
-      }
 
       if (e.key === 'Tab' && (focusInList || focusInButton)) {
         close();
