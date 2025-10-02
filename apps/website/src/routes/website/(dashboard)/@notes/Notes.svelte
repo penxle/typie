@@ -510,7 +510,7 @@
       class={flex({
         position: 'sticky',
         top: '[calc(16px - 15dvh)]',
-        zIndex: '1',
+        zIndex: '2',
         flexDirection: 'column',
         width: 'full',
         maxWidth: '450px',
