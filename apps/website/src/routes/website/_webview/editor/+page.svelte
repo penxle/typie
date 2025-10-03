@@ -1220,7 +1220,7 @@
               text: event.clipboardData.getData('text/plain'),
             };
 
-            if (features?.includes('paste-mode')) {
+            if (!features?.includes('paste-mode')) {
               onPasteConfirm('html');
               return true;
             }
