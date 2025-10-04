@@ -1,5 +1,0 @@
-config:
-  aws:defaultTags:
-    tags:
-      pulumi.typie.io/project: infrastructure
-      pulumi.typie.io/stack: base

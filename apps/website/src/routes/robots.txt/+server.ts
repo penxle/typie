@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async (event) => {
   const lines = ['User-agent: *'];
 
-  if (env.PUBLIC_PULUMI_STACK === 'prod') {
+  if (env.PUBLIC_ENVIRONMENT === 'prod') {
     lines.push('Disallow:');
   } else {
     lines.push('Disallow: /');

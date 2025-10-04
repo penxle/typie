@@ -1,8 +1,3 @@
 {
-  "extends": ["@typie/tsconfig"],
-  "compilerOptions": {
-    "paths": {
-      "$*": ["./pulumi/*"]
-    }
-  }
+  "extends": ["@typie/tsconfig"]
 }
