@@ -22,8 +22,8 @@ resource "aws_lambda_layer_version" "sharp" {
   layer_name          = "sharp"
   compatible_runtimes = ["nodejs22.x"]
   compatible_architectures = ["arm64"]
-  filename            = "${path.module}/../../../../literoom/dist/layers/sharp.zip"
-  source_code_hash    = filebase64sha256("${path.module}/../../../../literoom/dist/layers/sharp.zip")
+  filename            = "${path.module}/../../../../apps/literoom/dist/layers/sharp.zip"
+  source_code_hash    = filebase64sha256("${path.module}/../../../../apps/literoom/dist/layers/sharp.zip")
 }
 
 resource "aws_lambda_function" "literoom" {
@@ -38,8 +38,8 @@ resource "aws_lambda_function" "literoom" {
   handler = "handler.handler"
   layers  = [aws_lambda_layer_version.sharp.arn]
 
-  filename         = "${path.module}/../../../../literoom/dist/function.zip"
-  source_code_hash = filebase64sha256("${path.module}/../../../../literoom/dist/function.zip")
+  filename         = "${path.module}/../../../../apps/literoom/dist/function.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../../../apps/literoom/dist/function.zip")
 }
 
 resource "aws_lambda_permission" "literoom" {
