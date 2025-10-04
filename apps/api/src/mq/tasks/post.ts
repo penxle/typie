@@ -49,7 +49,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
   }
 
   let updates: string[] = [];
-  let snapshotUpdated = false;
+  let updated = false;
 
   try {
     updates = (await redis.rpop(`post:sync:updates:${postId}`, 5)) ?? [];
@@ -57,108 +57,49 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       return;
     }
 
-    await db.transaction(async (tx) => {
-      const post = await tx
-        .select({
-          id: Posts.id,
-          update: PostContents.update,
-          text: PostContents.text,
-          siteId: Entities.siteId,
-        })
-        .from(Posts)
-        .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
-        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .where(eq(Posts.id, postId))
-        .then(firstOrThrow);
+    const post = await db
+      .select({
+        id: Posts.id,
+        update: PostContents.update,
+        text: PostContents.text,
+        siteId: Entities.siteId,
+      })
+      .from(Posts)
+      .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
+      .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+      .where(eq(Posts.id, postId))
+      .then(firstOrThrow);
 
-      const pendingUpdates = R.groupBy(
-        updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
-        ({ userId }) => userId,
-      );
+    const pendingUpdates = R.groupBy(
+      updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
+      ({ userId }) => userId,
+    );
 
-      const doc = new Y.Doc({ gc: false });
-      Y.applyUpdateV2(doc, post.update);
+    const doc = new Y.Doc({ gc: false });
+    Y.applyUpdateV2(doc, post.update);
 
-      let prevCharacterCount = getCharacterCount(post.text);
-      let order = 0;
+    let prevCharacterCount = getCharacterCount(post.text);
+    let order = 0;
 
-      for (const [userId, data] of Object.entries(pendingUpdates)) {
-        const prevSnapshot = Y.snapshot(doc);
-        const update = Y.mergeUpdatesV2(data.map(({ data }) => Uint8Array.fromBase64(data)));
+    type Snapshot = {
+      userId: string;
+      snapshot: Uint8Array;
+      order: number;
+      delta: number;
+    };
 
-        Y.applyUpdateV2(doc, update);
-        const snapshot = Y.snapshot(doc);
+    const snapshots: Snapshot[] = [];
 
-        if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
-          snapshotUpdated = true;
+    for (const [userId, data] of Object.entries(pendingUpdates)) {
+      const prevSnapshot = Y.snapshot(doc);
+      const update = Y.mergeUpdatesV2(data.map(({ data }) => Uint8Array.fromBase64(data)));
 
-          const snapshotData = Y.encodeSnapshotV2(snapshot);
-          const compressedSnapshot = await compressZstd(snapshotData);
+      Y.applyUpdateV2(doc, update);
+      const snapshot = Y.snapshot(doc);
 
-          const postSnapshot = await tx
-            .insert(PostSnapshots)
-            .values({
-              postId,
-              snapshot: compressedSnapshot,
-              order: order++,
-            })
-            .returning({ id: PostSnapshots.id })
-            .then(firstOrThrow);
-
-          await tx.insert(PostSnapshotContributors).values({
-            snapshotId: postSnapshot.id,
-            userId,
-          });
-
-          const fragment = doc.getXmlFragment('body');
-          const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
-          const body = node.toJSON();
-          const text = makeText(body);
-
-          const characterCount = getCharacterCount(text);
-          const characterCountDelta = characterCount - prevCharacterCount;
-
-          if (characterCountDelta !== 0) {
-            await tx
-              .insert(PostCharacterCountChanges)
-              .values({
-                postId,
-                userId,
-                bucket: dayjs().startOf('hour'),
-                additions: Math.max(characterCountDelta, 0),
-                deletions: Math.max(-characterCountDelta, 0),
-              })
-              .onConflictDoUpdate({
-                target: [PostCharacterCountChanges.userId, PostCharacterCountChanges.postId, PostCharacterCountChanges.bucket],
-                set: {
-                  additions: characterCountDelta > 0 ? sql`${PostCharacterCountChanges.additions} + ${characterCountDelta}` : undefined,
-                  deletions: characterCountDelta < 0 ? sql`${PostCharacterCountChanges.deletions} + ${-characterCountDelta}` : undefined,
-                },
-              });
-          }
-
-          prevCharacterCount = characterCount;
-        }
-      }
-
-      await tx
-        .update(PostContents)
-        .set({
-          update: Y.encodeStateAsUpdateV2(doc),
-          vector: Y.encodeStateVector(doc),
-        })
-        .where(eq(PostContents.postId, postId));
-
-      if (snapshotUpdated) {
-        const map = doc.getMap('attrs');
-
-        const title = (map.get('title') as string) || null;
-        const subtitle = (map.get('subtitle') as string) || null;
-        const maxWidth = (map.get('maxWidth') as number) ?? 800;
-        const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
-        const layoutMode = (map.get('layoutMode') as PostLayoutMode) ?? PostLayoutMode.SCROLL;
-        const pageLayout = (map.get('pageLayout') as PageLayout) ?? null;
-        const anchors = (map.get('anchors') as Record<string, string | null>) ?? {};
+      if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
+        const snapshotData = Y.encodeSnapshotV2(snapshot);
+        const compressedSnapshot = await compressZstd(snapshotData);
 
         const fragment = doc.getXmlFragment('body');
         const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
@@ -166,11 +107,99 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
         const text = makeText(body);
 
         const characterCount = getCharacterCount(text);
-        const blobSize = getBlobSize(node);
+        const delta = characterCount - prevCharacterCount;
 
-        const updatedAt = dayjs();
+        snapshots.push({
+          userId,
+          snapshot: compressedSnapshot,
+          order: order++,
+          delta,
+        });
 
-        const effectiveLayoutMode = [PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode) ? layoutMode : PostLayoutMode.SCROLL;
+        prevCharacterCount = characterCount;
+      }
+    }
+
+    const finalUpdate = Y.encodeStateAsUpdateV2(doc);
+    const finalVector = Y.encodeStateVector(doc);
+
+    if (snapshots.length > 0) {
+      const map = doc.getMap('attrs');
+
+      const title = (map.get('title') as string) || null;
+      const subtitle = (map.get('subtitle') as string) || null;
+      const maxWidth = (map.get('maxWidth') as number) ?? 800;
+      const coverImageId = JSON.parse((map.get('coverImage') as string) || '{}')?.id ?? null;
+      const layoutMode = (map.get('layoutMode') as PostLayoutMode) ?? PostLayoutMode.SCROLL;
+      const pageLayout = (map.get('pageLayout') as PageLayout) ?? null;
+      const anchors = (map.get('anchors') as Record<string, string | null>) ?? {};
+
+      const fragment = doc.getXmlFragment('body');
+      const node = yXmlFragmentToProseMirrorRootNode(fragment, schema);
+      const body = node.toJSON();
+      const text = makeText(body);
+
+      const characterCount = getCharacterCount(text);
+      const blobSize = getBlobSize(node);
+
+      const updatedAt = dayjs();
+
+      const effectiveLayoutMode = [PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode) ? layoutMode : PostLayoutMode.SCROLL;
+
+      const sanitizedText = text.replaceAll('\u0000', '');
+      const sanitizedBody = JSON.parse(JSON.stringify(body).replaceAll(String.raw`\u0000`, ''));
+
+      await db.transaction(async (tx) => {
+        for (const snapshot of snapshots) {
+          const postSnapshot = await tx
+            .insert(PostSnapshots)
+            .values({
+              postId,
+              snapshot: snapshot.snapshot,
+              order: snapshot.order,
+            })
+            .returning({ id: PostSnapshots.id })
+            .then(firstOrThrow);
+
+          await tx.insert(PostSnapshotContributors).values({
+            snapshotId: postSnapshot.id,
+            userId: snapshot.userId,
+          });
+
+          if (snapshot.delta !== 0) {
+            await tx
+              .insert(PostCharacterCountChanges)
+              .values({
+                postId,
+                userId: snapshot.userId,
+                bucket: dayjs().startOf('hour'),
+                additions: Math.max(snapshot.delta, 0),
+                deletions: Math.max(-snapshot.delta, 0),
+              })
+              .onConflictDoUpdate({
+                target: [PostCharacterCountChanges.userId, PostCharacterCountChanges.postId, PostCharacterCountChanges.bucket],
+                set: {
+                  additions: snapshot.delta > 0 ? sql`${PostCharacterCountChanges.additions} + ${snapshot.delta}` : undefined,
+                  deletions: snapshot.delta < 0 ? sql`${PostCharacterCountChanges.deletions} + ${-snapshot.delta}` : undefined,
+                },
+              });
+          }
+        }
+
+        await tx
+          .update(PostContents)
+          .set({
+            update: finalUpdate,
+            vector: finalVector,
+            body: sanitizedBody,
+            text: sanitizedText,
+            characterCount,
+            blobSize,
+            layoutMode: effectiveLayoutMode,
+            pageLayout,
+            updatedAt,
+          })
+          .where(eq(PostContents.postId, postId));
 
         await tx
           .update(Posts)
@@ -183,22 +212,6 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
           })
           .where(eq(Posts.id, postId));
 
-        const sanitizedText = text.replaceAll('\u0000', '');
-        const sanitizedBody = JSON.parse(JSON.stringify(body).replaceAll(String.raw`\u0000`, ''));
-
-        await tx
-          .update(PostContents)
-          .set({
-            body: sanitizedBody,
-            text: sanitizedText,
-            characterCount,
-            blobSize,
-            layoutMode: effectiveLayoutMode,
-            pageLayout,
-            updatedAt,
-          })
-          .where(eq(PostContents.postId, postId));
-
         await tx.delete(PostAnchors).where(and(eq(PostAnchors.postId, postId), notInArray(PostAnchors.nodeId, Object.keys(anchors))));
 
         for (const [nodeId, name] of Object.entries(anchors)) {
@@ -210,10 +223,20 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
               set: { name },
             });
         }
-      }
 
-      lock.signal.throwIfAborted();
-    });
+        lock.signal.throwIfAborted();
+      });
+
+      updated = true;
+    } else {
+      await db
+        .update(PostContents)
+        .set({
+          update: finalUpdate,
+          vector: finalVector,
+        })
+        .where(eq(PostContents.postId, postId));
+    }
   } catch (err) {
     Sentry.captureException(err);
 
@@ -229,7 +252,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
     await enqueueJob('post:sync:collect', postId);
   }
 
-  if (snapshotUpdated) {
+  if (updated) {
     const { siteId, entityId } = await db
       .select({ siteId: Entities.siteId, entityId: Entities.id })
       .from(Posts)
@@ -291,8 +314,6 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
   }
 });
 
-type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
-
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
   const lock = new Lock(`post:${postId}`);
 
@@ -302,104 +323,105 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
   }
 
   try {
-    await db.transaction(async (tx) => {
-      const snapshots = await tx
-        .select({ id: PostSnapshots.id, createdAt: PostSnapshots.createdAt })
+    type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
+
+    const snapshots = await db
+      .select({
+        id: PostSnapshots.id,
+        createdAt: PostSnapshots.createdAt,
+      })
+      .from(PostSnapshots)
+      .where(eq(PostSnapshots.postId, postId))
+      .orderBy(asc(PostSnapshots.createdAt), asc(PostSnapshots.order));
+
+    if (snapshots.length === 0) {
+      await db.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
+      return;
+    }
+
+    const contributors = await db
+      .select({
+        snapshotId: PostSnapshotContributors.snapshotId,
+        userId: PostSnapshotContributors.userId,
+      })
+      .from(PostSnapshotContributors)
+      .innerJoin(PostSnapshots, eq(PostSnapshotContributors.snapshotId, PostSnapshots.id))
+      .where(eq(PostSnapshots.postId, postId));
+
+    const contributorsBySnapshotId = new Map<string, Set<string>>();
+    for (const contributor of contributors) {
+      const userIds = contributorsBySnapshotId.get(contributor.snapshotId) ?? new Set();
+      userIds.add(contributor.userId);
+      contributorsBySnapshotId.set(contributor.snapshotId, userIds);
+    }
+
+    const threshold24h = dayjs().subtract(24, 'hours');
+    const threshold2w = dayjs().subtract(2, 'weeks');
+    const windowedSnapshots = new Map<string, Snapshot>();
+
+    for (const snapshot of snapshots) {
+      const userIds = [...(contributorsBySnapshotId.get(snapshot.id) ?? [])];
+
+      const window = snapshot.createdAt.isAfter(threshold24h)
+        ? snapshot.createdAt.toISOString()
+        : snapshot.createdAt.isAfter(threshold2w)
+          ? snapshot.createdAt.startOf('minute').toISOString()
+          : snapshot.createdAt.startOf('hour').toISOString();
+
+      const windowedSnapshot = windowedSnapshots.get(window);
+
+      if (windowedSnapshot) {
+        windowedSnapshots.set(window, {
+          id: snapshot.id,
+          createdAt: snapshot.createdAt,
+          userIds: new Set([...windowedSnapshot.userIds, ...userIds]),
+        });
+      } else {
+        windowedSnapshots.set(window, {
+          id: snapshot.id,
+          createdAt: snapshot.createdAt,
+          userIds: new Set(userIds),
+        });
+      }
+    }
+
+    const retainedSnapshots = [...windowedSnapshots.values()].toSorted((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
+
+    if (retainedSnapshots.length === snapshots.length) {
+      await db.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
+      return;
+    }
+
+    const content = await db
+      .select({ update: PostContents.update })
+      .from(PostContents)
+      .where(eq(PostContents.postId, postId))
+      .then(firstOrThrow);
+
+    const oldDoc = new Y.Doc({ gc: false });
+    Y.applyUpdateV2(oldDoc, content.update);
+
+    const newDoc = new Y.Doc({ gc: false });
+
+    type CompactedSnapshot = {
+      snapshot: Uint8Array;
+      createdAt: dayjs.Dayjs;
+      userIds: string[];
+    };
+
+    const compactedSnapshots: CompactedSnapshot[] = [];
+
+    let index = 0;
+    for (const retainedSnapshot of retainedSnapshots) {
+      const { snapshot: snapshotData } = await db
+        .select({ snapshot: PostSnapshots.snapshot })
         .from(PostSnapshots)
-        .where(eq(PostSnapshots.postId, postId))
-        .orderBy(asc(PostSnapshots.createdAt), asc(PostSnapshots.order));
-
-      if (snapshots.length === 0) {
-        await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
-        return;
-      }
-
-      const contributors = await tx
-        .select({ snapshotId: PostSnapshotContributors.snapshotId, userId: PostSnapshotContributors.userId })
-        .from(PostSnapshotContributors)
-        .innerJoin(PostSnapshots, eq(PostSnapshotContributors.snapshotId, PostSnapshots.id))
-        .where(eq(PostSnapshots.postId, postId));
-
-      const contributorsBySnapshotId = new Map<string, Set<string>>();
-      for (const contributor of contributors) {
-        const userIds = contributorsBySnapshotId.get(contributor.snapshotId) ?? new Set();
-        userIds.add(contributor.userId);
-        contributorsBySnapshotId.set(contributor.snapshotId, userIds);
-      }
-
-      const threshold24h = dayjs().subtract(24, 'hours');
-      const threshold2w = dayjs().subtract(2, 'weeks');
-      const windowedSnapshots = new Map<string, Snapshot>();
-
-      for (const snapshot of snapshots) {
-        const userIds = [...(contributorsBySnapshotId.get(snapshot.id) ?? [])];
-
-        const window = snapshot.createdAt.isAfter(threshold24h)
-          ? snapshot.createdAt.toISOString()
-          : snapshot.createdAt.isAfter(threshold2w)
-            ? snapshot.createdAt.startOf('minute').toISOString()
-            : snapshot.createdAt.startOf('hour').toISOString();
-
-        const windowedSnapshot = windowedSnapshots.get(window);
-
-        if (windowedSnapshot) {
-          windowedSnapshots.set(window, {
-            id: snapshot.id,
-            createdAt: snapshot.createdAt,
-            userIds: new Set([...windowedSnapshot.userIds, ...userIds]),
-          });
-        } else {
-          windowedSnapshots.set(window, {
-            id: snapshot.id,
-            createdAt: snapshot.createdAt,
-            userIds: new Set(userIds),
-          });
-        }
-      }
-
-      const retainedSnapshots = [...windowedSnapshots.values()].toSorted((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
-
-      if (retainedSnapshots.length === snapshots.length) {
-        await tx.update(PostContents).set({ compactedAt: dayjs() }).where(eq(PostContents.postId, postId));
-        return;
-      }
-
-      const content = await tx
-        .select({ update: PostContents.update })
-        .from(PostContents)
-        .where(eq(PostContents.postId, postId))
+        .where(eq(PostSnapshots.id, retainedSnapshot.id))
         .then(firstOrThrow);
 
-      const oldDoc = new Y.Doc({ gc: false });
-      Y.applyUpdateV2(oldDoc, content.update);
-
-      await tx.delete(PostSnapshots).where(
-        and(
-          eq(PostSnapshots.postId, postId),
-          notInArray(
-            PostSnapshots.id,
-            retainedSnapshots.map(({ id }) => id),
-          ),
-        ),
-      );
-
-      const newDoc = new Y.Doc({ gc: false });
-      let index = 0;
-
-      for (const snapshot of retainedSnapshots) {
-        const { snapshot: snapshotData } = await tx
-          .delete(PostSnapshots)
-          .where(eq(PostSnapshots.id, snapshot.id))
-          .returning({ snapshot: PostSnapshots.snapshot })
-          .then(firstOrThrow);
-
-        let snapshotDoc;
-        try {
-          const decompressedSnapshot = await decompressZstd(snapshotData);
-          snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
-        } catch {
-          continue;
-        }
+      try {
+        const decompressedSnapshot = await decompressZstd(snapshotData);
+        const snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
 
         if (index === 0) {
           Y.applyUpdateV2(newDoc, Y.encodeStateAsUpdateV2(snapshotDoc));
@@ -420,61 +442,78 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         const newSnapshotData = Y.encodeSnapshotV2(Y.snapshot(newDoc));
         const compressedNewSnapshot = await compressZstd(newSnapshotData);
 
+        compactedSnapshots.push({
+          snapshot: compressedNewSnapshot,
+          createdAt: retainedSnapshot.createdAt,
+          userIds: [...retainedSnapshot.userIds],
+        });
+
+        index++;
+      } catch {
+        continue;
+      }
+    }
+
+    const beforeSnapshot = Y.snapshot(newDoc);
+
+    const newStateVector = Y.encodeStateVector(newDoc);
+    const oldStateVector = Y.encodeStateVector(oldDoc);
+
+    const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, oldStateVector);
+
+    const undoManager = new Y.UndoManager(oldDoc, { trackedOrigins: new Set(['snapshot']) });
+    Y.applyUpdateV2(oldDoc, missingUpdate, 'snapshot');
+    undoManager.undo();
+
+    const revertUpdate = Y.encodeStateAsUpdateV2(oldDoc, newStateVector);
+    Y.applyUpdateV2(newDoc, revertUpdate);
+
+    const afterSnapshot = Y.snapshot(newDoc);
+
+    if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
+      const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
+      const compressedFinalSnapshot = await compressZstd(finalSnapshotData);
+
+      compactedSnapshots.push({
+        snapshot: compressedFinalSnapshot,
+        createdAt: dayjs(),
+        userIds: [],
+      });
+    }
+
+    const finalUpdate = Y.encodeStateAsUpdateV2(newDoc);
+    const finalVector = Y.encodeStateVector(newDoc);
+
+    await db.transaction(async (tx) => {
+      await tx.delete(PostSnapshots).where(eq(PostSnapshots.postId, postId));
+
+      for (const snapshot of compactedSnapshots) {
         const postSnapshot = await tx
           .insert(PostSnapshots)
           .values({
             postId,
-            snapshot: compressedNewSnapshot,
+            snapshot: snapshot.snapshot,
             createdAt: snapshot.createdAt,
             order: 0,
           })
           .returning({ id: PostSnapshots.id })
           .then(firstOrThrow);
 
-        if (snapshot.userIds.size > 0) {
+        if (snapshot.userIds.length > 0) {
           await tx.insert(PostSnapshotContributors).values(
-            [...snapshot.userIds].map((userId) => ({
+            snapshot.userIds.map((userId) => ({
               snapshotId: postSnapshot.id,
               userId,
             })),
           );
         }
-
-        index++;
-      }
-
-      const beforeSnapshot = Y.snapshot(newDoc);
-
-      const newStateVector = Y.encodeStateVector(newDoc);
-      const oldStateVector = Y.encodeStateVector(oldDoc);
-
-      const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, oldStateVector);
-
-      const undoManager = new Y.UndoManager(oldDoc, { trackedOrigins: new Set(['snapshot']) });
-      Y.applyUpdateV2(oldDoc, missingUpdate, 'snapshot');
-      undoManager.undo();
-
-      const revertUpdate = Y.encodeStateAsUpdateV2(oldDoc, newStateVector);
-      Y.applyUpdateV2(newDoc, revertUpdate);
-
-      const afterSnapshot = Y.snapshot(newDoc);
-
-      if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
-        const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
-        const compressedFinalSnapshot = await compressZstd(finalSnapshotData);
-
-        await tx.insert(PostSnapshots).values({
-          postId,
-          snapshot: compressedFinalSnapshot,
-          order: 0,
-        });
       }
 
       await tx
         .update(PostContents)
         .set({
-          update: Y.encodeStateAsUpdateV2(newDoc),
-          vector: Y.encodeStateVector(newDoc),
+          update: finalUpdate,
+          vector: finalVector,
           compactedAt: dayjs(),
         })
         .where(eq(PostContents.postId, postId));

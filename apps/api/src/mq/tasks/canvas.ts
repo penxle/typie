@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/bun';
 import dayjs from 'dayjs';
-import { and, asc, eq, gt, lt, lte, notInArray, or } from 'drizzle-orm';
+import { and, asc, eq, gt, lt, lte, or } from 'drizzle-orm';
 import * as R from 'remeda';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
@@ -23,7 +23,7 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
   }
 
   let updates: string[] = [];
-  let snapshotUpdated = false;
+  let updated = false;
 
   try {
     updates = (await redis.rpop(`canvas:sync:updates:${canvasId}`, 5)) ?? [];
@@ -31,88 +31,109 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
       return;
     }
 
-    await db.transaction(async (tx) => {
-      const canvas = await tx
-        .select({
-          id: Canvases.id,
-          update: CanvasContents.update,
-          siteId: Entities.siteId,
-        })
-        .from(Canvases)
-        .innerJoin(CanvasContents, eq(Canvases.id, CanvasContents.canvasId))
-        .innerJoin(Entities, eq(Canvases.entityId, Entities.id))
-        .where(eq(Canvases.id, canvasId))
-        .then(firstOrThrow);
+    const canvas = await db
+      .select({
+        id: Canvases.id,
+        update: CanvasContents.update,
+        siteId: Entities.siteId,
+      })
+      .from(Canvases)
+      .innerJoin(CanvasContents, eq(Canvases.id, CanvasContents.canvasId))
+      .innerJoin(Entities, eq(Canvases.entityId, Entities.id))
+      .where(eq(Canvases.id, canvasId))
+      .then(firstOrThrow);
 
-      const pendingUpdates = R.groupBy(
-        updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
-        ({ userId }) => userId,
-      );
+    const pendingUpdates = R.groupBy(
+      updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
+      ({ userId }) => userId,
+    );
 
-      const doc = new Y.Doc({ gc: false });
-      Y.applyUpdateV2(doc, canvas.update);
+    const doc = new Y.Doc({ gc: false });
+    Y.applyUpdateV2(doc, canvas.update);
 
-      let order = 0;
+    let order = 0;
 
-      for (const [userId, data] of Object.entries(pendingUpdates)) {
-        const prevSnapshot = Y.snapshot(doc);
-        const update = Y.mergeUpdatesV2(data.map(({ data }) => Uint8Array.fromBase64(data)));
+    type Snapshot = {
+      userId: string;
+      snapshot: Uint8Array;
+      order: number;
+    };
 
-        Y.applyUpdateV2(doc, update);
-        const snapshot = Y.snapshot(doc);
+    const snapshots: Snapshot[] = [];
 
-        if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
-          snapshotUpdated = true;
+    for (const [userId, data] of Object.entries(pendingUpdates)) {
+      const prevSnapshot = Y.snapshot(doc);
+      const update = Y.mergeUpdatesV2(data.map(({ data }) => Uint8Array.fromBase64(data)));
 
-          const snapshotData = Y.encodeSnapshotV2(snapshot);
-          const compressedSnapshot = await compressZstd(snapshotData);
+      Y.applyUpdateV2(doc, update);
+      const snapshot = Y.snapshot(doc);
 
+      if (!Y.equalSnapshots(prevSnapshot, snapshot)) {
+        const snapshotData = Y.encodeSnapshotV2(snapshot);
+        const compressedSnapshot = await compressZstd(snapshotData);
+
+        snapshots.push({
+          userId,
+          snapshot: compressedSnapshot,
+          order: order++,
+        });
+      }
+    }
+
+    const finalUpdate = Y.encodeStateAsUpdateV2(doc);
+    const finalVector = Y.encodeStateVector(doc);
+
+    if (snapshots.length > 0) {
+      const map = doc.getMap('attrs');
+      const title = (map.get('title') as string) || null;
+
+      const fragment = doc.getXmlFragment('shapes');
+      const shapes: CanvasShape[] = [];
+      fragment.forEach((element) => {
+        if (element instanceof Y.XmlElement) {
+          const type = element.nodeName;
+          const attrs: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(element.getAttributes())) {
+            if (value !== undefined && value !== null) {
+              attrs[key] = JSON.parse(value as string);
+            }
+          }
+
+          shapes.push({ type, attrs });
+        }
+      });
+
+      const updatedAt = dayjs();
+
+      const sanitizedShapes = JSON.parse(JSON.stringify(shapes).replaceAll(String.raw`\u0000`, ''));
+
+      await db.transaction(async (tx) => {
+        for (const snapshot of snapshots) {
           const canvasSnapshot = await tx
             .insert(CanvasSnapshots)
             .values({
               canvasId,
-              snapshot: compressedSnapshot,
-              order: order++,
+              snapshot: snapshot.snapshot,
+              order: snapshot.order,
             })
             .returning({ id: CanvasSnapshots.id })
             .then(firstOrThrow);
 
           await tx.insert(CanvasSnapshotContributors).values({
             snapshotId: canvasSnapshot.id,
-            userId,
+            userId: snapshot.userId,
           });
         }
-      }
 
-      await tx
-        .update(CanvasContents)
-        .set({
-          update: Y.encodeStateAsUpdateV2(doc),
-          vector: Y.encodeStateVector(doc),
-        })
-        .where(eq(CanvasContents.canvasId, canvasId));
-
-      if (snapshotUpdated) {
-        const map = doc.getMap('attrs');
-        const title = (map.get('title') as string) || null;
-
-        const fragment = doc.getXmlFragment('shapes');
-        const shapes: CanvasShape[] = [];
-        fragment.forEach((element) => {
-          if (element instanceof Y.XmlElement) {
-            const type = element.nodeName;
-            const attrs: Record<string, unknown> = {};
-            for (const [key, value] of Object.entries(element.getAttributes())) {
-              if (value !== undefined && value !== null) {
-                attrs[key] = JSON.parse(value as string);
-              }
-            }
-
-            shapes.push({ type, attrs });
-          }
-        });
-
-        const updatedAt = dayjs();
+        await tx
+          .update(CanvasContents)
+          .set({
+            update: finalUpdate,
+            vector: finalVector,
+            shapes: sanitizedShapes,
+            updatedAt,
+          })
+          .where(eq(CanvasContents.canvasId, canvasId));
 
         await tx
           .update(Canvases)
@@ -122,19 +143,19 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
           })
           .where(eq(Canvases.id, canvasId));
 
-        const sanitizedShapes = JSON.parse(JSON.stringify(shapes).replaceAll(String.raw`\u0000`, ''));
+        lock.signal.throwIfAborted();
+      });
 
-        await tx
-          .update(CanvasContents)
-          .set({
-            shapes: sanitizedShapes,
-            updatedAt,
-          })
-          .where(eq(CanvasContents.canvasId, canvasId));
-      }
-
-      lock.signal.throwIfAborted();
-    });
+      updated = true;
+    } else {
+      await db
+        .update(CanvasContents)
+        .set({
+          update: finalUpdate,
+          vector: finalVector,
+        })
+        .where(eq(CanvasContents.canvasId, canvasId));
+    }
   } catch (err) {
     Sentry.captureException(err);
 
@@ -150,7 +171,7 @@ export const CanvasSyncCollectJob = defineJob('canvas:sync:collect', async (canv
     await enqueueJob('canvas:sync:collect', canvasId);
   }
 
-  if (snapshotUpdated) {
+  if (updated) {
     const { siteId, entityId } = await db
       .select({ siteId: Entities.siteId, entityId: Entities.id })
       .from(Canvases)
@@ -181,8 +202,6 @@ export const CanvasSyncScanCron = defineCron('canvas:sync:scan', '* * * * *', as
   );
 });
 
-type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
-
 export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: string) => {
   const lock = new Lock(`canvas:${canvasId}`);
 
@@ -192,104 +211,105 @@ export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: str
   }
 
   try {
-    await db.transaction(async (tx) => {
-      const snapshots = await tx
-        .select({ id: CanvasSnapshots.id, createdAt: CanvasSnapshots.createdAt })
+    type Snapshot = { id: string; createdAt: dayjs.Dayjs; userIds: Set<string> };
+
+    const snapshots = await db
+      .select({
+        id: CanvasSnapshots.id,
+        createdAt: CanvasSnapshots.createdAt,
+      })
+      .from(CanvasSnapshots)
+      .where(eq(CanvasSnapshots.canvasId, canvasId))
+      .orderBy(asc(CanvasSnapshots.createdAt), asc(CanvasSnapshots.order));
+
+    if (snapshots.length === 0) {
+      await db.update(CanvasContents).set({ compactedAt: dayjs() }).where(eq(CanvasContents.canvasId, canvasId));
+      return;
+    }
+
+    const contributors = await db
+      .select({
+        snapshotId: CanvasSnapshotContributors.snapshotId,
+        userId: CanvasSnapshotContributors.userId,
+      })
+      .from(CanvasSnapshotContributors)
+      .innerJoin(CanvasSnapshots, eq(CanvasSnapshotContributors.snapshotId, CanvasSnapshots.id))
+      .where(eq(CanvasSnapshots.canvasId, canvasId));
+
+    const contributorsBySnapshotId = new Map<string, Set<string>>();
+    for (const contributor of contributors) {
+      const userIds = contributorsBySnapshotId.get(contributor.snapshotId) ?? new Set();
+      userIds.add(contributor.userId);
+      contributorsBySnapshotId.set(contributor.snapshotId, userIds);
+    }
+
+    const threshold24h = dayjs().subtract(24, 'hours');
+    const threshold2w = dayjs().subtract(2, 'weeks');
+    const windowedSnapshots = new Map<string, Snapshot>();
+
+    for (const snapshot of snapshots) {
+      const userIds = [...(contributorsBySnapshotId.get(snapshot.id) ?? [])];
+
+      const window = snapshot.createdAt.isAfter(threshold24h)
+        ? snapshot.createdAt.toISOString()
+        : snapshot.createdAt.isAfter(threshold2w)
+          ? snapshot.createdAt.startOf('minute').toISOString()
+          : snapshot.createdAt.startOf('hour').toISOString();
+
+      const windowedSnapshot = windowedSnapshots.get(window);
+
+      if (windowedSnapshot) {
+        windowedSnapshots.set(window, {
+          id: snapshot.id,
+          createdAt: snapshot.createdAt,
+          userIds: new Set([...windowedSnapshot.userIds, ...userIds]),
+        });
+      } else {
+        windowedSnapshots.set(window, {
+          id: snapshot.id,
+          createdAt: snapshot.createdAt,
+          userIds: new Set(userIds),
+        });
+      }
+    }
+
+    const retainedSnapshots = [...windowedSnapshots.values()].toSorted((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
+
+    if (retainedSnapshots.length === snapshots.length) {
+      await db.update(CanvasContents).set({ compactedAt: dayjs() }).where(eq(CanvasContents.canvasId, canvasId));
+      return;
+    }
+
+    const content = await db
+      .select({ update: CanvasContents.update })
+      .from(CanvasContents)
+      .where(eq(CanvasContents.canvasId, canvasId))
+      .then(firstOrThrow);
+
+    const oldDoc = new Y.Doc({ gc: false });
+    Y.applyUpdateV2(oldDoc, content.update);
+
+    const newDoc = new Y.Doc({ gc: false });
+
+    type CompactedSnapshot = {
+      snapshot: Uint8Array;
+      createdAt: dayjs.Dayjs;
+      userIds: string[];
+    };
+
+    const compactedSnapshots: CompactedSnapshot[] = [];
+
+    let index = 0;
+    for (const retainedSnapshot of retainedSnapshots) {
+      const { snapshot: snapshotData } = await db
+        .select({ snapshot: CanvasSnapshots.snapshot })
         .from(CanvasSnapshots)
-        .where(eq(CanvasSnapshots.canvasId, canvasId))
-        .orderBy(asc(CanvasSnapshots.createdAt), asc(CanvasSnapshots.order));
-
-      if (snapshots.length === 0) {
-        await tx.update(CanvasContents).set({ compactedAt: dayjs() }).where(eq(CanvasContents.canvasId, canvasId));
-        return;
-      }
-
-      const contributors = await tx
-        .select({ snapshotId: CanvasSnapshotContributors.snapshotId, userId: CanvasSnapshotContributors.userId })
-        .from(CanvasSnapshotContributors)
-        .innerJoin(CanvasSnapshots, eq(CanvasSnapshotContributors.snapshotId, CanvasSnapshots.id))
-        .where(eq(CanvasSnapshots.canvasId, canvasId));
-
-      const contributorsBySnapshotId = new Map<string, Set<string>>();
-      for (const contributor of contributors) {
-        const userIds = contributorsBySnapshotId.get(contributor.snapshotId) ?? new Set();
-        userIds.add(contributor.userId);
-        contributorsBySnapshotId.set(contributor.snapshotId, userIds);
-      }
-
-      const threshold24h = dayjs().subtract(24, 'hours');
-      const threshold2w = dayjs().subtract(2, 'weeks');
-      const windowedSnapshots = new Map<string, Snapshot>();
-
-      for (const snapshot of snapshots) {
-        const userIds = [...(contributorsBySnapshotId.get(snapshot.id) ?? [])];
-
-        const window = snapshot.createdAt.isAfter(threshold24h)
-          ? snapshot.createdAt.toISOString()
-          : snapshot.createdAt.isAfter(threshold2w)
-            ? snapshot.createdAt.startOf('minute').toISOString()
-            : snapshot.createdAt.startOf('hour').toISOString();
-
-        const windowedSnapshot = windowedSnapshots.get(window);
-
-        if (windowedSnapshot) {
-          windowedSnapshots.set(window, {
-            id: snapshot.id,
-            createdAt: snapshot.createdAt,
-            userIds: new Set([...windowedSnapshot.userIds, ...userIds]),
-          });
-        } else {
-          windowedSnapshots.set(window, {
-            id: snapshot.id,
-            createdAt: snapshot.createdAt,
-            userIds: new Set(userIds),
-          });
-        }
-      }
-
-      const retainedSnapshots = [...windowedSnapshots.values()].toSorted((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
-
-      if (retainedSnapshots.length === snapshots.length) {
-        await tx.update(CanvasContents).set({ compactedAt: dayjs() }).where(eq(CanvasContents.canvasId, canvasId));
-        return;
-      }
-
-      const content = await tx
-        .select({ update: CanvasContents.update })
-        .from(CanvasContents)
-        .where(eq(CanvasContents.canvasId, canvasId))
+        .where(eq(CanvasSnapshots.id, retainedSnapshot.id))
         .then(firstOrThrow);
 
-      const oldDoc = new Y.Doc({ gc: false });
-      Y.applyUpdateV2(oldDoc, content.update);
-
-      await tx.delete(CanvasSnapshots).where(
-        and(
-          eq(CanvasSnapshots.canvasId, canvasId),
-          notInArray(
-            CanvasSnapshots.id,
-            retainedSnapshots.map(({ id }) => id),
-          ),
-        ),
-      );
-
-      const newDoc = new Y.Doc({ gc: false });
-      let index = 0;
-
-      for (const snapshot of retainedSnapshots) {
-        const { snapshot: snapshotData } = await tx
-          .delete(CanvasSnapshots)
-          .where(eq(CanvasSnapshots.id, snapshot.id))
-          .returning({ snapshot: CanvasSnapshots.snapshot })
-          .then(firstOrThrow);
-
-        let snapshotDoc;
-        try {
-          const decompressedSnapshot = await decompressZstd(snapshotData);
-          snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
-        } catch {
-          continue;
-        }
+      try {
+        const decompressedSnapshot = await decompressZstd(snapshotData);
+        const snapshotDoc = Y.createDocFromSnapshot(oldDoc, Y.decodeSnapshotV2(decompressedSnapshot));
 
         if (index === 0) {
           Y.applyUpdateV2(newDoc, Y.encodeStateAsUpdateV2(snapshotDoc));
@@ -310,61 +330,78 @@ export const CanvasCompactJob = defineJob('canvas:compact', async (canvasId: str
         const newSnapshotData = Y.encodeSnapshotV2(Y.snapshot(newDoc));
         const compressedNewSnapshot = await compressZstd(newSnapshotData);
 
+        compactedSnapshots.push({
+          snapshot: compressedNewSnapshot,
+          createdAt: retainedSnapshot.createdAt,
+          userIds: [...retainedSnapshot.userIds],
+        });
+
+        index++;
+      } catch {
+        continue;
+      }
+    }
+
+    const beforeSnapshot = Y.snapshot(newDoc);
+
+    const newStateVector = Y.encodeStateVector(newDoc);
+    const oldStateVector = Y.encodeStateVector(oldDoc);
+
+    const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, oldStateVector);
+
+    const undoManager = new Y.UndoManager(oldDoc, { trackedOrigins: new Set(['snapshot']) });
+    Y.applyUpdateV2(oldDoc, missingUpdate, 'snapshot');
+    undoManager.undo();
+
+    const revertUpdate = Y.encodeStateAsUpdateV2(oldDoc, newStateVector);
+    Y.applyUpdateV2(newDoc, revertUpdate);
+
+    const afterSnapshot = Y.snapshot(newDoc);
+
+    if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
+      const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
+      const compressedFinalSnapshot = await compressZstd(finalSnapshotData);
+
+      compactedSnapshots.push({
+        snapshot: compressedFinalSnapshot,
+        createdAt: dayjs(),
+        userIds: [],
+      });
+    }
+
+    const finalUpdate = Y.encodeStateAsUpdateV2(newDoc);
+    const finalVector = Y.encodeStateVector(newDoc);
+
+    await db.transaction(async (tx) => {
+      await tx.delete(CanvasSnapshots).where(eq(CanvasSnapshots.canvasId, canvasId));
+
+      for (const snapshot of compactedSnapshots) {
         const canvasSnapshot = await tx
           .insert(CanvasSnapshots)
           .values({
             canvasId,
-            snapshot: compressedNewSnapshot,
+            snapshot: snapshot.snapshot,
             createdAt: snapshot.createdAt,
             order: 0,
           })
           .returning({ id: CanvasSnapshots.id })
           .then(firstOrThrow);
 
-        if (snapshot.userIds.size > 0) {
+        if (snapshot.userIds.length > 0) {
           await tx.insert(CanvasSnapshotContributors).values(
-            [...snapshot.userIds].map((userId) => ({
+            snapshot.userIds.map((userId) => ({
               snapshotId: canvasSnapshot.id,
               userId,
             })),
           );
         }
-
-        index++;
-      }
-
-      const beforeSnapshot = Y.snapshot(newDoc);
-
-      const newStateVector = Y.encodeStateVector(newDoc);
-      const oldStateVector = Y.encodeStateVector(oldDoc);
-
-      const missingUpdate = Y.encodeStateAsUpdateV2(newDoc, oldStateVector);
-
-      const undoManager = new Y.UndoManager(oldDoc, { trackedOrigins: new Set(['snapshot']) });
-      Y.applyUpdateV2(oldDoc, missingUpdate, 'snapshot');
-      undoManager.undo();
-
-      const revertUpdate = Y.encodeStateAsUpdateV2(oldDoc, newStateVector);
-      Y.applyUpdateV2(newDoc, revertUpdate);
-
-      const afterSnapshot = Y.snapshot(newDoc);
-
-      if (!Y.equalSnapshots(beforeSnapshot, afterSnapshot)) {
-        const finalSnapshotData = Y.encodeSnapshotV2(afterSnapshot);
-        const compressedFinalSnapshot = await compressZstd(finalSnapshotData);
-
-        await tx.insert(CanvasSnapshots).values({
-          canvasId,
-          snapshot: compressedFinalSnapshot,
-          order: 0,
-        });
       }
 
       await tx
         .update(CanvasContents)
         .set({
-          update: Y.encodeStateAsUpdateV2(newDoc),
-          vector: Y.encodeStateVector(newDoc),
+          update: finalUpdate,
+          vector: finalVector,
           compactedAt: dayjs(),
         })
         .where(eq(CanvasContents.canvasId, canvasId));
