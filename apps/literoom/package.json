@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup",
-    "build:layers": "node scripts/build-layers.ts",
+    "build": "tsup && bun scripts/package-function.ts",
+    "build:layers": "bun scripts/build-layers.ts",
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
