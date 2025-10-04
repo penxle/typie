@@ -175,17 +175,6 @@
         "zod": "^4.1.11",
       },
     },
-    "apps/infrastructure": {
-      "name": "@typie/infrastructure",
-      "version": "0.0.1",
-      "devDependencies": {
-        "@typie/tsconfig": "workspace:*",
-        "chalk": "^5.6.2",
-        "dedent": "^1.7.0",
-        "fast-glob": "^3.3.3",
-        "typescript": "^5.9.2",
-      },
-    },
     "apps/literoom": {
       "name": "@typie/literoom",
       "version": "0.0.1",
@@ -1918,8 +1907,6 @@
     "@typie/desktop": ["@typie/desktop@workspace:apps/desktop"],
 
     "@typie/fondue": ["@typie/fondue@workspace:crates/fondue"],
-
-    "@typie/infrastructure": ["@typie/infrastructure@workspace:apps/infrastructure"],
 
     "@typie/lib": ["@typie/lib@workspace:packages/lib"],
 

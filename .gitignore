@@ -10,8 +10,8 @@ out/
 .env.local
 kubeconfig
 
-apps/infrastructure/manifests/secrets.yaml
-apps/infrastructure/manifests/patches/secrets.yaml
+infrastructure/machines/secrets.yaml
+infrastructure/machines/patches/secrets.yaml
 
 .svelte-kit/
 .sark/

@@ -4,7 +4,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { $ } from 'bun';
-import chalk from 'chalk';
 
 const NODES = [
   ['axolotl', 'worker'],
@@ -38,9 +37,9 @@ try {
             : `cd ${tempDir} && talosctl machineconfig patch worker.yaml --patch @${process.cwd()}/patches/base.yaml --patch @${process.cwd()}/patches/${name}.yaml --patch @patches-secrets.yaml --output ${name}.yaml`;
 
         await $`sh -c ${patchCmd}`.quiet();
-        console.log(chalk.green(`${name} patched`));
+        console.log(`${name} patched`);
       } catch {
-        console.log(chalk.red(`${name} patch failed`));
+        console.log(`${name} patch failed`);
         throw new Error(`${name} patch failed`);
       }
     }),
@@ -53,16 +52,16 @@ try {
       nodesToDeploy.map(async ([name]) => {
         try {
           await $`talosctl apply-config --nodes ${name} --file ${tempDir}/${name}.yaml`.quiet();
-          console.log(chalk.green(`${name} deployed`));
+          console.log(`${name} deployed`);
         } catch {
-          console.log(chalk.red(`${name} deployment failed`));
+          console.log(`${name} deployment failed`);
           throw new Error(`${name} deployment failed`);
         }
       }),
     );
   }
 } catch (err) {
-  console.error(chalk.red(`Error: ${err}`));
+  console.error(`Error: ${err}`);
   rmSync(tempDir, { recursive: true, force: true });
   process.exit(1);
 }
