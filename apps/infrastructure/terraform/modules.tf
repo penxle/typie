@@ -1,6 +1,8 @@
 module "cloudfront" {
   source = "./modules/cloudfront"
 
+  route53_zone_typie_co_zone_id  = module.route53.zone_typie_co_zone_id
+  route53_zone_typie_me_zone_id  = module.route53.zone_typie_me_zone_id
   route53_zone_typie_net_zone_id = module.route53.zone_typie_net_zone_id
 
   providers = {
@@ -15,6 +17,10 @@ module "ecr" {
 
 module "iam" {
   source = "./modules/iam"
+}
+
+module "lambda" {
+  source = "./modules/lambda"
 }
 
 module "route53" {
