@@ -46,6 +46,16 @@ jobs:
       version: ${{ needs.get-version.outputs.version }}
     secrets: inherit
 
+  deploy-prod-worker:
+    name: Deployment (prod-worker)
+    needs: get-version
+    uses: ./.github/workflows/deployment.yml
+    with:
+      stack: prod
+      app: worker
+      version: ${{ needs.get-version.outputs.version }}
+    secrets: inherit
+
   deploy-prod-website:
     name: Deployment (prod-website)
     needs: get-version
