@@ -22,32 +22,11 @@ jobs:
     with:
       app: website
 
-  deploy-dev-api:
-    name: Deployment (dev-api)
-    needs: build-api
+  deploy-dev:
+    name: Deployment (dev)
+    needs: [build-api, build-website]
     uses: ./.github/workflows/deployment.yml
     with:
       stack: dev
-      app: api
       version: ${{ needs.build-api.outputs.version }}
-    secrets: inherit
-
-  deploy-dev-worker:
-    name: Deployment (dev-worker)
-    needs: build-api
-    uses: ./.github/workflows/deployment.yml
-    with:
-      stack: dev
-      app: worker
-      version: ${{ needs.build-api.outputs.version }}
-    secrets: inherit
-
-  deploy-dev-website:
-    name: Deployment (dev-website)
-    needs: build-website
-    uses: ./.github/workflows/deployment.yml
-    with:
-      stack: dev
-      app: website
-      version: ${{ needs.build-website.outputs.version }}
     secrets: inherit

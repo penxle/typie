@@ -7,14 +7,10 @@ on:
         required: true
         type: string
         description: The stack to deploy to.
-      app:
-        required: true
-        type: string
-        description: The app to deploy.
       version:
         required: true
         type: string
-        description: The version of the image to deploy.
+        description: The version to deploy.
 
 permissions:
   contents: read
@@ -23,7 +19,7 @@ jobs:
   deploy:
     name: Deployment
     runs-on: ubuntu-latest
-    environment: ${{ inputs.stack }}-${{ inputs.app }}
+    environment: ${{ inputs.stack }}
 
     steps:
       - name: Generate GitHub App token
@@ -48,7 +44,7 @@ jobs:
 
       - name: Update version
         run: |
-          cat > apps/${{ inputs.app }}/${{ inputs.stack }}/version.yaml << EOF
+          cat > apps/base/version.${{ inputs.stack }}.yaml << EOF
           image:
             version: ${{ inputs.version }}
           EOF
@@ -57,6 +53,6 @@ jobs:
         run: |
           git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-          git add apps/${{ inputs.app }}/${{ inputs.stack }}/version.yaml
-          git commit -m "Deploy ${{ inputs.app }} to ${{ inputs.stack }}: ${{ inputs.version }}"
+          git add apps/base/version.${{ inputs.stack }}.yaml
+          git commit -m "Deploy to ${{ inputs.stack }}: ${{ inputs.version }}"
           git push
