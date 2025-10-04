@@ -74,7 +74,6 @@ penxle
 pgbouncer
 plpgsql
 pooler
-pulumi
 rabbitmq
 remeda
 resizer

@@ -22,7 +22,7 @@ export default {
           ...config.compilerOptions,
           rootDirs: [...config.compilerOptions.rootDirs, '../.sark/types'],
         },
-        include: [...config.include, '../pulumi/**/*.ts', '../scripts/**/*.ts'],
+        include: [...config.include, '../scripts/**/*.ts'],
       }),
     },
     version: { pollInterval: 60 * 1000 },
