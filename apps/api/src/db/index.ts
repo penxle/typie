@@ -9,8 +9,12 @@ import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 const sql = postgres(env.DATABASE_URL, {
   max: dev ? 20 : 50,
   connect_timeout: 5,
-  idle_timeout: 0,
+  idle_timeout: 30,
   prepare: false,
+  connection: {
+    statement_timeout: 30_000,
+    idle_in_transaction_session_timeout: 60_000,
+  },
 });
 
 export const db = drizzle(sql, {
