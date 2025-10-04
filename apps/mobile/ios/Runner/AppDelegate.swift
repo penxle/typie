@@ -11,12 +11,22 @@ import UIKit
 
     UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
 
-    let registrar = self.registrar(forPlugin: "co.typie.webview")
-    let factory = AppWebViewFactory(messenger: registrar!.messenger())
-    registrar?.register(factory, withId: "co.typie.webview")
+    PluginRegistration.registerCustomPlugins(with: self)
 
-    KeyboardPlugin.register(with: self.registrar(forPlugin: "co.typie.keyboard")!)
-    
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  @available(iOS 13.0, *)
+  override func application(
+    _ application: UIApplication,
+    configurationForConnecting connectingSceneSession: UISceneSession,
+    options: UIScene.ConnectionOptions
+  ) -> UISceneConfiguration {
+    let configuration = UISceneConfiguration(
+      name: "Default Configuration",
+      sessionRole: connectingSceneSession.role
+    )
+    configuration.delegateClass = SceneDelegate.self
+    return configuration
   }
 }

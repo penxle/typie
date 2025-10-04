@@ -19,10 +19,11 @@
 		B60149392DD4D5460055A06B /* AppWKWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60149382DD4D53F0055A06B /* AppWKWebView.swift */; };
 		B67D40782DD26A43002679B6 /* Configuration.storekit in Resources */ = {isa = PBXBuildFile; fileRef = B67D40772DD26A43002679B6 /* Configuration.storekit */; };
 		B6D0B1912DEDFA1600CC8EF8 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B6D0B1902DEDFA1600CC8EF8 /* InfoPlist.xcstrings */; };
-		B6D0B1972DEDFC6400CC8EF8 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B6D0B1962DEDFC6400CC8EF8 /* Main.storyboard */; };
 		B6D0B1992DEDFC6800CC8EF8 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */; };
 		B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC503E2DD388C900F2B218 /* AppWebView.swift */; };
 		B6FC50412DD3890600F2B218 /* AppWebViewFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */; };
+		EE3F87482E8FA704001774E2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3F87472E8FA704001774E2 /* SceneDelegate.swift */; };
+		EE3F874A2E8FAB02001774E2 /* PluginRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3F87492E8FAB02001774E2 /* PluginRegistration.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,13 +74,14 @@
 		B625650C2DD0A1F500958764 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		B67D40772DD26A43002679B6 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration.storekit; sourceTree = "<group>"; };
 		B6D0B1902DEDFA1600CC8EF8 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
-		B6D0B1962DEDFC6400CC8EF8 /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
 		B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		B6FC503E2DD388C900F2B218 /* AppWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWebView.swift; sourceTree = "<group>"; };
 		B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWebViewFactory.swift; sourceTree = "<group>"; };
 		BE9D161B413A5C0F3D8C8AEC /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		D9C07B5B2DCBD84C39AAE9CD /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		E0459602D6C5E3C898370C72 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		EE3F87472E8FA704001774E2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		EE3F87492E8FAB02001774E2 /* PluginRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginRegistration.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,10 +156,11 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				EE3F87492E8FAB02001774E2 /* PluginRegistration.swift */,
+				EE3F87472E8FA704001774E2 /* SceneDelegate.swift */,
 				B60149352DD4C8E00055A06B /* Keyboard */,
 				B6FC503C2DD3882000F2B218 /* WebView */,
 				B625650C2DD0A1F500958764 /* Runner.entitlements */,
-				B6D0B1962DEDFC6400CC8EF8 /* Main.storyboard */,
 				B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C147021CF9000F007C117D /* Info.plist */,
@@ -302,7 +305,6 @@
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
 				B6D0B1912DEDFA1600CC8EF8 /* InfoPlist.xcstrings in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
-				B6D0B1972DEDFC6400CC8EF8 /* Main.storyboard in Resources */,
 				B67D40782DD26A43002679B6 /* Configuration.storekit in Resources */,
 				B6D0B1992DEDFC6800CC8EF8 /* LaunchScreen.storyboard in Resources */,
 				5E66CF64DF7CADE78DF022A6 /* GoogleService-Info.plist in Resources */,
@@ -429,9 +431,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				B6FC50412DD3890600F2B218 /* AppWebViewFactory.swift in Sources */,
+				EE3F87482E8FA704001774E2 /* SceneDelegate.swift in Sources */,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				B60149372DD4C8F00055A06B /* KeyboardPlugin.swift in Sources */,
 				B60149392DD4D5460055A06B /* AppWKWebView.swift in Sources */,
+				EE3F874A2E8FAB02001774E2 /* PluginRegistration.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */,
 			);
