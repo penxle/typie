@@ -21,16 +21,16 @@
     "test": "turbo run test"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.22",
+    "@types/bun": "^1.2.23",
     "@typie/lintconfig": "workspace:*",
     "cspell": "^9.2.1",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.2",
+    "lint-staged": "^16.2.3",
     "prettier": "^3.6.2",
     "syncpack": "^13.0.4",
     "turbo": "^2.5.8",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   },
   "packageManager": "bun@1.2.20"
 }

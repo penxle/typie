@@ -27,11 +27,11 @@
     "lint:typescript": "tsc"
   },
   "dependencies": {
-    "@pandacss/preset-base": "^1.4.0"
+    "@pandacss/preset-base": "^1.4.1"
   },
   "devDependencies": {
-    "@pandacss/dev": "^1.4.0",
+    "@pandacss/dev": "^1.4.1",
     "@typie/tsconfig": "workspace:*",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   }
 }

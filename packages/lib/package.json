@@ -25,14 +25,14 @@
     "ts-pattern": "^5.8.0"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.43.5",
-    "@types/bun": "^1.2.22",
+    "@sveltejs/kit": "^2.43.8",
+    "@types/bun": "^1.2.23",
     "@typie/tsconfig": "workspace:*",
     "postcss": "^8.5.6",
-    "svelte": "^5.39.6",
+    "svelte": "^5.39.8",
     "svgo": "^4.0.0",
-    "typescript": "^5.9.2",
-    "vite": "^7.1.7",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9",
     "xmlbuilder2": "^3.1.1"
   }
 }
