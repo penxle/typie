@@ -77,37 +77,6 @@ resource "aws_iam_access_key" "cert_manager" {
   user = aws_iam_user.cert_manager.name
 }
 
-resource "aws_iam_user" "postgres" {
-  name = "postgres@k8s"
-}
-
-resource "aws_iam_user_policy" "postgres" {
-  user = aws_iam_user.postgres.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket",
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
-        ]
-        Resource = [
-          "arn:aws:s3:::typie-postgres",
-          "arn:aws:s3:::typie-postgres/*"
-        ]
-      }
-    ]
-  })
-}
-
-resource "aws_iam_access_key" "postgres" {
-  user = aws_iam_user.postgres.name
-}
-
 resource "aws_iam_user" "api" {
   name = "api@k8s"
 }

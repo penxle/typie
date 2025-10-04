@@ -34,18 +34,6 @@ resource "aws_ssm_parameter" "cert_manager_aws_secret_access_key" {
   value = aws_iam_access_key.cert_manager.secret
 } 
 
-resource "aws_ssm_parameter" "postgres_aws_access_key_id" {
-  name  = "/postgres/aws_access_key_id"
-  type  = "SecureString"
-  value = aws_iam_access_key.postgres.id
-}
-
-resource "aws_ssm_parameter" "postgres_aws_secret_access_key" {
-  name  = "/postgres/aws_secret_access_key"
-  type  = "SecureString"
-  value = aws_iam_access_key.postgres.secret
-}
-
 resource "aws_ssm_parameter" "api_aws_access_key_id" {
   name  = "/api/aws_access_key_id"
   type  = "SecureString"
