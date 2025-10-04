@@ -1,7 +1,6 @@
 machine:
   network:
-    hostname: quokka
+    hostname: axolotl
 
   nodeLabels:
-    volumes.typie.io/attach: 'true'
     volumes.typie.io/zfs: 'true'
