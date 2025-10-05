@@ -33,6 +33,10 @@ cluster:
   apiServer:
     extraArgs:
       enable-aggregator-routing: 'true'
+      oidc-issuer-url: https://dex.typie.io
+      oidc-client-id: kubernetes
+      oidc-username-claim: email
+      oidc-groups-claim: groups
 
     admissionControl:
       - name: PodSecurity
