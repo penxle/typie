@@ -84,6 +84,7 @@
   }}
   items={weightItems}
   label="폰트 두께"
+  onEscape={() => editor?.current.commands.focus()}
   onchange={(weight, options) => {
     const chain = editor?.current.chain().setFontWeight(weight);
     if (options?.shouldFocus) {
