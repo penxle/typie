@@ -259,13 +259,19 @@
       upperNote = notes[currentIndex + 1] ?? null;
 
       try {
+        const { noteId } = dragging;
         await moveNote({
-          noteId: dragging.noteId,
+          noteId,
           lowerOrder: lowerNote?.order,
           upperOrder: upperNote?.order,
         });
         mixpanel.track('move_note');
         cache.invalidate({ __typename: 'Query', field: 'notes' });
+
+        const movedNote = sortedNotes.find((n) => n.id === noteId);
+        if (movedNote?.entity?.id) {
+          cache.invalidate({ __typename: 'Entity', id: movedNote.entity.id, field: 'notes' });
+        }
       } catch {
         localNoteOrder = $query.notes.map((note) => note.id);
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
