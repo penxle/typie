@@ -36,10 +36,7 @@ resource "aws_cloudfront_origin_request_policy" "dynamic" {
 
     headers {
       items = [
-        "CloudFront-Viewer-Address",
-        "CloudFront-Viewer-Country-Name",
-        "CloudFront-Viewer-Country-Region-Name",
-        "CloudFront-Viewer-City",
+        "CloudFront-Viewer-Address"
       ]
     }
   }
