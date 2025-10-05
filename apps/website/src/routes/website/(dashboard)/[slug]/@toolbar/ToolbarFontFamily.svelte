@@ -14,9 +14,7 @@
   import { cache, fragment, graphql } from '$graphql';
   import { uploadBlob } from '$lib/utils';
   import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
-  import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
-  import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
-  import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
+  import ToolbarSearchableDropdown from './ToolbarSearchableDropdown.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type { Editor_BottomToolbar_FontFamily_user } from '$graphql';
@@ -70,19 +68,12 @@
     invalid_font_style: '폰트가 기울어져 있어요.',
   };
 
-  const currentFontFamily = $derived.by(() => {
-    const fonts = $user.fontFamilies.flatMap((f) => f.fonts);
-    if (fonts.length === 0) return null;
+  const currentFontFamilyValue = $derived(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily);
 
-    const fontIdOrFontFamilyId = editor?.current.getAttributes('text_style').fontFamily;
-    if (!fontIdOrFontFamilyId) return null;
-
-    const fontFamily = $user.fontFamilies.find(
-      ({ id, fonts }) => id === fontIdOrFontFamilyId || fonts.some(({ id }) => id === fontIdOrFontFamilyId),
-    );
-    if (!fontFamily) return null;
-
-    return fontFamily;
+  const allFontFamilies = $derived.by(() => {
+    const systemFonts = values.fontFamily.map((f) => ({ value: f.value, label: f.label }));
+    const userFonts = $user.subscription ? $user.fontFamilies.map((f) => ({ value: f.id, label: f.name })) : [];
+    return [...systemFonts, ...userFonts];
   });
 
   const getDefaultWeight = (fontFamilyOrId: string, fontWeight: number) => {
@@ -238,89 +229,54 @@
   };
 </script>
 
-<ToolbarDropdownButton
+{#snippet uploadFontFamilyItem()}
+  <div class={flex({ alignItems: 'center', gap: '4px' })}>
+    <Icon
+      style={css.raw({ color: 'text.faint', transitionProperty: '[none]', _groupHover: { color: 'text.brand' } })}
+      icon={PlusIcon}
+      size={14}
+    />
+    <span class={css({ color: 'text.subtle', _groupHover: { color: 'text.brand' } })}>직접 업로드</span>
+  </div>
+{/snippet}
+
+<ToolbarSearchableDropdown
   style={css.raw({ width: '120px' })}
-  chevron
   disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
+  extraItems={[
+    {
+      onclick: () => {
+        if ($user.subscription) {
+          open = true;
+        } else {
+          planUpgradeOpen = true;
+        }
+      },
+      content: uploadFontFamilyItem,
+    },
+  ]}
+  getLabel={(value) => {
+    const item = allFontFamilies.find((f) => f.value === value);
+    return item?.label ?? '(알 수 없는 폰트)';
+  }}
+  items={allFontFamilies}
   label="글씨 서체"
-  onEscape={() => editor?.current.commands.focus()}
-  size="small"
+  onchange={(fontFamilyValue, options) => {
+    const fontWeight = editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight;
+    const defaultWeight = getDefaultWeight(fontFamilyValue, fontWeight) ?? defaultValues.fontWeight;
+
+    const chain = editor?.current.chain().setFontFamily(fontFamilyValue).setFontWeight(defaultWeight);
+    if (options?.shouldFocus) {
+      chain?.focus();
+    }
+    chain?.run();
+  }}
+  value={currentFontFamilyValue}
 >
-  {#snippet anchor()}
-    <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle', lineClamp: '1' })}>
-      {values.fontFamily.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily))
-        ?.label ??
-        currentFontFamily?.name ??
-        '(알 수 없는 폰트)'}
-    </div>
+  {#snippet renderItem(item)}
+    <div style:font-family={item.value}>{item.label}</div>
   {/snippet}
-
-  {#snippet floating({ close, opened })}
-    <ToolbarDropdownMenu onclose={close} {opened}>
-      {#each values.fontFamily as { label, value } (value)}
-        <ToolbarDropdownMenuItem
-          active={(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily) === value}
-          onclick={() => {
-            const fontWeight = editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight;
-            const defaultWeight = getDefaultWeight(value, fontWeight) ?? defaultValues.fontWeight;
-
-            editor?.current
-              .chain()
-              .focus()
-              .setFontFamily(value)
-              .setFontWeight(defaultWeight as never)
-              .run();
-            close();
-          }}
-        >
-          <div style:font-family={value}>{label}</div>
-        </ToolbarDropdownMenuItem>
-      {/each}
-
-      {#if $user.subscription}
-        {#each $user.fontFamilies as fontFamily (fontFamily.id)}
-          <ToolbarDropdownMenuItem
-            active={currentFontFamily?.id === fontFamily.id}
-            onclick={() => {
-              const fontWeight = editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight;
-              const defaultWeight = getDefaultWeight(fontFamily.id, fontWeight) ?? defaultValues.fontWeight;
-
-              editor?.current
-                .chain()
-                .focus()
-                .setFontFamily(fontFamily.id as never)
-                .setFontWeight(defaultWeight as never)
-                .run();
-              close();
-            }}
-          >
-            <div style:font-family={fontFamily.id}>{fontFamily.name}</div>
-          </ToolbarDropdownMenuItem>
-        {/each}
-      {/if}
-      <ToolbarDropdownMenuItem
-        onclick={() => {
-          if ($user.subscription) {
-            open = true;
-          } else {
-            planUpgradeOpen = true;
-          }
-
-          close();
-        }}
-      >
-        <div class={flex({ alignItems: 'center', gap: '4px' })}>
-          <Icon
-            style={css.raw({ color: 'text.faint', transitionProperty: '[none]', _groupHover: { color: 'text.brand' } })}
-            icon={PlusIcon}
-            size={14}
-          />
-          <span class={css({ color: 'text.subtle', _groupHover: { color: 'text.brand' } })}>직접 업로드</span>
-        </div>
-      </ToolbarDropdownMenuItem>
-    </ToolbarDropdownMenu>
-  {/snippet}
-</ToolbarDropdownButton>
+</ToolbarSearchableDropdown>
 
 <PlanUpgradeModal bind:open={planUpgradeOpen} />
 
