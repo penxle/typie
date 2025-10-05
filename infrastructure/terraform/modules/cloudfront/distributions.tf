@@ -108,6 +108,11 @@ resource "aws_cloudfront_distribution" "usercontents" {
     origin_id                = "lambda"
     domain_name              = "usercontents-literoo-dsqhecmpgp5romu8x8rbkcmbapn2a--ol-s3.s3.ap-northeast-2.amazonaws.com"
     origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
+
+    origin_shield {
+      enabled = true
+      origin_shield_region = "ap-northeast-2"
+    }
   }
 
   default_cache_behavior {
