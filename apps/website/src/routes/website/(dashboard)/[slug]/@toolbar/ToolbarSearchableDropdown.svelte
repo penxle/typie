@@ -6,7 +6,6 @@
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import ChevronUpIcon from '~icons/lucide/chevron-up';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -203,8 +202,10 @@
       translateY: '-1/2',
       color: 'text.faint',
       pointerEvents: 'none',
+      transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
+      transitionDuration: '150ms',
     })}
-    icon={opened ? ChevronUpIcon : ChevronDownIcon}
+    icon={ChevronDownIcon}
     size={16}
   />
 </div>
