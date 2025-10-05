@@ -1,7 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { center, flex, grid } from '@typie/styled-system/patterns';
-  import { token } from '@typie/styled-system/tokens';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { defaultValues, getEditorContext, values } from '@typie/ui/tiptap';
@@ -20,6 +19,7 @@
   import { fragment, graphql } from '$graphql';
   import { getViewContext } from '../@split-view/context.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
+  import ToolbarColorGrid from './ToolbarColorGrid.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
   import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
@@ -143,6 +143,7 @@
       chevron
       disabled={!editor?.current.can().setTextColor(defaultValues.textColor)}
       label="글씨 색"
+      onEscape={() => editor?.current.commands.focus()}
       placement="bottom-start"
       size="small"
     >
@@ -157,28 +158,15 @@
         </div>
       {/snippet}
 
-      {#snippet floating({ close })}
-        <div class={grid({ columns: 11, gap: '8px', padding: '8px' })}>
-          {#each values.textColor as { label, value, color } (value)}
-            <button
-              style:background-color={color}
-              style:outline-color={value === 'white' ? token('colors.border.default') : color}
-              class={center({
-                borderWidth: '1px',
-                borderRadius: 'full',
-                outlineWidth: (editor?.current.getAttributes('text_style').textColor ?? defaultValues.textColor) === value ? '2px' : '0',
-                outlineOffset: '1px',
-                size: '20px',
-              })}
-              aria-label={label}
-              onclick={() => {
-                editor?.current.chain().focus().setTextColor(value).run();
-                close();
-              }}
-              type="button"
-            ></button>
-          {/each}
-        </div>
+      {#snippet floating({ close, opened })}
+        <ToolbarColorGrid
+          columns={11}
+          currentValue={editor?.current.getAttributes('text_style').textColor ?? defaultValues.textColor}
+          items={values.textColor}
+          onClose={close}
+          onSelect={(value) => editor?.current.chain().focus().setTextColor(value).run()}
+          {opened}
+        />
       {/snippet}
     </ToolbarDropdownButton>
 
@@ -186,6 +174,7 @@
       chevron
       disabled={!editor?.current.can().setTextBackgroundColor(defaultValues.textBackgroundColor)}
       label="배경색"
+      onEscape={() => editor?.current.commands.focus()}
       placement="bottom-start"
       size="small"
     >
@@ -219,46 +208,17 @@
         </div>
       {/snippet}
 
-      {#snippet floating({ close })}
-        <div class={grid({ columns: 8, gap: '8px', padding: '8px' })}>
-          {#each values.textBackgroundColor as { label, value, color } (value)}
-            <button
-              style:background-color={value === 'none' ? 'transparent' : color}
-              style:outline-color={value === 'none' ? token('colors.border.default') : color}
-              class={center({
-                borderWidth: '1px',
-                borderRadius: '4px',
-                outlineWidth:
-                  (editor?.current.getAttributes('text_style').textBackgroundColor ?? defaultValues.textBackgroundColor) === value
-                    ? '2px'
-                    : '0',
-                outlineOffset: '1px',
-                size: '20px',
-                position: 'relative',
-              })}
-              aria-label={label}
-              onclick={() => {
-                editor?.current.chain().focus().setTextBackgroundColor(value).run();
-                close();
-              }}
-              type="button"
-            >
-              {#if value === 'none'}
-                <div
-                  class={css({
-                    position: 'absolute',
-                    inset: '0',
-                    margin: 'auto',
-                    width: '1px',
-                    height: '14px',
-                    backgroundColor: 'text.disabled',
-                    transform: 'rotate(45deg)',
-                  })}
-                ></div>
-              {/if}
-            </button>
-          {/each}
-        </div>
+      {#snippet floating({ close, opened })}
+        <ToolbarColorGrid
+          columns={8}
+          currentValue={editor?.current.getAttributes('text_style').textBackgroundColor ?? defaultValues.textBackgroundColor}
+          items={values.textBackgroundColor}
+          onClose={close}
+          onSelect={(value) => editor?.current.chain().focus().setTextBackgroundColor(value).run()}
+          {opened}
+          shape="square"
+          showNone
+        />
       {/snippet}
     </ToolbarDropdownButton>
 

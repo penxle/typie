@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { pushEscapeHandler } from '@typie/ui/utils';
-  import { setContext, tick } from 'svelte';
+  import { tick } from 'svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
 
@@ -19,8 +19,6 @@
   const close = () => {
     onclose?.();
   };
-
-  setContext('close', close);
 
   $effect(() => {
     if (containerElement) {
