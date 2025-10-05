@@ -243,6 +243,7 @@
   chevron
   disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
   label="글씨 서체"
+  onEscape={() => editor?.current.commands.focus()}
   size="small"
 >
   {#snippet anchor()}
@@ -254,8 +255,8 @@
     </div>
   {/snippet}
 
-  {#snippet floating({ close })}
-    <ToolbarDropdownMenu>
+  {#snippet floating({ close, opened })}
+    <ToolbarDropdownMenu onclose={close} {opened}>
       {#each values.fontFamily as { label, value } (value)}
         <ToolbarDropdownMenuItem
           active={(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily) === value}

@@ -1,15 +1,11 @@
 import { Extension } from '@tiptap/core';
-import { closest } from '../../utils';
-import { defaultValues, values } from '../values';
-
-const fontSizes = values.fontSize.map(({ value }) => value);
-type FontSize = (typeof fontSizes)[number];
+import { defaultValues } from '../values';
 
 declare module '@tiptap/core' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Commands<ReturnType> {
     fontSize: {
-      setFontSize: (fontSize: FontSize) => ReturnType;
+      setFontSize: (fontSize: number) => ReturnType;
     };
   }
 }
@@ -31,8 +27,7 @@ export const FontSize = Extension.create({
                 return null;
               }
 
-              const fontSize = Number.parseFloat(match[1]) * 16;
-              return closest(fontSize, fontSizes);
+              return Number.parseFloat(match[1]) * 16;
             },
             renderHTML: ({ fontSize }) => {
               if (!fontSize) {
@@ -57,7 +52,7 @@ export const FontSize = Extension.create({
           if (fontSize === defaultValues.fontSize) {
             return commands.setTextStyle({ fontSize: null });
           } else {
-            return commands.setTextStyle({ fontSize: closest(fontSize, fontSizes) });
+            return commands.setTextStyle({ fontSize });
           }
         },
     };
