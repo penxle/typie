@@ -106,7 +106,7 @@ resource "aws_cloudfront_distribution" "usercontents" {
 
   origin {
     origin_id                = "lambda"
-    domain_name              = "usercontents-literoo-dsqhecmpgp5romu8x8rbkcmbapn2a--ol-s3.s3.ap-northeast-2.amazonaws.com"
+    domain_name              = var.lambda_object_access_point_literoom_domain
     origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
 
     origin_shield {
