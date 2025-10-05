@@ -101,14 +101,12 @@ class TextToolbar extends HookWidget {
           ),
           LabelToolbarButton(
             color: context.colors.textSubtle,
-            text:
-                editorValues['fontSize']?.firstWhere(
-                      (e) =>
-                          e['value'] ==
-                          (proseMirrorState?.getMarkAttributes('text_style')?['fontSize'] as num? ??
-                              editorDefaultValues['fontSize']),
-                    )['label']
-                    as String,
+            text: () {
+              final currentSize =
+                  proseMirrorState?.getMarkAttributes('text_style')?['fontSize'] as num? ??
+                  editorDefaultValues['fontSize'] as num;
+              return currentSize % 1 == 0 ? currentSize.toInt().toString() : currentSize.toString();
+            }(),
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.fontSize;
             },

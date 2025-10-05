@@ -4,12 +4,20 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/screens/editor/toolbar/buttons/base.dart';
 
 class LabelToolbarButton extends StatelessWidget {
-  const LabelToolbarButton({required this.onTap, required this.text, this.isActive = false, this.color, super.key});
+  const LabelToolbarButton({
+    required this.onTap,
+    required this.text,
+    this.isActive = false,
+    this.color,
+    this.suffix,
+    super.key,
+  });
 
   final String text;
   final Color? color;
   final bool isActive;
   final void Function() onTap;
+  final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +29,14 @@ class LabelToolbarButton extends StatelessWidget {
         return Center(
           child: Container(
             padding: const Pad(all: 8),
-            child: Text(text, style: TextStyle(fontSize: 16, color: color)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 4,
+              children: [
+                Text(text, style: TextStyle(fontSize: 16, color: color)),
+                if (suffix != null) suffix!,
+              ],
+            ),
           ),
         );
       },
