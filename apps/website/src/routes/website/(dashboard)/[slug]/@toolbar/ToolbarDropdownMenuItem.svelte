@@ -29,11 +29,13 @@
         textAlign: 'left',
         fontSize: '13px',
         color: active ? 'text.brand' : 'text.default',
-        _hover: { color: 'text.brand' },
+        _hover: { color: 'text.brand', backgroundColor: 'surface.subtle' },
+        _focus: { color: 'text.brand', backgroundColor: 'surface.subtle' },
       },
       style,
     ),
   )}
+  data-active={active}
   {onclick}
   type="button"
 >

@@ -20,8 +20,9 @@
     placement?: Placement;
     opened?: boolean;
     onOpenChange?: (opened: boolean) => void;
+    onEscape?: () => void;
     anchor: Snippet<[{ open: () => void; opened: boolean }]>;
-    floating: Snippet<[{ close: () => void }]>;
+    floating: Snippet<[{ close: () => void; opened: boolean }]>;
   };
 
   let {
@@ -35,6 +36,7 @@
     placement = 'bottom',
     opened: externalOpened,
     onOpenChange,
+    onEscape,
     anchor,
     floating,
   }: Props = $props();
@@ -67,6 +69,11 @@
   const close = () => {
     opened = false;
     onOpenChange?.(false);
+  };
+
+  const handleEscape = () => {
+    close();
+    onEscape?.();
   };
 </script>
 
@@ -209,6 +216,6 @@
     use:floatingAction
     in:fly={{ y: -5, duration: 150 }}
   >
-    {@render floating({ close })}
+    {@render floating({ close: handleEscape, opened })}
   </div>
 {/if}

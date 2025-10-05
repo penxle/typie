@@ -26,6 +26,7 @@
   import ToolbarFloatingLink from './ToolbarFloatingLink.svelte';
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarFontFamily from './ToolbarFontFamily.svelte';
+  import ToolbarFontSize from './ToolbarFontSize.svelte';
   import ToolbarFontWeight from './ToolbarFontWeight.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import type { Editor } from '@tiptap/core';
@@ -263,37 +264,7 @@
 
     <ToolbarFontFamily {$user} {editor} />
     <ToolbarFontWeight {$user} {editor} />
-
-    <ToolbarDropdownButton
-      style={css.raw({ width: '60px' })}
-      chevron
-      disabled={!editor?.current.can().setFontSize(defaultValues.fontSize)}
-      label="글씨 크기"
-      size="small"
-    >
-      {#snippet anchor()}
-        <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle' })}>
-          {values.fontSize.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontSize ?? defaultValues.fontSize))
-            ?.label}
-        </div>
-      {/snippet}
-
-      {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
-          {#each values.fontSize as { label, value } (value)}
-            <ToolbarDropdownMenuItem
-              active={(editor?.current.getAttributes('text_style').fontSize ?? defaultValues.fontSize) === value}
-              onclick={() => {
-                editor?.current.chain().focus().setFontSize(value).run();
-                close();
-              }}
-            >
-              {label}
-            </ToolbarDropdownMenuItem>
-          {/each}
-        </ToolbarDropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
+    <ToolbarFontSize {editor} />
   </div>
 
   <VerticalDivider style={css.raw({ height: '12px' })} />

@@ -15,7 +15,7 @@ type CreateFloatingActionsOptions = {
   arrow?: boolean;
   middleware?: Middleware[];
   disableAutoUpdate?: boolean;
-  onClickOutside?: () => void;
+  onClickOutside?: (event: Event) => void;
 };
 
 type CreateFloatingActionsReturn = {
@@ -109,7 +109,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     }
 
     if (options?.onClickOutside && !floatingElement?.contains(event.target as Node)) {
-      options.onClickOutside();
+      options.onClickOutside(event);
     }
   };
 

@@ -73,6 +73,7 @@
   chevron
   disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
   label="폰트 두께"
+  onEscape={() => editor?.current.commands.focus()}
   size="small"
 >
   {#snippet anchor()}
@@ -82,8 +83,8 @@
     </div>
   {/snippet}
 
-  {#snippet floating({ close })}
-    <ToolbarDropdownMenu>
+  {#snippet floating({ close, opened })}
+    <ToolbarDropdownMenu onclose={close} {opened}>
       {#each currentFontFamilyAndWeights.weights as weight (weight)}
         <ToolbarDropdownMenuItem
           active={(editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight) === weight}
