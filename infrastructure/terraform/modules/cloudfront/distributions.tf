@@ -165,7 +165,7 @@ resource "aws_cloudfront_distribution" "typie_co" {
   aliases      = ["typie.co", "auth.typie.co"]
 
   origin {
-    origin_id   = "alb"
+    origin_id   = "k8s"
     domain_name = "ingress.k8s.typie.io"
 
     custom_origin_config {
@@ -179,9 +179,9 @@ resource "aws_cloudfront_distribution" "typie_co" {
   }
 
   default_cache_behavior {
-    target_origin_id = "alb"
+    target_origin_id = "k8s"
 
-    compress               = false
+    compress               = true
     viewer_protocol_policy = "redirect-to-https"
 
     allowed_methods = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
@@ -213,7 +213,7 @@ resource "aws_cloudfront_distribution" "typie_me" {
   aliases      = ["typie.me", "*.typie.me"]
 
   origin {
-    origin_id   = "alb"
+    origin_id   = "k8s"
     domain_name = "ingress.k8s.typie.io"
 
     custom_origin_config {
@@ -227,9 +227,9 @@ resource "aws_cloudfront_distribution" "typie_me" {
   }
 
   default_cache_behavior {
-    target_origin_id = "alb"
+    target_origin_id = "k8s"
 
-    compress               = false
+    compress               = true
     viewer_protocol_policy = "redirect-to-https"
 
     allowed_methods = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
