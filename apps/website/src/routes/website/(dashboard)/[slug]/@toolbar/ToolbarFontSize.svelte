@@ -23,6 +23,7 @@
   const MAX_FONT_SIZE = 200;
 
   let anchorElement: HTMLDivElement | undefined = $state();
+  let floatingElement: HTMLDivElement | undefined = $state();
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
     placement: 'bottom-start',
@@ -71,8 +72,15 @@
     }
   };
 
-  const handleBlur = () => {
+  const handleBlur = (e: FocusEvent) => {
     isFocused = false;
+
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (relatedTarget && floatingElement?.contains(relatedTarget)) {
+      return;
+    }
+
+    close();
   };
 
   $effect(() => {
@@ -185,6 +193,7 @@
 
   {#if opened}
     <div
+      bind:this={floatingElement}
       class={css({
         borderWidth: '1px',
         borderColor: 'border.subtle',
