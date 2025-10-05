@@ -18,12 +18,13 @@
     label: string;
     disabled?: boolean;
     onchange: (value: T, options?: { shouldFocus?: boolean }) => void;
+    onEscape?: () => void;
     getLabel?: (value: T) => string;
     renderItem?: Snippet<[{ value: T; label: string }]>;
     extraItems?: { onclick: () => void; content: Snippet }[];
   };
 
-  let { value, items, style, label, disabled = false, onchange, getLabel, renderItem, extraItems = [] }: Props = $props();
+  let { value, items, style, label, disabled = false, onchange, onEscape, getLabel, renderItem, extraItems = [] }: Props = $props();
 
   let anchorElement: HTMLDivElement | undefined = $state();
   let floatingElement: HTMLDivElement | undefined = $state();
@@ -93,6 +94,7 @@
       inputValue = currentLabel;
       inputElement?.blur();
       close();
+      onEscape?.();
     } else if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
@@ -225,7 +227,14 @@
     use:floatingAction
     in:fly={{ y: -5, duration: 150 }}
   >
-    <ToolbarDropdownMenu autoFocus={false} onclose={close} {opened}>
+    <ToolbarDropdownMenu
+      autoFocus={false}
+      onclose={() => {
+        close();
+        onEscape?.();
+      }}
+      {opened}
+    >
       {#each filteredItems as item (item.value)}
         <ToolbarDropdownMenuItem
           active={value === item.value}

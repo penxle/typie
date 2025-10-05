@@ -261,6 +261,7 @@
   }}
   items={allFontFamilies}
   label="글씨 서체"
+  onEscape={() => editor?.current.commands.focus()}
   onchange={(fontFamilyValue, options) => {
     const fontWeight = editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight;
     const defaultWeight = getDefaultWeight(fontFamilyValue, fontWeight) ?? defaultValues.fontWeight;

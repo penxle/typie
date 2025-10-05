@@ -63,11 +63,15 @@
     inputElement?.select();
   };
 
-  const applyFontSize = () => {
+  const applyFontSize = (shouldFocus = false) => {
     const parsed = Number.parseFloat(inputValue);
     if (!Number.isNaN(parsed) && parsed !== currentFontSize) {
       const clamped = clamp(parsed, MIN_FONT_SIZE, MAX_FONT_SIZE);
-      editor?.current.chain().focus().setFontSize(clamped).run();
+      const chain = editor?.current.chain().setFontSize(clamped);
+      if (shouldFocus) {
+        chain?.focus();
+      }
+      chain?.run();
     }
   };
 
@@ -90,13 +94,16 @@
 
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
-      applyFontSize();
+      e.preventDefault();
+      e.stopPropagation();
+      applyFontSize(true);
       inputElement?.blur();
       close();
     } else if (e.key === 'Escape') {
       inputValue = String(currentFontSize);
       inputElement?.blur();
       close();
+      editor?.current.commands.focus();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
@@ -207,7 +214,14 @@
       use:floatingAction
       in:fly={{ y: -5, duration: 150 }}
     >
-      <ToolbarDropdownMenu autoFocus={false} onclose={close} {opened}>
+      <ToolbarDropdownMenu
+        autoFocus={false}
+        onclose={() => {
+          close();
+          editor?.current.commands.focus();
+        }}
+        {opened}
+      >
         {#each values.fontSize as { label, value } (value)}
           <ToolbarDropdownMenuItem
             active={currentFontSize === value}
