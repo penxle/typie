@@ -2,9 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { defaultValues, values } from '@typie/ui/tiptap';
   import { fragment, graphql } from '$graphql';
-  import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
-  import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
-  import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
+  import ToolbarSearchableDropdown from './ToolbarSearchableDropdown.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type { Editor_BottomToolbar_FontWeight_user } from '$graphql';
@@ -66,42 +64,38 @@
       weights: userFontFamily.fonts.map((f) => f.weight).toSorted((a, b) => a - b),
     };
   });
+
+  const currentWeight = $derived(editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight);
+
+  const weightItems = $derived(
+    currentFontFamilyAndWeights.weights.map((weight) => ({
+      value: weight,
+      label: values.fontWeight.find(({ value }) => value === weight)?.label || String(weight),
+    })),
+  );
 </script>
 
-<ToolbarDropdownButton
+<ToolbarSearchableDropdown
   style={css.raw({ width: '100px' })}
-  chevron
   disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
+  getLabel={(value) => {
+    const item = weightItems.find((w) => w.value === value);
+    return item?.label ?? '(알 수 없는 두께)';
+  }}
+  items={weightItems}
   label="폰트 두께"
-  onEscape={() => editor?.current.commands.focus()}
-  size="small"
+  onchange={(weight, options) => {
+    const chain = editor?.current.chain().setFontWeight(weight);
+    if (options?.shouldFocus) {
+      chain?.focus();
+    }
+    chain?.run();
+  }}
+  value={currentWeight}
 >
-  {#snippet anchor()}
-    <div class={css({ flexGrow: '1', fontSize: '14px', color: 'text.subtle', lineClamp: '1' })}>
-      {values.fontWeight.find(({ value }) => value === (editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight))
-        ?.label}
+  {#snippet renderItem(item)}
+    <div style:font-family={currentFontFamilyAndWeights.family} style:font-weight={item.value}>
+      {item.label}
     </div>
   {/snippet}
-
-  {#snippet floating({ close, opened })}
-    <ToolbarDropdownMenu onclose={close} {opened}>
-      {#each currentFontFamilyAndWeights.weights as weight (weight)}
-        <ToolbarDropdownMenuItem
-          active={(editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight) === weight}
-          onclick={() => {
-            editor?.current
-              .chain()
-              .focus()
-              .setFontWeight(weight as never)
-              .run();
-            close();
-          }}
-        >
-          <div style:font-family={currentFontFamilyAndWeights.family} style:font-weight={weight}>
-            {values.fontWeight.find(({ value }) => value === weight)?.label || weight}
-          </div>
-        </ToolbarDropdownMenuItem>
-      {/each}
-    </ToolbarDropdownMenu>
-  {/snippet}
-</ToolbarDropdownButton>
+</ToolbarSearchableDropdown>

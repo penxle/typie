@@ -43,7 +43,7 @@
   const currentFontSize = $derived(editor?.current.getAttributes('text_style').fontSize ?? defaultValues.fontSize);
 
   $effect(() => {
-    if (document.activeElement !== inputElement) {
+    if (!opened && document.activeElement !== inputElement) {
       inputValue = String(currentFontSize);
     }
   });
@@ -163,6 +163,7 @@
       onblur={handleBlur}
       onfocus={handleFocus}
       onkeydown={handleKeydown}
+      placeholder={String(currentFontSize)}
       type="text"
       bind:value={inputValue}
     />
