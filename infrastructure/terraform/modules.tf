@@ -1,9 +1,10 @@
 module "cloudfront" {
   source = "./modules/cloudfront"
 
-  route53_zone_typie_co_zone_id  = module.route53.zone_typie_co_zone_id
-  route53_zone_typie_me_zone_id  = module.route53.zone_typie_me_zone_id
-  route53_zone_typie_net_zone_id = module.route53.zone_typie_net_zone_id
+  route53_zone_typie_co_zone_id              = module.route53.zone_typie_co_zone_id
+  route53_zone_typie_me_zone_id              = module.route53.zone_typie_me_zone_id
+  route53_zone_typie_net_zone_id             = module.route53.zone_typie_net_zone_id
+  lambda_object_access_point_literoom_domain = module.lambda.lambda_object_access_point_literoom_domain
 
   providers = {
     aws           = aws
