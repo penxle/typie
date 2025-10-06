@@ -26,8 +26,8 @@ jobs:
 
       CC: clang
       CXX: clang++
-      LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
-      PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
+      LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/local/lib/aarch64-linux-gnu
+      PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:/usr/local/lib/aarch64-linux-gnu/pkgconfig
 
     steps:
       - name: Install dependencies
