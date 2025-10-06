@@ -40,20 +40,18 @@ impl DisplayWindow {
     }
 
     pub fn show(&self) {
-        unsafe {
-            if let Some(mtm) = MainThreadMarker::new() {
-                let app = NSApplication::sharedApplication(mtm);
-                app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
-                app.activate();
-            }
-
-            self.window.makeKeyAndOrderFront(None);
-            self.window.makeKeyWindow();
-            self.window.makeMainWindow();
-            self.window.setIsVisible(true);
-            self.window.orderFrontRegardless();
-            self.window.setLevel(NS_NORMAL_WINDOW_LEVEL);
+        if let Some(mtm) = MainThreadMarker::new() {
+            let app = NSApplication::sharedApplication(mtm);
+            app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+            app.activate();
         }
+
+        self.window.makeKeyAndOrderFront(None);
+        self.window.makeKeyWindow();
+        self.window.makeMainWindow();
+        self.window.setIsVisible(true);
+        self.window.orderFrontRegardless();
+        self.window.setLevel(NS_NORMAL_WINDOW_LEVEL);
 
         self.is_visible.store(true, Ordering::SeqCst);
     }

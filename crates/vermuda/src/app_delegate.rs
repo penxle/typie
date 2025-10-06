@@ -50,9 +50,7 @@ define_class!(
                 }
 
                 if window.isMiniaturized() {
-                    unsafe {
-                        window.deminiaturize(None);
-                    }
+                    window.deminiaturize(None);
                 }
 
                 Self::promote_window(window);
@@ -148,10 +146,8 @@ impl VermudaAppDelegate {
     }
 
     fn promote_window(window: &NSWindow) {
-        unsafe {
-            window.makeKeyAndOrderFront(None);
-            window.setIsVisible(true);
-            window.orderFrontRegardless();
-        }
+        window.makeKeyAndOrderFront(None);
+        window.setIsVisible(true);
+        window.orderFrontRegardless();
     }
 }
