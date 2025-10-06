@@ -1,4 +1,5 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3';
+import * as Sentry from '@sentry/bun';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, sql, sum } from 'drizzle-orm';
@@ -537,7 +538,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'overdue_invoices_exist' });
       }
 
-      await db.transaction(async (tx) => {
+      const billingKey = await db.transaction(async (tx) => {
         await tx
           .update(Entities)
           .set({ state: EntityState.PURGED, purgedAt: dayjs() })
@@ -555,8 +556,13 @@ builder.mutationFields((t) => ({
         await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.userId, ctx.session.userId));
 
         await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.userId, ctx.session.userId));
-        await tx.delete(UserBillingKeys).where(eq(UserBillingKeys.userId, ctx.session.userId));
         await tx.delete(UserInAppPurchases).where(eq(UserInAppPurchases.userId, ctx.session.userId));
+
+        const billingKey = await tx
+          .delete(UserBillingKeys)
+          .where(eq(UserBillingKeys.userId, ctx.session.userId))
+          .returning({ billingKey: UserBillingKeys.billingKey })
+          .then(first);
 
         await tx.delete(UserPersonalIdentities).where(eq(UserPersonalIdentities.userId, ctx.session.userId));
 
@@ -564,7 +570,17 @@ builder.mutationFields((t) => ({
         await tx.delete(UserSessions).where(eq(UserSessions.userId, ctx.session.userId));
 
         await tx.update(Users).set({ state: UserState.DEACTIVATED }).where(eq(Users.id, ctx.session.userId));
+
+        return billingKey;
       });
+
+      if (billingKey) {
+        try {
+          await portone.deleteBillingKey({ billingKey: billingKey.billingKey });
+        } catch (err) {
+          Sentry.captureException(err);
+        }
+      }
 
       return true;
     },
