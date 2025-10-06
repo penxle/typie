@@ -1,4 +1,4 @@
-resource "aws_route53_record" "app" {
+resource "aws_route53_record" "app_typie_net" {
   zone_id = var.route53_zone_typie_net_zone_id
   name    = "app.typie.net"
   type    = "A"
@@ -10,7 +10,7 @@ resource "aws_route53_record" "app" {
   }
 }
 
-resource "aws_route53_record" "cdn" {
+resource "aws_route53_record" "cdn_typie_net" {
   zone_id = var.route53_zone_typie_net_zone_id
   name    = "cdn.typie.net"
   type    = "A"
@@ -22,7 +22,7 @@ resource "aws_route53_record" "cdn" {
   }
 }
 
-resource "aws_route53_record" "usercontents" {
+resource "aws_route53_record" "typie_net" {
   zone_id = var.route53_zone_typie_net_zone_id
   name    = "typie.net"
   type    = "A"
