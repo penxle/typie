@@ -1,8 +1,10 @@
+import * as Sentry from '@sentry/bun';
 import dayjs from 'dayjs';
 import { and, eq, lte } from 'drizzle-orm';
 import { SUBSCRIPTION_GRACE_DAYS } from '@/const';
-import { db, firstOrThrow, PaymentInvoices, Plans, Subscriptions } from '@/db';
+import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBillingKeys } from '@/db';
 import { PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@/enums';
+import * as portone from '@/external/portone';
 import { getSubscriptionExpiresAt, payInvoiceWithBillingKey } from '@/utils';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
@@ -176,7 +178,29 @@ export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:
 });
 
 export const SubscriptionRenewalCancelJob = defineJob('subscription:renewal:cancel', async (subscriptionId: string) => {
-  await db.transaction(async (tx) => {
+  const billingKey = await db.transaction(async (tx) => {
+    const subscription = await tx
+      .select({ userId: Subscriptions.userId })
+      .from(Subscriptions)
+      .where(eq(Subscriptions.id, subscriptionId))
+      .then(firstOrThrow);
+
     await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, subscriptionId));
+
+    const billingKey = await tx
+      .delete(UserBillingKeys)
+      .where(eq(UserBillingKeys.userId, subscription.userId))
+      .returning({ billingKey: UserBillingKeys.billingKey })
+      .then(first);
+
+    return billingKey;
   });
+
+  if (billingKey) {
+    try {
+      await portone.deleteBillingKey({ billingKey: billingKey.billingKey });
+    } catch (err) {
+      Sentry.captureException(err);
+    }
+  }
 });
