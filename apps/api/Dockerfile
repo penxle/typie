@@ -29,6 +29,7 @@ RUN bun install --frozen-lockfile --production
 
 RUN tar -xvf vendor/sharp-debian.tar.xz -C /app/apps/api/
 ENV LD_LIBRARY_PATH="/app/apps/api/lib"
+ENV SHARP_FORCE_GLOBAL_LIBVIPS=1
 
 WORKDIR /app/apps/api
 EXPOSE 3000
