@@ -92,7 +92,7 @@ jobs:
       - name: Build x265
         working-directory: x265_${{ env.X265_VERSION }}
         run: |
-          cmake source
+          cmake source -DENABLE_SVE=OFF -DENABLE_SVE2=OFF
           make -j$(nproc)
           make install
 
@@ -138,11 +138,12 @@ jobs:
           mkdir artifacts
           cp -r node_modules artifacts/
           cp -r /opt/libvips/lib artifacts/
-          ldd artifacts/lib/libvips.so | grep '=>' | awk '{print $3}' | xargs -I {} cp {} artifacts/lib/
-          tar cJvf sharp.tar.xz -C artifacts/ .
+          ldd artifacts/lib/libvips.so
+          ldd artifacts/lib/libvips.so | grep '=>' | grep -v 'not found' | awk '{print $3}' | xargs -I {} cp {} artifacts/lib/
+          tar cJvf sharp-al2023.tar.xz -C artifacts/ .
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sharp
-          path: sharp.tar.xz
+          name: sharp-al2023
+          path: sharp-al2023.tar.xz
