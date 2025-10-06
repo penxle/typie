@@ -84,10 +84,8 @@ fn setup_appkit(
     configure_menu(&app, mtm);
     attach_delegate(&app, &delegate);
 
-    unsafe {
-        app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
-        app.activate();
-    }
+    app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+    app.activate();
 
     Ok((delegate, app))
 }
@@ -227,9 +225,7 @@ async fn run_runtime_tasks(app_exit_rx: oneshot::Receiver<()>, args: Args) -> Re
         ShutdownTrigger::AppExit => {
             run_on_main(|mtm| {
                 let app = NSApplication::sharedApplication(mtm);
-                unsafe {
-                    app.replyToApplicationShouldTerminate(true);
-                }
+                app.replyToApplicationShouldTerminate(true);
             })
             .await;
         }
@@ -239,9 +235,7 @@ async fn run_runtime_tasks(app_exit_rx: oneshot::Receiver<()>, args: Args) -> Re
             run_on_main(|mtm| {
                 if !VermudaAppDelegate::set_terminating() {
                     let app = NSApplication::sharedApplication(mtm);
-                    unsafe {
-                        app.terminate(None);
-                    }
+                    app.terminate(None);
                 }
             })
             .await;
@@ -261,8 +255,7 @@ fn set_process_name() {
 fn configure_menu(app: &Retained<NSApplication>, mtm: MainThreadMarker) {
     let menu_bar = NSMenu::new(mtm);
     let app_menu_item = NSMenuItem::new(mtm);
-    let app_menu =
-        unsafe { NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str(APP_NAME)) };
+    let app_menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str(APP_NAME));
 
     let quit_item = unsafe {
         NSMenuItem::initWithTitle_action_keyEquivalent(
