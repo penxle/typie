@@ -6,7 +6,6 @@ import * as Y from 'yjs';
 import { PostLayoutMode } from '@/enums';
 import { schema, textSerializers } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
-import type { CanvasShape } from '@/db/schemas/json';
 
 type MakeYDocParams = {
   title?: string | null;
@@ -46,32 +45,6 @@ export const makeText = (body: JSONContent) => {
     blockSeparator: '\n',
     textSerializers,
   }).trim();
-};
-
-type MakeCanvasYDocParams = {
-  title?: string | null;
-  shapes: CanvasShape[];
-};
-export const makeCanvasYDoc = ({ title, shapes }: MakeCanvasYDocParams) => {
-  const doc = new Y.Doc();
-
-  doc.transact(() => {
-    const attrs = doc.getMap('attrs');
-    attrs.set('title', title ?? '');
-
-    const fragment = doc.getXmlFragment('shapes');
-    for (const shape of shapes) {
-      const element = new Y.XmlElement(shape.type);
-      for (const [key, value] of Object.entries(shape.attrs)) {
-        if (value !== undefined && value !== null) {
-          element.setAttribute(key, JSON.stringify(value));
-        }
-      }
-      fragment.push([element]);
-    }
-  });
-
-  return doc;
 };
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });

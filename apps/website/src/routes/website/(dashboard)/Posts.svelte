@@ -7,7 +7,6 @@
   import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
-  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import PanelLeftIcon from '~icons/lucide/panel-left';
   import PanelLeftDashedIcon from '~icons/lucide/panel-left-dashed';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -53,19 +52,6 @@
   const createPost = graphql(`
     mutation DashboardLayout_Posts_CreatePost_Mutation($input: CreatePostInput!) {
       createPost(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
-  const createCanvas = graphql(`
-    mutation DashboardLayout_Posts_CreateCanvas_Mutation($input: CreateCanvasInput!) {
-      createCanvas(input: $input) {
         id
 
         entity {
@@ -252,29 +238,6 @@
           use:tooltip={{ message: '새 폴더 생성' }}
         >
           <Icon icon={FolderPlusIcon} />
-        </button>
-
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '24px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          })}
-          onclick={async () => {
-            const resp = await createCanvas({
-              siteId: $site.id,
-            });
-
-            mixpanel.track('create_canvas', { via: 'tree' });
-
-            await goto(`/${resp.entity.slug}`);
-          }}
-          type="button"
-          use:tooltip={{ message: '새 캔버스 생성' }}
-        >
-          <Icon icon={LineSquiggleIcon} />
         </button>
 
         <button

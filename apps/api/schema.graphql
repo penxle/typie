@@ -104,11 +104,6 @@ enum CommentState {
   DELETED
 }
 
-input CreateCanvasInput {
-  parentEntityId: ID
-  siteId: ID!
-}
-
 input CreateCommentInput {
   content: String!
   postId: ID!
@@ -175,10 +170,6 @@ input DeletePostInput {
 
 input DumpLocalStorageInput {
   data: JSON!
-}
-
-input DuplicateCanvasInput {
-  canvasId: ID!
 }
 
 input DuplicatePostInput {
@@ -475,7 +466,6 @@ type Mutation {
   cancelPlanChange: Subscription_!
   cancelSubscriptionCancellation: Subscription_!
   checkSpelling(input: CheckSpellingInput!): [SpellingError!]!
-  createCanvas(input: CreateCanvasInput!): Canvas!
   createComment(input: CreateCommentInput!): Comment!
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
@@ -490,7 +480,6 @@ type Mutation {
   deletePost(input: DeletePostInput!): Post!
   deleteUser: Boolean!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
-  duplicateCanvas(input: DuplicateCanvasInput!): Canvas!
   duplicatePost(input: DuplicatePostInput!): Post!
   exportPostAsDocx(input: ExportPostAsDocxInput!): ExportPostAsDocxResult!
   exportPostAsPdf(input: ExportPostAsPdfInput!): ExportPostAsPdfResult!

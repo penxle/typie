@@ -90,19 +90,6 @@
     }
   `);
 
-  const createCanvas = graphql(`
-    mutation FolderMenu_CreateCanvas_Mutation($input: CreateCanvasInput!) {
-      createCanvas(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
   const deleteFolder = graphql(`
     mutation FolderMenu_DeleteFolder_Mutation($input: DeleteFolderInput!) {
       deleteFolder(input: $input) {
@@ -179,22 +166,6 @@
   }}
 >
   하위 포스트 생성
-</MenuItem>
-
-<MenuItem
-  icon={LineSquiggleIcon}
-  onclick={async () => {
-    const resp = await createCanvas({
-      siteId: entity.site.id,
-      parentEntityId: entity.id,
-    });
-
-    mixpanel.track('create_child_canvas', { via });
-    open();
-    await goto(`/${resp.entity.slug}`);
-  }}
->
-  하위 캔버스 생성
 </MenuItem>
 
 {#if entity.depth < maxDepth - 1}
