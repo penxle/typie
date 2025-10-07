@@ -8,7 +8,7 @@
     "dev": "doppler run -- bun run --watch --no-clear-screen src/main.ts",
     "dev:email": "email dev --port 3001 --dir src/email/templates",
     "lint:typecheck": "tsc",
-    "start": "bun run src/main.ts"
+    "start": "bun run --preload ./src/instrumentation.ts src/main.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
@@ -20,10 +20,18 @@
     "@aws-sdk/s3-request-presigner": "^3.901.0",
     "@ctrl/tinycolor": "^4.2.0",
     "@envelop/core": "^5.3.2",
+    "@envelop/opentelemetry": "^8.0.0",
     "@faker-js/faker": "^10.0.0",
     "@googleapis/androidpublisher": "^32.0.0",
-    "@graphql-yoga/plugin-prometheus": "^6.11.0",
     "@graphql-yoga/redis-event-target": "^3.0.3",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.206.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.206.0",
+    "@opentelemetry/resources": "^2.1.0",
+    "@opentelemetry/sdk-metrics": "^2.1.0",
+    "@opentelemetry/sdk-node": "^0.206.0",
+    "@opentelemetry/sdk-trace-node": "^2.1.0",
+    "@opentelemetry/semantic-conventions": "^1.37.0",
     "@paralleldrive/cuid2": "^2.2.2",
     "@portone/server-sdk": "^0.17.0",
     "@pothos/core": "^4.10.0",

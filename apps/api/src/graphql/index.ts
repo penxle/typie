@@ -1,4 +1,5 @@
-import { usePrometheus } from '@graphql-yoga/plugin-prometheus';
+import { useOpenTelemetry } from '@envelop/opentelemetry';
+import { trace } from '@opentelemetry/api';
 import { GraphQLError } from 'graphql';
 import { CloseCode, makeServer } from 'graphql-ws';
 import { createYoga, useExecutionCancellation } from 'graphql-yoga';
@@ -24,9 +25,13 @@ const app = createYoga<{ c: ServerContext }, UserContext>({
     useExecutionCancellation(),
     useLogger(),
     useError(),
-    usePrometheus({
-      endpoint: '/graphql/metrics',
-    }),
+    useOpenTelemetry(
+      {
+        document: false,
+        resolvers: true,
+      },
+      trace.getTracerProvider(),
+    ),
   ],
 });
 
@@ -128,11 +133,6 @@ graphql.get(
 );
 
 graphql.on(['GET', 'POST'], '/', async (c) => {
-  const response = await app.handle(c.req.raw, { c });
-  return c.newResponse(response.body, response);
-});
-
-graphql.get('/metrics', async (c) => {
   const response = await app.handle(c.req.raw, { c });
   return c.newResponse(response.body, response);
 });
