@@ -3,6 +3,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
+import { AlwaysOnSampler } from '@opentelemetry/sdk-trace-node';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { ATTR_DEPLOYMENT_ENVIRONMENT_NAME } from '@opentelemetry/semantic-conventions/incubating';
 import * as Sentry from '@sentry/bun';
@@ -18,6 +19,7 @@ Sentry.init({
 });
 
 const sdk = new NodeSDK({
+  sampler: new AlwaysOnSampler(),
   traceExporter: new OTLPTraceExporter({
     url: env.OTEL_EXPORTER_OTLP_ENDPOINT,
   }),
