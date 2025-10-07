@@ -11,11 +11,9 @@ import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/canvas/__generated__/canvas_query.data.gql.dart';
 import 'package:typie/screens/canvas/__generated__/canvas_query.req.gql.dart';
 import 'package:typie/screens/canvas/__generated__/delete_canvas_mutation.req.gql.dart';
-import 'package:typie/screens/canvas/__generated__/duplicate_canvas_mutation.req.gql.dart';
 import 'package:typie/screens/canvas/canvas_viewer.dart';
 import 'package:typie/screens/canvas/scope.dart';
 import 'package:typie/widgets/heading.dart';
@@ -71,29 +69,6 @@ class CanvasScreen extends HookWidget {
                   await context.showBottomSheet(
                     child: BottomMenu(
                       items: [
-                        BottomMenuItem(
-                          icon: LucideLightIcons.copy,
-                          label: '복제하기',
-                          onTap: () async {
-                            try {
-                              final response = await client.request(
-                                GCanvasScreen_DuplicateCanvas_MutationReq((b) => b..vars.input.canvasId = canvas.id),
-                              );
-
-                              unawaited(mixpanel.track('duplicate_canvas', properties: {'via': 'canvas_menu'}));
-
-                              if (context.mounted) {
-                                await context.router.popAndPush(
-                                  CanvasRoute(slug: response.duplicateCanvas.entity.slug),
-                                );
-                              }
-                            } catch (_) {
-                              if (context.mounted) {
-                                context.toast(ToastType.error, '캔버스 복제에 실패했습니다');
-                              }
-                            }
-                          },
-                        ),
                         BottomMenuItem(
                           icon: LucideLightIcons.trash_2,
                           label: '삭제하기',

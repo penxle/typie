@@ -5,11 +5,9 @@
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import Columns2Icon from '~icons/lucide/columns-2';
-  import CopyIcon from '~icons/lucide/copy';
   import InfoIcon from '~icons/lucide/info';
   import Rows2Icon from '~icons/lucide/rows-2';
   import TrashIcon from '~icons/lucide/trash';
-  import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { getSplitViewContext, getViewContext } from '../[slug]/@split-view/context.svelte';
 
@@ -42,19 +40,6 @@
     mixpanel.track('add_split_view', { via, direction });
   };
 
-  const duplicateCanvas = graphql(`
-    mutation CanvasMenu_DuplicateCanvas_Mutation($input: DuplicateCanvasInput!) {
-      duplicateCanvas(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
   const deleteCanvas = graphql(`
     mutation CanvasMenu_DeleteCanvas_Mutation($input: DeleteCanvasInput!) {
       deleteCanvas(input: $input) {
@@ -73,12 +58,6 @@
       }
     }
   `);
-
-  const handleDuplicate = async () => {
-    const resp = await duplicateCanvas({ canvasId: canvas.id });
-    mixpanel.track('duplicate_canvas', { via });
-    await goto(`/${resp.entity.slug}`);
-  };
 
   const handleDelete = () => {
     Dialog.confirm({
@@ -113,10 +92,6 @@
 
 <MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
-<HorizontalDivider color="secondary" />
-
-<MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
-
 <HorizontalDivider color="secondary" />
 
 <MenuItem icon={TrashIcon} onclick={handleDelete} variant="danger">삭제</MenuItem>

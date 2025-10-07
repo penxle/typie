@@ -16,6 +16,7 @@
   import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
   import Notes from './@notes/Notes.svelte';
   import ShareModal from './@share/ShareModal.svelte';
+  import CanvasDeprecationModal from './CanvasDeprecationModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
@@ -122,6 +123,7 @@
 
   let referralWelcomeModalOpen = $state(false);
   let userSurveyModalOpen = $state(false);
+  let canvasDeprecationModalOpen = $state(false);
 
   $effect(() => {
     return untrack(() => {
@@ -158,6 +160,13 @@
 
     if (shouldShowSurvey) {
       userSurveyModalOpen = true;
+    }
+
+    const canvasDeprecationSkipUntil = localStorage.getItem('canvasDeprecationSkipUntil');
+    const shouldShowCanvasDeprecation = !canvasDeprecationSkipUntil || new Date(canvasDeprecationSkipUntil) < new Date();
+
+    if (shouldShowCanvasDeprecation) {
+      canvasDeprecationModalOpen = true;
     }
 
     if ($query.me.preferences.initialPage) {
@@ -286,6 +295,7 @@
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <UserSurveyModal bind:open={userSurveyModalOpen} />
+<CanvasDeprecationModal bind:open={canvasDeprecationModalOpen} />
 
 <div
   class={cx(
