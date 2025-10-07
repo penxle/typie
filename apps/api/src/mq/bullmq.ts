@@ -29,35 +29,38 @@ export const queue = new Queue(lane, {
   },
 });
 
+export const worker = new Worker(
+  lane,
+  async (job) => {
+    const fn = taskMap[job.name];
+    await fn?.(job.data);
+  },
+  {
+    connection: new Redis({
+      name: 'primary',
+      sentinels: [{ host: env.REDIS_URL }],
+      maxRetriesPerRequest: null,
+    }),
+
+    autorun: false,
+    concurrency: 50,
+  },
+);
+
+worker.on('completed', (job) => {
+  log.info('Job completed {*}', { id: job.id, name: job.name, data: job.data });
+});
+
+worker.on('failed', (job, error) => {
+  log.error('Job failed {*}', { id: job?.id, name: job?.name, data: job?.data, error });
+  Sentry.captureException(error);
+});
+
+worker.on('error', (error) => {
+  log.error('Job error {*}', { error });
+  Sentry.captureException(error);
+});
+
 if (!process.env.SCRIPT && !process.env.NO_WORKER) {
-  const worker = new Worker(
-    lane,
-    async (job) => {
-      const fn = taskMap[job.name];
-      await fn?.(job.data);
-    },
-    {
-      connection: new Redis({
-        name: 'primary',
-        sentinels: [{ host: env.REDIS_URL }],
-        maxRetriesPerRequest: null,
-      }),
-
-      concurrency: 50,
-    },
-  );
-
-  worker.on('completed', (job) => {
-    log.info('Job completed {*}', { id: job.id, name: job.name, data: job.data });
-  });
-
-  worker.on('failed', (job, error) => {
-    log.error('Job failed {*}', { id: job?.id, name: job?.name, data: job?.data, error });
-    Sentry.captureException(error);
-  });
-
-  worker.on('error', (error) => {
-    log.error('Job error {*}', { error });
-    Sentry.captureException(error);
-  });
+  worker.run();
 }

@@ -28,6 +28,7 @@ const schema = z.object({
   OIDC_CLIENT_ID: z.string(),
   OIDC_CLIENT_SECRET: z.string(),
   OIDC_JWK: z.string(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
   PORTONE_API_SECRET: z.string(),
   PORTONE_CHANNEL_KEY: z.string(),
   REDIS_URL: z.string(),

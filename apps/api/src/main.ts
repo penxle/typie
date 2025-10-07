@@ -1,4 +1,3 @@
-import '@/instrument';
 import '@typie/lib/dayjs';
 import '@/mq';
 
