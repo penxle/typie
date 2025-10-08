@@ -12,7 +12,9 @@ RUN apt-get update && apt-get install -y \
     xz-utils \
     ghostscript \
     && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
 RUN curl -fsSL https://bun.sh/install | bash
+RUN apt-get install -y nodejs
 ENV PATH="/root/.bun/bin:$PATH"
 
 FROM base AS runner
