@@ -30,6 +30,7 @@
     "@tiptap/core": "^3.6.5",
     "@tiptap/pm": "^3.6.5",
     "@typie/adapter-node": "workspace:*",
+    "@typie/api": "workspace:*",
     "@typie/lib": "workspace:*",
     "@typie/sark": "workspace:*",
     "@typie/styled-system": "workspace:*",
