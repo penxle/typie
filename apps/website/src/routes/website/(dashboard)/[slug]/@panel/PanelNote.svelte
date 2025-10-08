@@ -7,10 +7,9 @@
   import { Button, Icon, Popover } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { tick } from 'svelte';
   import ExpandIcon from '~icons/lucide/expand';
   import Minimize2Icon from '~icons/lucide/minimize-2';
   import PlusIcon from '~icons/lucide/plus';
@@ -176,51 +175,10 @@
       const dropIndex = localNoteOrder.indexOf(noteId);
 
       if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
-        const firstPositions: Record<string, DOMRect> = {};
-        const noteElements = document.querySelectorAll('[data-related-note-id]');
-        noteElements.forEach((el) => {
-          const id = (el as HTMLElement).dataset.relatedNoteId;
-          if (id) {
-            firstPositions[id] = el.getBoundingClientRect();
-          }
-        });
-
         const newOrder = [...localNoteOrder];
         const [removed] = newOrder.splice(draggedIndex, 1);
         newOrder.splice(dropIndex, 0, removed);
         localNoteOrder = newOrder;
-
-        tick().then(() => {
-          const noteElements = document.querySelectorAll('[data-related-note-id]');
-
-          if (Object.keys(firstPositions).length === 0) return;
-
-          for (const el of noteElements) {
-            const id = (el as HTMLElement).dataset.relatedNoteId;
-            if (!id || !firstPositions[id]) continue;
-
-            const prevPos = firstPositions[id];
-            const lastPos = el.getBoundingClientRect();
-            const deltaX = prevPos.left - lastPos.left;
-            const deltaY = prevPos.top - lastPos.top;
-
-            if (Math.abs(deltaX) === 0 && Math.abs(deltaY) === 0) continue;
-
-            const htmlEl = el as HTMLElement;
-            htmlEl.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-            htmlEl.style.transition = 'none';
-
-            requestAnimationFrame(() => {
-              htmlEl.style.transition = 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)';
-              htmlEl.style.transform = '';
-              htmlEl.style.pointerEvents = 'none';
-              setTimeout(() => {
-                htmlEl.style.transition = 'none';
-                htmlEl.style.pointerEvents = 'auto';
-              }, 300);
-            });
-          }
-        });
       }
     }
   };
@@ -271,6 +229,11 @@
 
   $effect(() => {
     return handleDragScroll(scrollContainer, !!dragging);
+  });
+
+  $effect.pre(() => {
+    void localNoteOrder;
+    animateFlip('[data-related-note-id]', 'relatedNoteId');
   });
 </script>
 

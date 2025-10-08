@@ -4,7 +4,7 @@
   import { Button, Icon, Modal, Select } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { clamp, getRandomNoteColor } from '@typie/ui/utils';
+  import { animateFlip, clamp, getRandomNoteColor } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -288,51 +288,10 @@
       const dropIndex = localNoteOrder.indexOf(noteId);
 
       if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
-        const firstPositions: Record<string, DOMRect> = {};
-        const noteElements = document.querySelectorAll('[data-note-id]');
-        noteElements.forEach((el) => {
-          const id = (el as HTMLElement).dataset.noteId;
-          if (id) {
-            firstPositions[id] = el.getBoundingClientRect();
-          }
-        });
-
         const newOrder = [...localNoteOrder];
         const [removed] = newOrder.splice(draggedIndex, 1);
         newOrder.splice(dropIndex, 0, removed);
         localNoteOrder = newOrder;
-
-        tick().then(() => {
-          const noteElements = document.querySelectorAll('[data-note-id]');
-
-          if (Object.keys(firstPositions).length === 0) return;
-
-          for (const el of noteElements) {
-            const id = (el as HTMLElement).dataset.noteId;
-            if (!id || !firstPositions[id]) continue;
-
-            const prevPos = firstPositions[id];
-            const lastPos = el.getBoundingClientRect();
-            const deltaX = prevPos.left - lastPos.left;
-            const deltaY = prevPos.top - lastPos.top;
-
-            if (Math.abs(deltaX) === 0 && Math.abs(deltaY) === 0) continue;
-
-            const htmlEl = el as HTMLElement;
-            htmlEl.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-            htmlEl.style.transition = 'none';
-
-            requestAnimationFrame(() => {
-              htmlEl.style.transition = 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)';
-              htmlEl.style.transform = '';
-              htmlEl.style.pointerEvents = 'none';
-              setTimeout(() => {
-                htmlEl.style.transition = 'none';
-                htmlEl.style.pointerEvents = 'auto';
-              }, 300);
-            });
-          }
-        });
       }
     }
   };
@@ -470,6 +429,11 @@
     if (page.params.slug) {
       currentEntityQuery.load({ slug: page.params.slug });
     }
+  });
+
+  $effect.pre(() => {
+    void localNoteOrder;
+    animateFlip('[data-note-id]', 'noteId');
   });
 </script>
 
