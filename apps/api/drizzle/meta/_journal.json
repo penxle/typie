@@ -253,6 +253,13 @@
       "when": 1759918246402,
       "tag": "0035_stale_black_crow",
       "breakpoints": false
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1759926419376,
+      "tag": "0036_same_mister_fear",
+      "breakpoints": false
     }
   ]
 }
