@@ -12,24 +12,20 @@ RUN apt-get update && apt-get install -y \
     xz-utils \
     ghostscript \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
 RUN curl -fsSL https://bun.sh/install | bash
-RUN apt-get install -y nodejs
 ENV PATH="/root/.bun/bin:$PATH"
 
 FROM base AS runner
 WORKDIR /app
 
-RUN npx playwright install-deps
-RUN npx playwright install chromium
-
 COPY . .
 
 RUN bun install --frozen-lockfile --production
+RUN bun playwright install-deps
+RUN bun playwright install chromium
 
 RUN tar -xvf vendor/sharp-debian.tar.xz -C /app/apps/api/
 ENV LD_LIBRARY_PATH="/app/apps/api/lib"
-ENV SHARP_FORCE_GLOBAL_LIBVIPS=1
 
 WORKDIR /app/apps/api
 EXPOSE 3000
