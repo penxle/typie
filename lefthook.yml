@@ -1,0 +1,13 @@
+output: false
+pre-commit:
+  parallel: true
+  commands:
+    eslint:
+      glob: '*'
+      run: bunx eslint --fix --quiet {staged_files}
+    prettier:
+      glob: '*'
+      run: bunx prettier --write --ignore-unknown {staged_files}
+    cspell:
+      glob: '*'
+      run: bunx cspell --no-progress --relative --no-must-find-files {staged_files}
