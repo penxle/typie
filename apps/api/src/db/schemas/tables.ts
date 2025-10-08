@@ -87,27 +87,6 @@ export const CanvasSnapshotContributors = pgTable(
   (t) => [unique().on(t.snapshotId, t.userId)],
 );
 
-export const Comments = pgTable(
-  'comments',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.COMMENTS)),
-    postId: text('post_id')
-      .notNull()
-      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    state: E._CommentState('state').notNull().default('ACTIVE'),
-    content: text('content').notNull(),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.postId, t.createdAt)],
-);
-
 export const CreditCodes = pgTable('credit_codes', {
   id: text('id')
     .primaryKey()
@@ -368,7 +347,6 @@ export const Posts = pgTable(
     coverImageId: text('cover_image_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     password: text('password'),
     contentRating: E._PostContentRating('content_rating').notNull().default('ALL'),
-    allowComment: boolean('allow_comment').notNull().default(true),
     allowReaction: boolean('allow_reaction').notNull().default(true),
     protectContent: boolean('protect_content').notNull().default(true),
     type: E._PostType('type').notNull().default('NORMAL'),

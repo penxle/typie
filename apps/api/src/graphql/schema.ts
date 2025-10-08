@@ -4,7 +4,6 @@ import './resolvers/admin';
 import './resolvers/auth';
 import './resolvers/blob';
 import './resolvers/canvas';
-import './resolvers/comment';
 import './resolvers/entity';
 import './resolvers/folder';
 import './resolvers/font';

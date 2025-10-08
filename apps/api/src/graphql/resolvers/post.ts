@@ -7,7 +7,6 @@ import { match } from 'ts-pattern';
 import * as Y from 'yjs';
 import { redis } from '@/cache';
 import {
-  Comments,
   db,
   Entities,
   first,
@@ -51,19 +50,7 @@ import { compressZstd, decompressZstd } from '@/utils/compression';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
-import {
-  CharacterCountChange,
-  Comment,
-  Entity,
-  EntityView,
-  Image,
-  IPost,
-  isTypeOf,
-  Post,
-  PostReaction,
-  PostSnapshot,
-  PostView,
-} from '../objects';
+import { CharacterCountChange, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostSnapshot, PostView } from '../objects';
 
 /**
  * * Types
@@ -78,7 +65,7 @@ IPost.implement({
     coverImage: t.expose('coverImageId', { type: Image, nullable: true }),
 
     contentRating: t.expose('contentRating', { type: PostContentRating }),
-    allowComment: t.exposeBoolean('allowComment'),
+    allowComment: t.boolean({ resolve: () => false }),
     allowReaction: t.exposeBoolean('allowReaction'),
     protectContent: t.exposeBoolean('protectContent'),
 
@@ -384,26 +371,6 @@ PostView.implement({
         return await loader.load(self.id);
       },
     }),
-
-    comments: t.field({
-      type: [Comment],
-      resolve: async (self, _, ctx) => {
-        if (!self.allowComment) {
-          return [];
-        }
-
-        const commentsLoader = ctx.loader({
-          name: 'PostView.comments',
-          many: true,
-          load: async (ids) => {
-            return await db.select().from(Comments).where(inArray(Comments.postId, ids)).orderBy(Comments.createdAt);
-          },
-          key: ({ postId }) => postId,
-        });
-
-        return await commentsLoader.load(self.id);
-      },
-    }),
   }),
 });
 
@@ -628,7 +595,6 @@ builder.mutationFields((t) => ({
           subtitle: Posts.subtitle,
           maxWidth: Posts.maxWidth,
           coverImageId: Posts.coverImageId,
-          allowComment: Posts.allowComment,
           allowReaction: Posts.allowReaction,
           protectContent: Posts.protectContent,
           password: Posts.password,
@@ -717,7 +683,6 @@ builder.mutationFields((t) => ({
             subtitle: post.subtitle,
             maxWidth: post.maxWidth,
             coverImageId: post.coverImageId,
-            allowComment: post.allowComment,
             allowReaction: post.allowReaction,
             protectContent: post.protectContent,
             password: post.password,
@@ -841,7 +806,6 @@ builder.mutationFields((t) => ({
       visibility: t.input.field({ type: EntityVisibility }),
       password: t.input.string({ required: false }),
       contentRating: t.input.field({ type: PostContentRating }),
-      allowComment: t.input.boolean({ required: false }),
       allowReaction: t.input.boolean(),
       protectContent: t.input.boolean(),
     },
@@ -872,7 +836,6 @@ builder.mutationFields((t) => ({
           .set({
             password: input.password || null,
             contentRating: input.contentRating,
-            allowComment: input.allowComment ?? true,
             allowReaction: input.allowReaction,
             protectContent: input.protectContent,
           })
