@@ -6,7 +6,7 @@ import { createDbId } from './id';
 import { bytea, datetime } from './types';
 import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { CanvasShape, NotificationData, PageLayout, PlanRules } from './json';
+import type { CanvasShape, PageLayout, PlanRules } from './json';
 
 export const Canvases = pgTable(
   'canvases',
@@ -299,24 +299,6 @@ export const Notes = pgTable(
     index().on(t.userId, t.state, t.order),
     index().on(t.entityId, t.state, t.order),
   ],
-);
-
-export const Notifications = pgTable(
-  'notifications',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.NOTIFICATIONS)),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    data: jsonb('data').notNull().$type<NotificationData>(),
-    state: E._NotificationState('state').notNull().default('UNREAD'),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.userId, t.state), index().on(t.userId, t.createdAt)],
 );
 
 export const PaymentInvoices = pgTable(

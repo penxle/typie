@@ -15,7 +15,6 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   FontFamilies,
-  Notifications,
   PaymentInvoices,
   PostCharacterCountChanges,
   Posts,
@@ -64,7 +63,6 @@ import {
   FontFamily,
   Image,
   isTypeOf,
-  Notification,
   Post,
   Referral,
   Site,
@@ -202,13 +200,6 @@ User.implement({
           )
           .groupBy(date)
           .orderBy(asc(date));
-      },
-    }),
-
-    notifications: t.field({
-      type: [Notification],
-      resolve: async (user) => {
-        return await db.select().from(Notifications).where(eq(Notifications.userId, user.id)).orderBy(desc(Notifications.createdAt));
       },
     }),
 

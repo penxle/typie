@@ -430,10 +430,6 @@ input LoginWithEmailInput {
   password: String!
 }
 
-input MarkNotificationAsReadInput {
-  notificationId: ID!
-}
-
 input MoveEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -489,8 +485,6 @@ type Mutation {
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
   issueReferralUrl: String!
   loginWithEmail(input: LoginWithEmailInput!): Boolean!
-  markAllNotificationsAsRead: [Notification!]!
-  markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
   moveEntities(input: MoveEntitiesInput!): [Entity!]!
   moveEntity(input: MoveEntityInput!): Entity!
   moveNote(input: MoveNoteInput!): Note!
@@ -549,34 +543,6 @@ enum NoteState {
   ACTIVE
   DELETED
   DELETED_CASCADED
-}
-
-type Notification {
-  data: NotificationData!
-  id: ID!
-  state: NotificationState!
-}
-
-type NotificationAnnouncementData {
-  link: String
-  message: String!
-}
-
-enum NotificationCategory {
-  ANNOUNCEMENT
-  COMMENT
-}
-
-type NotificationCommentData {
-  comment: Comment!
-  post: Post!
-}
-
-union NotificationData = NotificationAnnouncementData | NotificationCommentData
-
-enum NotificationState {
-  READ
-  UNREAD
 }
 
 type PaymentInvoice {
@@ -1077,7 +1043,6 @@ type User {
   marketingConsent: Boolean!
   name: String!
   nextSubscription: Subscription_
-  notifications: [Notification!]!
   personalIdentity: UserPersonalIdentity
   postCount: Int!
   preferences: JSON!
