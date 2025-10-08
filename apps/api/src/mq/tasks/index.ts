@@ -1,7 +1,6 @@
 import { ProcessBmoMentionJob } from './bmo';
 import { CanvasCompactJob, CanvasCompactScanCron, CanvasIndexJob, CanvasSyncCollectJob, CanvasSyncScanCron } from './canvas';
 import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email';
-import { CreateNotificationJob } from './notification';
 import { PostCompactJob, PostCompactScanCron, PostIndexJob, PostSyncCollectJob, PostSyncScanCron } from './post';
 import {
   SubscriptionRenewalCancelJob,
@@ -18,7 +17,6 @@ export const jobs = [
   CanvasIndexJob,
   CanvasSyncCollectJob,
   CanvasCompactJob,
-  CreateNotificationJob,
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalRetryJob,
   SubscriptionRenewalPlanChangeJob,

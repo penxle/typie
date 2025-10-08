@@ -22,7 +22,6 @@
   import { fragment, graphql } from '$graphql';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
-  import Notification from './Notification.svelte';
   import Posts from './Posts.svelte';
   import SidebarButton from './SidebarButton.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
@@ -48,7 +47,6 @@
         }
 
         ...DashboardLayout_UserMenu_user
-        ...DashboardLayout_Notification_user
         ...DashboardLayout_Posts_user
         ...DashboardLayout_PreferenceModal_user
       }
@@ -133,7 +131,6 @@
     />
     <SidebarButton icon={SearchIcon} label="검색" onclick={() => (app.state.commandPaletteOpen = true)} />
     <SidebarButton icon={StickyNoteIcon} label="노트" onclick={() => (app.state.notesOpen = true)} />
-    <Notification {$user} />
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>

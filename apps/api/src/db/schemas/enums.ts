@@ -15,7 +15,6 @@ export const _FontState = createPgEnum('_font_state', E.FontState);
 export const _FontFamilyState = createPgEnum('_font_family_state', E.FontFamilyState);
 export const _InAppPurchaseStore = createPgEnum('_in_app_purchase_store', E.InAppPurchaseStore);
 export const _NoteState = createPgEnum('_note_state', E.NoteState);
-export const _NotificationState = createPgEnum('_notification_state', E.NotificationState);
 export const _PaymentInvoiceState = createPgEnum('_payment_invoice_state', E.PaymentInvoiceState);
 export const _PaymentOutcome = createPgEnum('_payment_outcome', E.PaymentOutcome);
 export const _PlanAvailability = createPgEnum('_plan_availability', E.PlanAvailability);
