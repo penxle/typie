@@ -13,7 +13,6 @@
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import LockIcon from '~icons/lucide/lock';
-  import MessageCircleIcon from '~icons/lucide/message-circle';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';
   import SmileIcon from '~icons/lucide/smile';
   import { page } from '$app/state';
@@ -65,7 +64,6 @@
             maxWidth
             protectContent
             allowReaction
-            allowComment
 
             coverImage {
               id
@@ -87,10 +85,6 @@
             reactions {
               id
               emoji
-            }
-
-            comments {
-              id
             }
 
             ...UsersiteWildcardSlugPage_EmojiReaction_postView
@@ -326,13 +320,6 @@
                 <div class={flex({ align: 'center', gap: '3px' })}>
                   <Icon icon={SmileIcon} />
                   <span class={css({ marginTop: '1px' })}>{comma($entityView.node.reactions.length)}</span>
-                </div>
-              {/if}
-
-              {#if $entityView.node.allowComment && $entityView.node.comments.length > 0}
-                <div class={flex({ align: 'center', gap: '3px' })}>
-                  <Icon icon={MessageCircleIcon} />
-                  <span class={css({ marginTop: '1px' })}>{comma($entityView.node.comments.length)}</span>
                 </div>
               {/if}
             </div>

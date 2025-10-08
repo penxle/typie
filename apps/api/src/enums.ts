@@ -1,9 +1,3 @@
-export type CommentState = keyof typeof CommentState;
-export const CommentState = {
-  ACTIVE: 'ACTIVE',
-  DELETED: 'DELETED',
-} as const;
-
 export type CreditCodeState = keyof typeof CreditCodeState;
 export const CreditCodeState = {
   AVAILABLE: 'AVAILABLE',

@@ -4,7 +4,6 @@ query SharePost_Query($slug: String!) {
     title
     password
     contentRating
-    allowComment
     allowReaction
     protectContent
 

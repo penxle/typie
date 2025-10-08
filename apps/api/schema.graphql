@@ -92,23 +92,6 @@ input CheckSpellingInput {
   body: JSON!
 }
 
-type Comment {
-  content: String
-  createdAt: DateTime!
-  id: ID!
-  state: CommentState!
-}
-
-enum CommentState {
-  ACTIVE
-  DELETED
-}
-
-input CreateCommentInput {
-  content: String!
-  postId: ID!
-}
-
 input CreateFolderInput {
   name: String!
   parentEntityId: ID
@@ -146,10 +129,6 @@ scalar DateTime
 
 input DeleteCanvasInput {
   canvasId: ID!
-}
-
-input DeleteCommentInput {
-  commentId: ID!
 }
 
 input DeleteEntitiesInput {
@@ -462,14 +441,12 @@ type Mutation {
   cancelPlanChange: Subscription_!
   cancelSubscriptionCancellation: Subscription_!
   checkSpelling(input: CheckSpellingInput!): [SpellingError!]!
-  createComment(input: CreateCommentInput!): Comment!
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
   createPost(input: CreatePostInput!): Post!
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createWsSession: String!
   deleteCanvas(input: DeleteCanvasInput!): Canvas!
-  deleteComment(input: DeleteCommentInput!): Comment!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
@@ -687,7 +664,6 @@ type PostView implements IPost {
   allowReaction: Boolean!
   availableActions: [PostAvailableAction!]!
   body: PostViewBody!
-  comments: [Comment!]!
   contentRating: PostContentRating!
   coverImage: Image
   createdAt: DateTime!
@@ -991,7 +967,6 @@ input UpdatePasswordInput {
 }
 
 input UpdatePostOptionInput {
-  allowComment: Boolean
   allowReaction: Boolean!
   availability: EntityAvailability
   contentRating: PostContentRating!

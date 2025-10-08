@@ -51,7 +51,6 @@ export const ISite = createInterfaceRef('ISite', T.Sites);
 
 export const Canvas = createObjectRef('Canvas', T.Canvases);
 export const CanvasSnapshot = createObjectRef('CanvasSnapshot', T.CanvasSnapshots);
-export const Comment = createObjectRef('Comment', T.Comments);
 export const CreditCode = createObjectRef('CreditCode', T.CreditCodes);
 export const Embed = createObjectRef('Embed', T.Embeds);
 export const Entity = createObjectRef('Entity', T.Entities);

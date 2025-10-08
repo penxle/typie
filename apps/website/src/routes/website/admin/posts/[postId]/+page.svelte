@@ -18,7 +18,6 @@
         subtitle
         type
         contentRating
-        allowComment
         allowReaction
         protectContent
         createdAt
@@ -409,13 +408,6 @@
                 })}
               >
                 [{$query.adminPost.contentRating}]
-              </span>
-            </div>
-
-            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>COMMENTS</span>
-              <span class={css({ fontSize: '12px', color: $query.adminPost.allowComment ? 'green.400' : 'gray.400' })}>
-                {$query.adminPost.allowComment ? 'ALLOWED' : 'DISABLED'}
               </span>
             </div>
 
