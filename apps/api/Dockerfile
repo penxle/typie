@@ -23,8 +23,8 @@ WORKDIR /app
 COPY . .
 
 RUN bun install --frozen-lockfile --production
-RUN bun playwright install-deps
-RUN bun playwright install chromium
+RUN bunx playwright install-deps
+RUN bunx playwright install chromium
 
 RUN tar -xvf vendor/sharp-debian.tar.xz -C /app/apps/api/
 ENV LD_LIBRARY_PATH="/app/apps/api/lib"
