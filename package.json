@@ -20,6 +20,9 @@
     "lint:typecheck": "turbo run lint:typecheck",
     "test": "turbo run test"
   },
+  "overrides": {
+    "canvas": "npm:-"
+  },
   "devDependencies": {
     "@types/bun": "^1.2.23",
     "@typie/lintconfig": "workspace:*",
