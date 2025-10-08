@@ -1,5 +1,6 @@
 export * from './auth';
 export * from './device';
+export * from './dnd-handler';
 export * from './download';
 export * from './drag-scroll';
 export * from './escape-stack';

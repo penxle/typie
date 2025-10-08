@@ -18,6 +18,8 @@ type DragDropState = {
   droppedItem: DragItem | DragView | null;
 };
 
+const key: unique symbol = Symbol('SplitViewDragDropContext');
+
 export class DragDropContext {
   state = $state<DragDropState>({
     isDragging: false,
@@ -54,15 +56,13 @@ export class DragDropContext {
   }
 }
 
-const DRAG_DROP_CONTEXT_KEY = Symbol('dragDrop');
-
 export const setupDragDropContext = () => {
   const context = new DragDropContext();
-  setContext(DRAG_DROP_CONTEXT_KEY, context);
+  setContext(key, context);
 };
 
 export const getDragDropContext = (): DragDropContext => {
-  const context = getContext<DragDropContext>(DRAG_DROP_CONTEXT_KEY);
+  const context = getContext<DragDropContext>(key);
   if (!context) {
     throw new Error('DragDropContext not found');
   }
