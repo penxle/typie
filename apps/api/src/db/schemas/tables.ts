@@ -791,3 +791,22 @@ export const UserSurveys = pgTable(
   },
   (t) => [unique().on(t.userId, t.name)],
 );
+
+export const Widgets = pgTable(
+  'widgets',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.WIDGETS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    data: jsonb('data').notNull().default({}).$type<Record<string, unknown>>(),
+    order: text('order').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.userId, t.order), unique().on(t.userId, t.name)],
+);

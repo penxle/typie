@@ -16,6 +16,7 @@ import './resolvers/search';
 import './resolvers/site';
 import './resolvers/unfurl';
 import './resolvers/user';
+import './resolvers/widget';
 import './resolvers/export';
 
 import { dev } from '@/env';

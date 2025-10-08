@@ -114,6 +114,13 @@ input CreatePostReactionInput {
   postId: ID!
 }
 
+input CreateWidgetInput {
+  data: JSON!
+  lowerOrder: String
+  name: String!
+  upperOrder: String
+}
+
 type CreditCode {
   amount: Int!
   code: String!
@@ -145,6 +152,10 @@ input DeleteNoteInput {
 
 input DeletePostInput {
   postId: ID!
+}
+
+input DeleteWidgetInput {
+  widgetId: ID!
 }
 
 input DumpLocalStorageInput {
@@ -430,6 +441,12 @@ input MoveNoteInput {
   upperOrder: String
 }
 
+input MoveWidgetInput {
+  lowerOrder: String
+  upperOrder: String
+  widgetId: ID!
+}
+
 type Mutation {
   adminEnqueuePostCompact(input: AdminEnqueuePostCompactInput!): Boolean!
   adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
@@ -445,6 +462,7 @@ type Mutation {
   createNote(input: CreateNoteInput!): Note!
   createPost(input: CreatePostInput!): Post!
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
+  createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
   deleteCanvas(input: DeleteCanvasInput!): Canvas!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
@@ -452,6 +470,7 @@ type Mutation {
   deleteNote(input: DeleteNoteInput!): Note!
   deletePost(input: DeletePostInput!): Post!
   deleteUser: Boolean!
+  deleteWidget(input: DeleteWidgetInput!): Widget!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicatePost(input: DuplicatePostInput!): Post!
   exportPostAsDocx(input: ExportPostAsDocxInput!): ExportPostAsDocxResult!
@@ -465,6 +484,7 @@ type Mutation {
   moveEntities(input: MoveEntitiesInput!): [Entity!]!
   moveEntity(input: MoveEntityInput!): Entity!
   moveNote(input: MoveNoteInput!): Note!
+  moveWidget(input: MoveWidgetInput!): Widget!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
@@ -501,6 +521,7 @@ type Mutation {
   updatePreferences(input: UpdatePreferencesInput!): User!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
+  updateWidget(input: UpdateWidgetInput!): Widget!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
   viewEntity(input: ViewEntityInput!): Entity!
 }
@@ -734,6 +755,7 @@ type Query {
   site(siteId: ID!): Site!
   stats: JSON!
   welcome: Welcome!
+  widgets: [Widget!]!
 }
 
 input RecordSurveyInput {
@@ -1005,6 +1027,11 @@ input UpdateUserInput {
   name: String!
 }
 
+input UpdateWidgetInput {
+  data: JSON!
+  widgetId: ID!
+}
+
 type User {
   avatar: Image!
   billingKey: UserBillingKey
@@ -1086,4 +1113,13 @@ type Welcome {
   name: String!
   update: Binary!
   updateMobile: Binary!
+}
+
+type Widget {
+  createdAt: DateTime!
+  data: JSON!
+  id: ID!
+  name: String!
+  order: String!
+  user: User!
 }
