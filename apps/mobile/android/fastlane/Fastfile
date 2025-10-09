@@ -11,7 +11,6 @@ platform :android do
     latest_build_number = google_play_track_version_codes(track: "internal")[0]
 
     Dir.chdir("../..") do
-      sh "dart run build_runner clean"
       sh "dart run build_runner build --delete-conflicting-outputs"
       sh "flutter build appbundle --build-number=#{latest_build_number + 1}"
     end

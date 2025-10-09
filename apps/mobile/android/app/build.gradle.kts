@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
   id("com.android.application")
   id("com.google.gms.google-services")
@@ -7,8 +9,8 @@ plugins {
 
 android {
   namespace = "co.typie"
-  compileSdk = 36
-  ndkVersion = "27.0.12077973"
+  compileSdk = flutter.compileSdkVersion
+  ndkVersion = flutter.ndkVersion
 
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -17,14 +19,10 @@ android {
     isCoreLibraryDesugaringEnabled = true
   }
 
-  kotlinOptions {
-    jvmTarget = JavaVersion.VERSION_21.toString()
-  }
-
   defaultConfig {
     applicationId = "co.typie"
-    minSdk = 31
-    targetSdk = 36
+    minSdk = 26
+    targetSdk = flutter.targetSdkVersion
     versionCode = flutter.versionCode
     versionName = flutter.versionName
 
@@ -66,13 +64,20 @@ android {
   }
 }
 
+kotlin {
+  compilerOptions {
+    jvmTarget = JvmTarget.JVM_21
+  }
+}
+
 flutter {
   source = "../.."
 }
 
 dependencies {
-  implementation("androidx.window:window:1.4.0")
-  implementation("androidx.window:window-java:1.4.0")
+  implementation("androidx.core:core-splashscreen:1.0.1")
+  implementation("androidx.window:window:1.5.0")
+  implementation("androidx.window:window-java:1.5.0")
   implementation("com.squareup.moshi:moshi:1.15.2")
   coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
