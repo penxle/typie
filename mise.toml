@@ -1,5 +1,6 @@
 [tools]
 bun = "latest"
+java = "21"
 ruby = "latest"
 rust = "stable"
 terraform = "latest"

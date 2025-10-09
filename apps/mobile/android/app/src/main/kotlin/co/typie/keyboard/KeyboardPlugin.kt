@@ -3,7 +3,8 @@ package co.typie.keyboard
 import android.app.Activity
 import android.content.ComponentCallbacks2
 import android.content.res.Configuration
-import android.view.WindowInsets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 
@@ -34,11 +35,9 @@ class KeyboardPlugin(private val activity: Activity, messenger: BinaryMessenger)
   init {
     channel.setStreamHandler(this)
 
-    activity.window.decorView.setOnApplyWindowInsetsListener { view, originalInsets ->
-      val insets = view.onApplyWindowInsets(originalInsets)
-
-      val height =
-        insets.getInsets(WindowInsets.Type.ime()).bottom / view.resources.displayMetrics.density
+    ViewCompat.setOnApplyWindowInsetsListener(activity.window.decorView) { view, insets ->
+      val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+      val height = imeInsets.bottom / view.resources.displayMetrics.density
       events?.success(mapOf("type" to "height", "height" to height))
 
       insets

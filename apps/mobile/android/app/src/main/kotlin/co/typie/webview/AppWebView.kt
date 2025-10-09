@@ -1,12 +1,12 @@
 package co.typie.webview
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import android.view.WindowInsets
 import android.webkit.ConsoleMessage
 import android.webkit.ConsoleMessage.MessageLevel
 import android.webkit.CookieManager
@@ -17,6 +17,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
 import io.flutter.plugin.common.BinaryMessenger
@@ -34,6 +36,7 @@ class AppWebView(
 ) : PlatformView, MethodCallHandler {
   private val channel = MethodChannel(messenger, "co.typie.webview.$id")
   private val handler = Handler(Looper.getMainLooper())
+  private val activity = context as Activity
 
   private val webView = WebView(context)
   private val cookieManager = CookieManager.getInstance()
@@ -150,12 +153,12 @@ class AppWebView(
     when (call.method) {
       "requestFocus" -> {
         webView.requestFocus()
-        view.windowInsetsController?.show(WindowInsets.Type.ime())
+        WindowCompat.getInsetsController(activity.window, view).show(WindowInsetsCompat.Type.ime())
         result.success(null)
       }
 
       "clearFocus" -> {
-        view.windowInsetsController?.hide(WindowInsets.Type.ime())
+        WindowCompat.getInsetsController(activity.window, view).hide(WindowInsetsCompat.Type.ime())
         // webView.clearFocus()
         result.success(null)
       }
