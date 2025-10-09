@@ -3,11 +3,14 @@ package co.typie.webview
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.webkit.ConsoleMessage
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import android.webkit.ConsoleMessage.MessageLevel
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -17,8 +20,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
 import io.flutter.plugin.common.BinaryMessenger
@@ -36,12 +37,24 @@ class AppWebView(
 ) : PlatformView, MethodCallHandler {
   private val channel = MethodChannel(messenger, "co.typie.webview.$id")
   private val handler = Handler(Looper.getMainLooper())
-  private val activity = context as Activity
 
   private val webView = WebView(context)
   private val cookieManager = CookieManager.getInstance()
 
   private val adapter = Moshi.Builder().build().adapter<Map<String, Any?>>()
+
+  private val activity: Activity? = run {
+    var currentContext = context
+
+    while (currentContext is ContextWrapper) {
+      if (currentContext is Activity) {
+        return@run currentContext
+      }
+      currentContext = currentContext.baseContext
+    }
+
+    null
+  }
 
   private val pendingCallProcedureResults = mutableMapOf<String, Result>()
 
@@ -153,12 +166,16 @@ class AppWebView(
     when (call.method) {
       "requestFocus" -> {
         webView.requestFocus()
-        WindowInsetsControllerCompat(activity.window, view).show(WindowInsetsCompat.Type.ime())
+        activity?.window?.let { window ->
+          WindowCompat.getInsetsController(window, webView).show(WindowInsetsCompat.Type.ime())
+        }
         result.success(null)
       }
 
       "clearFocus" -> {
-        WindowInsetsControllerCompat(activity.window, view).hide(WindowInsetsCompat.Type.ime())
+        activity?.window?.let { window ->
+          WindowCompat.getInsetsController(window, webView).hide(WindowInsetsCompat.Type.ime())
+        }
         // webView.clearFocus()
         result.success(null)
       }
