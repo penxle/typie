@@ -64,7 +64,3 @@ css({ p: '16 8', color: '#000000', bg: 'white', lineHeight: '1.6' });
 - **Mobile (Flutter)**: Use semantic colors from `apps/mobile/lib/styles/semantic_colors.dart`
   - Access via `context.colors.textDefault` (using BuildContext extension from `lib/context/theme.dart`)
   - Example: `Icon(Icons.check, color: context.colors.textDefault)`
-
-## Workflow Guidelines
-
-- Always perform tasks in parallel and simultaneously. For example, when reading and writing files, always do so concurrently. When executing multiple commands, always execute them in parallel.
