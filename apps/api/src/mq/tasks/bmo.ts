@@ -521,7 +521,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       const toolInputMap = new Map<string, string>();
 
       const stream = anthropic.messages.stream({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 64_000,
         thinking: {
           type: 'enabled',
