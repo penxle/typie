@@ -17,8 +17,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
 import io.flutter.plugin.common.BinaryMessenger
@@ -153,12 +153,12 @@ class AppWebView(
     when (call.method) {
       "requestFocus" -> {
         webView.requestFocus()
-        WindowCompat.getInsetsController(activity.window, view).show(WindowInsetsCompat.Type.ime())
+        WindowInsetsControllerCompat(activity.window, view).show(WindowInsetsCompat.Type.ime())
         result.success(null)
       }
 
       "clearFocus" -> {
-        WindowCompat.getInsetsController(activity.window, view).hide(WindowInsetsCompat.Type.ime())
+        WindowInsetsControllerCompat(activity.window, view).hide(WindowInsetsCompat.Type.ime())
         // webView.clearFocus()
         result.success(null)
       }
