@@ -16,7 +16,6 @@ platform :ios do
     latest_build_number = latest_testflight_build_number 
 
     Dir.chdir("../..") do
-      sh "dart run build_runner clean"
       sh "dart run build_runner build --delete-conflicting-outputs"
       sh "flutter build ipa --build-number=#{latest_build_number + 1} --export-options-plist=./ios/ExportOptions.AppStore.plist"
     end
