@@ -34,13 +34,15 @@ class TextToolbar extends HookWidget {
         children: [
           ColorToolbarButton(
             color:
-                (editorValues['textColor']?.firstWhere(
-                      (e) =>
-                          e['value'] ==
-                          (proseMirrorState?.getMarkAttributes('text_style')?['textColor'] as String? ??
-                              editorDefaultValues['textColor']),
-                    )['color']
-                    as Color Function(BuildContext))(context),
+                (editorValues['textColor']?.firstWhereOrNull(
+                          (e) =>
+                              e['value'] ==
+                              (proseMirrorState?.getMarkAttributes('text_style')?['textColor'] as String? ??
+                                  editorDefaultValues['textColor']),
+                        )?['color']
+                        as Color Function(BuildContext)?)
+                    ?.call(context) ??
+                context.colors.prosemirrorBlack,
             value:
                 proseMirrorState?.getMarkAttributes('text_style')?['textColor'] as String? ??
                 editorDefaultValues['textColor'] as String,
@@ -50,12 +52,12 @@ class TextToolbar extends HookWidget {
           ),
           BackgroundColorToolbarButton(
             color:
-                (editorValues['textBackgroundColor']?.firstWhere(
+                (editorValues['textBackgroundColor']?.firstWhereOrNull(
                           (e) =>
                               e['value'] ==
                               (proseMirrorState?.getMarkAttributes('text_style')?['textBackgroundColor'] as String? ??
                                   editorDefaultValues['textBackgroundColor']),
-                        )['color']
+                        )?['color']
                         as Color Function(BuildContext)?)
                     ?.call(context),
             value:
@@ -88,13 +90,15 @@ class TextToolbar extends HookWidget {
           LabelToolbarButton(
             color: context.colors.textSubtle,
             text:
-                editorValues['fontWeight']?.firstWhere(
+                editorValues['fontWeight']?.firstWhereOrNull(
                       (e) =>
                           e['value'] ==
                           (proseMirrorState?.getMarkAttributes('text_style')?['fontWeight'] as int? ??
                               editorDefaultValues['fontWeight']),
-                    )['label']
-                    as String,
+                    )?['label']
+                    as String? ??
+                (proseMirrorState?.getMarkAttributes('text_style')?['fontWeight'] as int?)?.toString() ??
+                '(알 수 없음)',
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.fontWeight;
             },
