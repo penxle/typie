@@ -25,6 +25,15 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Run turbo prune
+        run: bunx turbo prune @typie/${{ inputs.app }} --docker
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -34,9 +43,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
       - name: Generate image metadata
         id: meta

@@ -1,30 +1,19 @@
-FROM oven/bun:1.2 AS source
+FROM oven/bun:1.2 AS build-base
 WORKDIR /app
+ENV NODE_ENV=production
 
-COPY apps/ ./apps/
-COPY packages/ ./packages/
-COPY crates/ ./crates/
-COPY vendor/ ./vendor/
-COPY package.json bun.lock turbo.json ./
+FROM build-base AS build-deps
 
-RUN bunx turbo prune @typie/api --docker
-
-FROM oven/bun:1.2 AS build-deps
-WORKDIR /app
-
-COPY --from=source /app/out/json/ .
+COPY out/json/ .
 RUN bun install --no-save
 
 FROM build-deps AS build
-WORKDIR /app
 
-ENV NODE_ENV=production
-
-COPY --from=source /app/out/full/ .
+COPY out/full/ .
 RUN bunx turbo build --filter=@typie/api
 RUN find . -type d -name "node_modules" -prune -exec rm -rf {} +
 
-FROM debian:12-slim AS runtime-deps
+FROM debian:12-slim AS runtime-base
 WORKDIR /app
 
 ENV PATH="/root/.bun/bin:$PATH"
@@ -42,19 +31,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://bun.sh/install | bash
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY --from=source /app/out/json/ .
+FROM runtime-base AS runtime-deps
+
+COPY out/json/ .
 RUN bun install --no-save --omit=dev
-RUN cd apps/api && bunx playwright install-deps && bunx playwright install chromium
+RUN cd apps/api && npx playwright install-deps && npx playwright install chromium
 
 FROM runtime-deps AS runtime
-WORKDIR /app
 
 COPY --from=build /app/ .
-COPY --from=source /app/vendor/sharp-debian.tar.xz ./vendor/
+COPY vendor/sharp-debian.tar.xz ./vendor/
 
 RUN tar -xf vendor/sharp-debian.tar.xz -C apps/api/ && rm -rf vendor
 
-WORKDIR /app/apps/api
 ENTRYPOINT ["tini", "--"]
-CMD ["bun", "run", "start"]
+CMD ["bun", "run", "--cwd", "apps/api", "start"]
