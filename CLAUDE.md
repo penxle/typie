@@ -7,6 +7,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - All chat responses should be written in Korean (한국어).
 - When adding memories to this file, always use English language.
 
+## Tool Execution Policy
+
+**CRITICAL: Sequential Tool Execution Required**
+
+- All tools MUST be executed sequentially, one at a time
+- Wait for each tool's result before proceeding to the next tool call
+- NEVER invoke multiple tools in parallel, even if they appear independent
+- This applies to ALL tools without exception: Read, Write, Edit, Bash, Grep, etc.
+- If a task requires multiple tool calls, break them into separate sequential messages
+
+This policy ensures system stability and prevents race conditions in the development environment.
+
 ## Project Overview
 
 Typie is a Korean writing platform that aims to be a "space for writing thoughts" and provides real-time collaboration, canvas drawing, and rich text editing features, supporting both web and mobile.
