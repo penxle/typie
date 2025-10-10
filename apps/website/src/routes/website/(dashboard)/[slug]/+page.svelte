@@ -135,8 +135,6 @@
     class={center({
       size: 'full',
       backgroundColor: 'surface.default',
-      boxShadow: 'card',
-      borderRadius: '4px',
     })}
   >
     <Logo

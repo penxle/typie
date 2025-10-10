@@ -120,7 +120,7 @@
         site {
           id
           ...DashboardLayout_EntityTree_site
-          ...DashboardLayout_Trash_site
+          ...DashboardLayout_TrashModal_site
           ...DashboardLayout_PlanUsageWidget_site
         }
       }
@@ -524,12 +524,6 @@
 
     lastPointerX = e.clientX;
     lastPointerY = e.clientY;
-
-    const isPostsPanelVisible = app.state.postsOpen || app.preference.current.postsExpanded === 'open';
-    if (dragging.eligible && !isPostsPanelVisible) {
-      endDragging();
-      return;
-    }
 
     if (dragging.eligible) {
       dragging.ghost = {

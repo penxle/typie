@@ -1,5 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { center } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
   import { Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getThemeContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
@@ -8,7 +10,6 @@
   import MoonIcon from '~icons/lucide/moon';
   import SunIcon from '~icons/lucide/sun';
   import SunMoonIcon from '~icons/lucide/sun-moon';
-  import SidebarButton from './SidebarButton.svelte';
   import type { Theme } from '@typie/ui/context';
   import type { Component } from 'svelte';
 
@@ -25,9 +26,29 @@
   let open = $state(false);
 </script>
 
-<Menu offset={8} placement="right-start" bind:open>
+<Menu offset={8} placement="top-start" bind:open>
   {#snippet button()}
-    <SidebarButton icon={SunMoonIcon} label="테마 설정" />
+    <button
+      class={center({
+        borderRadius: '8px',
+        size: '32px',
+        color: 'text.faint',
+        transition: 'common',
+        _hover: {
+          color: 'text.subtle',
+          backgroundColor: 'surface.muted',
+        },
+        '&[aria-pressed="true"]': {
+          color: 'text.subtle',
+          backgroundColor: 'surface.muted',
+        },
+      })}
+      aria-pressed={open}
+      type="button"
+      use:tooltip={{ message: '테마 설정', placement: 'top', offset: 8 }}
+    >
+      <Icon icon={SunMoonIcon} size={20} />
+    </button>
   {/snippet}
 
   {#each themeNames as name (name)}

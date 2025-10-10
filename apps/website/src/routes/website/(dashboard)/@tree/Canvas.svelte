@@ -98,9 +98,11 @@
   role="treeitem"
   use:contextMenu={{ content: contextMenuContent }}
 >
-  <EntitySelectionIndicator entityId={$canvas.entity.id} visibility={$canvas.entity.visibility} />
-
-  <Icon style={css.raw({ color: 'text.faint' })} icon={LineSquiggleIcon} size={14} />
+  <EntitySelectionIndicator entityId={$canvas.entity.id}>
+    {#snippet icon()}
+      <Icon style={css.raw({ color: 'text.faint' })} icon={LineSquiggleIcon} size={14} />
+    {/snippet}
+  </EntitySelectionIndicator>
 
   <span
     class={css(

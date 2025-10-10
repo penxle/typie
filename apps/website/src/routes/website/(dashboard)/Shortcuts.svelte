@@ -27,18 +27,6 @@
   );
 
   const handleKeydown = async (event: KeyboardEvent) => {
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyE') {
-      event.preventDefault();
-
-      if (app.preference.current.postsExpanded === false) {
-        app.state.postsOpen = !app.state.postsOpen;
-      } else {
-        app.preference.current.postsExpanded = app.preference.current.postsExpanded === 'open' ? 'closed' : 'open';
-      }
-
-      return;
-    }
-
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyP') {
       if (!app.state.current) return;
 

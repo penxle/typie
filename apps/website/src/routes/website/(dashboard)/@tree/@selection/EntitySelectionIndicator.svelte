@@ -1,16 +1,16 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { Checkbox } from '@typie/ui/components';
-  import { EntityVisibility } from '@/enums';
   import { getTreeContext } from '../state.svelte';
+  import type { Snippet } from 'svelte';
   import type { TreeEntity } from './types';
 
   type Props = {
     entityId: string;
-    visibility?: EntityVisibility;
+    icon: Snippet;
   };
 
-  let { entityId, visibility }: Props = $props();
+  let { entityId, icon }: Props = $props();
 
   const treeState = getTreeContext();
   const selected = $derived(treeState.selectedEntityIds.has(entityId));
@@ -133,18 +133,18 @@
       {
         position: 'absolute',
         inset: '0',
-        borderRadius: 'full',
-        backgroundColor: 'interactive.hover',
-        size: '4px',
-        margin: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         opacity: '100',
         transition: 'common',
-        _groupHover: { opacity: '0' },
+        _hover: { opacity: '0' },
       },
-      visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
       selected && { opacity: '0' },
     )}
-  ></div>
+  >
+    {@render icon()}
+  </div>
   <div
     class={css(
       {
@@ -155,7 +155,7 @@
         justifyContent: 'center',
         opacity: '0',
         transition: 'common',
-        _groupHover: { opacity: '100' },
+        _hover: { opacity: '100' },
       },
       selected && { opacity: '100' },
     )}

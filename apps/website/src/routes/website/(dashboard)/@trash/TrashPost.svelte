@@ -45,7 +45,7 @@
 
         site {
           id
-          ...DashboardLayout_Trash_site
+          ...DashboardLayout_TrashModal_site
         }
       }
     }
@@ -55,7 +55,7 @@
     mutation DashboardLayout_TrashTree_TrashPost_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
       purgeEntities(input: $input) {
         id
-        ...DashboardLayout_Trash_site
+        ...DashboardLayout_TrashModal_site
       }
     }
   `);

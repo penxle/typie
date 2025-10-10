@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { Helmet, Icon, RingSpinner } from '@typie/ui/components';
+  import { Helmet, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import { onMount } from 'svelte';
@@ -10,6 +10,7 @@
   import XIcon from '~icons/lucide/x';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import Logo from '$assets/logos/logo.svg?component';
   import { fragment, graphql } from '$graphql';
   import Canvas from '../@canvas/Canvas.svelte';
   import Editor from '../Editor.svelte';
@@ -96,11 +97,7 @@
     flex: '1',
     size: 'full',
     backgroundColor: 'surface.default',
-    borderWidth: '1px',
-    boxShadow: 'card',
-    borderRadius: '4px',
     overflow: 'hidden',
-    borderColor: focused && splitView.state.current.enabled ? 'border.strong' : 'transparent',
   })}
   data-view-id={viewItem.id}
   onclick={() => {
@@ -158,7 +155,13 @@
         </CloseSplitView>
       {/if}
 
-      <RingSpinner style={css.raw({ size: '24px', color: 'text.subtle' })} />
+      <Logo
+        class={css({
+          size: '32px',
+          filter: '[grayscale(100%)]',
+          animation: 'pulse 2s ease-in-out infinite',
+        })}
+      />
     </div>
   {/if}
 </div>

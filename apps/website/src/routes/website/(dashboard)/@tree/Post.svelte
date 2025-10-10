@@ -103,13 +103,15 @@
   role="treeitem"
   use:contextMenu={{ content: contextMenuContent }}
 >
-  <EntitySelectionIndicator entityId={$post.entity.id} visibility={$post.entity.visibility} />
-
-  {#if $post.type === PostType.NORMAL}
-    <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
-  {:else if $post.type === PostType.TEMPLATE}
-    <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
-  {/if}
+  <EntitySelectionIndicator entityId={$post.entity.id}>
+    {#snippet icon()}
+      {#if $post.type === PostType.NORMAL}
+        <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
+      {:else if $post.type === PostType.TEMPLATE}
+        <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
+      {/if}
+    {/snippet}
+  </EntitySelectionIndicator>
 
   <span
     class={css(

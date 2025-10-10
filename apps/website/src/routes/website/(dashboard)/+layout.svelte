@@ -4,10 +4,12 @@
   import { token } from '@typie/styled-system/tokens';
   import { Button, HorizontalDivider } from '@typie/ui/components';
   import { setupAppContext } from '@typie/ui/context';
+  import { Updater } from '@typie/ui/notification';
   import { isMobileDevice } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount, untrack } from 'svelte';
+  import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
@@ -15,7 +17,10 @@
   import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
   import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
   import Notes from './@notes/Notes.svelte';
+  import PreferenceModal from './@preference/PreferenceModal.svelte';
   import ShareModal from './@share/ShareModal.svelte';
+  import StatsModal from './@stats/StatsModal.svelte';
+  import TrashModal from './@trash/TrashModal.svelte';
   import CanvasDeprecationModal from './CanvasDeprecationModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -41,6 +46,9 @@
         sites {
           id
           name
+
+          ...DashboardLayout_Sidebar_site
+          ...DashboardLayout_TrashModal_site
         }
 
         referral {
@@ -49,8 +57,9 @@
 
         surveys
 
-        ...DashboardLayout_Sidebar_user
         ...DashboardLayout_CommandPalette_user
+        ...DashboardLayout_PreferenceModal_user
+        ...DashboardLayout_Sidebar_user
       }
 
       ...AdminImpersonateBanner_query
@@ -66,7 +75,7 @@
           id
 
           ...DashboardLayout_EntityTree_site
-          ...DashboardLayout_Trash_site
+          ...DashboardLayout_TrashModal_site
         }
 
         ... on Entity {
@@ -145,6 +154,16 @@
         $email: $query.me.email,
         $name: $query.me.name,
         $avatar: qs.stringifyUrl({ url: $query.me.avatar.url, query: { s: 256, f: 'png' } }),
+      });
+    }
+  });
+
+  $effect(() => {
+    if (updated.current) {
+      Updater.show({
+        onRefresh: () => {
+          location.reload();
+        },
       });
     }
   });
@@ -265,19 +284,16 @@
         position: 'relative',
         flexGrow: '1',
         alignItems: 'stretch',
-        backgroundColor: 'surface.muted',
         overflow: 'hidden',
       })}
     >
-      <Sidebar $user={$query.me} />
+      <Sidebar $site={$query.me.sites[0]} $user={$query.me} />
 
       <div
         class={cx(
           'main-container',
           flex({
             flexGrow: '1',
-            marginY: '8px',
-            marginRight: '8px',
             overflow: 'auto',
           }),
         )}
@@ -290,7 +306,10 @@
 
 <CommandPalette $user={$query.me} />
 <Notes {$query} />
+<PreferenceModal $user={$query.me} />
 <ShareModal />
+<StatsModal />
+<TrashModal $site={$query.me.sites[0]} />
 <Shortcuts {$query} />
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
