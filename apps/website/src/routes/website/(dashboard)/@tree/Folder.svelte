@@ -158,9 +158,11 @@
     role="treeitem"
     use:contextMenu={{ content: contextMenuContent }}
   >
-    <EntitySelectionIndicator entityId={$folder.entity.id} visibility={$folder.entity.visibility} />
-
-    <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
+    <EntitySelectionIndicator entityId={$folder.entity.id}>
+      {#snippet icon()}
+        <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
+      {/snippet}
+    </EntitySelectionIndicator>
 
     {#if editing}
       <form

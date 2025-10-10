@@ -136,9 +136,6 @@
       minHeight: 'fit',
       padding: '32px',
       backgroundColor: 'surface.default',
-      borderWidth: '1px',
-      boxShadow: 'card',
-      borderRadius: '4px',
     })}
   >
     {#if mounted}

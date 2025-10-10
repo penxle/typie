@@ -4,35 +4,32 @@
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { Dialog } from '@typie/ui/notification';
+  import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { fly } from 'svelte/transition';
-  import ChartNoAxesCombinedIcon from '~icons/lucide/chart-no-axes-combined';
-  import CircleFadingArrowUpIcon from '~icons/lucide/circle-fading-arrow-up';
-  import CogIcon from '~icons/lucide/cog';
-  import FolderIcon from '~icons/lucide/folder';
-  import PlusIcon from '~icons/lucide/plus';
+  import BarChart3Icon from '~icons/lucide/bar-chart-3';
+  import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import HelpCircleIcon from '~icons/lucide/help-circle';
+  import HomeIcon from '~icons/lucide/home';
+  import NewspaperIcon from '~icons/lucide/newspaper';
   import SearchIcon from '~icons/lucide/search';
-  import ShieldUserIcon from '~icons/lucide/shield-user';
-  import StickyNoteIcon from '~icons/lucide/sticky-note';
+  import SettingsIcon from '~icons/lucide/settings';
+  import SquarePenIcon from '~icons/lucide/square-pen';
+  import Trash2Icon from '~icons/lucide/trash-2';
   import { goto, pushState } from '$app/navigation';
-  import { updated } from '$app/state';
-  import FaviconDark from '$assets/logos/favicon-dark.svg?component';
-  import FaviconLight from '$assets/logos/favicon-light.svg?component';
+  import { page } from '$app/state';
   import { fragment, graphql } from '$graphql';
-  import PreferenceModal from './@preference/PreferenceModal.svelte';
-  import StatsModal from './@stats/StatsModal.svelte';
-  import Posts from './Posts.svelte';
-  import SidebarButton from './SidebarButton.svelte';
+  import EntityTree from './@tree/EntityTree.svelte';
+  import PlanUsageWidget from './PlanUsageWidget.svelte';
+  import Profile from './Profile.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
-  import UserMenu from './UserMenu.svelte';
-  import type { DashboardLayout_Sidebar_user } from '$graphql';
+  import type { DashboardLayout_Sidebar_site, DashboardLayout_Sidebar_user } from '$graphql';
 
   type Props = {
+    $site: DashboardLayout_Sidebar_site;
     $user: DashboardLayout_Sidebar_user;
   };
 
-  let { $user: _user }: Props = $props();
+  let { $site: _site, $user: _user }: Props = $props();
 
   const user = fragment(
     _user,
@@ -41,14 +38,21 @@
         id
         role
 
-        sites {
-          id
-          ...DashboardLayout_Posts_site
-        }
+        ...DashboardLayout_Profile_user
+        ...DashboardLayout_PlanUsageWidget_user
+      }
+    `),
+  );
 
-        ...DashboardLayout_UserMenu_user
-        ...DashboardLayout_Posts_user
-        ...DashboardLayout_PreferenceModal_user
+  const site = fragment(
+    _site,
+    graphql(`
+      fragment DashboardLayout_Sidebar_site on Site {
+        id
+
+        ...DashboardLayout_EntityTree_site
+        ...DashboardLayout_PlanUsageWidget_site
+        ...DashboardLayout_TrashModal_site
       }
     `),
   );
@@ -66,141 +70,393 @@
     }
   `);
 
+  const createFolder = graphql(`
+    mutation DashboardLayout_Sidebar_CreateFolder_Mutation($input: CreateFolderInput!) {
+      createFolder(input: $input) {
+        id
+      }
+    }
+  `);
+
   const app = getAppContext();
+
+  type Resizer = {
+    deltaX: number;
+    eligible: boolean;
+    event: PointerEvent;
+    element: HTMLElement;
+  };
+
+  let resizer = $state<Resizer | null>(null);
+  let newWidth = $derived(clamp((app.preference.current.sidebarWidth ?? 240) + (resizer?.deltaX ?? 0), 240, 480));
 </script>
 
-<aside
-  class={flex({
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '24px',
+<div
+  style:--min-width="240px"
+  style:--width={`${newWidth}px`}
+  style:--max-width="480px"
+  class={css({
+    position: 'relative',
     flexShrink: '0',
-    paddingY: '12px',
-    width: '64px',
+    minWidth: 'var(--min-width)',
+    maxWidth: 'var(--max-width)',
+    opacity: '100',
+    transitionDuration: '150ms',
+    transitionTimingFunction: 'ease',
+    transitionProperty: '[min-width, max-width, opacity, position, margin-block]',
   })}
 >
-  <a class={css({ flexShrink: '0', borderRadius: '8px', size: '32px', overflow: 'hidden' })} href="/home">
-    <FaviconLight class={css({ size: 'full', _dark: { display: 'none' } })} />
-    <FaviconDark class={css({ display: 'none', size: 'full', _dark: { display: 'block' } })} />
-  </a>
-
-  <button
-    class={center({
-      borderWidth: '1px',
-      borderColor: 'border.strong',
-      borderRadius: '8px',
-      size: '32px',
-      color: 'text.faint',
+  <div
+    class={css({
+      display: 'flex',
+      flexDirection: 'column',
+      minWidth: 'var(--min-width)',
+      width: 'var(--width)',
+      maxWidth: 'var(--max-width)',
+      height: 'full',
       backgroundColor: 'surface.subtle',
-      boxShadow: 'small',
-      transition: 'common',
-      _hover: {
-        color: 'text.subtle',
-        backgroundColor: 'surface.muted',
-        boxShadow: 'medium',
-      },
+      borderRightWidth: '1px',
+      borderColor: 'border.subtle',
+      boxShadow: 'card',
+      transitionProperty: '[border, border-radius, box-shadow]',
+      transitionDuration: '150ms',
+      transitionTimingFunction: 'ease',
+      overflow: 'hidden',
     })}
-    onclick={async () => {
-      const resp = await createPost({
-        siteId: $user.sites[0].id,
-      });
-
-      mixpanel.track('create_post', { via: 'sidebar' });
-
-      await goto(`/${resp.entity.slug}`);
-    }}
-    type="button"
-    use:tooltip={{ message: '새 포스트 생성', placement: 'right', offset: 12 }}
   >
-    <Icon icon={PlusIcon} size={20} />
-  </button>
+    <div
+      class={flex({
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginX: '8px',
+        marginTop: '8px',
+        gap: '8px',
+      })}
+    >
+      <Profile {$user} />
 
-  <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <SidebarButton
-      active={app.preference.current.postsExpanded === false ? app.state.postsOpen : app.preference.current.postsExpanded === 'open'}
-      icon={FolderIcon}
-      keys={['Mod', 'Shift', 'E']}
-      label="내 포스트"
-      onclick={() => {
-        if (app.preference.current.postsExpanded === false) {
-          app.state.postsOpen = !app.state.postsOpen;
-        } else {
-          app.preference.current.postsExpanded = app.preference.current.postsExpanded === 'open' ? 'closed' : 'open';
-        }
-      }}
-    />
-    <SidebarButton icon={SearchIcon} label="검색" onclick={() => (app.state.commandPaletteOpen = true)} />
-    <SidebarButton icon={StickyNoteIcon} label="노트" onclick={() => (app.state.notesOpen = true)} />
-  </div>
-
-  <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <SidebarButton
-      icon={ChartNoAxesCombinedIcon}
-      label="통계"
-      onclick={() => {
-        app.state.statsOpen = true;
-        mixpanel.track('open_stats_modal');
-      }}
-    />
-  </div>
-
-  <div class={css({ flexGrow: '1' })}></div>
-
-  {#if updated.current}
-    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <div in:fly={{ y: '4px', duration: 500 }}>
-        <SidebarButton
-          icon={CircleFadingArrowUpIcon}
-          iconStyle={css.raw({
-            color: 'text.brand',
-            animationName: 'alarm',
-            animationDuration: '2s',
-            animationDelay: '500ms',
-            animationIterationCount: 'infinite',
-            animationTimingFunction: 'cubic-bezier(0.36, 0.07, 0.19, 0.97)',
+      <div class={flex({ alignItems: 'center', gap: '8px' })}>
+        <button
+          class={center({
+            borderRadius: '4px',
+            size: '24px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
-          label="새로운 업데이트가 있어요"
-          onclick={() => {
-            Dialog.confirm({
-              title: '새로운 업데이트가 있어요',
-              message: `이용 가능한 업데이트가 있어요. 새로고침 후 이용해주세요.`,
-              actionLabel: '새로고침',
-              actionHandler: () => {
-                location.reload();
-              },
-              cancelLabel: '나중에',
+          onclick={async () => {
+            const resp = await createFolder({
+              siteId: $site.id,
+              name: '새 폴더',
             });
 
-            mixpanel.track('click_new_update_alert', { via: 'sidebar' });
+            mixpanel.track('create_folder', { via: 'tree' });
+
+            app.state.newFolderId = resp.id;
           }}
-        />
+          type="button"
+          use:tooltip={{ message: '새 폴더 생성' }}
+        >
+          <Icon icon={FolderPlusIcon} />
+        </button>
+
+        <button
+          class={center({
+            borderRadius: '4px',
+            size: '24px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+          })}
+          onclick={async () => {
+            const resp = await createPost({
+              siteId: $site.id,
+            });
+
+            mixpanel.track('create_post', { via: 'tree' });
+
+            await goto(`/${resp.entity.slug}`);
+          }}
+          type="button"
+          use:tooltip={{ message: '새 포스트 생성' }}
+        >
+          <Icon icon={SquarePenIcon} />
+        </button>
       </div>
     </div>
-  {/if}
 
-  <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    {#if $user.role === 'ADMIN'}
-      <SidebarButton as="a" href="/admin" icon={ShieldUserIcon} label="어드민" />
-    {/if}
+    <div class={flex({ flexDirection: 'column', marginX: '8px', marginTop: '8px' })}>
+      <a
+        class={css({
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          paddingX: '8px',
+          paddingY: '6px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+          '&[aria-current="page"]': {
+            backgroundColor: 'surface.muted',
+          },
+        })}
+        aria-current={page.route.id === '/website/(dashboard)/home' ? 'page' : undefined}
+        href="/home"
+      >
+        <Icon style={css.raw({ color: 'text.faint' })} icon={HomeIcon} size={14} />
+        <span
+          class={css({
+            fontSize: '14px',
+            fontWeight: 'medium',
+            color: 'text.muted',
+            '[aria-current="page"] > &': {
+              fontWeight: 'bold',
+              color: 'text.default',
+            },
+          })}
+        >
+          홈
+        </span>
+      </a>
 
-    <div class={center({ width: 'full' })}>
-      <ThemeSwitch />
+      <button
+        class={flex({
+          alignItems: 'center',
+          gap: '6px',
+          paddingX: '8px',
+          paddingY: '6px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+        })}
+        onclick={() => (app.state.commandPaletteOpen = true)}
+        type="button"
+      >
+        <Icon style={css.raw({ color: 'text.faint' })} icon={SearchIcon} size={14} />
+        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>검색</span>
+      </button>
+
+      <button
+        class={flex({
+          alignItems: 'center',
+          gap: '6px',
+          paddingX: '8px',
+          paddingY: '6px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+        })}
+        onclick={() => {
+          app.state.statsOpen = true;
+          mixpanel.track('open_stats_modal');
+        }}
+        type="button"
+      >
+        <Icon style={css.raw({ color: 'text.faint' })} icon={BarChart3Icon} size={14} />
+        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>통계</span>
+      </button>
     </div>
 
-    <SidebarButton
-      icon={CogIcon}
-      label="설정"
-      onclick={() => {
-        pushState('', { shallowRoute: '/preference/account' });
-        mixpanel.track('open_preference_modal', { via: 'sidebar' });
-      }}
-    />
+    <div class={css({ marginX: '8px', paddingX: '8px', marginTop: '8px', paddingTop: '6px' })}>
+      <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>포스트</span>
+    </div>
+
+    <div
+      class={css({
+        position: 'relative',
+        flexGrow: '1',
+        overflow: 'hidden',
+        _before: {
+          content: '""',
+          position: 'absolute',
+          top: '0',
+          left: '0',
+          right: '0',
+          height: '12px',
+          background: '[linear-gradient(to bottom, token(colors.surface.subtle), transparent)]',
+          pointerEvents: 'none',
+          zIndex: '1',
+        },
+        _after: {
+          content: '""',
+          position: 'absolute',
+          bottom: '0',
+          left: '0',
+          right: '0',
+          height: '12px',
+          background: '[linear-gradient(to top, token(colors.surface.subtle), transparent)]',
+          pointerEvents: 'none',
+          zIndex: '1',
+        },
+      })}
+    >
+      <div
+        class={css({
+          position: 'absolute',
+          inset: '0',
+          paddingX: '8px',
+          paddingY: '12px',
+          overflowY: 'auto',
+        })}
+      >
+        <EntityTree {$site} />
+      </div>
+    </div>
+
+    <PlanUsageWidget {$site} {$user} />
+
+    <div
+      class={flex({
+        justifyContent: 'space-between',
+        paddingY: '4px',
+        paddingX: '8px',
+        borderTopWidth: '1px',
+        borderColor: 'border.default',
+      })}
+    >
+      <div class={flex({ alignItems: 'center', gap: '4px' })}>
+        <a
+          class={center({
+            borderRadius: '8px',
+            size: '32px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: {
+              color: 'text.subtle',
+              backgroundColor: 'surface.muted',
+            },
+          })}
+          href="https://typie.link/help"
+          rel="noopener noreferrer"
+          target="_blank"
+          type="button"
+          use:tooltip={{ message: '고객센터', placement: 'top', offset: 8 }}
+        >
+          <Icon icon={HelpCircleIcon} size={16} />
+        </a>
+
+        <a
+          class={center({
+            borderRadius: '8px',
+            size: '32px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: {
+              color: 'text.subtle',
+              backgroundColor: 'surface.muted',
+            },
+          })}
+          href="/changelog"
+          rel="noopener noreferrer"
+          target="_blank"
+          type="button"
+          use:tooltip={{ message: '업데이트 노트', placement: 'top', offset: 8 }}
+        >
+          <Icon icon={NewspaperIcon} size={16} />
+        </a>
+      </div>
+
+      <div class={flex({ alignItems: 'center', gap: '4px' })}>
+        <button
+          class={center({
+            borderRadius: '8px',
+            size: '32px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: {
+              color: 'text.subtle',
+              backgroundColor: 'surface.muted',
+            },
+            '&[aria-pressed="true"]': {
+              color: 'text.subtle',
+              backgroundColor: 'surface.muted',
+            },
+          })}
+          aria-pressed={app.state.trashOpen}
+          onclick={() => {
+            app.state.trashOpen = true;
+            mixpanel.track('open_trash_modal', { via: 'sidebar' });
+          }}
+          type="button"
+          use:tooltip={{ message: '휴지통', placement: 'top', offset: 8 }}
+        >
+          <Icon icon={Trash2Icon} size={16} />
+        </button>
+
+        <button
+          class={center({
+            borderRadius: '8px',
+            size: '32px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: {
+              color: 'text.subtle',
+              backgroundColor: 'surface.muted',
+            },
+          })}
+          onclick={() => {
+            pushState('', { shallowRoute: '/preference/account' });
+            mixpanel.track('open_preference_modal', { via: 'sidebar' });
+          }}
+          type="button"
+          use:tooltip={{ message: '설정', placement: 'top', offset: 8 }}
+        >
+          <Icon icon={SettingsIcon} size={16} />
+        </button>
+
+        <ThemeSwitch />
+      </div>
+    </div>
   </div>
 
-  <UserMenu {$user} />
-</aside>
+  <div
+    class={css({
+      position: 'absolute',
+      top: '0',
+      right: '-6px',
+      zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'sidebar',
+      width: '12px',
+      height: 'full',
+      cursor: 'col-resize',
+      _hoverAfter: {
+        content: '""',
+        display: 'block',
+        borderRightRadius: '4px',
+        marginLeft: '4px',
+        height: 'full',
+        width: '2px',
+        backgroundColor: 'border.strong',
+        opacity: '50',
+      },
+    })}
+    onpointerdowncapture={(e) => {
+      resizer = {
+        element: e.currentTarget,
+        event: e,
+        deltaX: 0,
+        eligible: false,
+      };
+    }}
+    onpointermovecapture={(e) => {
+      if (!resizer) return;
 
-<Posts $site={$user.sites[0]} {$user} />
+      if (!resizer.eligible) {
+        resizer.eligible = true;
+        resizer.element.setPointerCapture(e.pointerId);
+      }
 
-<PreferenceModal {$user} />
-<StatsModal />
+      resizer.deltaX = Math.round(e.clientX - resizer.event.clientX);
+    }}
+    onpointerupcapture={() => {
+      if (!resizer) return;
+
+      if (resizer.eligible && resizer.element.hasPointerCapture(resizer.event.pointerId)) {
+        resizer.element.releasePointerCapture(resizer.event.pointerId);
+      }
+
+      app.preference.current.sidebarWidth = newWidth;
+
+      resizer = null;
+    }}
+  ></div>
+</div>

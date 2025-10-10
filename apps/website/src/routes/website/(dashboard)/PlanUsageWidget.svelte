@@ -90,11 +90,11 @@
       paddingX: '12px',
       paddingTop: '12px',
       paddingBottom: '20px',
-      backgroundColor: 'surface.default',
+      backgroundColor: 'surface.subtle',
       transitionProperty: '[background-color]',
       transitionDuration: '250ms',
       transitionTimingFunction: 'ease',
-      _hover: { backgroundColor: 'surface.subtle' },
+      _hover: { backgroundColor: 'surface.muted' },
     })}
     onclick={() => {
       pushState('', { shallowRoute: '/preference/billing' });
@@ -133,7 +133,7 @@
 
     <div class={flex({ flexDirection: 'column', gap: '2px', width: 'full' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '4px' })}>
-        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>파일 업로드</div>
+        <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>파일 업로드</div>
 
         <div class={css({ fontSize: '12px', color: 'text.faint' })}>
           {formatBytes($site.usage.totalBlobSize)} / {formatBytes(planRule.maxTotalBlobSize)}

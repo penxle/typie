@@ -57,6 +57,7 @@
   class={flex({
     flexDirection: 'column',
     flexGrow: '1',
+    height: 'full',
     userSelect: 'none',
   })}
   role="tree"

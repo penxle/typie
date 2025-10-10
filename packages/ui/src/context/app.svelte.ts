@@ -3,8 +3,7 @@ import { LocalStore, SessionStore } from '../state';
 import type { PageLayout } from '../utils';
 
 export type AppPreference = {
-  postsExpanded: 'open' | 'closed' | false;
-  postsWidth: number;
+  sidebarWidth: number;
   panelExpandedByViewId: Record<string, boolean>;
   panelTabByViewId: Record<string, 'info' | 'anchors' | 'spellcheck' | 'timeline' | 'settings'>;
   hasOpenedPanelOnce: boolean;
@@ -47,7 +46,6 @@ type AppState = {
   ancestors: string[];
   current?: string;
 
-  postsOpen: boolean;
   trashOpen: boolean;
   commandPaletteOpen: boolean;
   notesOpen: boolean;
@@ -86,7 +84,6 @@ export const getAppContext = () => {
 export const setupAppContext = (userId: string) => {
   const appState = $state<AppState>({
     ancestors: [],
-    postsOpen: false,
     trashOpen: false,
     commandPaletteOpen: false,
     notesOpen: false,
@@ -103,8 +100,7 @@ export const setupAppContext = (userId: string) => {
 
   const context: AppContext = {
     preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
-      postsExpanded: false,
-      postsWidth: 240,
+      sidebarWidth: 240,
       panelExpandedByViewId: {},
       panelTabByViewId: {},
       hasOpenedPanelOnce: false,
