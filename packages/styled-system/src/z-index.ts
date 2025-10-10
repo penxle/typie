@@ -16,6 +16,7 @@ export const zIndex = defineTokens.zIndex({
   underEditor: { value: '40' },
   editor: { value: '50' },
   overEditor: { value: '60' },
+  widget: { value: '65' },
   underPanel: { value: '68' },
   panel: { value: '70' },
   overPanel: { value: '72' },
