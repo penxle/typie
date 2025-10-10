@@ -14,6 +14,7 @@
   import HelpCircleIcon from '~icons/lucide/help-circle';
   import HomeIcon from '~icons/lucide/home';
   import NewspaperIcon from '~icons/lucide/newspaper';
+  import NotebookPenIcon from '~icons/lucide/notebook-pen';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -356,6 +357,26 @@
           홈
         </span>
       </a>
+
+      <button
+        class={flex({
+          alignItems: 'center',
+          gap: '6px',
+          paddingX: '8px',
+          paddingY: '6px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+        })}
+        onclick={() => {
+          app.state.notesOpen = true;
+          mixpanel.track('open_notes_modal');
+        }}
+        type="button"
+      >
+        <Icon style={css.raw({ color: 'text.faint' })} icon={NotebookPenIcon} size={14} />
+        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>노트</span>
+      </button>
 
       <button
         class={flex({
