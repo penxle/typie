@@ -6,7 +6,10 @@
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { untrack } from 'svelte';
   import BarChart3Icon from '~icons/lucide/bar-chart-3';
+  import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
+  import ChevronsRightIcon from '~icons/lucide/chevrons-right';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import HelpCircleIcon from '~icons/lucide/help-circle';
   import HomeIcon from '~icons/lucide/home';
@@ -89,22 +92,132 @@
 
   let resizer = $state<Resizer | null>(null);
   let newWidth = $derived(clamp((app.preference.current.sidebarWidth ?? 240) + (resizer?.deltaX ?? 0), 240, 480));
+
+  let hideTimeout = $state<NodeJS.Timeout | null>(null);
+  let hovered = $state(false);
+
+  type SidebarState = 'hidden' | 'peeking' | 'visible';
+  let sidebarState = $state<SidebarState>('hidden');
+
+  const transform = $derived.by(() => {
+    if (!app.preference.current.sidebarHidden) {
+      return 'translateX(0)';
+    }
+
+    switch (sidebarState) {
+      case 'hidden': {
+        return 'translateX(-100%)';
+      }
+      case 'peeking': {
+        return 'translateX(-90%)';
+      }
+      case 'visible': {
+        return 'translateX(0)';
+      }
+      default: {
+        return 'translateX(-100%)';
+      }
+    }
+  });
+
+  $effect(() => {
+    if (!app.preference.current.sidebarHidden) return;
+
+    if (app.state.openMenuCount === 0 && !hovered) {
+      untrack(() => {
+        if (hideTimeout) {
+          clearTimeout(hideTimeout);
+        }
+
+        hideTimeout = setTimeout(() => {
+          sidebarState = 'hidden';
+          hideTimeout = null;
+        }, 300);
+      });
+    }
+  });
+
+  const handleMouseEnter = () => {
+    hovered = true;
+
+    if (app.preference.current.sidebarHidden) {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+      sidebarState = 'visible';
+    }
+  };
+
+  const handleMouseLeave = () => {
+    hovered = false;
+
+    if (!app.preference.current.sidebarHidden) return;
+
+    if (app.state.openMenuCount > 0) return;
+
+    if (hideTimeout) {
+      clearTimeout(hideTimeout);
+    }
+
+    hideTimeout = setTimeout(() => {
+      if (app.state.openMenuCount === 0) {
+        sidebarState = 'hidden';
+      }
+      hideTimeout = null;
+    }, 300);
+  };
 </script>
+
+{#if app.preference.current.sidebarHidden && sidebarState !== 'visible'}
+  <div
+    class={css({
+      position: 'fixed',
+      top: '128px',
+      left: '0',
+      width: '60px',
+      height: '[calc(100vh - 256px)]',
+      zIndex: 'sidebar',
+    })}
+    onmouseenter={() => {
+      if (sidebarState === 'hidden') {
+        sidebarState = 'peeking';
+      }
+    }}
+    onmouseleave={() => {
+      if (sidebarState !== 'visible') {
+        sidebarState = 'hidden';
+      }
+    }}
+    role="button"
+    tabindex="-1"
+  ></div>
+{/if}
 
 <div
   style:--min-width="240px"
   style:--width={`${newWidth}px`}
   style:--max-width="480px"
+  style:transform
   class={css({
-    position: 'relative',
-    flexShrink: '0',
-    minWidth: 'var(--min-width)',
-    maxWidth: 'var(--max-width)',
+    position: app.preference.current.sidebarHidden ? 'fixed' : 'relative',
+    top: app.preference.current.sidebarHidden ? '128px' : undefined,
+    left: app.preference.current.sidebarHidden ? '0' : undefined,
+    height: app.preference.current.sidebarHidden ? '[calc(100vh - 256px)]' : undefined,
+    flexShrink: app.preference.current.sidebarHidden ? undefined : '0',
+    minWidth: app.preference.current.sidebarHidden ? undefined : 'var(--min-width)',
+    maxWidth: app.preference.current.sidebarHidden ? undefined : 'var(--max-width)',
+    width: app.preference.current.sidebarHidden ? 'var(--width)' : undefined,
+    zIndex: app.preference.current.sidebarHidden ? 'sidebar' : undefined,
     opacity: '100',
-    transitionDuration: '150ms',
-    transitionTimingFunction: 'ease',
-    transitionProperty: '[min-width, max-width, opacity, position, margin-block]',
+    transitionDuration: '300ms',
+    transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    transitionProperty: '[transform]',
   })}
+  aria-label="사이드바"
+  onmouseenter={handleMouseEnter}
+  onmouseleave={handleMouseLeave}
+  role="navigation"
 >
   <div
     class={css({
@@ -115,8 +228,12 @@
       maxWidth: 'var(--max-width)',
       height: 'full',
       backgroundColor: 'surface.subtle',
+      borderTopWidth: app.preference.current.sidebarHidden ? '1px' : undefined,
+      borderBottomWidth: app.preference.current.sidebarHidden ? '1px' : undefined,
       borderRightWidth: '1px',
       borderColor: 'border.subtle',
+      borderTopRightRadius: app.preference.current.sidebarHidden ? '12px' : undefined,
+      borderBottomRightRadius: app.preference.current.sidebarHidden ? '12px' : undefined,
       boxShadow: 'card',
       transitionProperty: '[border, border-radius, box-shadow]',
       transitionDuration: '150ms',
@@ -136,6 +253,27 @@
       <Profile {$user} />
 
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
+        <button
+          class={center({
+            borderRadius: '4px',
+            size: '24px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+          })}
+          onclick={() => {
+            app.preference.current.sidebarHidden = !app.preference.current.sidebarHidden;
+            if (app.preference.current.sidebarHidden) {
+              sidebarState = 'hidden';
+            }
+            mixpanel.track('toggle_sidebar_auto_hide', { enabled: app.preference.current.sidebarHidden });
+          }}
+          type="button"
+          use:tooltip={{ message: app.preference.current.sidebarHidden ? '사이드바 고정' : '사이드바 자동 숨김' }}
+        >
+          <Icon icon={app.preference.current.sidebarHidden ? ChevronsRightIcon : ChevronsLeftIcon} size={14} />
+        </button>
+
         <button
           class={center({
             borderRadius: '4px',

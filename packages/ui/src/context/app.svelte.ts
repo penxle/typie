@@ -4,6 +4,7 @@ import type { PageLayout } from '../utils';
 
 export type AppPreference = {
   sidebarWidth: number;
+  sidebarHidden: boolean;
   panelExpandedByViewId: Record<string, boolean>;
   panelTabByViewId: Record<string, 'info' | 'anchors' | 'spellcheck' | 'timeline' | 'settings'>;
   hasOpenedPanelOnce: boolean;
@@ -60,6 +61,8 @@ type AppState = {
   };
 
   newFolderId?: string;
+
+  openMenuCount: number;
 };
 
 type AppTimerState = {
@@ -96,11 +99,15 @@ export const setupAppContext = (userId: string) => {
       totalCharacterCount: 0,
       totalBlobSize: 0,
     },
+
+    openMenuCount: 0,
   });
 
   const context: AppContext = {
     preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
       sidebarWidth: 240,
+      sidebarHidden: false,
+
       panelExpandedByViewId: {},
       panelTabByViewId: {},
       hasOpenedPanelOnce: false,
