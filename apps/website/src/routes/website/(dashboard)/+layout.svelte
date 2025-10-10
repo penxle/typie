@@ -162,6 +162,7 @@
     if (updated.current) {
       Updater.show({
         onRefresh: () => {
+          mixpanel.track('reload_app', { reason: 'update' });
           location.reload();
         },
       });
