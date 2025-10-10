@@ -11,6 +11,7 @@
   import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import HelpCircleIcon from '~icons/lucide/help-circle';
   import HomeIcon from '~icons/lucide/home';
   import NewspaperIcon from '~icons/lucide/newspaper';
@@ -265,7 +266,12 @@
           onclick={() => {
             app.preference.current.sidebarHidden = !app.preference.current.sidebarHidden;
             if (app.preference.current.sidebarHidden) {
-              sidebarState = 'hidden';
+              sidebarState = 'visible';
+              setTimeout(() => {
+                if (!hovered) {
+                  sidebarState = 'hidden';
+                }
+              }, 300);
             }
             mixpanel.track('toggle_sidebar_auto_hide', { enabled: app.preference.current.sidebarHidden });
           }}
@@ -567,6 +573,37 @@
       </div>
     </div>
   </div>
+
+  {#if app.preference.current.sidebarHidden}
+    <div
+      class={center({
+        position: 'absolute',
+        top: '8px',
+        right: '-24px',
+        width: '24px',
+        height: '60px',
+        backgroundColor: 'surface.subtle',
+        borderWidth: '1px',
+        borderLeftWidth: '0',
+        borderColor: 'border.subtle',
+        borderTopRightRadius: '12px',
+        borderBottomRightRadius: '12px',
+        boxShadow: 'card',
+        color: 'text.faint',
+        pointerEvents: 'none',
+        opacity: sidebarState === 'visible' ? '0' : '100',
+        transform: sidebarState === 'visible' ? 'translateX(-100%)' : 'translateX(0)',
+        transitionProperty: '[opacity, transform]',
+        transitionDuration: '300ms',
+        transitionDelay: '150ms',
+        transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+        zIndex: '[-1]',
+      })}
+      aria-label="사이드바"
+    >
+      <Icon icon={GripVerticalIcon} size={14} />
+    </div>
+  {/if}
 
   <div
     class={css({
