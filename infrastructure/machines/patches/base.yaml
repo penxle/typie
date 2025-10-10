@@ -3,10 +3,6 @@ machine:
     disk: /dev/vda
     image: factory.talos.dev/metal-installer/d16652227f171d277b6bd35af6f88ce5d9d48906f80a938476b5fea6e7803e6b:v1.11.2
 
-  kernel:
-    modules:
-      - name: zfs
-
   network:
     interfaces:
       - deviceSelector:
