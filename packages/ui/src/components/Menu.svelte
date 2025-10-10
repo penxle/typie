@@ -1,9 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { setContext, tick } from 'svelte';
+  import { setContext, tick, untrack } from 'svelte';
   import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
   import { createFloatingActions, focusTrap, portal } from '../actions';
+  import { getAppContext } from '../context';
   import { pushEscapeHandler } from '../utils';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -46,6 +47,8 @@
   let buttonEl = $state<HTMLButtonElement>();
   let menuEl = $state<HTMLUListElement>();
 
+  const app = getAppContext();
+
   const { anchor, floating } = createFloatingActions({
     placement,
     offset,
@@ -61,6 +64,17 @@
   };
 
   setContext('close', close);
+
+  $effect(() => {
+    if (open) {
+      return untrack(() => {
+        app.state.openMenuCount++;
+        return () => {
+          app.state.openMenuCount--;
+        };
+      });
+    }
+  });
 
   afterNavigate(() => {
     open = false;
