@@ -3,4 +3,4 @@ machine:
     hostname: meerkat
 
   nodeLabels:
-    volumes.typie.io/zfs: 'true'
+    volumes.typie.io/local-path: 'true'
