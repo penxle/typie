@@ -1,8 +1,29 @@
-FROM oven/bun:1 AS build-base
+FROM debian:12-slim AS base
 WORKDIR /app
+
+ENV PATH="/root/.bun/bin:$PATH"
+ENV LD_LIBRARY_PATH="/app/apps/api/lib"
 ENV NODE_ENV=production
 
-FROM build-base AS build-deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    curl \
+    ghostscript \
+    git \
+    python3 \
+    tar \
+    tini \
+    unzip \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://bun.sh/install | bash
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM base AS build-deps
 
 COPY out/json/ .
 RUN bun install --no-save
@@ -13,29 +34,7 @@ COPY out/full/ .
 RUN bunx turbo build --filter=@typie/api
 RUN find . -type d -name "node_modules" -prune -exec rm -rf {} +
 
-FROM debian:12-slim AS runtime-base
-WORKDIR /app
-
-ENV PATH="/root/.bun/bin:$PATH"
-ENV LD_LIBRARY_PATH="/app/apps/api/lib"
-ENV NODE_ENV=production
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tini \
-    ca-certificates \
-    curl \
-    unzip \
-    tar \
-    xz-utils \
-    ghostscript \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN curl -fsSL https://bun.sh/install | bash
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-FROM runtime-base AS runtime-deps
+FROM base AS runtime-deps
 
 COPY out/json/ .
 RUN bun install --no-save --omit=dev
