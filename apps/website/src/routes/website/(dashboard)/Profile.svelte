@@ -72,7 +72,7 @@
         size={24}
       />
 
-      <span class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>
+      <span class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', truncate: true })}>
         {$user.name}
       </span>
 
