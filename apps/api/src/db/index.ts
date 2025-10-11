@@ -6,14 +6,14 @@ import * as enums from './schemas/enums';
 import * as tables from './schemas/tables';
 import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
-const sql = postgres(env.DATABASE_URL, {
+export const pg = postgres(env.DATABASE_URL, {
   max: dev ? 20 : 50,
   connect_timeout: 5,
   idle_timeout: 30,
   prepare: false,
 });
 
-export const db = drizzle(sql, {
+export const db = drizzle(pg, {
   schema: { ...tables, ...enums },
   logger: new DrizzleLogger(),
 });

@@ -1,6 +1,6 @@
 import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
 import { redis } from '@/cache';
-import { db, Entities, first, firstOrThrow, Posts, TableCode, UserPaymentCredits, Users, UserSessions, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, pg, Posts, TableCode, UserPaymentCredits, Users, UserSessions, validateDbId } from '@/db';
 import { EntityState, PostType, UserRole, UserState } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -159,6 +159,23 @@ builder.queryFields((t) => ({
         admin: session.userId,
         user: impersonatedUserId,
       };
+    },
+  }),
+
+  adminRawQuery: t.withAuth({ session: true }).field({
+    type: ['JSON'],
+    args: {
+      query: t.arg.string(),
+      params: t.arg({ type: ['JSON'], required: false }),
+    },
+    resolve: async (_, { query, params }, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      const result = await pg.begin('READ ONLY', async (sql) => {
+        return await sql.unsafe(query, params ?? []);
+      });
+
+      return result;
     },
   }),
 }));

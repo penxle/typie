@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import BarChartIcon from '~icons/lucide/bar-chart';
   import FileTextIcon from '~icons/lucide/file-text';
   import HomeIcon from '~icons/lucide/home';
   import UsersIcon from '~icons/lucide/users';
@@ -32,6 +33,7 @@
     { href: '/admin', label: '홈', icon: HomeIcon },
     { href: '/admin/users', label: '사용자 관리', icon: UsersIcon },
     { href: '/admin/posts', label: '포스트 관리', icon: FileTextIcon },
+    { href: '/admin/stats', label: '통계', icon: BarChartIcon },
   ];
 
   const isActive = (href: string) => {
