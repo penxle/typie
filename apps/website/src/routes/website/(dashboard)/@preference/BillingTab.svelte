@@ -12,6 +12,7 @@
   import { PlanInterval, SubscriptionState } from '@/enums';
   import { fragment, graphql } from '$graphql';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
+  import SubscriptionCancellationSurveyModal from './SubscriptionCancellationSurveyModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
   import type { DashboardLayout_PreferenceModal_BillingTab_user } from '$graphql';
 
@@ -28,6 +29,7 @@
         id
         credit
         ...DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user
+        ...DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user
 
         billingKey {
           id
@@ -111,8 +113,28 @@
     }
   `);
 
+  const recordSurvey = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_RecordSurvey_Mutation($input: RecordSurveyInput!) {
+      recordSurvey(input: $input) {
+        id
+      }
+    }
+  `);
+
   let updatePaymentMethodOpen = $state(false);
   let redeemCreditCodeOpen = $state(false);
+  let cancellationSurveyOpen = $state(false);
+
+  async function handleCancellationSurveySubmit(surveyData: unknown) {
+    await recordSurvey({
+      name: 'subscription_cancellation_202510',
+      value: surveyData,
+    });
+
+    await scheduleSubscriptionCancellation();
+
+    mixpanel.track('cancel_plan', surveyData as Record<string, unknown>);
+  }
 </script>
 
 <div class={flex({ direction: 'column', gap: '32px' })}>
@@ -383,19 +405,7 @@
         _hover: { color: 'text.danger', backgroundColor: 'accent.danger.subtle' },
       })}
       onclick={() => {
-        Dialog.confirm({
-          title: '정말로 해지하시겠습니까?',
-          message:
-            $user.subscription?.state === SubscriptionState.ACTIVE
-              ? '해지 후에도 남은 기간 동안 서비스를 이용하실 수 있습니다.'
-              : '해지 즉시 유료 서비스가 중단됩니다.',
-          action: 'danger',
-          actionLabel: '해지',
-          actionHandler: async () => {
-            await scheduleSubscriptionCancellation();
-            mixpanel.track('cancel_plan');
-          },
-        });
+        cancellationSurveyOpen = true;
       }}
       type="button"
     >
@@ -406,3 +416,4 @@
 
 <UpdatePaymentMethodModal {$user} bind:open={updatePaymentMethodOpen} />
 <RedeemCreditCodeModal bind:open={redeemCreditCodeOpen} />
+<SubscriptionCancellationSurveyModal {$user} onSubmit={handleCancellationSurveySubmit} bind:open={cancellationSurveyOpen} />
