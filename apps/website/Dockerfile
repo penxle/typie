@@ -1,4 +1,4 @@
-FROM oven/bun:1.2 AS build-base
+FROM oven/bun:1 AS build-base
 WORKDIR /app
 ENV NODE_ENV=production
 
