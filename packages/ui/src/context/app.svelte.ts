@@ -5,6 +5,7 @@ import type { PageLayout } from '../utils';
 export type AppPreference = {
   sidebarWidth: number;
   sidebarHidden: boolean;
+  sidebarTrigger: 'hover' | 'click';
   panelExpandedByViewId: Record<string, boolean>;
   panelTabByViewId: Record<string, 'info' | 'anchors' | 'spellcheck' | 'timeline' | 'settings'>;
   hasOpenedPanelOnce: boolean;
@@ -107,6 +108,7 @@ export const setupAppContext = (userId: string) => {
     preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
       sidebarWidth: 240,
       sidebarHidden: false,
+      sidebarTrigger: 'hover',
 
       panelExpandedByViewId: {},
       panelTabByViewId: {},
