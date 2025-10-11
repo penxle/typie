@@ -38,6 +38,7 @@
   import { getSplitViewContext, getViewContext } from './@split-view/context.svelte';
   import { getDragDropContext } from './@split-view/drag-context.svelte';
   import { dragView } from './@split-view/drag-view-action';
+  import { getEditorRegistry } from './@split-view/editor-registry.svelte';
   import { VIEW_BUFFER_SIZE, VIEW_MIN_SIZE } from './@split-view/utils';
   import BottomToolbar from './@toolbar/BottomToolbar.svelte';
   import TopToolbar from './@toolbar/TopToolbar.svelte';
@@ -162,6 +163,9 @@
               title
               type
               update
+              characterCount
+              createdAt
+              updatedAt
 
               ...Editor_Panel_post
             }
@@ -193,6 +197,7 @@
   const splitView = getSplitViewContext();
   const splitViewId = getViewContext().id;
   const dragDropContext = getDragDropContext();
+  const editorRegistry = getEditorRegistry();
   const dragViewProps = $derived({ dragDropContext, viewId: splitViewId });
   const clientId = nanoid();
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -272,6 +277,16 @@
 
   let editorScale = $state(1);
   let editorZoomed = $state(false);
+
+  $effect(() => {
+    const _slug = slug;
+    editorRegistry.register(splitViewId, slug, editor);
+
+    return () => {
+      // NOTE: 이유를 모르겠지만 여기서 slug 직접 접근하면 에러 남
+      editorRegistry.unregister(splitViewId, _slug);
+    };
+  });
 
   $effect(() => {
     if (editor?.current && editor.current.storage?.page?.scale !== editorScale) {

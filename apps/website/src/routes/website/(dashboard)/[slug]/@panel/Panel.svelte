@@ -78,6 +78,8 @@
   style:--max-width={`${maxWidth}px`}
   class={flex({
     position: 'relative',
+    zIndex: 'panel',
+    backgroundColor: 'surface.default',
     flexDirection: 'column',
     flexShrink: '0',
     minWidth: isExpanded ? 'var(--min-width)' : '0',

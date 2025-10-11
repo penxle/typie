@@ -9,6 +9,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
   import { fb } from '$lib/analytics';
+  import WidgetGroup from '../@widgets/WidgetGroup.svelte';
   import { getSplitViewContext } from './@split-view/context.svelte';
   import SplitViews from './@split-view/SplitViews.svelte';
   import { collectSlug, findViewIdBySlug, replaceSplitView } from './@split-view/utils';
@@ -34,6 +35,7 @@
       }
 
       ...SplitViews_View_query
+      ...WidgetGroup_query
     }
   `);
 
@@ -145,4 +147,8 @@
       })}
     />
   </div>
+{/if}
+
+{#if loaded && $query}
+  <WidgetGroup {$query} />
 {/if}
