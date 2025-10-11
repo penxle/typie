@@ -16,17 +16,17 @@
   "devDependencies": {
     "@ctrl/tinycolor": "^4.2.0",
     "@floating-ui/dom": "^1.7.4",
-    "@iconify-json/lucide": "^1.2.68",
-    "@iconify-json/simple-icons": "^1.2.53",
+    "@iconify-json/lucide": "^1.2.69",
+    "@iconify-json/simple-icons": "^1.2.54",
     "@iconify-json/twemoji": "^1.2.4",
     "@pandacss/dev": "^1.4.1",
     "@sindresorhus/string-hash": "^2.0.0",
     "@sveltejs/adapter-static": "^3.0.10",
-    "@sveltejs/kit": "^2.43.8",
+    "@sveltejs/kit": "^2.46.4",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
     "@tauri-apps/cli": "^2.8.4",
-    "@tiptap/core": "^3.6.5",
-    "@tiptap/pm": "^3.6.5",
+    "@tiptap/core": "^3.6.6",
+    "@tiptap/pm": "^3.6.6",
     "@typie/lib": "workspace:*",
     "@typie/sark": "workspace:*",
     "@typie/styled-system": "workspace:*",
@@ -47,8 +47,8 @@
     "rfc4648": "^1.5.4",
     "roughjs": "^4.6.6",
     "shiki": "^3.13.0",
-    "svelte": "^5.39.8",
-    "svelte-check": "^4.3.2",
+    "svelte": "^5.39.11",
+    "svelte-check": "^4.3.3",
     "thumbhash": "^0.1.1",
     "ts-pattern": "^5.8.0",
     "tsx": "^4.20.6",
@@ -61,6 +61,6 @@
     "y-protocols": "^1.0.6",
     "yjs": "^13.6.27",
     "zeed-dom": "^0.17.7",
-    "zod": "^4.1.11"
+    "zod": "^4.1.12"
   }
 }
