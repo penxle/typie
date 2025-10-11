@@ -82,4 +82,27 @@
       value={$user.preferences.toolbarStyle ?? 'compact'}
     />
   </div>
+
+  <div class={flex({ align: 'center', justify: 'space-between', width: 'full', paddingY: '4px' })}>
+    <div>
+      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>사이드바 자동 표시 모드</h3>
+      <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.faint' })}>숨김 모드일 때 사이드바를 표시하는 방식을 설정합니다.</p>
+    </div>
+
+    <Select
+      items={[
+        { value: 'hover', label: '호버 모드', description: '왼쪽 가장자리에 마우스를 올려 표시합니다.' },
+        { value: 'click', label: '클릭 모드', description: '왼쪽 가장자리의 힌트를 클릭해 표시합니다.' },
+      ]}
+      onselect={async (value) => {
+        mixpanel.track('change_sidebar_trigger', {
+          trigger: value,
+        });
+
+        app.preference.current.sidebarTrigger = value;
+        await updatePreferences({ value: { sidebarTrigger: value } });
+      }}
+      value={$user.preferences.sidebarTrigger ?? 'hover'}
+    />
+  </div>
 </div>

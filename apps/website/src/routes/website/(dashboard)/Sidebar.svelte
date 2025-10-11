@@ -142,11 +142,12 @@
   const handleMouseEnter = () => {
     hovered = true;
 
-    if (app.preference.current.sidebarHidden) {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
+    if (hideTimeout) {
+      clearTimeout(hideTimeout);
+      hideTimeout = null;
+    }
+
+    if (app.preference.current.sidebarHidden && app.preference.current.sidebarTrigger === 'hover') {
       sidebarState = 'visible';
     }
   };
@@ -182,12 +183,12 @@
       zIndex: 'sidebar',
     })}
     onmouseenter={() => {
-      if (sidebarState === 'hidden') {
+      if (app.preference.current.sidebarTrigger === 'hover' && sidebarState === 'hidden') {
         sidebarState = 'peeking';
       }
     }}
     onmouseleave={() => {
-      if (sidebarState !== 'visible') {
+      if (app.preference.current.sidebarTrigger === 'hover' && sidebarState !== 'visible') {
         sidebarState = 'hidden';
       }
     }}
@@ -575,34 +576,71 @@
   </div>
 
   {#if app.preference.current.sidebarHidden}
-    <div
-      class={center({
-        position: 'absolute',
-        top: '8px',
-        right: '-24px',
-        width: '24px',
-        height: '60px',
-        backgroundColor: 'surface.subtle',
-        borderWidth: '1px',
-        borderLeftWidth: '0',
-        borderColor: 'border.subtle',
-        borderTopRightRadius: '12px',
-        borderBottomRightRadius: '12px',
-        boxShadow: 'card',
-        color: 'text.faint',
-        pointerEvents: 'none',
-        opacity: sidebarState === 'visible' ? '0' : '100',
-        transform: sidebarState === 'visible' ? 'translateX(-100%)' : 'translateX(0)',
-        transitionProperty: '[opacity, transform]',
-        transitionDuration: '300ms',
-        transitionDelay: '150ms',
-        transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        zIndex: '[-1]',
-      })}
-      aria-label="사이드바"
-    >
-      <Icon icon={GripVerticalIcon} size={14} />
-    </div>
+    {#if app.preference.current.sidebarTrigger === 'click'}
+      <button
+        class={center({
+          position: 'absolute',
+          top: '8px',
+          right: '-24px',
+          width: '24px',
+          height: '60px',
+          backgroundColor: 'surface.subtle',
+          borderWidth: '1px',
+          borderLeftWidth: '0',
+          borderColor: 'border.subtle',
+          borderTopRightRadius: '12px',
+          borderBottomRightRadius: '12px',
+          boxShadow: 'card',
+          color: 'text.faint',
+          cursor: 'pointer',
+          opacity: sidebarState === 'visible' ? '0' : '100',
+          transform: sidebarState === 'visible' ? 'translateX(-100%)' : 'translateX(0)',
+          transitionProperty: '[opacity, transform]',
+          transitionDuration: '300ms',
+          transitionDelay: '150ms',
+          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: '[-1]',
+        })}
+        aria-label="사이드바 열기"
+        onclick={() => {
+          if (sidebarState === 'hidden') {
+            sidebarState = 'visible';
+          }
+        }}
+        type="button"
+      >
+        <Icon icon={GripVerticalIcon} size={14} />
+      </button>
+    {:else if app.preference.current.sidebarTrigger === 'hover'}
+      <div
+        class={center({
+          position: 'absolute',
+          top: '8px',
+          right: '-24px',
+          width: '24px',
+          height: '60px',
+          backgroundColor: 'surface.subtle',
+          borderWidth: '1px',
+          borderLeftWidth: '0',
+          borderColor: 'border.subtle',
+          borderTopRightRadius: '12px',
+          borderBottomRightRadius: '12px',
+          boxShadow: 'card',
+          color: 'text.faint',
+          pointerEvents: 'none',
+          opacity: sidebarState === 'visible' ? '0' : '100',
+          transform: sidebarState === 'visible' ? 'translateX(-100%)' : 'translateX(0)',
+          transitionProperty: '[opacity, transform]',
+          transitionDuration: '300ms',
+          transitionDelay: '150ms',
+          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: '[-1]',
+        })}
+        aria-label="사이드바"
+      >
+        <Icon icon={GripVerticalIcon} size={14} />
+      </div>
+    {/if}
   {/if}
 
   <div
