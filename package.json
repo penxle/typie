@@ -24,7 +24,7 @@
     "canvas": "npm:-"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.23",
+    "@types/bun": "^1.3.0",
     "@typie/lintconfig": "workspace:*",
     "cspell": "^9.2.1",
     "eslint": "^9.37.0",
