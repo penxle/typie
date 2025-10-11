@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import { cacheExchange, createClient, errorExchange, fetchExchange, GraphQLError, NetworkError, wsExchange } from '@typie/sark';
+import { FormError } from '@typie/ui/form';
 import ky from 'ky';
 import { TypieError } from '@/errors';
 import { browser } from '$app/environment';
@@ -14,10 +15,19 @@ export default createClient({
   exchanges: [
     errorExchange((error) => {
       if (error instanceof GraphQLError && error.extensions?.type === 'TypieError') {
+        if (error.extensions.code === 'validation_error') {
+          const extra = error.extensions.extra as { field: string; message: string }[];
+          for (const { field, message } of extra) {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            return new FormError(field.split('.').pop()!, message);
+          }
+        }
+
         return new TypieError({
           code: error.extensions.code as string,
           message: error.message,
           status: error.extensions.status as number,
+          extra: error.extensions.extra,
         });
       }
 

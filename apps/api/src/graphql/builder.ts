@@ -49,7 +49,13 @@ export const builder = new SchemaBuilder<{
   },
 
   zod: {
-    validationError: (error) => new TypieError({ code: 'validation_error', message: error.issues[0].message, status: 400 }),
+    validationError: (error) =>
+      new TypieError({
+        code: 'validation_error',
+        message: error.message,
+        status: 400,
+        extra: error.issues.map((issue) => ({ field: issue.path.join('.'), message: issue.message })),
+      }),
   },
 });
 
