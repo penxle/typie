@@ -13,7 +13,6 @@ mutation NotesScreen_CreateNote_Mutation($input: CreateNoteInput!) {
         ... on Post {
           id
           title
-          type
         }
         ... on Canvas {
           id

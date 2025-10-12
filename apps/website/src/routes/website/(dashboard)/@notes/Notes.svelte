@@ -9,11 +9,9 @@
   import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { match } from 'ts-pattern';
-  import { PostType } from '@/enums';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
-  import ShapesIcon from '~icons/lucide/shapes';
   import { beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { cache, fragment, graphql } from '$graphql';
@@ -44,7 +42,6 @@
               ... on Post {
                 id
                 title
-                type
               }
               ... on Canvas {
                 id
@@ -71,7 +68,6 @@
               ... on Post {
                 id
                 title
-                type
               }
               ... on Canvas {
                 id
@@ -95,7 +91,6 @@
           ... on Post {
             id
             title
-            type
           }
           ... on Canvas {
             id
@@ -123,7 +118,6 @@
             ... on Post {
               id
               title
-              type
             }
             ... on Canvas {
               id
@@ -151,7 +145,6 @@
             ... on Post {
               id
               title
-              type
             }
             ... on Canvas {
               id
@@ -211,7 +204,7 @@
           .with({ __typename: 'Post' }, (node) => ({
             entity,
             title: node.title,
-            icon: node.type === PostType.TEMPLATE ? ShapesIcon : FileIcon,
+            icon: FileIcon,
           }))
           .with({ __typename: 'Canvas' }, (node) => ({
             entity,

@@ -731,7 +731,7 @@ input PurgeEntitiesInput {
 
 type Query {
   adminPost(postId: String!): Post!
-  adminPosts(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: PostType): AdminPostsResult!
+  adminPosts(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState): AdminPostsResult!
   adminRawQuery(params: [JSON!], query: String!): [JSON!]!
   adminUser(userId: String!): User!
   adminUsers(limit: Int! = 20, offset: Int! = 0, role: UserRole, search: String, state: UserState): AdminUsersResult!

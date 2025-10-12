@@ -968,7 +968,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const post = await db
-        .select({ siteId: Entities.siteId, entityId: Entities.id })
+        .select({ id: Posts.id, siteId: Entities.siteId })
         .from(Posts)
         .innerJoin(Entities, eq(Posts.entityId, Entities.id))
         .where(eq(Posts.id, input.postId))
@@ -979,19 +979,7 @@ builder.mutationFields((t) => ({
         siteId: post.siteId,
       });
 
-      const updatedPost = await db
-        .update(Posts)
-        .set({
-          type: input.type,
-        })
-        .where(eq(Posts.id, input.postId))
-        .returning()
-        .then(firstOrThrow);
-
-      pubsub.publish('site:update', post.siteId, { scope: 'site' });
-      pubsub.publish('site:update', post.siteId, { scope: 'entity', entityId: post.entityId });
-
-      return updatedPost;
+      return await db.select().from(Posts).where(eq(Posts.id, input.postId)).then(firstOrThrow);
     },
   }),
 

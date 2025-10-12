@@ -14,7 +14,6 @@ import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
-import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/debounce.dart';
@@ -531,8 +530,7 @@ class _NotesReorderableList extends StatelessWidget {
           }
           final node = note.entity!.node;
           if (node.G__typename == 'Post') {
-            final postNode = node as GNotesScreen_QueryData_notes_entity_node__asPost;
-            return postNode.type == GPostType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file;
+            return LucideLightIcons.file;
           } else if (node.G__typename == 'Canvas') {
             return LucideLightIcons.line_squiggle;
           }
@@ -649,7 +647,7 @@ class _EntitySelector extends StatelessWidget {
                   if (node.G__typename == 'Post') {
                     final postNode = node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asPost;
                     title = postNode.title;
-                    icon = postNode.type == GPostType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file;
+                    icon = LucideLightIcons.file;
                   } else if (node.G__typename == 'Canvas') {
                     final canvasNode = node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asCanvas;
                     title = canvasNode.title;

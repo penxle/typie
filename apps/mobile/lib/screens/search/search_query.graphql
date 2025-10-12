@@ -7,7 +7,6 @@ query SearchScreen_Query($siteId: ID!, $query: String!) {
 
         post {
           id
-          type
           updatedAt
 
           entity {
