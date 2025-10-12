@@ -10,6 +10,7 @@
   import { untrack } from 'svelte';
   import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
+  import LayoutDashboardIcon from '~icons/lucide/layout-dashboard';
   import { fragment, graphql } from '$graphql';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
   import { getEditorRegistry } from '../[slug]/@split-view/editor-registry.svelte';
@@ -665,26 +666,58 @@
       data-widget-group
     >
       <div bind:this={widgetListElement} class={flex({ flexDirection: 'column', gap: '8px', position: 'relative' })}>
-        {#each localWidgets as widget, index (widget.id)}
-          {@const WidgetComponent = WIDGET_COMPONENTS[widget.name as WidgetType]}
-          {@const isDragging = dragging?.source === 'group' && dragging?.widgetId === widget.id}
-          {#if dragging?.dropIndex === index && dragging?.widgetType}
+        {#if localWidgets.length === 0 && !dragging}
+          <div
+            class={flex({
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              paddingY: '32px',
+              paddingX: '16px',
+            })}
+          >
+            <div
+              class={flex({
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                backgroundColor: 'surface.muted',
+                color: 'text.faint',
+              })}
+            >
+              <Icon icon={LayoutDashboardIcon} size={20} />
+            </div>
+            <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center', lineHeight: '[1.6]' })}>
+              위젯 편집을 눌러
+              <br />
+              원하는 위젯을 추가해보세요
+            </p>
+          </div>
+        {:else}
+          {#each localWidgets as widget, index (widget.id)}
+            {@const WidgetComponent = WIDGET_COMPONENTS[widget.name as WidgetType]}
+            {@const isDragging = dragging?.source === 'group' && dragging?.widgetId === widget.id}
+            {#if dragging?.dropIndex === index && dragging?.widgetType}
+              {@const DraggingWidgetComponent = WIDGET_COMPONENTS[dragging.widgetType]}
+              <div style:opacity="0.5">
+                <DraggingWidgetComponent data={dragging.widgetData} widgetId="drop-preview" />
+              </div>
+            {/if}
+            {#if !isDragging}
+              <div data-widget-id={widget.id} role="listitem">
+                <WidgetComponent data={widget.data} widgetId={widget.id} />
+              </div>
+            {/if}
+          {/each}
+          {#if dragging?.dropIndex === localWidgets.length && dragging.widgetType}
             {@const DraggingWidgetComponent = WIDGET_COMPONENTS[dragging.widgetType]}
             <div style:opacity="0.5">
               <DraggingWidgetComponent data={dragging.widgetData} widgetId="drop-preview" />
             </div>
           {/if}
-          {#if !isDragging}
-            <div data-widget-id={widget.id} role="listitem">
-              <WidgetComponent data={widget.data} widgetId={widget.id} />
-            </div>
-          {/if}
-        {/each}
-        {#if dragging?.dropIndex === localWidgets.length && dragging.widgetType}
-          {@const DraggingWidgetComponent = WIDGET_COMPONENTS[dragging.widgetType]}
-          <div style:opacity="0.5">
-            <DraggingWidgetComponent data={dragging.widgetData} widgetId="drop-preview" />
-          </div>
         {/if}
       </div>
     </div>
