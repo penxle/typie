@@ -13,11 +13,22 @@ type MakeYDocParams = {
   maxWidth?: number;
   body: JSONContent;
   storedMarks?: unknown[];
+  initialMarks?: unknown[];
   anchors?: Record<string, string | null>;
   layoutMode?: PostLayoutMode;
   pageLayout?: unknown;
 };
-export const makeYDoc = ({ title, subtitle, maxWidth, body, storedMarks, anchors, layoutMode, pageLayout }: MakeYDocParams) => {
+export const makeYDoc = ({
+  title,
+  subtitle,
+  maxWidth,
+  body,
+  storedMarks,
+  initialMarks,
+  anchors,
+  layoutMode,
+  pageLayout,
+}: MakeYDocParams) => {
   const node = Node.fromJSON(schema, body);
   const doc = new Y.Doc();
 
@@ -27,6 +38,7 @@ export const makeYDoc = ({ title, subtitle, maxWidth, body, storedMarks, anchors
     map.set('subtitle', subtitle ?? '');
     map.set('maxWidth', maxWidth ?? 800);
     map.set('storedMarks', storedMarks ?? []);
+    map.set('initialMarks', initialMarks ?? []);
     map.set('anchors', anchors ?? {});
     map.set('layoutMode', layoutMode ?? PostLayoutMode.SCROLL);
     map.set('pageLayout', pageLayout ?? null);

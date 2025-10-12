@@ -12,6 +12,7 @@
   import { LocalStore } from '@typie/ui/state';
   import { getNodeView, setupEditorContext, TiptapEditor } from '@typie/ui/tiptap';
   import dayjs from 'dayjs';
+  import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { onMount, untrack } from 'svelte';
@@ -135,16 +136,6 @@
               }
             }
 
-            fonts {
-              id
-              weight
-              url
-
-              family {
-                id
-              }
-            }
-
             ...Editor_Limit_site
             ...Editor_Placeholder_site
             ...Editor_TopToolbar_site
@@ -262,6 +253,7 @@
   const pageLayout = new YState<PageLayout | undefined>(doc, 'pageLayout', undefined);
   const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
   const anchors = new YState<Record<string, string | null>>(doc, 'anchors', {});
+  const initialMarks = new YState<unknown[]>(doc, 'initialMarks', []);
 
   const viewTitle = $derived(viewDoc ? new YState<string>(viewDoc, 'title', '') : undefined);
   const viewSubtitle = $derived(viewDoc ? new YState<string>(viewDoc, 'subtitle', '') : undefined);
@@ -300,15 +292,6 @@
       [postId]: { ...selection.toJSON(), timestamp: dayjs().valueOf() },
     };
   };
-
-  const fontFaces = $derived(
-    entity.site.fonts
-      .flatMap((font) => [
-        `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
-        `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
-      ])
-      .join('\n'),
-  );
 
   let syncUpdateTimeout: NodeJS.Timeout | null = null;
   let pendingUpdate: Uint8Array | null = null;
@@ -607,6 +590,17 @@
     });
 
     editor?.current.once('create', ({ editor }) => {
+      const isDocumentEmpty = editor.state.doc.child(0).childCount === 1 && editor.state.doc.child(0).child(0).childCount === 0;
+
+      if (isDocumentEmpty && initialMarks.current.length > 0) {
+        const marks = initialMarks.current.map((markJSON) => editor.schema.markFromJSON(markJSON));
+        editor.commands.command(({ tr, dispatch }) => {
+          tr.setStoredMarks(marks);
+          dispatch?.(tr);
+          return true;
+        });
+      }
+
       const selections = selectionsStore.current;
       if (postId && selections[postId]) {
         if (selections[postId].type === 'element') {
@@ -658,7 +652,37 @@
       }
     });
 
+    const applyInitialMarks = ({ transaction }: { transaction: Transaction }) => {
+      if (!editor?.current) return;
+      if (transaction.getMeta('applyInitialMarks')) return;
+
+      const currentEditor = editor.current;
+
+      const isDocumentEmpty =
+        currentEditor.state.doc.child(0).childCount === 1 && currentEditor.state.doc.child(0).child(0).childCount === 0;
+
+      if (!isDocumentEmpty) return;
+
+      const currentStoredMarks = transaction.storedMarks;
+
+      if (!currentStoredMarks && initialMarks.current.length > 0) {
+        const marks = initialMarks.current.map((markJSON) => currentEditor.schema.markFromJSON(markJSON));
+        currentEditor.commands.command(({ tr, dispatch }) => {
+          tr.setStoredMarks(marks);
+          tr.setMeta('applyInitialMarks', true);
+          dispatch?.(tr);
+          return true;
+        });
+      } else if (currentStoredMarks) {
+        const newInitialMarks = currentStoredMarks.map((mark) => mark.toJSON());
+        if (stringify(newInitialMarks) !== stringify(initialMarks.current)) {
+          initialMarks.current = newInitialMarks;
+        }
+      }
+    };
+
     editor?.current.on('selectionUpdate', persistSelection);
+    editor?.current.on('transaction', applyInitialMarks);
 
     fullSync();
 
@@ -698,11 +722,6 @@
     }
   });
 </script>
-
-<svelte:head>
-  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-  {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
-</svelte:head>
 
 <svelte:window
   onkeydown={(e) => {

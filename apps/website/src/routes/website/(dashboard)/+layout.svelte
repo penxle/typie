@@ -47,6 +47,16 @@
           id
           name
 
+          fonts {
+            id
+            weight
+            url
+
+            family {
+              id
+            }
+          }
+
           ...DashboardLayout_Sidebar_site
           ...DashboardLayout_TrashModal_site
         }
@@ -134,6 +144,15 @@
   let userSurveyModalOpen = $state(false);
   let canvasDeprecationModalOpen = $state(false);
 
+  const fontFaces = $derived(
+    $query.me.sites[0].fonts
+      .flatMap((font) => [
+        `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+        `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
+      ])
+      .join('\n'),
+  );
+
   $effect(() => {
     return untrack(() => {
       const unsubscribe = siteUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
@@ -198,6 +217,11 @@
     }
   });
 </script>
+
+<svelte:head>
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+  {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
+</svelte:head>
 
 {#if isMobileDevice()}
   <div
