@@ -7,14 +7,13 @@ export type AppPreference = {
   sidebarHidden: boolean;
   sidebarTrigger: 'hover' | 'click';
   panelExpandedByViewId: Record<string, boolean>;
-  panelTabByViewId: Record<string, 'info' | 'anchors' | 'spellcheck' | 'timeline' | 'settings'>;
+  panelTabByViewId: Record<string, 'anchors' | 'spellcheck' | 'timeline' | 'settings'>;
   hasOpenedPanelOnce: boolean;
 
   panelWidth: number;
 
   toolbarStyle: 'compact' | 'classic';
 
-  noteExpanded: boolean;
   trashHeight: number;
 
   focusDuration: number;
@@ -42,6 +41,8 @@ export type AppPreference = {
   referralWelcomeModalShown: boolean;
 
   initialPage: 'blank' | 'last';
+
+  widgetHidden: boolean;
 };
 
 type AppState = {
@@ -117,7 +118,6 @@ export const setupAppContext = (userId: string) => {
 
       toolbarStyle: 'compact',
 
-      noteExpanded: false,
       trashHeight: 300,
 
       focusDuration: 30,
@@ -145,6 +145,8 @@ export const setupAppContext = (userId: string) => {
       referralWelcomeModalShown: false,
 
       initialPage: 'last',
+
+      widgetHidden: false,
     }),
     state: appState,
     timerState: new SessionStore<AppTimerState>(`typie:timer:${userId}`, {

@@ -186,7 +186,7 @@
 {/if}
 
 <button
-  style:top={`calc(12px + ${position} * (100% - 24px))`}
+  style:top={`calc(12px + ${position} * (100% - 64px))`}
   class={css({
     position: 'absolute',
     right: '8px',

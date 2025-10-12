@@ -7,7 +7,6 @@
   import { getViewContext } from '../@split-view/context.svelte';
   import PanelAnchors from './PanelAnchors.svelte';
   import PanelBodySettings from './PanelBodySettings.svelte';
-  import PanelInfo from './PanelInfo.svelte';
   import PanelSpellcheck from './PanelSpellcheck.svelte';
   import PanelTimeline from './PanelTimeline.svelte';
   import type { Editor } from '@tiptap/core';
@@ -35,7 +34,6 @@
       fragment Editor_Panel_user on User {
         id
 
-        ...Editor_Panel_PanelInfo_user
         ...Editor_Panel_PanelSpellcheck_user
       }
     `),
@@ -47,7 +45,6 @@
       fragment Editor_Panel_post on Post {
         id
 
-        ...Editor_Panel_PanelInfo_post
         ...Editor_PanelTimeline_post
       }
     `),
@@ -78,6 +75,8 @@
   style:--max-width={`${maxWidth}px`}
   class={flex({
     position: 'relative',
+    zIndex: 'panel',
+    backgroundColor: 'surface.default',
     flexDirection: 'column',
     flexShrink: '0',
     minWidth: isExpanded ? 'var(--min-width)' : '0',
@@ -96,6 +95,7 @@
   <div
     class={css({
       position: 'absolute',
+      zIndex: '1',
       top: '0',
       left: '0',
       width: '8px',
@@ -143,10 +143,6 @@
   ></div>
 
   {#if isExpanded}
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
-      <PanelInfo {$post} {$user} {editor} />
-    {/if}
-
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'anchors'}
       <PanelAnchors {doc} {editor} />
     {/if}

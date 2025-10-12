@@ -16,6 +16,7 @@
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
   import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
+  import { setupEditorRegistry } from './[slug]/@split-view/editor-registry.svelte';
   import Notes from './@notes/Notes.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import ShareModal from './@share/ShareModal.svelte';
@@ -139,6 +140,7 @@
 
   setupSplitViewContext($query.me.id);
   setupDragDropContext();
+  setupEditorRegistry();
 
   let referralWelcomeModalOpen = $state(false);
   let userSurveyModalOpen = $state(false);

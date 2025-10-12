@@ -5,6 +5,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { comma, downloadFromBase64 } from '@typie/ui/utils';
+  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility, ExportLayoutMode, PostLayoutMode } from '@/enums';
   import { TypieError } from '@/errors';
@@ -29,6 +30,8 @@
       id: string;
       title: string;
       characterCount?: number;
+      createdAt: string;
+      updatedAt: string;
     };
     entity: {
       id: string;
@@ -275,28 +278,41 @@
   bind:open={showPdfExportModal}
 />
 
-{#if via === 'tree'}
-  <HorizontalDivider color="secondary" />
+<HorizontalDivider color="secondary" />
 
-  <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
-    <div class={css({ fontWeight: 'medium' })}>
-      {#if entity.visibility === EntityVisibility.UNLISTED || entity.availability === EntityAvailability.UNLISTED}
-        <span class={css({ color: 'accent.brand.default' })}>
-          {#if entity.visibility === EntityVisibility.UNLISTED && entity.availability === EntityAvailability.UNLISTED}
-            링크 조회/편집 가능 포스트
-          {:else if entity.visibility === EntityVisibility.UNLISTED}
-            링크 조회 가능 포스트
-          {:else if entity.availability === EntityAvailability.UNLISTED}
-            링크 편집 가능 포스트
-          {/if}
-        </span>
-      {:else}
-        <span>비공개 포스트</span>
-      {/if}
-    </div>
-
-    {#if post.characterCount !== undefined}
-      <span>총 {comma(post.characterCount)}자</span>
+<div
+  class={flex({
+    flexDirection: 'column',
+    gap: '4px',
+    paddingX: '10px',
+    paddingY: '4px',
+    fontSize: '12px',
+    color: 'text.faint',
+    userSelect: 'none',
+  })}
+>
+  <div class={css({ fontWeight: 'medium' })}>
+    {#if entity.visibility === EntityVisibility.UNLISTED || entity.availability === EntityAvailability.UNLISTED}
+      <span class={css({ color: 'accent.brand.default' })}>
+        {#if entity.visibility === EntityVisibility.UNLISTED && entity.availability === EntityAvailability.UNLISTED}
+          링크 조회/편집 가능 포스트
+        {:else if entity.visibility === EntityVisibility.UNLISTED}
+          링크 조회 가능 포스트
+        {:else if entity.availability === EntityAvailability.UNLISTED}
+          링크 편집 가능 포스트
+        {/if}
+      </span>
+    {:else}
+      <span>비공개 포스트</span>
     {/if}
   </div>
-{/if}
+
+  {#if post.characterCount !== undefined}
+    <div>총 {comma(post.characterCount)}자</div>
+  {/if}
+
+  <div>
+    <div>생성: {dayjs(post.createdAt).formatAsDateTime()}</div>
+    <div>수정: {dayjs(post.updatedAt).formatAsDateTime()}</div>
+  </div>
+</div>

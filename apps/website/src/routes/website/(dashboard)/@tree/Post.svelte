@@ -26,6 +26,8 @@
         id
         title
         characterCount
+        createdAt
+        updatedAt
 
         entity {
           id

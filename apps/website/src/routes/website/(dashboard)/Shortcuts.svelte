@@ -27,21 +27,6 @@
   );
 
   const handleKeydown = async (event: KeyboardEvent) => {
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyP') {
-      if (!app.state.current) return;
-
-      event.preventDefault();
-
-      const id = splitView.state.current.focusedViewId;
-      if (id) {
-        app.preference.current.panelExpandedByViewId[id] = !app.preference.current.panelExpandedByViewId[id];
-
-        app.preference.current.panelTabByViewId[id] ??= 'info';
-      }
-
-      return;
-    }
-
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyM') {
       if (!app.state.current) return;
 

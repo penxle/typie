@@ -2,9 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
-  import { onMount } from 'svelte';
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
   import XIcon from '~icons/lucide/x';
@@ -52,7 +50,6 @@
     `),
   );
 
-  const app = getAppContext();
   const splitView = getSplitViewContext();
 
   const focused = $derived(viewItem.id === splitView.state.current.focusedViewId);
@@ -71,18 +68,6 @@
       goto(`/${viewItem.slug}`, { keepFocus: true });
     }
   };
-
-  onMount(() => {
-    if (
-      !app.preference.current.hasOpenedPanelOnce &&
-      !(viewItem.id in app.preference.current.panelExpandedByViewId) &&
-      !(viewItem.id in app.preference.current.panelTabByViewId)
-    ) {
-      app.preference.current.panelExpandedByViewId[viewItem.id] = true;
-      app.preference.current.panelTabByViewId[viewItem.id] = 'info';
-      app.preference.current.hasOpenedPanelOnce = true;
-    }
-  });
 
   setupViewContext(viewItem);
 </script>

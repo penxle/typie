@@ -13,7 +13,6 @@
   import FileUpIcon from '~icons/lucide/file-up';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
   import ImageIcon from '~icons/lucide/image';
-  import InfoIcon from '~icons/lucide/info';
   import ListIcon from '~icons/lucide/list';
   import ListOrderedIcon from '~icons/lucide/list-ordered';
   import PaperclipIcon from '~icons/lucide/paperclip';
@@ -287,7 +286,6 @@
   <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
     <ToolbarPanelTabButton icon={BookmarkIcon} label="북마크" tab="anchors" />
     <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" needPlanUpgrade={!$site?.user.subscription} tab="spellcheck" />
     <ToolbarPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" />
