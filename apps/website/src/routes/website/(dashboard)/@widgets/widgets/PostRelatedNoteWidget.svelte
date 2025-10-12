@@ -9,6 +9,8 @@
   import { animateFlip, debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
+  import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import ChevronUpIcon from '~icons/lucide/chevron-up';
   import ExpandIcon from '~icons/lucide/expand';
   import Minimize2Icon from '~icons/lucide/minimize-2';
   import PlusIcon from '~icons/lucide/plus';
@@ -103,10 +105,16 @@
   let localNoteOrder = $state<string[]>([]);
   let scrollContainer = $state<HTMLElement | null>(null);
   let isExpanded = $state((data.isExpanded as boolean) ?? false);
+  let isCollapsed = $state((data.isCollapsed as boolean) ?? false);
 
   const toggleExpanded = () => {
     isExpanded = !isExpanded;
-    widgetContext.updateWidget?.(widgetId, { ...data, isExpanded });
+    widgetContext.updateWidget?.(widgetId, { ...data, isExpanded, isCollapsed });
+  };
+
+  const toggleCollapse = () => {
+    isCollapsed = !isCollapsed;
+    widgetContext.updateWidget?.(widgetId, { ...data, isExpanded, isCollapsed });
   };
 
   const sortedNotes = $derived.by(() => {
@@ -262,7 +270,15 @@
   });
 </script>
 
-<Widget {disabled} icon={StickyNoteIcon} noPadding title="이 포스트 관련 노트" {widgetId} widgetType="postRelatedNote">
+<Widget
+  collapsed={isCollapsed}
+  {disabled}
+  icon={StickyNoteIcon}
+  noPadding
+  title="이 포스트 관련 노트"
+  {widgetId}
+  widgetType="postRelatedNote"
+>
   {#snippet headerActions()}
     {#if !palette}
       <button
@@ -305,6 +321,13 @@
         <Icon icon={isExpanded ? Minimize2Icon : ExpandIcon} size={14} />
       </button>
     {/if}
+    <button
+      class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}
+      onclick={toggleCollapse}
+      type="button"
+    >
+      <Icon icon={isCollapsed ? ChevronDownIcon : ChevronUpIcon} size={14} />
+    </button>
   {/snippet}
 
   <div

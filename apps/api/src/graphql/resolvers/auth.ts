@@ -20,6 +20,7 @@ import {
   Users,
   UserSessions,
   UserSingleSignOns,
+  Widgets,
 } from '@/db';
 import { sendEmail } from '@/email';
 import { PasswordResetEmail, SignUpEmail } from '@/email/templates';
@@ -28,7 +29,7 @@ import { dev, env } from '@/env';
 import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
 import { apple, google, kakao, naver } from '@/external/sso';
-import { generateRandomAvatar, generateRandomName, persistBlobAsImage } from '@/utils';
+import { generateFractionalOrder, generateRandomAvatar, generateRandomName, persistBlobAsImage } from '@/utils';
 import { createSite } from '@/utils/site';
 import { builder } from '../builder';
 import type { UserContext } from '@/context';
@@ -398,6 +399,19 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId, refer
       },
     }),
   );
+
+  const widgets = ['onboarding', 'characterCount', 'characterCountChange'];
+  let widgetOrder = null;
+
+  for (const widget of widgets) {
+    widgetOrder = generateFractionalOrder({ lower: widgetOrder, upper: null });
+
+    await tx.insert(Widgets).values({
+      userId: user.id,
+      name: widget,
+      order: widgetOrder,
+    });
+  }
 
   if (referralCode) {
     const referrer = await tx
