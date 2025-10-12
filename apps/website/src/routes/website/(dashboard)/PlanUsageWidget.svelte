@@ -5,8 +5,8 @@
   import { comma, formatBytes } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { defaultPlanRules } from '@/const';
-  import { pushState } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
+  import PlanUpgradeModal from './PlanUpgradeModal.svelte';
   import type { DashboardLayout_PlanUsageWidget_site, DashboardLayout_PlanUsageWidget_user } from '$graphql';
 
   type Props = {
@@ -15,6 +15,8 @@
   };
 
   let { $site: _site, $user: _user }: Props = $props();
+
+  let planUpgradeModalOpen = $state(false);
 
   const user = fragment(
     _user,
@@ -97,8 +99,8 @@
       _hover: { backgroundColor: 'surface.muted' },
     })}
     onclick={() => {
-      pushState('', { shallowRoute: '/preference/billing' });
-      mixpanel.track('open_billing_tab', { via: 'usage_widget' });
+      planUpgradeModalOpen = true;
+      mixpanel.track('open_plan_upgrade_modal', { via: 'usage_widget' });
     }}
     type="button"
   >
@@ -160,4 +162,10 @@
       </div>
     </div>
   </button>
+
+  <PlanUpgradeModal bind:open={planUpgradeModalOpen}>
+    FULL ACCESS로 업그레이드하면
+    <br />
+    무제한으로 글을 작성하고 파일을 업로드할 수 있어요.
+  </PlanUpgradeModal>
 {/if}
