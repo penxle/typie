@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { fragment, graphql } from '$graphql';
+  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import type { DashboardLayout_PreferenceModal_ShortcutsTab_user } from '$graphql';
 
   type Props = {
@@ -83,7 +84,6 @@
     {
       title: '레이아웃',
       shortcuts: [
-        { keys: [modKey, 'Shift', 'E'], description: '내 포스트 토글' },
         { keys: [modKey, 'Shift', 'P'], description: '우측 패널 토글' },
         { keys: [modKey, 'Shift', 'M'], description: '집중 모드 전환' },
       ],
@@ -91,58 +91,27 @@
   ];
 </script>
 
-<div class={flex({ direction: 'column', gap: '32px' })}>
-  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>단축키</h1>
+<div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
+  <!-- Tab Header -->
+  <div>
+    <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>단축키</h1>
+  </div>
 
-  <div class={flex({ direction: 'column', gap: '16px' })}>
-    {#each shortcutCategories as category (category.title)}
-      <div
-        class={css({
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          borderRadius: '8px',
-          backgroundColor: 'surface.default',
-          overflow: 'hidden',
-        })}
-      >
-        <div
-          class={css({
-            paddingX: '16px',
-            paddingY: '12px',
-            backgroundColor: 'surface.subtle',
-            borderBottomWidth: '1px',
-            borderColor: 'border.subtle',
-          })}
-        >
-          <h3
-            class={css({
-              fontSize: '13px',
-              fontWeight: 'medium',
-              color: 'text.subtle',
-            })}
-          >
-            {category.title}
-          </h3>
-        </div>
-        <div class={css({ padding: '12px' })}>
-          {#each category.shortcuts as shortcut (shortcut.description)}
-            <div
-              class={flex({
-                align: 'center',
-                justify: 'space-between',
-                paddingX: '12px',
-                paddingY: '8px',
-                borderRadius: '4px',
-              })}
-            >
-              <span
-                class={css({
-                  fontSize: '13px',
-                  color: 'text.subtle',
-                })}
-              >
-                {shortcut.description}
-              </span>
+  {#each shortcutCategories as category (category.title)}
+    <!-- {category.title} Section -->
+    <div>
+      <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>{category.title}</h2>
+
+      <SettingsCard>
+        {#each category.shortcuts as shortcut, index (shortcut.description)}
+          {#if index > 0}
+            <SettingsDivider />
+          {/if}
+          <SettingsRow>
+            {#snippet label()}
+              {shortcut.description}
+            {/snippet}
+            {#snippet value()}
               <div
                 class={flex({
                   align: 'center',
@@ -165,8 +134,8 @@
                       </span>
                     {/if}
                     <div class={flex({ align: 'center', gap: '4px' })}>
-                      {#each keyGroup as key, index (key)}
-                        {#if index > 0}
+                      {#each keyGroup as key, keyIndex (key)}
+                        {#if keyIndex > 0}
                           <span
                             class={css({
                               fontSize: '11px',
@@ -189,11 +158,9 @@
                             fontWeight: 'normal',
                             fontFamily: 'mono',
                             color: 'text.subtle',
-                            backgroundColor: 'surface.default',
                             borderWidth: '1px',
-                            borderColor: 'border.default',
-                            borderRadius: '3px',
-                            boxShadow: 'small',
+                            borderColor: 'border.subtle',
+                            borderRadius: '4px',
                           })}
                         >
                           {key}
@@ -202,8 +169,8 @@
                     </div>
                   {/each}
                 {:else}
-                  {#each shortcut.keys as key, index (key)}
-                    {#if index > 0}
+                  {#each shortcut.keys as key, keyIndex (key)}
+                    {#if keyIndex > 0}
                       <span
                         class={css({
                           fontSize: '11px',
@@ -226,11 +193,9 @@
                         fontWeight: 'normal',
                         fontFamily: 'mono',
                         color: 'text.subtle',
-                        backgroundColor: 'surface.default',
                         borderWidth: '1px',
-                        borderColor: 'border.default',
-                        borderRadius: '3px',
-                        boxShadow: 'small',
+                        borderColor: 'border.subtle',
+                        borderRadius: '4px',
                       })}
                     >
                       {key}
@@ -238,10 +203,10 @@
                   {/each}
                 {/if}
               </div>
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/each}
-  </div>
+            {/snippet}
+          </SettingsRow>
+        {/each}
+      </SettingsCard>
+    </div>
+  {/each}
 </div>

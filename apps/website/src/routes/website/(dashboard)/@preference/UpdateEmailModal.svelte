@@ -48,26 +48,46 @@
   });
 </script>
 
-<Modal style={css.raw({ padding: '16px', maxWidth: '440px' })} bind:open>
-  <p class={css({ paddingBottom: '20px', fontSize: '18px', textAlign: 'center', fontWeight: 'semibold' })}>이메일 변경</p>
+<Modal style={css.raw({ padding: '24px', maxWidth: '480px' })} bind:open>
+  <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>이메일 변경</h2>
 
-  <div class={flex({ direction: 'column', gap: '36px' })}>
-    <div>
-      <p class={css({ marginBottom: '4px', fontSize: '15px', fontWeight: 'medium' })}>현재 이메일</p>
-      <p class={css({ fontSize: '14px', color: 'text.muted' })}>{email}</p>
+  <form class={flex({ direction: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
+    <div class={flex({ direction: 'column', gap: '8px' })}>
+      <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>현재 이메일</div>
+      <div
+        class={css({
+          padding: '12px',
+          borderRadius: '6px',
+          backgroundColor: 'surface.muted',
+          fontSize: '14px',
+          color: 'text.subtle',
+        })}
+      >
+        {email}
+      </div>
     </div>
 
-    <form onsubmit={form.handleSubmit}>
-      <label class={css({ display: 'block', marginBottom: '4px', fontSize: '15px', fontWeight: 'medium' })} for="email">
-        변경할 이메일
-      </label>
+    <div class={flex({ direction: 'column', gap: '8px' })}>
+      <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="email">새 이메일</label>
       <TextInput id="email" autofocus placeholder="new@example.com" type="email" bind:value={form.fields.email} />
 
       {#if form.errors.email}
-        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.email}</div>
+        <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.email}</div>
       {/if}
+    </div>
 
-      <Button style={css.raw({ marginTop: '12px', width: 'full' })} type="submit">변경</Button>
-    </form>
-  </div>
+    <div class={flex({ gap: '8px', marginTop: '8px' })}>
+      <Button
+        style={css.raw({ flex: '1' })}
+        onclick={() => {
+          open = false;
+        }}
+        type="button"
+        variant="secondary"
+      >
+        취소
+      </Button>
+      <Button style={css.raw({ flex: '1' })} type="submit">변경</Button>
+    </div>
+  </form>
 </Modal>

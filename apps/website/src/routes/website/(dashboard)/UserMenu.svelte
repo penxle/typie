@@ -103,7 +103,7 @@
       _hover: { backgroundColor: 'surface.muted' },
     })}
     onclick={() => {
-      pushState('', { shallowRoute: '/preference/account' });
+      pushState('', { shallowRoute: '/preference/profile' });
       mixpanel.track('open_preference_modal', { via: 'user_menu' });
       open = false;
     }}

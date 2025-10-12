@@ -15,6 +15,7 @@
     hidden?: boolean;
     leftItem?: Snippet;
     rightItem?: Snippet;
+    rightItemAttached?: boolean;
     autofocus?: boolean;
   } & RecipeVariantProps<typeof recipe> &
     Omit<HTMLInputAttributes, 'class' | 'style' | 'size' | 'name' | 'autofocus'>;
@@ -30,6 +31,7 @@
     hidden = false,
     leftItem,
     rightItem,
+    rightItemAttached = false,
     autofocus = false,
     ...rest
   }: Props = $props();
@@ -47,9 +49,11 @@
       display: 'flex',
       alignItems: 'center',
       borderWidth: '1px',
+      borderColor: 'border.subtle',
       color: 'text.faint',
       backgroundColor: 'surface.default',
       transition: 'common',
+      overflow: 'hidden',
       _hover: {
         borderColor: 'border.brand',
       },
@@ -58,7 +62,7 @@
       },
       '&:has(input:not(:placeholder-shown)), &:has(input[aria-live="polite"])': {
         color: 'text.default',
-        borderColor: 'border.strong',
+        borderColor: 'border.subtle',
       },
       '&:has(input:disabled)': {
         color: 'text.disabled',
@@ -85,19 +89,22 @@
       size: {
         sm: {
           borderRadius: '4px',
-          paddingX: '12px',
+          paddingLeft: '12px',
+          paddingRight: '12px',
           height: '32px',
           fontSize: '13px',
         },
         md: {
           borderRadius: '6px',
-          paddingX: '12px',
+          paddingLeft: '12px',
+          paddingRight: '12px',
           height: '38px',
           fontSize: '14px',
         },
         lg: {
           borderRadius: '8px',
-          paddingX: '16px',
+          paddingLeft: '16px',
+          paddingRight: '16px',
           height: '44px',
           fontSize: '15px',
         },
@@ -106,7 +113,7 @@
   });
 </script>
 
-<label class={css(recipe.raw({ size }), style)} for={name} {hidden}>
+<label class={css(recipe.raw({ size }), rightItemAttached && { paddingRight: '0' }, style)} for={name} {hidden}>
   {#if leftIcon}
     <div class={flex({ align: 'center', marginRight: '8px' })}>
       <Icon icon={leftIcon} size={18} />
@@ -137,7 +144,12 @@
   {/if}
 
   {#if rightItem}
-    <div class={css({ marginLeft: '8px' })}>
+    <div
+      class={css({
+        marginLeft: '8px',
+        ...(rightItemAttached && { height: 'full', display: 'flex', alignItems: 'center' }),
+      })}
+    >
       {@render rightItem()}
     </div>
   {/if}

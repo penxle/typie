@@ -81,7 +81,7 @@
           },
         },
         secondary: {
-          fontWeight: 'semibold',
+          fontWeight: 'medium',
           color: {
             _enabled: {
               base: 'text.subtle',
@@ -102,8 +102,29 @@
           },
           borderWidth: '1px',
           borderColor: {
-            _enabled: 'border.strong',
-            _disabled: 'border.default',
+            _enabled: 'border.subtle',
+            _disabled: 'border.subtle',
+          },
+        },
+        ghost: {
+          fontWeight: 'medium',
+          color: {
+            _enabled: {
+              base: 'text.subtle',
+              _hover: 'text.default',
+              _active: 'text.default',
+              _pressed: 'text.default',
+            },
+            _disabled: 'text.disabled',
+          },
+          backgroundColor: {
+            _enabled: {
+              base: 'transparent',
+              _hover: 'surface.subtle',
+              _active: 'surface.muted',
+              _pressed: 'surface.muted',
+            },
+            _disabled: 'transparent',
           },
         },
         danger: {
@@ -143,6 +164,7 @@
       color: {
         primary: { color: 'text.bright' },
         secondary: { color: 'text.subtle' },
+        ghost: { color: 'text.subtle' },
         danger: { color: 'text.danger' },
       },
     },

@@ -83,7 +83,7 @@
   <MenuItem
     icon={SettingsIcon}
     onclick={() => {
-      pushState('', { shallowRoute: '/preference/account' });
+      pushState('', { shallowRoute: '/preference/profile' });
       mixpanel.track('open_preference_modal', { via: 'profile_menu' });
       open = false;
     }}

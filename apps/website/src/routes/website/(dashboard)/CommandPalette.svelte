@@ -166,7 +166,7 @@
       aliases: [],
       icon: SettingsIcon,
       action: () => {
-        pushState('', { shallowRoute: '/preference/account' });
+        pushState('', { shallowRoute: '/preference/profile' });
       },
     },
   ]);
