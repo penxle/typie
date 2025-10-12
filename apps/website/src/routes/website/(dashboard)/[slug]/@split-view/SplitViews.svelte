@@ -58,7 +58,7 @@
       position: 'relative',
     })}
   >
-    {#each view.children as child, index (child.id)}
+    {#each view.children as child, index (child.type === 'item' ? `item-${child.id}-${child.slug ?? ''}` : `container-${child.id}`)}
       <SplitViews $query={_query} {slug} view={child} />
       {#if index !== view.children.length - 1}
         <Resizer {containerRef} direction={view.direction} {index} {view} />
