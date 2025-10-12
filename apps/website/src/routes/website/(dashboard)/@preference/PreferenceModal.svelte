@@ -168,7 +168,7 @@
     <div
       class={css({
         flex: 'none',
-        paddingY: '24px',
+        paddingY: '20px',
         paddingX: '12px',
         width: '200px',
         borderRightWidth: '1px',
