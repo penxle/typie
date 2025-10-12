@@ -45,7 +45,6 @@ import 'package:typie/services/theme.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
-import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/webview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -123,7 +122,7 @@ class Editor extends HookWidget {
           case 'webviewReady':
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
-              'features': ['template', 'hide-table-delete-in-handle', 'focusable', 'paste-mode', 'notes'],
+              'features': ['hide-table-delete-in-handle', 'focusable', 'paste-mode', 'notes'],
               'settings': {
                 'lineHighlightEnabled': pref.lineHighlightEnabled,
                 'typewriterEnabled': pref.typewriterEnabled,
@@ -146,11 +145,6 @@ class Editor extends HookWidget {
             await webViewController.clearFocus();
             if (context.mounted) {
               await context.showBottomSheet(intercept: true, child: const LimitBottomSheet());
-            }
-          case 'useTemplate':
-            await webViewController.clearFocus();
-            if (context.mounted) {
-              await context.showBottomSheet(intercept: true, child: _TemplateBottomSheet(scope: scope));
             }
           case 'focus':
             final element = (event.data as Map<String, dynamic>)['element'] as String;
@@ -642,60 +636,6 @@ class _EditorInfoBottomSheet extends HookWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _TemplateBottomSheet extends HookWidget {
-  const _TemplateBottomSheet({required this.scope});
-
-  final EditorStateScope scope;
-
-  @override
-  Widget build(BuildContext context) {
-    final data = useValueListenable(scope.data);
-    final templates = data?.site.templates.toList() ?? [];
-
-    return AppBottomSheet(
-      child: templates.isEmpty
-          ? Padding(
-              padding: const Pad(vertical: 20),
-              child: Text(
-                '아직 템플릿이 없어요.\n\n에디터 우상단 더보기 메뉴에서\n기존 포스트를 템플릿으로 전환해보세요.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-              ),
-            )
-          : ListView.separated(
-              shrinkWrap: true,
-              padding: const Pad(horizontal: 20),
-              itemCount: templates.length,
-              itemBuilder: (context, index) {
-                return Tappable(
-                  padding: const Pad(vertical: 8),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(templates[index].title, overflow: TextOverflow.ellipsis)),
-                      const Gap(8),
-                      Text('사용하기', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-                      const Gap(4),
-                      Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textFaint),
-                    ],
-                  ),
-                  onTap: () async {
-                    await scope.webViewController.value?.emitEvent('loadTemplate', {
-                      'slug': templates[index].entity.slug,
-                    });
-                    if (context.mounted) {
-                      await context.router.root.maybePop();
-                    }
-                  },
-                );
-              },
-              separatorBuilder: (context, index) {
-                return const Gap(12);
-              },
-            ),
     );
   }
 }

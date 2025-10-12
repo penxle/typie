@@ -15,7 +15,6 @@ import {
   Selection,
   SentenceNavigation,
   SyntaxHighlight,
-  TemplatePlaceholder,
   TrailingNode,
   Typewriter,
   Typography,
@@ -106,7 +105,6 @@ export const editorExtensions = [
   Placeholder,
   Search,
   SentenceNavigation,
-  TemplatePlaceholder,
   Typewriter,
   Typography,
 
