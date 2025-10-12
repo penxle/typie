@@ -2,6 +2,7 @@ import CharacterCountChangeWidget from './CharacterCountChangeWidget.svelte';
 import CharacterCountWidget from './CharacterCountWidget.svelte';
 import OnboardingWidget from './OnboardingWidget.svelte';
 import PostRelatedNoteWidget from './PostRelatedNoteWidget.svelte';
+import TimerWidget from './TimerWidget.svelte';
 import type { Editor } from '@tiptap/core';
 import type { Ref } from '@typie/ui/utils';
 import type { Component } from 'svelte';
@@ -12,6 +13,7 @@ export { default as CharacterCountChangeWidget } from './CharacterCountChangeWid
 export { default as CharacterCountWidget } from './CharacterCountWidget.svelte';
 export { default as OnboardingWidget } from './OnboardingWidget.svelte';
 export { default as PostRelatedNoteWidget } from './PostRelatedNoteWidget.svelte';
+export { default as TimerWidget } from './TimerWidget.svelte';
 
 export type WidgetComponentProps = {
   widgetId: string;
@@ -30,6 +32,7 @@ export const WIDGET_COMPONENTS: Record<WidgetType, WidgetComponent> = {
   characterCountChange: CharacterCountChangeWidget as WidgetComponent,
   postRelatedNote: PostRelatedNoteWidget as WidgetComponent,
   onboarding: OnboardingWidget as WidgetComponent,
+  timer: TimerWidget as WidgetComponent,
 };
 
 export type WidgetCategory = 'writing';
@@ -44,6 +47,7 @@ export const WIDGET_METADATA: WidgetMetadata[] = [
   { type: 'characterCount', category: 'writing', name: '글자 수' },
   { type: 'characterCountChange', category: 'writing', name: '오늘의 기록' },
   { type: 'postRelatedNote', category: 'writing', name: '노트' },
+  { type: 'timer', category: 'writing', name: '타이머' },
 ];
 
 export const WIDGET_CATEGORIES: { id: WidgetCategory; name: string }[] = [{ id: 'writing', name: '위젯' }];

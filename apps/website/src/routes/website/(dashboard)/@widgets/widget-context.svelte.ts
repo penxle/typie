@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/core';
 import type { Ref } from '@typie/ui/utils';
 import type { Editor_Widget_CharacterCountChangeWidget_post, Editor_Widget_PostRelatedNoteWidget_post } from '$graphql';
 
-export type WidgetType = 'characterCount' | 'characterCountChange' | 'postRelatedNote' | 'onboarding';
+export type WidgetType = 'characterCount' | 'characterCountChange' | 'postRelatedNote' | 'onboarding' | 'timer';
 
 export type WidgetInstance = {
   id: string;
