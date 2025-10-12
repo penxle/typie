@@ -10,7 +10,6 @@ import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
-import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
@@ -411,8 +410,7 @@ class _Post extends StatelessWidget {
                 maxLines: 1,
               ),
             ),
-            if (post.type == GPostType.NORMAL)
-              Text(post.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+            Text(post.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
           ],
         ),
         Text(

@@ -24,7 +24,6 @@ fragment TrashScreen_Entity_entity on Entity {
     ... on Post {
       id
       title
-      type
       excerpt
       updatedAt
     }

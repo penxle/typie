@@ -6,7 +6,7 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import { comma, downloadFromBase64 } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { EntityAvailability, EntityVisibility, ExportLayoutMode, PostLayoutMode, PostType } from '@/enums';
+  import { EntityAvailability, EntityVisibility, ExportLayoutMode, PostLayoutMode } from '@/enums';
   import { TypieError } from '@/errors';
   import BlendIcon from '~icons/lucide/blend';
   import Columns2Icon from '~icons/lucide/columns-2';
@@ -15,7 +15,6 @@
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import InfoIcon from '~icons/lucide/info';
   import Rows2Icon from '~icons/lucide/rows-2';
-  import ShapesIcon from '~icons/lucide/shapes';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
@@ -29,7 +28,6 @@
     post: {
       id: string;
       title: string;
-      type: PostType;
       characterCount?: number;
     };
     entity: {
@@ -93,27 +91,6 @@
     }
   `);
 
-  const updatePostType = graphql(`
-    mutation PostMenu_UpdatePostType_Mutation($input: UpdatePostTypeInput!) {
-      updatePostType(input: $input) {
-        id
-        type
-
-        entity {
-          id
-
-          site {
-            id
-
-            templates {
-              id
-            }
-          }
-        }
-      }
-    }
-  `);
-
   const exportPostAsPdf = graphql(`
     mutation PostMenu_ExportPostAsPdf_Mutation($input: ExportPostAsPdfInput!) {
       exportPostAsPdf(input: $input) {
@@ -160,21 +137,6 @@
       actionHandler: async () => {
         await deletePost({ postId: post.id });
         mixpanel.track('delete_post', { via });
-      },
-    });
-  };
-
-  const handleTypeChange = (newType: PostType) => {
-    const isToTemplate = newType === PostType.TEMPLATE;
-
-    Dialog.confirm({
-      title: isToTemplate ? '템플릿으로 전환' : '포스트로 전환',
-      message: isToTemplate
-        ? '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.'
-        : '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
-      actionLabel: '전환',
-      actionHandler: async () => {
-        await updatePostType({ postId: post.id, type: newType });
       },
     });
   };
@@ -284,12 +246,6 @@
 </MenuItem>
 
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
-
-{#if post.type === PostType.NORMAL}
-  <MenuItem icon={ShapesIcon} onclick={() => handleTypeChange(PostType.TEMPLATE)}>템플릿으로 전환</MenuItem>
-{:else if post.type === PostType.TEMPLATE}
-  <MenuItem icon={ShapesIcon} onclick={() => handleTypeChange(PostType.NORMAL)}>포스트로 전환</MenuItem>
-{/if}
 
 {@render children?.()}
 

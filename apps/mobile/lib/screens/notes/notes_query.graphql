@@ -9,7 +9,6 @@ query NotesScreen_Query {
         ... on Post {
           id
           title
-          type
         }
         ... on Canvas {
           id
@@ -34,7 +33,6 @@ query NotesScreen_Query {
         ... on Post {
           id
           title
-          type
         }
         ... on Canvas {
           id

@@ -5,9 +5,7 @@
   import { Icon } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import { PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
-  import ShapesIcon from '~icons/lucide/shapes';
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
   import { fragment, graphql } from '$graphql';
@@ -24,7 +22,6 @@
     graphql(`
       fragment DashboardLayout_TrashTree_TrashPost_post on Post {
         id
-        type
         title
         characterCount
 
@@ -78,11 +75,7 @@
   role="treeitem"
 >
   <div class={css({ display: 'flex', alignItems: 'center', gap: '6px', paddingY: '4px' })}>
-    {#if $post.type === PostType.NORMAL}
-      <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
-    {:else if $post.type === PostType.TEMPLATE}
-      <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
-    {/if}
+    <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
 
     <span
       class={css({

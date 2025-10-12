@@ -6,10 +6,8 @@
   import { values } from '@typie/ui/tiptap/values-base';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
-  import { PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
-  import ShapesIcon from '~icons/lucide/shapes';
   import Trash2Icon from '~icons/lucide/trash-2';
 
   type Props = {
@@ -184,14 +182,7 @@
           })}
           href={`/${note.entity.slug}`}
         >
-          <Icon
-            icon={note.entity.node.__typename === 'Post'
-              ? note.entity.node.type === PostType.TEMPLATE
-                ? ShapesIcon
-                : FileIcon
-              : LineSquiggleIcon}
-            size={12}
-          />
+          <Icon icon={note.entity.node.__typename === 'Post' ? FileIcon : LineSquiggleIcon} size={12} />
           <span class={css({ fontSize: '12px', fontWeight: 'medium', lineClamp: '1' })}>
             {note.entity.node.__typename === 'Post' || note.entity.node.__typename === 'Canvas'
               ? note.entity.node.title || '(제목 없음)'

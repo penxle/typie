@@ -8,11 +8,9 @@
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import { match } from 'ts-pattern';
-  import { PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
-  import ShapesIcon from '~icons/lucide/shapes';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import ActivityGrid from '../@stats/ActivityGrid.svelte';
@@ -37,7 +35,6 @@
         recentlyViewedEntities {
           id
           slug
-          type
 
           node {
             __typename
@@ -46,7 +43,6 @@
               id
               title
               subtitle
-              type
               excerpt
             }
 
@@ -169,11 +165,7 @@
                 <div class={flex({ alignItems: 'center', gap: '8px' })}>
                   <Icon
                     style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
-                    icon={entity.node.__typename === 'Canvas'
-                      ? LineSquiggleIcon
-                      : entity.node.__typename === 'Post' && entity.node.type === PostType.TEMPLATE
-                        ? ShapesIcon
-                        : FileIcon}
+                    icon={entity.node.__typename === 'Canvas' ? LineSquiggleIcon : FileIcon}
                   />
                   <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
                     {entity.node.__typename === 'Post' || entity.node.__typename === 'Canvas' ? entity.node.title : ''}
