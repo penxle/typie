@@ -83,10 +83,7 @@
     },
     {
       title: '레이아웃',
-      shortcuts: [
-        { keys: [modKey, 'Shift', 'P'], description: '우측 패널 토글' },
-        { keys: [modKey, 'Shift', 'M'], description: '집중 모드 전환' },
-      ],
+      shortcuts: [{ keys: [modKey, 'Shift', 'M'], description: '집중 모드 전환' }],
     },
   ];
 </script>
