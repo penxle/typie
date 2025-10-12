@@ -22,6 +22,7 @@ import {
   PostSnapshots,
   TableCode,
   UserPersonalIdentities,
+  UserPreferences,
   Users,
   validateDbId,
 } from '@/db';
@@ -443,18 +444,39 @@ builder.mutationFields((t) => ({
       const title = null;
       const subtitle = null;
 
+      const preference = await db
+        .select({ value: UserPreferences.value })
+        .from(UserPreferences)
+        .where(eq(UserPreferences.userId, ctx.session.userId))
+        .then(first);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const template = preference?.value as Record<string, any> | undefined;
+
+      const paragraphIndent = template?.paragraphIndent ?? 1;
+      const blockGap = template?.blockGap ?? 1;
+      const lineHeight = template?.lineHeight ?? 1.6;
+      const letterSpacing = template?.letterSpacing ?? 0;
+      const fontFamily = template?.fontFamily ?? 'Pretendard';
+      const fontSize = template?.fontSize ?? 16;
+      const maxWidth = template?.maxWidth ?? 800;
+      const layoutMode = template?.layoutMode ?? PostLayoutMode.SCROLL;
+      const pageLayout = template?.pageLayout ?? null;
+
       const node = schema.nodes.doc.createChecked(
         null,
         schema.nodes.body.createChecked(
-          { nodeId: nanoid(32), paragraphIndent: 1, blockGap: 1 },
-          schema.nodes.paragraph.createChecked({ nodeId: nanoid(32), textAlign: 'left', lineHeight: 1.6, letterSpacing: 0 }),
+          { nodeId: nanoid(32), paragraphIndent, blockGap },
+          schema.nodes.paragraph.createChecked({ nodeId: nanoid(32), textAlign: 'left', lineHeight, letterSpacing }),
         ),
       );
 
       const body = node.toJSON();
       const text = makeText(body);
 
-      const doc = makeYDoc({ title, subtitle, body });
+      const initialMarks = [schema.marks.text_style.create({ fontFamily, fontSize }).toJSON()];
+
+      const doc = makeYDoc({ title, subtitle, body, maxWidth, layoutMode, pageLayout, initialMarks });
       const snapshot = Y.snapshot(doc);
 
       let depth = 0;
@@ -510,6 +532,7 @@ builder.mutationFields((t) => ({
             entityId: entity.id,
             title,
             subtitle,
+            maxWidth,
           })
           .returning()
           .then(firstOrThrow);
@@ -520,6 +543,8 @@ builder.mutationFields((t) => ({
           text,
           update: Y.encodeStateAsUpdateV2(doc),
           vector: Y.encodeStateVector(doc),
+          layoutMode,
+          pageLayout,
         });
 
         const snapshotData = Y.encodeSnapshotV2(snapshot);

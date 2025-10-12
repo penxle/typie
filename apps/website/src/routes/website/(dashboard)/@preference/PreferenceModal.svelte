@@ -8,6 +8,7 @@
   import GiftIcon from '~icons/lucide/gift';
   import KeyboardIcon from '~icons/lucide/keyboard';
   import LayoutIcon from '~icons/lucide/layout';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import PencilIcon from '~icons/lucide/pencil';
   import ShieldIcon from '~icons/lucide/shield';
   import TypeIcon from '~icons/lucide/type';
@@ -25,6 +26,7 @@
   import ReferralTab from './ReferralTab.svelte';
   import SecurityTab from './SecurityTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
+  import TemplateTab from './TemplateTab.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_PreferenceModal_user } from '$graphql';
 
@@ -57,6 +59,7 @@
         ...DashboardLayout_PreferenceModal_EditorTab_user
         ...DashboardLayout_PreferenceModal_InterfaceTab_user
         ...DashboardLayout_PreferenceModal_FontTab_user
+        ...DashboardLayout_PreferenceModal_TemplateTab_user
         ...DashboardLayout_PreferenceModal_PlanTab_user
         ...DashboardLayout_PreferenceModal_BillingTab_user
         ...DashboardLayout_PreferenceModal_ReferralTab_user
@@ -109,6 +112,12 @@
           label: '폰트',
           icon: TypeIcon,
           component: FontTab,
+        },
+        {
+          path: '/preference/template',
+          label: '템플릿',
+          icon: LayoutTemplateIcon,
+          component: TemplateTab,
         },
       ],
     },
@@ -168,7 +177,7 @@
     <div
       class={css({
         flex: 'none',
-        paddingY: '20px',
+        paddingY: '24px',
         paddingX: '12px',
         width: '200px',
         borderRightWidth: '1px',
