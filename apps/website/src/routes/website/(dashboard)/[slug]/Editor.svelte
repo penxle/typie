@@ -23,6 +23,7 @@
   import * as Y from 'yjs';
   import { PostLayoutMode, PostSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import CrownIcon from '~icons/lucide/crown';
   import ElipsisIcon from '~icons/lucide/ellipsis';
   import FolderIcon from '~icons/lucide/folder';
   import Maximize2Icon from '~icons/lucide/maximize-2';
@@ -31,6 +32,7 @@
   import { fragment, graphql } from '$graphql';
   import { unfurlEmbed, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
   import PostMenu from '../@context-menu/PostMenu.svelte';
+  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import Anchors from './@anchor/Anchors.svelte';
   import Panel from './@panel/Panel.svelte';
   import PanelNote from './@panel/PanelNote.svelte';
@@ -151,6 +153,10 @@
           user {
             id
 
+            subscription {
+              id
+            }
+
             ...Editor_BottomToolbar_user
           }
 
@@ -238,6 +244,7 @@
 
   let clipboardData = $state<{ html: string; text?: string }>();
   let openPasteModal = $state(false);
+  let planUpgradeModalOpen = $state(false);
 
   const doc = new Y.Doc();
   let viewDoc = $state<Y.Doc>();
@@ -773,6 +780,35 @@
         </div>
 
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          {#if !entity.user.subscription}
+            <button
+              class={flex({
+                alignItems: 'center',
+                gap: '4px',
+                paddingX: '8px',
+                paddingY: '4px',
+                borderRadius: '4px',
+                borderWidth: '1px',
+                borderColor: 'border.brand',
+                fontSize: '11px',
+                fontWeight: 'semibold',
+                color: 'text.brand',
+                backgroundColor: 'transparent',
+                cursor: 'pointer',
+                transition: 'common',
+                _hover: { backgroundColor: 'accent.brand.subtle' },
+              })}
+              onclick={() => {
+                planUpgradeModalOpen = true;
+                mixpanel.track('open_plan_upgrade_modal', { via: 'editor_header' });
+              }}
+              type="button"
+            >
+              <Icon icon={CrownIcon} size={12} />
+              <span>업그레이드</span>
+            </button>
+          {/if}
+
           <div class={center({ size: '24px' })}>
             <div
               style:background-color={match(connectionStatus)
@@ -1197,31 +1233,68 @@
           </div>
         </div>
         {#if currentViewZenModeEnabled}
-          <button
-            class={css({
+          <div
+            class={flex({
               position: 'fixed',
               top: '18px',
               right: '18px',
               zIndex: 'editor',
-              borderWidth: '1px',
-              borderColor: 'border.strong',
-              borderRadius: '8px',
-              padding: '5px',
-              color: 'text.subtle',
-              backgroundColor: { base: 'surface.default', _hover: 'surface.subtle' },
+              alignItems: 'center',
+              gap: '8px',
             })}
-            onclick={() => {
-              app.preference.current.zenModeEnabled = false;
-              mixpanel.track('zen_mode_disabled', { via: 'close_button' });
-            }}
-            type="button"
-            use:tooltip={{
-              message: '집중 모드 끄기',
-              keys: ['Esc'],
-            }}
           >
-            <Icon icon={XIcon} />
-          </button>
+            {#if !entity.user.subscription}
+              <button
+                class={flex({
+                  alignItems: 'center',
+                  gap: '4px',
+                  height: '[31.5px]',
+                  paddingX: '8px',
+                  borderRadius: '6px',
+                  borderWidth: '1px',
+                  borderColor: 'border.brand',
+                  fontSize: '11px',
+                  fontWeight: 'semibold',
+                  color: 'text.brand',
+                  backgroundColor: 'surface.default',
+                  cursor: 'pointer',
+                  transition: 'common',
+                  _hover: { backgroundColor: 'accent.brand.subtle' },
+                })}
+                onclick={() => {
+                  planUpgradeModalOpen = true;
+                  mixpanel.track('open_plan_upgrade_modal', { via: 'editor_zen_mode' });
+                }}
+                type="button"
+              >
+                <Icon icon={CrownIcon} size={12} />
+                <span>업그레이드</span>
+              </button>
+            {/if}
+
+            <button
+              class={center({
+                height: '32px',
+                width: '32px',
+                borderWidth: '1px',
+                borderColor: 'border.strong',
+                borderRadius: '8px',
+                color: 'text.subtle',
+                backgroundColor: { base: 'surface.default', _hover: 'surface.subtle' },
+              })}
+              onclick={() => {
+                app.preference.current.zenModeEnabled = false;
+                mixpanel.track('zen_mode_disabled', { via: 'close_button' });
+              }}
+              type="button"
+              use:tooltip={{
+                message: '집중 모드 끄기',
+                keys: ['Esc'],
+              }}
+            >
+              <Icon icon={XIcon} />
+            </button>
+          </div>
         {/if}
 
         {#if app.preference.current.noteExpanded}
@@ -1260,3 +1333,8 @@
     }
   }
 />
+<PlanUpgradeModal bind:open={planUpgradeModalOpen}>
+  FULL ACCESS로 업그레이드하면
+  <br />
+  모든 프리미엄 기능을 무제한으로 사용할 수 있어요.
+</PlanUpgradeModal>
