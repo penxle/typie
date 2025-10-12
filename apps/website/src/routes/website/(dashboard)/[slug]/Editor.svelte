@@ -15,7 +15,7 @@
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
-  import { onMount, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { on } from 'svelte/events';
   import { match } from 'ts-pattern';
   import { IndexeddbPersistence } from 'y-indexeddb';
@@ -295,127 +295,9 @@
   let pendingUpdate: Uint8Array | null = null;
   let lastSyncTime = Date.now();
 
-  doc.on('updateV2', async (update, origin) => {
-    if (browser && origin !== 'remote' && postId) {
-      if (pendingUpdate) {
-        pendingUpdate = Y.mergeUpdatesV2([pendingUpdate, update]);
-      } else {
-        pendingUpdate = update;
-      }
-
-      if (syncUpdateTimeout) {
-        clearTimeout(syncUpdateTimeout);
-      }
-
-      const timeSinceLastSync = Date.now() - lastSyncTime;
-      const shouldForceSync = timeSinceLastSync >= 100;
-
-      if (shouldForceSync && pendingUpdate) {
-        await syncPost(
-          {
-            clientId,
-            postId,
-            type: PostSyncType.UPDATE,
-            data: pendingUpdate.toBase64(),
-          },
-          { transport: 'ws' },
-        );
-
-        pendingUpdate = null;
-        lastSyncTime = Date.now();
-      } else {
-        const remainingTime = Math.max(0, 100 - timeSinceLastSync);
-
-        syncUpdateTimeout = setTimeout(async () => {
-          if (pendingUpdate && postId) {
-            await syncPost(
-              {
-                clientId,
-                postId,
-                type: PostSyncType.UPDATE,
-                data: pendingUpdate.toBase64(),
-              },
-              { transport: 'ws' },
-            );
-
-            pendingUpdate = null;
-            lastSyncTime = Date.now();
-          }
-        }, remainingTime);
-      }
-    }
-  });
-
   let syncAwarenessTimeout: NodeJS.Timeout | null = null;
   let pendingAwarenessStates: { added: number[]; updated: number[]; removed: number[] } | null = null;
   let lastAwarenessSyncTime = Date.now();
-
-  awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
-    if (browser && origin !== 'remote' && postId) {
-      if (pendingAwarenessStates) {
-        pendingAwarenessStates = {
-          added: [...new Set([...pendingAwarenessStates.added, ...states.added])],
-          updated: [...new Set([...pendingAwarenessStates.updated, ...states.updated])],
-          removed: [...new Set([...pendingAwarenessStates.removed, ...states.removed])],
-        };
-      } else {
-        pendingAwarenessStates = states;
-      }
-
-      if (syncAwarenessTimeout) {
-        clearTimeout(syncAwarenessTimeout);
-      }
-
-      const timeSinceLastSync = Date.now() - lastAwarenessSyncTime;
-      const shouldForceSync = timeSinceLastSync >= 100;
-
-      if (shouldForceSync && pendingAwarenessStates) {
-        const update = YAwareness.encodeAwarenessUpdate(awareness, [
-          ...pendingAwarenessStates.added,
-          ...pendingAwarenessStates.updated,
-          ...pendingAwarenessStates.removed,
-        ]);
-
-        await syncPost(
-          {
-            clientId,
-            postId,
-            type: PostSyncType.AWARENESS,
-            data: update.toBase64(),
-          },
-          { transport: 'ws' },
-        );
-
-        pendingAwarenessStates = null;
-        lastAwarenessSyncTime = Date.now();
-      } else {
-        const remainingTime = Math.max(0, 100 - timeSinceLastSync);
-
-        syncAwarenessTimeout = setTimeout(async () => {
-          if (pendingAwarenessStates && postId) {
-            const update = YAwareness.encodeAwarenessUpdate(awareness, [
-              ...pendingAwarenessStates.added,
-              ...pendingAwarenessStates.updated,
-              ...pendingAwarenessStates.removed,
-            ]);
-
-            await syncPost(
-              {
-                clientId,
-                postId,
-                type: PostSyncType.AWARENESS,
-                data: update.toBase64(),
-              },
-              { transport: 'ws' },
-            );
-
-            pendingAwarenessStates = null;
-            lastAwarenessSyncTime = Date.now();
-          }
-        }, remainingTime);
-      }
-    }
-  });
 
   const forceSync = async () => {
     if (!postId) return;
@@ -514,203 +396,334 @@
     clipboardData = undefined;
   };
 
-  onMount(() => {
+  $effect(() => {
     if (!postId) return;
 
-    const handleOnline = () => {
-      const isFresh = dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD;
-      if (isFresh) {
-        connectionStatus = 'connected';
-      } else {
-        connectionStatus = 'connecting';
-      }
-    };
+    return untrack(() => {
+      const currentPostId = postId;
 
-    const handleOffline = () => {
-      connectionStatus = 'disconnected';
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    if (!navigator.onLine) {
-      connectionStatus = 'disconnected';
-    }
-
-    const unsubscribe = postSyncStream.subscribe({ clientId, postId }, async (payload) => {
-      if (payload.type === PostSyncType.HEARTBEAT) {
-        lastHeartbeatAt = dayjs(payload.data);
-        connectionStatus = 'connected';
-      } else if (payload.type === PostSyncType.UPDATE) {
-        Y.applyUpdateV2(doc, Uint8Array.fromBase64(payload.data), 'remote');
-      } else if (payload.type === PostSyncType.VECTOR) {
-        const update = Y.encodeStateAsUpdateV2(doc, Uint8Array.fromBase64(payload.data));
-
-        await syncPost(
-          {
-            clientId,
-            postId,
-            type: PostSyncType.UPDATE,
-            data: update.toBase64(),
-          },
-          { transport: 'ws' },
-        );
-      } else if (payload.type === PostSyncType.AWARENESS) {
-        YAwareness.applyAwarenessUpdate(awareness, Uint8Array.fromBase64(payload.data), 'remote');
-      } else if (payload.type === PostSyncType.PRESENCE) {
-        const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
-
-        await syncPost(
-          {
-            clientId,
-            postId,
-            type: PostSyncType.AWARENESS,
-            data: update.toBase64(),
-          },
-          { transport: 'ws' },
-        );
-      }
-    });
-
-    const persistence = new IndexeddbPersistence(`typie:editor:${postId}`, doc);
-
-    if (entity.node.__typename === 'Post') {
-      Y.applyUpdateV2(doc, Uint8Array.fromBase64(entity.node.update), 'remote');
-
-      if (![PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode.current)) {
-        layoutMode.current = PostLayoutMode.SCROLL;
-      }
-    }
-
-    awareness.setLocalStateField('user', {
-      name: $query.me.name,
-      color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
-    });
-
-    editor?.current.once('create', ({ editor }) => {
-      const isDocumentEmpty = editor.state.doc.child(0).childCount === 1 && editor.state.doc.child(0).child(0).childCount === 0;
-
-      if (isDocumentEmpty && initialMarks.current.length > 0) {
-        const marks = initialMarks.current.map((markJSON) => editor.schema.markFromJSON(markJSON));
-        editor.commands.command(({ tr, dispatch }) => {
-          tr.setStoredMarks(marks);
-          dispatch?.(tr);
-          return true;
-        });
-      }
-
-      const selections = selectionsStore.current;
-      if (postId && selections[postId]) {
-        if (selections[postId].type === 'element') {
-          if (selections[postId].element === 'title') {
-            titleEl?.focus();
-          } else if (selections[postId].element === 'subtitle') {
-            subtitleEl?.focus();
-          }
+      const handleOnline = () => {
+        const isFresh = dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD;
+        if (isFresh) {
+          connectionStatus = 'connected';
         } else {
-          try {
-            const selection = Selection.fromJSON(editor.state.doc, selections[postId]);
-            editor.commands.command(({ tr, dispatch }) => {
-              tr.setSelection(selection);
-              tr.setMeta('initialSelection', true);
-              dispatch?.(tr);
-              return true;
-            });
-          } catch {
-            // pass
-          }
-
-          document.fonts.ready.then(() => {
-            editor.commands.focus();
-          });
+          connectionStatus = 'connecting';
         }
-      } else {
-        editor.commands.setTextSelection(2);
-        titleEl?.focus();
-      }
-    });
+      };
 
-    const fullSyncInterval = setInterval(() => fullSync(), 60_000);
-    const forceSyncInterval = setInterval(() => forceSync(), 10_000);
-    const heartbeatInterval = setInterval(() => {
-      if (dayjs().diff(lastHeartbeatAt, 'seconds') > DISCONNECT_THRESHOLD) {
+      const handleOffline = () => {
+        connectionStatus = 'disconnected';
+      };
+
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+
+      if (!navigator.onLine) {
         connectionStatus = 'disconnected';
       }
-    }, 1000);
 
-    const off = on(globalThis.window, 'keydown', async (e) => {
-      if (!focused) return;
+      doc.on('updateV2', async (update, origin) => {
+        if (browser && origin !== 'remote' && postId === currentPostId) {
+          if (pendingUpdate) {
+            pendingUpdate = Y.mergeUpdatesV2([pendingUpdate, update]);
+          } else {
+            pendingUpdate = update;
+          }
 
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault();
-        e.stopPropagation();
+          if (syncUpdateTimeout) {
+            clearTimeout(syncUpdateTimeout);
+          }
 
-        forceSync();
-        Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
-      }
-    });
+          const timeSinceLastSync = Date.now() - lastSyncTime;
+          const shouldForceSync = timeSinceLastSync >= 100;
 
-    const applyInitialMarks = ({ transaction }: { transaction: Transaction }) => {
-      if (!editor?.current) return;
-      if (transaction.getMeta('applyInitialMarks')) return;
+          if (shouldForceSync && pendingUpdate) {
+            if (postId === currentPostId) {
+              await syncPost(
+                {
+                  clientId,
+                  postId,
+                  type: PostSyncType.UPDATE,
+                  data: pendingUpdate.toBase64(),
+                },
+                { transport: 'ws' },
+              );
 
-      const currentEditor = editor.current;
+              pendingUpdate = null;
+              lastSyncTime = Date.now();
+            }
+          } else {
+            const remainingTime = Math.max(0, 100 - timeSinceLastSync);
 
-      const isDocumentEmpty =
-        currentEditor.state.doc.child(0).childCount === 1 && currentEditor.state.doc.child(0).child(0).childCount === 0;
+            syncUpdateTimeout = setTimeout(async () => {
+              if (pendingUpdate && postId === currentPostId) {
+                await syncPost(
+                  {
+                    clientId,
+                    postId,
+                    type: PostSyncType.UPDATE,
+                    data: pendingUpdate.toBase64(),
+                  },
+                  { transport: 'ws' },
+                );
 
-      if (!isDocumentEmpty) return;
+                pendingUpdate = null;
+                lastSyncTime = Date.now();
+              }
+            }, remainingTime);
+          }
+        }
+      });
 
-      const currentStoredMarks = transaction.storedMarks;
+      awareness.on('update', async (states: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
+        if (browser && origin !== 'remote' && postId === currentPostId) {
+          if (pendingAwarenessStates) {
+            pendingAwarenessStates = {
+              added: [...new Set([...pendingAwarenessStates.added, ...states.added])],
+              updated: [...new Set([...pendingAwarenessStates.updated, ...states.updated])],
+              removed: [...new Set([...pendingAwarenessStates.removed, ...states.removed])],
+            };
+          } else {
+            pendingAwarenessStates = states;
+          }
 
-      if (!currentStoredMarks && initialMarks.current.length > 0) {
-        const marks = initialMarks.current.map((markJSON) => currentEditor.schema.markFromJSON(markJSON));
-        currentEditor.commands.command(({ tr, dispatch }) => {
-          tr.setStoredMarks(marks);
-          tr.setMeta('applyInitialMarks', true);
-          dispatch?.(tr);
-          return true;
-        });
-      } else if (currentStoredMarks) {
-        const newInitialMarks = currentStoredMarks.map((mark) => mark.toJSON());
-        if (stringify(newInitialMarks) !== stringify(initialMarks.current)) {
-          initialMarks.current = newInitialMarks;
+          if (syncAwarenessTimeout) {
+            clearTimeout(syncAwarenessTimeout);
+          }
+
+          const timeSinceLastSync = Date.now() - lastAwarenessSyncTime;
+          const shouldForceSync = timeSinceLastSync >= 100;
+
+          if (shouldForceSync && pendingAwarenessStates) {
+            if (postId === currentPostId) {
+              const update = YAwareness.encodeAwarenessUpdate(awareness, [
+                ...pendingAwarenessStates.added,
+                ...pendingAwarenessStates.updated,
+                ...pendingAwarenessStates.removed,
+              ]);
+
+              await syncPost(
+                {
+                  clientId,
+                  postId,
+                  type: PostSyncType.AWARENESS,
+                  data: update.toBase64(),
+                },
+                { transport: 'ws' },
+              );
+
+              pendingAwarenessStates = null;
+              lastAwarenessSyncTime = Date.now();
+            }
+          } else {
+            const remainingTime = Math.max(0, 100 - timeSinceLastSync);
+
+            syncAwarenessTimeout = setTimeout(async () => {
+              if (pendingAwarenessStates && postId === currentPostId) {
+                const update = YAwareness.encodeAwarenessUpdate(awareness, [
+                  ...pendingAwarenessStates.added,
+                  ...pendingAwarenessStates.updated,
+                  ...pendingAwarenessStates.removed,
+                ]);
+
+                await syncPost(
+                  {
+                    clientId,
+                    postId,
+                    type: PostSyncType.AWARENESS,
+                    data: update.toBase64(),
+                  },
+                  { transport: 'ws' },
+                );
+
+                pendingAwarenessStates = null;
+                lastAwarenessSyncTime = Date.now();
+              }
+            }, remainingTime);
+          }
+        }
+      });
+
+      const unsubscribe = postSyncStream.subscribe({ clientId, postId: currentPostId }, async (payload) => {
+        if (postId !== currentPostId) {
+          return;
+        }
+
+        if (payload.type === PostSyncType.HEARTBEAT) {
+          lastHeartbeatAt = dayjs(payload.data);
+          connectionStatus = 'connected';
+        } else if (payload.type === PostSyncType.UPDATE) {
+          Y.applyUpdateV2(doc, Uint8Array.fromBase64(payload.data), 'remote');
+        } else if (payload.type === PostSyncType.VECTOR) {
+          const update = Y.encodeStateAsUpdateV2(doc, Uint8Array.fromBase64(payload.data));
+
+          await syncPost(
+            {
+              clientId,
+              postId: currentPostId,
+              type: PostSyncType.UPDATE,
+              data: update.toBase64(),
+            },
+            { transport: 'ws' },
+          );
+        } else if (payload.type === PostSyncType.AWARENESS) {
+          YAwareness.applyAwarenessUpdate(awareness, Uint8Array.fromBase64(payload.data), 'remote');
+        } else if (payload.type === PostSyncType.PRESENCE) {
+          const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
+
+          await syncPost(
+            {
+              clientId,
+              postId: currentPostId,
+              type: PostSyncType.AWARENESS,
+              data: update.toBase64(),
+            },
+            { transport: 'ws' },
+          );
+        }
+      });
+
+      const persistence = new IndexeddbPersistence(`typie:editor:${currentPostId}`, doc);
+
+      if (entity.node.__typename === 'Post') {
+        Y.applyUpdateV2(doc, Uint8Array.fromBase64(entity.node.update), 'remote');
+
+        if (![PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode.current)) {
+          layoutMode.current = PostLayoutMode.SCROLL;
         }
       }
-    };
 
-    editor?.current.on('selectionUpdate', persistSelection);
-    editor?.current.on('transaction', applyInitialMarks);
+      awareness.setLocalStateField('user', {
+        name: $query.me.name,
+        color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
+      });
 
-    fullSync();
+      editor?.current.once('create', ({ editor }) => {
+        const isDocumentEmpty = editor.state.doc.child(0).childCount === 1 && editor.state.doc.child(0).child(0).childCount === 0;
 
-    return () => {
-      off();
+        if (isDocumentEmpty && initialMarks.current.length > 0) {
+          const marks = initialMarks.current.map((markJSON) => editor.schema.markFromJSON(markJSON));
+          editor.commands.command(({ tr, dispatch }) => {
+            tr.setStoredMarks(marks);
+            dispatch?.(tr);
+            return true;
+          });
+        }
 
-      clearInterval(fullSyncInterval);
-      clearInterval(forceSyncInterval);
-      clearInterval(heartbeatInterval);
+        const selections = selectionsStore.current;
+        if (currentPostId && selections[currentPostId]) {
+          if (selections[currentPostId].type === 'element') {
+            if (selections[currentPostId].element === 'title') {
+              titleEl?.focus();
+            } else if (selections[currentPostId].element === 'subtitle') {
+              subtitleEl?.focus();
+            }
+          } else {
+            try {
+              const selection = Selection.fromJSON(editor.state.doc, selections[currentPostId]);
+              editor.commands.command(({ tr, dispatch }) => {
+                tr.setSelection(selection);
+                tr.setMeta('initialSelection', true);
+                dispatch?.(tr);
+                return true;
+              });
+            } catch {
+              // pass
+            }
 
-      if (syncUpdateTimeout) {
-        clearTimeout(syncUpdateTimeout);
-      }
+            document.fonts.ready.then(() => {
+              editor.commands.focus();
+            });
+          }
+        } else {
+          editor.commands.setTextSelection(2);
+          titleEl?.focus();
+        }
+      });
 
-      if (syncAwarenessTimeout) {
-        clearTimeout(syncAwarenessTimeout);
-      }
+      const fullSyncInterval = setInterval(() => fullSync(), 60_000);
+      const forceSyncInterval = setInterval(() => forceSync(), 10_000);
+      const heartbeatInterval = setInterval(() => {
+        if (dayjs().diff(lastHeartbeatAt, 'seconds') > DISCONNECT_THRESHOLD) {
+          connectionStatus = 'disconnected';
+        }
+      }, 1000);
 
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      const off = on(globalThis.window, 'keydown', async (e) => {
+        if (!focused) return;
 
-      YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
-      unsubscribe();
+        if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+          e.preventDefault();
+          e.stopPropagation();
 
-      editor?.current.off('selectionUpdate', persistSelection);
+          forceSync();
+          Tip.show('editor.shortcut.save', '따로 저장 키를 누르지 않아도 모든 변경 사항은 실시간으로 저장돼요.');
+        }
+      });
 
-      persistence.destroy();
-      awareness.destroy();
-      doc.destroy();
-    };
+      const applyInitialMarks = ({ transaction }: { transaction: Transaction }) => {
+        if (!editor?.current) return;
+        if (transaction.getMeta('applyInitialMarks')) return;
+
+        const currentEditor = editor.current;
+
+        const isDocumentEmpty =
+          currentEditor.state.doc.child(0).childCount === 1 && currentEditor.state.doc.child(0).child(0).childCount === 0;
+
+        if (!isDocumentEmpty) return;
+
+        const currentStoredMarks = transaction.storedMarks;
+
+        if (!currentStoredMarks && initialMarks.current.length > 0) {
+          const marks = initialMarks.current.map((markJSON) => currentEditor.schema.markFromJSON(markJSON));
+          currentEditor.commands.command(({ tr, dispatch }) => {
+            tr.setStoredMarks(marks);
+            tr.setMeta('applyInitialMarks', true);
+            dispatch?.(tr);
+            return true;
+          });
+        } else if (currentStoredMarks) {
+          const newInitialMarks = currentStoredMarks.map((mark) => mark.toJSON());
+          if (stringify(newInitialMarks) !== stringify(initialMarks.current)) {
+            initialMarks.current = newInitialMarks;
+          }
+        }
+      };
+
+      editor?.current.on('selectionUpdate', persistSelection);
+      editor?.current.on('transaction', applyInitialMarks);
+
+      fullSync();
+
+      return () => {
+        off();
+
+        clearInterval(fullSyncInterval);
+        clearInterval(forceSyncInterval);
+        clearInterval(heartbeatInterval);
+
+        if (syncUpdateTimeout) {
+          clearTimeout(syncUpdateTimeout);
+        }
+
+        if (syncAwarenessTimeout) {
+          clearTimeout(syncAwarenessTimeout);
+        }
+
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+
+        YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
+        unsubscribe();
+
+        editor?.current.off('selectionUpdate', persistSelection);
+        editor?.current.off('transaction', applyInitialMarks);
+
+        persistence.destroy();
+        awareness.destroy();
+        doc.destroy();
+      };
+    });
   });
 
   $effect(() => {
