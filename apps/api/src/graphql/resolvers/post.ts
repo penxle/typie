@@ -451,7 +451,7 @@ builder.mutationFields((t) => ({
         .then(first);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const template = preference?.value as Record<string, any> | undefined;
+      const template = preference?.value.template as Record<string, any> | undefined;
 
       const paragraphIndent = template?.paragraphIndent ?? 1;
       const blockGap = template?.blockGap ?? 1;
