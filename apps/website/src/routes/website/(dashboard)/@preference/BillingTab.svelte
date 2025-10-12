@@ -1,9 +1,8 @@
 <script lang="ts">
   import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
-  import { flex, grid } from '@typie/styled-system/patterns';
-  import { Button, Icon } from '@typie/ui/components';
-  import { PLAN_FEATURES } from '@typie/ui/constants';
+  import { flex } from '@typie/styled-system/patterns';
+  import { Button } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
@@ -11,6 +10,7 @@
   import { PlanPair } from '@/const';
   import { PlanInterval, SubscriptionState } from '@/enums';
   import { fragment, graphql } from '$graphql';
+  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import SubscriptionCancellationSurveyModal from './SubscriptionCancellationSurveyModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
@@ -137,131 +137,74 @@
   }
 </script>
 
-<div class={flex({ direction: 'column', gap: '32px' })}>
-  <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>결제</h1>
-
-  <div class={flex({ direction: 'column', gap: '16px' })}>
-    <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>플랜 정보</h3>
-
-    <div class={grid({ columns: 2, gap: '12px' })}>
-      <div
-        class={flex({
-          flexDirection: 'column',
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          borderRadius: '12px',
-          padding: '20px',
-          backgroundColor: 'surface.default',
-        })}
-      >
-        <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '16px' })}>
-          <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>타이피 BASIC ACCESS</div>
-
-          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>무료</div>
-        </div>
-
-        <ul class={flex({ flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'text.muted' })}>
-          {#each PLAN_FEATURES.basic as feature, index (index)}
-            <li class={flex({ alignItems: 'center', gap: '6px' })}>
-              <Icon style={css.raw({ color: 'text.disabled' })} icon={feature.icon} size={14} />
-              <span>{feature.label}</span>
-            </li>
-          {/each}
-        </ul>
-      </div>
-
-      <div
-        class={flex({
-          flexDirection: 'column',
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          borderRadius: '12px',
-          padding: '20px',
-          backgroundColor: 'surface.default',
-        })}
-      >
-        <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '16px' })}>
-          <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>타이피 FULL ACCESS</div>
-
-          <div>
-            <span class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>4,900</span>
-            <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>원 / 월</span>
-          </div>
-        </div>
-
-        <ul class={flex({ flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'text.muted' })}>
-          {#each PLAN_FEATURES.full as feature, index (index)}
-            <li class={flex({ alignItems: 'center', gap: '6px' })}>
-              <Icon style={css.raw({ color: 'text.disabled' })} icon={feature.icon} size={14} />
-              <span>{feature.label}</span>
-            </li>
-          {/each}
-        </ul>
-      </div>
-    </div>
+<div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
+  <!-- Tab Header -->
+  <div>
+    <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>결제</h1>
   </div>
 
-  {#if !$user.subscription}
-    <div class={flex({ direction: 'column', gap: '12px' })}>
-      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>이용중인 플랜</h3>
+  <!-- Current Plan Section -->
+  <div>
+    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>현재 플랜</h2>
 
-      <div
-        class={flex({
-          align: 'center',
-          justify: 'space-between',
-          borderRadius: '8px',
-          padding: '16px',
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          backgroundColor: 'surface.subtle',
-        })}
-      >
-        <div>
-          <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>타이피 BASIC ACCESS</p>
-          <p class={css({ marginTop: '2px', fontSize: '13px', color: 'text.faint' })}>무료 플랜을 사용 중입니다</p>
-        </div>
+    {#if !$user.subscription}
+      <SettingsCard>
+        <SettingsRow>
+          {#snippet label()}
+            타이피 BASIC ACCESS
+          {/snippet}
+          {#snippet description()}
+            타이피의 기본 기능을 무료로 이용할 수 있어요.
+          {/snippet}
+          {#snippet value()}
+            <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">업그레이드</Button>
+          {/snippet}
+        </SettingsRow>
+      </SettingsCard>
+    {:else}
+      {@const subscription = $user.subscription}
+      <SettingsCard>
+        <SettingsRow>
+          {#snippet label()}
+            {subscription.plan.name} 플랜
+          {/snippet}
+          {#snippet description()}
+            {#if subscription.state === SubscriptionState.ACTIVE}
+              <span>
+                {dayjs(subscription.expiresAt).formatAsDate()}에 {comma(subscription.plan.fee)}원 결제 예정
+              </span>
+            {:else if subscription.state === SubscriptionState.WILL_EXPIRE}
+              <span class={css({ color: 'text.danger' })}>
+                {dayjs(subscription.expiresAt).formatAsDate()} 해지 예정
+              </span>
+            {/if}
+          {/snippet}
+          {#snippet value()}
+            이용 기간: {dayjs(subscription.startsAt).formatAsDate()} ~ {dayjs(subscription.expiresAt).formatAsDate()}
+          {/snippet}
+        </SettingsRow>
 
-        <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">업그레이드</Button>
-      </div>
-    </div>
-  {:else}
-    <div class={flex({ direction: 'column', gap: '12px' })}>
-      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>이용중인 플랜</h3>
+        {#if subscription.state === SubscriptionState.ACTIVE && !$user.nextSubscription && PlanPair[subscription.plan.id as keyof typeof PlanPair]}
+          <SettingsDivider />
 
-      <div
-        class={css({
-          borderRadius: '8px',
-          padding: '16px',
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          backgroundColor: 'surface.subtle',
-        })}
-      >
-        <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>
-          {$user.subscription.plan.name} 플랜
-        </p>
-
-        <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.muted' })}>
-          {dayjs($user.subscription.startsAt).formatAsDate()} - {dayjs($user.subscription.expiresAt).formatAsDate()}
-        </p>
-
-        {#if $user.subscription.state === SubscriptionState.ACTIVE}
-          <div class={flex({ align: 'center', justify: 'space-between', marginTop: '8px' })}>
-            <p class={css({ fontSize: '12px', color: 'text.faint' })}>
-              {dayjs($user.subscription.expiresAt).formatAsDate()}에 {comma($user.subscription.plan.fee)}원 결제 예정
-            </p>
-            {#if !$user.nextSubscription && PlanPair[$user.subscription.plan.id as keyof typeof PlanPair]}
-              {@const targetPlanId = PlanPair[$user.subscription.plan.id as keyof typeof PlanPair]}
-              {@const isMonthly = $user.subscription.plan.interval === PlanInterval.MONTHLY}
+          <SettingsRow>
+            {#snippet label()}
+              플랜 전환
+            {/snippet}
+            {#snippet description()}
+              {@const isMonthly = subscription.plan.interval === PlanInterval.MONTHLY}
+              {isMonthly ? '1년 단위로 결제하면 2개월 무료 혜택을 받아요.' : '한 달 단위로 결제할 수 있어요.'}
+            {/snippet}
+            {#snippet value()}
+              {@const targetPlanId = PlanPair[subscription.plan.id as keyof typeof PlanPair]}
+              {@const isMonthly = subscription.plan.interval === PlanInterval.MONTHLY}
               <Button
                 onclick={() => {
                   Dialog.confirm({
                     title: isMonthly ? '연간 플랜으로 전환하시겠어요?' : '월간 플랜으로 전환하시겠어요?',
                     message: isMonthly
-                      ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                        `다음 결제일(${dayjs($user.subscription!.expiresAt).formatAsDate()})부터 연간 플랜(49,000원/년)이 적용됩니다.`
-                      : // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                        `다음 결제일(${dayjs($user.subscription!.expiresAt).formatAsDate()})부터 월간 플랜(4,900원/월)이 적용됩니다.`,
+                      ? `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 연간 플랜(49,000원/년)이 적용돼요.`
+                      : `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 월간 플랜(4,900원/월)이 적용돼요.`,
                     actionLabel: '전환하기',
                     actionHandler: async () => {
                       await schedulePlanChange({ planId: targetPlanId });
@@ -279,19 +222,26 @@
               >
                 {isMonthly ? '연간 플랜으로 전환' : '월간 플랜으로 전환'}
               </Button>
-            {/if}
-          </div>
-        {:else if $user.subscription.state === SubscriptionState.WILL_EXPIRE}
-          <div class={flex({ align: 'center', justify: 'space-between', marginTop: '8px' })}>
-            {#if !$user.nextSubscription}
-              <p class={css({ fontSize: '12px', color: 'text.danger' })}>
-                {dayjs($user.subscription.expiresAt).formatAsDate()} 해지 예정
-              </p>
+            {/snippet}
+          </SettingsRow>
+        {/if}
+
+        {#if subscription.state === SubscriptionState.WILL_EXPIRE && !$user.nextSubscription}
+          <SettingsDivider />
+
+          <SettingsRow>
+            {#snippet label()}
+              구독 재개
+            {/snippet}
+            {#snippet description()}
+              해지를 취소하고 다음 결제일부터 자동 갱신을 계속해요.
+            {/snippet}
+            {#snippet value()}
               <Button
                 onclick={() => {
                   Dialog.confirm({
                     title: '구독 해지를 취소하시겠어요?',
-                    message: '구독이 계속 유지되며, 다음 결제일에 자동으로 결제됩니다.',
+                    message: '구독이 계속 유지되며, 다음 결제일에 자동으로 결제돼요.',
                     actionLabel: '해지 취소',
                     actionHandler: async () => {
                       await cancelSubscriptionCancellation();
@@ -304,113 +254,133 @@
               >
                 해지 취소
               </Button>
-            {/if}
-          </div>
+            {/snippet}
+          </SettingsRow>
         {/if}
-      </div>
+      </SettingsCard>
 
       {#if $user.nextSubscription}
-        <div class={flex({ direction: 'column', gap: '8px', marginTop: '16px' })}>
-          <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>다음 플랜 (예정)</p>
-          <div
-            class={css({
-              borderRadius: '8px',
-              padding: '12px',
-              borderWidth: '1px',
-              borderColor: 'border.default',
-              backgroundColor: 'surface.subtle',
-              borderStyle: 'dashed',
-            })}
-          >
-            <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>
-              {$user.nextSubscription.plan.name} 플랜
-            </p>
-            <div class={flex({ align: 'center', justify: 'space-between', marginTop: '8px' })}>
-              <p class={css({ fontSize: '12px', color: 'text.muted' })}>
-                {dayjs($user.nextSubscription.startsAt).formatAsDate()}부터 시작
-              </p>
-              <Button
-                onclick={() => {
-                  Dialog.confirm({
-                    title: '플랜 전환을 취소하시겠어요?',
-                    message: '현재 플랜이 계속 유지됩니다.',
-                    actionLabel: '전환 취소',
-                    actionHandler: async () => {
-                      await cancelPlanChange();
-                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
-                      mixpanel.track('cancel_plan_change');
-                    },
-                  });
-                }}
-                size="sm"
-                variant="secondary"
-              >
-                전환 취소
-              </Button>
-            </div>
-          </div>
+        {@const nextSubscription = $user.nextSubscription}
+        <div class={css({ marginTop: '16px' })}>
+          <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '12px' })}>다음 플랜 (예정)</p>
+          <SettingsCard>
+            <SettingsRow>
+              {#snippet label()}
+                {nextSubscription.plan.name} 플랜
+              {/snippet}
+              {#snippet description()}
+                {dayjs(nextSubscription.startsAt).formatAsDate()}부터 시작
+              {/snippet}
+              {#snippet value()}
+                <Button
+                  onclick={() => {
+                    Dialog.confirm({
+                      title: '플랜 전환을 취소하시겠어요?',
+                      message: '현재 플랜이 계속 유지돼요.',
+                      actionLabel: '전환 취소',
+                      actionHandler: async () => {
+                        await cancelPlanChange();
+                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
+                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
+                        mixpanel.track('cancel_plan_change');
+                      },
+                    });
+                  }}
+                  size="sm"
+                  variant="secondary"
+                >
+                  전환 취소
+                </Button>
+              {/snippet}
+            </SettingsRow>
+          </SettingsCard>
         </div>
       {/if}
-    </div>
-  {/if}
+    {/if}
+  </div>
 
-  <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
-
+  <!-- Payment Methods Section -->
   <div>
-    <div class={flex({ direction: 'column', gap: '12px' })}>
-      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>크레딧</h3>
+    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>결제 수단</h2>
 
-      <div class={flex({ align: 'center', justify: 'space-between' })}>
-        <div>
-          <p class={css({ fontSize: '14px', color: 'text.muted' })}>현재 크레딧</p>
-          <p class={css({ marginTop: '2px', fontSize: '12px', color: 'text.faint' })}>플랜 결제 시 잔여 크레딧이 먼저 사용됩니다</p>
-        </div>
+    <SettingsCard>
+      <SettingsRow>
+        {#snippet label()}
+          결제 카드
+        {/snippet}
+        {#snippet description()}
+          {#if $user.billingKey}
+            {$user.billingKey.name}
+          {:else}
+            등록된 카드가 없어요.
+          {/if}
+        {/snippet}
+        {#snippet value()}
+          <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">
+            {$user.billingKey ? '카드 변경' : '카드 등록'}
+          </Button>
+        {/snippet}
+      </SettingsRow>
+    </SettingsCard>
 
-        <p class={css({ fontSize: '16px', fontWeight: 'medium', color: 'text.default' })}>{comma($user.credit)}원</p>
-      </div>
+    <div class={css({ marginTop: '16px' })}>
+      <SettingsCard>
+        <SettingsRow>
+          {#snippet label()}
+            현재 크레딧
+          {/snippet}
+          {#snippet description()}
+            구독료 결제 시 크레딧이 있으면 우선 차감돼요.
+          {/snippet}
+          {#snippet value()}
+            <span>{comma($user.credit)}원</span>
+          {/snippet}
+        </SettingsRow>
 
-      <Button style={css.raw({ alignSelf: 'flex-start' })} onclick={() => (redeemCreditCodeOpen = true)} size="sm" variant="secondary">
-        할인 코드 등록
-      </Button>
+        <SettingsDivider />
+
+        <SettingsRow>
+          {#snippet label()}
+            할인 코드
+          {/snippet}
+          {#snippet description()}
+            이벤트나 프로모션 코드로 크레딧을 충전해요.
+          {/snippet}
+          {#snippet value()}
+            <Button onclick={() => (redeemCreditCodeOpen = true)} size="sm" variant="secondary">코드 등록</Button>
+          {/snippet}
+        </SettingsRow>
+      </SettingsCard>
     </div>
   </div>
 
-  {#if $user.billingKey}
-    <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
-
-    <div class={flex({ direction: 'column', gap: '12px' })}>
-      <h3 class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>결제 카드 정보</h3>
-
-      <div class={flex({ align: 'center', justify: 'space-between' })}>
-        <p class={css({ fontSize: '14px', color: 'text.subtle' })}>{$user.billingKey.name}</p>
-
-        <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">결제 카드 변경</Button>
-      </div>
-    </div>
-  {/if}
-
   {#if $user.subscription?.state === SubscriptionState.ACTIVE || $user.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
-    <div class={css({ height: '1px', backgroundColor: 'surface.muted' })}></div>
-    <button
-      class={css({
-        alignSelf: 'flex-start',
-        paddingX: '8px',
-        paddingY: '4px',
-        fontSize: '13px',
-        color: 'text.faint',
-        width: 'fit',
-        borderRadius: '4px',
-        transition: 'common',
-        _hover: { color: 'text.danger', backgroundColor: 'accent.danger.subtle' },
-      })}
-      onclick={() => {
-        cancellationSurveyOpen = true;
-      }}
-      type="button"
-    >
-      구독 해지
-    </button>
+    <!-- Subscription Cancellation Section -->
+    <div>
+      <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>구독 해지</h2>
+
+      <SettingsCard>
+        <SettingsRow>
+          {#snippet label()}
+            구독 해지
+          {/snippet}
+          {#snippet description()}
+            해지 후에도 결제일까지는 유료 기능을 계속 사용할 수 있어요.
+          {/snippet}
+          {#snippet value()}
+            <Button
+              onclick={() => {
+                cancellationSurveyOpen = true;
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              해지하기
+            </Button>
+          {/snippet}
+        </SettingsRow>
+      </SettingsCard>
+    </div>
   {/if}
 </div>
 

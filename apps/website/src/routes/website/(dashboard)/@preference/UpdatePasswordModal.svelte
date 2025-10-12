@@ -64,15 +64,15 @@
   });
 </script>
 
-<Modal style={css.raw({ width: '448px' })} bind:open>
-  <form class={flex({ direction: 'column', gap: '16px', padding: '24px' })} onsubmit={form.handleSubmit}>
-    <h1 class={css({ fontSize: '20px', fontWeight: 'semibold' })}>
-      비밀번호 {hasPassword ? '변경' : '설정'}
-    </h1>
+<Modal style={css.raw({ width: '480px', padding: '24px' })} bind:open>
+  <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>
+    비밀번호 {hasPassword ? '변경' : '설정'}
+  </h2>
 
+  <form class={flex({ direction: 'column', gap: '20px' })} onsubmit={form.handleSubmit}>
     {#if hasPassword}
       <div class={flex({ direction: 'column', gap: '8px' })}>
-        <label class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })} for="currentPassword">현재 비밀번호</label>
+        <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="currentPassword">현재 비밀번호</label>
         <TextInput id="currentPassword" placeholder="현재 비밀번호를 입력하세요" type="password" bind:value={form.fields.currentPassword} />
         {#if form.errors.currentPassword}
           <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.currentPassword}</div>
@@ -81,22 +81,22 @@
     {/if}
 
     <div class={flex({ direction: 'column', gap: '8px' })}>
-      <label class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })} for="newPassword">새 비밀번호</label>
-      <TextInput id="newPassword" placeholder="********" type="password" bind:value={form.fields.newPassword} />
+      <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="newPassword">새 비밀번호</label>
+      <TextInput id="newPassword" placeholder="새 비밀번호를 입력하세요" type="password" bind:value={form.fields.newPassword} />
       {#if form.errors.newPassword}
         <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.newPassword}</div>
       {/if}
     </div>
 
     <div class={flex({ direction: 'column', gap: '8px' })}>
-      <label class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })} for="confirmPassword">새 비밀번호 확인</label>
-      <TextInput id="confirmPassword" placeholder="********" type="password" bind:value={form.fields.confirmPassword} />
+      <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="confirmPassword">새 비밀번호 확인</label>
+      <TextInput id="confirmPassword" placeholder="비밀번호를 다시 입력하세요" type="password" bind:value={form.fields.confirmPassword} />
       {#if form.errors.confirmPassword}
         <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.confirmPassword}</div>
       {/if}
     </div>
 
-    <div class={flex({ gap: '8px', marginTop: '8px' })}>
+    <div class={flex({ gap: '8px', marginTop: '12px' })}>
       <Button
         style={css.raw({ flex: '1' })}
         onclick={() => {

@@ -4,25 +4,27 @@
   import { Icon, Modal } from '@typie/ui/components';
   import CreditCardIcon from '~icons/lucide/credit-card';
   import FlaskConicalIcon from '~icons/lucide/flask-conical';
+  import GemIcon from '~icons/lucide/gem';
   import GiftIcon from '~icons/lucide/gift';
   import KeyboardIcon from '~icons/lucide/keyboard';
-  import MonitorIcon from '~icons/lucide/monitor';
-  import PanelTopIcon from '~icons/lucide/panel-top';
+  import LayoutIcon from '~icons/lucide/layout';
   import PencilIcon from '~icons/lucide/pencil';
-  import ShieldCheckIcon from '~icons/lucide/shield-check';
+  import ShieldIcon from '~icons/lucide/shield';
+  import TypeIcon from '~icons/lucide/type';
   import UserIcon from '~icons/lucide/user';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { fragment, graphql } from '$graphql';
-  import AccountTab from './AccountTab.svelte';
   import BillingTab from './BillingTab.svelte';
   import EditorTab from './EditorTab.svelte';
-  import IdentityTab from './IdentityTab.svelte';
+  import FontTab from './FontTab.svelte';
+  import InterfaceTab from './InterfaceTab.svelte';
   import LaboratoryTab from './LaboratoryTab.svelte';
+  import PlanTab from './PlanTab.svelte';
+  import ProfileTab from './ProfileTab.svelte';
   import ReferralTab from './ReferralTab.svelte';
-  import ScreenTab from './ScreenTab.svelte';
+  import SecurityTab from './SecurityTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
-  import SiteTab from './SiteTab.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_PreferenceModal_user } from '$graphql';
 
@@ -34,7 +36,8 @@
     path: string;
     label: string;
     icon: Component;
-    component: Component<never>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    component: Component<any>;
   };
 
   let { $user: _user }: Props = $props();
@@ -49,79 +52,109 @@
           id
         }
 
-        ...DashboardLayout_PreferenceModal_AccountTab_user
-        ...DashboardLayout_PreferenceModal_BillingTab_user
-        ...DashboardLayout_PreferenceModal_IdentityTab_user
-        ...DashboardLayout_PreferenceModal_SiteTab_user
-        ...DashboardLayout_PreferenceModal_ShortcutsTab_user
+        ...DashboardLayout_PreferenceModal_ProfileTab_user
+        ...DashboardLayout_PreferenceModal_SecurityTab_user
         ...DashboardLayout_PreferenceModal_EditorTab_user
-        ...DashboardLayout_PreferenceModal_ScreenTab_user
-        ...DashboardLayout_PreferenceModal_LaboratoryTab_user
+        ...DashboardLayout_PreferenceModal_InterfaceTab_user
+        ...DashboardLayout_PreferenceModal_FontTab_user
+        ...DashboardLayout_PreferenceModal_PlanTab_user
+        ...DashboardLayout_PreferenceModal_BillingTab_user
         ...DashboardLayout_PreferenceModal_ReferralTab_user
+        ...DashboardLayout_PreferenceModal_LaboratoryTab_user
+        ...DashboardLayout_PreferenceModal_ShortcutsTab_user
       }
     `),
   );
 
-  const tabs = [
+  type TabGroup = {
+    label: string;
+    tabs: Tab[];
+  };
+
+  const tabGroups: TabGroup[] = [
     {
-      path: '/preference/account',
       label: '계정',
-      icon: UserIcon,
-      component: AccountTab,
+      tabs: [
+        {
+          path: '/preference/profile',
+          label: '프로필',
+          icon: UserIcon,
+          component: ProfileTab,
+        },
+        {
+          path: '/preference/security',
+          label: '보안',
+          icon: ShieldIcon,
+          component: SecurityTab,
+        },
+      ],
     },
     {
-      path: '/preference/editor',
-      label: '에디터',
-      icon: PencilIcon,
-      component: EditorTab,
+      label: '환경',
+      tabs: [
+        {
+          path: '/preference/interface',
+          label: '인터페이스',
+          icon: LayoutIcon,
+          component: InterfaceTab,
+        },
+        {
+          path: '/preference/editor',
+          label: '에디터',
+          icon: PencilIcon,
+          component: EditorTab,
+        },
+        {
+          path: '/preference/font',
+          label: '폰트',
+          icon: TypeIcon,
+          component: FontTab,
+        },
+      ],
     },
     {
-      path: '/preference/screen',
-      label: '화면',
-      icon: MonitorIcon,
-      component: ScreenTab,
-    },
-    ...($user.subscription
-      ? [
-          {
-            path: '/preference/site',
-            label: '사이트',
-            icon: PanelTopIcon,
-            component: SiteTab,
-          },
-        ]
-      : []),
-    {
-      path: '/preference/identity',
-      label: '인증',
-      icon: ShieldCheckIcon,
-      component: IdentityTab,
-    },
-    {
-      path: '/preference/billing',
-      label: '결제',
-      icon: CreditCardIcon,
-      component: BillingTab,
+      label: '구독',
+      tabs: [
+        {
+          path: '/preference/plan',
+          label: '플랜',
+          icon: GemIcon,
+          component: PlanTab,
+        },
+        {
+          path: '/preference/billing',
+          label: '결제',
+          icon: CreditCardIcon,
+          component: BillingTab,
+        },
+        {
+          path: '/preference/referral',
+          label: '초대',
+          icon: GiftIcon,
+          component: ReferralTab,
+        },
+      ],
     },
     {
-      path: '/preference/referral',
-      label: '초대',
-      icon: GiftIcon,
-      component: ReferralTab,
+      label: '고급',
+      tabs: [
+        {
+          path: '/preference/laboratory',
+          label: '실험실',
+          icon: FlaskConicalIcon,
+          component: LaboratoryTab,
+        },
+        {
+          path: '/preference/shortcuts',
+          label: '단축키',
+          icon: KeyboardIcon,
+          component: ShortcutsTab,
+        },
+      ],
     },
-    {
-      path: '/preference/laboratory',
-      label: '실험실',
-      icon: FlaskConicalIcon,
-      component: LaboratoryTab,
-    },
-    {
-      path: '/preference/shortcuts',
-      label: '단축키',
-      icon: KeyboardIcon,
-      component: ShortcutsTab,
-    },
-  ] satisfies Tab[];
+  ];
+
+  const tabs = tabGroups.flatMap((group) => group.tabs);
 
   const currentTab = $derived(tabs.find((tab) => tab.path === page.state.shallowRoute));
 </script>
@@ -140,37 +173,62 @@
         width: '200px',
         borderRightWidth: '1px',
         borderColor: 'border.subtle',
+        overflowY: 'auto',
       })}
     >
-      <nav class={flex({ direction: 'column', gap: '1px' })}>
-        {#each tabs as { icon, path, label } (path)}
-          <button
-            class={flex({
-              align: 'center',
-              gap: '8px',
-              borderRadius: '6px',
-              paddingX: '10px',
-              paddingY: '8px',
-              fontSize: '13px',
-              color: 'text.muted',
-              transition: 'common',
-              _hover: { backgroundColor: 'surface.subtle' },
-              _selected: {
-                color: 'text.default',
-                fontWeight: 'medium',
-                backgroundColor: 'surface.muted',
-              },
-            })}
-            aria-selected={currentTab?.path === path}
-            onclick={() => {
-              replaceState('', { shallowRoute: path });
-            }}
-            role="tab"
-            type="button"
-          >
-            <Icon {icon} size={16} />
-            <span>{label}</span>
-          </button>
+      <nav class={flex({ direction: 'column', gap: '16px' })}>
+        {#each tabGroups as group, groupIndex (group.label)}
+          <div>
+            {#if groupIndex > 0}
+              <div class={css({ height: '1px', backgroundColor: 'border.subtle', marginBottom: '16px' })}></div>
+            {/if}
+
+            <div class={css({ paddingX: '10px', paddingY: '4px', marginBottom: '4px' })}>
+              <h3
+                class={css({
+                  fontSize: '11px',
+                  fontWeight: 'semibold',
+                  color: 'text.disabled',
+                  textTransform: 'uppercase',
+                  letterSpacing: '[0.05em]',
+                })}
+              >
+                {group.label}
+              </h3>
+            </div>
+
+            <div class={flex({ direction: 'column', gap: '1px' })}>
+              {#each group.tabs as { icon, path, label } (path)}
+                <button
+                  class={flex({
+                    align: 'center',
+                    gap: '8px',
+                    borderRadius: '6px',
+                    paddingX: '10px',
+                    paddingY: '8px',
+                    fontSize: '13px',
+                    color: 'text.muted',
+                    transition: 'common',
+                    _hover: { backgroundColor: 'surface.subtle' },
+                    _selected: {
+                      color: 'text.default',
+                      fontWeight: 'medium',
+                      backgroundColor: 'surface.muted',
+                    },
+                  })}
+                  aria-selected={currentTab?.path === path}
+                  onclick={() => {
+                    replaceState('', { shallowRoute: path });
+                  }}
+                  role="tab"
+                  type="button"
+                >
+                  <Icon {icon} size={16} />
+                  <span>{label}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
         {/each}
       </nav>
     </div>
@@ -179,6 +237,7 @@
       {#if currentTab}
         {@const Component = currentTab.component}
 
+        <!-- @ts-expect-error Each tab component accepts a specific fragment type derived from DashboardLayout_PreferenceModal_user -->
         <Component {$user} />
       {/if}
     </div>

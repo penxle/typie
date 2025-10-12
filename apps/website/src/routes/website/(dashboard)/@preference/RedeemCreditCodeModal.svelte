@@ -50,18 +50,31 @@
   });
 </script>
 
-<Modal style={css.raw({ gap: '24px', padding: '20px', maxWidth: '500px' })} bind:open>
-  <p class={css({ fontWeight: 'semibold' })}>할인코드 등록</p>
+<Modal style={css.raw({ padding: '24px', maxWidth: '440px' })} bind:open>
+  <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>할인 코드 등록</h2>
 
-  <form class={flex({ align: 'flex-start', gap: '4px' })} onsubmit={form.handleSubmit}>
-    <div class={css({ width: 'full' })}>
-      <TextInput id="code" style={css.raw({ width: 'full' })} placeholder="할인 코드 입력하기" size="sm" bind:value={form.fields.code} />
+  <form class={flex({ direction: 'column', gap: '20px' })} onsubmit={form.handleSubmit}>
+    <div class={flex({ direction: 'column', gap: '8px' })}>
+      <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="code">할인 코드</label>
+      <TextInput id="code" style={css.raw({ width: 'full' })} placeholder="할인 코드를 입력하세요" bind:value={form.fields.code} />
 
       {#if form.errors.code}
-        <div class={css({ marginTop: '4px', paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.code}</div>
+        <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.code}</div>
       {/if}
     </div>
 
-    <Button style={css.raw({ flex: 'none' })} size="sm" type="submit" variant="secondary">등록</Button>
+    <div class={flex({ gap: '8px' })}>
+      <Button
+        style={css.raw({ flex: '1' })}
+        onclick={() => {
+          open = false;
+        }}
+        type="button"
+        variant="secondary"
+      >
+        취소
+      </Button>
+      <Button style={css.raw({ flex: '1' })} type="submit">등록</Button>
+    </div>
   </form>
 </Modal>

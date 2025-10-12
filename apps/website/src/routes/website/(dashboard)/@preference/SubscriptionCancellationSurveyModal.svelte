@@ -115,7 +115,7 @@
     })}
   >
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-      <h2 class={css({ fontSize: '18px', fontWeight: 'bold', color: 'text.default' })}>
+      <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>
         {currentStep === 0 ? '정말 해지하시겠어요?' : '구독을 해지하려는 이유를 알려주세요'}
       </h2>
       <p class={css({ fontSize: '13px', color: 'text.subtle' })}>
@@ -181,7 +181,7 @@
       <div class={flex({ flexDirection: 'column', gap: '24px' })}>
         <div class={flex({ flexDirection: 'column', gap: '16px' })}>
           <div>
-            <div class={css({ fontSize: '15px', fontWeight: 'medium', color: 'text.default' })}>어떤 이유로 구독을 해지하시나요?</div>
+            <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>어떤 이유로 구독을 해지하시나요?</div>
             <p class={css({ fontSize: '13px', color: 'text.faint', marginTop: '4px' })}>복수 선택 가능합니다</p>
           </div>
 
@@ -244,7 +244,7 @@
         </div>
 
         <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-          <div class={css({ fontSize: '15px', fontWeight: 'medium', color: 'text.default' })}>추가로 전하고 싶은 의견이 있으신가요?</div>
+          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>추가로 전하고 싶은 의견이 있으신가요?</div>
           <textarea
             class={css({
               padding: '12px',
