@@ -46,7 +46,7 @@
 
 <Menu placement="bottom-start" bind:open>
   {#snippet button()}
-    <button
+    <div
       class={flex({
         alignItems: 'center',
         gap: '12px',
@@ -60,7 +60,6 @@
           backgroundColor: 'surface.muted',
         },
       })}
-      type="button"
     >
       <Img
         style={css.raw({
@@ -77,7 +76,7 @@
       </span>
 
       <Icon style={css.raw({ color: 'text.faint' })} icon={ChevronDownIcon} size={16} />
-    </button>
+    </div>
   {/snippet}
 
   <MenuItem
