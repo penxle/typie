@@ -15,7 +15,7 @@
 </script>
 
 <Modal
-  style={css.raw({ gap: '36px', maxWidth: '400px' })}
+  style={css.raw({ padding: '24px', maxWidth: '440px' })}
   onclose={() => {
     if (dialog.type === 'confirm') {
       dialog.cancelHandler?.();
@@ -25,54 +25,46 @@
   }}
   open={true}
 >
-  <div class={flex({ flexDirection: 'column', gap: '12px', paddingTop: '24px', paddingX: '24px' })}>
-    <div class={css({ fontSize: '18px', fontWeight: 'semibold' })}>
-      {dialog.title}
+  <div class={flex({ flexDirection: 'column', gap: '24px' })}>
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>
+        {dialog.title}
+      </h2>
+
+      <div class={css({ fontSize: '14px', color: 'text.subtle', whiteSpace: 'pre-wrap', lineHeight: '[1.6]' })}>
+        {dialog.message}
+      </div>
+
+      {#if dialog.children}
+        {@render dialog.children()}
+      {/if}
     </div>
 
-    <div class={css({ fontSize: '15px', color: 'text.subtle', whiteSpace: 'pre-wrap' })}>
-      {dialog.message}
-    </div>
+    <div class={flex({ gap: '8px', justifyContent: 'flex-end' })}>
+      {#if dialog.type === 'confirm'}
+        <Button
+          onclick={() => {
+            dialog.cancelHandler?.();
+            dismiss();
+          }}
+          size="md"
+          variant="secondary"
+        >
+          {dialog.cancelLabel ?? '취소'}
+        </Button>
+      {/if}
 
-    {#if dialog.children}
-      {@render dialog.children()}
-    {/if}
-  </div>
-
-  <div
-    class={flex({
-      flexDirection: 'row-reverse',
-      justifyContent: 'space-between',
-      gap: '8px',
-      borderTopWidth: '1px',
-      padding: '16px',
-      backgroundColor: 'surface.muted',
-    })}
-  >
-    <Button
-      onclick={() => {
-        dialog.actionHandler?.();
-        dismiss();
-      }}
-      size="md"
-      tabindex={0}
-      variant={dialog.action ?? 'primary'}
-    >
-      {dialog.actionLabel ?? '확인'}
-    </Button>
-
-    {#if dialog.type === 'confirm'}
       <Button
-        style={css.raw({ borderColor: 'border.default' })}
         onclick={() => {
-          dialog.cancelHandler?.();
+          dialog.actionHandler?.();
           dismiss();
         }}
         size="md"
-        variant="secondary"
+        tabindex={0}
+        variant={dialog.action ?? 'primary'}
       >
-        {dialog.cancelLabel ?? '취소'}
+        {dialog.actionLabel ?? '확인'}
       </Button>
-    {/if}
+    </div>
   </div>
 </Modal>
