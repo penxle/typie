@@ -98,4 +98,4 @@
   {/if}
 </button>
 
-<PlanUpgradeModal bind:open={planUpgradeModalOpen} />
+<PlanUpgradeModal bind:open={planUpgradeModalOpen}>{label} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
