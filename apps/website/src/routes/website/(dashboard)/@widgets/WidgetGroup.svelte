@@ -1,15 +1,15 @@
 <script lang="ts">
   import { cache } from '@typie/sark/internal';
   import { css, cx } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
+  import { flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { Tip } from '@typie/ui/notification';
   import { animateFlip, createDndHandler, handleDragScroll } from '@typie/ui/utils';
   import { untrack } from 'svelte';
-  import ChevronsDownIcon from '~icons/lucide/chevrons-down';
-  import ChevronsUpIcon from '~icons/lucide/chevrons-up';
-  import ShapesIcon from '~icons/lucide/shapes';
+  import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
+  import ChevronsRightIcon from '~icons/lucide/chevrons-right';
   import { fragment, graphql } from '$graphql';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
   import { getEditorRegistry } from '../[slug]/@split-view/editor-registry.svelte';
@@ -120,28 +120,31 @@
   let editMode = $state(false);
   let isHidden = $derived.by(() => app.preference.current.widgetHidden);
   let hideTimeout = $state<NodeJS.Timeout | null>(null);
+  let showTimeout = $state<NodeJS.Timeout | null>(null);
   let hovered = $state(false);
+  let transitioning = $state(false);
+  let altPressed = $state(false);
 
   type WidgetGroupState = 'hidden' | 'peeking' | 'visible';
   let widgetGroupState = $state<WidgetGroupState>('hidden');
 
-  const transformBottom = $derived.by(() => {
+  const transformRight = $derived.by(() => {
     if (!isHidden || editMode) {
-      return 'translateY(0)';
+      return 'translateX(0)';
     }
 
     switch (widgetGroupState) {
       case 'hidden': {
-        return 'translateY(100%)';
+        return 'translateX(calc(100% + 24px))';
       }
       case 'peeking': {
-        return 'translateY(calc(100% - 24px))';
+        return 'translateX(calc(100% + 24px))';
       }
       case 'visible': {
-        return 'translateY(0)';
+        return 'translateX(0)';
       }
       default: {
-        return 'translateY(100%)';
+        return 'translateX(calc(100% + 24px))';
       }
     }
   });
@@ -161,9 +164,23 @@
         }, 300);
       });
     }
+
+    return () => {
+      if (showTimeout) {
+        clearTimeout(showTimeout);
+        showTimeout = null;
+      }
+
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+    };
   });
 
   const handleMouseEnter = () => {
+    if (transitioning) return;
+
     hovered = true;
 
     if (isHidden) {
@@ -171,6 +188,12 @@
         clearTimeout(hideTimeout);
         hideTimeout = null;
       }
+
+      if (showTimeout) {
+        clearTimeout(showTimeout);
+        showTimeout = null;
+      }
+
       widgetGroupState = 'visible';
     }
   };
@@ -180,6 +203,11 @@
 
     if (!isHidden) return;
 
+    if (showTimeout) {
+      clearTimeout(showTimeout);
+      showTimeout = null;
+    }
+
     if (hideTimeout) {
       clearTimeout(hideTimeout);
     }
@@ -188,6 +216,24 @@
       widgetGroupState = 'hidden';
       hideTimeout = null;
     }, 300);
+  };
+
+  const handleTriggerMouseEnter = () => {
+    hovered = true;
+
+    if (isHidden) {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+
+      if (!showTimeout) {
+        showTimeout = setTimeout(() => {
+          widgetGroupState = 'visible';
+          showTimeout = null;
+        }, 150);
+      }
+    }
   };
 
   let dropZoneElement = $state<HTMLDivElement>();
@@ -443,41 +489,36 @@
 
     animateFlip('[data-widget-id]', 'widgetId', widgetListElement);
   });
+
+  $effect(() => {
+    if (!scrollContainerElement) return;
+
+    scrollContainerElement.scrollTop = scrollContainerElement.scrollHeight;
+  });
+
+  $effect(() => {
+    if (widgetGroupState === 'hidden' && isHidden) {
+      Tip.show('widget.hide', '`Alt` 키를 눌러 위젯을 잠시 투명하게 만들 수 있어요.');
+      Tip.show('widget.show', '커서를 화면 오른쪽 아래로 이동해 위젯을 다시 띄울 수 있어요.');
+    }
+  });
 </script>
 
-{#if isHidden}
-  <button
-    class={center({
-      position: 'fixed',
-      bottom: widgetGroupState === 'hidden' ? '0' : '24px',
-      right: '[calc(15dvw * 0.5 + 24px)]',
-      size: '40px',
-      zIndex: 'widget',
-      backgroundColor: 'transparent',
-      border: 'none',
-      cursor: 'pointer',
-      color: 'text.faint',
-      transition: '[color 0.2s, bottom 0.2s ease-in-out]',
-      opacity: widgetGroupState === 'visible' ? '0' : '100',
-      _hover: {
-        color: 'text.subtle',
-      },
-    })}
-    onmouseenter={() => {
-      if (widgetGroupState === 'hidden') {
-        widgetGroupState = 'peeking';
-      }
-    }}
-    onmouseleave={() => {
-      if (widgetGroupState !== 'visible') {
-        widgetGroupState = 'hidden';
-      }
-    }}
-    type="button"
-  >
-    <Icon icon={ShapesIcon} size={16} />
-  </button>
-{/if}
+<svelte:window
+  onblur={() => {
+    altPressed = false;
+  }}
+  onkeydown={(e) => {
+    if (e.altKey) {
+      altPressed = true;
+    }
+  }}
+  onkeyup={(e) => {
+    if (!e.altKey) {
+      altPressed = false;
+    }
+  }}
+/>
 
 {#if dragging?.isOutsideDropZone && dragging.source === 'group'}
   <div
@@ -494,6 +535,7 @@
 {/if}
 
 <div
+  style:transform={transformRight}
   class={cx(
     'group',
     css({
@@ -506,11 +548,26 @@
       width: '[15dvw]',
       minWidth: '256px',
       maxWidth: '356px',
-      height: '[calc(100dvh - 120px)]',
+      height: '[100dvh]',
       zIndex: 'widget',
-      pointerEvents: 'none',
+      transition: '[transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-in-out]',
+      pointerEvents: altPressed ? 'none!' : 'none',
+      opacity: altPressed ? '15' : '100',
+      '& *': {
+        pointerEvents: transitioning || altPressed ? 'none!' : 'auto',
+      },
     }),
   )}
+  ontransitionend={(e) => {
+    if (e.target === e.currentTarget) {
+      transitioning = false;
+    }
+  }}
+  ontransitionstart={(e) => {
+    if (e.target === e.currentTarget) {
+      transitioning = true;
+    }
+  }}
 >
   {#if dragging}
     <div
@@ -529,15 +586,15 @@
 
   <div
     bind:this={scrollContainerElement}
-    style:transform={transformBottom}
     class={flex({
       flexDirection: 'column',
       backgroundColor: widgetGroupState === 'peeking' ? 'surface.dark/20' : 'transparent',
       borderWidth: widgetGroupState === 'peeking' ? '1px' : '0',
       borderColor: 'border.default',
       borderRadius: '12px',
-      transition: '[transform 0.2s ease-in-out, background-color 0.2s ease-in-out]',
+      transition: '[background-color 0.2s ease-in-out]',
       overflowY: 'auto',
+      paddingBottom: '24px',
       scrollbarWidth: 'none',
       paddingTop: '8px',
       pointerEvents: 'auto',
@@ -580,7 +637,7 @@
             })}
             onclick={() => {
               app.preference.current.widgetHidden = !app.preference.current.widgetHidden;
-              if (isHidden) {
+              if (app.preference.current.widgetHidden) {
                 editMode = false;
                 widgetGroupState = 'visible';
                 setTimeout(() => {
@@ -593,7 +650,7 @@
             size="sm"
             variant="secondary"
           >
-            <Icon icon={isHidden ? ChevronsUpIcon : ChevronsDownIcon} size={16} />
+            <Icon icon={isHidden ? ChevronsLeftIcon : ChevronsRightIcon} size={16} />
           </Button>
         </div>
       </div>
@@ -618,7 +675,7 @@
             </div>
           {/if}
           {#if !isDragging}
-            <div style:pointer-events="auto" data-widget-id={widget.id} role="listitem">
+            <div data-widget-id={widget.id} role="listitem">
               <WidgetComponent data={widget.data} widgetId={widget.id} />
             </div>
           {/if}
@@ -663,3 +720,21 @@
   }}
   bind:open={editMode}
 />
+
+{#if isHidden}
+  <div
+    class={css({
+      position: 'fixed',
+      bottom: '0',
+      right: '0',
+      width: '40px',
+      height: '40px',
+      zIndex: 'widget',
+      pointerEvents: 'auto',
+    })}
+    aria-label="위젯 표시 영역"
+    onmouseenter={handleTriggerMouseEnter}
+    onmouseleave={handleMouseLeave}
+    role="region"
+  ></div>
+{/if}
