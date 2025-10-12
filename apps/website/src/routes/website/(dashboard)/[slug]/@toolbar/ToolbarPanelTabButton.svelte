@@ -50,6 +50,7 @@
   onclick={() => {
     if (needPlanUpgrade) {
       planUpgradeModalOpen = true;
+      mixpanel.track('open_plan_upgrade_modal', { via: 'panel_tab_button', tab });
       return;
     }
 

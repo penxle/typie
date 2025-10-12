@@ -5,6 +5,7 @@
   import { HorizontalDivider, Icon, Modal, RingSpinner } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { defaultValues, values } from '@typie/ui/tiptap';
+  import mixpanel from 'mixpanel-browser';
   import { TypieError } from '@/errors';
   import GemIcon from '~icons/lucide/gem';
   import InfoIcon from '~icons/lucide/info';
@@ -250,6 +251,7 @@
           open = true;
         } else {
           planUpgradeOpen = true;
+          mixpanel.track('open_plan_upgrade_modal', { via: 'font_family_upload' });
         }
       },
       content: uploadFontFamilyItem,

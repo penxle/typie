@@ -346,6 +346,7 @@
                     aria-label="사이트 주소 기능 업그레이드"
                     onclick={() => {
                       planUpgradeModalOpen = true;
+                      mixpanel.track('open_plan_upgrade_modal', { via: 'site_address' });
                     }}
                     type="button"
                   ></button>
