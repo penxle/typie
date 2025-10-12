@@ -253,9 +253,11 @@
         gap: '8px',
       })}
     >
-      <Profile {$user} />
+      <div class={css({ minWidth: '0', flexShrink: '1', overflow: 'hidden' })}>
+        <Profile {$user} />
+      </div>
 
-      <div class={flex({ alignItems: 'center', gap: '8px' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
         <button
           class={center({
             borderRadius: '4px',
