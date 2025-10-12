@@ -118,7 +118,9 @@
                   placement: 'top',
                 }}
               >
-                <WidgetComponent disabled={isAdded} widgetId={`palette-preview-${widget.type}`} />
+                <div class={css({ '& *': { pointerEvents: 'none!' } })}>
+                  <WidgetComponent disabled={isAdded} widgetId={`palette-preview-${widget.type}`} />
+                </div>
               </div>
             {/each}
           </div>

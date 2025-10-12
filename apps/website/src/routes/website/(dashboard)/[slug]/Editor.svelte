@@ -232,6 +232,8 @@
   let mounted = $state(false);
 
   let showAnchorOutline = $state(false);
+  let anchorTriggerTimeout = $state<NodeJS.Timeout | null>(null);
+  let anchorHideTimeout = $state<NodeJS.Timeout | null>(null);
 
   let clipboardData = $state<{ html: string; text?: string }>();
   let openPasteModal = $state(false);
@@ -722,6 +724,16 @@
           clearTimeout(syncAwarenessTimeout);
         }
 
+        if (anchorTriggerTimeout) {
+          clearTimeout(anchorTriggerTimeout);
+          anchorTriggerTimeout = null;
+        }
+
+        if (anchorHideTimeout) {
+          clearTimeout(anchorHideTimeout);
+          anchorHideTimeout = null;
+        }
+
         window.removeEventListener('online', handleOnline);
         window.removeEventListener('offline', handleOffline);
 
@@ -978,14 +990,58 @@
                 }),
               )}
               onmouseleave={() => {
-                showAnchorOutline = false;
+                if (anchorTriggerTimeout) {
+                  clearTimeout(anchorTriggerTimeout);
+                  anchorTriggerTimeout = null;
+                }
+
+                if (anchorHideTimeout) {
+                  clearTimeout(anchorHideTimeout);
+                }
+
+                anchorHideTimeout = setTimeout(() => {
+                  showAnchorOutline = false;
+                  anchorHideTimeout = null;
+                }, 150);
               }}
               onmousemove={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
+                const container = e.currentTarget;
+                const rect = container.getBoundingClientRect();
                 const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
                 const width = rect.width;
+                const height = rect.height;
 
-                showAnchorOutline = mouseX > width - 50;
+                const anchorMinY = 12;
+                const anchorMaxY = height - 52;
+
+                const isInTriggerZone = mouseX > width - 50 && mouseY >= anchorMinY && mouseY <= anchorMaxY;
+
+                if (isInTriggerZone) {
+                  if (anchorHideTimeout) {
+                    clearTimeout(anchorHideTimeout);
+                    anchorHideTimeout = null;
+                  }
+
+                  if (!anchorTriggerTimeout && !showAnchorOutline) {
+                    anchorTriggerTimeout = setTimeout(() => {
+                      showAnchorOutline = true;
+                      anchorTriggerTimeout = null;
+                    }, 150);
+                  }
+                } else {
+                  if (anchorTriggerTimeout) {
+                    clearTimeout(anchorTriggerTimeout);
+                    anchorTriggerTimeout = null;
+                  }
+
+                  if (showAnchorOutline && !anchorHideTimeout) {
+                    anchorHideTimeout = setTimeout(() => {
+                      showAnchorOutline = false;
+                      anchorHideTimeout = null;
+                    }, 150);
+                  }
+                }
               }}
               role="none"
             >
