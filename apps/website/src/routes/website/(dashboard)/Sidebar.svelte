@@ -268,6 +268,7 @@
             app.preference.current.sidebarHidden = !app.preference.current.sidebarHidden;
             if (app.preference.current.sidebarHidden) {
               sidebarState = 'visible';
+              hovered = false;
               setTimeout(() => {
                 if (!hovered) {
                   sidebarState = 'hidden';
