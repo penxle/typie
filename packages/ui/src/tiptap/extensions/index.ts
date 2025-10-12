@@ -16,7 +16,6 @@ export * from './search';
 export * from './selection';
 export * from './sentence-navigation';
 export * from './syntax-highlight';
-export * from './template-placeholder';
 export * from './trailing-node';
 export * from './typewriter';
 export * from './typography';

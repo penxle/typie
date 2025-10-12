@@ -98,19 +98,6 @@
     }
   `);
 
-  const postQuery = graphql(`
-    query WebViewEditorPage_Post_Query($slug: String!) @client {
-      post(slug: $slug) {
-        id
-        body
-        maxWidth
-        storedMarks
-        layoutMode
-        pageLayout
-      }
-    }
-  `);
-
   const syncPost = graphql(`
     mutation WebViewEditor_SyncPost_Mutation($input: SyncPostInput!) {
       syncPost(input: $input)
@@ -977,17 +964,6 @@
           editor?.current.commands.scrollIntoView();
         }, 0);
       }
-    });
-
-    window.__webview__?.addEventListener('loadTemplate', async (data) => {
-      const resp = await postQuery.load({ slug: data.slug as string });
-
-      if (!editor) return;
-
-      maxWidth.current = resp.post.maxWidth;
-      layoutMode.current = resp.post.layoutMode;
-      pageLayout.current = resp.post.pageLayout;
-      editor.current.commands.loadTemplate(resp.post);
     });
 
     window.__webview__?.addEventListener('pasteConfirm', (data) => {

@@ -1,5 +1,4 @@
 import { mergeAttributes, Node } from '@tiptap/core';
-import { Mark } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { css, cx } from '@typie/styled-system/css';
 import { defaultValues, values } from '../values';
@@ -16,7 +15,6 @@ declare module '@tiptap/core' {
     body: {
       setBodyParagraphIndent: (paragraphIndent: ParagraphIndent) => ReturnType;
       setBodyBlockGap: (blockGap: BlockGap) => ReturnType;
-      loadTemplate: (post: { body: Record<string, unknown>; storedMarks: Mark[] }) => ReturnType;
     };
   }
 }
@@ -109,29 +107,6 @@ export const Body = Node.create({
           }
 
           return true;
-        },
-
-      loadTemplate:
-        ({ body, storedMarks }) =>
-        ({ chain, state }) => {
-          const { schema } = state;
-
-          return chain()
-            .command(({ tr }) => {
-              tr.setMeta('template', true);
-              return true;
-            })
-            .focus(2)
-            .setContent(body)
-            .command(({ tr, dispatch }) => {
-              if (storedMarks && storedMarks.length > 0) {
-                tr.setStoredMarks(storedMarks.map((mark: unknown) => Mark.fromJSON(schema, mark)));
-              }
-              dispatch?.(tr);
-              return true;
-            })
-            .setTextSelection(2)
-            .run();
         },
     };
   },
