@@ -425,7 +425,7 @@
     const newCount = $query.widgets.length;
 
     if (newCount < prevWidgetCount) {
-      optimisticDeletedWidgetIds = [];
+      optimisticDeletedWidgetIds = optimisticDeletedWidgetIds.filter((id) => $query.widgets.find((w) => w.id === id));
     }
 
     // NOTE: 팔레트에서 드래그 중이고 위젯이 새로 추가되었다면 드래그 초기화. 해주지 않으면 순간적으로 drop preview와 새 위젯이 동시에 렌더링됨
