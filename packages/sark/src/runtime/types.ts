@@ -39,6 +39,7 @@ export type OperationContext = {
   requestPolicy: 'cache-only' | 'network-only' | 'cache-first';
   transport: 'fetch' | 'sse' | 'ws';
   extensions?: Record<string, unknown>;
+  optimistic?: Record<string, unknown>;
   _meta?: Record<string, unknown>;
 };
 

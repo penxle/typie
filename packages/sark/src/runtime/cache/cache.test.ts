@@ -1674,4 +1674,356 @@ describe('Cache', () => {
 
     observers.forEach((sub) => sub.unsubscribe());
   });
+
+  test('addOptimisticLayer는 즉시 쿼리 결과에 반영된다', () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            name
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Initial Name',
+      },
+    };
+
+    cache.writeQuery(schema, {}, initialData);
+
+    const optimisticData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Optimistic Name',
+      },
+    };
+
+    cache.addOptimisticLayer('opt-1', schema, {}, optimisticData);
+
+    const result = cache.readQuery(schema, {});
+
+    expect(result).toEqual(optimisticData);
+  });
+
+  test('removeOptimisticLayer는 optimistic data를 제거한다', () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            name
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Initial Name',
+      },
+    };
+
+    cache.writeQuery(schema, {}, initialData);
+
+    const optimisticData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Optimistic Name',
+      },
+    };
+
+    cache.addOptimisticLayer('opt-1', schema, {}, optimisticData);
+    cache.removeOptimisticLayer('opt-1');
+
+    const result = cache.readQuery(schema, {});
+
+    expect(result).toEqual(initialData);
+  });
+
+  test('여러 optimistic layers가 올바르게 병합된다', () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            name
+            ... on A {
+              num
+            }
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Initial Name',
+        num: 10,
+      },
+    };
+
+    cache.writeQuery(schema, {}, initialData);
+
+    cache.addOptimisticLayer(
+      'opt-1',
+      schema,
+      {},
+      {
+        get: {
+          __typename: 'A',
+          id: '1',
+          name: 'Optimistic Name 1',
+        },
+      },
+    );
+
+    cache.addOptimisticLayer(
+      'opt-2',
+      schema,
+      {},
+      {
+        get: {
+          __typename: 'A',
+          id: '1',
+          num: 99,
+        },
+      },
+    );
+
+    const result = cache.readQuery(schema, {});
+
+    expect(result).toEqual({
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Optimistic Name 1',
+        num: 99,
+      },
+    });
+  });
+
+  test('optimistic layer는 observe 구독자에게 알림을 보낸다', () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            name
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Initial Name',
+      },
+    };
+
+    cache.writeQuery(schema, {}, initialData);
+
+    const callback = vi.fn();
+    const source = cache.observe(schema, {});
+    pipe(source, subscribe(callback));
+
+    callback.mockClear();
+
+    const optimisticData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Optimistic Name',
+      },
+    };
+
+    cache.addOptimisticLayer('opt-1', schema, {}, optimisticData);
+
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({
+      data: optimisticData,
+      partial: false,
+    });
+
+    callback.mockClear();
+
+    cache.removeOptimisticLayer('opt-1');
+
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({
+      data: initialData,
+      partial: false,
+    });
+  });
+
+  test('clearOptimisticLayers는 모든 optimistic layers를 제거한다', () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            name
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Initial Name',
+      },
+    };
+
+    cache.writeQuery(schema, {}, initialData);
+
+    cache.addOptimisticLayer(
+      'opt-1',
+      schema,
+      {},
+      {
+        get: {
+          __typename: 'A',
+          id: '1',
+          name: 'Optimistic 1',
+        },
+      },
+    );
+
+    cache.addOptimisticLayer(
+      'opt-2',
+      schema,
+      {},
+      {
+        get: {
+          __typename: 'A',
+          id: '1',
+          name: 'Optimistic 2',
+        },
+      },
+    );
+
+    cache.clearOptimisticLayers();
+
+    const result = cache.readQuery(schema, {});
+
+    expect(result).toEqual(initialData);
+  });
+
+  test('optimistic layer는 새로운 엔티티를 추가할 수 있다', () => {
+    const cache = createCache();
+    const listSchema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query ListQuery {
+          find(filter: "test") {
+            __typename
+            ... on A {
+              id
+              name
+            }
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      find: [
+        {
+          __typename: 'A',
+          id: '1',
+          name: 'Entity 1',
+        },
+      ],
+    };
+
+    cache.writeQuery(listSchema, {}, initialData);
+
+    const optimisticData = {
+      find: [
+        {
+          __typename: 'A',
+          id: '1',
+          name: 'Entity 1',
+        },
+        {
+          __typename: 'A',
+          id: '2',
+          name: 'New Entity',
+        },
+      ],
+    };
+
+    cache.addOptimisticLayer('opt-1', listSchema, {}, optimisticData);
+
+    const result = cache.readQuery(listSchema, {});
+
+    expect(result).toEqual(optimisticData);
+  });
+
+  test('optimistic layer의 임시 ID와 실제 response의 ID가 다른 경우를 처리한다', () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            name
+          }
+        }
+      `,
+    });
+
+    const optimisticData = {
+      get: {
+        __typename: 'A',
+        id: 'temp-id',
+        name: 'Optimistic Entity',
+      },
+    };
+
+    cache.addOptimisticLayer('opt-1', schema, {}, optimisticData);
+
+    const optimisticResult = cache.readQuery(schema, {});
+    expect(optimisticResult).toEqual(optimisticData);
+
+    const actualData = {
+      get: {
+        __typename: 'A',
+        id: 'server-123',
+        name: 'Optimistic Entity',
+      },
+    };
+
+    cache.writeQuery(schema, {}, actualData);
+
+    cache.removeOptimisticLayer('opt-1');
+
+    const finalResult = cache.readQuery(schema, {});
+    expect(finalResult).toEqual(actualData);
+  });
 });
