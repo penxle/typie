@@ -269,7 +269,7 @@
   });
 </script>
 
-<Widget collapsed={isCollapsed} icon={StickyNoteIcon} noPadding title="이 포스트 관련 노트" {widgetId}>
+<Widget collapsed={isCollapsed} icon={StickyNoteIcon} noPadding title="이 포스트 관련 노트">
   {#snippet headerActions()}
     {#if !palette}
       <button

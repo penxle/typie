@@ -6,7 +6,6 @@
   import type { Component, Snippet } from 'svelte';
 
   type Props = {
-    widgetId: string;
     title: string;
     children: Snippet;
     editMode?: boolean;
@@ -16,7 +15,7 @@
     collapsed?: boolean;
   };
 
-  let { widgetId, title, children, editMode: editModeProp, icon, headerActions, noPadding = false, collapsed = false }: Props = $props();
+  let { title, children, editMode: editModeProp, icon, headerActions, noPadding = false, collapsed = false }: Props = $props();
 
   const widgetContext = getWidgetContext();
   const { editMode: editModeContext, palette } = $derived(widgetContext.env);
@@ -33,7 +32,6 @@
     boxShadow: 'medium',
     overflow: palette || editMode ? 'visible' : 'hidden',
   })}
-  data-widget={widgetId}
 >
   <div
     class={flex({
