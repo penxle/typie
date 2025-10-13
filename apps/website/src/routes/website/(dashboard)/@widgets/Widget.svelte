@@ -29,7 +29,6 @@
     backgroundColor: 'surface.default',
     borderWidth: '1px',
     borderColor: 'border.default',
-    boxShadow: 'medium',
     overflow: palette || editMode ? 'visible' : 'hidden',
   })}
 >
