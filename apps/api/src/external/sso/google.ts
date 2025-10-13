@@ -17,6 +17,7 @@ export const generateAuthorizationUrl = (state: string, email?: string | null) =
     scope: ['email', 'profile'],
     state,
     login_hint: email ?? undefined,
+    prompt: 'select_account',
   });
 };
 
