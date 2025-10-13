@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cache } from '@typie/sark/internal';
   import { css, cx } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
@@ -11,6 +11,7 @@
   import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
   import LayoutDashboardIcon from '~icons/lucide/layout-dashboard';
+  import MinusIcon from '~icons/lucide/minus';
   import { fragment, graphql } from '$graphql';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
   import { getEditorRegistry } from '../[slug]/@split-view/editor-registry.svelte';
@@ -707,7 +708,39 @@
               </div>
             {/if}
             {#if !isDragging}
-              <div data-widget-id={widget.id} role="listitem">
+              <div class={cx('group', css({ position: 'relative' }))} data-widget-id={widget.id} role="listitem">
+                {#if editMode}
+                  <button
+                    class={center({
+                      position: 'absolute',
+                      top: '0',
+                      left: '0',
+                      size: '24px',
+                      borderRadius: 'full',
+                      backgroundColor: 'surface.default',
+                      borderWidth: '1px',
+                      borderColor: 'border.default',
+                      color: 'text.subtle',
+                      transitionProperty: '[opacity]',
+                      transitionDuration: '200ms',
+                      transform: 'translate(-8px, -8px)',
+                      _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+                      zIndex: '10',
+                      cursor: 'pointer',
+                    })}
+                    onclick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      widgetContext.deleteWidget?.(widget.id);
+                    }}
+                    onpointerdown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    type="button"
+                  >
+                    <Icon icon={MinusIcon} size={14} />
+                  </button>
+                {/if}
                 <WidgetComponent data={widget.data} widgetId={widget.id} />
               </div>
             {/if}

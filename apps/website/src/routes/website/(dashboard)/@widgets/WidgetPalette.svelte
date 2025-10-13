@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
+  import { css, cx } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Button } from '@typie/ui/components';
+  import { Button, Icon } from '@typie/ui/components';
   import { slide } from 'svelte/transition';
+  import PlusIcon from '~icons/lucide/plus';
   import { dragPaletteWidget } from './drag-palette-widget-action';
   import { WIDGET_CATEGORIES, WIDGET_COMPONENTS, WIDGET_METADATA } from './widgets';
   import type { Editor } from '@tiptap/core';
@@ -56,6 +57,12 @@
       widgets: WIDGET_METADATA.filter((w) => w.category === category.id && w.type !== 'onboarding'),
     })).filter((group) => group.widgets.length > 0),
   );
+
+  const handleAddWidget = (widgetType: WidgetType) => {
+    if (widgetType) {
+      widgetContext.createWidget?.(widgetType, 0);
+    }
+  };
 </script>
 
 {#if open}
@@ -98,11 +105,19 @@
               {@const WidgetComponent = WIDGET_COMPONENTS[widget.type]}
               {@const isAdded = addedWidgets.includes(widget.type)}
               <div
-                class={css({
-                  width: '300px',
-                  opacity: isAdded ? '50' : '100',
-                  cursor: isAdded ? 'not-allowed!' : 'grab!',
-                })}
+                class={cx(
+                  'group',
+                  css({
+                    position: 'relative',
+                    width: '300px',
+                    opacity: isAdded ? '50' : '100',
+                    cursor: isAdded ? 'not-allowed!' : 'grab!',
+                  }),
+                  !isAdded &&
+                    css({
+                      userSelect: 'none',
+                    }),
+                )}
                 use:dragPaletteWidget={{
                   widgetType: widget.type,
                   isAdded,
@@ -118,8 +133,43 @@
                   placement: 'top',
                 }}
               >
+                {#if !isAdded}
+                  <button
+                    class={center({
+                      position: 'absolute',
+                      top: '0',
+                      left: '0',
+                      size: '28px',
+                      borderRadius: 'full',
+                      backgroundColor: 'surface.default',
+                      borderWidth: '1px',
+                      borderColor: 'border.default',
+                      color: 'text.subtle',
+                      opacity: '0',
+                      transitionProperty: '[opacity]',
+                      transitionDuration: '200ms',
+                      transform: 'translate(-8px, -8px)',
+                      _groupHover: { opacity: '100' },
+                      _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+                      zIndex: '10',
+                      cursor: 'pointer',
+                    })}
+                    data-widget-palette-button
+                    onclick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleAddWidget(widget.type);
+                    }}
+                    onpointerdown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    type="button"
+                  >
+                    <Icon icon={PlusIcon} size={16} />
+                  </button>
+                {/if}
                 <div class={css({ '& *': { pointerEvents: 'none!' } })}>
-                  <WidgetComponent disabled={isAdded} widgetId={`palette-preview-${widget.type}`} />
+                  <WidgetComponent widgetId={`palette-preview-${widget.type}`} />
                 </div>
               </div>
             {/each}

@@ -6,13 +6,12 @@
 
   type Props = {
     widgetId: string;
-    disabled?: boolean;
   };
 
-  let { widgetId, disabled = false }: Props = $props();
+  let { widgetId }: Props = $props();
 </script>
 
-<Widget {disabled} editMode={true} icon={ShapesIcon} title="새로운 위젯 기능" {widgetId} widgetType="onboarding">
+<Widget editMode={true} icon={ShapesIcon} title="새로운 위젯 기능" {widgetId}>
   <div class={flex({ flexDirection: 'column', alignItems: 'center' })}>
     <div
       class={css({
