@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getText, getTextBetween } from '@tiptap/core';
-  import { css } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { comma } from '@typie/ui/utils';
@@ -94,12 +94,24 @@
 <Widget collapsed={isCollapsed} icon={TypeIcon} title="글자 수">
   {#snippet headerActions()}
     <button
-      class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}
+      class={cx(
+        'group',
+        flex({
+          alignItems: 'center',
+          height: '26px',
+          borderRadius: '6px',
+          paddingX: '6px',
+          gap: '2px',
+          color: 'text.subtle',
+          cursor: 'pointer',
+          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+        }),
+      )}
       onclick={toggleCollapse}
       type="button"
     >
       {#if isCollapsed}
-        <span class={css({ fontSize: '13px', fontWeight: 'normal', color: 'text.subtle' })}>
+        <span class={css({ fontSize: '13px', fontWeight: 'normal' })}>
           {comma(docCountWithWhitespace)}자
         </span>
       {/if}

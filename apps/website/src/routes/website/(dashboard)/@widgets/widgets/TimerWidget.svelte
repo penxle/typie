@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon, SegmentButtons } from '@typie/ui/components';
@@ -277,12 +277,23 @@
 <Widget collapsed={isCollapsed} icon={TimerIcon} title="타이머">
   {#snippet headerActions()}
     <button
-      class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}
+      class={cx(
+        'group',
+        center({
+          height: '26px',
+          borderRadius: '6px',
+          paddingX: '6px',
+          gap: '2px',
+          color: 'text.subtle',
+          cursor: 'pointer',
+          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+        }),
+      )}
       onclick={toggleCollapse}
       type="button"
     >
       {#if isCollapsed}
-        <span class={css({ fontSize: '13px', fontWeight: 'normal', color: 'text.subtle' })}>
+        <span class={css({ fontSize: '13px', fontWeight: 'normal' })}>
           {displayTime}
         </span>
       {/if}
