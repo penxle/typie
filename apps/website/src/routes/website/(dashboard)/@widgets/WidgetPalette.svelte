@@ -60,7 +60,7 @@
 
   const handleAddWidget = (widgetType: WidgetType) => {
     if (widgetType) {
-      widgetContext.createWidget?.(widgetType, 0);
+      widgetContext.createWidget?.(widgetType, 'button', 0);
     }
   };
 </script>
