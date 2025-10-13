@@ -1,5 +1,9 @@
 import { tick } from 'svelte';
 
+const ANIMATION_DURATION = 300;
+
+const animationStates = new WeakMap<HTMLElement, { timerId?: number; cancelled: boolean }>();
+
 // NOTE: $effect.pre()에서 사용하세요
 export const animateFlip = async (selector: string, idAttribute = 'id', container: Document | HTMLElement = document): Promise<void> => {
   const elements = container.querySelectorAll(selector);
@@ -34,7 +38,7 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
         const element = containerRef.deref();
         if (!element) return;
 
-        element.style.transition = 'height 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+        element.style.transition = `height ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
         element.style.height = `${lastContainerHeight}px`;
 
         setTimeout(() => {
@@ -43,7 +47,7 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
 
           el.style.height = '';
           el.style.transition = '';
-        }, 300);
+        }, ANIMATION_DURATION);
       });
     }
   }
@@ -60,6 +64,17 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
 
     if (Math.abs(deltaX) === 0 && Math.abs(deltaY) === 0) continue;
 
+    const existingState = animationStates.get(el);
+    if (existingState) {
+      existingState.cancelled = true;
+      if (existingState.timerId) {
+        clearTimeout(existingState.timerId);
+      }
+    }
+
+    const state = { cancelled: false };
+    animationStates.set(el, state);
+
     el.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
     el.style.transition = 'none';
 
@@ -68,16 +83,28 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
       const element = elRef.deref();
       if (!element) return;
 
-      element.style.transition = 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+      const currentState = animationStates.get(element);
+      if (currentState?.cancelled) return;
+
+      element.style.transition = `transform ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
       element.style.transform = '';
       element.style.pointerEvents = 'none';
-      setTimeout(() => {
+
+      const timerId = setTimeout(() => {
         const el = elRef.deref();
         if (!el) return;
 
+        const finalState = animationStates.get(el);
+        if (finalState?.cancelled) return;
+
         el.style.transition = 'none';
         el.style.pointerEvents = 'auto';
-      }, 300);
+        animationStates.delete(el);
+      }, ANIMATION_DURATION);
+
+      if (currentState) {
+        currentState.timerId = timerId as unknown as number;
+      }
     });
   }
 };
