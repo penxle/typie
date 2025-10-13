@@ -5,17 +5,6 @@ import type { Editor_Widget_CharacterCountChangeWidget_post, Editor_Widget_PostR
 
 export type WidgetType = 'characterCount' | 'characterCountChange' | 'postRelatedNote' | 'onboarding' | 'timer';
 
-export type WidgetInstance = {
-  id: string;
-  name: string;
-  data: Record<string, unknown>;
-  order: string;
-};
-
-type WidgetState = {
-  widgets: WidgetInstance[];
-};
-
 type WidgetEnvironment = {
   editMode: boolean;
   palette: boolean;
@@ -26,10 +15,6 @@ type WidgetEnvironment = {
 const key: unique symbol = Symbol('WidgetContext');
 
 export class WidgetContext {
-  state = $state<WidgetState>({
-    widgets: [],
-  });
-
   env = $state<WidgetEnvironment>({
     editMode: false,
     palette: false,
