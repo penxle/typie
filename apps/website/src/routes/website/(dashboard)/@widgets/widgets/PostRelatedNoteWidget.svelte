@@ -22,11 +22,10 @@
 
   type Props = {
     widgetId: string;
-    disabled?: boolean;
     data?: Record<string, unknown>;
   };
 
-  let { widgetId, disabled = false, data = {} }: Props = $props();
+  let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
   const { palette, $post: _post } = $derived(widgetContext.env);
@@ -270,15 +269,7 @@
   });
 </script>
 
-<Widget
-  collapsed={isCollapsed}
-  {disabled}
-  icon={StickyNoteIcon}
-  noPadding
-  title="이 포스트 관련 노트"
-  {widgetId}
-  widgetType="postRelatedNote"
->
+<Widget collapsed={isCollapsed} icon={StickyNoteIcon} noPadding title="이 포스트 관련 노트" {widgetId}>
   {#snippet headerActions()}
     {#if !palette}
       <button

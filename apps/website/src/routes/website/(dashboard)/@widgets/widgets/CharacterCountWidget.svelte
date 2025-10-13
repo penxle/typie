@@ -16,11 +16,10 @@
 
   type Props = {
     widgetId: string;
-    disabled?: boolean;
     data?: Record<string, unknown>;
   };
 
-  let { widgetId, disabled = false, data = {} }: Props = $props();
+  let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
   const { editor } = $derived(widgetContext.env);
@@ -92,7 +91,7 @@
   });
 </script>
 
-<Widget collapsed={isCollapsed} {disabled} icon={TypeIcon} title="글자 수" {widgetId} widgetType="characterCount">
+<Widget collapsed={isCollapsed} icon={TypeIcon} title="글자 수" {widgetId}>
   {#snippet headerActions()}
     <button
       class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}

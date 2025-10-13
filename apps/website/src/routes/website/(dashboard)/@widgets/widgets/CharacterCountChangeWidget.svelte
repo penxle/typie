@@ -14,11 +14,10 @@
 
   type Props = {
     widgetId: string;
-    disabled?: boolean;
     data?: Record<string, unknown>;
   };
 
-  let { widgetId, disabled = false, data = {} }: Props = $props();
+  let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
   const { $post: _post } = $derived(widgetContext.env);
@@ -50,7 +49,7 @@
   const deletions = $derived($post ? $post.characterCountChange.deletions : 0);
 </script>
 
-<Widget collapsed={isCollapsed} {disabled} icon={GoalIcon} title="오늘의 기록" {widgetId} widgetType="characterCountChange">
+<Widget collapsed={isCollapsed} icon={GoalIcon} title="오늘의 기록" {widgetId}>
   {#snippet headerActions()}
     <button
       class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}

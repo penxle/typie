@@ -19,11 +19,10 @@
 
   type Props = {
     widgetId: string;
-    disabled?: boolean;
     data?: Record<string, unknown>;
   };
 
-  let { widgetId, disabled = false, data = {} }: Props = $props();
+  let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
 
@@ -275,7 +274,7 @@
   });
 </script>
 
-<Widget collapsed={isCollapsed} {disabled} icon={TimerIcon} title="타이머" {widgetId} widgetType="timer">
+<Widget collapsed={isCollapsed} icon={TimerIcon} title="타이머" {widgetId}>
   {#snippet headerActions()}
     <button
       class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}
