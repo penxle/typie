@@ -725,102 +725,93 @@
       </div>
     </div>
     <div
-      class={flex({
-        position: 'relative',
-        flexDirection: 'column',
-        gap: '8px',
-        padding: '8px',
-      })}
+      bind:this={widgetListElement}
+      class={flex({ flexDirection: 'column', justifyContent: 'flex-end', padding: '8px', gap: '4px', position: 'relative' })}
       data-widget-group
     >
-      <div
-        bind:this={widgetListElement}
-        class={flex({ flexDirection: 'column', justifyContent: 'flex-end', gap: '8px', position: 'relative' })}
-      >
-        {#if localWidgets.length === 0 && !dragging}
+      {#if localWidgets.length === 0 && !dragging}
+        <div
+          class={flex({
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            paddingY: '32px',
+            paddingX: '16px',
+          })}
+        >
           <div
             class={flex({
-              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '12px',
-              paddingY: '32px',
-              paddingX: '16px',
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              backgroundColor: 'surface.muted',
+              color: 'text.faint',
             })}
           >
-            <div
-              class={flex({
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                backgroundColor: 'surface.muted',
-                color: 'text.faint',
-              })}
-            >
-              <Icon icon={LayoutDashboardIcon} size={20} />
-            </div>
-            <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center', lineHeight: '[1.6]' })}>
-              위젯 편집을 눌러
-              <br />
-              원하는 위젯을 추가해보세요
-            </p>
+            <Icon icon={LayoutDashboardIcon} size={20} />
           </div>
-        {:else}
-          <!-- NOTE: id와 index를 조합한 키를 쓰지 않으면 맨 아래에서 드래그할 때 dnd가 버벅거리는 경우 있음 -->
-          {#each localWidgets as item, index (`${item.id}-${index}`)}
-            {#if item.type === 'preview'}
-              {@const WidgetComponent = WIDGET_COMPONENTS[item.widgetType]}
-              <div class={css({ position: 'relative', opacity: '50' })} data-widget-flip-animation-id={item.widgetType}>
-                <WidgetComponent data={item.widgetData} widgetId="drop-preview" />
-              </div>
-            {:else}
-              {@const WidgetComponent = WIDGET_COMPONENTS[item.name as WidgetType]}
-              <div
-                class={cx('group', css({ position: 'relative' }))}
-                data-widget-flip-animation-id={item.name}
-                data-widget-id={item.id}
-                role="listitem"
-              >
-                {#if editMode}
-                  <button
-                    class={center({
-                      position: 'absolute',
-                      top: '0',
-                      left: '0',
-                      size: '24px',
-                      borderRadius: 'full',
-                      backgroundColor: 'surface.default',
-                      borderWidth: '1px',
-                      borderColor: 'border.default',
-                      color: 'text.subtle',
-                      transitionProperty: '[opacity]',
-                      transitionDuration: '200ms',
-                      transform: 'translate(-8px, -8px)',
-                      _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
-                      zIndex: '10',
-                      cursor: 'pointer',
-                    })}
-                    onclick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      widgetContext.deleteWidget?.(item.id, 'button');
-                    }}
-                    onpointerdown={(e) => {
-                      e.stopPropagation();
-                    }}
-                    type="button"
-                  >
-                    <Icon icon={MinusIcon} size={14} />
-                  </button>
-                {/if}
-                <WidgetComponent data={item.data} widgetId={item.id} />
-              </div>
-            {/if}
-          {/each}
-        {/if}
-      </div>
+          <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center', lineHeight: '[1.6]' })}>
+            위젯 편집을 눌러
+            <br />
+            원하는 위젯을 추가해보세요
+          </p>
+        </div>
+      {:else}
+        <!-- NOTE: id와 index를 조합한 키를 쓰지 않으면 맨 아래에서 드래그할 때 dnd가 버벅거리는 경우 있음 -->
+        {#each localWidgets as item, index (`${item.id}-${index}`)}
+          {#if item.type === 'preview'}
+            {@const WidgetComponent = WIDGET_COMPONENTS[item.widgetType]}
+            <div class={css({ position: 'relative', opacity: '50' })} data-widget-flip-animation-id={item.widgetType}>
+              <WidgetComponent data={item.widgetData} widgetId="drop-preview" />
+            </div>
+          {:else}
+            {@const WidgetComponent = WIDGET_COMPONENTS[item.name as WidgetType]}
+            <div
+              class={cx('group', css({ position: 'relative' }))}
+              data-widget-flip-animation-id={item.name}
+              data-widget-id={item.id}
+              role="listitem"
+            >
+              {#if editMode}
+                <button
+                  class={center({
+                    position: 'absolute',
+                    top: '0',
+                    left: '0',
+                    size: '24px',
+                    borderRadius: 'full',
+                    backgroundColor: 'surface.default',
+                    borderWidth: '1px',
+                    borderColor: 'border.default',
+                    color: 'text.subtle',
+                    transitionProperty: '[opacity]',
+                    transitionDuration: '200ms',
+                    transform: 'translate(-8px, -8px)',
+                    _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+                    zIndex: '10',
+                    cursor: 'pointer',
+                  })}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    widgetContext.deleteWidget?.(item.id, 'button');
+                  }}
+                  onpointerdown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  type="button"
+                >
+                  <Icon icon={MinusIcon} size={14} />
+                </button>
+              {/if}
+              <WidgetComponent data={item.data} widgetId={item.id} />
+            </div>
+          {/if}
+        {/each}
+      {/if}
     </div>
   </div>
 </div>
