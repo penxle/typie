@@ -271,13 +271,15 @@
 
 <Widget collapsed={isCollapsed} icon={StickyNoteIcon} noPadding title="이 포스트 관련 노트">
   {#snippet headerActions()}
-    {#if !palette}
+    {#if !palette && !isCollapsed}
       <button
         class={center({
-          size: '20px',
-          color: 'text.faint',
+          height: '26px',
+          borderRadius: '6px',
+          paddingX: '6px',
+          color: 'text.subtle',
           transition: 'common',
-          _hover: { color: 'text.subtle' },
+          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
           cursor: 'pointer',
         })}
         onclick={(e) => {
@@ -293,10 +295,12 @@
       </button>
       <button
         class={center({
-          size: '20px',
-          color: 'text.faint',
+          height: '26px',
+          borderRadius: '6px',
+          paddingX: '6px',
+          color: 'text.subtle',
           transition: 'common',
-          _hover: { color: 'text.subtle' },
+          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
           cursor: 'pointer',
         })}
         onclick={(e) => {
@@ -313,7 +317,19 @@
       </button>
     {/if}
     <button
-      class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}
+      class={cx(
+        'group',
+        flex({
+          alignItems: 'center',
+          height: '26px',
+          borderRadius: '6px',
+          paddingX: '6px',
+          gap: '2px',
+          color: 'text.subtle',
+          cursor: 'pointer',
+          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+        }),
+      )}
       onclick={toggleCollapse}
       type="button"
     >

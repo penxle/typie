@@ -35,9 +35,9 @@
   <div
     class={flex({
       alignItems: 'center',
+      justifyContent: 'space-between',
       gap: '8px',
-      paddingX: '12px',
-      paddingY: '8px',
+      height: '36px',
       borderBottomWidth: '1px',
       borderColor: 'border.subtle',
       backgroundColor: 'surface.subtle',
@@ -48,21 +48,25 @@
     })}
     data-drag-handle
   >
-    {#if icon}
-      <Icon style={css.raw({ color: 'text.subtle' })} {icon} size={14} />
-    {/if}
-    <span
-      class={css({
-        fontSize: '13px',
-        fontWeight: 'semibold',
-        color: 'text.default',
-        flexGrow: '1',
-      })}
-    >
-      {title}
-    </span>
+    <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '12px', flexGrow: '1' })}>
+      {#if icon}
+        <Icon style={css.raw({ color: 'text.subtle' })} {icon} size={14} />
+      {/if}
+      <span
+        class={css({
+          fontSize: '13px',
+          fontWeight: 'semibold',
+          color: 'text.default',
+          flexGrow: '1',
+        })}
+      >
+        {title}
+      </span>
+    </div>
     {#if headerActions}
-      {@render headerActions()}
+      <div class={flex({ alignItems: 'center', padding: '4px' })}>
+        {@render headerActions()}
+      </div>
     {/if}
   </div>
 
