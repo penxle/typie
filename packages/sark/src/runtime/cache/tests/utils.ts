@@ -12,18 +12,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = await fs.readFile(path.join(__dirname, 'schema.graphql'), 'utf8');
 const schema = graphql.buildSchema(source);
 
-export const makeArtifactSchema = ({
+export const makeArtifactSchema = <K extends ArtifactSchema['kind'] = ArtifactSchema['kind']>({
   operation: operationSource,
   fragments: fragmentsSource,
 }: {
   operation: string;
   fragments?: string[];
-}): ArtifactSchema => {
+}): ArtifactSchema & { kind: K } => {
   const operation = getArtifact(schema, '', operationSource);
   const fragments = (fragmentsSource ?? []).map((source) => getArtifact(schema, '', source));
 
   return {
-    kind: operation.kind,
+    kind: operation.kind as K,
     name: operation.name,
     source: operation.source,
     selections: {

@@ -21,6 +21,7 @@ type QueryResult<T extends $ArtifactSchema = $ArtifactSchema> = { data: T['$outp
 
 export class Cache {
   #storage: Storage = { [RootFieldKey]: {} };
+  #optimisticLayers = new Map<string, Storage>();
   #queries = new Map<QueryKey, Query>();
   #dependencies = new Map<DependencyKey, Set<QueryKey>>();
   #subjects = new Map<QueryKey, Subject<QueryResult>>();
@@ -173,6 +174,40 @@ export class Cache {
     }
   }
 
+  addOptimisticLayer(key: string, schema: ArtifactSchema, variables: Variables, data: Data) {
+    const normalized = normalize(schema, variables, data);
+    this.#optimisticLayers.set(key, normalized);
+
+    const fieldUpdates = this.#extractFieldUpdates(normalized);
+    this.#refreshAffectedQueries(fieldUpdates);
+  }
+
+  removeOptimisticLayer(key: string) {
+    const layer = this.#optimisticLayers.get(key);
+    if (layer && this.#optimisticLayers.delete(key)) {
+      const fieldUpdates = this.#extractFieldUpdates(layer);
+      this.#refreshAffectedQueries(fieldUpdates);
+    }
+  }
+
+  clearOptimisticLayers() {
+    const allFieldUpdates = new Map<EntityKey, Set<FieldKey>>();
+
+    for (const layer of this.#optimisticLayers.values()) {
+      const fieldUpdates = this.#extractFieldUpdates(layer);
+      for (const [entity, fields] of fieldUpdates) {
+        const existing = allFieldUpdates.get(entity) ?? new Set();
+        for (const field of fields) {
+          existing.add(field);
+        }
+        allFieldUpdates.set(entity, existing);
+      }
+    }
+
+    this.#optimisticLayers.clear();
+    this.#refreshAffectedQueries(allFieldUpdates);
+  }
+
   #readQuery<T extends $ArtifactSchema>(schema: ArtifactSchema<T>, variables: Variables): QueryResult<T> {
     const queryKey = makeQueryKey(schema, variables);
 
@@ -184,7 +219,8 @@ export class Cache {
       });
     }
 
-    return denormalize(schema, variables, this.#storage, (storageKey, fieldKey) => {
+    const mergedStorage = this.#getMergedStorage();
+    return denormalize(schema, variables, mergedStorage, (storageKey, fieldKey) => {
       this.#trackDependency(queryKey, storageKey, fieldKey);
     });
   }
@@ -226,7 +262,8 @@ export class Cache {
 
     query.paths.clear();
 
-    const result = denormalize(query.schema, query.variables, this.#storage, (storageKey, fieldKey) => {
+    const mergedStorage = this.#getMergedStorage();
+    const result = denormalize(query.schema, query.variables, mergedStorage, (storageKey, fieldKey) => {
       this.#trackDependency(queryKey, storageKey, fieldKey);
     });
 
@@ -264,6 +301,43 @@ export class Cache {
     for (const queryKey of queryKeys) {
       this.#refreshQuery(queryKey);
     }
+  }
+
+  #getMergedStorage(): Storage {
+    if (this.#optimisticLayers.size === 0) {
+      return this.#storage;
+    }
+
+    const merged = { ...this.#storage };
+
+    for (const layer of this.#optimisticLayers.values()) {
+      for (const [key, value] of entries(layer)) {
+        if (key === RootFieldKey) {
+          merged[RootFieldKey] = deepMerge(merged[RootFieldKey] ?? {}, value, { arrayStrategy: 'replace' });
+        } else if (merged[key]) {
+          merged[key] = deepMerge(merged[key], value, { arrayStrategy: 'replace' });
+        } else {
+          merged[key] = value;
+        }
+      }
+    }
+
+    return merged;
+  }
+
+  #extractFieldUpdates(storage: Storage): Map<EntityKey, Set<FieldKey>> {
+    const fieldUpdates = new Map<EntityKey, Set<FieldKey>>();
+
+    for (const [key, value] of entries(storage)) {
+      if (key === RootFieldKey) {
+        continue;
+      }
+
+      const fields = new Set<FieldKey>(Object.keys(value));
+      fieldUpdates.set(key as EntityKey, fields);
+    }
+
+    return fieldUpdates;
   }
 
   #retriveSubject(queryKey: QueryKey) {
