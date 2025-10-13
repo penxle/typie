@@ -733,7 +733,10 @@
       })}
       data-widget-group
     >
-      <div bind:this={widgetListElement} class={flex({ flexDirection: 'column', gap: '8px', position: 'relative' })}>
+      <div
+        bind:this={widgetListElement}
+        class={flex({ flexDirection: 'column', justifyContent: 'flex-end', gap: '8px', position: 'relative' })}
+      >
         {#if localWidgets.length === 0 && !dragging}
           <div
             class={flex({

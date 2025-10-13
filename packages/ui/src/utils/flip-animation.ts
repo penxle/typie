@@ -13,10 +13,40 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
     }
   });
 
+  const containerElement = container instanceof Document ? null : container;
+  const firstContainerHeight = containerElement?.getBoundingClientRect().height;
+
   await tick();
 
   const elementsAfter = container.querySelectorAll(selector);
   if (Object.keys(firstPositions).length === 0) return;
+
+  if (containerElement && firstContainerHeight !== undefined) {
+    const lastContainerHeight = containerElement.getBoundingClientRect().height;
+    const deltaHeight = firstContainerHeight - lastContainerHeight;
+
+    if (Math.abs(deltaHeight) > 0) {
+      containerElement.style.height = `${firstContainerHeight}px`;
+      containerElement.style.transition = 'none';
+
+      const containerRef = new WeakRef(containerElement);
+      requestAnimationFrame(() => {
+        const element = containerRef.deref();
+        if (!element) return;
+
+        element.style.transition = 'height 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+        element.style.height = `${lastContainerHeight}px`;
+
+        setTimeout(() => {
+          const el = containerRef.deref();
+          if (!el) return;
+
+          el.style.height = '';
+          el.style.transition = '';
+        }, 300);
+      });
+    }
+  }
 
   for (const el of elementsAfter) {
     if (!(el instanceof HTMLElement)) continue;
