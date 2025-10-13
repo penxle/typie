@@ -309,7 +309,7 @@
   const widgetContext = setupWidgetContext();
 
   widgetContext.createWidget = async (type: WidgetType, via: string, index?: number) => {
-    const widgets = widgetContext.state.widgets;
+    const widgets = $query.widgets;
     let lowerOrder: string | undefined;
     let upperOrder: string | undefined;
 
@@ -336,80 +336,68 @@
       via,
     });
 
-    cache.invalidate({ __typename: 'Query', field: 'widgets' });
+    await cache.invalidate({ __typename: 'Query', field: 'widgets' });
   };
 
   widgetContext.deleteWidget = async (id: string, via: string) => {
-    const widget = widgetContext.state.widgets.find((w) => w.id === id);
-    await deleteWidgetMutation({ widgetId: id });
+    optimisticDeletedWidgetIds = [...optimisticDeletedWidgetIds, id];
+    const widget = $query.widgets.find((w) => w.id === id);
+    try {
+      await deleteWidgetMutation({ widgetId: id });
 
-    mixpanel.track('delete_widget', {
-      widgetType: widget?.name,
-      via,
-    });
+      mixpanel.track('delete_widget', {
+        widgetType: widget?.name,
+        via,
+      });
 
-    cache.invalidate({ __typename: 'Query', field: 'widgets' });
+      await cache.invalidate({ __typename: 'Query', field: 'widgets' });
+    } catch (err) {
+      optimisticDeletedWidgetIds = optimisticDeletedWidgetIds.filter((existingId) => existingId !== id);
+      throw err;
+    }
   };
 
   widgetContext.updateWidget = async (widgetId: string, data: Record<string, unknown>) => {
     await updateWidgetMutation({ widgetId, data });
-    cache.invalidate({ __typename: 'Query', field: 'widgets' });
+    await cache.invalidate({ __typename: 'Query', field: 'widgets' });
   };
 
-  let localWidgetOrder = $state<string[]>([]);
-
   widgetContext.moveWidget = async (widgetId: string, targetIndex: number) => {
-    const widgets = widgetContext.state.widgets;
+    const widgets = $query.widgets;
     const currentIndex = widgets.findIndex((w) => w.id === widgetId);
     if (currentIndex === -1) return;
 
     const widget = widgets.find((w) => w.id === widgetId);
 
-    const newOrder = widgets.map((w) => w.id);
-    const [movedId] = newOrder.splice(currentIndex, 1);
-    newOrder.splice(targetIndex, 0, movedId);
-    localWidgetOrder = newOrder;
-
-    const localWidgets = [...widgets]
-      .toSorted((a, b) => {
-        const indexA = localWidgetOrder.indexOf(a.id);
-        const indexB = localWidgetOrder.indexOf(b.id);
-        if (indexA === -1) return 1;
-        if (indexB === -1) return -1;
-        return indexA - indexB;
-      })
-      .filter((w) => dragging?.source === 'group' && dragging.widgetId !== w.id);
+    const sortedWidgets = [...widgets]
+      .toSorted((a, b) => a.order.localeCompare(b.order))
+      .filter((w) => w.id !== widgetId && !optimisticDeletedWidgetIds.includes(w.id));
 
     let lowerOrder: string | undefined;
     let upperOrder: string | undefined;
 
     if (targetIndex === 0) {
       lowerOrder = undefined;
-      upperOrder = localWidgets[1]?.order;
-    } else if (targetIndex >= localWidgets.length - 1) {
-      lowerOrder = localWidgets.at(-2)?.order;
+      upperOrder = sortedWidgets[0]?.order;
+    } else if (targetIndex >= sortedWidgets.length) {
+      lowerOrder = sortedWidgets.at(-1)?.order;
       upperOrder = undefined;
     } else {
-      lowerOrder = localWidgets[targetIndex - 1]?.order;
-      upperOrder = localWidgets[targetIndex + 1]?.order;
+      lowerOrder = sortedWidgets[targetIndex - 1]?.order;
+      upperOrder = sortedWidgets[targetIndex]?.order;
     }
 
-    try {
-      await moveWidgetMutation({
-        widgetId,
-        lowerOrder,
-        upperOrder,
-      });
+    await moveWidgetMutation({
+      widgetId,
+      lowerOrder,
+      upperOrder,
+    });
 
-      mixpanel.track('move_widget', {
-        widgetType: widget?.name,
-      });
+    mixpanel.track('move_widget', {
+      widgetType: widget?.name,
+    });
 
-      cache.invalidate({ __typename: 'Query', field: 'widgets' });
-    } catch (err) {
-      localWidgetOrder = [];
-      throw err;
-    }
+    await cache.invalidate({ __typename: 'Query', field: 'widgets' });
   };
 
   type RealWidget = {
@@ -429,18 +417,28 @@
 
   type WidgetItem = RealWidget | PreviewWidget;
 
-  const localWidgets = $derived.by((): WidgetItem[] => {
-    const widgets = widgetContext.state.widgets.filter((w) => !(dragging?.source === 'group' && dragging.widgetId === w.id));
-    const sorted =
-      localWidgetOrder.length === 0
-        ? widgets.toSorted((a, b) => a.order.localeCompare(b.order))
-        : [...widgets].toSorted((a, b) => {
-            const indexA = localWidgetOrder.indexOf(a.id);
-            const indexB = localWidgetOrder.indexOf(b.id);
-            if (indexA === -1) return 1;
-            if (indexB === -1) return -1;
-            return indexA - indexB;
-          });
+  let optimisticDeletedWidgetIds = $state<string[]>([]);
+  let localWidgets = $state<WidgetItem[]>([]);
+  let prevWidgetCount = 0;
+
+  $effect.pre(() => {
+    const newCount = $query.widgets.length;
+
+    if (newCount < prevWidgetCount) {
+      optimisticDeletedWidgetIds = [];
+    }
+
+    // NOTE: 팔레트에서 드래그 중이고 위젯이 새로 추가되었다면 드래그 초기화. 해주지 않으면 순간적으로 drop preview와 새 위젯이 동시에 렌더링됨
+    if (newCount > prevWidgetCount && dragging?.source === 'palette') {
+      dragging = null;
+    }
+
+    prevWidgetCount = newCount;
+
+    const widgets = $query.widgets.filter(
+      (w) => !(dragging?.source === 'group' && dragging.widgetId === w.id) && !optimisticDeletedWidgetIds.includes(w.id),
+    );
+    const sorted = widgets.toSorted((a, b) => a.order.localeCompare(b.order));
 
     const result: WidgetItem[] = sorted.map((w) => ({ type: 'real' as const, ...w }));
 
@@ -454,27 +452,7 @@
       result.splice(dragging.dropIndex, 0, previewWidget);
     }
 
-    return result;
-  });
-
-  let prevWidgetIds = $state<string[]>([]);
-  $effect(() => {
-    if ($query?.widgets) {
-      const widgetIds = $query.widgets.map((w) => w.id);
-      const widgetIdsStr = widgetIds.join(',');
-      const prevWidgetIdsStr = prevWidgetIds.join(',');
-
-      if (widgetIdsStr !== prevWidgetIdsStr) {
-        prevWidgetIds = widgetIds;
-        localWidgetOrder = widgetIds;
-
-        const widgets = $query.widgets;
-        // NOTE: $query.widgets 업데이트에 의한 추가/제거 시 animateFlip이 제대로 동작할 수 있도록 함
-        queueMicrotask(() => {
-          widgetContext.state.widgets = widgets;
-        });
-      }
-    }
+    localWidgets = result;
   });
 
   $effect(() => {
@@ -503,11 +481,11 @@
         const widgetId = widgetElement.dataset.widgetId;
         if (!widgetId) return;
 
-        const widget = widgetContext.state.widgets.find((w) => w.id === widgetId);
+        const widget = $query.widgets.find((w) => w.id === widgetId);
         if (!widget) return;
 
         dragging = {
-          dropIndex: widgetContext.state.widgets.findIndex((w) => w.id === widgetId),
+          dropIndex: $query.widgets.findIndex((w) => w.id === widgetId),
           isOutsideDropZone: false,
           cursorPosition: { x: e.clientX, y: e.clientY },
           source: 'group',
@@ -526,12 +504,13 @@
             if (dragging.dropIndex !== null) {
               await widgetContext.moveWidget?.(dragging.widgetId, dragging.dropIndex);
             }
+            dragging = null;
           } else {
-            await widgetContext.deleteWidget?.(dragging.widgetId, 'drag');
+            const { widgetId } = dragging;
+            dragging = null;
+            await widgetContext.deleteWidget?.(widgetId, 'drag');
           }
         }
-
-        dragging = null;
       },
       onDragCancel: () => {
         dragging = null;
@@ -675,6 +654,7 @@
         opacity: editMode || widgetGroupState === 'peeking' ? '100' : '0',
         transitionProperty: '[opacity]',
         transitionDuration: '200ms',
+        zIndex: '10',
         _groupHover: { opacity: '100' },
       })}
     >
