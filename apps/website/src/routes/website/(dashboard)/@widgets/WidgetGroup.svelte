@@ -457,9 +457,23 @@
     return result;
   });
 
+  let prevWidgetIds = $state<string[]>([]);
   $effect(() => {
     if ($query?.widgets) {
-      widgetContext.state.widgets = $query.widgets;
+      const widgetIds = $query.widgets.map((w) => w.id);
+      const widgetIdsStr = widgetIds.join(',');
+      const prevWidgetIdsStr = prevWidgetIds.join(',');
+
+      if (widgetIdsStr !== prevWidgetIdsStr) {
+        prevWidgetIds = widgetIds;
+        localWidgetOrder = widgetIds;
+
+        const widgets = $query.widgets;
+        // NOTE: $query.widgets 업데이트에 의한 추가/제거 시 animateFlip이 제대로 동작할 수 있도록 함
+        queueMicrotask(() => {
+          widgetContext.state.widgets = widgets;
+        });
+      }
     }
   });
 
@@ -467,18 +481,6 @@
     widgetContext.env.editMode = editMode;
     widgetContext.env.editor = editor;
     widgetContext.env.$post = _post;
-  });
-
-  let prevWidgetIds = $state<string[]>([]);
-  $effect(() => {
-    const widgetIds = $query?.widgets?.map((w) => w.id) ?? [];
-    const widgetIdsStr = widgetIds.join(',');
-    const prevWidgetIdsStr = prevWidgetIds.join(',');
-
-    if (widgetIdsStr !== prevWidgetIdsStr) {
-      prevWidgetIds = widgetIds;
-      localWidgetOrder = widgetIds;
-    }
   });
 
   $effect(() => {
