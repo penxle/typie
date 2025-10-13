@@ -37,8 +37,8 @@ export class WidgetContext {
     $post: undefined,
   });
 
-  createWidget?: (type: WidgetType, index?: number) => Promise<void>;
-  deleteWidget?: (id: string) => Promise<void>;
+  createWidget?: (type: WidgetType, via: string, index?: number) => Promise<void>;
+  deleteWidget?: (id: string, via: string) => Promise<void>;
   updateWidget?: (id: string, data: Record<string, unknown>) => Promise<void>;
   moveWidget?: (widgetId: string, targetIndex: number) => Promise<void>;
 }

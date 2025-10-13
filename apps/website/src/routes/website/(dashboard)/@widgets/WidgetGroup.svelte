@@ -7,6 +7,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { animateFlip, createDndHandler, handleDragScroll } from '@typie/ui/utils';
+  import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
@@ -263,7 +264,7 @@
 
   let dragging = $state<DraggingState | null>(null);
 
-  const updateDropPosition = async (e: PointerEvent) => {
+  const updateDropPosition = (e: PointerEvent) => {
     if (!dropZoneElement || !widgetListElement || !dragging) {
       return;
     }
@@ -307,7 +308,7 @@
 
   const widgetContext = setupWidgetContext();
 
-  widgetContext.createWidget = async (type: WidgetType, index?: number) => {
+  widgetContext.createWidget = async (type: WidgetType, via: string, index?: number) => {
     const widgets = widgetContext.state.widgets;
     let lowerOrder: string | undefined;
     let upperOrder: string | undefined;
@@ -330,11 +331,23 @@
       upperOrder,
     });
 
+    mixpanel.track('create_widget', {
+      widgetType: type,
+      via,
+    });
+
     cache.invalidate({ __typename: 'Query', field: 'widgets' });
   };
 
-  widgetContext.deleteWidget = async (id: string) => {
+  widgetContext.deleteWidget = async (id: string, via: string) => {
+    const widget = widgetContext.state.widgets.find((w) => w.id === id);
     await deleteWidgetMutation({ widgetId: id });
+
+    mixpanel.track('delete_widget', {
+      widgetType: widget?.name,
+      via,
+    });
+
     cache.invalidate({ __typename: 'Query', field: 'widgets' });
   };
 
@@ -349,6 +362,8 @@
     const widgets = widgetContext.state.widgets;
     const currentIndex = widgets.findIndex((w) => w.id === widgetId);
     if (currentIndex === -1) return;
+
+    const widget = widgets.find((w) => w.id === widgetId);
 
     const newOrder = widgets.map((w) => w.id);
     const [movedId] = newOrder.splice(currentIndex, 1);
@@ -385,6 +400,11 @@
         lowerOrder,
         upperOrder,
       });
+
+      mixpanel.track('move_widget', {
+        widgetType: widget?.name,
+      });
+
       cache.invalidate({ __typename: 'Query', field: 'widgets' });
     } catch (err) {
       localWidgetOrder = [];
@@ -505,7 +525,7 @@
               await widgetContext.moveWidget?.(dragging.widgetId, dragging.dropIndex);
             }
           } else {
-            await widgetContext.deleteWidget?.(dragging.widgetId);
+            await widgetContext.deleteWidget?.(dragging.widgetId, 'drag');
           }
         }
 
@@ -679,8 +699,14 @@
               borderRadius: 'full',
             })}
             onclick={() => {
-              app.preference.current.widgetHidden = !app.preference.current.widgetHidden;
-              if (app.preference.current.widgetHidden) {
+              const willBeHidden = !app.preference.current.widgetHidden;
+              app.preference.current.widgetHidden = willBeHidden;
+
+              mixpanel.track('toggle_widget_visibility', {
+                mode: willBeHidden ? 'auto_hide' : 'pin',
+              });
+
+              if (willBeHidden) {
                 editMode = false;
                 widgetGroupState = 'visible';
                 setTimeout(() => {
@@ -776,7 +802,7 @@
                     onclick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      widgetContext.deleteWidget?.(item.id);
+                      widgetContext.deleteWidget?.(item.id, 'button');
                     }}
                     onpointerdown={(e) => {
                       e.stopPropagation();
@@ -805,7 +831,7 @@
   }}
   onDragEnd={async () => {
     if (dragging && !dragging.isOutsideDropZone) {
-      await widgetContext.createWidget?.(dragging.widgetType, dragging.dropIndex ?? undefined);
+      await widgetContext.createWidget?.(dragging.widgetType, 'drag', dragging.dropIndex ?? undefined);
     }
     dragging = null;
   }}
