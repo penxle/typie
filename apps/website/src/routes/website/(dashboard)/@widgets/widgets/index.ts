@@ -3,10 +3,7 @@ import CharacterCountWidget from './CharacterCountWidget.svelte';
 import OnboardingWidget from './OnboardingWidget.svelte';
 import PostRelatedNoteWidget from './PostRelatedNoteWidget.svelte';
 import TimerWidget from './TimerWidget.svelte';
-import type { Editor } from '@tiptap/core';
-import type { Ref } from '@typie/ui/utils';
 import type { Component } from 'svelte';
-import type { Editor_Widget_CharacterCountChangeWidget_post, Editor_Widget_PostRelatedNoteWidget_post } from '$graphql';
 import type { WidgetType } from '../widget-context.svelte';
 
 export { default as CharacterCountChangeWidget } from './CharacterCountChangeWidget.svelte';
@@ -17,22 +14,17 @@ export { default as TimerWidget } from './TimerWidget.svelte';
 
 export type WidgetComponentProps = {
   widgetId: string;
-  palette?: boolean;
-  disabled?: boolean;
-  editMode?: boolean;
-  editor?: Ref<Editor>;
-  $post?: Editor_Widget_CharacterCountChangeWidget_post | Editor_Widget_PostRelatedNoteWidget_post;
   data?: Record<string, unknown>;
 };
 
 export type WidgetComponent = Component<WidgetComponentProps>;
 
-export const WIDGET_COMPONENTS: Record<WidgetType, WidgetComponent> = {
-  characterCount: CharacterCountWidget as WidgetComponent,
-  characterCountChange: CharacterCountChangeWidget as WidgetComponent,
-  postRelatedNote: PostRelatedNoteWidget as WidgetComponent,
-  onboarding: OnboardingWidget as WidgetComponent,
-  timer: TimerWidget as WidgetComponent,
+export const WIDGET_COMPONENTS: Record<WidgetType, Component<WidgetComponentProps>> = {
+  characterCount: CharacterCountWidget,
+  characterCountChange: CharacterCountChangeWidget,
+  postRelatedNote: PostRelatedNoteWidget,
+  onboarding: OnboardingWidget,
+  timer: TimerWidget,
 };
 
 export type WidgetCategory = 'writing';

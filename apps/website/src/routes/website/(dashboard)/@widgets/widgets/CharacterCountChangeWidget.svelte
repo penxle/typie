@@ -49,7 +49,7 @@
   const deletions = $derived($post ? $post.characterCountChange.deletions : 0);
 </script>
 
-<Widget collapsed={isCollapsed} icon={GoalIcon} title="오늘의 기록" {widgetId}>
+<Widget collapsed={isCollapsed} icon={GoalIcon} title="오늘의 기록">
   {#snippet headerActions()}
     <button
       class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}

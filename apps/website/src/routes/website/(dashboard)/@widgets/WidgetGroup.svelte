@@ -242,17 +242,28 @@
   let widgetListElement = $state<HTMLDivElement>();
   let scrollContainerElement = $state<HTMLDivElement>();
 
-  let dragging = $state<{
+  type BaseDragging = {
     dropIndex: number | null;
     isOutsideDropZone: boolean;
     cursorPosition: { x: number; y: number };
-    source: 'group' | 'palette';
-    widgetId: string;
     widgetType: WidgetType;
     widgetData: Record<string, unknown>;
-  } | null>(null);
+  };
 
-  const updateDropPosition = (e: PointerEvent) => {
+  type GroupDragging = BaseDragging & {
+    source: 'group';
+    widgetId: string;
+  };
+
+  type PaletteDragging = BaseDragging & {
+    source: 'palette';
+  };
+
+  type DraggingState = GroupDragging | PaletteDragging;
+
+  let dragging = $state<DraggingState | null>(null);
+
+  const updateDropPosition = async (e: PointerEvent) => {
     if (!dropZoneElement || !widgetListElement || !dragging) {
       return;
     }
@@ -352,7 +363,7 @@
         if (indexB === -1) return -1;
         return indexA - indexB;
       })
-      .filter((w) => dragging?.widgetId !== w.id);
+      .filter((w) => dragging?.source === 'group' && dragging.widgetId !== w.id);
 
     let lowerOrder: string | undefined;
     let upperOrder: string | undefined;
@@ -381,18 +392,49 @@
     }
   };
 
-  const localWidgets = $derived.by(() => {
-    const widgets = widgetContext.state.widgets.filter((w) => dragging?.widgetId !== w.id);
-    if (localWidgetOrder.length === 0) {
-      return widgets.toSorted((a, b) => a.order.localeCompare(b.order));
+  type RealWidget = {
+    type: 'real';
+    id: string;
+    name: string;
+    data: Record<string, unknown>;
+    order: string;
+  };
+
+  type PreviewWidget = {
+    type: 'preview';
+    id: string;
+    widgetType: WidgetType;
+    widgetData: Record<string, unknown>;
+  };
+
+  type WidgetItem = RealWidget | PreviewWidget;
+
+  const localWidgets = $derived.by((): WidgetItem[] => {
+    const widgets = widgetContext.state.widgets.filter((w) => !(dragging?.source === 'group' && dragging.widgetId === w.id));
+    const sorted =
+      localWidgetOrder.length === 0
+        ? widgets.toSorted((a, b) => a.order.localeCompare(b.order))
+        : [...widgets].toSorted((a, b) => {
+            const indexA = localWidgetOrder.indexOf(a.id);
+            const indexB = localWidgetOrder.indexOf(b.id);
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+          });
+
+    const result: WidgetItem[] = sorted.map((w) => ({ type: 'real' as const, ...w }));
+
+    if (dragging?.widgetType && dragging.dropIndex !== null) {
+      const previewWidget: PreviewWidget = {
+        type: 'preview',
+        id: 'drop-preview',
+        widgetType: dragging.widgetType,
+        widgetData: dragging.widgetData,
+      };
+      result.splice(dragging.dropIndex, 0, previewWidget);
     }
-    return [...widgets].toSorted((a, b) => {
-      const indexA = localWidgetOrder.indexOf(a.id);
-      const indexB = localWidgetOrder.indexOf(b.id);
-      if (indexA === -1) return 1;
-      if (indexB === -1) return -1;
-      return indexA - indexB;
-    });
+
+    return result;
   });
 
   $effect(() => {
@@ -456,7 +498,7 @@
         updateDropPosition(e);
       },
       onDragEnd: async (e) => {
-        if (dragging && dropZoneElement) {
+        if (dragging && dragging.source === 'group' && dropZoneElement) {
           const rect = dropZoneElement.getBoundingClientRect();
           if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
             if (dragging.dropIndex !== null) {
@@ -485,11 +527,10 @@
   });
 
   $effect.pre(() => {
-    void dragging?.dropIndex;
     void localWidgets;
     if (!widgetListElement) return;
 
-    animateFlip('[data-widget-id]', 'widgetId', widgetListElement);
+    animateFlip('[data-widget-flip-animation-id]', 'widgetFlipAnimationId', widgetListElement);
   });
 
   $effect(() => {
@@ -698,17 +739,21 @@
             </p>
           </div>
         {:else}
-          {#each localWidgets as widget, index (widget.id)}
-            {@const WidgetComponent = WIDGET_COMPONENTS[widget.name as WidgetType]}
-            {@const isDragging = dragging?.source === 'group' && dragging?.widgetId === widget.id}
-            {#if dragging?.dropIndex === index && dragging?.widgetType}
-              {@const DraggingWidgetComponent = WIDGET_COMPONENTS[dragging.widgetType]}
-              <div style:opacity="0.5">
-                <DraggingWidgetComponent data={dragging.widgetData} widgetId="drop-preview" />
+          <!-- NOTE: id와 index를 조합한 키를 쓰지 않으면 맨 아래에서 드래그할 때 dnd가 버벅거리는 경우 있음 -->
+          {#each localWidgets as item, index (`${item.id}-${index}`)}
+            {#if item.type === 'preview'}
+              {@const WidgetComponent = WIDGET_COMPONENTS[item.widgetType]}
+              <div class={css({ position: 'relative', opacity: '50' })} data-widget-flip-animation-id={item.widgetType}>
+                <WidgetComponent data={item.widgetData} widgetId="drop-preview" />
               </div>
-            {/if}
-            {#if !isDragging}
-              <div class={cx('group', css({ position: 'relative' }))} data-widget-id={widget.id} role="listitem">
+            {:else}
+              {@const WidgetComponent = WIDGET_COMPONENTS[item.name as WidgetType]}
+              <div
+                class={cx('group', css({ position: 'relative' }))}
+                data-widget-flip-animation-id={item.name}
+                data-widget-id={item.id}
+                role="listitem"
+              >
                 {#if editMode}
                   <button
                     class={center({
@@ -731,7 +776,7 @@
                     onclick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      widgetContext.deleteWidget?.(widget.id);
+                      widgetContext.deleteWidget?.(item.id);
                     }}
                     onpointerdown={(e) => {
                       e.stopPropagation();
@@ -741,16 +786,10 @@
                     <Icon icon={MinusIcon} size={14} />
                   </button>
                 {/if}
-                <WidgetComponent data={widget.data} widgetId={widget.id} />
+                <WidgetComponent data={item.data} widgetId={item.id} />
               </div>
             {/if}
           {/each}
-          {#if dragging?.dropIndex === localWidgets.length && dragging.widgetType}
-            {@const DraggingWidgetComponent = WIDGET_COMPONENTS[dragging.widgetType]}
-            <div style:opacity="0.5">
-              <DraggingWidgetComponent data={dragging.widgetData} widgetId="drop-preview" />
-            </div>
-          {/if}
         {/if}
       </div>
     </div>
@@ -759,7 +798,7 @@
 
 <WidgetPalette
   $post={_post}
-  addedWidgets={localWidgets.map((w) => w.name as WidgetType)}
+  addedWidgets={localWidgets.filter((w) => w.type === 'real').map((w) => w.name as WidgetType)}
   {editor}
   onDragCancel={() => {
     dragging = null;
@@ -779,7 +818,6 @@
       isOutsideDropZone: true,
       cursorPosition: { x: e.clientX, y: e.clientY },
       source: 'palette',
-      widgetId: '',
       widgetType,
       widgetData: {},
     };

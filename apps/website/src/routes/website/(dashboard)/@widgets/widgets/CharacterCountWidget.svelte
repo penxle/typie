@@ -91,7 +91,7 @@
   });
 </script>
 
-<Widget collapsed={isCollapsed} icon={TypeIcon} title="글자 수" {widgetId}>
+<Widget collapsed={isCollapsed} icon={TypeIcon} title="글자 수">
   {#snippet headerActions()}
     <button
       class={flex({ alignItems: 'center', gap: '2px', color: 'text.subtle', cursor: 'pointer' })}
