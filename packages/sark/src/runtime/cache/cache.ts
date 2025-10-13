@@ -26,6 +26,7 @@ export class Cache {
   #dependencies = new Map<DependencyKey, Set<QueryKey>>();
   #subjects = new Map<QueryKey, Subject<QueryResult>>();
   #lastResultHashes = new Map<QueryKey, string>();
+  #refetchPromises = new Map<QueryKey, { resolve: () => void; reject: (err: Error) => void }[]>();
   id = nanoid();
 
   readQuery<T extends $ArtifactSchema>(schema: ArtifactSchema<T>, variables: Variables): T['$output'] | null {
@@ -38,57 +39,81 @@ export class Cache {
   }
 
   writeQuery<T extends $ArtifactSchema>(schema: ArtifactSchema<T>, variables: Variables, data: T['$output']) {
-    const normalized = normalize(schema, variables, data as Data);
-
     const queryKey = makeQueryKey(schema, variables);
-    const fieldUpdates = new Map<EntityKey, Set<FieldKey>>();
 
-    let isStorageChanged = false;
+    try {
+      const normalized = normalize(schema, variables, data as Data);
 
-    for (const [key, value] of entries(normalized)) {
-      if (key === RootFieldKey) {
-        this.#storage[RootFieldKey] = deepMerge(this.#storage[RootFieldKey], value, { arrayStrategy: 'replace' });
-        continue;
-      }
+      const fieldUpdates = new Map<EntityKey, Set<FieldKey>>();
 
-      if (this.#storage[key]) {
-        const updatedFields = new Set<FieldKey>(Object.keys(value).filter((field) => this.#storage[key][field] !== value[field]));
-        if (updatedFields.size > 0) {
-          fieldUpdates.set(key, updatedFields);
-          isStorageChanged = true;
+      let isStorageChanged = false;
+
+      for (const [key, value] of entries(normalized)) {
+        if (key === RootFieldKey) {
+          this.#storage[RootFieldKey] = deepMerge(this.#storage[RootFieldKey], value, { arrayStrategy: 'replace' });
+          continue;
         }
 
-        this.#storage[key] = deepMerge(this.#storage[key], value, { arrayStrategy: 'replace' });
-      } else {
-        this.#storage[key] = value;
-        fieldUpdates.set(key, new Set(Object.keys(value)));
-        isStorageChanged = true;
+        if (this.#storage[key]) {
+          const updatedFields = new Set<FieldKey>(Object.keys(value).filter((field) => this.#storage[key][field] !== value[field]));
+          if (updatedFields.size > 0) {
+            fieldUpdates.set(key, updatedFields);
+            isStorageChanged = true;
+          }
+
+          this.#storage[key] = deepMerge(this.#storage[key], value, { arrayStrategy: 'replace' });
+        } else {
+          this.#storage[key] = value;
+          fieldUpdates.set(key, new Set(Object.keys(value)));
+          isStorageChanged = true;
+        }
       }
-    }
 
-    if (isStorageChanged) {
-      this.#refreshAffectedQueries(fieldUpdates, queryKey);
-    }
+      if (isStorageChanged) {
+        this.#refreshAffectedQueries(fieldUpdates, queryKey);
+      }
 
-    if (this.#queries.has(queryKey)) {
-      const query = this.#queries.get(queryKey);
-      query?.paths.clear();
-    } else {
-      this.#queries.set(queryKey, { paths: new Set(), schema, variables });
-    }
+      if (this.#queries.has(queryKey)) {
+        const query = this.#queries.get(queryKey);
+        query?.paths.clear();
+      } else {
+        this.#queries.set(queryKey, { paths: new Set(), schema, variables });
+      }
 
-    const result = denormalize(schema, variables, this.#storage, (storageKey, fieldKey) => {
-      this.#trackDependency(queryKey, storageKey, fieldKey);
-    });
+      const result = denormalize(schema, variables, this.#storage, (storageKey, fieldKey) => {
+        this.#trackDependency(queryKey, storageKey, fieldKey);
+      });
 
-    const resultHash = rapidhash(stringify(result.data)).toString();
-    const lastHash = this.#lastResultHashes.get(queryKey);
+      const resultHash = rapidhash(stringify(result.data)).toString();
+      const lastHash = this.#lastResultHashes.get(queryKey);
 
-    if (lastHash !== resultHash) {
-      this.#lastResultHashes.set(queryKey, resultHash);
+      if (lastHash !== resultHash) {
+        this.#lastResultHashes.set(queryKey, resultHash);
 
-      const subject = this.#retriveSubject(queryKey);
-      subject.next(result);
+        const subject = this.#retriveSubject(queryKey);
+        subject.next(result);
+      }
+
+      // Resolve refetch promises if data is complete
+      if (!result.partial) {
+        const promises = this.#refetchPromises.get(queryKey);
+        if (promises && promises.length > 0) {
+          for (const { resolve } of promises) {
+            resolve();
+          }
+          this.#refetchPromises.delete(queryKey);
+        }
+      }
+    } catch (err) {
+      // Reject waiting refetch promises on error
+      const promises = this.#refetchPromises.get(queryKey);
+      if (promises && promises.length > 0) {
+        for (const { reject } of promises) {
+          reject(err as Error);
+        }
+        this.#refetchPromises.delete(queryKey);
+      }
+      throw err;
     }
   }
 
@@ -119,20 +144,27 @@ export class Cache {
     });
   }
 
-  invalidate(storageKey: StorageKey, fieldKey?: FieldKey) {
+  invalidate(storageKey: StorageKey, fieldKey?: FieldKey): Set<QueryKey> {
+    const affectedQueries = new Set<QueryKey>();
+
     if (fieldKey && this.#storage[storageKey] && typeof this.#storage[storageKey] === 'object') {
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete this.#storage[storageKey][fieldKey];
 
       if (storageKey === RootFieldKey) {
         const dependencyKey: DependencyKey = `Query:${fieldKey}`;
-        const affectedQueries = this.#dependencies.get(dependencyKey) ?? new Set();
+        const queries = this.#dependencies.get(dependencyKey) ?? new Set();
 
-        for (const queryKey of affectedQueries) {
+        for (const queryKey of queries) {
+          affectedQueries.add(queryKey);
           this.#refreshQuery(queryKey);
         }
       } else {
         const fieldUpdates = new Map<EntityKey, Set<FieldKey>>([[storageKey as EntityKey, new Set([fieldKey])]]);
+        const queries = this.#getAffectedQueries(fieldUpdates);
+        for (const queryKey of queries) {
+          affectedQueries.add(queryKey);
+        }
         this.#refreshAffectedQueries(fieldUpdates);
       }
     } else if (!fieldKey) {
@@ -143,11 +175,10 @@ export class Cache {
         this.#storage[RootFieldKey] = {};
 
         for (const queryKey of this.#queries.keys()) {
+          affectedQueries.add(queryKey);
           this.#refreshQuery(queryKey);
         }
       } else {
-        const affectedQueries = new Set<QueryKey>();
-
         for (const [dependencyKey, queryKeys] of this.#dependencies.entries()) {
           if (dependencyKey.startsWith(`${storageKey}:`)) {
             for (const queryKey of queryKeys) {
@@ -161,6 +192,27 @@ export class Cache {
         }
       }
     }
+
+    return affectedQueries;
+  }
+
+  async waitForRefetches(queryKeys: Set<QueryKey>): Promise<void> {
+    if (queryKeys.size === 0) {
+      return;
+    }
+
+    const promises: Promise<void>[] = [];
+
+    for (const queryKey of queryKeys) {
+      const promise = new Promise<void>((resolve, reject) => {
+        const existing = this.#refetchPromises.get(queryKey) ?? [];
+        existing.push({ resolve, reject });
+        this.#refetchPromises.set(queryKey, existing);
+      });
+      promises.push(promise);
+    }
+
+    await Promise.all(promises);
   }
 
   clear() {
@@ -277,7 +329,7 @@ export class Cache {
     }
   }
 
-  #refreshAffectedQueries(fieldUpdates: Map<EntityKey, Set<FieldKey>>, excludeKey?: QueryKey) {
+  #getAffectedQueries(fieldUpdates: Map<EntityKey, Set<FieldKey>>, excludeKey?: QueryKey): Set<QueryKey> {
     const queryKeys = new Set<QueryKey>();
 
     for (const [entity, fields] of fieldUpdates.entries()) {
@@ -297,6 +349,12 @@ export class Cache {
         }
       }
     }
+
+    return queryKeys;
+  }
+
+  #refreshAffectedQueries(fieldUpdates: Map<EntityKey, Set<FieldKey>>, excludeKey?: QueryKey) {
+    const queryKeys = this.#getAffectedQueries(fieldUpdates, excludeKey);
 
     for (const queryKey of queryKeys) {
       this.#refreshQuery(queryKey);

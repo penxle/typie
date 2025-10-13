@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { pipe, subscribe } from 'wonka';
 import { createCache } from './cache';
 import { makeArtifactSchema } from './tests/utils';
+import type { QueryKey } from './types';
 
 describe('Cache', () => {
   test('createCache는 빈 캐시를 생성한다', () => {
@@ -2025,5 +2026,141 @@ describe('Cache', () => {
 
     const finalResult = cache.readQuery(schema, {});
     expect(finalResult).toEqual(actualData);
+  });
+
+  test('waitForRefetches는 영향받은 쿼리의 refetch 완료를 대기한다', async () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            name
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Initial Name',
+      },
+    };
+
+    cache.writeQuery(schema, {}, initialData);
+
+    const affectedQueries = cache.invalidate('A:1');
+
+    expect(affectedQueries.size).toBeGreaterThan(0);
+
+    const refetchPromise = cache.waitForRefetches(affectedQueries);
+
+    let resolved = false;
+    void refetchPromise.then(() => {
+      resolved = true;
+    });
+
+    // 아직 refetch가 완료되지 않았으므로 resolve되지 않아야 함
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(resolved).toBe(false);
+
+    // refetch 완료 시뮬레이션
+    const updatedData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Updated Name',
+      },
+    };
+    cache.writeQuery(schema, {}, updatedData);
+
+    // refetch 완료 후 resolve되어야 함
+    await refetchPromise;
+    expect(resolved).toBe(true);
+  });
+
+  test('waitForRefetches는 여러 쿼리의 refetch 완료를 대기한다', async () => {
+    const cache = createCache();
+    const schema1 = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query Query1 {
+          get(id: "1") {
+            __typename
+            id
+            name
+          }
+        }
+      `,
+    });
+
+    const schema2 = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query Query2 {
+          get(id: "1") {
+            __typename
+            id
+            ... on A {
+              num
+            }
+          }
+        }
+      `,
+    });
+
+    const initialData1 = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Entity 1',
+      },
+    };
+
+    const initialData2 = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        num: 42,
+      },
+    };
+
+    cache.writeQuery(schema1, {}, initialData1);
+    cache.writeQuery(schema2, {}, initialData2);
+
+    const affectedQueries = cache.invalidate('A:1');
+
+    expect(affectedQueries.size).toBeGreaterThan(1);
+
+    const refetchPromise = cache.waitForRefetches(affectedQueries);
+
+    let resolved = false;
+    void refetchPromise.then(() => {
+      resolved = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(resolved).toBe(false);
+
+    // 첫 번째 쿼리만 refetch
+    cache.writeQuery(schema1, {}, initialData1);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(resolved).toBe(false);
+
+    // 두 번째 쿼리도 refetch
+    cache.writeQuery(schema2, {}, initialData2);
+
+    // 모든 refetch 완료 후 resolve
+    await refetchPromise;
+    expect(resolved).toBe(true);
+  });
+
+  test('waitForRefetches는 빈 Set으로 호출 시 즉시 resolve한다', async () => {
+    const cache = createCache();
+    const emptySet = new Set<QueryKey>();
+
+    await expect(cache.waitForRefetches(emptySet)).resolves.toBeUndefined();
   });
 });
