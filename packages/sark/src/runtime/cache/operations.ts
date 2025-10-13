@@ -1,7 +1,7 @@
 import { createCache } from './cache';
 import { RootFieldKey } from './types';
 import { makeFieldKeyWithArgs } from './utils';
-import type { StorageKey } from './types';
+import type { QueryKey, StorageKey } from './types';
 
 const cache = createCache();
 
@@ -12,24 +12,36 @@ type InvalidateTarget =
   | { __typename: 'Query'; field: string; args?: Record<string, unknown> };
 
 export const cacheOperations = {
-  invalidate(...targets: InvalidateTarget[]) {
+  async invalidate(...targets: InvalidateTarget[]): Promise<void> {
+    const allAffectedQueries = new Set<QueryKey>();
+
     for (const target of targets) {
+      let affectedQueries: Set<QueryKey>;
+
       if (target.__typename === 'Query') {
         if ('field' in target) {
           const fieldKey = makeFieldKeyWithArgs(target.field, target.args);
-          cache.invalidate(RootFieldKey, fieldKey);
+          affectedQueries = cache.invalidate(RootFieldKey, fieldKey);
         } else {
-          cache.invalidate(RootFieldKey);
+          affectedQueries = cache.invalidate(RootFieldKey);
         }
       } else if ('field' in target && 'id' in target) {
         const storageKey = `${target.__typename}:${target.id}` as StorageKey;
         const fieldKey = makeFieldKeyWithArgs(target.field, target.args);
-        cache.invalidate(storageKey, fieldKey);
+        affectedQueries = cache.invalidate(storageKey, fieldKey);
       } else if ('id' in target) {
         const storageKey = `${target.__typename}:${target.id}` as StorageKey;
-        cache.invalidate(storageKey);
+        affectedQueries = cache.invalidate(storageKey);
+      } else {
+        affectedQueries = new Set();
+      }
+
+      for (const queryKey of affectedQueries) {
+        allAffectedQueries.add(queryKey);
       }
     }
+
+    await cache.waitForRefetches(allAffectedQueries);
   },
 
   clear() {
