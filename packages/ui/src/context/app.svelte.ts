@@ -7,7 +7,7 @@ export type AppPreference = {
   sidebarHidden: boolean;
   sidebarTrigger: 'hover' | 'click';
   panelExpandedByViewId: Record<string, boolean>;
-  panelTabByViewId: Record<string, 'anchors' | 'spellcheck' | 'timeline' | 'settings'>;
+  panelTabByViewId: Record<string, 'info' | 'note' | 'anchors' | 'spellcheck' | 'timeline' | 'settings'>;
   hasOpenedPanelOnce: boolean;
 
   panelWidth: number;

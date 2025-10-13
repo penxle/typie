@@ -6,7 +6,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions, tooltip } from '@typie/ui/actions';
-  import { HorizontalDivider, Icon, RingSpinner } from '@typie/ui/components';
+  import { Icon, RingSpinner } from '@typie/ui/components';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { onMount, tick, untrack } from 'svelte';
@@ -294,46 +294,55 @@
     height: 'full',
   })}
 >
-  <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
-    <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-      <div class={flex({ height: '40px', alignItems: 'center', gap: '6px' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>맞춤법 검사</div>
-        {#if hasChecked && !checkFailed && errors.length > 0}
-          <div
-            class={css({
-              borderRadius: '4px',
-              paddingX: '6px',
-              paddingY: '2px',
-              fontSize: '11px',
-              fontWeight: 'semibold',
-              color: 'text.danger',
-              backgroundColor: 'accent.danger.subtle',
-            })}
-          >
-            {errors.length}
-          </div>
-        {/if}
-      </div>
-
-      {#if !inflight && hasChecked}
-        <button
+  <div
+    class={flex({
+      flexShrink: '0',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      height: '41px',
+      paddingX: '20px',
+      fontSize: '13px',
+      fontWeight: 'semibold',
+      color: 'text.subtle',
+      borderBottomWidth: '1px',
+      borderColor: 'surface.muted',
+    })}
+  >
+    <div class={flex({ alignItems: 'center', gap: '6px' })}>
+      맞춤법 검사
+      {#if hasChecked && !checkFailed && errors.length > 0}
+        <div
           class={css({
-            fontSize: '13px',
-            fontWeight: 'medium',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle' },
+            borderRadius: '4px',
+            paddingX: '6px',
+            paddingY: '2px',
+            fontSize: '11px',
+            fontWeight: 'semibold',
+            color: 'text.danger',
+            backgroundColor: 'accent.danger.subtle',
           })}
-          onclick={runSpellcheck}
-          type="button"
         >
-          다시 검사
-        </button>
+          {errors.length}
+        </div>
       {/if}
     </div>
-  </div>
 
-  <HorizontalDivider color="secondary" />
+    {#if !inflight && hasChecked}
+      <button
+        class={css({
+          fontSize: '13px',
+          fontWeight: 'medium',
+          color: 'text.faint',
+          transition: 'common',
+          _hover: { color: 'text.subtle' },
+        })}
+        onclick={runSpellcheck}
+        type="button"
+      >
+        다시 검사
+      </button>
+    {/if}
+  </div>
 
   {#if inflight}
     <div class={flex({ justifyContent: 'center', alignItems: 'center', paddingY: '40px' })}>

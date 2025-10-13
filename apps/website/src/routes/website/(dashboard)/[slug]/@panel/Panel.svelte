@@ -7,6 +7,8 @@
   import { getViewContext } from '../@split-view/context.svelte';
   import PanelAnchors from './PanelAnchors.svelte';
   import PanelBodySettings from './PanelBodySettings.svelte';
+  import PanelInfo from './PanelInfo.svelte';
+  import PanelNote from './PanelNote.svelte';
   import PanelSpellcheck from './PanelSpellcheck.svelte';
   import PanelTimeline from './PanelTimeline.svelte';
   import type { Editor } from '@tiptap/core';
@@ -34,6 +36,7 @@
       fragment Editor_Panel_user on User {
         id
 
+        ...Editor_Panel_PanelInfo_user
         ...Editor_Panel_PanelSpellcheck_user
       }
     `),
@@ -45,7 +48,14 @@
       fragment Editor_Panel_post on Post {
         id
 
-        ...Editor_PanelTimeline_post
+        entity {
+          id
+
+          ...Editor_Panel_PanelNote_entity
+        }
+
+        ...Editor_Panel_PanelInfo_post
+        ...Editor_Panel_PanelTimeline_post
       }
     `),
   );
@@ -143,6 +153,14 @@
   ></div>
 
   {#if isExpanded}
+    {#if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
+      <PanelInfo {$post} {$user} {editor} />
+    {/if}
+
+    {#if app.preference.current.panelTabByViewId[splitViewId] === 'note'}
+      <PanelNote $entity={$post.entity} />
+    {/if}
+
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'anchors'}
       <PanelAnchors {doc} {editor} />
     {/if}
