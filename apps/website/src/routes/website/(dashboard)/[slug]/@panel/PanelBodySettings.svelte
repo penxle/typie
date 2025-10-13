@@ -136,7 +136,7 @@
   <div
     class={flex({
       flexShrink: '0',
-      height: '40px',
+      height: '41px',
       alignItems: 'center',
       paddingX: '20px',
       fontSize: '13px',

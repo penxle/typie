@@ -28,10 +28,10 @@
   import type { PageLayout, Ref } from '@typie/ui/utils';
   import type { Action } from 'svelte/action';
   import type { PointerEventHandler } from 'svelte/elements';
-  import type { Editor_PanelTimeline_post } from '$graphql';
+  import type { Editor_Panel_PanelTimeline_post } from '$graphql';
 
   type Props = {
-    $post: Editor_PanelTimeline_post;
+    $post: Editor_Panel_PanelTimeline_post;
     editor?: Ref<Editor>;
     viewEditor?: Ref<Editor>;
     doc: Y.Doc;
@@ -43,7 +43,7 @@
   const post = fragment(
     _post,
     graphql(`
-      fragment Editor_PanelTimeline_post on Post {
+      fragment Editor_Panel_PanelTimeline_post on Post {
         id
 
         entity {
@@ -360,8 +360,8 @@
   <div
     class={flex({
       flexShrink: '0',
-      height: '40px',
       alignItems: 'center',
+      height: '41px',
       paddingX: '20px',
       fontSize: '13px',
       fontWeight: 'semibold',
