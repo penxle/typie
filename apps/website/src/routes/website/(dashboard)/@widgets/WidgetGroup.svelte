@@ -1049,13 +1049,15 @@
   {#each freePositionWidgets as widget (widget.id)}
     {@const WidgetComponent = WIDGET_COMPONENTS[widget.name as WidgetType]}
     {@const position = widget.data.position as { top?: string; left?: string; bottom?: string; right?: string } | undefined}
-    {@const isDragging = dragging?.source === 'freePosition' && dragging.widgetId === widget.id && !dragging.dropped}
-    {#if position && !isDragging}
+    {@const isDragging = dragging?.source === 'freePosition' && dragging.widgetId === widget.id}
+    {@const isDropped = isDragging && dragging?.dropped}
+    {@const droppedPosition = dragging?.calculatedPosition}
+    {#if position && (!isDragging || isDropped)}
       <div
-        style:top={position.top}
-        style:left={position.left}
-        style:bottom={position.bottom}
-        style:right={position.right}
+        style:top={isDropped ? droppedPosition?.top : position.top}
+        style:left={isDropped ? droppedPosition?.left : position.left}
+        style:bottom={isDropped ? droppedPosition?.bottom : position.bottom}
+        style:right={isDropped ? droppedPosition?.right : position.right}
         class={cx(
           'group',
           css({
