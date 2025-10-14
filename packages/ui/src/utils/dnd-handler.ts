@@ -94,19 +94,25 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   let hoveredTarget: HTMLElement | null = null;
 
   const updateCursor = (e: PointerEvent | null) => {
-    const cursor = dragging ? 'grabbing' : 'grab';
+    if (dragging) {
+      document.body.style.cursor = 'grabbing';
+      return;
+    }
+
+    document.body.style.cursor = '';
+
     if (getDragTarget) {
       const target = e ? getDragTarget(e) : null;
 
       if (hoveredTarget && hoveredTarget !== target && hoveredTarget.isConnected) {
         hoveredTarget.style.cursor = '';
       }
-      if (target && target.isConnected) {
-        target.style.cursor = cursor;
+      if (target?.isConnected) {
+        target.style.cursor = 'grab';
       }
       hoveredTarget = target;
     } else {
-      node.style.cursor = cursor;
+      node.style.cursor = 'grab';
     }
   };
 
