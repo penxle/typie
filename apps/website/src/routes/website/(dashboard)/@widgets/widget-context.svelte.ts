@@ -5,6 +5,13 @@ import type { Editor_Widget_CharacterCountChangeWidget_post, Editor_Widget_PostR
 
 export type WidgetType = 'characterCount' | 'characterCountChange' | 'postRelatedNote' | 'onboarding' | 'timer';
 
+export type WidgetPosition = {
+  top?: string;
+  left?: string;
+  bottom?: string;
+  right?: string;
+};
+
 type WidgetEnvironment = {
   editMode: boolean;
   palette: boolean;
@@ -25,7 +32,8 @@ export class WidgetContext {
   createWidget?: (type: WidgetType, via: string, index?: number) => Promise<void>;
   deleteWidget?: (id: string, via: string) => Promise<void>;
   updateWidget?: (id: string, data: Record<string, unknown>) => Promise<void>;
-  moveWidget?: (widgetId: string, targetIndex: number) => Promise<void>;
+  moveWidgetInGroup?: (widgetId: string, targetIndex: number) => Promise<void>;
+  moveWidgetToFreePosition?: (widgetId: string, position: WidgetPosition) => Promise<void>;
 }
 
 export const setupWidgetContext = () => {

@@ -243,7 +243,7 @@
     class={css({
       position: 'absolute',
       inset: '0',
-      zIndex: 'underPanel',
+      zIndex: 'overEditor',
     })}
   ></div>
 </button>

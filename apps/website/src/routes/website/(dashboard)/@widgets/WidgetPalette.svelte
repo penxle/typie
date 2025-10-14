@@ -17,7 +17,7 @@
     editor?: Ref<Editor>;
     $post?: Editor_Widget_CharacterCountChangeWidget_post & Editor_Widget_PostRelatedNoteWidget_post;
     addedWidgets?: WidgetType[];
-    onDragStart: (e: PointerEvent, widgetType: WidgetType) => void;
+    onDragStart: (e: PointerEvent, widgetType: WidgetType, target: HTMLElement) => void;
     onDragMove: (e: PointerEvent) => void;
     onDragEnd: (e: PointerEvent) => void;
     onDragCancel: () => void;
@@ -42,7 +42,8 @@
   widgetContext.createWidget = parentContext.createWidget;
   widgetContext.deleteWidget = parentContext.deleteWidget;
   widgetContext.updateWidget = parentContext.updateWidget;
-  widgetContext.moveWidget = parentContext.moveWidget;
+  widgetContext.moveWidgetInGroup = parentContext.moveWidgetInGroup;
+  widgetContext.moveWidgetToFreePosition = parentContext.moveWidgetToFreePosition;
 
   $effect(() => {
     widgetContext.env.editor = editor;
@@ -121,8 +122,8 @@
                 use:dragPaletteWidget={{
                   widgetType: widget.type,
                   isAdded,
-                  onDragStart: (e) => {
-                    onDragStart?.(e, widget.type);
+                  onDragStart: (e, target) => {
+                    onDragStart?.(e, widget.type, target);
                   },
                   onDragMove,
                   onDragEnd,
