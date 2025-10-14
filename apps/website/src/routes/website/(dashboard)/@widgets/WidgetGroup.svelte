@@ -8,11 +8,10 @@
   import { Tip } from '@typie/ui/notification';
   import { animateFlip, createDndHandler, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { untrack } from 'svelte';
-  import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
-  import ChevronsRightIcon from '~icons/lucide/chevrons-right';
   import LayoutDashboardIcon from '~icons/lucide/layout-dashboard';
   import MinusIcon from '~icons/lucide/minus';
+  import ShapesIcon from '~icons/lucide/shapes';
+  import XIcon from '~icons/lucide/x';
   import { fragment, graphql } from '$graphql';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
   import { getEditorRegistry } from '../[slug]/@split-view/editor-registry.svelte';
@@ -122,122 +121,16 @@
 
   let editMode = $state(false);
   let isHidden = $derived.by(() => app.preference.current.widgetHidden);
-  let hideTimeout = $state<NodeJS.Timeout | null>(null);
-  let showTimeout = $state<NodeJS.Timeout | null>(null);
-  let hovered = $state(false);
   let transitioning = $state(false);
   let altPressed = $state(false);
-
-  type WidgetGroupState = 'hidden' | 'peeking' | 'visible';
-  let widgetGroupState = $state<WidgetGroupState>('hidden');
 
   const transformRight = $derived.by(() => {
     if (!isHidden || editMode) {
       return 'translateX(0)';
     }
 
-    switch (widgetGroupState) {
-      case 'hidden': {
-        return 'translateX(calc(100% + 24px))';
-      }
-      case 'peeking': {
-        return 'translateX(calc(100% + 24px))';
-      }
-      case 'visible': {
-        return 'translateX(0)';
-      }
-      default: {
-        return 'translateX(calc(100% + 24px))';
-      }
-    }
+    return 'translateX(calc(100% + 24px))';
   });
-
-  $effect(() => {
-    if (!isHidden) return;
-
-    if (!hovered) {
-      untrack(() => {
-        if (hideTimeout) {
-          clearTimeout(hideTimeout);
-        }
-
-        hideTimeout = setTimeout(() => {
-          widgetGroupState = 'hidden';
-          hideTimeout = null;
-        }, 300);
-      });
-    }
-
-    return () => {
-      if (showTimeout) {
-        clearTimeout(showTimeout);
-        showTimeout = null;
-      }
-
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-    };
-  });
-
-  const handleMouseEnter = () => {
-    if (transitioning) return;
-
-    hovered = true;
-
-    if (isHidden) {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-
-      if (showTimeout) {
-        clearTimeout(showTimeout);
-        showTimeout = null;
-      }
-
-      widgetGroupState = 'visible';
-    }
-  };
-
-  const handleMouseLeave = () => {
-    hovered = false;
-
-    if (!isHidden) return;
-
-    if (showTimeout) {
-      clearTimeout(showTimeout);
-      showTimeout = null;
-    }
-
-    if (hideTimeout) {
-      clearTimeout(hideTimeout);
-    }
-
-    hideTimeout = setTimeout(() => {
-      widgetGroupState = 'hidden';
-      hideTimeout = null;
-    }, 300);
-  };
-
-  const handleTriggerMouseEnter = () => {
-    hovered = true;
-
-    if (isHidden) {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-
-      if (!showTimeout) {
-        showTimeout = setTimeout(() => {
-          widgetGroupState = 'visible';
-          showTimeout = null;
-        }, 150);
-      }
-    }
-  };
 
   let dropZoneElement = $state<HTMLDivElement>();
   let widgetListElement = $state<HTMLDivElement>();
@@ -541,9 +434,8 @@
   });
 
   $effect(() => {
-    if (widgetGroupState === 'hidden' && isHidden) {
+    if (isHidden) {
       Tip.show('widget.hide', '`Alt` 키를 눌러 위젯을 잠시 투명하게 만들 수 있어요.');
-      Tip.show('widget.show', '커서를 화면 오른쪽 아래로 이동해 위젯을 다시 띄울 수 있어요.');
     }
   });
 </script>
@@ -632,26 +524,21 @@
     bind:this={scrollContainerElement}
     class={flex({
       flexDirection: 'column',
-      backgroundColor: widgetGroupState === 'peeking' ? 'surface.dark/20' : 'transparent',
-      borderWidth: widgetGroupState === 'peeking' ? '1px' : '0',
-      borderColor: 'border.default',
+      backgroundColor: 'transparent',
       borderRadius: '12px',
-      transition: '[background-color 0.2s ease-in-out]',
       overflowY: 'auto',
       paddingBottom: '24px',
       scrollbarWidth: 'none',
       paddingTop: '8px',
       pointerEvents: 'auto',
     })}
-    onmouseenter={handleMouseEnter}
-    onmouseleave={handleMouseLeave}
     role="region"
   >
     <div
       class={flex({
         position: 'relative',
         justifyContent: 'center',
-        opacity: editMode || widgetGroupState === 'peeking' ? '100' : '0',
+        opacity: editMode ? '100' : '0',
         transitionProperty: '[opacity]',
         transitionDuration: '200ms',
         zIndex: '10',
@@ -674,34 +561,25 @@
         {editMode ? '완료' : '위젯 편집'}
       </Button>
       <div class={css({ position: 'absolute', right: '8px' })}>
-        <div use:tooltip={{ message: isHidden ? '위젯 고정' : '위젯 자동 숨김' }}>
+        <div use:tooltip={{ message: '위젯 숨기기' }}>
           <Button
             style={css.raw({
               padding: '4px',
               borderRadius: 'full',
             })}
             onclick={() => {
-              const willBeHidden = !app.preference.current.widgetHidden;
-              app.preference.current.widgetHidden = willBeHidden;
+              app.preference.current.widgetHidden = true;
 
               mixpanel.track('toggle_widget_visibility', {
-                mode: willBeHidden ? 'auto_hide' : 'pin',
+                mode: 'hide',
               });
 
-              if (willBeHidden) {
-                editMode = false;
-                widgetGroupState = 'visible';
-                setTimeout(() => {
-                  if (!hovered) {
-                    widgetGroupState = 'hidden';
-                  }
-                }, 300);
-              }
+              editMode = false;
             }}
             size="sm"
             variant="secondary"
           >
-            <Icon icon={isHidden ? ChevronsLeftIcon : ChevronsRightIcon} size={16} />
+            <Icon icon={XIcon} size={16} />
           </Button>
         </div>
       </div>
@@ -828,19 +706,30 @@
 />
 
 {#if isHidden}
-  <div
-    class={css({
+  <button
+    class={center({
       position: 'fixed',
-      bottom: '0',
-      right: '0',
-      width: '40px',
-      height: '40px',
+      bottom: '4px',
+      right: '4px',
+      size: '36px',
+      borderRadius: '8px',
       zIndex: 'widget',
       pointerEvents: 'auto',
+      cursor: 'pointer',
+      borderWidth: '0',
+      color: 'text.faint',
+      _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
     })}
-    aria-label="위젯 표시 영역"
-    onmouseenter={handleTriggerMouseEnter}
-    onmouseleave={handleMouseLeave}
-    role="region"
-  ></div>
+    aria-label="위젯 보기"
+    onclick={() => {
+      app.preference.current.widgetHidden = false;
+      mixpanel.track('toggle_widget_visibility', {
+        mode: 'show',
+      });
+    }}
+    type="button"
+    use:tooltip={{ message: '위젯 보기' }}
+  >
+    <Icon icon={ShapesIcon} size={20} />
+  </button>
 {/if}
