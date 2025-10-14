@@ -1557,6 +1557,10 @@ describe('denormalize', () => {
     expect(accessedEntities).toMatchInlineSnapshot(`
       [
         {
+          "entityKey": Symbol(ROOT),
+          "fieldKey": "get$3db81b2845b4c2fc",
+        },
+        {
           "entityKey": "A:1",
           "fieldKey": "*",
         },

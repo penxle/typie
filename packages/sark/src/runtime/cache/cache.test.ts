@@ -1161,6 +1161,104 @@ describe('Cache', () => {
     });
   });
 
+  test('스칼라 필드가 객체 형태일 때 deep merge가 아닌 replace된다', () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            name
+            ... on A {
+              num
+            }
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Entity 1',
+        num: { oldKey: 'old value', metadata: { source: 'initial' } },
+      },
+    };
+
+    cache.writeQuery(schema, {}, initialData);
+
+    const updateData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Entity 1',
+        num: { newKey: 'new value', config: { version: 2 } },
+      },
+    };
+
+    cache.writeQuery(schema, {}, updateData);
+
+    const result = cache.readQuery(schema, {});
+
+    expect(result).toEqual({
+      get: {
+        __typename: 'A',
+        id: '1',
+        name: 'Entity 1',
+        num: { newKey: 'new value', config: { version: 2 } },
+      },
+    });
+  });
+
+  test('스칼라 필드의 객체 값이 null로 업데이트되면 replace된다', () => {
+    const cache = createCache();
+    const schema = makeArtifactSchema({
+      operation: /* GraphQL */ `
+        query TestQuery {
+          get(id: "1") {
+            __typename
+            id
+            ... on A {
+              num
+            }
+          }
+        }
+      `,
+    });
+
+    const initialData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        num: { value: 42, nested: { data: 'test' } },
+      },
+    };
+
+    cache.writeQuery(schema, {}, initialData);
+
+    const updateData = {
+      get: {
+        __typename: 'A',
+        id: '1',
+        num: null,
+      },
+    };
+
+    cache.writeQuery(schema, {}, updateData);
+
+    const result = cache.readQuery(schema, {});
+
+    expect(result).toEqual({
+      get: {
+        __typename: 'A',
+        id: '1',
+        num: null,
+      },
+    });
+  });
+
   test('observe를 사용해 쿼리 결과 변경을 구독한다', () => {
     const cache = createCache();
     const schema = makeArtifactSchema({
