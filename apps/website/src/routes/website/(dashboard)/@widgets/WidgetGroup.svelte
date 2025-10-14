@@ -567,21 +567,23 @@
       },
       onDragEnd: async (e) => {
         if (dragging && dragging.source === 'group' && dropZoneElement) {
-          dragging.dropped = true;
+          const currentDragging = dragging;
+          currentDragging.dropped = true;
 
-          if (dragging.isOutsideDropZone) {
-            const { widgetId, widgetRect, offsetX, offsetY } = dragging;
+          if (currentDragging.isOutsideDropZone) {
+            const { widgetId, widgetRect, offsetX, offsetY } = currentDragging;
             const widget = $query.widgets.find((w) => w.id === widgetId);
             if (widget) {
               const newPosition = calculateWidgetPosition(e.clientX, e.clientY, widgetRect, offsetX, offsetY);
 
               await widgetContext.moveWidgetToFreePosition?.(widgetId, newPosition);
             }
-            dragging = null;
           } else {
-            if (dragging.dropIndex !== null) {
-              await widgetContext.moveWidgetInGroup?.(dragging.widgetId, dragging.dropIndex);
+            if (currentDragging.dropIndex !== null) {
+              await widgetContext.moveWidgetInGroup?.(currentDragging.widgetId, currentDragging.dropIndex);
             }
+          }
+          if (dragging === currentDragging) {
             dragging = null;
           }
         }
@@ -670,20 +672,23 @@
       },
       onDragEnd: async () => {
         if (dragging && dragging.source === 'freePosition') {
-          dragging.dropped = true;
+          const currentDragging = dragging;
+          currentDragging.dropped = true;
 
-          const { widgetId, dropIndex } = dragging;
+          const { widgetId, dropIndex } = currentDragging;
           const widget = $query.widgets.find((w) => w.id === widgetId);
 
           if (widget) {
-            if (!dragging.isOutsideDropZone && dropIndex !== null) {
+            if (!currentDragging.isOutsideDropZone && dropIndex !== null) {
               await widgetContext.moveWidgetInGroup?.(widgetId, dropIndex);
-            } else if (dragging.calculatedPosition) {
-              await widgetContext.moveWidgetToFreePosition?.(widgetId, dragging.calculatedPosition);
+            } else if (currentDragging.calculatedPosition) {
+              await widgetContext.moveWidgetToFreePosition?.(widgetId, currentDragging.calculatedPosition);
             }
           }
+          if (dragging === currentDragging) {
+            dragging = null;
+          }
         }
-        dragging = null;
       },
       onDragCancel: () => {
         dragging = null;
@@ -953,32 +958,35 @@
   }}
   onDragEnd={async () => {
     if (dragging && dragging.source === 'palette') {
-      dragging.dropped = true;
+      const currentDragging = dragging;
+      currentDragging.dropped = true;
 
-      if (!dragging.isOutsideDropZone) {
-        await widgetContext.createWidget?.(dragging.widgetType, 'drag', dragging.dropIndex ?? undefined);
-      } else if (dragging.calculatedPosition) {
+      if (!currentDragging.isOutsideDropZone) {
+        await widgetContext.createWidget?.(currentDragging.widgetType, 'drag', currentDragging.dropIndex ?? undefined);
+      } else if (currentDragging.calculatedPosition) {
         await createWidgetMutation({
-          name: dragging.widgetType,
+          name: currentDragging.widgetType,
           data: {
             position: {
               top: null,
               left: null,
               bottom: null,
               right: null,
-              ...dragging.calculatedPosition,
+              ...currentDragging.calculatedPosition,
             },
           },
         });
 
         mixpanel.track('create_widget', {
-          widgetType: dragging.widgetType,
+          widgetType: currentDragging.widgetType,
           via: 'drag_free',
         });
       }
       await cache.invalidate({ __typename: 'Query', field: 'widgets' });
+      if (dragging === currentDragging) {
+        dragging = null;
+      }
     }
-    dragging = null;
   }}
   onDragMove={(e) => {
     updateDropPosition(e);
