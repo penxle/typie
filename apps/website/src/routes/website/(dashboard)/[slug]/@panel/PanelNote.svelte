@@ -244,7 +244,23 @@
       borderColor: 'surface.muted',
     })}
   >
-    <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>노트</div>
+    <div class={flex({ alignItems: 'center', gap: '6px', fontWeight: 'semibold' })}>
+      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>이 포스트 관련 노트</div>
+      {#if notes.length > 0}
+        <div
+          class={css({
+            fontSize: '11px',
+            color: 'text.default',
+            backgroundColor: 'surface.muted',
+            paddingX: '6px',
+            paddingY: '2px',
+            borderRadius: '4px',
+          })}
+        >
+          {notes.length}
+        </div>
+      {/if}
+    </div>
 
     <button
       class={center({
