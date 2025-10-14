@@ -9,8 +9,8 @@
   import { animateFlip, debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import NotebookPenIcon from '~icons/lucide/notebook-pen';
   import PlusIcon from '~icons/lucide/plus';
+  import StickyNoteIcon from '~icons/lucide/sticky-note';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { fragment, graphql } from '$graphql';
   import type { Editor_Panel_PanelNote_entity } from '$graphql';
@@ -308,7 +308,7 @@
             color: 'text.faint',
           })}
         >
-          <Icon icon={NotebookPenIcon} size={28} />
+          <Icon icon={StickyNoteIcon} size={28} />
         </div>
 
         <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px' })}>
