@@ -410,6 +410,11 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId, refer
       userId: user.id,
       name: widget,
       order: widgetOrder,
+      data: ['characterCount', 'characterCountChange'].includes(widget)
+        ? {
+            isCollapsed: true,
+          }
+        : undefined,
     });
   }
 
