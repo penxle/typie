@@ -111,7 +111,7 @@
         return 'translateX(-100%)';
       }
       case 'peeking': {
-        return 'translateX(-90%)';
+        return 'translateX(calc(-100% + 20px))';
       }
       case 'visible': {
         return 'translateX(0)';
@@ -172,23 +172,23 @@
   };
 </script>
 
-{#if app.preference.current.sidebarHidden && sidebarState !== 'visible'}
+{#if app.preference.current.sidebarTrigger === 'hover' && app.preference.current.sidebarHidden && sidebarState !== 'visible'}
   <div
     class={css({
       position: 'fixed',
       top: '128px',
       left: '0',
-      width: '60px',
+      width: '40px',
       height: '[calc(100vh - 256px)]',
       zIndex: 'sidebar',
     })}
     onmouseenter={() => {
-      if (app.preference.current.sidebarTrigger === 'hover' && sidebarState === 'hidden') {
+      if (sidebarState === 'hidden') {
         sidebarState = 'peeking';
       }
     }}
     onmouseleave={() => {
-      if (app.preference.current.sidebarTrigger === 'hover' && sidebarState !== 'visible') {
+      if (sidebarState !== 'visible') {
         sidebarState = 'hidden';
       }
     }}
