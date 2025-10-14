@@ -401,13 +401,7 @@
           widgetId,
           data: {
             ...widget.data,
-            position: {
-              top: null,
-              left: null,
-              bottom: null,
-              right: null,
-              ...position,
-            },
+            position,
           },
         },
         {
@@ -415,13 +409,7 @@
             id: widgetId,
             data: {
               ...widget.data,
-              position: {
-                top: null,
-                left: null,
-                bottom: null,
-                right: null,
-                ...position,
-              },
+              position,
             },
           },
         },
@@ -570,21 +558,24 @@
           const currentDragging = dragging;
           currentDragging.dropped = true;
 
-          if (currentDragging.isOutsideDropZone) {
-            const { widgetId, widgetRect, offsetX, offsetY } = currentDragging;
-            const widget = $query.widgets.find((w) => w.id === widgetId);
-            if (widget) {
-              const newPosition = calculateWidgetPosition(e.clientX, e.clientY, widgetRect, offsetX, offsetY);
+          try {
+            if (currentDragging.isOutsideDropZone) {
+              const { widgetId, widgetRect, offsetX, offsetY } = currentDragging;
+              const widget = $query.widgets.find((w) => w.id === widgetId);
+              if (widget) {
+                const newPosition = calculateWidgetPosition(e.clientX, e.clientY, widgetRect, offsetX, offsetY);
 
-              await widgetContext.moveWidgetToFreePosition?.(widgetId, newPosition);
+                await widgetContext.moveWidgetToFreePosition?.(widgetId, newPosition);
+              }
+            } else {
+              if (currentDragging.dropIndex !== null) {
+                await widgetContext.moveWidgetInGroup?.(currentDragging.widgetId, currentDragging.dropIndex);
+              }
             }
-          } else {
-            if (currentDragging.dropIndex !== null) {
-              await widgetContext.moveWidgetInGroup?.(currentDragging.widgetId, currentDragging.dropIndex);
+          } finally {
+            if (dragging === currentDragging) {
+              dragging = null;
             }
-          }
-          if (dragging === currentDragging) {
-            dragging = null;
           }
         }
       },
@@ -675,18 +666,21 @@
           const currentDragging = dragging;
           currentDragging.dropped = true;
 
-          const { widgetId, dropIndex } = currentDragging;
-          const widget = $query.widgets.find((w) => w.id === widgetId);
+          try {
+            const { widgetId, dropIndex } = currentDragging;
+            const widget = $query.widgets.find((w) => w.id === widgetId);
 
-          if (widget) {
-            if (!currentDragging.isOutsideDropZone && dropIndex !== null) {
-              await widgetContext.moveWidgetInGroup?.(widgetId, dropIndex);
-            } else if (currentDragging.calculatedPosition) {
-              await widgetContext.moveWidgetToFreePosition?.(widgetId, currentDragging.calculatedPosition);
+            if (widget) {
+              if (!currentDragging.isOutsideDropZone && dropIndex !== null) {
+                await widgetContext.moveWidgetInGroup?.(widgetId, dropIndex);
+              } else if (currentDragging.calculatedPosition) {
+                await widgetContext.moveWidgetToFreePosition?.(widgetId, currentDragging.calculatedPosition);
+              }
             }
-          }
-          if (dragging === currentDragging) {
-            dragging = null;
+          } finally {
+            if (dragging === currentDragging) {
+              dragging = null;
+            }
           }
         }
       },
@@ -961,30 +955,27 @@
       const currentDragging = dragging;
       currentDragging.dropped = true;
 
-      if (!currentDragging.isOutsideDropZone) {
-        await widgetContext.createWidget?.(currentDragging.widgetType, 'drag', currentDragging.dropIndex ?? undefined);
-      } else if (currentDragging.calculatedPosition) {
-        await createWidgetMutation({
-          name: currentDragging.widgetType,
-          data: {
-            position: {
-              top: null,
-              left: null,
-              bottom: null,
-              right: null,
-              ...currentDragging.calculatedPosition,
+      try {
+        if (!currentDragging.isOutsideDropZone) {
+          await widgetContext.createWidget?.(currentDragging.widgetType, 'drag', currentDragging.dropIndex ?? undefined);
+        } else if (currentDragging.calculatedPosition) {
+          await createWidgetMutation({
+            name: currentDragging.widgetType,
+            data: {
+              position: currentDragging.calculatedPosition,
             },
-          },
-        });
+          });
 
-        mixpanel.track('create_widget', {
-          widgetType: currentDragging.widgetType,
-          via: 'drag_free',
-        });
-      }
-      await cache.invalidate({ __typename: 'Query', field: 'widgets' });
-      if (dragging === currentDragging) {
-        dragging = null;
+          mixpanel.track('create_widget', {
+            widgetType: currentDragging.widgetType,
+            via: 'drag_free',
+          });
+        }
+        await cache.invalidate({ __typename: 'Query', field: 'widgets' });
+      } finally {
+        if (dragging === currentDragging) {
+          dragging = null;
+        }
       }
     }
   }}
@@ -1051,13 +1042,14 @@
     {@const position = widget.data.position as { top?: string; left?: string; bottom?: string; right?: string } | undefined}
     {@const isDragging = dragging?.source === 'freePosition' && dragging.widgetId === widget.id}
     {@const isDropped = isDragging && dragging?.dropped}
-    {@const droppedPosition = dragging?.calculatedPosition}
+    {@const droppedPosition = isDragging ? dragging?.calculatedPosition : undefined}
+    {@const toUsePos = isDropped && droppedPosition ? droppedPosition : position}
     {#if position && (!isDragging || isDropped)}
       <div
-        style:top={isDropped ? droppedPosition?.top : position.top}
-        style:left={isDropped ? droppedPosition?.left : position.left}
-        style:bottom={isDropped ? droppedPosition?.bottom : position.bottom}
-        style:right={isDropped ? droppedPosition?.right : position.right}
+        style:top={toUsePos?.top}
+        style:left={toUsePos?.left}
+        style:bottom={toUsePos?.bottom}
+        style:right={toUsePos?.right}
         class={cx(
           'group',
           css({
