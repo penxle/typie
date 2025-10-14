@@ -23,7 +23,14 @@ export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> =
   $effect(() => {
     element.style.overflow = 'hidden';
 
+    let lastWidth = 0;
+
     const handler = () => {
+      // NOTE: 요소가 숨겨져 있으면 scrollHeight 계산을 건너뜀
+      if (element.offsetParent === null) {
+        return;
+      }
+
       element.style.height = 'auto';
       const height = element.scrollHeight;
       element.style.height = `${height}px`;
@@ -35,12 +42,28 @@ export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> =
 
     const off = on(element, 'input', handler);
 
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const newWidth = entry.contentRect.width;
+
+        if (newWidth > 0 && newWidth !== lastWidth) {
+          lastWidth = newWidth;
+          requestAnimationFrame(() => {
+            handler();
+          });
+        }
+      }
+    });
+
+    resizeObserver.observe(element);
+
     requestAnimationFrame(() => {
       handler();
     });
 
     return () => {
       off();
+      resizeObserver.disconnect();
     };
   });
 

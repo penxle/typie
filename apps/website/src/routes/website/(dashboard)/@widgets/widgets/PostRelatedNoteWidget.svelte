@@ -480,7 +480,7 @@
             placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
             rows={3}
             value={noteContents[note.id] || ''}
-            use:autosize={{ cacheKey: `note-${note.id}` }}
+            use:autosize={{ cacheKey: `widget-note-${note.id}` }}
           ></textarea>
 
           {#if !palette}
