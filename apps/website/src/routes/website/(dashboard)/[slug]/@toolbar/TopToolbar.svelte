@@ -16,11 +16,11 @@
   import InfoIcon from '~icons/lucide/info';
   import ListIcon from '~icons/lucide/list';
   import ListOrderedIcon from '~icons/lucide/list-ordered';
-  import NotebookPenIcon from '~icons/lucide/notebook-pen';
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
   import SettingsIcon from '~icons/lucide/settings';
   import SpellCheckIcon from '~icons/lucide/spell-check';
+  import StickyNoteIcon from '~icons/lucide/sticky-note';
   import TableIcon from '~icons/lucide/table';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
   import { fragment, graphql } from '$graphql';
@@ -289,7 +289,7 @@
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
-    <ToolbarPanelTabButton icon={NotebookPenIcon} label="노트" tab="note" />
+    <ToolbarPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" />
     <ToolbarPanelTabButton icon={BookmarkIcon} label="북마크" tab="anchors" />
     <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" needPlanUpgrade={!$site?.user.subscription} tab="spellcheck" />
     <ToolbarPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" />

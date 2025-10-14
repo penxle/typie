@@ -15,10 +15,10 @@
   import HelpCircleIcon from '~icons/lucide/help-circle';
   import HomeIcon from '~icons/lucide/home';
   import NewspaperIcon from '~icons/lucide/newspaper';
-  import NotebookPenIcon from '~icons/lucide/notebook-pen';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import SquarePenIcon from '~icons/lucide/square-pen';
+  import StickyNoteIcon from '~icons/lucide/sticky-note';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { goto, pushState } from '$app/navigation';
   import { page } from '$app/state';
@@ -384,7 +384,7 @@
         }}
         type="button"
       >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={NotebookPenIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={StickyNoteIcon} size={14} />
         <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>노트</span>
       </button>
 
