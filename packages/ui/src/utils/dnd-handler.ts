@@ -87,9 +87,23 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   let ghost: Ghost | null = null;
   let capturedPointerId: number | null = null;
   let animationFrameId: number | null = null;
+  let hoveredTarget: HTMLElement | null = null;
 
-  const updateCursor = () => {
-    node.style.cursor = dragging ? 'grabbing' : 'grab';
+  const updateCursor = (e: PointerEvent | null) => {
+    const cursor = dragging ? 'grabbing' : 'grab';
+    if (getDragTarget) {
+      const target = e ? getDragTarget(e) : null;
+
+      if (hoveredTarget && hoveredTarget !== target) {
+        hoveredTarget.style.cursor = '';
+      }
+      if (target) {
+        target.style.cursor = cursor;
+      }
+      hoveredTarget = target;
+    } else {
+      node.style.cursor = cursor;
+    }
   };
 
   const cleanup = () => {
@@ -107,7 +121,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     }
     dragging = false;
     dragTarget = null;
-    updateCursor();
+    updateCursor(null);
   };
 
   const handlePointerCancel = () => {
@@ -144,11 +158,14 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     node.setPointerCapture(e.pointerId);
     capturedPointerId = e.pointerId;
 
-    updateCursor();
+    updateCursor(e);
   };
 
   const handlePointerMove = (e: PointerEvent) => {
-    if (!dragging) return;
+    if (!dragging) {
+      updateCursor(e);
+      return;
+    }
 
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animationFrameId = requestAnimationFrame(() => {
@@ -193,7 +210,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   node.addEventListener('pointerup', handlePointerUp);
   window.addEventListener('keydown', handleKeyDown);
 
-  updateCursor();
+  updateCursor(null);
 
   return {
     state: (): DndHandlerState => ({
