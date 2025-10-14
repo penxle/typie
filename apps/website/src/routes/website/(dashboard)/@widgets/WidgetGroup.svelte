@@ -329,7 +329,7 @@
         .toSorted((a, b) => a.order.localeCompare(b.order))
         .filter((w) => !optimisticDeletedWidgetIds.includes(w.id));
 
-      const groupWidgetIds = globalSorted.filter((w) => !w.data.position).map((w) => w.id);
+      const groupWidgetIds = globalSorted.filter((w) => !w.data.position && w.id !== widgetId).map((w) => w.id);
 
       const leftId = targetIndex === 0 ? undefined : groupWidgetIds[targetIndex - 1];
       const rightId = targetIndex >= groupWidgetIds.length ? undefined : groupWidgetIds[targetIndex];
