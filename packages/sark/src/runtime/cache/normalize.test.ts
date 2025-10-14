@@ -82,7 +82,7 @@ describe('normalize', () => {
           "name": "Entity 1",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -135,7 +135,7 @@ describe('normalize', () => {
           "name": "Entity 1",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -189,7 +189,7 @@ describe('normalize', () => {
           "id": "1",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -254,7 +254,7 @@ describe('normalize', () => {
           "name": "Entity 3",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -299,7 +299,7 @@ describe('normalize', () => {
           "list": [],
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -340,7 +340,7 @@ describe('normalize', () => {
           "kind": "X",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -381,7 +381,7 @@ describe('normalize', () => {
           "num": 42.5,
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -424,7 +424,7 @@ describe('normalize', () => {
           "time": "2023-01-01T00:00:00Z",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -463,7 +463,7 @@ describe('normalize', () => {
           "name": "Entity 1",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -504,7 +504,7 @@ describe('normalize', () => {
           "name": "Entity 1",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -560,7 +560,7 @@ describe('normalize', () => {
           "name": "Referenced Entity",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -633,7 +633,7 @@ describe('normalize', () => {
           "name": "Deeply Nested Entity",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -682,7 +682,7 @@ describe('normalize', () => {
           "name": "Entity 2",
         },
         Symbol(ROOT): {
-          "find$6d26e463b36d050a": [
+          "find$bc4b7681e53455fb": [
             {
               Symbol(LINK): "A:1",
             },
@@ -741,7 +741,7 @@ describe('normalize', () => {
           "num": null,
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -787,7 +787,7 @@ describe('normalize', () => {
           "name": "Entity 1",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -838,7 +838,7 @@ describe('normalize', () => {
           "time": "2023-05-01T12:00:00Z",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -899,7 +899,7 @@ describe('normalize', () => {
           "num": 42,
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -1012,7 +1012,7 @@ describe('normalize', () => {
           "name": "List Item 2",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -1067,7 +1067,7 @@ describe('normalize', () => {
           "name": "Entity A2",
         },
         Symbol(ROOT): {
-          "find$89ba49cf4d6820cb": [
+          "find$ddac5398f3451df9": [
             {
               Symbol(LINK): "A:1",
             },
@@ -1114,7 +1114,7 @@ describe('normalize', () => {
     expect(storage).toMatchInlineSnapshot(`
       {
         Symbol(ROOT): {
-          "find$7632e79bbe61e2f6": [],
+          "find$7efccc2f62257ffc": [],
         },
       }
     `);
@@ -1148,7 +1148,7 @@ describe('normalize', () => {
     expect(storage).toMatchInlineSnapshot(`
       {
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             "__typename": "A",
             "name": "No ID Entity",
             "num": 42,
@@ -1182,7 +1182,7 @@ describe('normalize', () => {
     expect(storage).toMatchInlineSnapshot(`
       {
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             "__typename": "Entity",
           },
         },
@@ -1236,12 +1236,12 @@ describe('normalize', () => {
           "name": "Found Entity",
         },
         Symbol(ROOT): {
-          "find$6d26e463b36d050a": [
+          "find$bc4b7681e53455fb": [
             {
               Symbol(LINK): "A:2",
             },
           ],
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
           "value": "root value",
@@ -1289,12 +1289,12 @@ describe('normalize', () => {
           "name": "Entity 1",
         },
         Symbol(ROOT): {
-          "find$c670fc73f681837f": [
+          "find$e4c369a3eacebdbc": [
             {
               Symbol(LINK): "A:1",
             },
           ],
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -1368,7 +1368,7 @@ describe('normalize', () => {
           },
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },
@@ -1407,7 +1407,7 @@ describe('normalize', () => {
           "name": "Default Entity",
         },
         Symbol(ROOT): {
-          "get$c9c02d9babf17311": {
+          "get$ba11439ce35288b4": {
             Symbol(LINK): "A:default",
           },
         },
@@ -1460,7 +1460,7 @@ describe('normalize', () => {
           "name": "Entity 1",
         },
         Symbol(ROOT): {
-          "get$7f0aa1302c1f9439": {
+          "get$3db81b2845b4c2fc": {
             Symbol(LINK): "A:1",
           },
         },

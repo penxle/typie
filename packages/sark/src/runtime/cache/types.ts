@@ -2,6 +2,7 @@ type Arrayable<T> = T | T[];
 
 export const RootFieldKey: unique symbol = Symbol('ROOT');
 export const EntityLinkKey: unique symbol = Symbol('LINK');
+export const ScalarValueKey: unique symbol = Symbol('SCALAR');
 
 export type Typename = string;
 export type ID = string;
@@ -14,13 +15,14 @@ export type KeyableEntity = {
 
 export type EntityKey = `${Typename}:${ID}`;
 export type EntityLink = { [EntityLinkKey]: EntityKey };
+export type ScalarValue = { [ScalarValueKey]: unknown };
 
 export type StorageKey = EntityKey | typeof RootFieldKey;
 export type Storage = Record<StorageKey, Fields>;
 
 export type FieldKey = string | `${string}$${string}`;
 export type Scalar = string | number | boolean | null | undefined;
-export type FieldValue = Arrayable<Scalar | EntityLink | { [key: FieldKey]: FieldValue }>;
+export type FieldValue = Arrayable<Scalar | EntityLink | ScalarValue | { [key: FieldKey]: FieldValue }>;
 export type Fields = Record<FieldKey, FieldValue>;
 
 export type Data = { [key: string]: Arrayable<Scalar | Data> };

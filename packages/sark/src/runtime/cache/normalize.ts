@@ -1,5 +1,15 @@
 import { EntityLinkKey, RootFieldKey } from './types';
-import { deepMerge, entries, getCompatibleTypes, isEntityLink, isKeyableEntity, isScalar, makeEntityKey, makeFieldKey } from './utils';
+import {
+  deepMerge,
+  entries,
+  getCompatibleTypes,
+  isEntityLink,
+  isKeyableEntity,
+  isScalar,
+  makeEntityKey,
+  makeFieldKey,
+  wrapScalarValue,
+} from './utils';
 import type { ArtifactSchema, FragmentSpreadSelection, InlineFragmentSelection, ObjectFieldSelection, Selection } from '../../types';
 import type { Data, Fields, Storage, Variables } from './types';
 
@@ -30,7 +40,7 @@ export const normalize = (schema: ArtifactSchema, variables: Variables, data: Da
           const fieldValue = (value as Record<string, unknown>)[selection.alias || selection.name];
 
           if (fieldValue !== undefined) {
-            fields[fieldKey] = fieldValue;
+            fields[fieldKey] = selection.kind === 'ScalarField' ? wrapScalarValue(fieldValue) : fieldValue;
           }
 
           break;

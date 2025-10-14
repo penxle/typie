@@ -1,7 +1,7 @@
 import stringify from 'fast-json-stable-stringify';
 import { rapidhash } from 'rapidhash-js';
 import { match } from 'ts-pattern';
-import { EntityLinkKey } from './types';
+import { EntityLinkKey, ScalarValueKey } from './types';
 import type {
   ArtifactSchema,
   CompositeType,
@@ -11,13 +11,30 @@ import type {
   TypenameFieldSelection,
   Value,
 } from '../../types';
-import type { DependencyKey, EntityKey, EntityLink, FieldKey, KeyableEntity, QueryKey, Scalar, Variables } from './types';
+import type { DependencyKey, EntityKey, EntityLink, FieldKey, KeyableEntity, QueryKey, Scalar, ScalarValue, Variables } from './types';
 
 export const isKeyableEntity = (data: unknown): data is KeyableEntity => typeof data === 'object' && data !== null && 'id' in data;
 
 export const makeEntityKey = (entity: KeyableEntity): EntityKey => `${entity.__typename}:${entity.id}`;
 
 export const isEntityLink = (value: unknown): value is EntityLink => typeof value === 'object' && value !== null && EntityLinkKey in value;
+
+export const isScalarValue = (value: unknown): value is ScalarValue =>
+  typeof value === 'object' && value !== null && ScalarValueKey in value;
+
+export const wrapScalarValue = (value: unknown): unknown => {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return { [ScalarValueKey]: value };
+  }
+  return value;
+};
+
+export const unwrapScalarValue = (value: unknown): unknown => {
+  if (isScalarValue(value)) {
+    return value[ScalarValueKey];
+  }
+  return value;
+};
 
 export const isScalar = (value: unknown): value is Scalar => {
   const type = typeof value;
@@ -81,9 +98,17 @@ export const deepMerge = <A, B, T extends A & B = A & B>(
 ): T => {
   if (!source || typeof source !== 'object' || !target || typeof target !== 'object') return source as unknown as T;
 
-  const isPlainObject = (val: unknown): val is Record<string, unknown> => val !== null && typeof val === 'object' && !Array.isArray(val);
+  const isPlainObject = (val: unknown): val is Record<string, unknown> => {
+    if (val === null || typeof val !== 'object' || Array.isArray(val)) return false;
+    if (isEntityLink(val) || isScalarValue(val)) return false;
+    return true;
+  };
 
   const mergeValues = (a: unknown, b: unknown) => {
+    if (isEntityLink(b) || isScalarValue(b)) {
+      return b;
+    }
+
     if (isPlainObject(a) && isPlainObject(b)) {
       return deepMerge(a, b, { arrayStrategy });
     }
