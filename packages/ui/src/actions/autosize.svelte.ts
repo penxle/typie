@@ -4,6 +4,7 @@ import type { Action } from 'svelte/action';
 
 // NOTE: animateFlip과의 호환성을 위해 캐시된 높이를 즉시 적용해서 항상 올바른 높이를 유지
 const heightCache = new SvelteMap<string, number>();
+const cleanupTimeouts = new SvelteMap<string, ReturnType<typeof setTimeout>>();
 
 type AutosizeParams = {
   // NOTE: 높이 캐싱을 위한 stable key
@@ -14,6 +15,12 @@ export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> =
   const cacheKey = params.cacheKey;
 
   if (cacheKey) {
+    const existingTimeout = cleanupTimeouts.get(cacheKey);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      cleanupTimeouts.delete(cacheKey);
+    }
+
     const cachedHeight = heightCache.get(cacheKey);
     if (cachedHeight) {
       element.style.height = `${cachedHeight}px`;
@@ -70,7 +77,12 @@ export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> =
   return {
     destroy() {
       if (cacheKey) {
-        heightCache.delete(cacheKey);
+        // NOTE: animateFlip이 완료될 때까지 캐시를 유지한 후 삭제
+        const timeoutId = setTimeout(() => {
+          heightCache.delete(cacheKey);
+          cleanupTimeouts.delete(cacheKey);
+        }, 1000);
+        cleanupTimeouts.set(cacheKey, timeoutId);
       }
     },
   };
