@@ -26,6 +26,7 @@ export const wrapScalarValue = (value: unknown): unknown => {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     return { [ScalarValueKey]: value };
   }
+
   return value;
 };
 
@@ -33,6 +34,7 @@ export const unwrapScalarValue = (value: unknown): unknown => {
   if (isScalarValue(value)) {
     return value[ScalarValueKey];
   }
+
   return value;
 };
 
@@ -98,17 +100,16 @@ export const deepMerge = <A, B, T extends A & B = A & B>(
 ): T => {
   if (!source || typeof source !== 'object' || !target || typeof target !== 'object') return source as unknown as T;
 
+  if (isScalarValue(source)) {
+    return source as unknown as T;
+  }
+
   const isPlainObject = (val: unknown): val is Record<string, unknown> => {
     if (val === null || typeof val !== 'object' || Array.isArray(val)) return false;
-    if (isEntityLink(val) || isScalarValue(val)) return false;
     return true;
   };
 
   const mergeValues = (a: unknown, b: unknown) => {
-    if (isEntityLink(b) || isScalarValue(b)) {
-      return b;
-    }
-
     if (isPlainObject(a) && isPlainObject(b)) {
       return deepMerge(a, b, { arrayStrategy });
     }
