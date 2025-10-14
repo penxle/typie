@@ -1,7 +1,24 @@
 import { tick } from 'svelte';
 
+const ANIMATION_DURATION = 300;
+const ANIMATING_ATTR = 'data-flip-animating';
+
 // NOTE: $effect.pre()에서 사용하세요
 export const animateFlip = async (selector: string, idAttribute = 'id', container: Document | HTMLElement = document): Promise<void> => {
+  const containerElement = container instanceof Document ? null : container;
+
+  if (containerElement) {
+    let parent = containerElement.parentElement;
+    while (parent) {
+      if (parent.hasAttribute(ANIMATING_ATTR)) {
+        return;
+      }
+      parent = parent.parentElement;
+    }
+
+    containerElement.setAttribute(ANIMATING_ATTR, 'true');
+  }
+
   const elements = container.querySelectorAll(selector);
   const firstPositions: Record<string, DOMRect> = {};
 
@@ -13,19 +30,26 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
     }
   });
 
-  const containerElement = container instanceof Document ? null : container;
   const firstContainerHeight = containerElement?.getBoundingClientRect().height;
 
   await tick();
 
   const elementsAfter = container.querySelectorAll(selector);
-  if (Object.keys(firstPositions).length === 0) return;
+  if (Object.keys(firstPositions).length === 0) {
+    if (containerElement) {
+      containerElement.removeAttribute(ANIMATING_ATTR);
+    }
+    return;
+  }
+
+  let hasAnimation = false;
 
   if (containerElement && firstContainerHeight !== undefined) {
     const lastContainerHeight = containerElement.getBoundingClientRect().height;
     const deltaHeight = firstContainerHeight - lastContainerHeight;
 
     if (Math.abs(deltaHeight) > 0) {
+      hasAnimation = true;
       containerElement.style.height = `${firstContainerHeight}px`;
       containerElement.style.transition = 'none';
 
@@ -34,7 +58,7 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
         const element = containerRef.deref();
         if (!element) return;
 
-        element.style.transition = 'height 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+        element.style.transition = `height ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
         element.style.height = `${lastContainerHeight}px`;
 
         setTimeout(() => {
@@ -43,7 +67,7 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
 
           el.style.height = '';
           el.style.transition = '';
-        }, 300);
+        }, ANIMATION_DURATION);
       });
     }
   }
@@ -60,6 +84,7 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
 
     if (Math.abs(deltaX) === 0 && Math.abs(deltaY) === 0) continue;
 
+    hasAnimation = true;
     el.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
     el.style.transition = 'none';
 
@@ -68,7 +93,7 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
       const element = elRef.deref();
       if (!element) return;
 
-      element.style.transition = 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+      element.style.transition = `transform ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
       element.style.transform = '';
       element.style.pointerEvents = 'none';
       setTimeout(() => {
@@ -77,7 +102,15 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
 
         el.style.transition = 'none';
         el.style.pointerEvents = 'auto';
-      }, 300);
+      }, ANIMATION_DURATION);
     });
+  }
+
+  if (!hasAnimation && containerElement) {
+    containerElement.removeAttribute(ANIMATING_ATTR);
+  } else if (hasAnimation && containerElement) {
+    setTimeout(() => {
+      containerElement.removeAttribute(ANIMATING_ATTR);
+    }, ANIMATION_DURATION);
   }
 };
