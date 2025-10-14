@@ -58,6 +58,8 @@ export type DndHandlerOptions = {
 
   onDragCancel?: () => void;
 
+  showGhost?: boolean;
+
   excludeSelectors?: string[];
 
   dragHandleSelector?: string;
@@ -77,11 +79,13 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     onDragMove,
     onDragEnd,
     onDragCancel,
+    showGhost = true,
     excludeSelectors = ['button', '[role="button"]', 'a[href]', 'input', 'textarea', 'select'],
     dragHandleSelector,
   } = options;
 
   let dragging = false;
+  let isDragActive = false;
   let dragStartEvent: PointerEvent | null = null;
   let dragTarget: HTMLElement | null = null;
   let ghost: Ghost | null = null;
@@ -126,6 +130,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
       hoveredTarget = null;
     }
     dragging = false;
+    isDragActive = false;
     dragTarget = null;
     updateCursor(null);
   };
@@ -181,13 +186,19 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
 
       const distance = Math.sqrt(Math.pow(e.clientX - dragStartEvent.clientX, 2) + Math.pow(e.clientY - dragStartEvent.clientY, 2));
 
-      if (distance > threshold && !ghost) {
-        ghost = createGhost(dragTarget, dragStartEvent.clientX, dragStartEvent.clientY);
+      if (distance > threshold && !isDragActive) {
+        isDragActive = true;
+        if (showGhost) {
+          ghost = createGhost(dragTarget, dragStartEvent.clientX, dragStartEvent.clientY);
+        }
         onDragStart?.(dragStartEvent, dragTarget);
       }
 
       if (ghost) {
         updateGhost(ghost, e.clientX, e.clientY);
+      }
+
+      if (isDragActive) {
         onDragMove?.(e);
       }
 
@@ -197,9 +208,9 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
 
   const handlePointerUp = (e: PointerEvent) => {
     if (dragging) {
-      const wasGhosting = ghost !== null;
+      const wasDragActive = isDragActive;
       cleanup();
-      if (wasGhosting) {
+      if (wasDragActive) {
         onDragEnd?.(e);
       }
     }
@@ -222,7 +233,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
 
   return {
     state: (): DndHandlerState => ({
-      isDragging: dragging && ghost !== null,
+      isDragging: dragging && isDragActive,
       ghost,
     }),
     destroy: () => {

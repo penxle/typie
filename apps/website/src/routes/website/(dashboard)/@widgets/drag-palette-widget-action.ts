@@ -4,7 +4,7 @@ import type { WidgetType } from './widget-context.svelte';
 
 type DragPaletteWidgetOptions = {
   widgetType: WidgetType;
-  onDragStart: (e: PointerEvent) => void;
+  onDragStart: (e: PointerEvent, target: HTMLElement) => void;
   onDragMove?: (e: PointerEvent) => void;
   onDragEnd: (e: PointerEvent) => void;
   onDragCancel: () => void;
@@ -15,8 +15,8 @@ export const dragPaletteWidget: Action<HTMLElement, DragPaletteWidgetOptions> = 
   const handler = createDndHandler(node, {
     excludeSelectors: ['button'],
     canStartDrag: () => !options.isAdded,
-    onDragStart: (e) => {
-      options.onDragStart(e);
+    onDragStart: (e, target) => {
+      options.onDragStart(e, target);
     },
     onDragMove: (e) => {
       options.onDragMove?.(e);
