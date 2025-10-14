@@ -731,7 +731,12 @@
 />
 
 {#if dragging && !dragging.dropped}
-  {@const tooltipMessage = dragging.isOutsideDropZone ? '여기에 배치' : dragging.source === 'group' ? null : '그룹에 넣기'}
+  {@const tooltipMessage =
+    dragging.source !== 'freePosition' && dragging.isOutsideDropZone
+      ? '여기에 배치'
+      : dragging.source === 'group' || dragging.isOutsideDropZone
+        ? null
+        : '그룹에 넣기'}
   {#if tooltipMessage}
     <div
       style:left="{dragging.cursorPosition.x}px"
@@ -899,7 +904,7 @@
               data-widget-id={item.id}
               role="listitem"
             >
-              {#if editMode}
+              {#if editMode || item.name === 'onboarding'}
                 <button
                   class={center({
                     position: 'absolute',
@@ -1067,7 +1072,7 @@
         data-widget-id={widget.id}
         role="listitem"
       >
-        {#if editMode}
+        {#if editMode || widget.name === 'onboarding'}
           <button
             class={center({
               position: 'absolute',
