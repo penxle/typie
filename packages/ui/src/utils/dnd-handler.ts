@@ -94,10 +94,10 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     if (getDragTarget) {
       const target = e ? getDragTarget(e) : null;
 
-      if (hoveredTarget && hoveredTarget !== target) {
+      if (hoveredTarget && hoveredTarget !== target && hoveredTarget.isConnected) {
         hoveredTarget.style.cursor = '';
       }
-      if (target) {
+      if (target && target.isConnected) {
         target.style.cursor = cursor;
       }
       hoveredTarget = target;
@@ -118,6 +118,12 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     if (animationFrameId) {
       cancelAnimationFrame(animationFrameId);
       animationFrameId = null;
+    }
+    if (hoveredTarget) {
+      if (hoveredTarget.isConnected) {
+        hoveredTarget.style.cursor = '';
+      }
+      hoveredTarget = null;
     }
     dragging = false;
     dragTarget = null;
@@ -162,13 +168,15 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   };
 
   const handlePointerMove = (e: PointerEvent) => {
-    if (!dragging) {
-      updateCursor(e);
-      return;
-    }
-
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
     animationFrameId = requestAnimationFrame(() => {
+      if (!dragging) {
+        updateCursor(e);
+        animationFrameId = null;
+        return;
+      }
+
       if (!dragStartEvent || !dragTarget) return;
 
       const distance = Math.sqrt(Math.pow(e.clientX - dragStartEvent.clientX, 2) + Math.pow(e.clientY - dragStartEvent.clientY, 2));
