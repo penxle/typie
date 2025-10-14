@@ -8,18 +8,16 @@
   type Props = {
     title: string;
     children: Snippet;
-    editMode?: boolean;
     icon?: Component;
     headerActions?: Snippet;
     noPadding?: boolean;
     collapsed?: boolean;
   };
 
-  let { title, children, editMode: editModeProp, icon, headerActions, noPadding = false, collapsed = false }: Props = $props();
+  let { title, children, icon, headerActions, noPadding = false, collapsed = false }: Props = $props();
 
   const widgetContext = getWidgetContext();
-  const { editMode: editModeContext, palette } = $derived(widgetContext.env);
-  const editMode = $derived(editModeProp ?? editModeContext);
+  const { editMode, palette } = $derived(widgetContext.env);
 </script>
 
 <div
