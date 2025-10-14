@@ -846,6 +846,7 @@
                 borderColor: 'border.brand',
                 fontSize: '11px',
                 fontWeight: 'semibold',
+                whiteSpace: 'nowrap',
                 color: 'text.brand',
                 backgroundColor: 'transparent',
                 cursor: 'pointer',
