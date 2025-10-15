@@ -64,6 +64,7 @@
   let open = $state(false);
   let inflight = $state(false);
   let isDragging = $state(false);
+  let uploadProgress = $state({ current: 0, total: 0 });
 
   const errorMap = {
     invalid_font_style: '폰트가 기울어져 있어요.',
@@ -116,11 +117,13 @@
     }
 
     inflight = true;
+    uploadProgress = { current: 0, total: files.length };
 
     const results: { name: string; success: boolean; error?: string }[] = [];
 
     // NOTE: 업로드 폭탄을 방지하기 위해 하나씩 업로드
     for (const file of files) {
+      uploadProgress.current++;
       try {
         const path = await uploadBlob(file);
         const resp = await persistBlobAsFont({ path });
@@ -367,7 +370,9 @@
       <div class={flex({ flexDirection: 'column', gap: '12px', alignItems: 'center' })}>
         {#if inflight}
           <RingSpinner style={css.raw({ color: 'text.subtle', size: '24px' })} />
-          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.subtle' })}>폰트 업로드 중...</div>
+          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.subtle' })}>
+            폰트 업로드 중... ({uploadProgress.current}/{uploadProgress.total})
+          </div>
         {:else}
           <Icon style={css.raw({ color: isDragging ? 'text.brand' : 'text.subtle' })} icon={UploadIcon} size={24} />
           <div class={flex({ flexDirection: 'column', gap: '4px' })}>
