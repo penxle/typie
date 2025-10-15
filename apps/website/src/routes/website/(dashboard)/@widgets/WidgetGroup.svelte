@@ -450,7 +450,13 @@
     widgetData: Record<string, unknown>;
   };
 
-  type WidgetItem = RealWidget | PreviewWidget;
+  type DropareaWidget = {
+    type: 'droparea';
+    id: string;
+    height: number;
+  };
+
+  type WidgetItem = RealWidget | PreviewWidget | DropareaWidget;
 
   let optimisticDeletedWidgetIds = $state<string[]>([]);
   let widgetsInGroup = $state<WidgetItem[]>([]);
@@ -497,6 +503,14 @@
         };
         result.splice(dragging.dropIndex, 0, previewWidget);
       }
+    }
+
+    if (dragging?.dropIndex === null && !dragging.dropped) {
+      result.unshift({
+        type: 'droparea',
+        id: 'droparea',
+        height: dragging.widgetRect.height,
+      } as DropareaWidget);
     }
 
     widgetsInGroup = result;
@@ -891,7 +905,9 @@
       {:else}
         <!-- NOTE: id와 index를 조합한 키를 쓰지 않으면 맨 아래에서 드래그할 때 dnd가 버벅거리는 경우 있음 -->
         {#each widgetsInGroup as item, index (`${item.id}-${index}`)}
-          {#if item.type === 'preview'}
+          {#if item.type === 'droparea'}
+            <div style:height={`${item.height}px`}></div>
+          {:else if item.type === 'preview'}
             {@const WidgetComponent = WIDGET_COMPONENTS[item.widgetType]}
             <div class={css({ position: 'relative', opacity: '50' })} data-widget-flip-animation-id={item.widgetType}>
               <WidgetComponent data={item.widgetData} widgetId="drop-preview" />
