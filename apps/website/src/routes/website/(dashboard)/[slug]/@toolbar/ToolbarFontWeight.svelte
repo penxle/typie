@@ -80,10 +80,10 @@
   disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
   getLabel={(value) => {
     const item = weightItems.find((w) => w.value === value);
-    return item?.label ?? '(알 수 없는 두께)';
+    return item?.label ?? '(알 수 없는 굵기)';
   }}
   items={weightItems}
-  label="폰트 두께"
+  label="폰트 굵기"
   onEscape={() => editor?.current.commands.focus()}
   onchange={(weight, options) => {
     const chain = editor?.current.chain().setFontWeight(weight);

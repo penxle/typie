@@ -262,7 +262,7 @@
     return item?.label ?? '(알 수 없는 폰트)';
   }}
   items={allFontFamilies}
-  label="글씨 서체"
+  label="폰트 패밀리"
   onEscape={() => editor?.current.commands.focus()}
   onchange={(fontFamilyValue, options) => {
     const fontWeight = editor?.current.getAttributes('text_style').fontWeight ?? defaultValues.fontWeight;
