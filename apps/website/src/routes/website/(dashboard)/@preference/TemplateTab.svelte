@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
-  import { Icon, Menu, MenuItem, SegmentButtons, Select, TextInput } from '@typie/ui/components';
+  import { Icon, SegmentButtons, Select, TextInput } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { defaultValues, values } from '@typie/ui/tiptap';
   import { clamp, createDefaultPageLayout, getMaxMargin, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
@@ -25,6 +25,7 @@
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import ToolbarSearchableDropdown from '../[slug]/@toolbar/ToolbarSearchableDropdown.svelte';
   import type { PageLayout, PageLayoutPreset } from '@typie/ui/utils';
   import type { DashboardLayout_PreferenceModal_TemplateTab_user } from '$graphql';
 
@@ -235,28 +236,6 @@
     }
   });
 
-  $effect(() => {
-    if (!fontSizeOpened) return;
-
-    let scrollableParent = fontSizeAnchorElement?.parentElement;
-    while (scrollableParent) {
-      const overflowY = window.getComputedStyle(scrollableParent).overflowY;
-      if (overflowY === 'auto' || overflowY === 'scroll') {
-        break;
-      }
-      scrollableParent = scrollableParent.parentElement;
-    }
-
-    if (!scrollableParent) return;
-
-    const originalOverflow = scrollableParent.style.overflow;
-    scrollableParent.style.overflow = 'hidden';
-
-    return () => {
-      scrollableParent.style.overflow = originalOverflow;
-    };
-  });
-
   const handleFontSizeKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -353,50 +332,24 @@
           폰트 패밀리
         {/snippet}
         {#snippet value()}
-          <Menu disableAutoUpdate listStyle={css.raw({ minWidth: '[initial]', maxWidth: '280px' })} offset={4} placement="bottom-end">
-            {#snippet button({ open }: { open: boolean })}
-              <button
-                class={css({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  borderRadius: '6px',
-                  paddingX: '8px',
-                  paddingY: '4px',
-                  transition: 'common',
-                  _hover: { backgroundColor: 'surface.muted' },
-                  _expanded: { backgroundColor: 'surface.muted' },
-                })}
-                aria-expanded={open}
-                type="button"
-              >
-                <span style:font-family={fontFamily} class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-                  {fontFamilyItems.find((f) => f.value === fontFamily)?.label ?? '(알 수 없는 폰트)'}
-                </span>
-                <Icon style={css.raw({ color: 'text.faint', '& *': { strokeWidth: '[1.5px]' } })} icon={ChevronDownIcon} size={14} />
-              </button>
+          <ToolbarSearchableDropdown
+            style={css.raw({ width: '160px', height: '28px', paddingX: '8px' })}
+            getLabel={(value) => {
+              const item = fontFamilyItems.find((f) => f.value === value);
+              return item?.label ?? '(알 수 없는 폰트)';
+            }}
+            items={fontFamilyItems}
+            label="폰트 패밀리"
+            onchange={(value) => {
+              const defaultWeight = getDefaultWeight(value, fontWeight) ?? defaultValues.fontWeight;
+              updateTemplate({ fontFamily: value, fontWeight: defaultWeight });
+            }}
+            value={fontFamily}
+          >
+            {#snippet renderItem(item)}
+              <div style:font-family={item.value}>{item.label}</div>
             {/snippet}
-
-            {#each fontFamilyItems as item (item.value)}
-              <MenuItem
-                onclick={() => {
-                  const defaultWeight = getDefaultWeight(item.value, fontWeight) ?? defaultValues.fontWeight;
-                  updateTemplate({ fontFamily: item.value, fontWeight: defaultWeight });
-                }}
-              >
-                <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '20px', flexGrow: '1' })}>
-                  <span style:font-family={item.value} class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-                    {item.label}
-                  </span>
-                  {#if fontFamily === item.value}
-                    <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
-                  {:else}
-                    <div style:width="14px"></div>
-                  {/if}
-                </div>
-              </MenuItem>
-            {/each}
-          </Menu>
+          </ToolbarSearchableDropdown>
         {/snippet}
       </SettingsRow>
 
@@ -407,57 +360,25 @@
           폰트 굵기
         {/snippet}
         {#snippet value()}
-          <Menu disableAutoUpdate listStyle={css.raw({ minWidth: '[initial]', maxWidth: '280px' })} offset={4} placement="bottom-end">
-            {#snippet button({ open }: { open: boolean })}
-              <button
-                class={css({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  borderRadius: '6px',
-                  paddingX: '8px',
-                  paddingY: '4px',
-                  transition: 'common',
-                  _hover: { backgroundColor: 'surface.muted' },
-                  _expanded: { backgroundColor: 'surface.muted' },
-                })}
-                aria-expanded={open}
-                type="button"
-              >
-                <span
-                  style:font-family={fontFamily}
-                  style:font-weight={fontWeight}
-                  class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}
-                >
-                  {fontWeightItems.find((w) => w.value === fontWeight)?.label ?? '(알 수 없는 굵기)'}
-                </span>
-                <Icon style={css.raw({ color: 'text.faint', '& *': { strokeWidth: '[1.5px]' } })} icon={ChevronDownIcon} size={14} />
-              </button>
+          <ToolbarSearchableDropdown
+            style={css.raw({ width: '120px', height: '28px', paddingX: '8px' })}
+            getLabel={(value) => {
+              const item = fontWeightItems.find((w) => w.value === value);
+              return item?.label ?? '(알 수 없는 굵기)';
+            }}
+            items={fontWeightItems}
+            label="폰트 굵기"
+            onchange={(value) => {
+              updateTemplate({ fontWeight: value });
+            }}
+            value={fontWeight}
+          >
+            {#snippet renderItem(item)}
+              <div style:font-family={fontFamily} style:font-weight={item.value}>
+                {item.label}
+              </div>
             {/snippet}
-
-            {#each fontWeightItems as item (item.value)}
-              <MenuItem
-                onclick={() => {
-                  updateTemplate({ fontWeight: item.value });
-                }}
-              >
-                <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '20px', flexGrow: '1' })}>
-                  <span
-                    style:font-family={fontFamily}
-                    style:font-weight={item.value}
-                    class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}
-                  >
-                    {item.label}
-                  </span>
-                  {#if fontWeight === item.value}
-                    <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
-                  {:else}
-                    <div style:width="14px"></div>
-                  {/if}
-                </div>
-              </MenuItem>
-            {/each}
-          </Menu>
+          </ToolbarSearchableDropdown>
         {/snippet}
       </SettingsRow>
 

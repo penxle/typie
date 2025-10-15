@@ -220,7 +220,7 @@
       borderColor: 'border.subtle',
       borderBottomRadius: '4px',
       backgroundColor: 'surface.default',
-      zIndex: 'overEditor',
+      zIndex: 'menu',
       boxShadow: 'small',
       overflow: 'hidden',
     })}
