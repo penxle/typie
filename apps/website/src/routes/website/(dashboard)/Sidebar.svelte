@@ -560,6 +560,7 @@
             },
           })}
           aria-pressed={app.state.trashOpen}
+          data-type="trash"
           onclick={() => {
             app.state.trashOpen = true;
             mixpanel.track('open_trash_modal', { via: 'sidebar' });
