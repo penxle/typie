@@ -300,7 +300,7 @@
         result.push(current.format('YYYY-MM-DD'));
         current = current.add(1, 'day');
       } else if (gran === 'week') {
-        result.push(current.startOf('week').format('YYYY-MM-DD'));
+        result.push(current.startOf('isoWeek').format('YYYY-MM-DD'));
         current = current.add(1, 'week');
       } else {
         result.push(current.startOf('month').format('YYYY-MM-DD'));
