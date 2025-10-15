@@ -2,10 +2,13 @@
   import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button } from '@typie/ui/components';
+  import { Button, Icon } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
+  import PlusIcon from '~icons/lucide/plus';
   import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import FontUploadModal from '../FontUploadModal.svelte';
+  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import type { DashboardLayout_PreferenceModal_FontTab_user } from '$graphql';
 
   type Props = {
@@ -29,9 +32,16 @@
             weight
           }
         }
+
+        subscription {
+          id
+        }
       }
     `),
   );
+
+  let uploadModalOpen = $state(false);
+  let planUpgradeOpen = $state(false);
 
   const archiveFont = graphql(`
     mutation DashboardLayout_PreferenceModal_FontTab_ArchiveFont_Mutation($input: ArchiveFontInput!) {
@@ -44,8 +54,33 @@
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
   <!-- Tab Header -->
-  <div>
+  <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
     <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>폰트</h1>
+    <button
+      class={flex({
+        alignItems: 'center',
+        gap: '6px',
+        borderRadius: '6px',
+        paddingX: '12px',
+        paddingY: '6px',
+        fontSize: '13px',
+        fontWeight: 'medium',
+        color: 'text.subtle',
+        transition: 'common',
+        _hover: { backgroundColor: 'surface.muted' },
+      })}
+      onclick={() => {
+        if ($user.subscription) {
+          uploadModalOpen = true;
+        } else {
+          planUpgradeOpen = true;
+        }
+      }}
+      type="button"
+    >
+      <Icon style={css.raw({ color: 'text.faint' })} icon={PlusIcon} size={14} />
+      <span>직접 업로드</span>
+    </button>
   </div>
 
   <!-- Font Management Section -->
@@ -102,3 +137,6 @@
     {/if}
   </div>
 </div>
+
+<FontUploadModal userId={$user.id} bind:open={uploadModalOpen} />
+<PlanUpgradeModal bind:open={planUpgradeOpen}>폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
