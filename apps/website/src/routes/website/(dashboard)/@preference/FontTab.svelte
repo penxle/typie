@@ -59,7 +59,12 @@
             {/if}
             <SettingsRow>
               {#snippet label()}
-                {name}
+                <span style:font-family={familyId} style:font-weight={weight}>
+                  {name}
+                </span>
+                <span class={css({ color: 'text.subtle' })}>
+                  ({name})
+                </span>
               {/snippet}
               {#snippet description()}
                 굵기: {weight}
