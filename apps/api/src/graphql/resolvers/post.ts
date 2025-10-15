@@ -459,6 +459,7 @@ builder.mutationFields((t) => ({
       const letterSpacing = template?.letterSpacing ?? 0;
       const fontFamily = template?.fontFamily ?? 'Pretendard';
       const fontSize = template?.fontSize ?? 16;
+      const fontWeight = template?.fontWeight ?? 400;
       const maxWidth = template?.maxWidth ?? 800;
       const layoutMode = template?.layoutMode ?? PostLayoutMode.SCROLL;
       const pageLayout = template?.pageLayout ?? null;
@@ -474,7 +475,7 @@ builder.mutationFields((t) => ({
       const body = node.toJSON();
       const text = makeText(body);
 
-      const initialMarks = [schema.marks.text_style.create({ fontFamily, fontSize }).toJSON()];
+      const initialMarks = [schema.marks.text_style.create({ fontFamily, fontSize, fontWeight }).toJSON()];
 
       const doc = makeYDoc({ title, subtitle, body, maxWidth, layoutMode, pageLayout, initialMarks });
       const snapshot = Y.snapshot(doc);
