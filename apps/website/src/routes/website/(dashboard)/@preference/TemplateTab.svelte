@@ -44,6 +44,11 @@
         fontFamilies {
           id
           name
+
+          fonts {
+            id
+            weight
+          }
         }
       }
     `),
@@ -74,11 +79,67 @@
 
   const fontFamily = $derived(template.fontFamily ?? defaultValues.fontFamily);
   const fontSize = $derived(template.fontSize ?? defaultValues.fontSize);
+  const fontWeight = $derived(template.fontWeight ?? defaultValues.fontWeight);
 
   const fontFamilyItems = $derived([
     ...values.fontFamily.map((f) => ({ value: f.value, label: f.label })),
     ...$user.fontFamilies.map((f) => ({ value: f.id, label: f.name })),
   ]);
+
+  const currentFontFamilyWeights = $derived.by(() => {
+    const systemFontFamily = values.fontFamily.find((f) => f.value === fontFamily);
+    if (systemFontFamily) {
+      return systemFontFamily.weights.toSorted((a, b) => a - b);
+    }
+
+    const userFontFamily = $user.fontFamilies.find((f) => f.id === fontFamily);
+    if (userFontFamily) {
+      return userFontFamily.fonts.map((f) => f.weight).toSorted((a, b) => a - b);
+    }
+
+    return values.fontFamily[0].weights.toSorted((a, b) => a - b);
+  });
+
+  const fontWeightItems = $derived(
+    currentFontFamilyWeights.map((weight) => ({
+      value: weight,
+      label: values.fontWeight.find(({ value }) => value === weight)?.label || String(weight),
+    })),
+  );
+
+  const getDefaultWeight = (fontFamilyOrId: string, fontWeight: number) => {
+    let weights: number[];
+
+    const systemFontFamily = values.fontFamily.find((f) => f.value === fontFamilyOrId);
+    if (systemFontFamily) {
+      weights = systemFontFamily.weights.toSorted((a, b) => a - b);
+    } else {
+      const userFontFamily = $user.fontFamilies.find((f) => f.id === fontFamilyOrId);
+      if (!userFontFamily) return null;
+
+      weights = userFontFamily.fonts.map((f) => f.weight).toSorted((a, b) => a - b);
+    }
+
+    if (weights.length === 0) return null;
+
+    if (weights.includes(fontWeight)) {
+      return fontWeight;
+    }
+
+    let closest = weights[0];
+    let minDiff = Math.abs(fontWeight - weights[0]);
+
+    for (const weight of weights) {
+      const diff = Math.abs(fontWeight - weight);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = weight;
+      }
+    }
+
+    return closest;
+  };
+
   const letterSpacing = $derived(template.letterSpacing ?? defaultValues.letterSpacing);
   const lineHeight = $derived(template.lineHeight ?? defaultValues.lineHeight);
   const layoutMode = $derived(template.layoutMode ?? PostLayoutMode.SCROLL);
@@ -319,7 +380,8 @@
             {#each fontFamilyItems as item (item.value)}
               <MenuItem
                 onclick={() => {
-                  updateTemplate({ fontFamily: item.value });
+                  const defaultWeight = getDefaultWeight(item.value, fontWeight) ?? defaultValues.fontWeight;
+                  updateTemplate({ fontFamily: item.value, fontWeight: defaultWeight });
                 }}
               >
                 <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '20px', flexGrow: '1' })}>
@@ -327,6 +389,67 @@
                     {item.label}
                   </span>
                   {#if fontFamily === item.value}
+                    <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+                  {:else}
+                    <div style:width="14px"></div>
+                  {/if}
+                </div>
+              </MenuItem>
+            {/each}
+          </Menu>
+        {/snippet}
+      </SettingsRow>
+
+      <SettingsDivider />
+
+      <SettingsRow>
+        {#snippet label()}
+          폰트 굵기
+        {/snippet}
+        {#snippet value()}
+          <Menu disableAutoUpdate listStyle={css.raw({ minWidth: '[initial]', maxWidth: '280px' })} offset={4} placement="bottom-end">
+            {#snippet button({ open }: { open: boolean })}
+              <button
+                class={css({
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  borderRadius: '6px',
+                  paddingX: '8px',
+                  paddingY: '4px',
+                  transition: 'common',
+                  _hover: { backgroundColor: 'surface.muted' },
+                  _expanded: { backgroundColor: 'surface.muted' },
+                })}
+                aria-expanded={open}
+                type="button"
+              >
+                <span
+                  style:font-family={fontFamily}
+                  style:font-weight={fontWeight}
+                  class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}
+                >
+                  {fontWeightItems.find((w) => w.value === fontWeight)?.label ?? '(알 수 없는 굵기)'}
+                </span>
+                <Icon style={css.raw({ color: 'text.faint', '& *': { strokeWidth: '[1.5px]' } })} icon={ChevronDownIcon} size={14} />
+              </button>
+            {/snippet}
+
+            {#each fontWeightItems as item (item.value)}
+              <MenuItem
+                onclick={() => {
+                  updateTemplate({ fontWeight: item.value });
+                }}
+              >
+                <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '20px', flexGrow: '1' })}>
+                  <span
+                    style:font-family={fontFamily}
+                    style:font-weight={item.value}
+                    class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}
+                  >
+                    {item.label}
+                  </span>
+                  {#if fontWeight === item.value}
                     <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
                   {:else}
                     <div style:width="14px"></div>
