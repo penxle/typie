@@ -48,7 +48,7 @@
     <span>{message}</span>
 
     {#if trailing}
-      <span class={css({ color: 'text.bright', opacity: '50' })}>{trailing}</span>
+      <span class={css({ color: 'text.bright', opacity: '70' })}>{trailing}</span>
     {/if}
 
     {#if keys}
@@ -59,7 +59,7 @@
           fontFamily: '[Pretendard]',
           fontWeight: 'medium',
           color: 'text.bright',
-          opacity: '50',
+          opacity: '70',
           lineHeight: '[1em]',
         })}
       >
