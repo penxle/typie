@@ -63,7 +63,7 @@ class FontSizeTextOptionsToolbar extends HookWidget {
                   },
                   builder: (context, form) {
                     return ConfirmModal(
-                      title: '글씨 크기',
+                      title: '폰트 크기',
                       onConfirm: () async {
                         await form.submit();
                       },
