@@ -1028,34 +1028,36 @@
   bind:open={editMode}
 />
 
-{#if isHidden}
-  <button
-    class={center({
-      position: 'fixed',
-      bottom: '4px',
-      right: '4px',
-      size: '36px',
-      borderRadius: '8px',
-      zIndex: 'widget',
-      pointerEvents: 'auto',
-      cursor: 'pointer',
-      borderWidth: '0',
-      color: 'text.faint',
-      _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
-    })}
-    aria-label="위젯 보기"
-    onclick={() => {
-      app.preference.current.widgetHidden = false;
-      mixpanel.track('toggle_widget_visibility', {
-        mode: 'show',
-      });
-    }}
-    type="button"
-    use:tooltip={{ message: '위젯 보기' }}
-  >
-    <Icon icon={ShapesIcon} size={20} />
-  </button>
-{/if}
+<button
+  class={center({
+    position: 'fixed',
+    bottom: '4px',
+    right: '4px',
+    size: '36px',
+    borderRadius: '8px',
+    zIndex: 'widget',
+    pointerEvents: 'auto',
+    cursor: 'pointer',
+    borderWidth: '0',
+    color: isHidden ? 'text.faint' : 'text.default',
+    _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+    transition: '[background-color 0.2s, color 0.2s]',
+  })}
+  aria-label={isHidden ? '위젯 보기' : '위젯 숨기기'}
+  onclick={() => {
+    app.preference.current.widgetHidden = !isHidden;
+    mixpanel.track('toggle_widget_visibility', {
+      mode: isHidden ? 'show' : 'hide',
+    });
+    if (!isHidden) {
+      editMode = false;
+    }
+  }}
+  type="button"
+  use:tooltip={{ message: isHidden ? '위젯 보기' : '위젯 숨기기' }}
+>
+  <Icon icon={ShapesIcon} size={20} />
+</button>
 
 <div bind:this={freePositionListElement}>
   {#each freePositionWidgets as widget (widget.id)}
