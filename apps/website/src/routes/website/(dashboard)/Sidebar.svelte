@@ -17,6 +17,7 @@
   import NewspaperIcon from '~icons/lucide/newspaper';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
+  import ShieldUserIcon from '~icons/lucide/shield-user';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -498,8 +499,7 @@
           href="https://typie.link/help"
           rel="noopener noreferrer"
           target="_blank"
-          type="button"
-          use:tooltip={{ message: '고객센터', placement: 'top', offset: 8 }}
+          use:tooltip={{ message: '고객센터', placement: 'top', offset: 8, trailing: '(새 탭)' }}
         >
           <Icon icon={HelpCircleIcon} size={16} />
         </a>
@@ -518,11 +518,29 @@
           href="/changelog"
           rel="noopener noreferrer"
           target="_blank"
-          type="button"
-          use:tooltip={{ message: '업데이트 노트', placement: 'top', offset: 8 }}
+          use:tooltip={{ message: '업데이트 노트', placement: 'top', offset: 8, trailing: '(새 탭)' }}
         >
           <Icon icon={NewspaperIcon} size={16} />
         </a>
+
+        {#if $user.role === 'ADMIN'}
+          <a
+            class={center({
+              borderRadius: '8px',
+              size: '32px',
+              color: 'text.faint',
+              transition: 'common',
+              _hover: {
+                color: 'text.subtle',
+                backgroundColor: 'surface.muted',
+              },
+            })}
+            href="/admin"
+            use:tooltip={{ message: '어드민', placement: 'top', offset: 8 }}
+          >
+            <Icon icon={ShieldUserIcon} size={16} />
+          </a>
+        {/if}
       </div>
 
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
