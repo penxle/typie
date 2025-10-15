@@ -1,14 +1,13 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Icon } from '@typie/ui/components';
+  import { Icon, SearchableDropdown } from '@typie/ui/components';
   import { defaultValues, values } from '@typie/ui/tiptap';
   import mixpanel from 'mixpanel-browser';
   import PlusIcon from '~icons/lucide/plus';
   import { fragment, graphql } from '$graphql';
   import FontUploadModal from '../../FontUploadModal.svelte';
   import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
-  import ToolbarSearchableDropdown from './ToolbarSearchableDropdown.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type { Editor_BottomToolbar_FontFamily_user } from '$graphql';
@@ -99,7 +98,7 @@
   </div>
 {/snippet}
 
-<ToolbarSearchableDropdown
+<SearchableDropdown
   style={css.raw({ width: '120px' })}
   disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
   extraItems={[
@@ -137,7 +136,7 @@
   {#snippet renderItem(item)}
     <div style:font-family={item.value}>{item.label}</div>
   {/snippet}
-</ToolbarSearchableDropdown>
+</SearchableDropdown>
 
 <FontUploadModal userId={$user.id} bind:open={uploadModalOpen} />
 <PlanUpgradeModal bind:open={planUpgradeOpen}>폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>

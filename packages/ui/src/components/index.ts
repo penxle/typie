@@ -1,6 +1,8 @@
 export { default as Button } from './Button.svelte';
 export { default as Checkbox } from './Checkbox.svelte';
 export { default as ContentProtect } from './ContentProtect.svelte';
+export { default as DropdownMenu } from './DropdownMenu.svelte';
+export { default as DropdownMenuItem } from './DropdownMenuItem.svelte';
 export { default as EditorLayout } from './editor/EditorLayout.svelte';
 export { default as EditorZoom } from './editor/EditorZoom.svelte';
 export { default as Helmet } from './Helmet.svelte';
@@ -12,6 +14,7 @@ export { default as MenuItem } from './MenuItem.svelte';
 export { default as Modal } from './Modal.svelte';
 export { default as Popover } from './Popover.svelte';
 export { default as RingSpinner } from './RingSpinner.svelte';
+export { default as SearchableDropdown } from './SearchableDropdown.svelte';
 export { default as SegmentButtons } from './SegmentButtons.svelte';
 export { default as Select } from './Select.svelte';
 export { default as Slider } from './Slider.svelte';

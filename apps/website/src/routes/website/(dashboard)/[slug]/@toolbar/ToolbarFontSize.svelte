@@ -1,14 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { createFloatingActions, tooltip } from '@typie/ui/actions';
-  import { Icon } from '@typie/ui/components';
+  import { DropdownMenu, DropdownMenuItem, Icon } from '@typie/ui/components';
   import { defaultValues, values } from '@typie/ui/tiptap';
   import { clamp } from '@typie/ui/utils';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
-  import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
 
@@ -214,7 +212,7 @@
       use:floatingAction
       in:fly={{ y: -5, duration: 150 }}
     >
-      <ToolbarDropdownMenu
+      <DropdownMenu
         autoFocus={false}
         onclose={() => {
           close();
@@ -223,7 +221,7 @@
         {opened}
       >
         {#each values.fontSize as { label, value } (value)}
-          <ToolbarDropdownMenuItem
+          <DropdownMenuItem
             active={currentFontSize === value}
             onclick={() => {
               editor?.current.chain().focus().setFontSize(value).run();
@@ -231,9 +229,9 @@
             }}
           >
             {label}
-          </ToolbarDropdownMenuItem>
+          </DropdownMenuItem>
         {/each}
-      </ToolbarDropdownMenu>
+      </DropdownMenu>
     </div>
   {/if}
 </div>

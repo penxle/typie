@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
-  import { Icon, SegmentButtons, Select, TextInput } from '@typie/ui/components';
+  import { Icon, SearchableDropdown, SegmentButtons, Select, TextInput } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { defaultValues, values } from '@typie/ui/tiptap';
   import { clamp, createDefaultPageLayout, getMaxMargin, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
@@ -25,7 +25,6 @@
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
-  import ToolbarSearchableDropdown from '../[slug]/@toolbar/ToolbarSearchableDropdown.svelte';
   import type { PageLayout, PageLayoutPreset } from '@typie/ui/utils';
   import type { DashboardLayout_PreferenceModal_TemplateTab_user } from '$graphql';
 
@@ -332,7 +331,7 @@
           폰트 패밀리
         {/snippet}
         {#snippet value()}
-          <ToolbarSearchableDropdown
+          <SearchableDropdown
             style={css.raw({ width: '160px', height: '28px', paddingX: '8px' })}
             getLabel={(value) => {
               const item = fontFamilyItems.find((f) => f.value === value);
@@ -349,7 +348,7 @@
             {#snippet renderItem(item)}
               <div style:font-family={item.value}>{item.label}</div>
             {/snippet}
-          </ToolbarSearchableDropdown>
+          </SearchableDropdown>
         {/snippet}
       </SettingsRow>
 
@@ -360,7 +359,7 @@
           폰트 굵기
         {/snippet}
         {#snippet value()}
-          <ToolbarSearchableDropdown
+          <SearchableDropdown
             style={css.raw({ width: '120px', height: '28px', paddingX: '8px' })}
             getLabel={(value) => {
               const item = fontWeightItems.find((w) => w.value === value);
@@ -378,7 +377,7 @@
                 {item.label}
               </div>
             {/snippet}
-          </ToolbarSearchableDropdown>
+          </SearchableDropdown>
         {/snippet}
       </SettingsRow>
 
