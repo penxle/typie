@@ -54,13 +54,13 @@
     offset,
     disableAutoUpdate,
     onClickOutside: () => {
-      open = false;
+      close();
     },
   });
 
   const close = () => {
     open = false;
-    buttonEl?.focus();
+    // NOTE: 닫으면 focusTrap에 의해 자동으로 포커스 돌아감
   };
 
   setContext('close', close);
@@ -77,7 +77,7 @@
   });
 
   afterNavigate(() => {
-    open = false;
+    close();
   });
 
   $effect(() => {
@@ -219,7 +219,13 @@
     )}
     role="menu"
     use:floating
-    use:focusTrap={{ fallbackFocus: menuEl, escapeDeactivates: false, allowOutsideClick: true }}
+    use:focusTrap={{
+      fallbackFocus: menuEl,
+      escapeDeactivates: false,
+      allowOutsideClick: true,
+      // NOTE: 우클릭으로 연 경우 buttonEl이 없으며 포커스 되돌리지 않음
+      returnFocusOnDeactivate: !!buttonEl,
+    }}
     transition:scale={{ start: 0.95, duration: 150 }}
   >
     {#if action}

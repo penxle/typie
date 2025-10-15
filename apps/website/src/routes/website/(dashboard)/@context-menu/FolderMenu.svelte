@@ -125,10 +125,10 @@
 <MenuItem
   icon={PencilIcon}
   onclick={() => {
+    mixpanel.track('rename_folder_try', { via });
     if (onRename) {
       onRename();
     }
-    mixpanel.track('rename_folder', { via });
   }}
 >
   이름 변경
