@@ -453,7 +453,7 @@
                   borderColor: 'border.subtle',
                   borderBottomRadius: '4px',
                   backgroundColor: 'surface.default',
-                  zIndex: '[9999]',
+                  zIndex: 'menu',
                   boxShadow: 'small',
                   overflow: 'hidden',
                   maxHeight: '200px',
