@@ -1,8 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { SearchableDropdown } from '@typie/ui/components';
   import { defaultValues, values } from '@typie/ui/tiptap';
   import { fragment, graphql } from '$graphql';
-  import ToolbarSearchableDropdown from './ToolbarSearchableDropdown.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type { Editor_BottomToolbar_FontWeight_user } from '$graphql';
@@ -75,7 +75,7 @@
   );
 </script>
 
-<ToolbarSearchableDropdown
+<SearchableDropdown
   style={css.raw({ width: '100px' })}
   disabled={!editor?.current.can().chain().setFontFamily(defaultValues.fontFamily).run()}
   getLabel={(value) => {
@@ -99,4 +99,4 @@
       {item.label}
     </div>
   {/snippet}
-</ToolbarSearchableDropdown>
+</SearchableDropdown>

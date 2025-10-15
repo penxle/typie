@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { VerticalDivider } from '@typie/ui/components';
+  import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { getEditorContext, values } from '@typie/ui/tiptap';
   import BookmarkIcon from '~icons/lucide/bookmark';
@@ -26,8 +26,6 @@
   import { fragment, graphql } from '$graphql';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
-  import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
-  import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import ToolbarPanelTabButton from './ToolbarPanelTabButton.svelte';
   import type { Editor } from '@tiptap/core';
@@ -137,9 +135,9 @@
       {/snippet}
 
       {#snippet floating({ close })}
-        <ToolbarDropdownMenu style={css.raw({ maxWidth: '200px' })}>
+        <DropdownMenu style={css.raw({ maxWidth: '200px' })}>
           {#each values.horizontalRule as { type, component: Component } (type)}
-            <ToolbarDropdownMenuItem
+            <DropdownMenuItem
               style={css.raw({ justifyContent: 'center', height: '48px' })}
               onclick={() => {
                 editor?.current.chain().focus().setHorizontalRule(type).run();
@@ -147,9 +145,9 @@
               }}
             >
               <Component />
-            </ToolbarDropdownMenuItem>
+            </DropdownMenuItem>
           {/each}
-        </ToolbarDropdownMenu>
+        </DropdownMenu>
       {/snippet}
     </ToolbarDropdownButton>
 
@@ -164,9 +162,9 @@
       {/snippet}
 
       {#snippet floating({ close })}
-        <ToolbarDropdownMenu style={css.raw({ maxWidth: '200px' })}>
+        <DropdownMenu style={css.raw({ maxWidth: '200px' })}>
           {#each values.blockquote as { type, component: Component } (type)}
-            <ToolbarDropdownMenuItem
+            <DropdownMenuItem
               style={css.raw({ height: '48px' })}
               onclick={() => {
                 editor?.current.chain().focus().toggleBlockquote(type).run();
@@ -174,9 +172,9 @@
               }}
             >
               <Component renderAsOption />
-            </ToolbarDropdownMenuItem>
+            </DropdownMenuItem>
           {/each}
-        </ToolbarDropdownMenu>
+        </DropdownMenu>
       {/snippet}
     </ToolbarDropdownButton>
 
@@ -220,8 +218,8 @@
       {/snippet}
 
       {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
-          <ToolbarDropdownMenuItem
+        <DropdownMenu>
+          <DropdownMenuItem
             onclick={() => {
               editor?.current.chain().focus().toggleBulletList().run();
               close();
@@ -231,9 +229,9 @@
               <ToolbarIcon icon={ListIcon} />
               순서 없는 목록
             </div>
-          </ToolbarDropdownMenuItem>
+          </DropdownMenuItem>
 
-          <ToolbarDropdownMenuItem
+          <DropdownMenuItem
             onclick={() => {
               editor?.current.chain().focus().toggleOrderedList().run();
               close();
@@ -243,8 +241,8 @@
               <ToolbarIcon icon={ListOrderedIcon} />
               순서 있는 목록
             </div>
-          </ToolbarDropdownMenuItem>
-        </ToolbarDropdownMenu>
+          </DropdownMenuItem>
+        </DropdownMenu>
       {/snippet}
     </ToolbarDropdownButton>
 

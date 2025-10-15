@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { VerticalDivider } from '@typie/ui/components';
+  import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { defaultValues, getEditorContext, values } from '@typie/ui/tiptap';
   import BoldIcon from '~icons/lucide/bold';
@@ -21,8 +21,6 @@
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarColorGrid from './ToolbarColorGrid.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
-  import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
-  import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
   import ToolbarFloatingLink from './ToolbarFloatingLink.svelte';
   import ToolbarFloatingRuby from './ToolbarFloatingRuby.svelte';
   import ToolbarFontFamily from './ToolbarFontFamily.svelte';
@@ -330,9 +328,9 @@
       {/snippet}
 
       {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
+        <DropdownMenu>
           {#each values.textAlign as { label, value } (value)}
-            <ToolbarDropdownMenuItem
+            <DropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
               active={(editor?.current.getAttributes('paragraph').textAlign ?? defaultValues.textAlign) === value}
               onclick={() => {
@@ -341,9 +339,9 @@
               }}
             >
               {label}
-            </ToolbarDropdownMenuItem>
+            </DropdownMenuItem>
           {/each}
-        </ToolbarDropdownMenu>
+        </DropdownMenu>
       {/snippet}
     </ToolbarDropdownButton>
 
@@ -357,9 +355,9 @@
       {/snippet}
 
       {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
+        <DropdownMenu>
           {#each values.lineHeight as { label, value } (value)}
-            <ToolbarDropdownMenuItem
+            <DropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
               active={(editor?.current.getAttributes('paragraph').lineHeight ?? defaultValues.lineHeight) === value}
               onclick={() => {
@@ -368,9 +366,9 @@
               }}
             >
               {label}
-            </ToolbarDropdownMenuItem>
+            </DropdownMenuItem>
           {/each}
-        </ToolbarDropdownMenu>
+        </DropdownMenu>
       {/snippet}
     </ToolbarDropdownButton>
 
@@ -384,9 +382,9 @@
       {/snippet}
 
       {#snippet floating({ close })}
-        <ToolbarDropdownMenu>
+        <DropdownMenu>
           {#each values.letterSpacing as { label, value } (value)}
-            <ToolbarDropdownMenuItem
+            <DropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
               active={(editor?.current.getAttributes('paragraph').letterSpacing ?? defaultValues.letterSpacing) === value}
               onclick={() => {
@@ -395,9 +393,9 @@
               }}
             >
               {label}
-            </ToolbarDropdownMenuItem>
+            </DropdownMenuItem>
           {/each}
-        </ToolbarDropdownMenu>
+        </DropdownMenu>
       {/snippet}
     </ToolbarDropdownButton>
   </div>

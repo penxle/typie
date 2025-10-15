@@ -6,8 +6,8 @@
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import ToolbarDropdownMenu from './ToolbarDropdownMenu.svelte';
-  import ToolbarDropdownMenuItem from './ToolbarDropdownMenuItem.svelte';
+  import DropdownMenu from './DropdownMenu.svelte';
+  import DropdownMenuItem from './DropdownMenuItem.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
 
@@ -227,7 +227,7 @@
     use:floatingAction
     in:fly={{ y: -5, duration: 150 }}
   >
-    <ToolbarDropdownMenu
+    <DropdownMenu
       autoFocus={false}
       onclose={() => {
         close();
@@ -236,7 +236,7 @@
       {opened}
     >
       {#each filteredItems as item (item.value)}
-        <ToolbarDropdownMenuItem
+        <DropdownMenuItem
           active={value === item.value}
           onclick={() => {
             onchange(item.value, { shouldFocus: true });
@@ -248,19 +248,19 @@
           {:else}
             {item.label}
           {/if}
-        </ToolbarDropdownMenuItem>
+        </DropdownMenuItem>
       {/each}
 
       {#each extraItems as extraItem, i (i)}
-        <ToolbarDropdownMenuItem
+        <DropdownMenuItem
           onclick={() => {
             extraItem.onclick();
             close();
           }}
         >
           {@render extraItem.content()}
-        </ToolbarDropdownMenuItem>
+        </DropdownMenuItem>
       {/each}
-    </ToolbarDropdownMenu>
+    </DropdownMenu>
   </div>
 {/if}
