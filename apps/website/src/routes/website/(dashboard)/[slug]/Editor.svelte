@@ -941,11 +941,9 @@
           >
             <Icon icon={Maximize2Icon} size={16} />
           </button>
-          {#if splitView.state.current.enabled}
-            <CloseSplitView>
-              <Icon icon={XIcon} size={16} />
-            </CloseSplitView>
-          {/if}
+          <CloseSplitView>
+            <Icon icon={XIcon} size={16} />
+          </CloseSplitView>
         </div>
       </div>
 
