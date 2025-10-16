@@ -71,7 +71,7 @@
         <ActivityGrid $user={$query.me} />
 
         <div class={flex({ justifyContent: 'flex-end' })}>
-          <Button onclick={copyActivityImage}>이미지로 복사하기</Button>
+          <Button onclick={copyActivityImage} variant="secondary">이미지로 복사하기</Button>
         </div>
       </div>
 
