@@ -12,6 +12,7 @@
   import FilePenIcon from '~icons/lucide/file-pen';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { goto } from '$app/navigation';
+  import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
   import ActivityGrid from '../@stats/ActivityGrid.svelte';
 
@@ -122,93 +123,110 @@
 
 <Helmet title="홈" />
 
-{#if $query.me.sites[0].firstEntity}
+<div class={center({ padding: '32px', marginX: 'auto', minHeight: 'fit', backgroundColor: 'surface.default' })}>
   <div
     class={center({
       flexDirection: 'column',
       gap: '32px',
-      width: 'full',
-      minWidth: 'fit',
-      minHeight: 'fit',
-      padding: '32px',
-      backgroundColor: 'surface.default',
+      width: '800px',
     })}
   >
-    {#if mounted}
-      <h1
-        class={css({ fontSize: '24px', fontWeight: 'bold', color: 'text.default', minHeight: '36px', width: '800px' })}
-        transition:typewriter={{ speed: 50 }}
-      >
-        {$query.me.name}님, {getGreeting()}
-      </h1>
-    {/if}
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <Logo class={css({ size: '32px' })} />
+      {#if mounted}
+        <h1
+          class={css({
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: 'text.default',
+            minHeight: '36px',
+            width: '800px',
+          })}
+          transition:typewriter={{ speed: 50 }}
+        >
+          {$query.me.name}님, {getGreeting()}
+        </h1>
+      {/if}
+    </div>
 
-    {#if $query.me.recentlyViewedEntities.length > 0}
-      <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px' })}>
-        <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 본 항목</h2>
-        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-          {#each $query.me.recentlyViewedEntities.slice(0, 5) as entity (entity.id)}
-            <a
-              class={css({
-                padding: '12px',
-                borderRadius: '8px',
-                backgroundColor: 'surface.subtle',
-                transition: 'background',
-                transitionDuration: '150ms',
-                _hover: {
-                  backgroundColor: 'surface.muted',
-                },
-              })}
-              href="/{entity.slug}"
-            >
-              <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-                <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                  <Icon
-                    style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
-                    icon={entity.node.__typename === 'Canvas' ? LineSquiggleIcon : FileIcon}
-                  />
-                  <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
-                    {entity.node.__typename === 'Post' || entity.node.__typename === 'Canvas' ? entity.node.title : ''}
+    {#if $query.me.sites[0].firstEntity}
+      {#if $query.me.recentlyViewedEntities.length > 0}
+        <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px' })}>
+          <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 본 항목</h2>
+          <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+            {#each $query.me.recentlyViewedEntities.slice(0, 5) as entity (entity.id)}
+              <a
+                class={css({
+                  padding: '12px',
+                  borderRadius: '8px',
+                  backgroundColor: 'surface.subtle',
+                  transition: 'background',
+                  transitionDuration: '150ms',
+                  _hover: {
+                    backgroundColor: 'surface.muted',
+                  },
+                })}
+                href="/{entity.slug}"
+              >
+                <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+                  <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                    <Icon
+                      style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
+                      icon={entity.node.__typename === 'Canvas' ? LineSquiggleIcon : FileIcon}
+                    />
+                    <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
+                      {entity.node.__typename === 'Post' || entity.node.__typename === 'Canvas' ? entity.node.title : ''}
+                    </div>
                   </div>
+                  {#if entity.node.__typename === 'Post' && entity.node.excerpt}
+                    <div class={css({ fontSize: '13px', color: 'text.subtle', paddingLeft: '24px', lineClamp: '1' })}>
+                      {entity.node.excerpt}
+                    </div>
+                  {/if}
                 </div>
-                {#if entity.node.__typename === 'Post' && entity.node.excerpt}
-                  <div class={css({ fontSize: '13px', color: 'text.subtle', paddingLeft: '24px', lineClamp: '1' })}>
-                    {entity.node.excerpt}
-                  </div>
-                {/if}
-              </div>
-            </a>
-          {/each}
+              </a>
+            {/each}
+          </div>
         </div>
+      {/if}
+    {:else}
+      <div
+        class={center({
+          width: 'full',
+          flexDirection: 'column',
+          gap: '20px',
+          paddingY: '50px',
+          borderRadius: '8px',
+          borderWidth: '1px',
+          textAlign: 'center',
+        })}
+      >
+        <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
+
+        <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+          <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>첫 포스트를 만들어보세요</h1>
+          <p class={css({ fontSize: '14px', color: 'text.faint' })}>아래 버튼을 눌러 포스트를 만들 수 있어요</p>
+        </div>
+
+        <Button
+          onclick={async () => {
+            const resp = await createPost({
+              siteId: $query.me.sites[0].id,
+            });
+
+            mixpanel.track('create_post', { via: 'empty_home' });
+
+            await goto(`/${resp.entity.slug}`);
+          }}
+        >
+          새 포스트 만들기
+        </Button>
       </div>
     {/if}
 
-    <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px' })}>
+    <div class={flex({ flexDirection: 'column', gap: '16px', width: 'full' })}>
       <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 활동</h2>
       <ActivityGrid $user={$query.me} />
     </div>
   </div>
-{:else}
-  <div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>
-    <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
-
-    <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-      <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>첫 포스트를 만들어보세요</h1>
-      <p class={css({ fontSize: '14px', color: 'text.faint' })}>아래 버튼을 눌러 포스트를 만들 수 있어요</p>
-    </div>
-
-    <Button
-      onclick={async () => {
-        const resp = await createPost({
-          siteId: $query.me.sites[0].id,
-        });
-
-        mixpanel.track('create_post', { via: 'empty_home' });
-
-        await goto(`/${resp.entity.slug}`);
-      }}
-    >
-      새 포스트 만들기
-    </Button>
-  </div>
-{/if}
+</div>
