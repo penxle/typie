@@ -8,6 +8,7 @@
   import { Tip } from '@typie/ui/notification';
   import { animateFlip, createDndHandler, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { on } from 'svelte/events';
   import LayoutDashboardIcon from '~icons/lucide/layout-dashboard';
   import MinusIcon from '~icons/lucide/minus';
   import ShapesIcon from '~icons/lucide/shapes';
@@ -136,6 +137,7 @@
   let widgetListElement = $state<HTMLDivElement>();
   let scrollContainerElement = $state<HTMLDivElement>();
   let freePositionListElement = $state<HTMLDivElement>();
+  let widgetGroupScrollTop = $state(0);
 
   type BaseDragging = {
     dropIndex: number | null;
@@ -605,6 +607,16 @@
 
   $effect(() => {
     if (!scrollContainerElement) return;
+
+    widgetGroupScrollTop = scrollContainerElement.scrollTop;
+
+    return on(scrollContainerElement, 'scroll', (e) => {
+      widgetGroupScrollTop = (e.currentTarget as HTMLElement).scrollTop;
+    });
+  });
+
+  $effect(() => {
+    if (!scrollContainerElement) return;
     return handleDragScroll(scrollContainerElement, !!dragging);
   });
 
@@ -719,6 +731,7 @@
     if (!scrollContainerElement) return;
 
     scrollContainerElement.scrollTop = scrollContainerElement.scrollHeight;
+    widgetGroupScrollTop = scrollContainerElement.scrollTop;
   });
 
   $effect(() => {
@@ -816,6 +829,7 @@
     {#if dragging && !dragging.dropped}
       <div
         bind:this={dropZoneElement}
+        style:bottom={`${-widgetGroupScrollTop}px`}
         class={css({
           position: 'absolute',
           width: 'full',
