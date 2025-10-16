@@ -131,7 +131,7 @@
     {:else}
       <SettingsCard>
         <div class={css({ padding: '20px', fontSize: '13px', color: 'text.subtle', textAlign: 'center' })}>
-          에디터에서 업로드한 폰트가 여기 나타나요.
+          아직 직접 업로드한 폰트가 없어요.
         </div>
       </SettingsCard>
     {/if}
