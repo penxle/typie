@@ -73,21 +73,21 @@ const gray = {
   950: '#09090B',
 };
 
-const brand = {
-  100: '#DBEAFE',
-  300: '#BFDBFE',
-  500: '#60A5FA',
-  700: '#2563EB',
-  900: '#1D4ED8',
+const green = {
+  100: '#DCFCE7',
+  300: '#7BF1A8',
+  500: '#00C951',
+  700: '#008236',
+  900: '#0D542B',
 };
 
 const levelColors = {
   0: gray[100],
-  1: brand[100],
-  2: brand[300],
-  3: brand[500],
-  4: brand[700],
-  5: brand[900],
+  1: green[100],
+  2: green[300],
+  3: green[500],
+  4: green[700],
+  5: green[900],
 };
 
 type Level = 0 | 1 | 2 | 3 | 4 | 5;

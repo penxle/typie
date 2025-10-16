@@ -123,8 +123,8 @@
     offset: 8,
   });
 
-  const additionColor = css.raw({ backgroundColor: { base: 'brand.400', _dark: 'dark.brand.600' } });
-  const deletionColor = css.raw({ backgroundColor: { base: 'gray.400', _dark: 'dark.gray.500' } });
+  const additionColor = css.raw({ backgroundColor: { base: 'green.400', _dark: 'dark.green.600' } });
+  const deletionColor = css.raw({ backgroundColor: { base: 'gray.400', _dark: 'dark.gray.600' } });
 
   const maxVal = $derived(Math.max(...daysData.map((d) => (showAdditions ? d.additions : 0) + (showDeletions ? d.deletions : 0)), 1));
 

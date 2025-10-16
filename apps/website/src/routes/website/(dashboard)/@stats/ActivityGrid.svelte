@@ -136,11 +136,11 @@
 
   const cssByLevel = {
     0: css.raw({ backgroundColor: { base: 'gray.100', _dark: 'dark.gray.800' } }),
-    1: css.raw({ backgroundColor: { base: 'brand.100', _dark: 'dark.brand.700' } }),
-    2: css.raw({ backgroundColor: { base: 'brand.300', _dark: 'dark.brand.600' } }),
-    3: css.raw({ backgroundColor: { base: 'brand.500', _dark: 'dark.brand.500' } }),
-    4: css.raw({ backgroundColor: { base: 'brand.700', _dark: 'dark.brand.300' } }),
-    5: css.raw({ backgroundColor: { base: 'brand.900', _dark: 'dark.brand.100' } }),
+    1: css.raw({ backgroundColor: { base: 'green.100', _dark: 'dark.green.800' } }),
+    2: css.raw({ backgroundColor: { base: 'green.300', _dark: 'dark.green.600' } }),
+    3: css.raw({ backgroundColor: { base: 'green.500', _dark: 'dark.green.500' } }),
+    4: css.raw({ backgroundColor: { base: 'green.700', _dark: 'dark.green.300' } }),
+    5: css.raw({ backgroundColor: { base: 'green.900', _dark: 'dark.green.100' } }),
   };
 
   const { anchor, floating } = createFloatingActions({
