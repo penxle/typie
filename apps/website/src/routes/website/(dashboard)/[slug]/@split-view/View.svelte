@@ -113,11 +113,9 @@
         <Helmet title={`삭제된 ${name}`} />
       {/if}
 
-      {#if splitView.state.current.enabled}
-        <CloseSplitView style={css.raw({ position: 'absolute', top: '6px', right: '8px' })}>
-          <Icon icon={XIcon} size={16} />
-        </CloseSplitView>
-      {/if}
+      <CloseSplitView style={css.raw({ position: 'absolute', top: '6px', right: '8px' })}>
+        <Icon icon={XIcon} size={16} />
+      </CloseSplitView>
 
       <div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>
         <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FileXIcon} />
@@ -134,11 +132,9 @@
     {/if}
   {:else}
     <div class={center({ size: 'full' })}>
-      {#if splitView.state.current.enabled}
-        <CloseSplitView style={css.raw({ position: 'absolute', top: '6px', right: '8px' })}>
-          <Icon icon={XIcon} size={16} />
-        </CloseSplitView>
-      {/if}
+      <CloseSplitView style={css.raw({ position: 'absolute', top: '6px', right: '8px' })}>
+        <Icon icon={XIcon} size={16} />
+      </CloseSplitView>
 
       <Logo
         class={css({

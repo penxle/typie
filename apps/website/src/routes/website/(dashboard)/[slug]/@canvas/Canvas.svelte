@@ -23,7 +23,7 @@
   import { fragment, graphql } from '$graphql';
   import CanvasMenu from '../../@context-menu/CanvasMenu.svelte';
   import CloseSplitView from '../@split-view/CloseSplitView.svelte';
-  import { getSplitViewContext, getViewContext } from '../@split-view/context.svelte';
+  import { getViewContext } from '../@split-view/context.svelte';
   import { getDragDropContext } from '../@split-view/drag-context.svelte.ts';
   import { dragView } from '../@split-view/drag-view-action';
   import { YState } from '../state.svelte';
@@ -102,7 +102,6 @@
 
   const app = getAppContext();
   const theme = getThemeContext();
-  const splitView = getSplitViewContext();
   const splitViewId = getViewContext().id;
   const dragDropContext = getDragDropContext();
   const dragViewProps = $derived({ dragDropContext, viewId: splitViewId });
@@ -491,11 +490,9 @@
           <CanvasMenu canvas={entity.node} {entity} via="editor" />
         {/if}
       </Menu>
-      {#if splitView.state.current.enabled}
-        <CloseSplitView>
-          <Icon icon={XIcon} size={16} />
-        </CloseSplitView>
-      {/if}
+      <CloseSplitView>
+        <Icon icon={XIcon} size={16} />
+      </CloseSplitView>
     </div>
   </div>
 
