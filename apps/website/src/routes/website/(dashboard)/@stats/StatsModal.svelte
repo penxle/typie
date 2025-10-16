@@ -1,9 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Modal } from '@typie/ui/components';
+  import { Button, Icon, Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
+  import { downloadFromBase64 } from '@typie/ui/utils';
+  import CopyIcon from '~icons/lucide/copy';
+  import DownloadIcon from '~icons/lucide/download';
   import { graphql } from '$graphql';
   import ActivityChart from './ActivityChart.svelte';
   import ActivityGrid from './ActivityGrid.svelte';
@@ -12,6 +15,7 @@
     query DashboardLayout_StatsModal_Query @client {
       me @required {
         id
+        name
 
         ...DashboardLayout_Stats_ActivityChart_user
         ...DashboardLayout_Stats_ActivityGrid_user
@@ -46,6 +50,13 @@
 
     Toast.success('이미지가 클립보드에 복사되었어요.');
   };
+
+  const downloadActivityImage = async () => {
+    const b64 = await generateActivityImage();
+    downloadFromBase64(b64, `${$query?.me.name ?? '타이피'} - 나의 글쓰기 발자취.png`, 'image/png');
+
+    Toast.success('이미지가 다운로드되었어요.');
+  };
 </script>
 
 <Modal
@@ -70,8 +81,15 @@
 
         <ActivityGrid $user={$query.me} />
 
-        <div class={flex({ justifyContent: 'flex-end' })}>
-          <Button onclick={copyActivityImage} variant="secondary">이미지로 복사하기</Button>
+        <div class={flex({ justifyContent: 'flex-end', gap: '8px' })}>
+          <Button style={css.raw({ gap: '4px' })} onclick={copyActivityImage} size="sm" variant="secondary">
+            <Icon icon={CopyIcon} />
+            복사
+          </Button>
+          <Button style={css.raw({ gap: '4px' })} onclick={downloadActivityImage} size="sm" variant="secondary">
+            <Icon icon={DownloadIcon} />
+            다운로드
+          </Button>
         </div>
       </div>
 
