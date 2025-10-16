@@ -45,7 +45,18 @@
     `),
   );
 
-  const currentFontFamilyValue = $derived(editor?.current.getAttributes('text_style').fontFamily ?? defaultValues.fontFamily);
+  const currentFontFamilyValue = $derived.by(() => {
+    const value = editor?.current.getAttributes('text_style').fontFamily;
+
+    // NOTE: 레거시 지원; value가 font id(FONT0)인 경우, font family id(FNTF0)로 변환
+    for (const fontFamily of $user.fontFamilies) {
+      if (fontFamily.fonts.some((font) => font.id === value)) {
+        return fontFamily.id;
+      }
+    }
+
+    return value ?? defaultValues.fontFamily;
+  });
 
   const allFontFamilies = $derived.by(() => {
     const systemFonts = values.fontFamily.map((f) => ({ value: f.value, label: f.label }));
