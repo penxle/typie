@@ -157,12 +157,6 @@
     });
   }, 500);
 
-  const handleNoteChange = (noteId: string, value: string) => {
-    noteContents[noteId] = value;
-    noteLocalUpdatedAt[noteId] = new Date();
-    saveNote(noteId, value);
-  };
-
   const handleAddNote = async (via: string) => {
     if (!$post?.entity.id) return;
 
@@ -470,7 +464,10 @@
               resize: 'none',
             })}
             disabled={palette}
-            oninput={(e) => handleNoteChange(note.id, e.currentTarget.value)}
+            oninput={(e) => {
+              noteLocalUpdatedAt[note.id] = new Date();
+              saveNote(note.id, e.currentTarget.value);
+            }}
             onkeydown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
                 e.preventDefault();
@@ -479,7 +476,7 @@
             }}
             placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
             rows={3}
-            value={noteContents[note.id] || ''}
+            bind:value={noteContents[note.id]}
             use:autosize={{ cacheKey: `widget-note-${note.id}` }}
           ></textarea>
 
