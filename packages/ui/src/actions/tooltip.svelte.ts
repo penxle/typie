@@ -24,7 +24,7 @@ type Parameter = TooltipParameter;
 
 export const tooltip: Action<HTMLElement, Parameter> = (
   element,
-  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false, force = false, arrow = true, keys }: Parameter,
+  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false, force, arrow = true, keys }: Parameter,
 ) => {
   let show = $state(false);
   let forceShow = $state(force);
@@ -32,7 +32,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   let shouldShow = $state(false);
 
   const debouncedShouldShow = debounce(() => {
-    shouldShow = show || forceShow;
+    shouldShow = forceShow ?? show;
   }, 0);
 
   $effect(() => {
@@ -126,7 +126,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   });
 
   return {
-    update: ({ message, trailing, keys, force = false }: Parameter) => {
+    update: ({ message, trailing, keys, force }: Parameter) => {
       props.message = message;
       props.trailing = trailing;
       props.keys = keys;

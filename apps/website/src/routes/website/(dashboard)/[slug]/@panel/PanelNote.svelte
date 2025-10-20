@@ -9,6 +9,7 @@
   import { animateFlip, debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
+  import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import PlusIcon from '~icons/lucide/plus';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -343,58 +344,83 @@
             }),
           )}
           data-related-note-id={note.id}
-          draggable="true"
           ondragend={handleDragEnd}
           ondragenter={() => handleDragEnter(note.id)}
           ondragover={(e) => {
             e.preventDefault();
           }}
-          ondragstart={(e) => {
-            const target = e.target as HTMLElement;
-            if (target.tagName === 'TEXTAREA') {
-              e.preventDefault();
-              return;
-            }
-
-            if (e.dataTransfer) {
-              e.dataTransfer.effectAllowed = 'move';
-              e.dataTransfer.setData('text', noteContents[note.id] || '');
-
-              const currentTarget = e.currentTarget as HTMLElement;
-              const rect = currentTarget.getBoundingClientRect();
-              const ghost = document.createElement('div');
-
-              const cloned = currentTarget.cloneNode(true) as HTMLElement;
-              cloned.style.pointerEvents = 'none';
-              cloned.style.transform = 'rotate(1.5deg) scale(1.05)';
-              cloned.style.opacity = '0.8';
-              cloned.style.width = '100%';
-              cloned.style.height = '100%';
-              ghost.append(cloned);
-
-              ghost.style.position = 'absolute';
-              ghost.style.width = `${rect.width}px`;
-              ghost.style.height = `${rect.height}px`;
-              ghost.style.minHeight = `${rect.height}px`;
-              ghost.style.top = '-1000px';
-              ghost.style.left = '-1000px';
-
-              document.body.append(ghost);
-
-              const offsetX = e.clientX - rect.left;
-              const offsetY = e.clientY - rect.top;
-
-              e.dataTransfer.setDragImage(ghost, offsetX, offsetY);
-
-              setTimeout(() => {
-                ghost.remove();
-              });
-            }
-
-            handleDragStart(note.id);
-          }}
           role="listitem"
         >
+          <button
+            class={center({
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              size: '24px',
+              borderRadius: '4px',
+              color: 'text.faint',
+              cursor: 'grab',
+              transition: 'common',
+              opacity: '0',
+              _groupHover: {
+                opacity: dragging ? '0' : '100',
+              },
+              _hover: {
+                color: 'text.default',
+                backgroundColor: 'surface.dark/10',
+              },
+              _active: {
+                cursor: 'grabbing',
+              },
+            })}
+            draggable="true"
+            ondragend={handleDragEnd}
+            ondragstart={(e) => {
+              if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text', noteContents[note.id] || '');
+
+                const noteElement = e.currentTarget.closest('[data-related-note-id]') as HTMLElement;
+                if (noteElement) {
+                  const rect = noteElement.getBoundingClientRect();
+                  const ghost = document.createElement('div');
+
+                  const cloned = noteElement.cloneNode(true) as HTMLElement;
+                  cloned.style.pointerEvents = 'none';
+                  cloned.style.transform = 'rotate(1.5deg) scale(1.05)';
+                  cloned.style.opacity = '0.8';
+                  cloned.style.width = '100%';
+                  cloned.style.height = '100%';
+                  ghost.append(cloned);
+
+                  ghost.style.position = 'absolute';
+                  ghost.style.width = `${rect.width}px`;
+                  ghost.style.height = `${rect.height}px`;
+                  ghost.style.minHeight = `${rect.height}px`;
+                  ghost.style.top = '-1000px';
+                  ghost.style.left = '-1000px';
+
+                  document.body.append(ghost);
+
+                  const offsetX = e.clientX - rect.left;
+                  const offsetY = e.clientY - rect.top;
+
+                  e.dataTransfer.setDragImage(ghost, offsetX, offsetY);
+
+                  setTimeout(() => {
+                    ghost.remove();
+                  });
+                }
+              }
+
+              handleDragStart(note.id);
+            }}
+            type="button"
+            use:tooltip={{ message: '드래그해서 순서 변경', placement: 'top', force: dragging === null ? undefined : false }}
+          >
+            <Icon icon={GripVerticalIcon} size={16} />
+          </button>
+
           <textarea
             class={css({
               width: 'full',
@@ -432,7 +458,7 @@
               transition: 'common',
               opacity: '0',
               _groupHover: {
-                opacity: '100',
+                opacity: dragging ? '0' : '100',
               },
               _hover: {
                 color: 'text.default',
