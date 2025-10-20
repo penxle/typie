@@ -35,7 +35,7 @@
     content: '';
     position: absolute;
     background-color: inherit;
-    right: -0.35rem;
+    right: -0.3456rem;
     bottom: 0;
     width: 1rem;
     height: 1rem;
@@ -78,7 +78,7 @@
 
   .message-sent + :global([data-node-view-content-editable])::before {
     background-color: inherit;
-    right: -0.35rem;
+    right: -0.3456rem;
     bottom: 0;
     width: 1rem;
     height: 1rem;
