@@ -117,6 +117,6 @@
     })}
     ondragstart={(e) => e.preventDefault()}
     role="presentation"
-    use:tooltip={{ message: tooltipMessage, placement: 'top', offset: 8, delay: 0, force: isDragging }}
+    use:tooltip={{ message: tooltipMessage, placement: 'top', offset: 8, delay: 0, force: isDragging ? true : undefined }}
   ></div>
 </div>
