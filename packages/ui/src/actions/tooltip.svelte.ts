@@ -4,6 +4,7 @@ import { debounce } from '../utils';
 import { createFloatingActions } from './floating.svelte';
 import Tooltip from './TooltipComponent.svelte';
 import type { Placement } from '@floating-ui/dom';
+import type { Component } from 'svelte';
 import type { Action } from 'svelte/action';
 
 type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
@@ -11,6 +12,7 @@ type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
 export type TooltipParameter = {
   message?: string | null;
   trailing?: string;
+  trailingIcon?: Component;
   placement?: Placement;
   keys?: [...ModifierKey[], string];
   offset?: number;
@@ -24,7 +26,18 @@ type Parameter = TooltipParameter;
 
 export const tooltip: Action<HTMLElement, Parameter> = (
   element,
-  { message, trailing, placement = 'bottom', offset = 8, delay = 500, keepOnClick = false, force, arrow = true, keys }: Parameter,
+  {
+    message,
+    trailing,
+    trailingIcon,
+    placement = 'bottom',
+    offset = 8,
+    delay = 500,
+    keepOnClick = false,
+    force,
+    arrow = true,
+    keys,
+  }: Parameter,
 ) => {
   let show = $state(false);
   let forceShow = $state(force);
@@ -57,6 +70,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   const props = $state({
     message,
     trailing,
+    trailingIcon,
     keys,
     floating,
     arrow: arrow ? arrowAction : undefined,
@@ -126,9 +140,10 @@ export const tooltip: Action<HTMLElement, Parameter> = (
   });
 
   return {
-    update: ({ message, trailing, keys, force }: Parameter) => {
+    update: ({ message, trailing, trailingIcon, keys, force }: Parameter) => {
       props.message = message;
       props.trailing = trailing;
+      props.trailingIcon = trailingIcon;
       props.keys = keys;
       forceShow = force;
     },
