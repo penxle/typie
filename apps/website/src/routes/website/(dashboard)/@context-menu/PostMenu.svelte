@@ -13,7 +13,7 @@
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';
   import DownloadIcon from '~icons/lucide/download';
-  import ExternalLinkIcon from '~icons/lucide/external-link';
+  import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import Rows2Icon from '~icons/lucide/rows-2';
   import TrashIcon from '~icons/lucide/trash';
@@ -232,7 +232,7 @@
 <MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
 
-<MenuItem external href={entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">사이트에서 열기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 

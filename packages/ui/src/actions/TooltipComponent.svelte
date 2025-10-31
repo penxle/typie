@@ -2,11 +2,14 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { scale } from 'svelte/transition';
+  import { Icon } from '../components';
+  import type { Component } from 'svelte';
   import type { ArrowAction, FloatingAction } from './floating.svelte';
 
   type Props = {
     message?: string | null;
     trailing?: string;
+    trailingIcon?: Component;
     keys?: [...ModifierKey[], string];
     floating: FloatingAction;
     arrow?: ArrowAction;
@@ -22,7 +25,7 @@
     Shift: isMac ? '⇧' : 'Shift',
   };
 
-  let { message, trailing, keys, floating, arrow }: Props = $props();
+  let { message, trailing, trailingIcon, keys, floating, arrow }: Props = $props();
 </script>
 
 {#if message}
@@ -47,6 +50,9 @@
   >
     <span>{message}</span>
 
+    {#if trailingIcon}
+      <Icon style={css.raw({ color: 'text.bright', opacity: '70' })} icon={trailingIcon} size={12} />
+    {/if}
     {#if trailing}
       <span class={css({ color: 'text.bright', opacity: '70' })}>{trailing}</span>
     {/if}

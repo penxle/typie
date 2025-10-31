@@ -9,10 +9,10 @@
   import { EntityType, EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
-  import ExternalLinkIcon from '~icons/lucide/external-link';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import PencilIcon from '~icons/lucide/pencil-line';
@@ -136,7 +136,7 @@
 
 <HorizontalDivider color="secondary" />
 
-<MenuItem external href={entity.url} icon={ExternalLinkIcon} type="link">사이트에서 열기</MenuItem>
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">사이트에서 열기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 

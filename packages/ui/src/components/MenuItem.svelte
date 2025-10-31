@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css, cx, sva } from '@typie/styled-system/css';
   import { getContext } from 'svelte';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import Icon from './Icon.svelte';
   import RingSpinner from './RingSpinner.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -131,6 +132,9 @@
     <Icon style={styles.icon} {icon} size={14} />
   {/if}
   {@render children?.()}
+  {#if type === 'link' && 'external' in rest && rest.external}
+    <Icon style={styles.icon} aria-label="새 탭에서 열기" icon={ExternalLinkIcon} size={12} />
+  {/if}
   {#if loading}
     <RingSpinner style={css.raw({ size: '14px', marginLeft: 'auto' })} />
   {:else}

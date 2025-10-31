@@ -10,6 +10,7 @@
   import BarChart3Icon from '~icons/lucide/bar-chart-3';
   import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import HelpCircleIcon from '~icons/lucide/help-circle';
@@ -499,7 +500,7 @@
           href="https://typie.link/help"
           rel="noopener noreferrer"
           target="_blank"
-          use:tooltip={{ message: '고객센터', placement: 'top', offset: 8, trailing: '(새 탭)' }}
+          use:tooltip={{ message: '고객센터', placement: 'top', offset: 8, trailingIcon: ExternalLinkIcon }}
         >
           <Icon icon={HelpCircleIcon} size={16} />
         </a>
@@ -518,7 +519,7 @@
           href="/changelog"
           rel="noopener noreferrer"
           target="_blank"
-          use:tooltip={{ message: '업데이트 노트', placement: 'top', offset: 8, trailing: '(새 탭)' }}
+          use:tooltip={{ message: '업데이트 노트', placement: 'top', offset: 8, trailingIcon: ExternalLinkIcon }}
         >
           <Icon icon={NewspaperIcon} size={16} />
         </a>
