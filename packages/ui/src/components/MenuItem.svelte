@@ -113,10 +113,10 @@
   this={element}
   onblur={() => (focused = false)}
   onclick={() => {
-    onclick?.();
     if (!loading && !noCloseOnClick) {
       close?.();
     }
+    onclick?.();
   }}
   onfocus={() => (focused = true)}
   role="menuitem"
