@@ -160,7 +160,8 @@
       display: 'flex',
       alignItems: 'center',
       borderRadius: '4px',
-      paddingX: '4px',
+      paddingLeft: '4px',
+      paddingRight: '20px',
       height: '24px',
       _hover: {
         backgroundColor: 'surface.muted',
@@ -185,6 +186,7 @@
       backgroundColor: 'transparent',
       border: 'none',
       outline: 'none',
+      textOverflow: 'ellipsis',
     })}
     {disabled}
     onblur={handleBlur}
