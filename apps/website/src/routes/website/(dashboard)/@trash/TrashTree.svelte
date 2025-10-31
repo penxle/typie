@@ -78,8 +78,9 @@
       {/each}
     </div>
   {:else}
-    <div class={center({ flexGrow: '1' })}>
-      <p class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.disabled' })}>휴지통이 비어있어요</p>
+    <div class={center({ flexGrow: '1', flexDirection: 'column', gap: '6px' })}>
+      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>휴지통이 비어있어요.</p>
+      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>삭제 후 30일동안 휴지통에 보관돼요.</p>
     </div>
   {/if}
 </div>
