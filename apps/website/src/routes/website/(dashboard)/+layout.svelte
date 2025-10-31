@@ -22,7 +22,6 @@
   import ShareModal from './@share/ShareModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
-  import CanvasDeprecationModal from './CanvasDeprecationModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
@@ -144,7 +143,6 @@
 
   let referralWelcomeModalOpen = $state(false);
   let userSurveyModalOpen = $state(false);
-  let canvasDeprecationModalOpen = $state(false);
 
   const fontFaces = $derived(
     $query.me.sites[0].fonts
@@ -201,13 +199,6 @@
 
     if (shouldShowSurvey) {
       userSurveyModalOpen = true;
-    }
-
-    const canvasDeprecationSkipUntil = localStorage.getItem('canvasDeprecationSkipUntil');
-    const shouldShowCanvasDeprecation = !canvasDeprecationSkipUntil || new Date(canvasDeprecationSkipUntil) < new Date();
-
-    if (shouldShowCanvasDeprecation) {
-      canvasDeprecationModalOpen = true;
     }
 
     if ($query.me.preferences.initialPage) {
@@ -341,7 +332,6 @@
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <UserSurveyModal bind:open={userSurveyModalOpen} />
-<CanvasDeprecationModal bind:open={canvasDeprecationModalOpen} />
 
 <div
   class={cx(
