@@ -906,7 +906,18 @@
       data-widget-group
     >
       {#if widgetsInGroup.length === 0 && (!dragging || dragging.dropped)}
-        <div class={center({ flexDirection: 'column', gap: '12px', paddingY: '32px', paddingX: '16px' })}>
+        <div
+          class={center({
+            flexDirection: 'column',
+            gap: '12px',
+            paddingY: '32px',
+            paddingX: '16px',
+            borderRadius: '8px',
+            backgroundColor: 'surface.default/30',
+            backdropFilter: 'auto',
+            backdropBlur: '6px',
+          })}
+        >
           <div class={center({ size: '48px', borderRadius: '12px', backgroundColor: 'surface.muted', color: 'text.faint' })}>
             <Icon icon={LayoutDashboardIcon} size={20} />
           </div>
@@ -1047,14 +1058,14 @@
     position: 'fixed',
     bottom: '4px',
     right: '4px',
-    size: '36px',
+    size: '32px',
     borderRadius: '8px',
     zIndex: 'widget',
     pointerEvents: 'auto',
     cursor: 'pointer',
     borderWidth: '0',
     color: isHidden ? 'text.faint' : 'text.default',
-    _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+    _hover: { color: 'text.default', backgroundColor: 'surface.dark/10' },
     transition: '[background-color 0.2s, color 0.2s]',
   })}
   aria-label={isHidden ? '위젯 보기' : '위젯 숨기기'}
