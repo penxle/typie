@@ -53,7 +53,7 @@
 
     <div
       class={css({
-        backgroundColor: 'white/80',
+        backgroundColor: 'surface.default/80',
         borderRadius: '4px',
         fontSize: '12px',
         color: 'text.subtle',

@@ -328,12 +328,11 @@
           data-anchor-current={anchor.isCurrent}
           onclick={() => handleAnchorClick(anchor)}
           onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+            if ((e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'Enter' || e.key === ' ')) {
               e.preventDefault();
               handleAnchorClick(anchor);
             }
           }}
-          onpointerdown={(e) => e.preventDefault()}
           role="button"
           tabindex="0"
         >
