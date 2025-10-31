@@ -180,7 +180,12 @@
 
       mixpanel.track('create_child_folder', { via });
       open();
-      app.state.newFolderId = resp.id;
+
+      // NOTE: Menu 컴포넌트의 focus-trap이 deactivate시 focus 되돌리기를 setTimeout으로 하므로,
+      // focus-trap에 의해 곧바로 편집 상태가 풀리는 일이 없도록 setTimeout 적용함.
+      setTimeout(() => {
+        app.state.newFolderId = resp.id;
+      });
     }}
   >
     하위 폴더 생성
