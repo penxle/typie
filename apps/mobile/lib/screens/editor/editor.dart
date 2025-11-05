@@ -26,6 +26,7 @@ import 'package:typie/screens/editor/__generated__/delete_post_mutation.req.gql.
 import 'package:typie/screens/editor/__generated__/duplicate_post_mutation.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
+import 'package:typie/screens/editor/__generated__/update_post_type_mutation.req.gql.dart';
 import 'package:typie/screens/editor/anchor.dart';
 import 'package:typie/screens/editor/body_setting_bottom_sheet.dart';
 import 'package:typie/screens/editor/find_replace.dart';
@@ -45,6 +46,7 @@ import 'package:typie/services/theme.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/webview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -122,7 +124,7 @@ class Editor extends HookWidget {
           case 'webviewReady':
             await webViewController.requestFocus();
             await webViewController.emitEvent('appReady', {
-              'features': ['hide-table-delete-in-handle', 'focusable', 'paste-mode', 'notes'],
+              'features': ['template', 'hide-table-delete-in-handle', 'focusable', 'paste-mode', 'notes'],
               'settings': {
                 'lineHighlightEnabled': pref.lineHighlightEnabled,
                 'typewriterEnabled': pref.typewriterEnabled,
@@ -145,6 +147,11 @@ class Editor extends HookWidget {
             await webViewController.clearFocus();
             if (context.mounted) {
               await context.showBottomSheet(intercept: true, child: const LimitBottomSheet());
+            }
+          case 'useTemplate':
+            await webViewController.clearFocus();
+            if (context.mounted) {
+              await context.showBottomSheet(intercept: true, child: _TemplateBottomSheet(scope: scope));
             }
           case 'focus':
             final element = (event.data as Map<String, dynamic>)['element'] as String;
@@ -233,7 +240,7 @@ class Editor extends HookWidget {
       builder: (context, client, data) {
         return Screen(
           heading: Heading(
-            titleIcon: LucideLabIcons.text_square,
+            titleIcon: data.post.type == GPostType.NORMAL ? LucideLabIcons.text_square : LucideLightIcons.shapes,
             title: data.post.title,
             banner: connectionStatus == ConnectionStatus.disconnected
                 ? HeadingBanner(text: '연결이 끊어졌습니다', backgroundColor: context.colors.accentDanger)
@@ -408,6 +415,53 @@ class Editor extends HookWidget {
                               }
                             },
                           ),
+                          switch (data.post.type) {
+                            GPostType.NORMAL => BottomMenuItem(
+                              icon: LucideLightIcons.shapes,
+                              label: '템플릿으로 전환',
+                              onTap: () async {
+                                await context.showModal(
+                                  child: ConfirmModal(
+                                    title: '템플릿으로 전환',
+                                    message: '이 포스트를 템플릿으로 전환하시겠어요?\n앞으로 새 포스트를 생성할 때 이 포스트의 서식을 쉽게 이용할 수 있어요.',
+                                    confirmText: '전환',
+                                    onConfirm: () async {
+                                      await client.request(
+                                        GEditorScreen_UpdatePostType_MutationReq(
+                                          (b) => b
+                                            ..vars.input.postId = data.post.id
+                                            ..vars.input.type = GPostType.TEMPLATE,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                            GPostType.TEMPLATE => BottomMenuItem(
+                              icon: LucideLightIcons.shapes,
+                              label: '포스트로 전환',
+                              onTap: () async {
+                                await context.showModal(
+                                  child: ConfirmModal(
+                                    title: '포스트로 전환',
+                                    message: '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
+                                    confirmText: '전환',
+                                    onConfirm: () async {
+                                      await client.request(
+                                        GEditorScreen_UpdatePostType_MutationReq(
+                                          (b) => b
+                                            ..vars.input.postId = data.post.id
+                                            ..vars.input.type = GPostType.NORMAL,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                            _ => throw UnimplementedError(),
+                          },
                           BottomMenuItem(
                             icon: LucideLightIcons.trash_2,
                             label: '삭제하기',
@@ -636,6 +690,60 @@ class _EditorInfoBottomSheet extends HookWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TemplateBottomSheet extends HookWidget {
+  const _TemplateBottomSheet({required this.scope});
+
+  final EditorStateScope scope;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = useValueListenable(scope.data);
+    final templates = data?.site.templates.toList() ?? [];
+
+    return AppBottomSheet(
+      child: templates.isEmpty
+          ? Padding(
+              padding: const Pad(vertical: 20),
+              child: Text(
+                '아직 템플릿이 없어요.\n\n에디터 우상단 더보기 메뉴에서\n기존 포스트를 템플릿으로 전환해보세요.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+              ),
+            )
+          : ListView.separated(
+              shrinkWrap: true,
+              padding: const Pad(horizontal: 20),
+              itemCount: templates.length,
+              itemBuilder: (context, index) {
+                return Tappable(
+                  padding: const Pad(vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(templates[index].title, overflow: TextOverflow.ellipsis)),
+                      const Gap(8),
+                      Text('사용하기', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+                      const Gap(4),
+                      Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textFaint),
+                    ],
+                  ),
+                  onTap: () async {
+                    await scope.webViewController.value?.emitEvent('loadTemplate', {
+                      'slug': templates[index].entity.slug,
+                    });
+                    if (context.mounted) {
+                      await context.router.root.maybePop();
+                    }
+                  },
+                );
+              },
+              separatorBuilder: (context, index) {
+                return const Gap(12);
+              },
+            ),
     );
   }
 }

@@ -1,7 +1,7 @@
 import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
 import { redis } from '@/cache';
 import { db, Entities, first, firstOrThrow, pg, Posts, TableCode, UserPaymentCredits, Users, UserSessions, validateDbId } from '@/db';
-import { EntityState, UserRole, UserState } from '@/enums';
+import { EntityState, PostType, UserRole, UserState } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { assertAdminPermission } from '@/utils/permission';
@@ -75,6 +75,7 @@ builder.queryFields((t) => ({
     }),
     args: {
       search: t.arg.string({ required: false }),
+      type: t.arg({ type: PostType, required: false }),
       state: t.arg({ type: EntityState, required: false }),
       offset: t.arg.int({ defaultValue: 0 }),
       limit: t.arg.int({ defaultValue: 20 }),
@@ -86,6 +87,10 @@ builder.queryFields((t) => ({
       let count$ = db.select({ totalCount: count() }).from(Posts).innerJoin(Entities, eq(Posts.entityId, Entities.id)).$dynamic();
 
       const conditions = [];
+
+      if (args.type) {
+        conditions.push(eq(Posts.type, args.type));
+      }
 
       if (args.state) {
         conditions.push(eq(Entities.state, args.state));

@@ -1,0 +1,18 @@
+mutation EditorScreen_UpdatePostType_Mutation($input: UpdatePostTypeInput!) {
+  updatePostType(input: $input) {
+    id
+    type
+
+    entity {
+      id
+
+      site {
+        id
+
+        templates {
+          id
+        }
+      }
+    }
+  }
+}

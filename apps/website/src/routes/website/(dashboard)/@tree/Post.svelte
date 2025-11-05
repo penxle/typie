@@ -4,8 +4,10 @@
   import { contextMenu } from '@typie/ui/actions';
   import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { PostType } from '@/enums';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
+  import ShapesIcon from '~icons/lucide/shapes';
   import { fragment, graphql } from '$graphql';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
@@ -24,6 +26,7 @@
     graphql(`
       fragment DashboardLayout_EntityTree_Post_post on Post {
         id
+        type
         title
         characterCount
         createdAt
@@ -104,7 +107,11 @@
 >
   <EntitySelectionIndicator entityId={$post.entity.id}>
     {#snippet icon()}
-      <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
+      {#if $post.type === PostType.NORMAL}
+        <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
+      {:else if $post.type === PostType.TEMPLATE}
+        <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
+      {/if}
     {/snippet}
   </EntitySelectionIndicator>
 

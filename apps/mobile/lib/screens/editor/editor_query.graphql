@@ -20,6 +20,7 @@ query EditorScreen_Query($slug: String!, $siteId: ID!) {
   post(slug: $slug) {
     id
     title
+    type
     createdAt
     updatedAt
 
@@ -42,5 +43,15 @@ query EditorScreen_Query($slug: String!, $siteId: ID!) {
 
   site(siteId: $siteId) {
     id
+
+    templates {
+      id
+      title
+
+      entity {
+        id
+        slug
+      }
+    }
   }
 }

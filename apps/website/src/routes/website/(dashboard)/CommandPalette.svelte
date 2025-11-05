@@ -11,6 +11,7 @@
   import { tick } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { match } from 'ts-pattern';
+  import { PostType } from '@/enums';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
@@ -19,6 +20,7 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
+  import ShapesIcon from '~icons/lucide/shapes';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import XIcon from '~icons/lucide/x';
   import { beforeNavigate, goto, pushState } from '$app/navigation';
@@ -60,6 +62,7 @@
             ... on Post {
               id
               title
+              type
             }
 
             ... on Canvas {
@@ -88,6 +91,7 @@
             post {
               id
               title
+              type
 
               entity {
                 id
@@ -249,7 +253,7 @@
                 __typename: 'SearchHitRecent' as const,
                 entity,
                 title: node.title || '제목 없음',
-                icon: FileIcon,
+                icon: node.type === PostType.TEMPLATE ? ShapesIcon : FileIcon,
               }))
               .with({ __typename: 'Canvas' }, (node) => ({
                 __typename: 'SearchHitRecent' as const,
@@ -529,7 +533,11 @@
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
             >
-              <Icon icon={FileIcon} size={16} />
+              {#if hit.post.type === PostType.TEMPLATE}
+                <Icon icon={ShapesIcon} size={16} />
+              {:else}
+                <Icon icon={FileIcon} size={16} />
+              {/if}
             </div>
 
             <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
