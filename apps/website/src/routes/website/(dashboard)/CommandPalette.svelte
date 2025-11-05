@@ -16,11 +16,11 @@
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
-  import ShapesIcon from '~icons/lucide/shapes';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import XIcon from '~icons/lucide/x';
   import { beforeNavigate, goto, pushState } from '$app/navigation';
@@ -253,7 +253,7 @@
                 __typename: 'SearchHitRecent' as const,
                 entity,
                 title: node.title || '제목 없음',
-                icon: node.type === PostType.TEMPLATE ? ShapesIcon : FileIcon,
+                icon: node.type === PostType.TEMPLATE ? LayoutTemplateIcon : FileIcon,
               }))
               .with({ __typename: 'Canvas' }, (node) => ({
                 __typename: 'SearchHitRecent' as const,
@@ -534,7 +534,7 @@
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
             >
               {#if hit.post.type === PostType.TEMPLATE}
-                <Icon icon={ShapesIcon} size={16} />
+                <Icon icon={LayoutTemplateIcon} size={16} />
               {:else}
                 <Icon icon={FileIcon} size={16} />
               {/if}

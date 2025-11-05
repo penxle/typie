@@ -11,8 +11,8 @@
   import { PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
-  import ShapesIcon from '~icons/lucide/shapes';
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
@@ -179,7 +179,7 @@
                       icon={entity.node.__typename === 'Canvas'
                         ? LineSquiggleIcon
                         : entity.node.__typename === 'Post' && entity.node.type === PostType.TEMPLATE
-                          ? ShapesIcon
+                          ? LayoutTemplateIcon
                           : FileIcon}
                     />
                     <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>

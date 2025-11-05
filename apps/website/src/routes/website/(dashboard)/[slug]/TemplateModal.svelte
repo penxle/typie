@@ -5,7 +5,7 @@
   import * as Y from 'yjs';
   import { PostLayoutMode } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import ShapesIcon from '~icons/lucide/shapes';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { fragment, graphql } from '$graphql';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
@@ -89,7 +89,7 @@
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>
   <div class={center({ gap: '8px', padding: '12px' })}>
     <div class={center({ gap: '4px' })}>
-      <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
+      <Icon style={css.raw({ color: 'text.faint' })} icon={LayoutTemplateIcon} size={14} />
       <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>템플릿 사용하기</span>
     </div>
   </div>

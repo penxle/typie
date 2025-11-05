@@ -7,7 +7,7 @@
   import { PostType } from '@/enums';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
-  import ShapesIcon from '~icons/lucide/shapes';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { fragment, graphql } from '$graphql';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
@@ -110,7 +110,7 @@
       {#if $post.type === PostType.NORMAL}
         <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
       {:else if $post.type === PostType.TEMPLATE}
-        <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={LayoutTemplateIcon} size={14} />
       {/if}
     {/snippet}
   </EntitySelectionIndicator>
