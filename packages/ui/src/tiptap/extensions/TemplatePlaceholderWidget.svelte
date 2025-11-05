@@ -2,7 +2,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { onMount } from 'svelte';
-  import ShapesIcon from '~icons/lucide/shapes';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import type { Editor } from '@tiptap/core';
 
   type Props = {
@@ -59,7 +59,7 @@
         onclick={onTemplateClick}
         type="button"
       >
-        <Icon icon={ShapesIcon} size={16} />
+        <Icon icon={LayoutTemplateIcon} size={16} />
         <div>템플릿 사용하기</div>
       </button>
     </div>

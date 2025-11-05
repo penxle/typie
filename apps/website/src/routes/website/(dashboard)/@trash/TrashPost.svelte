@@ -7,7 +7,7 @@
   import mixpanel from 'mixpanel-browser';
   import { PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
-  import ShapesIcon from '~icons/lucide/shapes';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
   import { fragment, graphql } from '$graphql';
@@ -81,7 +81,7 @@
     {#if $post.type === PostType.NORMAL}
       <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
     {:else if $post.type === PostType.TEMPLATE}
-      <Icon style={css.raw({ color: 'text.faint' })} icon={ShapesIcon} size={14} />
+      <Icon style={css.raw({ color: 'text.faint' })} icon={LayoutTemplateIcon} size={14} />
     {/if}
 
     <span

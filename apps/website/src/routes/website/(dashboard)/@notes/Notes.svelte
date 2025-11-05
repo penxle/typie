@@ -12,8 +12,8 @@
   import { PostType } from '@/enums';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
-  import ShapesIcon from '~icons/lucide/shapes';
   import { beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { cache, fragment, graphql } from '$graphql';
@@ -211,7 +211,7 @@
           .with({ __typename: 'Post' }, (node) => ({
             entity,
             title: node.title,
-            icon: node.type === PostType.TEMPLATE ? ShapesIcon : FileIcon,
+            icon: node.type === PostType.TEMPLATE ? LayoutTemplateIcon : FileIcon,
           }))
           .with({ __typename: 'Canvas' }, (node) => ({
             entity,

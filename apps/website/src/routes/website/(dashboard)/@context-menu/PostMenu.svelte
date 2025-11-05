@@ -15,8 +15,8 @@
   import DownloadIcon from '~icons/lucide/download';
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Rows2Icon from '~icons/lucide/rows-2';
-  import ShapesIcon from '~icons/lucide/shapes';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
@@ -289,9 +289,9 @@
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
 
 {#if post.type === PostType.NORMAL}
-  <MenuItem icon={ShapesIcon} onclick={() => handleTypeChange(PostType.TEMPLATE)}>템플릿으로 전환</MenuItem>
+  <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(PostType.TEMPLATE)}>템플릿으로 전환</MenuItem>
 {:else if post.type === PostType.TEMPLATE}
-  <MenuItem icon={ShapesIcon} onclick={() => handleTypeChange(PostType.NORMAL)}>포스트로 전환</MenuItem>
+  <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(PostType.NORMAL)}>포스트로 전환</MenuItem>
 {/if}
 
 {@render children?.()}

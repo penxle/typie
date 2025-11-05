@@ -8,13 +8,13 @@
   import FolderHeartIcon from '~icons/lucide/folder-heart';
   import GlobeIcon from '~icons/lucide/globe';
   import ImageIcon from '~icons/lucide/image';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import LinkIcon from '~icons/lucide/link';
   import ListIcon from '~icons/lucide/list';
   import PencilRulerIcon from '~icons/lucide/pencil-ruler';
   import QuoteIcon from '~icons/lucide/quote';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import SaveIcon from '~icons/lucide/save';
-  import ShapesIcon from '~icons/lucide/shapes';
   import SparklesIcon from '~icons/lucide/sparkles';
   import TableIcon from '~icons/lucide/table';
   import UsersRoundIcon from '~icons/lucide/users-round';
@@ -237,7 +237,7 @@
         })}
       >
         <div class={flex({ alignItems: 'center', gap: { sm: '8px', lg: '12px' }, marginBottom: { sm: '16px', lg: '24px' } })}>
-          <Icon style={css.raw({ color: 'amber.400' })} icon={ShapesIcon} size={24} />
+          <Icon style={css.raw({ color: 'amber.400' })} icon={LayoutTemplateIcon} size={24} />
           <h3
             class={css({
               fontSize: { sm: '20px', lg: '24px' },

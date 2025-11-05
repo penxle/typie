@@ -8,8 +8,8 @@
   import { fly } from 'svelte/transition';
   import { PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import LineSquiggleIcon from '~icons/lucide/line-squiggle';
-  import ShapesIcon from '~icons/lucide/shapes';
   import Trash2Icon from '~icons/lucide/trash-2';
 
   type Props = {
@@ -187,7 +187,7 @@
           <Icon
             icon={note.entity.node.__typename === 'Post'
               ? note.entity.node.type === PostType.TEMPLATE
-                ? ShapesIcon
+                ? LayoutTemplateIcon
                 : FileIcon
               : LineSquiggleIcon}
             size={12}
