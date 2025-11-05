@@ -6,6 +6,7 @@ import 'package:gap/gap.dart';
 import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/extensions/jiffy.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/route_resumed.dart';
 import 'package:typie/hooks/service.dart';
@@ -136,6 +137,8 @@ class SearchScreen extends HookWidget {
                               Row(
                                 spacing: 8,
                                 children: [
+                                  if (post.post.type == GPostType.TEMPLATE)
+                                    const Icon(LucideLightIcons.shapes, size: 18),
                                   Expanded(
                                     child: _HTMLText(
                                       post.title ?? '(제목 없음)',
@@ -226,6 +229,7 @@ class _RecentlyViewedItem extends StatelessWidget {
               Row(
                 spacing: 8,
                 children: [
+                  if (post.type == GPostType.TEMPLATE) const Icon(LucideLightIcons.shapes, size: 18),
                   Expanded(
                     child: Text(
                       post.title,

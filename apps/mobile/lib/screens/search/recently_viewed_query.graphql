@@ -4,6 +4,7 @@ query SearchScreen_RecentlyViewed_Query {
     recentlyViewedEntities {
       id
       slug
+      type
 
       node {
         __typename
@@ -12,6 +13,7 @@ query SearchScreen_RecentlyViewed_Query {
           id
           title
           excerpt
+          type
           updatedAt
         }
         ... on Canvas {

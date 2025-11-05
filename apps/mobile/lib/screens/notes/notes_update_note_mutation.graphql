@@ -11,6 +11,7 @@ mutation NotesScreen_UpdateNote_Mutation($input: UpdateNoteInput!) {
         ... on Post {
           id
           title
+          type
         }
         ... on Canvas {
           id

@@ -971,6 +971,7 @@ class _Post extends StatelessWidget {
         Row(
           spacing: 8,
           children: [
+            if (post.type == GPostType.TEMPLATE) const Icon(LucideLightIcons.shapes, size: 18),
             Expanded(
               child: Text(
                 post.title,
@@ -979,7 +980,8 @@ class _Post extends StatelessWidget {
                 maxLines: 1,
               ),
             ),
-            Text(post.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+            if (post.type == GPostType.NORMAL)
+              Text(post.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
           ],
         ),
         Text(

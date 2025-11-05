@@ -4,7 +4,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
 import { db, Entities, first, firstOrThrow, FontFamilies, Fonts, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType, FontState } from '@/enums';
+import { EntityState, EntityType, FontState, PostType } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -99,8 +99,13 @@ Site.implement({
 
     templates: t.field({
       type: [Post],
-      resolve: async () => {
-        return [];
+      resolve: async (self) => {
+        return await db
+          .select(getTableColumns(Posts))
+          .from(Posts)
+          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+          .where(and(eq(Entities.siteId, self.id), eq(Posts.type, PostType.TEMPLATE), eq(Entities.state, EntityState.ACTIVE)))
+          .orderBy(asc(Posts.createdAt));
       },
     }),
 

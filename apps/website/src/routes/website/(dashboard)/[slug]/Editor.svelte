@@ -49,6 +49,7 @@
   import Limit from './Limit.svelte';
   import PasteModal from './PasteModal.svelte';
   import { YState } from './state.svelte';
+  import TemplateModal from './TemplateModal.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PageLayout, Ref } from '@typie/ui/utils';
   import type { Editor_query } from '$graphql';
@@ -134,6 +135,7 @@
             }
 
             ...Editor_Limit_site
+            ...Editor_Placeholder_site
             ...Editor_TopToolbar_site
           }
 
@@ -1286,6 +1288,7 @@
                           bind:editor
                         />
                         {#if editor && mounted}
+                          <TemplateModal $site={entity.site} {doc} {editor} {focused} />
                           {#if app.preference.current.lineHighlightEnabled}
                             <Highlight {editor} scale={editorScale} />
                           {/if}
