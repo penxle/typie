@@ -23,13 +23,15 @@
   import PanelTopIcon from '~icons/lucide/panel-top';
   import RotateCcwIcon from '~icons/lucide/rotate-ccw';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
+  import LetterSpacingIcon from '~icons/typie/letter-spacing';
+  import LineHeightIcon from '~icons/typie/line-height';
   import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import type { PageLayout, PageLayoutPreset } from '@typie/ui/utils';
-  import type { DashboardLayout_PreferenceModal_TemplateTab_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_PresetTab_user } from '$graphql';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_TemplateTab_user;
+    $user: DashboardLayout_PreferenceModal_PresetTab_user;
   };
 
   let { $user: _user }: Props = $props();
@@ -37,7 +39,7 @@
   const user = fragment(
     _user,
     graphql(`
-      fragment DashboardLayout_PreferenceModal_TemplateTab_user on User {
+      fragment DashboardLayout_PreferenceModal_PresetTab_user on User {
         id
         preferences
 
@@ -55,14 +57,14 @@
   );
 
   const updatePreferences = graphql(`
-    mutation DashboardLayout_PreferenceModal_TemplateTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+    mutation DashboardLayout_PreferenceModal_PresetTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
       updatePreferences(input: $input) {
         id
       }
     }
   `);
 
-  type TemplatePreference = {
+  type PresetPreference = {
     fontFamily?: string;
     fontSize?: number;
     fontWeight?: number;
@@ -75,7 +77,7 @@
     blockGap?: number;
   };
 
-  const template = $derived<TemplatePreference>(($user.preferences as Record<string, unknown>)?.template ?? {});
+  const template = $derived<PresetPreference>(($user.preferences as Record<string, unknown>)?.template ?? {});
 
   const fontFamily = $derived(template.fontFamily ?? defaultValues.fontFamily);
   const fontSize = $derived(template.fontSize ?? defaultValues.fontSize);
@@ -150,7 +152,7 @@
 
   const isPageLayoutEnabled = $derived(layoutMode === PostLayoutMode.PAGE);
 
-  const updateTemplate = async (updates: Partial<TemplatePreference>) => {
+  const updateTemplate = async (updates: Partial<PresetPreference>) => {
     const newTemplate = { ...template, ...updates };
     await updatePreferences({ value: { template: newTemplate } });
     cache.invalidate({ __typename: 'User', id: $user.id, field: 'preferences' });
@@ -287,7 +289,7 @@
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
   <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
     <div>
-      <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>템플릿</h1>
+      <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>프리셋</h1>
       <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]', marginTop: '8px' })}>
         새 포스트를 생성할 때 자동으로 적용될 기본 포맷을 설정해요.
       </p>
@@ -307,8 +309,8 @@
       })}
       onclick={() => {
         Dialog.confirm({
-          title: '템플릿 초기화',
-          message: '모든 템플릿 설정을 기본값으로 되돌려요. 이 작업은 되돌릴 수 없어요.',
+          title: '프리셋 초기화',
+          message: '모든 프리셋 설정을 기본값으로 되돌려요. 이 작업은 되돌릴 수 없어요.',
           actionLabel: '초기화',
           action: 'danger',
           actionHandler: resetTemplate,
@@ -510,7 +512,10 @@
     <SettingsCard>
       <SettingsRow>
         {#snippet label()}
-          자간
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={LetterSpacingIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>자간</div>
+          </div>
         {/snippet}
         {#snippet value()}
           <Select
@@ -527,7 +532,10 @@
 
       <SettingsRow>
         {#snippet label()}
-          행간
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={LineHeightIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>행간</div>
+          </div>
         {/snippet}
         {#snippet value()}
           <Select
