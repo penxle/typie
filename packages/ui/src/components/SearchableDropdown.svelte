@@ -42,6 +42,7 @@
 
   let opened = $state(false);
   let inputElement: HTMLInputElement | undefined = $state();
+  let chevronElement: HTMLButtonElement | undefined = $state();
   let inputValue = $state('');
   let isFocused = $state(false);
 
@@ -160,13 +161,12 @@
       display: 'flex',
       alignItems: 'center',
       borderRadius: '4px',
-      paddingLeft: '4px',
-      paddingRight: '20px',
+      paddingX: '4px',
       height: '24px',
       _hover: {
         backgroundColor: 'surface.muted',
       },
-      _focusWithin: {
+      '& > input:focus': {
         backgroundColor: 'surface.muted',
       },
     },
@@ -180,6 +180,7 @@
     class={css({
       flexGrow: '1',
       width: 'full',
+      paddingRight: '16px',
       fontSize: '14px',
       color: 'text.subtle',
       textAlign: 'left',
@@ -197,21 +198,33 @@
     bind:value={inputValue}
   />
 
-  <Icon
-    style={css.raw({
-      position: 'absolute',
-      right: '4px',
-      top: '1/2',
-      translate: 'auto',
-      translateY: '-1/2',
-      color: 'text.faint',
-      pointerEvents: 'none',
-      transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
-      transitionDuration: '150ms',
+  <button
+    bind:this={chevronElement}
+    class={css({
+      pointerEvents: opened ? 'auto' : 'none',
+      cursor: 'pointer',
     })}
-    icon={ChevronDownIcon}
-    size={16}
-  />
+    onclick={() => {
+      inputElement?.blur();
+      close();
+    }}
+    type="button"
+  >
+    <Icon
+      style={css.raw({
+        position: 'absolute',
+        right: '4px',
+        top: '1/2',
+        translate: 'auto',
+        translateY: '-1/2',
+        color: 'text.faint',
+        transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
+        transitionDuration: '150ms',
+      })}
+      icon={ChevronDownIcon}
+      size={16}
+    />
+  </button>
 </div>
 
 {#if opened}
