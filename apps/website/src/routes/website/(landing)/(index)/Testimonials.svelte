@@ -13,7 +13,7 @@
   // spell-checker:disable
   const testimonials: Testimonial[] = [
     {
-      avatar: 'https://pbs.twimg.com/profile_images/1907998919797387266/wmZyRRj3_400x400.jpg',
+      avatar: 'https://pbs.twimg.com/profile_images/1963278993085624320/UvQIYXE3_400x400.jpg',
       author: '백지',
       handle: '@paperr_white',
       content: '타이피가 좋다… 쓸데없는 플랫폼이 아니라 그냥 정말 글 쓰는 기능만 있어서 더 좋다…',
@@ -27,7 +27,7 @@
       url: 'https://x.com/izatsuyu_dream/status/1947480997010018709?s=46&t=CT-W3Ige047OuUmFWL09YA',
     },
     {
-      avatar: 'https://pbs.twimg.com/profile_images/1941691464687230976/rhmYr0Ju_400x400.jpg',
+      avatar: 'https://pbs.twimg.com/profile_images/1990274009926422528/ydVC8oAB_400x400.jpg',
       author: '8484',
       handle: '@aibo8484',
       content:
