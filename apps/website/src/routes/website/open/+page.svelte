@@ -398,7 +398,7 @@
 
         <SmallStatCard
           data={[]}
-          description="지난 30일간 AWS 인프라 비용"
+          description="지난 30일간 인프라 비용"
           title="월간 인프라 비용"
           value={formatWithUnit($query.stats.infraMonthlyCost, '원')}
         />
