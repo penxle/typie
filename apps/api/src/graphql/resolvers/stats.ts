@@ -135,13 +135,16 @@ builder.queryField('stats', (t) =>
 
           const response = await aws.costExplorer.send(command);
 
-          const total = response.ResultsByTime?.reduce((acc, curr) => {
+          const awsTotal = response.ResultsByTime?.reduce((acc, curr) => {
             return acc + Number.parseFloat(curr.Total?.BlendedCost?.Amount ?? '0');
           }, 0);
 
           const usdToKrw = await getUsdToKrwRate();
 
-          return Math.round((total ?? 0) * usdToKrw);
+          const idcMonthly = 400_000; // IDC
+          const devicesDepreciationMonthly = 17_345_940 / 36; // 장비 감가 36개월
+
+          return Math.round((awsTotal ?? 0) * usdToKrw + idcMonthly + devicesDepreciationMonthly);
         } catch {
           return 0;
         }
