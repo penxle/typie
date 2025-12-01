@@ -40,6 +40,11 @@ class InAppPurchaseProvider extends HookWidget {
 }
 
 Future<void> _handlePurchase(GraphQLClient client, PurchaseDetails purchaseDetails) async {
+  if (purchaseDetails.error != null) {
+    await Sentry.captureException(purchaseDetails.error);
+    log.e('InAppPurchaseProvider', error: purchaseDetails.error);
+  }
+
   try {
     await client.request(
       GInAppPurchaseProvider_SubscribeOrChangePlanWithInAppPurchase_MutationReq(
