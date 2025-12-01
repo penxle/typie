@@ -75,9 +75,9 @@ flutter {
 }
 
 dependencies {
-  implementation("androidx.core:core-splashscreen:1.0.1")
-  implementation("androidx.window:window:1.5.0")
-  implementation("androidx.window:window-java:1.5.0")
+  implementation("androidx.core:core-splashscreen:1.2.0")
+  implementation("androidx.window:window:1.5.1")
+  implementation("androidx.window:window-java:1.5.1")
   implementation("com.squareup.moshi:moshi:1.15.2")
   coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
