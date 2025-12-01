@@ -8,22 +8,22 @@
     "./prettier": "./prettier.js"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.1",
-    "@eslint/js": "^9.37.0",
+    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/js": "^9.39.1",
     "@prettier/plugin-xml": "^3.4.2",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-simple-import-sort": "^12.1.1",
-    "eslint-plugin-svelte": "^3.12.4",
-    "eslint-plugin-unicorn": "^61.0.2",
-    "globals": "^16.4.0",
+    "eslint-plugin-svelte": "^3.13.0",
+    "eslint-plugin-unicorn": "^62.0.0",
+    "globals": "^16.5.0",
     "ignore": "^7.0.5",
-    "prettier-plugin-packagejson": "^2.5.19",
+    "prettier-plugin-packagejson": "^2.5.20",
     "prettier-plugin-sh": "^0.18.0",
     "prettier-plugin-svelte": "^3.4.0",
-    "typescript-eslint": "^8.46.0"
+    "typescript-eslint": "^8.48.0"
   },
   "peerDependencies": {
-    "eslint": "^9.37.0",
-    "prettier": "^3.6.2"
+    "eslint": "^9.39.1",
+    "prettier": "^3.7.3"
   }
 }

@@ -73,7 +73,9 @@ export const Search = Extension.create<unknown, SearchStorage>({
           }
 
           const escaped = escape(text);
-          const pattern = matchWholeWord ? new RegExp(`(?<!\\p{L}|\\p{N})${escaped}(?!\\p{L}|\\p{N})`, 'giu') : new RegExp(escaped, 'gi');
+          const pattern = matchWholeWord
+            ? new RegExp(String.raw`(?<!\p{L}|\p{N})${escaped}(?!\p{L}|\p{N})`, 'giu')
+            : new RegExp(escaped, 'gi');
           const matches: Match[] = [];
 
           const { doc } = this.editor.state;

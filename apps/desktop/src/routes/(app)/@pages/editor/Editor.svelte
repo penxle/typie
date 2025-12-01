@@ -1056,8 +1056,7 @@
             {editor}
             showOutline={showAnchorOutline}
             updateAnchorName={(nodeId, name) => {
-              const newAnchors = { ...anchors.current };
-              newAnchors[nodeId] = name;
+              const newAnchors = { ...anchors.current, [nodeId]: name };
               anchors.current = newAnchors;
             }}
           />
