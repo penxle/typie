@@ -34,10 +34,11 @@
       const rightChildId = view.children[index + 1].id;
 
       const currentPercentages = { ...context.state.current.currentPercentages };
-      const basePercentages = { ...context.state.current.basePercentages };
-
-      basePercentages[leftChildId] = currentPercentages[leftChildId];
-      basePercentages[rightChildId] = currentPercentages[rightChildId];
+      const basePercentages = {
+        ...context.state.current.basePercentages,
+        [leftChildId]: currentPercentages[leftChildId],
+        [rightChildId]: currentPercentages[rightChildId],
+      };
 
       // NOTE: 뷰들의 합이 정확히 100%가 되도록 정규화
       let currentSum = 0;

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { exportToDirectory, IconSet } from '@iconify/tools';
+import { exportToDirectory, IconSet, SVG } from '@iconify/tools';
 import { icons as lucideIcons } from '@iconify-json/lucide';
 import { icons as lucideLabIcons } from '@iconify-json/lucide-lab';
 import { Case } from 'change-case-all';
@@ -139,8 +139,8 @@ const makeIconSetDir = async (name, icons) => {
   iconSet.forEachSync(
     (name) => {
       const svg = iconSet.toSVG(name);
-      svg.$svg('[stroke-width="2"]').attr('stroke-width', '1.5');
-      iconSet.fromSVG(name, svg);
+      const modified = svg.toString().replace(/stroke-width=["']?2["']?/g, 'stroke-width="1.5"');
+      iconSet.fromSVG(name, new SVG(modified));
     },
     ['icon'],
   );

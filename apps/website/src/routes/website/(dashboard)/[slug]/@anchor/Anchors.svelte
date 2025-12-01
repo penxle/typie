@@ -29,8 +29,7 @@
   });
 
   const updateAnchorName = (nodeId: string, name: string | null) => {
-    const newAnchors = { ...anchors.current };
-    newAnchors[nodeId] = name;
+    const newAnchors = { ...anchors.current, [nodeId]: name };
     anchors.current = newAnchors;
   };
 

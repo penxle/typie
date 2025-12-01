@@ -25,14 +25,14 @@ if (!hasNativeSupport) {
 
       if (this.length <= CHUNK_SIZE) {
         // @ts-expect-error - Using apply with typed array for performance
-        result = btoa(String.fromCharCode.apply(null, this));
+        result = btoa(String.fromCodePoint.apply(null, this));
       } else {
         let binaryString = '';
         for (let i = 0; i < this.length; i += CHUNK_SIZE) {
           const end = Math.min(i + CHUNK_SIZE, this.length);
           const chunk = this.subarray(i, end);
           // @ts-expect-error - Using apply with typed array for performance
-          binaryString += String.fromCharCode.apply(null, chunk);
+          binaryString += String.fromCodePoint.apply(null, chunk);
         }
         result = btoa(binaryString);
       }
