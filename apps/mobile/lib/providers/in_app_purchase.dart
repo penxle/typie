@@ -41,17 +41,15 @@ class InAppPurchaseProvider extends HookWidget {
 
 Future<void> _handlePurchase(GraphQLClient client, PurchaseDetails purchaseDetails) async {
   try {
-    if (purchaseDetails.status == PurchaseStatus.purchased || purchaseDetails.status == PurchaseStatus.restored) {
-      await client.request(
-        GInAppPurchaseProvider_SubscribeOrChangePlanWithInAppPurchase_MutationReq(
-          (b) => b
-            ..vars.input.store = Platform.isIOS ? GInAppPurchaseStore.APP_STORE : GInAppPurchaseStore.GOOGLE_PLAY
-            ..vars.input.data = Platform.isIOS
-                ? purchaseDetails.purchaseID
-                : purchaseDetails.verificationData.serverVerificationData,
-        ),
-      );
-    }
+    await client.request(
+      GInAppPurchaseProvider_SubscribeOrChangePlanWithInAppPurchase_MutationReq(
+        (b) => b
+          ..vars.input.store = Platform.isIOS ? GInAppPurchaseStore.APP_STORE : GInAppPurchaseStore.GOOGLE_PLAY
+          ..vars.input.data = Platform.isIOS
+              ? purchaseDetails.purchaseID
+              : purchaseDetails.verificationData.serverVerificationData,
+      ),
+    );
   } catch (err) {
     await Sentry.captureException(err);
     log.e('InAppPurchaseProvider', error: err);
