@@ -34,7 +34,7 @@
     { label: '96', value: 96 },
   ];
 
-  const defaultFontSize = 16;
+  const defaultFontSize = 12;
 
   let anchorElement: HTMLDivElement | undefined = $state();
   let floatingElement: HTMLDivElement | undefined = $state();
