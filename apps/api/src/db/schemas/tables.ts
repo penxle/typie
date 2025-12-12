@@ -87,6 +87,43 @@ export const CanvasSnapshotContributors = pgTable(
   (t) => [unique().on(t.snapshotId, t.userId)],
 );
 
+export const Documents = pgTable(
+  'documents',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENTS)),
+    entityId: text('entity_id')
+      .notNull()
+      .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    title: text('title'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.entityId)],
+);
+
+export const DocumentContents = pgTable('document_contents', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.DOCUMENT_CONTENTS)),
+  documentId: text('document_id')
+    .notNull()
+    .unique()
+    .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  snapshot: bytea('snapshot').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const CreditCodes = pgTable('credit_codes', {
   id: text('id')
     .primaryKey()

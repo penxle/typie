@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fragment, graphql } from '$graphql';
   import Canvas from './Canvas.svelte';
+  import Document from './Document.svelte';
   import Folder from './Folder.svelte';
   import Post from './Post.svelte';
   import type { DashboardLayout_EntityTree_Entity_entity, DashboardLayout_EntityTree_Folder_entity } from '$graphql';
@@ -35,6 +36,11 @@
             id
             ...DashboardLayout_EntityTree_Canvas_canvas
           }
+
+          ... on Document {
+            id
+            ...DashboardLayout_EntityTree_Document_document
+          }
         }
       }
     `),
@@ -49,4 +55,6 @@
   <Post $post={$entity.node} />
 {:else if $entity.node.__typename === 'Canvas'}
   <Canvas $canvas={$entity.node} />
+{:else if $entity.node.__typename === 'Document'}
+  <Document $document={$entity.node} />
 {/if}

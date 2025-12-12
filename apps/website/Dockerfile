@@ -26,7 +26,8 @@ FROM base AS build-deps
 
 COPY out/json/ .
 COPY out/full/packages/sark/bin/sark.js ./packages/sark/bin/sark.js
-RUN bun install --no-save
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    GITHUB_TOKEN=$(cat /run/secrets/GITHUB_TOKEN) bun install --no-save
 
 FROM build-deps AS build
 
@@ -37,7 +38,8 @@ RUN find . -type d -name "node_modules" -prune -exec rm -rf {} +
 FROM base AS runtime-deps
 
 COPY out/json/ .
-RUN bun install --no-save --omit=dev
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    GITHUB_TOKEN=$(cat /run/secrets/GITHUB_TOKEN) bun install --no-save --omit=dev
 
 FROM runtime-deps AS runtime
 

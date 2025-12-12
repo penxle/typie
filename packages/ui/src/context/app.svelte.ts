@@ -36,6 +36,7 @@ export type AppPreference = {
 
   experimental_pdfExportEnabled: boolean;
   experimental_docxExportEnabled: boolean;
+  experimental_v2EditorEnabled: boolean;
   lastPdfPageLayout: PageLayout | null;
 
   referralWelcomeModalShown: boolean;
@@ -141,6 +142,8 @@ export const setupAppContext = (userId: string) => {
       lastPdfPageLayout: null,
 
       experimental_docxExportEnabled: false,
+
+      experimental_v2EditorEnabled: false,
 
       referralWelcomeModalShown: false,
 

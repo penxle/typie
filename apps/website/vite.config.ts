@@ -4,10 +4,12 @@ import { sark } from '@typie/sark/vite';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
 import icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
+import wasm from 'vite-plugin-wasm';
 
 export default defineConfig({
   clearScreen: false,
   plugins: [
+    wasm(),
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore type mismatch
     svg(),

@@ -278,7 +278,7 @@
 
   $effect(() => {
     const _slug = slug;
-    editorRegistry.register(splitViewId, slug, editor);
+    editorRegistry.registerTipTap(splitViewId, slug, editor);
 
     return () => {
       // NOTE: 이유를 모르겠지만 여기서 slug 직접 접근하면 에러 남

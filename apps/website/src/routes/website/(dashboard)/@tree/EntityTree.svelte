@@ -26,7 +26,7 @@
   type EntityNode = {
     id: string;
     node: {
-      __typename: 'Canvas' | 'Folder' | 'Post';
+      __typename: 'Canvas' | 'Document' | 'Folder' | 'Post';
     };
     children?: EntityNode[];
     ' $$_DashboardLayout_EntityTree_Entity_entity'?: unknown;
@@ -639,6 +639,7 @@
     let count = {
       post: 0,
       canvas: 0,
+      document: 0,
       folder: 0,
     };
 
@@ -659,6 +660,8 @@
             count.post++;
           } else if (entity.node.__typename === 'Canvas') {
             count.canvas++;
+          } else if (entity.node.__typename === 'Document') {
+            count.document++;
           }
         }
       });
@@ -777,6 +780,12 @@
           <div class={center({ gap: '2px' })}>
             <Icon style={css.raw({ color: 'text.bright' })} icon={LineSquiggleIcon} size={14} />
             {draggingEntityCount.canvas}
+          </div>
+        {/if}
+        {#if draggingEntityCount.document > 0}
+          <div class={center({ gap: '2px' })}>
+            <Icon style={css.raw({ color: 'text.bright' })} icon={FileIcon} size={14} />
+            {draggingEntityCount.document}
           </div>
         {/if}
       </div>

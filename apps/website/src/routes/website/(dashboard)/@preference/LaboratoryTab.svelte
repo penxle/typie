@@ -14,12 +14,12 @@
 
   let { $user: _user }: Props = $props();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const user = fragment(
     _user,
     graphql(`
       fragment DashboardLayout_PreferenceModal_LaboratoryTab_user on User {
         id
+        role
       }
     `),
   );
@@ -80,5 +80,29 @@
         />
       {/snippet}
     </SettingsRow>
+
+    {#if $user.role === 'ADMIN'}
+      <SettingsDivider />
+
+      <SettingsRow>
+        {#snippet label()}
+          v2 에디터 사용
+        {/snippet}
+        {#snippet description()}
+          새로운 에디터를 사용하여 문서를 작성해요.
+        {/snippet}
+        {#snippet value()}
+          <Switch
+            onchange={() => {
+              mixpanel.track('toggle_experimental_feature', {
+                feature: 'v2_editor',
+                enabled: app.preference.current.experimental_v2EditorEnabled,
+              });
+            }}
+            bind:checked={app.preference.current.experimental_v2EditorEnabled}
+          />
+        {/snippet}
+      </SettingsRow>
+    {/if}
   </SettingsCard>
 </div>

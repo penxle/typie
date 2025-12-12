@@ -109,7 +109,7 @@
   );
 
   const focusedViewSlug = $derived(focusedView?.type === 'item' ? focusedView.slug : null);
-  const editor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.get(focusedViewId, focusedViewSlug) : undefined);
+  const editor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getTipTap(focusedViewId, focusedViewSlug) : undefined);
   const _post = $derived(focusedViewSlug && $postQuery?.entity?.node?.__typename === 'Post' ? $postQuery.entity.node : undefined);
 
   $effect(() => {

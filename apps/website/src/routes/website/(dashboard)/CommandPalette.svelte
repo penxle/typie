@@ -69,6 +69,11 @@
               id
               title
             }
+
+            ... on Document {
+              id
+              title
+            }
           }
         }
       }
@@ -260,6 +265,12 @@
                 entity,
                 title: node.title || '제목 없음',
                 icon: LineSquiggleIcon,
+              }))
+              .with({ __typename: 'Document' }, (node) => ({
+                __typename: 'SearchHitRecent' as const,
+                entity,
+                title: node.title || '제목 없음',
+                icon: FileIcon,
               }))
               .with({ __typename: 'Folder' }, () => null)
               .exhaustive(),

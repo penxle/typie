@@ -26,6 +26,7 @@
   import { page } from '$app/state';
   import { fragment, graphql } from '$graphql';
   import EntityTree from './@tree/EntityTree.svelte';
+  import EditorSelectModal from './EditorSelectModal.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';
   import Profile from './Profile.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
@@ -77,6 +78,19 @@
     }
   `);
 
+  const createDocument = graphql(`
+    mutation DashboardLayout_Sidebar_CreateDocument_Mutation($input: CreateDocumentInput!) {
+      createDocument(input: $input) {
+        id
+
+        entity {
+          id
+          slug
+        }
+      }
+    }
+  `);
+
   const createFolder = graphql(`
     mutation DashboardLayout_Sidebar_CreateFolder_Mutation($input: CreateFolderInput!) {
       createFolder(input: $input) {
@@ -99,6 +113,7 @@
 
   let hideTimeout = $state<NodeJS.Timeout | null>(null);
   let hovered = $state(false);
+  let editorSelectOpen = $state(false);
 
   type SidebarState = 'hidden' | 'peeking' | 'visible';
   let sidebarState = $state<SidebarState>('hidden');
@@ -320,13 +335,17 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
-            const resp = await createPost({
-              siteId: $site.id,
-            });
+            if (app.preference.current.experimental_v2EditorEnabled) {
+              editorSelectOpen = true;
+            } else {
+              const resp = await createPost({
+                siteId: $site.id,
+              });
 
-            mixpanel.track('create_post', { via: 'tree' });
+              mixpanel.track('create_post', { via: 'tree' });
 
-            await goto(`/${resp.entity.slug}`);
+              await goto(`/${resp.entity.slug}`);
+            }
           }}
           type="button"
           use:tooltip={{ message: '새 포스트 생성' }}
@@ -717,3 +736,28 @@
     }}
   ></div>
 </div>
+
+<EditorSelectModal
+  onselect={async (editor) => {
+    editorSelectOpen = false;
+
+    if (editor === 'v1') {
+      const resp = await createPost({
+        siteId: $site.id,
+      });
+
+      mixpanel.track('create_post', { via: 'tree' });
+
+      await goto(`/${resp.entity.slug}`);
+    } else {
+      const resp = await createDocument({
+        siteId: $site.id,
+      });
+
+      mixpanel.track('create_document', { via: 'tree' });
+
+      await goto(`/${resp.entity.slug}`);
+    }
+  }}
+  bind:open={editorSelectOpen}
+/>

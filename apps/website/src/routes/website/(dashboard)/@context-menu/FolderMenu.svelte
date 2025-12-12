@@ -10,6 +10,7 @@
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import FileIcon from '~icons/lucide/file';
+  import FileTextIcon from '~icons/lucide/file-text';
   import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GlobeIcon from '~icons/lucide/globe';
@@ -72,6 +73,19 @@
   const createPost = graphql(`
     mutation FolderMenu_CreatePost_Mutation($input: CreatePostInput!) {
       createPost(input: $input) {
+        id
+
+        entity {
+          id
+          slug
+        }
+      }
+    }
+  `);
+
+  const createDocument = graphql(`
+    mutation FolderMenu_CreateDocument_Mutation($input: CreateDocumentInput!) {
+      createDocument(input: $input) {
         id
 
         entity {
@@ -166,6 +180,22 @@
   }}
 >
   하위 포스트 생성
+</MenuItem>
+
+<MenuItem
+  icon={FileTextIcon}
+  onclick={async () => {
+    const resp = await createDocument({
+      siteId: entity.site.id,
+      parentEntityId: entity.id,
+    });
+
+    mixpanel.track('create_child_document', { via });
+    open();
+    await goto(`/${resp.entity.slug}`);
+  }}
+>
+  하위 문서 생성
 </MenuItem>
 
 {#if entity.depth < maxDepth - 1}
@@ -279,12 +309,14 @@
   {:else}
     {@const folders = $descendants.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
     {@const posts = $descendants.entity.descendants.filter((d) => d.type === EntityType.POST).length}
+    {@const documents = $descendants.entity.descendants.filter((d) => d.type === EntityType.DOCUMENT).length}
     {@const canvases = $descendants.entity.descendants.filter((d) => d.type === EntityType.CANVAS).length}
 
-    {#if folders > 0 || posts > 0 || canvases > 0}
+    {#if folders > 0 || posts > 0 || documents > 0 || canvases > 0}
       {@const items = [
         folders > 0 && `${folders}개의 하위 폴더`,
         posts > 0 && `${posts}개의 하위 포스트`,
+        documents > 0 && `${documents}개의 하위 문서`,
         canvases > 0 && `${canvases}개의 하위 캔버스`,
       ].filter(Boolean)}
       <div
