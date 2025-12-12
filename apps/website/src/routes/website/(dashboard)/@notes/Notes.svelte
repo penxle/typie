@@ -50,6 +50,10 @@
                 id
                 title
               }
+              ... on Document {
+                id
+                title
+              }
             }
           }
         }
@@ -74,6 +78,10 @@
                 type
               }
               ... on Canvas {
+                id
+                title
+              }
+              ... on Document {
                 id
                 title
               }
@@ -193,6 +201,7 @@
     return match(note.entity!.node)
       .with({ __typename: 'Post' }, (node) => node.title)
       .with({ __typename: 'Canvas' }, (node) => node.title)
+      .with({ __typename: 'Document' }, (node) => node.title)
       .with({ __typename: 'Folder' }, () => null)
       .exhaustive();
   });
@@ -217,6 +226,11 @@
             entity,
             title: node.title,
             icon: LineSquiggleIcon,
+          }))
+          .with({ __typename: 'Document' }, (node) => ({
+            entity,
+            title: node.title,
+            icon: FileIcon,
           }))
           .with({ __typename: 'Folder' }, () => null)
           .exhaustive(),

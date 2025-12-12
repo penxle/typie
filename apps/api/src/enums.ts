@@ -20,6 +20,7 @@ export const EntityState = {
 export type EntityType = keyof typeof EntityType;
 export const EntityType = {
   CANVAS: 'CANVAS',
+  DOCUMENT: 'DOCUMENT',
   FOLDER: 'FOLDER',
   POST: 'POST',
 } as const;

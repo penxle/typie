@@ -65,7 +65,7 @@
   };
 
   $effect(() => {
-    if (editor) {
+    if (editor?.current) {
       return untrack(() => {
         editor.current.on('transaction', handler);
 
@@ -84,7 +84,7 @@
         );
 
         return () => {
-          editor?.current.off('transaction', handler);
+          editor?.current?.off('transaction', handler);
         };
       });
     }

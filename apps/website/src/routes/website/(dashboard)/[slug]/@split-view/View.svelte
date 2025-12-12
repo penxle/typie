@@ -11,6 +11,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { fragment, graphql } from '$graphql';
   import Canvas from '../@canvas/Canvas.svelte';
+  import Document from '../Document.svelte';
   import Editor from '../Editor.svelte';
   import CloseSplitView from './CloseSplitView.svelte';
   import { getSplitViewContext, setupViewContext } from './context.svelte';
@@ -45,6 +46,7 @@
         }
 
         ...Canvas_query
+        ...Document_query
         ...Editor_query
       }
     `),
@@ -106,9 +108,11 @@
         <Editor {$query} {focused} slug={entity.slug} />
       {:else if entity?.node.__typename === 'Canvas'}
         <Canvas {$query} {focused} slug={entity.slug} />
+      {:else if entity?.node.__typename === 'Document'}
+        <Document {$query} {focused} slug={entity.slug} />
       {/if}
     {:else}
-      {@const name = entity?.node.__typename === 'Post' ? '포스트' : '캔버스'}
+      {@const name = entity?.node.__typename === 'Post' ? '포스트' : entity?.node.__typename === 'Document' ? '문서' : '캔버스'}
       {#if focused}
         <Helmet title={`삭제된 ${name}`} />
       {/if}

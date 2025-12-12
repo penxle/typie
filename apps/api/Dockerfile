@@ -26,7 +26,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
 FROM base AS build-deps
 
 COPY out/json/ .
-RUN bun install --no-save
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    GITHUB_TOKEN=$(cat /run/secrets/GITHUB_TOKEN) bun install --no-save
 
 FROM build-deps AS build
 
@@ -37,7 +38,8 @@ RUN find . -type d -name "node_modules" -prune -exec rm -rf {} +
 FROM base AS runtime-deps
 
 COPY out/json/ .
-RUN bun install --no-save --omit=dev
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    GITHUB_TOKEN=$(cat /run/secrets/GITHUB_TOKEN) bun install --no-save --omit=dev
 RUN cd apps/api && npx playwright install-deps && npx playwright install chromium
 
 FROM runtime-deps AS runtime

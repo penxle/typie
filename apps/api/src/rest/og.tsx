@@ -9,7 +9,7 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
-import { Canvases, db, Entities, first, Folders, Images, Posts } from '@/db';
+import { Canvases, db, Documents, Entities, first, Folders, Images, Posts } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import * as aws from '@/external/aws';
 import type { Env } from '@/context';
@@ -85,6 +85,7 @@ og.get('/:entityId', async (c) => {
     .with(EntityType.POST, () => renderPost(entityId))
     .with(EntityType.FOLDER, () => renderFolder(entityId))
     .with(EntityType.CANVAS, () => renderCanvas(entityId))
+    .with(EntityType.DOCUMENT, () => renderDocument(entityId))
     .exhaustive();
 
   const svg = await satori(node, {
@@ -219,6 +220,40 @@ const renderCanvas = async (entityId: string) => {
       }}
     >
       {canvas.title}
+    </div>
+  );
+};
+
+const renderDocument = async (entityId: string) => {
+  const document = await db
+    .select({
+      title: Documents.title,
+    })
+    .from(Entities)
+    .innerJoin(Documents, eq(Documents.entityId, Entities.id))
+    .where(eq(Entities.id, entityId))
+    .then(first);
+
+  if (!document) {
+    throw new HTTPException(404);
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '1200px',
+        height: '630px',
+        fontFamily: 'SUIT, Pretendard, NotoSansKR, KoPubWorldDotum',
+        fontSize: '60px',
+        fontWeight: 800,
+        color: colors.gray[950],
+        backgroundColor: colors.gray[100],
+      }}
+    >
+      {document.title ?? '(제목 없음)'}
     </div>
   );
 };

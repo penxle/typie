@@ -3,7 +3,21 @@ import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, sql } fro
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
-import { Canvases, db, Entities, first, firstOrThrow, firstOrThrowWith, Folders, Notes, Posts, Sites, TableCode, validateDbId } from '@/db';
+import {
+  Canvases,
+  db,
+  Documents,
+  Entities,
+  first,
+  firstOrThrow,
+  firstOrThrowWith,
+  Folders,
+  Notes,
+  Posts,
+  Sites,
+  TableCode,
+  validateDbId,
+} from '@/db';
 import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
@@ -52,6 +66,13 @@ Entity.implement({
             ctx.loader({
               name: 'Entity.node (Canvas)',
               load: (ids) => db.select().from(Canvases).where(inArray(Canvases.entityId, ids)),
+              key: ({ entityId }) => entityId,
+            }),
+          )
+          .with(EntityType.DOCUMENT, () =>
+            ctx.loader({
+              name: 'Entity.node (Document)',
+              load: (ids) => db.select().from(Documents).where(inArray(Documents.entityId, ids)),
               key: ({ entityId }) => entityId,
             }),
           )
@@ -198,6 +219,13 @@ EntityView.implement({
             ctx.loader({
               name: 'EntityView.node (Canvas)',
               load: (ids) => db.select().from(Canvases).where(inArray(Canvases.entityId, ids)),
+              key: ({ entityId }) => entityId,
+            }),
+          )
+          .with(EntityType.DOCUMENT, () =>
+            ctx.loader({
+              name: 'EntityView.node (Document)',
+              load: (ids) => db.select().from(Documents).where(inArray(Documents.entityId, ids)),
               key: ({ entityId }) => entityId,
             }),
           )

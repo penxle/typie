@@ -51,6 +51,7 @@ llen
 lpush
 lucide
 luthor
+mediump
 meili
 meilisearch
 monzo
@@ -62,6 +63,7 @@ natgw
 noeviction
 noreferrer
 nori
+noto
 nsis
 nums
 objc

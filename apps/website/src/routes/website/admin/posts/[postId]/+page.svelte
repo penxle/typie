@@ -44,6 +44,9 @@
               ... on Post {
                 title
               }
+              ... on Document {
+                title
+              }
             }
           }
           user {

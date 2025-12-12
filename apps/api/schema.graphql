@@ -92,6 +92,11 @@ input CheckSpellingInput {
   body: JSON!
 }
 
+input CreateDocumentInput {
+  parentEntityId: ID
+  siteId: ID!
+}
+
 input CreateFolderInput {
   name: String!
   parentEntityId: ID
@@ -138,6 +143,10 @@ input DeleteCanvasInput {
   canvasId: ID!
 }
 
+input DeleteDocumentInput {
+  documentId: ID!
+}
+
 input DeleteEntitiesInput {
   entityIds: [ID!]!
 }
@@ -156,6 +165,24 @@ input DeletePostInput {
 
 input DeleteWidgetInput {
   widgetId: ID!
+}
+
+type Document implements IDocument {
+  createdAt: DateTime!
+  entity: Entity!
+  id: ID!
+  snapshot: Binary
+  title: String!
+  updatedAt: DateTime!
+  view: DocumentView!
+}
+
+type DocumentView implements IDocument {
+  createdAt: DateTime!
+  entity: EntityView!
+  id: ID!
+  title: String!
+  updatedAt: DateTime!
 }
 
 input DumpLocalStorageInput {
@@ -203,7 +230,7 @@ enum EntityAvailability {
   UNLISTED
 }
 
-union EntityNode = Canvas | Folder | Post
+union EntityNode = Canvas | Document | Folder | Post
 
 enum EntityState {
   ACTIVE
@@ -213,6 +240,7 @@ enum EntityState {
 
 enum EntityType {
   CANVAS
+  DOCUMENT
   FOLDER
   POST
 }
@@ -234,7 +262,7 @@ type EntityView implements IEntity {
   visibility: EntityVisibility!
 }
 
-union EntityViewNode = CanvasView | FolderView | PostView
+union EntityViewNode = CanvasView | DocumentView | FolderView | PostView
 
 enum EntityVisibility {
   PRIVATE
@@ -331,6 +359,13 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 }
 
 interface ICanvas {
+  createdAt: DateTime!
+  id: ID!
+  title: String!
+  updatedAt: DateTime!
+}
+
+interface IDocument {
   createdAt: DateTime!
   id: ID!
   title: String!
@@ -458,6 +493,7 @@ type Mutation {
   cancelPlanChange: Subscription_!
   cancelSubscriptionCancellation: Subscription_!
   checkSpelling(input: CheckSpellingInput!): [SpellingError!]!
+  createDocument(input: CreateDocumentInput!): Document!
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
   createPost(input: CreatePostInput!): Post!
@@ -465,6 +501,7 @@ type Mutation {
   createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
   deleteCanvas(input: DeleteCanvasInput!): Canvas!
+  deleteDocument(input: DeleteDocumentInput!): Document!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
@@ -497,6 +534,7 @@ type Mutation {
   reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
+  saveDocumentSnapshot(input: SaveDocumentSnapshotInput!): Boolean!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
   scheduleSubscriptionCancellation: Subscription_!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
@@ -739,6 +777,7 @@ type Query {
   canvas(slug: String!): Canvas!
   creditCode(code: String!): CreditCode!
   defaultPlanRule: PlanRule!
+  document(slug: String!): Document!
   entities(entityIds: [ID!], slugs: [String!]): [Entity!]!
   entity(entityId: ID, slug: String): Entity!
   entityView(origin: String!, slug: String!): EntityView!
@@ -794,6 +833,11 @@ input ReportPostInput {
 input ResetPasswordInput {
   code: String!
   password: String!
+}
+
+input SaveDocumentSnapshotInput {
+  documentId: ID!
+  snapshot: Binary!
 }
 
 input SchedulePlanChangeInput {
