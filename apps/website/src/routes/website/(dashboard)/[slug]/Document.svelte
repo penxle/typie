@@ -19,6 +19,7 @@
   import { Editor } from '$lib/editor/editor.svelte';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
+  import DocumentPanel from './@document-panel/DocumentPanel.svelte';
   import CloseSplitView from './@split-view/CloseSplitView.svelte';
   import { getSplitViewContext, getViewContext } from './@split-view/context.svelte';
   import { getDragDropContext } from './@split-view/drag-context.svelte';
@@ -366,6 +367,8 @@
             <EditorComponent {editor} onDocChanged={handleDocChanged} {snapshot} unit="cm" />
           </div>
         </div>
+
+        <DocumentPanel {editor} />
       </div>
 
       {#if currentViewZenModeEnabled}
