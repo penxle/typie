@@ -262,8 +262,10 @@ export class Editor {
     });
   }
 
-  dispatch(message: Message): void {
+  dispatch(message: Message): Editor {
     this.#wasmEditor?.enqueueMessage(message);
+
+    return this;
   }
 
   updatePageVisibility(pageIndex: number, ratio: number): void {
@@ -770,8 +772,10 @@ export class Editor {
     return this.#wasmEditor?.getClipboardData() ?? null;
   }
 
-  focus(): void {
+  focus(): Editor {
     this.inputElement?.focus({ preventScroll: true });
+
+    return this;
   }
 
   destroy(): void {

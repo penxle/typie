@@ -118,10 +118,12 @@
       applyFontSize(true);
       inputElement?.blur();
       close();
+      editor.focus();
     } else if (e.key === 'Escape') {
       inputValue = String(currentFontSize ?? defaultFontSize);
       inputElement?.blur();
       close();
+      editor.focus();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();

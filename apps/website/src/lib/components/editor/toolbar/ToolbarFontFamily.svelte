@@ -63,6 +63,7 @@
   }}
   items={allFontFamilies}
   label="폰트 패밀리"
+  onEscape={() => editor.focus()}
   onchange={(fontFamilyValue) => {
     const currentWeight = (findMark('font_weight') as { weight?: number })?.weight ?? defaultFontWeight;
     const defaultWeight = getDefaultWeight(fontFamilyValue, currentWeight);

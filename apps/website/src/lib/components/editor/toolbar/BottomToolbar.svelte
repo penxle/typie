@@ -176,7 +176,7 @@
       icon={UndoIcon}
       label="실행 취소"
       onclick={() => {
-        editor.dispatch({ type: 'undo' });
+        editor.focus().dispatch({ type: 'undo' });
       }}
       size="small"
     />
@@ -187,7 +187,7 @@
       icon={RedoIcon}
       label="다시 실행"
       onclick={() => {
-        editor.dispatch({ type: 'redo' });
+        editor.focus().dispatch({ type: 'redo' });
       }}
       size="small"
     />
@@ -196,7 +196,14 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton chevron disabled={!editor.can('toggleTextColor')} label="글씨 색" placement="bottom-start" size="small">
+    <ToolbarDropdownButton
+      chevron
+      disabled={!editor.can('toggleTextColor')}
+      label="글씨 색"
+      onEscape={() => editor.focus()}
+      placement="bottom-start"
+      size="small"
+    >
       {#snippet anchor()}
         <div class={center({ size: '20px' })}>
           <div
@@ -212,13 +219,22 @@
           currentValue={currentTextColor}
           items={textColors}
           onClose={close}
-          onSelect={(value) => editor.dispatch({ type: 'toggleTextColor', key: value })}
+          onSelect={(value) => {
+            editor.focus().dispatch({ type: 'toggleTextColor', key: value });
+          }}
           {opened}
         />
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton chevron disabled={!editor.can('toggleBackgroundColor')} label="배경색" placement="bottom-start" size="small">
+    <ToolbarDropdownButton
+      chevron
+      disabled={!editor.can('toggleBackgroundColor')}
+      label="배경색"
+      onEscape={() => editor.focus()}
+      placement="bottom-start"
+      size="small"
+    >
       {#snippet anchor()}
         {@const selectedValue = currentTextBackgroundColor}
         {@const selectedItem = textBackgroundColors.find(({ value }) => value === selectedValue)}
@@ -255,7 +271,9 @@
           currentValue={currentTextBackgroundColor}
           items={textBackgroundColors}
           onClose={close}
-          onSelect={(value) => editor.dispatch({ type: 'toggleBackgroundColor', key: value ?? undefined })}
+          onSelect={(value) => {
+            editor.focus().dispatch({ type: 'toggleBackgroundColor', key: value ?? undefined });
+          }}
           {opened}
           shape="square"
           showNone
@@ -278,7 +296,7 @@
       keys={['Mod', 'B']}
       label="굵게"
       onclick={() => {
-        editor.dispatch({ type: 'toggleBold' });
+        editor.focus().dispatch({ type: 'toggleBold' });
       }}
       size="small"
     />
@@ -290,7 +308,7 @@
       keys={['Mod', 'I']}
       label="기울임"
       onclick={() => {
-        editor.dispatch({ type: 'toggleItalic' });
+        editor.focus().dispatch({ type: 'toggleItalic' });
       }}
       size="small"
     />
@@ -302,7 +320,7 @@
       keys={['Mod', 'Shift', 'S']}
       label="취소선"
       onclick={() => {
-        editor.dispatch({ type: 'toggleStrikethrough' });
+        editor.focus().dispatch({ type: 'toggleStrikethrough' });
       }}
       size="small"
     />
@@ -314,7 +332,7 @@
       keys={['Mod', 'U']}
       label="밑줄"
       onclick={() => {
-        editor.dispatch({ type: 'toggleUnderline' });
+        editor.focus().dispatch({ type: 'toggleUnderline' });
       }}
       size="small"
     />
@@ -323,7 +341,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton active={isLinkActive} disabled={true} label="링크" size="small">
+    <ToolbarDropdownButton active={isLinkActive} disabled={true} label="링크" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LinkIcon} />
       {/snippet}
@@ -333,7 +351,13 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton active={isRubyActive} disabled={!editor.can('toggleRuby')} label="루비" size="small">
+    <ToolbarDropdownButton
+      active={isRubyActive}
+      disabled={!editor.can('toggleRuby')}
+      label="루비"
+      onEscape={() => editor.focus()}
+      size="small"
+    >
       {#snippet anchor()}
         <ToolbarIcon icon={RubyIcon} />
       {/snippet}
@@ -347,7 +371,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton disabled={!editor.can('setTextAlign')} label="문단 정렬" size="small">
+    <ToolbarDropdownButton disabled={!editor.can('setTextAlign')} label="문단 정렬" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={currentTextAlignIcon} />
       {/snippet}
@@ -359,7 +383,7 @@
               style={css.raw({ fontSize: '14px' })}
               active={currentTextAlign === value}
               onclick={() => {
-                editor.dispatch({ type: 'setTextAlign', align: value });
+                editor.focus().dispatch({ type: 'setTextAlign', align: value });
                 close();
               }}
             >
@@ -370,7 +394,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton disabled={!editor.can('setLineHeight')} label="문단 행간" size="small">
+    <ToolbarDropdownButton disabled={!editor.can('setLineHeight')} label="문단 행간" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LineHeightIcon} />
       {/snippet}
@@ -382,7 +406,7 @@
               style={css.raw({ fontSize: '14px' })}
               active={currentLineHeight === value}
               onclick={() => {
-                editor.dispatch({ type: 'setLineHeight', height: value });
+                editor.focus().dispatch({ type: 'setLineHeight', height: value });
                 close();
               }}
             >
@@ -393,7 +417,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton disabled={!editor.can('setLetterSpacing')} label="문단 자간" size="small">
+    <ToolbarDropdownButton disabled={!editor.can('setLetterSpacing')} label="문단 자간" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LetterSpacingIcon} />
       {/snippet}
@@ -405,7 +429,7 @@
               style={css.raw({ fontSize: '14px' })}
               active={currentLetterSpacing === value}
               onclick={() => {
-                editor.dispatch({ type: 'setLetterSpacing', spacing: value });
+                editor.focus().dispatch({ type: 'setLetterSpacing', spacing: value });
                 close();
               }}
             >
@@ -425,7 +449,7 @@
     keys={['Mod', '\\']}
     label="서식 해제"
     onclick={() => {
-      editor.dispatch({ type: 'clearFormatting' });
+      editor.focus().dispatch({ type: 'clearFormatting' });
     }}
     size="small"
   />
