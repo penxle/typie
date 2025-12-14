@@ -65,6 +65,7 @@ export class Editor {
   cursor = $state({
     pageIdx: -1,
     bounds: null as Rect | null,
+    show: false,
   });
 
   inputElement = $state<HTMLInputElement | null>(null);
@@ -187,9 +188,11 @@ export class Editor {
           if (cmd.pageIdx !== null && cmd.pageIdx !== undefined && cmd.bounds) {
             this.cursor.pageIdx = cmd.pageIdx;
             this.cursor.bounds = cmd.bounds;
+            this.cursor.show = cmd.show;
           } else {
             this.cursor.pageIdx = -1;
             this.cursor.bounds = null;
+            this.cursor.show = false;
           }
           break;
         }

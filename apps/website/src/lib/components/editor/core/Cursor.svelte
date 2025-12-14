@@ -42,14 +42,14 @@
   $effect(() => {
     if (!element) return;
 
-    const { pageIdx, bounds } = editor.cursor;
+    const { pageIdx, bounds, show } = editor.cursor;
     const containerEls = editor.pageContainerEls;
     const inputEl = editor.inputElement;
 
     if (editor.isFocused && bounds && containerEls[pageIdx]) {
       containerEls[pageIdx].append(element);
 
-      element.style.display = 'block';
+      element.style.display = show ? 'block' : 'none';
       element.style.left = `${bounds.x}px`;
       element.style.top = `${bounds.y}px`;
       element.style.height = `${bounds.height}px`;
