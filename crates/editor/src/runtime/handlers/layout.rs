@@ -1,5 +1,5 @@
 use crate::model::{LayoutMode, Mark, Node, NodeId};
-use crate::runtime::{CONTINUOUS_PAGE_MARGIN, Effect, Runtime};
+use crate::runtime::{Effect, Runtime};
 use crate::types::{Theme, WritingSystem};
 use crate::utils::detect_writing_systems;
 use rustc_hash::FxHashSet;
@@ -84,7 +84,10 @@ impl Runtime {
 
         let width = match mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
+            LayoutMode::Continuous {
+                max_width,
+                page_margin,
+            } => max_width + 2.0 * page_margin,
         };
 
         self.set_width(width);
@@ -100,9 +103,10 @@ impl Runtime {
         let layout_mode = self.doc().settings().layout_mode;
         let new_width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width } => {
-                width.min(max_width + 2.0 * CONTINUOUS_PAGE_MARGIN)
-            }
+            LayoutMode::Continuous {
+                max_width,
+                page_margin,
+            } => width.min(max_width + 2.0 * page_margin),
         };
 
         self.set_width(new_width);

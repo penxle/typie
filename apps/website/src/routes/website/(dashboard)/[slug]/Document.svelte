@@ -124,7 +124,11 @@
   setEditor(editor);
 
   const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
-  const contentWidth = $derived(editor.layout.pageWidth - editor.layout.pageMargin * 2);
+  const contentWidth = $derived(
+    editor.layout.layoutMode.type === 'paginated'
+      ? editor.layout.pageWidth - editor.layout.layoutMode.pageMarginLeft - editor.layout.layoutMode.pageMarginRight
+      : editor.layout.pageWidth - editor.layout.layoutMode.pageMargin * 2,
+  );
 
   let syncTimer: ReturnType<typeof setTimeout> | null = null;
   let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');

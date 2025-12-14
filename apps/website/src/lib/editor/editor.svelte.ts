@@ -34,9 +34,16 @@ export class Editor {
   layout = $state({
     pageCount: 0,
     pageWidth: 0,
-    pageMargin: 0,
     pageHeights: [] as number[],
-    layoutMode: { type: 'paginated', pageWidth: 794, pageHeight: 1123, pageMargin: 96 } as LayoutMode,
+    layoutMode: {
+      type: 'paginated',
+      pageWidth: 794,
+      pageHeight: 1123,
+      pageMarginTop: 96,
+      pageMarginBottom: 96,
+      pageMarginLeft: 96,
+      pageMarginRight: 96,
+    } as LayoutMode,
   });
 
   selection = $state({
@@ -179,7 +186,6 @@ export class Editor {
           this.layout.pageCount = cmd.pageCount;
           this.layout.layoutMode = cmd.layoutMode;
           this.layout.pageWidth = cmd.pageWidth;
-          this.layout.pageMargin = cmd.pageMargin;
           this.layout.pageHeights = cmd.pageHeights;
           break;
         }

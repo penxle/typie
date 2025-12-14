@@ -6,7 +6,9 @@ use std::rc::Rc;
 pub struct Paginator {
     page_width: f32,
     page_height: f32,
-    page_margin: f32,
+    margin_top: f32,
+    margin_bottom: f32,
+    margin_left: f32,
     layout_mode: LayoutMode,
 }
 
@@ -21,7 +23,9 @@ struct ParentInfo {
 struct PaginationState {
     page_width: f32,
     content_height: f32,
-    page_margin: f32,
+    margin_top: f32,
+    margin_bottom: f32,
+    margin_left: f32,
     layout_mode: LayoutMode,
     page_start_y: f32,
     current_y: f32,
@@ -35,13 +39,17 @@ impl PaginationState {
     fn new(
         page_width: f32,
         content_height: f32,
-        page_margin: f32,
+        margin_top: f32,
+        margin_bottom: f32,
+        margin_left: f32,
         layout_mode: LayoutMode,
     ) -> Self {
         Self {
             page_width,
             content_height,
-            page_margin,
+            margin_top,
+            margin_bottom,
+            margin_left,
             layout_mode,
             page_start_y: 0.0,
             current_y: 0.0,
@@ -73,10 +81,10 @@ impl PaginationState {
 
     fn top_margin(&self) -> f32 {
         match self.layout_mode {
-            LayoutMode::Paginated { .. } => self.page_margin,
+            LayoutMode::Paginated { .. } => self.margin_top,
             LayoutMode::Continuous { .. } => {
                 if self.is_first_page() {
-                    self.page_margin
+                    self.margin_top
                 } else {
                     0.0
                 }
@@ -86,10 +94,10 @@ impl PaginationState {
 
     fn bottom_margin(&self, is_final: bool) -> f32 {
         match self.layout_mode {
-            LayoutMode::Paginated { .. } => self.page_margin,
+            LayoutMode::Paginated { .. } => self.margin_bottom,
             LayoutMode::Continuous { .. } => {
                 if is_final {
-                    self.page_margin
+                    self.margin_bottom
                 } else {
                     0.0
                 }
@@ -183,7 +191,7 @@ impl PaginationState {
 
     fn replicate_parents(&mut self) {
         let top = self.top_margin();
-        let margin_x = self.page_margin;
+        let margin_x = self.margin_left;
         let page_start_y = self.page_start_y;
 
         for i in 0..self.parent_stack.len() {
@@ -235,7 +243,7 @@ impl PaginationState {
             self.pages.push(Page::from_root(PositionedNode {
                 position: Point::zero(),
                 node: Rc::new(LayoutNode {
-                    size: Size::new(self.page_width, 2.0 * self.page_margin),
+                    size: Size::new(self.page_width, self.margin_top + self.margin_bottom),
                     element: None,
                     children: None,
                     page_break_policy: Default::default(),
@@ -251,21 +259,25 @@ impl Paginator {
     pub fn new(
         page_width: f32,
         page_height: f32,
-        page_margin: f32,
+        margin_top: f32,
+        margin_bottom: f32,
+        margin_left: f32,
         layout_mode: LayoutMode,
     ) -> Self {
         Self {
             page_width,
             page_height,
-            page_margin,
+            margin_top,
+            margin_bottom,
+            margin_left,
             layout_mode,
         }
     }
 
     fn content_height(&self) -> f32 {
         match self.layout_mode {
-            LayoutMode::Paginated { .. } => self.page_height - 2.0 * self.page_margin,
-            LayoutMode::Continuous { .. } => 4096.0 - 2.0 * self.page_margin,
+            LayoutMode::Paginated { .. } => self.page_height - self.margin_top - self.margin_bottom,
+            LayoutMode::Continuous { .. } => 4096.0 - self.margin_top - self.margin_bottom,
         }
     }
 
@@ -274,7 +286,9 @@ impl Paginator {
         let mut state = PaginationState::new(
             self.page_width,
             content_height,
-            self.page_margin,
+            self.margin_top,
+            self.margin_bottom,
+            self.margin_left,
             self.layout_mode,
         );
 
@@ -356,7 +370,7 @@ impl Paginator {
         }
 
         let top = state.top_margin();
-        let horizontal_margin = state.page_margin;
+        let horizontal_margin = state.margin_left;
 
         let adjusted_y = abs_y - state.page_start_y + top;
 
@@ -448,7 +462,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let node1 = Rc::new(LayoutNode {
@@ -483,7 +500,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 2);
@@ -504,7 +528,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let node1 = Rc::new(LayoutNode {
@@ -539,7 +566,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 2);
@@ -559,7 +593,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let node1 = Rc::new(LayoutNode {
@@ -594,7 +631,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 2);
@@ -614,7 +658,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let node1 = Rc::new(LayoutNode {
@@ -660,7 +707,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 2);
@@ -681,7 +735,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let node1 = Rc::new(LayoutNode {
@@ -727,7 +784,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 1);
@@ -740,7 +804,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let node1 = Rc::new(LayoutNode {
@@ -775,7 +842,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert!(pages.len() >= 2);
@@ -797,7 +871,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let item1 = Rc::new(LayoutNode {
@@ -856,7 +933,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert!(pages.len() >= 2);
@@ -882,7 +966,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let node1 = Rc::new(LayoutNode {
@@ -917,7 +1004,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 2);
@@ -947,7 +1041,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let p1_line1 = Rc::new(LayoutNode {
@@ -1012,7 +1109,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 2);
@@ -1064,7 +1168,10 @@ mod tests {
             mode: crate::model::LayoutMode::Paginated {
                 page_width: 200.0,
                 page_height: 125.0,
-                page_margin: 0.0,
+                page_margin_top: 0.0,
+                page_margin_bottom: 0.0,
+                page_margin_left: 0.0,
+                page_margin_right: 0.0,
             },
         });
 
@@ -1151,7 +1258,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 1, "Continuous mode should ignore page break");
@@ -1166,7 +1280,10 @@ mod tests {
         let layout_mode = LayoutMode::Paginated {
             page_width: 100.0,
             page_height,
-            page_margin,
+            page_margin_top: page_margin,
+            page_margin_bottom: page_margin,
+            page_margin_left: page_margin,
+            page_margin_right: page_margin,
         };
 
         let parent_element = Element::FoldContent(FoldContentElement::new(Size::new(80.0, 150.0)));
@@ -1203,7 +1320,14 @@ mod tests {
             page_break_policy: Default::default(),
         };
 
-        let paginator = Paginator::new(100.0, page_height, page_margin, layout_mode);
+        let paginator = Paginator::new(
+            100.0,
+            page_height,
+            page_margin,
+            page_margin,
+            page_margin,
+            layout_mode,
+        );
         let pages = paginator.paginate(root);
 
         assert_eq!(pages.len(), 2);

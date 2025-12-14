@@ -34,8 +34,6 @@ use loro::UndoManager;
 use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 
-pub(crate) const CONTINUOUS_PAGE_MARGIN: f32 = 24.0;
-
 #[derive(Default)]
 struct PendingUpdates {
     doc: bool,
@@ -243,21 +241,42 @@ impl Runtime {
     pub fn layout(&mut self) {
         let settings = self.doc().settings();
 
-        let (page_width, page_height, page_margin) = match settings.layout_mode {
-            LayoutMode::Paginated {
-                page_width,
-                page_height,
-                page_margin,
-            } => (page_width, page_height, page_margin),
-            LayoutMode::Continuous { max_width } => {
-                let page_width = self.width.min(max_width + 2.0 * CONTINUOUS_PAGE_MARGIN);
-                (page_width, f32::INFINITY, CONTINUOUS_PAGE_MARGIN)
-            }
-        };
+        let (page_width, page_height, margin_top, margin_bottom, margin_left, margin_right) =
+            match settings.layout_mode {
+                LayoutMode::Paginated {
+                    page_width,
+                    page_height,
+                    page_margin_top,
+                    page_margin_bottom,
+                    page_margin_left,
+                    page_margin_right,
+                } => (
+                    page_width,
+                    page_height,
+                    page_margin_top,
+                    page_margin_bottom,
+                    page_margin_left,
+                    page_margin_right,
+                ),
+                LayoutMode::Continuous {
+                    max_width,
+                    page_margin,
+                } => {
+                    let page_width = self.width.min(max_width + 2.0 * page_margin);
+                    (
+                        page_width,
+                        f32::INFINITY,
+                        page_margin,
+                        page_margin,
+                        page_margin,
+                        page_margin,
+                    )
+                }
+            };
 
         let constraints = BoxConstraints::loose(Size::new(
-            page_width - 2.0 * page_margin,
-            page_height - 2.0 * page_margin,
+            page_width - margin_left - margin_right,
+            page_height - margin_top - margin_bottom,
         ));
 
         let preedit = self.preedit();
@@ -283,7 +302,14 @@ impl Runtime {
 
         let root_node = root_ref.node().layout(&ctx, constraints);
 
-        let paginator = Paginator::new(page_width, page_height, page_margin, settings.layout_mode);
+        let paginator = Paginator::new(
+            page_width,
+            page_height,
+            margin_top,
+            margin_bottom,
+            margin_left,
+            settings.layout_mode,
+        );
         self.pages = paginator.paginate(root_node);
     }
 
@@ -507,18 +533,12 @@ impl Runtime {
             self.layout();
 
             let layout_mode = self.doc().settings().layout_mode;
-            let (page_width, page_margin) = match layout_mode {
-                LayoutMode::Paginated {
-                    page_width,
+            let page_width = match layout_mode {
+                LayoutMode::Paginated { page_width, .. } => page_width.ceil(),
+                LayoutMode::Continuous {
+                    max_width,
                     page_margin,
-                    ..
-                } => (page_width.ceil(), page_margin),
-                LayoutMode::Continuous { max_width } => (
-                    self.width
-                        .min(max_width + 2.0 * CONTINUOUS_PAGE_MARGIN)
-                        .ceil(),
-                    CONTINUOUS_PAGE_MARGIN,
-                ),
+                } => self.width.min(max_width + 2.0 * page_margin).ceil(),
             };
 
             let page_heights: Vec<f32> = match layout_mode {
@@ -536,7 +556,6 @@ impl Runtime {
                 page_count: self.pages.len(),
                 layout_mode,
                 page_width,
-                page_margin,
                 page_heights,
             });
             self.pending.layout = false;

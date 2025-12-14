@@ -6,19 +6,30 @@
     thickness?: number;
     pageHeights: number[];
     pageGap: number;
-    margin: number;
+    marginTop: number;
+    marginBottom: number;
     unit?: 'px' | 'cm';
     dpi?: number;
     padding?: number;
     ref?: HTMLElement | null;
   };
 
-  let { thickness = 24, pageHeights, pageGap, margin, unit = 'px', dpi = 96, padding = 0, ref = $bindable(null) }: Props = $props();
+  let {
+    thickness = 24,
+    pageHeights,
+    pageGap,
+    marginTop,
+    marginBottom,
+    unit = 'px',
+    dpi = 96,
+    padding = 0,
+    ref = $bindable(null),
+  }: Props = $props();
 
   const getTicksForPage = (height: number) => calculateTicks(height, unit, dpi);
 
   const isInMargin = (position: number, pageHeight: number): boolean => {
-    return position < margin || position > pageHeight - margin;
+    return position < marginTop || position > pageHeight - marginBottom;
   };
 </script>
 

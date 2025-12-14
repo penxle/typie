@@ -157,7 +157,10 @@ macro_rules! runtime {
                 s.layout_mode = $crate::model::LayoutMode::Paginated {
                     page_width: $width as f32,
                     page_height: $height as f32,
-                    page_margin: $margin as f32,
+                    page_margin_top: $margin as f32,
+                    page_margin_bottom: $margin as f32,
+                    page_margin_left: $margin as f32,
+                    page_margin_right: $margin as f32,
                 };
             }).unwrap();
             runtime.layout();

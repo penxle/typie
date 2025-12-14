@@ -120,16 +120,19 @@ impl Renderer {
 
         let clip_bounds = match settings.layout_mode {
             crate::model::LayoutMode::Paginated {
-                page_margin,
+                page_margin_top,
+                page_margin_bottom,
+                page_margin_left,
+                page_margin_right,
                 page_height,
                 ..
             } => {
                 let page_width = page.root.node.size.width;
                 Rect::from_xywh(
-                    page_margin,
-                    page_margin,
-                    page_width - 2.0 * page_margin,
-                    page_height - 2.0 * page_margin,
+                    page_margin_left,
+                    page_margin_top,
+                    page_width - page_margin_left - page_margin_right,
+                    page_height - page_margin_top - page_margin_bottom,
                 )
             }
             crate::model::LayoutMode::Continuous { .. } => None,

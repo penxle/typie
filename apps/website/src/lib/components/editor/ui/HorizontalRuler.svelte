@@ -5,19 +5,20 @@
   type Props = {
     thickness?: number;
     pageWidth: number;
-    margin: number;
+    marginLeft: number;
+    marginRight: number;
     unit?: 'px' | 'cm';
     dpi?: number;
     padding?: number;
     ref?: HTMLElement | null;
   };
 
-  let { thickness = 24, pageWidth, margin, unit = 'px', dpi = 96, padding = 0, ref = $bindable(null) }: Props = $props();
+  let { thickness = 24, pageWidth, marginLeft, marginRight, unit = 'px', dpi = 96, padding = 0, ref = $bindable(null) }: Props = $props();
 
   const ticks = $derived(calculateTicks(pageWidth, unit, dpi));
 
   const isInMargin = (position: number): boolean => {
-    return position < margin || position > pageWidth - margin;
+    return position < marginLeft || position > pageWidth - marginRight;
   };
 </script>
 

@@ -13,6 +13,7 @@
   import InfoIcon from '~icons/lucide/info';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import TypeIcon from '~icons/lucide/type';
+  import { CONTINUOUS_PAGE_MARGIN } from '$lib/editor/constants';
   import type { Editor } from '$lib/editor/editor.svelte';
 
   type Props = {
@@ -41,7 +42,10 @@
 
   const currentWidthMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageWidth) : 210);
   const currentHeightMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageHeight) : 297);
-  const currentMarginMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMargin) : 25);
+  const currentMarginTopMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMarginTop) : 25);
+  const currentMarginBottomMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMarginBottom) : 25);
+  const currentMarginLeftMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMarginLeft) : 25);
+  const currentMarginRightMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMarginRight) : 25);
 
   const getMaxMargin = (dimension: 'width' | 'height') => {
     const size = dimension === 'width' ? currentWidthMm : currentHeightMm;
@@ -53,12 +57,20 @@
       const preset = PAGE_SIZE_MAP.a4;
       editor.dispatch({
         type: 'setLayoutMode',
-        mode: { type: 'paginated', pageWidth: mmToPx(preset.width), pageHeight: mmToPx(preset.height), pageMargin: mmToPx(25) },
+        mode: {
+          type: 'paginated',
+          pageWidth: mmToPx(preset.width),
+          pageHeight: mmToPx(preset.height),
+          pageMarginTop: mmToPx(25),
+          pageMarginBottom: mmToPx(25),
+          pageMarginLeft: mmToPx(25),
+          pageMarginRight: mmToPx(25),
+        },
       });
     } else {
       editor.dispatch({
         type: 'setLayoutMode',
-        mode: { type: 'continuous', maxWidth: 800 },
+        mode: { type: 'continuous', maxWidth: 800, pageMargin: CONTINUOUS_PAGE_MARGIN },
       });
     }
     mixpanel.track('toggle_document_layout_mode', { mode });
@@ -70,7 +82,15 @@
     if (preset && layoutMode.type === 'paginated') {
       editor.dispatch({
         type: 'setLayoutMode',
-        mode: { type: 'paginated', pageWidth: mmToPx(preset.width), pageHeight: mmToPx(preset.height), pageMargin: layoutMode.pageMargin },
+        mode: {
+          type: 'paginated',
+          pageWidth: mmToPx(preset.width),
+          pageHeight: mmToPx(preset.height),
+          pageMarginTop: layoutMode.pageMarginTop,
+          pageMarginBottom: layoutMode.pageMarginBottom,
+          pageMarginLeft: layoutMode.pageMarginLeft,
+          pageMarginRight: layoutMode.pageMarginRight,
+        },
       });
       mixpanel.track('change_document_page_size', { preset: value });
     }
@@ -83,7 +103,15 @@
     target.value = String(value);
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: { type: 'paginated', pageWidth: mmToPx(value), pageHeight: layoutMode.pageHeight, pageMargin: layoutMode.pageMargin },
+      mode: {
+        type: 'paginated',
+        pageWidth: mmToPx(value),
+        pageHeight: layoutMode.pageHeight,
+        pageMarginTop: layoutMode.pageMarginTop,
+        pageMarginBottom: layoutMode.pageMarginBottom,
+        pageMarginLeft: layoutMode.pageMarginLeft,
+        pageMarginRight: layoutMode.pageMarginRight,
+      },
     });
   };
 
@@ -94,26 +122,43 @@
     target.value = String(value);
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: { type: 'paginated', pageWidth: layoutMode.pageWidth, pageHeight: mmToPx(value), pageMargin: layoutMode.pageMargin },
+      mode: {
+        type: 'paginated',
+        pageWidth: layoutMode.pageWidth,
+        pageHeight: mmToPx(value),
+        pageMarginTop: layoutMode.pageMarginTop,
+        pageMarginBottom: layoutMode.pageMarginBottom,
+        pageMarginLeft: layoutMode.pageMarginLeft,
+        pageMarginRight: layoutMode.pageMarginRight,
+      },
     });
   };
 
-  const handleMarginChange = (e: Event) => {
+  const handleMarginChange = (side: 'top' | 'bottom' | 'left' | 'right', e: Event) => {
     if (layoutMode.type !== 'paginated') return;
     const target = e.target as HTMLInputElement;
-    const maxMargin = Math.min(getMaxMargin('width'), getMaxMargin('height'));
+    const maxMargin = side === 'top' || side === 'bottom' ? getMaxMargin('height') : getMaxMargin('width');
     const value = clamp(Number(target.value), 0, maxMargin);
     target.value = String(value);
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: { type: 'paginated', pageWidth: layoutMode.pageWidth, pageHeight: layoutMode.pageHeight, pageMargin: mmToPx(value) },
+      mode: {
+        type: 'paginated',
+        pageWidth: layoutMode.pageWidth,
+        pageHeight: layoutMode.pageHeight,
+        pageMarginTop: side === 'top' ? mmToPx(value) : layoutMode.pageMarginTop,
+        pageMarginBottom: side === 'bottom' ? mmToPx(value) : layoutMode.pageMarginBottom,
+        pageMarginLeft: side === 'left' ? mmToPx(value) : layoutMode.pageMarginLeft,
+        pageMarginRight: side === 'right' ? mmToPx(value) : layoutMode.pageMarginRight,
+      },
     });
   };
 
   const handleMaxWidthChange = (value: number) => {
+    const currentMargin = layoutMode.type === 'continuous' ? layoutMode.pageMargin : CONTINUOUS_PAGE_MARGIN;
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: { type: 'continuous', maxWidth: value },
+      mode: { type: 'continuous', maxWidth: value, pageMargin: currentMargin },
     });
     mixpanel.track('change_document_max_width', { maxWidth: value });
   };
@@ -203,17 +248,53 @@
           <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
           <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>여백 (mm)</div>
         </div>
-        <div class={flex({ paddingLeft: '8px' })}>
+        <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
           <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>전체</div>
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>상단</div>
             <TextInput
               style={css.raw({ width: '80px' })}
-              max={String(Math.min(getMaxMargin('width'), getMaxMargin('height')))}
+              max={String(getMaxMargin('height'))}
               min="0"
-              onchange={handleMarginChange}
+              onchange={(e) => handleMarginChange('top', e)}
               size="sm"
               type="number"
-              value={currentMarginMm}
+              value={currentMarginTopMm}
+            />
+          </div>
+          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>하단</div>
+            <TextInput
+              style={css.raw({ width: '80px' })}
+              max={String(getMaxMargin('height'))}
+              min="0"
+              onchange={(e) => handleMarginChange('bottom', e)}
+              size="sm"
+              type="number"
+              value={currentMarginBottomMm}
+            />
+          </div>
+          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>왼쪽</div>
+            <TextInput
+              style={css.raw({ width: '80px' })}
+              max={String(getMaxMargin('width'))}
+              min="0"
+              onchange={(e) => handleMarginChange('left', e)}
+              size="sm"
+              type="number"
+              value={currentMarginLeftMm}
+            />
+          </div>
+          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>오른쪽</div>
+            <TextInput
+              style={css.raw({ width: '80px' })}
+              max={String(getMaxMargin('width'))}
+              min="0"
+              onchange={(e) => handleMarginChange('right', e)}
+              size="sm"
+              type="number"
+              value={currentMarginRightMm}
             />
           </div>
         </div>
