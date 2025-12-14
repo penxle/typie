@@ -1,0 +1,306 @@
+use crate::global::{register_fallback_font_family, register_font_family};
+use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
+use crate::runtime::{Message, Runtime, State};
+use crate::state::{Position, Selection};
+use crate::types::Affinity;
+use serde::Serialize;
+use std::rc::Rc;
+use wasm_bindgen::prelude::*;
+
+fn to_js_value<T: Serialize>(value: &T) -> JsValue {
+    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+    value.serialize(&serializer).unwrap()
+}
+
+#[wasm_bindgen(js_name = getMemory)]
+pub fn get_memory() -> JsValue {
+    wasm_bindgen::memory()
+}
+
+#[wasm_bindgen]
+pub struct Application;
+
+#[wasm_bindgen]
+impl Application {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        console_error_panic_hook::set_once();
+        Self
+    }
+
+    #[wasm_bindgen(js_name = loadIcuData)]
+    pub fn load_icu_data(&self, icu_data: Vec<u8>) -> Result<(), JsValue> {
+        crate::icu_data::load_icu_data(&icu_data)
+    }
+
+    #[wasm_bindgen(js_name = registerFont)]
+    pub fn register_font(&self, name: &str, weight: u16, data: Vec<u8>) {
+        register_font_family(name, weight, &data);
+    }
+
+    #[wasm_bindgen(js_name = registerFallbackFont)]
+    pub fn register_fallback_font(&self, name: &str, weight: u16, data: Vec<u8>) {
+        register_fallback_font_family(name, weight, &data);
+    }
+
+    #[wasm_bindgen(js_name = setAvailableFonts)]
+    pub fn set_available_fonts(&self, fonts: JsValue) {
+        if let Ok(fonts) = serde_wasm_bindgen::from_value(fonts) {
+            crate::global::set_available_fonts(fonts);
+        }
+    }
+
+    #[wasm_bindgen(js_name = createEditor)]
+    pub fn create_editor(&self, scale_factor: f64, snapshot: Option<Vec<u8>>) -> Editor {
+        if let Some(snapshot) = snapshot {
+            Editor::new_with_snapshot(scale_factor, snapshot)
+        } else {
+            Editor::new(scale_factor)
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub struct RenderInfo {
+    pub ptr: u32,
+    pub len: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[wasm_bindgen(getter_with_clone)]
+pub struct ClipboardData {
+    pub fragment: String,
+    pub html: String,
+    pub text: String,
+}
+
+#[wasm_bindgen]
+pub struct DragImageInfo {
+    drag_image: crate::render::DragImageResult,
+}
+
+#[wasm_bindgen]
+impl DragImageInfo {
+    #[wasm_bindgen(getter)]
+    pub fn ptr(&self) -> u32 {
+        self.drag_image.ptr() as u32
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn len(&self) -> u32 {
+        self.drag_image.len() as u32
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn width(&self) -> u32 {
+        self.drag_image.width as u32
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn height(&self) -> u32 {
+        self.drag_image.height as u32
+    }
+
+    #[wasm_bindgen(getter, js_name = offsetX)]
+    pub fn offset_x(&self) -> f32 {
+        self.drag_image.offset_x
+    }
+
+    #[wasm_bindgen(getter, js_name = offsetY)]
+    pub fn offset_y(&self) -> f32 {
+        self.drag_image.offset_y
+    }
+
+    #[wasm_bindgen(getter, js_name = scaleFactor)]
+    pub fn scale_factor(&self) -> f32 {
+        self.drag_image.scale_factor
+    }
+}
+
+#[wasm_bindgen]
+pub struct Editor {
+    runtime: Runtime,
+}
+
+impl Editor {
+    fn new(scale_factor: f64) -> Self {
+        let doc = Rc::new(Doc::new());
+        let layout_mode = doc.settings().layout_mode;
+
+        let width = match layout_mode {
+            LayoutMode::Paginated { page_width, .. } => page_width,
+            LayoutMode::Continuous { max_width } => max_width,
+        };
+
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let paragraph_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+
+        let state = State::new(
+            doc,
+            Selection::collapsed(Position::new(paragraph_id, 0, Affinity::default())),
+        );
+
+        let mut runtime = Runtime::new(width, scale_factor, state);
+
+        runtime.layout();
+
+        Self { runtime }
+    }
+
+    fn new_with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> Self {
+        let doc = Rc::new(Doc::from_snapshot(snapshot));
+        let layout_mode = doc.settings().layout_mode;
+
+        let width = match layout_mode {
+            LayoutMode::Paginated { page_width, .. } => page_width,
+            LayoutMode::Continuous { max_width } => max_width,
+        };
+
+        let state = State::new(
+            doc,
+            Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
+        );
+
+        let mut runtime = Runtime::new(width, scale_factor, state);
+
+        runtime.layout();
+
+        Self { runtime }
+    }
+}
+
+#[wasm_bindgen]
+impl Editor {
+    #[wasm_bindgen(js_name = renderPage)]
+    pub fn render_page(&mut self, page_index: usize) -> Option<RenderInfo> {
+        let result = self.runtime.render_page(page_index)?;
+        Some(RenderInfo {
+            ptr: result.ptr as u32,
+            len: result.len as u32,
+            width: result.width as u32,
+            height: result.height as u32,
+        })
+    }
+
+    #[wasm_bindgen(js_name = getSnapshot)]
+    pub fn get_snapshot(&self) -> Vec<u8> {
+        self.runtime.doc().snapshot().unwrap()
+    }
+
+    #[wasm_bindgen(js_name = canDragAt)]
+    pub fn can_drag_at(&self, page_idx: usize, x: f32, y: f32) -> bool {
+        self.runtime.can_drag_at(page_idx, x, y)
+    }
+
+    #[wasm_bindgen(js_name = renderDragImage)]
+    pub fn render_drag_image(
+        &mut self,
+        visible_pages: Vec<usize>,
+        page_idx: usize,
+    ) -> Option<DragImageInfo> {
+        let drag_image = self.runtime.render_drag_image(&visible_pages, page_idx)?;
+        Some(DragImageInfo { drag_image })
+    }
+
+    #[wasm_bindgen(js_name = can)]
+    pub fn can(&self, val: JsValue) -> bool {
+        serde_wasm_bindgen::from_value::<Message>(val)
+            .ok()
+            .map(|msg| self.runtime.can_action(&msg))
+            .unwrap_or(false)
+    }
+
+    #[wasm_bindgen(js_name = canAll)]
+    pub fn can_all(&self, val: JsValue) -> JsValue {
+        let results: Vec<bool> = serde_wasm_bindgen::from_value::<Vec<Message>>(val)
+            .ok()
+            .map(|messages| {
+                messages
+                    .iter()
+                    .map(|msg| self.runtime.can_action(msg))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        to_js_value(&results)
+    }
+
+    #[wasm_bindgen(js_name = dispatch)]
+    pub fn dispatch(&mut self, val: JsValue) -> JsValue {
+        if let Ok(msg) = serde_wasm_bindgen::from_value::<Message>(val) {
+            let cmd = self.runtime.update(msg);
+            to_js_value(&cmd)
+        } else {
+            JsValue::NULL
+        }
+    }
+
+    #[wasm_bindgen(js_name = inspectState)]
+    pub fn inspect_state(&self) -> String {
+        self.runtime.inspect_state()
+    }
+
+    #[wasm_bindgen(js_name = inspectStateAsMacro)]
+    pub fn inspect_state_as_macro(&self) -> String {
+        self.runtime.inspect_state_as_macro()
+    }
+
+    #[wasm_bindgen(js_name = inspectSelectionAsFragmentMacro)]
+    pub fn inspect_selection_as_fragment_macro(&self) -> Option<String> {
+        self.runtime.inspect_selection_as_fragment_macro()
+    }
+
+    #[wasm_bindgen(js_name = inspectPageElement)]
+    pub fn inspect_page_element(&self, page_idx: usize, x: f32, y: f32) -> Option<String> {
+        self.runtime.inspect_page_element(page_idx, x, y)
+    }
+
+    pub fn tick(&mut self) -> JsValue {
+        let cmds = self.runtime.tick();
+        if cmds.is_empty() {
+            JsValue::NULL
+        } else {
+            to_js_value(&cmds)
+        }
+    }
+
+    #[wasm_bindgen(js_name = enqueueMessage)]
+    pub fn enqueue_message(&mut self, val: JsValue) {
+        if let Ok(msg) = serde_wasm_bindgen::from_value::<Message>(val) {
+            self.runtime.enqueue_message(msg);
+        }
+    }
+
+    #[wasm_bindgen(js_name = flush)]
+    pub fn flush(&mut self) {
+        self.runtime.flush();
+    }
+
+    #[wasm_bindgen(js_name = getClipboardData)]
+    pub fn get_clipboard_data(&self) -> Option<ClipboardData> {
+        let state = self.runtime.state();
+        if state.selection.is_collapsed() {
+            return None;
+        }
+
+        let fragment = state.selection.extract_fragment(&state.doc).ok()?;
+
+        if fragment.is_empty() {
+            return None;
+        }
+
+        let fragment_json = fragment.to_json().ok()?;
+        let text = fragment.to_plain_text();
+        let html = fragment.to_html();
+
+        Some(ClipboardData {
+            fragment: fragment_json,
+            html,
+            text,
+        })
+    }
+}

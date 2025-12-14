@@ -1,0 +1,27 @@
+use crate::model::NodeId;
+use crate::types::Affinity;
+
+#[derive(Debug, Clone, Copy, Eq)]
+pub struct Position {
+    pub node_id: NodeId,
+    pub offset: usize,
+    pub affinity: Affinity,
+}
+
+impl PartialEq for Position {
+    fn eq(&self, other: &Self) -> bool {
+        self.node_id == other.node_id
+            && self.offset == other.offset
+            && self.affinity == other.affinity
+    }
+}
+
+impl Position {
+    pub fn new(node_id: NodeId, offset: usize, affinity: Affinity) -> Self {
+        Self {
+            node_id,
+            offset,
+            affinity,
+        }
+    }
+}
