@@ -94,7 +94,7 @@
     }
   `);
 
-  const updateDocumentMutation = graphql(`
+  const updateDocument = graphql(`
     mutation Document_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
       updateDocument(input: $input) {
         id
@@ -160,7 +160,7 @@
     if (!documentId) return;
 
     titleDirty = true;
-    await updateDocumentMutation({
+    await updateDocument({
       documentId,
       title: localTitle || null,
     });
@@ -170,7 +170,7 @@
     if (!documentId) return;
 
     subtitleDirty = true;
-    await updateDocumentMutation({
+    await updateDocument({
       documentId,
       subtitle: localSubtitle || null,
     });
