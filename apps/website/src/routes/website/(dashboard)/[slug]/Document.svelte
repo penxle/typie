@@ -123,6 +123,7 @@
   const editor = new Editor();
   setEditor(editor);
 
+  const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
   const contentWidth = $derived(editor.layout.pageWidth - editor.layout.pageMargin * 2);
 
   let syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -450,7 +451,7 @@
                     alignItems: 'center',
                     paddingTop: '40px',
                     paddingX: '48px',
-                    backgroundColor: 'surface.muted',
+                    backgroundColor: isPaginated ? 'surface.muted' : 'surface.default',
                   })}
                 >
                   <textarea
