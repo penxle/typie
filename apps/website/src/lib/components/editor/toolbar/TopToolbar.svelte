@@ -110,6 +110,7 @@
           reader.readAsDataURL(file);
         });
         input.click();
+        editor.focus();
       }}
       size={toolbarSize}
     />
@@ -129,7 +130,7 @@
             <DropdownMenuItem
               style={css.raw({ justifyContent: 'center', height: '48px' })}
               onclick={() => {
-                editor.dispatch({ type: 'insertHorizontalRule', variant: value });
+                editor.focus().dispatch({ type: 'insertHorizontalRule', variant: value });
                 close();
               }}
             >
@@ -151,7 +152,7 @@
             <DropdownMenuItem
               style={css.raw({ height: '48px' })}
               onclick={() => {
-                editor.dispatch({ type: 'toggleBlockquote' });
+                editor.focus().dispatch({ type: 'toggleBlockquote' });
                 close();
               }}
             >
@@ -167,6 +168,7 @@
       label="강조"
       onclick={() => {
         editor.dispatch({ type: 'toggleCallout' });
+        editor.focus();
       }}
       size={toolbarSize}
     />
@@ -175,7 +177,7 @@
       icon={ChevronsDownUpIcon}
       label="접기"
       onclick={() => {
-        editor.dispatch({ type: 'insertFold' });
+        editor.focus().dispatch({ type: 'insertFold' });
       }}
       size={toolbarSize}
     />
@@ -191,7 +193,7 @@
         <DropdownMenu>
           <DropdownMenuItem
             onclick={() => {
-              editor.dispatch({ type: 'toggleBulletList' });
+              editor.focus().dispatch({ type: 'toggleBulletList' });
               close();
             }}
           >
@@ -203,7 +205,7 @@
 
           <DropdownMenuItem
             onclick={() => {
-              editor.dispatch({ type: 'toggleOrderedList' });
+              editor.focus().dispatch({ type: 'toggleOrderedList' });
               close();
             }}
           >
@@ -227,7 +229,7 @@
         icon={FilePlusIcon}
         label="페이지 나누기"
         onclick={() => {
-          editor.dispatch({ type: 'insertPageBreak' });
+          editor.focus().dispatch({ type: 'insertPageBreak' });
         }}
         size={toolbarSize}
       />

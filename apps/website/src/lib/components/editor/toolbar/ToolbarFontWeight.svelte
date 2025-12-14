@@ -76,6 +76,7 @@
   }}
   items={weightItems}
   label="폰트 굵기"
+  onEscape={() => editor.focus()}
   onchange={(weight) => {
     editor.dispatch({ type: 'setFontWeight', weight });
   }}
