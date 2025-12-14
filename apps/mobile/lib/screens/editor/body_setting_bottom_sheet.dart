@@ -494,7 +494,7 @@ String _getPageSizePreset(PageLayout layout) {
   return 'custom';
 }
 
-class _PageSizeSection extends HookWidget {
+class _PageSizeSection extends StatelessWidget {
   const _PageSizeSection({required this.pageLayout, required this.scope});
 
   final PageLayout pageLayout;

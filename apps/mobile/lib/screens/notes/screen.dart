@@ -411,7 +411,7 @@ class _NotesContent extends HookWidget {
                               ),
                             ),
                           )
-                        : _NotesReorderableList(
+                        : _SliverNotesReorderableList(
                             notes: notesRelatedToEntity,
                             noteControllers: noteControllers.value,
                             focusNodes: focusNodes.value,
@@ -440,7 +440,7 @@ class _NotesContent extends HookWidget {
                       showSelector: selectedFilterEntityId.value == null,
                       onTap: showFilterEntitySelector,
                     ),
-                    sliver: _NotesReorderableList(
+                    sliver: _SliverNotesReorderableList(
                       notes: notesNotRelatedToEntity,
                       noteControllers: noteControllers.value,
                       focusNodes: focusNodes.value,
@@ -467,8 +467,8 @@ class _NotesContent extends HookWidget {
   }
 }
 
-class _NotesReorderableList extends StatelessWidget {
-  const _NotesReorderableList({
+class _SliverNotesReorderableList extends StatelessWidget {
+  const _SliverNotesReorderableList({
     required this.notes,
     required this.noteControllers,
     required this.focusNodes,
@@ -633,7 +633,7 @@ class _EntitySelector extends StatelessWidget {
           Expanded(
             child: ListView(
               controller: scrollController,
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 20),
+              padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 20),
               children: [
                 _EntitySelectorItem(
                   title: '없음',

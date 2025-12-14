@@ -50,7 +50,7 @@ class EditorFloatingWidget extends HookWidget {
     final widgetKey = useMemoized(GlobalKey.new);
     final widgetSize = useState<Size?>(null);
 
-    final screenSize = MediaQuery.of(context).size;
+    final screenSize = MediaQuery.sizeOf(context);
     final relativePos = initialRelativePosition ?? const Offset(0.5, 0.5);
     final initialX = relativePos.dx * screenSize.width;
     final initialY = relativePos.dy * screenSize.height;
