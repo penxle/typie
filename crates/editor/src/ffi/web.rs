@@ -6,6 +6,7 @@ use crate::types::Affinity;
 use serde::Serialize;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 fn to_js_value<T: Serialize>(value: &T) -> JsValue {
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
@@ -189,6 +190,37 @@ impl Editor {
     #[wasm_bindgen(js_name = getSnapshot)]
     pub fn get_snapshot(&self) -> Vec<u8> {
         self.runtime.doc().snapshot().unwrap()
+    }
+
+    #[wasm_bindgen(js_name = getVersion)]
+    pub fn get_version(&self) -> Vec<u8> {
+        self.runtime.doc().loro_doc().oplog_vv().encode()
+    }
+
+    #[wasm_bindgen(js_name = exportAllUpdates)]
+    pub fn export_all_updates(&self) -> Vec<u8> {
+        self.runtime.doc().export_all_updates().unwrap()
+    }
+
+    #[wasm_bindgen(js_name = exportUpdatesFrom)]
+    pub fn export_updates_from(&self, version: Vec<u8>) -> Vec<u8> {
+        let vv = loro::VersionVector::decode(&version).unwrap();
+        self.runtime.doc().export_updates_from(&vv).unwrap()
+    }
+
+    #[wasm_bindgen(js_name = importUpdates)]
+    pub fn import_updates(&self, updates: Vec<u8>) {
+        self.runtime.doc().import_updates(&updates).unwrap()
+    }
+
+    #[wasm_bindgen(js_name = importUpdatesBatch)]
+    pub fn import_updates_batch(&self, updates_batch: js_sys::Array) {
+        let batch: Vec<Vec<u8>> = updates_batch
+            .iter()
+            .filter_map(|v| v.dyn_into::<js_sys::Uint8Array>().ok())
+            .map(|arr| arr.to_vec())
+            .collect();
+        self.runtime.doc().import_updates_batch(&batch).unwrap()
     }
 
     #[wasm_bindgen(js_name = canDragAt)]

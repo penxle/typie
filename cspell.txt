@@ -20,6 +20,7 @@ bytea
 cdylib
 cnpg
 crds
+crdt
 creds
 cxzv
 dearmor
@@ -48,6 +49,7 @@ kubeconfig
 kubelet
 lbipam
 llen
+loro
 lpush
 lucide
 luthor

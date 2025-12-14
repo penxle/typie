@@ -1,10 +1,13 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, isNull } from 'drizzle-orm';
+import { filter, pipe, Repeater } from 'graphql-yoga';
+import { redis } from '@/cache';
 import { db, DocumentContents, Documents, Entities, first, firstOrThrow, firstOrThrowWith, Notes, TableCode, validateDbId } from '@/db';
-import { EntityAvailability, EntityState, EntityType, NoteState } from '@/enums';
+import { DocumentSyncType, EntityAvailability, EntityState, EntityType, NoteState } from '@/enums';
 import { NotFoundError } from '@/errors';
+import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
-import { generateFractionalOrder, generatePermalink, generateSlug } from '@/utils';
+import { generateFractionalOrder, generatePermalink, generateSlug, makeLoroDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Document, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
@@ -147,6 +150,16 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
 
+        const emptyDoc = makeLoroDoc();
+        const snapshot = emptyDoc.export({ mode: 'snapshot' });
+        const version = emptyDoc.version().encode();
+
+        await tx.insert(DocumentContents).values({
+          documentId: document.id,
+          snapshot,
+          version,
+        });
+
         return document;
       });
 
@@ -154,51 +167,6 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:usage:update', input.siteId, null);
 
       return document;
-    },
-  }),
-
-  saveDocumentSnapshot: t.withAuth({ session: true }).fieldWithInput({
-    type: 'Boolean',
-    input: {
-      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
-      snapshot: t.input.field({ type: 'Binary' }),
-    },
-    resolve: async (_, { input }, ctx) => {
-      const document = await db
-        .select({ siteId: Entities.siteId, availability: Entities.availability })
-        .from(Documents)
-        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-        .where(eq(Documents.id, input.documentId))
-        .then(firstOrThrow);
-
-      if (document.availability === EntityAvailability.PRIVATE) {
-        await assertSitePermission({
-          userId: ctx.session.userId,
-          siteId: document.siteId,
-        });
-      }
-
-      const existing = await db
-        .select({ id: DocumentContents.id })
-        .from(DocumentContents)
-        .where(eq(DocumentContents.documentId, input.documentId))
-        .then(first);
-
-      if (existing) {
-        await db
-          .update(DocumentContents)
-          .set({ snapshot: input.snapshot, updatedAt: dayjs() })
-          .where(eq(DocumentContents.documentId, input.documentId));
-      } else {
-        await db.insert(DocumentContents).values({
-          documentId: input.documentId,
-          snapshot: input.snapshot,
-        });
-      }
-
-      await db.update(Documents).set({ updatedAt: dayjs() }).where(eq(Documents.id, input.documentId));
-
-      return true;
     },
   }),
 
@@ -277,6 +245,154 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
 
       return updatedDocument;
+    },
+  }),
+
+  syncDocument: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: {
+      clientId: t.input.string(),
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      type: t.input.field({ type: DocumentSyncType }),
+      data: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({ siteId: Entities.siteId, availability: Entities.availability })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      if (document.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: document.siteId,
+        });
+      }
+
+      if (input.type === DocumentSyncType.UPDATE) {
+        pubsub.publish('document:sync', input.documentId, {
+          target: `!${input.clientId}`,
+          type: DocumentSyncType.UPDATE,
+          data: input.data,
+        });
+
+        await redis.lpush(
+          `document:sync:updates:${input.documentId}`,
+          JSON.stringify({
+            userId: ctx.session.userId,
+            data: input.data,
+          }),
+        );
+
+        await enqueueJob('document:sync:collect', input.documentId);
+      } else if (input.type === DocumentSyncType.VECTOR) {
+        const contents = await db
+          .select({ snapshot: DocumentContents.snapshot, version: DocumentContents.version })
+          .from(DocumentContents)
+          .where(eq(DocumentContents.documentId, input.documentId))
+          .then(first);
+
+        if (contents) {
+          pubsub.publish('document:sync', input.documentId, {
+            target: input.clientId,
+            type: DocumentSyncType.UPDATE,
+            data: contents.snapshot.toBase64(),
+          });
+
+          pubsub.publish('document:sync', input.documentId, {
+            target: input.clientId,
+            type: DocumentSyncType.VECTOR,
+            data: contents.version.toBase64(),
+          });
+        }
+      } else if (input.type === DocumentSyncType.AWARENESS) {
+        pubsub.publish('document:sync', input.documentId, {
+          target: `!${input.clientId}`,
+          type: DocumentSyncType.AWARENESS,
+          data: input.data,
+        });
+      }
+
+      return true;
+    },
+  }),
+}));
+
+builder.subscriptionFields((t) => ({
+  documentSyncStream: t.withAuth({ session: true }).field({
+    type: t.builder.simpleObject('DocumentSyncStreamPayload', {
+      fields: (t) => ({
+        documentId: t.id(),
+        type: t.field({ type: DocumentSyncType }),
+        data: t.string(),
+      }),
+    }),
+    args: {
+      clientId: t.arg.string(),
+      documentId: t.arg.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+    },
+    subscribe: async (_, args, ctx) => {
+      const document = await db
+        .select({ siteId: Entities.siteId, availability: Entities.availability })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, args.documentId))
+        .then(firstOrThrow);
+
+      if (document.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: document.siteId,
+        });
+      }
+
+      pubsub.publish('document:sync', args.documentId, {
+        target: `!${args.clientId}`,
+        type: DocumentSyncType.PRESENCE,
+        data: '',
+      });
+
+      const repeater = Repeater.merge([
+        pubsub.subscribe('document:sync', args.documentId),
+        new Repeater<{ target: string; type: DocumentSyncType; data: string }>(async (push, stop) => {
+          const heartbeat = () => {
+            push({
+              target: args.clientId,
+              type: DocumentSyncType.HEARTBEAT,
+              data: dayjs().toISOString(),
+            });
+          };
+
+          heartbeat();
+          const interval = setInterval(heartbeat, 1000);
+
+          await stop;
+
+          clearInterval(interval);
+        }),
+      ]);
+
+      return pipe(
+        repeater,
+        filter(({ target }) => {
+          if (target === '*') {
+            return true;
+          } else if (target.startsWith('!')) {
+            return target.slice(1) !== args.clientId;
+          } else {
+            return target === args.clientId;
+          }
+        }),
+      );
+    },
+    resolve: async (payload, args) => {
+      return {
+        documentId: args.documentId,
+        type: payload.type,
+        data: payload.data,
+      };
     },
   }),
 }));

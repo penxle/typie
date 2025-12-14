@@ -92,6 +92,36 @@ impl Doc {
             .context("Failed to export document snapshot")
     }
 
+    pub fn export_all_updates(&self) -> Result<Vec<u8>> {
+        self.inner
+            .loro
+            .export(ExportMode::all_updates())
+            .context("Failed to export all updates")
+    }
+
+    pub fn export_updates_from(&self, version: &loro::VersionVector) -> Result<Vec<u8>> {
+        self.inner
+            .loro
+            .export(ExportMode::updates(version))
+            .context("Failed to export updates from version")
+    }
+
+    pub fn import_updates(&self, updates: &[u8]) -> Result<()> {
+        self.inner
+            .loro
+            .import(updates)
+            .context("Failed to import updates")?;
+        Ok(())
+    }
+
+    pub fn import_updates_batch(&self, updates_batch: &[Vec<u8>]) -> Result<()> {
+        self.inner
+            .loro
+            .import_batch(updates_batch)
+            .context("Failed to import updates batch")?;
+        Ok(())
+    }
+
     pub fn revert_to(&self, frontiers: &Frontiers) -> Result<()> {
         self.inner.loro.revert_to(frontiers)?;
         Ok(())

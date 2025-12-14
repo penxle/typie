@@ -6,7 +6,9 @@
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
+  import { nanoid } from 'nanoid';
   import { match } from 'ts-pattern';
+  import { DocumentSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -17,6 +19,7 @@
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/components/editor';
   import { setEditor } from '$lib/editor/context';
   import { Editor } from '$lib/editor/editor.svelte';
+  import { IndexeddbPersistence } from '$lib/editor/persistence';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
@@ -88,9 +91,19 @@
     `),
   );
 
-  const saveDocumentSnapshotMutation = graphql(`
-    mutation Document_SaveDocumentSnapshot_Mutation($input: SaveDocumentSnapshotInput!) {
-      saveDocumentSnapshot(input: $input)
+  const syncDocument = graphql(`
+    mutation Document_SyncDocument_Mutation($input: SyncDocumentInput!) {
+      syncDocument(input: $input)
+    }
+  `);
+
+  const documentSyncStream = graphql(`
+    subscription Document_DocumentSyncStream_Subscription($clientId: String!, $documentId: ID!) {
+      documentSyncStream(clientId: $clientId, documentId: $documentId) {
+        documentId
+        type
+        data
+      }
     }
   `);
 
@@ -130,7 +143,10 @@
       : editor.layout.pageWidth - editor.layout.layoutMode.pageMargin * 2,
   );
 
-  let syncTimer: ReturnType<typeof setTimeout> | null = null;
+  const clientId = nanoid();
+  let syncUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+  let lastSyncedVersion: Uint8Array | null = null;
+  let persistence: IndexeddbPersistence | null = null;
   let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');
   let planUpgradeModalOpen = $state(false);
 
@@ -215,17 +231,6 @@
   });
 
   $effect(() => {
-    if (!documentId) return;
-
-    return () => {
-      if (syncTimer) {
-        clearTimeout(syncTimer);
-        flushSync();
-      }
-    };
-  });
-
-  $effect(() => {
     const _slug = slug;
     editorRegistry.registerPenxle(viewContext.id, slug, editor);
 
@@ -234,29 +239,151 @@
     };
   });
 
-  function handleDocChanged() {
-    syncStatus = 'syncing';
-    if (syncTimer) {
-      clearTimeout(syncTimer);
-    }
-    syncTimer = setTimeout(() => {
-      flushSync();
-    }, 1000);
-  }
+  $effect(() => {
+    const currentDocumentId = documentId;
+    if (!currentDocumentId) return;
 
-  async function flushSync() {
-    syncTimer = null;
+    persistence = new IndexeddbPersistence(currentDocumentId);
+
+    let fullSyncInterval: ReturnType<typeof setInterval> | null = null;
+    let forceSyncInterval: ReturnType<typeof setInterval> | null = null;
+    let unsubscribe: (() => void) | null = null;
+
+    editor.ready.then(async () => {
+      if (currentDocumentId !== documentId) return;
+
+      const local = await persistence?.load();
+      if (local) {
+        const updates = local.snapshot ? [local.snapshot, ...local.pendingUpdates] : local.pendingUpdates;
+        if (updates.length > 0) {
+          editor.importUpdatesBatch(updates);
+        }
+      }
+
+      fullSyncInterval = setInterval(() => fullSync(), 60_000);
+      forceSyncInterval = setInterval(() => forceSync(), 10_000);
+
+      await fullSync();
+      lastSyncedVersion = editor.getVersion() ?? null;
+
+      unsubscribe = documentSyncStream.subscribe({ clientId, documentId: currentDocumentId }, async (payload) => {
+        if (currentDocumentId !== documentId) {
+          return;
+        }
+
+        if (payload.type === DocumentSyncType.HEARTBEAT) {
+          syncStatus = 'synced';
+        } else if (payload.type === DocumentSyncType.UPDATE) {
+          editor.importUpdates(Uint8Array.fromBase64(payload.data));
+        } else if (payload.type === DocumentSyncType.VECTOR) {
+          lastSyncedVersion = Uint8Array.fromBase64(payload.data);
+        }
+      });
+    });
+
+    return () => {
+      unsubscribe?.();
+      if (fullSyncInterval) clearInterval(fullSyncInterval);
+      if (forceSyncInterval) clearInterval(forceSyncInterval);
+      if (syncUpdateTimeout) {
+        clearTimeout(syncUpdateTimeout);
+        syncUpdateTimeout = null;
+      }
+      if (currentDocumentId && lastSyncedVersion) {
+        const update = editor.exportUpdatesFrom(lastSyncedVersion);
+        if (update && update.length > 0) {
+          syncDocument({
+            clientId,
+            documentId: currentDocumentId,
+            type: DocumentSyncType.UPDATE,
+            data: update.toBase64(),
+          });
+        }
+      }
+      persistence?.destroy();
+      persistence = null;
+    };
+  });
+
+  async function fullSync() {
     if (!documentId) return;
 
-    const currentSnapshot = editor.getSnapshot();
-    if (currentSnapshot) {
-      try {
-        await saveDocumentSnapshotMutation({ documentId, snapshot: currentSnapshot.toBase64() });
-        syncStatus = 'synced';
-      } catch {
-        syncStatus = 'error';
-      }
+    const update = editor.exportAllUpdates();
+    if (!update) return;
+
+    const snapshot = editor.getSnapshot();
+    const version = editor.getVersion();
+
+    if (persistence && snapshot) {
+      await persistence.saveSnapshot(snapshot);
     }
+
+    await syncDocument({
+      clientId,
+      documentId,
+      type: DocumentSyncType.UPDATE,
+      data: update.toBase64(),
+    });
+
+    lastSyncedVersion = version ?? null;
+  }
+
+  async function forceSync() {
+    if (!documentId) return;
+
+    const version = editor.getVersion();
+    if (!version) return;
+
+    await syncDocument(
+      {
+        clientId,
+        documentId,
+        type: DocumentSyncType.VECTOR,
+        data: version.toBase64(),
+      },
+      { transport: 'ws' },
+    );
+  }
+
+  function handleDocChanged() {
+    if (!documentId) return;
+
+    syncStatus = 'syncing';
+
+    const update = lastSyncedVersion ? editor.exportUpdatesFrom(lastSyncedVersion) : editor.exportAllUpdates();
+    if (update && update.length > 0 && persistence) {
+      persistence.storeUpdate(update);
+    }
+
+    if (syncUpdateTimeout) {
+      clearTimeout(syncUpdateTimeout);
+    }
+
+    syncUpdateTimeout = setTimeout(async () => {
+      if (!documentId) return;
+
+      const syncUpdate = lastSyncedVersion ? editor.exportUpdatesFrom(lastSyncedVersion) : editor.exportAllUpdates();
+
+      if (syncUpdate && syncUpdate.length > 0) {
+        try {
+          await syncDocument(
+            {
+              clientId,
+              documentId,
+              type: DocumentSyncType.UPDATE,
+              data: syncUpdate.toBase64(),
+            },
+            { transport: 'ws' },
+          );
+          lastSyncedVersion = editor.getVersion() ?? null;
+          syncStatus = 'synced';
+        } catch {
+          syncStatus = 'error';
+        }
+      } else {
+        syncStatus = 'synced';
+      }
+    }, 1000);
   }
 </script>
 
