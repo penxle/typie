@@ -6,9 +6,10 @@
 
   type Props = {
     onFocus?: () => void;
+    onBlur?: () => void;
   };
 
-  let { onFocus }: Props = $props();
+  let { onFocus, onBlur }: Props = $props();
 
   const editor = getEditor();
 
@@ -122,6 +123,7 @@
   bind:this={inputEl}
   name="input"
   class={css({ pointerEvents: 'none', position: 'fixed', top: '0', left: '0', height: '1px', width: '1px', opacity: '0' })}
+  onblur={onBlur}
   oncompositionend={handleCompositionEnd}
   oncompositionstart={handleCompositionStart}
   oncompositionupdate={handleCompositionUpdate}

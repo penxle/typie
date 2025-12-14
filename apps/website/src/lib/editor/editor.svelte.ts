@@ -4,7 +4,7 @@ import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
-import { calculateRelativePosition, findNearestPageCoordinate, findScroller, getPageIndex, idleCallback } from './utils';
+import { calculateRelativePosition, findNearestPageCoordinate, getPageIndex, idleCallback } from './utils';
 import type { Editor as WasmEditor } from '@typie/editor';
 import type { ThemeColors } from './theme';
 import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, SelectionStats, WritingSystem } from './types';
@@ -65,8 +65,9 @@ export class Editor {
   cursor = $state({
     pageIdx: -1,
     bounds: null as Rect | null,
-    element: null as HTMLDivElement | null,
   });
+
+  inputElement = $state<HTMLInputElement | null>(null);
 
   pointer = $state({
     isPressed: false,
@@ -81,6 +82,8 @@ export class Editor {
     isOpen: false,
   });
 
+  isFocused = $state(false);
+
   pageVisibility = new SvelteMap<number, number>();
 
   extensionArea = $state({
@@ -88,10 +91,11 @@ export class Editor {
     pageElements: [] as HTMLElement[],
   });
 
+  pageContainerEls = $state<HTMLDivElement[]>([]);
+
   #lastClickTime = 0;
   #lastClickPos: { x: number; y: number } | null = null;
   #clickCount = 0;
-  #prevCursorPos: { x: number; y: number } | null = null;
 
   async initialize(options: EditorOptions): Promise<void> {
     if (this.#wasmEditor) return;
@@ -288,71 +292,6 @@ export class Editor {
 
   inspectSelectionAsFragmentMacro(): string | undefined {
     return this.#wasmEditor?.inspectSelectionAsFragmentMacro();
-  }
-
-  updateCursorElement(containerEls: HTMLDivElement[], inputEl: HTMLInputElement | undefined): void {
-    const element = this.cursor.element;
-    if (!element) return;
-
-    const { pageIdx, bounds } = this.cursor;
-
-    if (bounds && containerEls[pageIdx]) {
-      containerEls[pageIdx].append(element);
-
-      element.style.display = 'block';
-      element.style.left = `${bounds.x}px`;
-      element.style.top = `${bounds.y}px`;
-      element.style.height = `${bounds.height}px`;
-
-      if (inputEl) {
-        const rect = element.getBoundingClientRect();
-        inputEl.style.left = `${rect.left}px`;
-        inputEl.style.top = `${rect.top + rect.height / 2}px`;
-      }
-
-      if (!this.#prevCursorPos || this.#prevCursorPos.x !== bounds.x || this.#prevCursorPos.y !== bounds.y) {
-        this.#resetCursorAnimation();
-        this.#prevCursorPos = { x: bounds.x, y: bounds.y };
-      }
-
-      this.#scrollCursorIntoView();
-    } else {
-      element.style.display = 'none';
-      this.#prevCursorPos = null;
-    }
-  }
-
-  #resetCursorAnimation(): void {
-    const element = this.cursor.element;
-    if (!element) return;
-
-    element.classList.remove('blink');
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        element?.classList.add('blink');
-      });
-    });
-  }
-
-  #scrollCursorIntoView(): void {
-    const element = this.cursor.element;
-    if (!element) return;
-
-    const scroller = findScroller(element);
-    const margin = 40;
-    const scrollerRect = scroller.getBoundingClientRect();
-    const cursorRect = element.getBoundingClientRect();
-
-    const scrollerTop = scrollerRect.top + margin;
-    const scrollerBottom = scrollerRect.bottom - margin;
-
-    if (cursorRect.top < scrollerTop) {
-      const delta = cursorRect.top - scrollerTop;
-      scroller.scrollBy({ top: delta, behavior: 'instant' });
-    } else if (cursorRect.bottom > scrollerBottom) {
-      const delta = cursorRect.bottom - scrollerBottom;
-      scroller.scrollBy({ top: delta, behavior: 'instant' });
-    }
   }
 
   #getClickCount(x: number, y: number, timestamp: number): number {
@@ -829,6 +768,10 @@ export class Editor {
 
   getClipboardData(): { fragment: string; html: string; text: string } | null {
     return this.#wasmEditor?.getClipboardData() ?? null;
+  }
+
+  focus(): void {
+    this.inputElement?.focus({ preventScroll: true });
   }
 
   destroy(): void {
