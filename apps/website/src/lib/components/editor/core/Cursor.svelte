@@ -1,15 +1,13 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { getThemeContext } from '@typie/ui/context';
+  import { token } from '@typie/styled-system/tokens';
   import { getEditor } from '$lib/editor/context';
-  import { formatColor, getEditorTheme } from '$lib/editor/theme';
 
   const editor = getEditor();
-  const theme = getThemeContext();
 
   let element = $state<HTMLDivElement>();
 
-  let cursorColor = $derived(formatColor(getEditorTheme(theme.effective).text));
+  let cursorColor = $derived(token('colors.text.default'));
 
   $effect(() => {
     if (element) {

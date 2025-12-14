@@ -78,7 +78,7 @@
   ];
 
   const textBackgroundColors = [
-    { label: '배경 없음', value: 'none', color: null },
+    { label: '배경 없음', value: null, color: null },
     { label: '그레이', value: 'gray', color: '#f1f1f2' },
     { label: '레드', value: 'red', color: '#fdebec' },
     { label: '오렌지', value: 'orange', color: '#ffecd5' },
@@ -252,7 +252,7 @@
           currentValue={currentTextBackgroundColor}
           items={textBackgroundColors}
           onClose={close}
-          onSelect={(value) => editor.dispatch({ type: 'toggleBackgroundColor', key: value })}
+          onSelect={(value) => editor.dispatch({ type: 'toggleBackgroundColor', key: value ?? undefined })}
           {opened}
           shape="square"
           showNone

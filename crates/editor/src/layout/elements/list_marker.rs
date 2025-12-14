@@ -72,7 +72,7 @@ impl Render for ListMarkerElement {
 
 impl ListMarkerElement {
     fn render_bullet(&self, pixmap: &mut PixmapMut, transform: Transform, ctx: &RenderContext) {
-        let color = ctx.theme.text_color(None);
+        let color = ctx.theme.color("ui.text.default");
         let paint = Paint {
             shader: tiny_skia::Shader::SolidColor(color),
             anti_alias: true,
@@ -100,7 +100,7 @@ impl ListMarkerElement {
         let text = format!("{}.", index);
         let scale = ctx.scale_factor as f32;
 
-        let color = ctx.theme.text_color(None);
+        let color = ctx.theme.color("ui.text.default");
         let mut paint = Paint::default();
         paint.set_color(color);
         paint.anti_alias = true;

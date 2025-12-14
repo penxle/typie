@@ -2,7 +2,6 @@ use crate::layout::elements::HorizontalRuleElement;
 use crate::model::HorizontalRuleVariant;
 use crate::render::{GlyphRenderer, Render, RenderContext};
 use crate::state::position_helpers::calculate_offset_before_child;
-use crate::utils::rgba_from_u32;
 use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 const LINE_HEIGHT: f32 = 1.0;
@@ -44,9 +43,9 @@ impl Render for HorizontalRuleElement {
 
 impl HorizontalRuleElement {
     fn paint(ctx: &RenderContext) -> Paint<'static> {
-        let rgba = rgba_from_u32(ctx.theme.text);
+        let color = ctx.theme.color("ui.text.default");
         let mut paint = Paint::default();
-        paint.set_color(Color::from_rgba8(rgba[0], rgba[1], rgba[2], rgba[3]));
+        paint.set_color(color);
         paint.anti_alias = true;
         paint
     }
@@ -73,6 +72,7 @@ impl HorizontalRuleElement {
             return;
         }
 
+        // TODO: selection color token
         let color = Color::from_rgba8(153, 204, 255, 77);
         let mut paint = Paint::default();
         paint.set_color(color);

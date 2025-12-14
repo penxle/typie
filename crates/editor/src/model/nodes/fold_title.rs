@@ -85,7 +85,7 @@ impl Layout for FoldTitleNode {
                     line_height,
                 )));
                 builder.push_default(StyleProperty::LetterSpacing(0.0));
-                builder.push_default(StyleProperty::Brush("text.subtle".to_string()));
+                builder.push_default(StyleProperty::Brush("ui.text.subtle".to_string()));
 
                 builder.push_default(StyleProperty::FontFeatures(FontSettings::Source(
                     Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),

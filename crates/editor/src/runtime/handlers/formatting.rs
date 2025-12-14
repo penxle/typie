@@ -87,8 +87,14 @@ impl Runtime {
         self.transact(|tr| tr.toggle_mark(Mark::TextColor(TextColorMark { key })))
     }
 
-    pub(crate) fn handle_toggle_background_color(&mut self, key: String) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::BackgroundColor(BackgroundColorMark { key })))
+    pub(crate) fn handle_toggle_background_color(&mut self, key: Option<String>) -> Vec<Effect> {
+        self.transact(|tr| {
+            if let Some(key) = key {
+                tr.toggle_mark(Mark::BackgroundColor(BackgroundColorMark { key }))
+            } else {
+                tr.remove_mark(Mark::BackgroundColor(BackgroundColorMark::default()))
+            }
+        })
     }
 
     pub(crate) fn handle_insert_image(

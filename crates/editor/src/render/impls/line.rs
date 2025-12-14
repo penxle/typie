@@ -251,9 +251,7 @@ impl LineElement {
         let line_height = line_metrics.ascent + line_metrics.descent;
 
         for segment in &self.background_segments {
-            let Some(color) = ctx.theme.highlight_color(&segment.color_key) else {
-                continue;
-            };
+            let color = ctx.theme.color(&format!("bg.{}", segment.color_key));
 
             let mut min_x = f32::MAX;
             let mut max_x = f32::MIN;
@@ -353,7 +351,7 @@ impl LineElement {
                     let ruby_height = ruby_metrics.ascent + ruby_metrics.descent;
                     let ruby_y_offset = line_baseline - line_metrics.ascent - ruby_height;
 
-                    let color = ctx.theme.text_color(None);
+                    let color = ctx.theme.color("text.black");
                     let ruby_paint = create_solid_paint(color);
 
                     for item in ruby_line.items() {
@@ -422,7 +420,11 @@ impl Render for LineElement {
                     let run = glyph_run.run();
                     let style = glyph_run.style();
 
-                    let color = ctx.theme.text_color(Some(&style.brush));
+                    let color = if style.brush.is_empty() {
+                        ctx.theme.color("text.black")
+                    } else {
+                        ctx.theme.color(&style.brush)
+                    };
                     let text_paint = create_solid_paint(color);
 
                     let run_x = glyph_run.offset();
