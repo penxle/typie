@@ -21,10 +21,6 @@ class CharacterCountFloating extends HookWidget {
 
     final isExpanded = useState(false);
 
-    if (characterCountState == null) {
-      return const SizedBox.shrink();
-    }
-
     final savedPosition = pref.characterCountFloatingPosition;
     final initialRelativePosition = savedPosition != null
         ? Offset(savedPosition['x'] ?? defaultRelativePosition.dx, savedPosition['y'] ?? defaultRelativePosition.dy)
@@ -42,6 +38,10 @@ class CharacterCountFloating extends HookWidget {
         isExpanded.value = !isExpanded.value;
       }
     }, []);
+
+    if (characterCountState == null) {
+      return const SizedBox.shrink();
+    }
 
     return EditorFloatingWidget(
       initialRelativePosition: initialRelativePosition,

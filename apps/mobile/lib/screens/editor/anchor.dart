@@ -205,7 +205,7 @@ class AnchorBottomSheet extends HookWidget {
               child: const Center(child: CircularProgressIndicator()),
             )
           : ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
               child: ListView.separated(
                 controller: scrollController,
                 shrinkWrap: true,

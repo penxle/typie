@@ -28,7 +28,7 @@ import 'package:typie/widgets/forms/switch.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/tappable.dart';
 
-class ShareBottomSheet extends HookWidget {
+class ShareBottomSheet extends StatelessWidget {
   const ShareBottomSheet({required this.entityIds, super.key});
 
   final List<String> entityIds;

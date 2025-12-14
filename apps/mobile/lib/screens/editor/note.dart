@@ -252,17 +252,18 @@ class _NoteContent extends HookWidget {
     }
 
     Future<void> handleMoveNote(int oldIndex, int newIndex) async {
+      var targetIndex = newIndex;
       if (oldIndex < newIndex) {
-        newIndex -= 1;
+        targetIndex -= 1;
       }
 
       final movedNoteId = sortedNotes[oldIndex].id;
 
       final movedNote = sortedNotes.removeAt(oldIndex);
-      sortedNotes.insert(newIndex, movedNote);
+      sortedNotes.insert(targetIndex, movedNote);
 
-      final lowerNote = newIndex > 0 ? sortedNotes[newIndex - 1] : null;
-      final upperNote = newIndex < sortedNotes.length - 1 ? sortedNotes[newIndex + 1] : null;
+      final lowerNote = targetIndex > 0 ? sortedNotes[targetIndex - 1] : null;
+      final upperNote = targetIndex < sortedNotes.length - 1 ? sortedNotes[targetIndex + 1] : null;
 
       final request = GPostRelatedNotesScreen_MoveNote_MutationReq(
         (b) => b

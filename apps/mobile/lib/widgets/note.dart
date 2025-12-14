@@ -135,7 +135,7 @@ class NoteCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (footer != null) footer!,
+                  ?footer,
                 ],
               ),
             ),

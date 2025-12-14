@@ -314,7 +314,7 @@ class BottomMenuItem extends StatelessWidget {
           Expanded(
             child: Text(label, style: TextStyle(fontSize: 17, color: labelColor ?? context.colors.textDefault)),
           ),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

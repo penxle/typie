@@ -87,7 +87,7 @@ class SpellCheckBottomSheet extends HookWidget {
             ),
             const Gap(12),
             ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
               child: SingleChildScrollView(
                 padding: Pad(bottom: bottomPadding + 12),
                 child: Column(

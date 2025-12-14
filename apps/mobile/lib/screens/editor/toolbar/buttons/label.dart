@@ -34,7 +34,7 @@ class LabelToolbarButton extends StatelessWidget {
               spacing: 4,
               children: [
                 Text(text, style: TextStyle(fontSize: 16, color: color)),
-                if (suffix != null) suffix!,
+                ?suffix,
               ],
             ),
           ),
