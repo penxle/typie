@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { tooltip } from '@typie/ui/actions';
+  import { autosize, tooltip } from '@typie/ui/actions';
   import { Helmet, HorizontalDivider, Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
@@ -76,6 +76,8 @@
             ... on Document {
               id
               title
+              nullableTitle
+              subtitle
               snapshot
               createdAt
               updatedAt
@@ -89,6 +91,17 @@
   const saveDocumentSnapshotMutation = graphql(`
     mutation Document_SaveDocumentSnapshot_Mutation($input: SaveDocumentSnapshotInput!) {
       saveDocumentSnapshot(input: $input)
+    }
+  `);
+
+  const updateDocumentMutation = graphql(`
+    mutation Document_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
+      updateDocument(input: $input) {
+        id
+        title
+        nullableTitle
+        subtitle
+      }
     }
   `);
 
@@ -110,9 +123,74 @@
   const editor = new Editor();
   setEditor(editor);
 
+  const contentWidth = $derived(editor.layout.pageWidth - editor.layout.pageMargin * 2);
+
   let syncTimer: ReturnType<typeof setTimeout> | null = null;
   let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');
   let planUpgradeModalOpen = $state(false);
+
+  let subtitleEl = $state<HTMLTextAreaElement>();
+  let localTitle = $state('');
+  let localSubtitle = $state('');
+  let titleDirty = $state(false);
+  let subtitleDirty = $state(false);
+
+  $effect(() => {
+    if (entity?.node.__typename === 'Document') {
+      const serverTitle = entity.node.nullableTitle ?? '';
+      const serverSubtitle = entity.node.subtitle ?? '';
+
+      if (titleDirty && serverTitle === localTitle) {
+        titleDirty = false;
+      }
+      if (subtitleDirty && serverSubtitle === localSubtitle) {
+        subtitleDirty = false;
+      }
+
+      if (!titleDirty) {
+        localTitle = serverTitle;
+      }
+      if (!subtitleDirty) {
+        localSubtitle = serverSubtitle;
+      }
+    }
+  });
+
+  async function handleTitleChanged() {
+    if (!documentId) return;
+
+    titleDirty = true;
+    await updateDocumentMutation({
+      documentId,
+      title: localTitle || null,
+    });
+  }
+
+  async function handleSubtitleChanged() {
+    if (!documentId) return;
+
+    subtitleDirty = true;
+    await updateDocumentMutation({
+      documentId,
+      subtitle: localSubtitle || null,
+    });
+  }
+
+  function handleTitleKeydown(e: KeyboardEvent) {
+    if (e.isComposing) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      subtitleEl?.focus();
+    }
+  }
+
+  function handleSubtitleKeydown(e: KeyboardEvent) {
+    if (e.isComposing) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // TODO: focus editor
+    }
+  }
 
   const currentViewZenModeEnabled = $derived(
     app.preference.current.zenModeEnabled && viewContext.id === splitView.state.current.focusedViewId,
@@ -364,7 +442,61 @@
               backgroundColor: 'surface.default',
             })}
           >
-            <EditorComponent {editor} onDocChanged={handleDocChanged} {snapshot} unit="cm" />
+            <EditorComponent {editor} onDocChanged={handleDocChanged} {snapshot} unit="cm">
+              {#snippet header()}
+                <div
+                  class={flex({
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    paddingTop: '40px',
+                    paddingX: '48px',
+                    backgroundColor: 'surface.muted',
+                  })}
+                >
+                  <textarea
+                    style:width={`${contentWidth}px`}
+                    class={css({
+                      fontSize: '20px',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      overflow: 'hidden',
+                      resize: 'none',
+                      color: 'text.default',
+                      _placeholder: { color: 'text.disabled' },
+                    })}
+                    maxlength={100}
+                    oninput={handleTitleChanged}
+                    onkeydown={handleTitleKeydown}
+                    placeholder="제목"
+                    rows={1}
+                    bind:value={localTitle}
+                    use:autosize
+                  ></textarea>
+
+                  <textarea
+                    bind:this={subtitleEl}
+                    style:width={`${contentWidth}px`}
+                    class={css({
+                      marginTop: '4px',
+                      fontSize: '16px',
+                      fontWeight: 'medium',
+                      textAlign: 'center',
+                      overflow: 'hidden',
+                      resize: 'none',
+                      color: 'text.subtle',
+                      _placeholder: { color: 'text.disabled' },
+                    })}
+                    maxlength={100}
+                    oninput={handleSubtitleChanged}
+                    onkeydown={handleSubtitleKeydown}
+                    placeholder="부제목"
+                    rows={1}
+                    bind:value={localSubtitle}
+                    use:autosize
+                  ></textarea>
+                </div>
+              {/snippet}
+            </EditorComponent>
           </div>
         </div>
 

@@ -97,6 +97,7 @@ export const Documents = pgTable(
       .notNull()
       .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     title: text('title'),
+    subtitle: text('subtitle'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),

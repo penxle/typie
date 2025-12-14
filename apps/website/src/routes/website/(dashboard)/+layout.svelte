@@ -114,6 +114,11 @@
               id
               title
             }
+
+            ... on Document {
+              id
+              title
+            }
           }
         }
       }

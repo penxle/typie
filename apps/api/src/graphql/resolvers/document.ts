@@ -13,6 +13,8 @@ IDocument.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     title: t.string({ resolve: (self) => self.title || '(제목 없음)' }),
+    nullableTitle: t.exposeString('title', { nullable: true }),
+    subtitle: t.exposeString('subtitle', { nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
   }),
@@ -236,6 +238,45 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:usage:update', entity.siteId, null);
 
       return input.documentId;
+    },
+  }),
+
+  updateDocument: t.withAuth({ session: true }).fieldWithInput({
+    type: Document,
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      title: t.input.string({ required: false }),
+      subtitle: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({ entityId: Documents.entityId, siteId: Entities.siteId, availability: Entities.availability })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      if (document.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: document.siteId,
+        });
+      }
+
+      const updatedDocument = await db
+        .update(Documents)
+        .set({
+          ...(input.title !== undefined && { title: input.title }),
+          ...(input.subtitle !== undefined && { subtitle: input.subtitle }),
+          updatedAt: dayjs(),
+        })
+        .where(eq(Documents.id, input.documentId))
+        .returning()
+        .then(firstOrThrow);
+
+      pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
+
+      return updatedDocument;
     },
   }),
 }));

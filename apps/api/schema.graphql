@@ -171,7 +171,9 @@ type Document implements IDocument {
   createdAt: DateTime!
   entity: Entity!
   id: ID!
+  nullableTitle: String
   snapshot: Binary
+  subtitle: String
   title: String!
   updatedAt: DateTime!
   view: DocumentView!
@@ -181,6 +183,8 @@ type DocumentView implements IDocument {
   createdAt: DateTime!
   entity: EntityView!
   id: ID!
+  nullableTitle: String
+  subtitle: String
   title: String!
   updatedAt: DateTime!
 }
@@ -368,6 +372,8 @@ interface ICanvas {
 interface IDocument {
   createdAt: DateTime!
   id: ID!
+  nullableTitle: String
+  subtitle: String
   title: String!
   updatedAt: DateTime!
 }
@@ -547,6 +553,7 @@ type Mutation {
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
+  updateDocument(input: UpdateDocumentInput!): Document!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateFoldersOption(input: UpdateFoldersOptionInput!): [Folder!]!
@@ -999,6 +1006,12 @@ input UpdateBillingKeyInput {
   cardNumber: String!
   expiryDate: String!
   passwordTwoDigits: String!
+}
+
+input UpdateDocumentInput {
+  documentId: ID!
+  subtitle: String
+  title: String
 }
 
 input UpdateEmailInput {
