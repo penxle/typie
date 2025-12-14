@@ -85,9 +85,11 @@
 
   const layoutMode = $derived<LayoutMode>(editor.layout.layoutMode);
   const pageWidth = $derived(editor.layout.pageWidth);
-  const pageMargin = $derived(editor.layout.pageMargin);
   const pageHeights = $derived(editor.layout.pageHeights);
-  const effectiveMargin = $derived(layoutMode.type === 'paginated' ? pageMargin : 0);
+  const marginTop = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginTop : 0);
+  const marginBottom = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginBottom : 0);
+  const marginLeft = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginLeft : 0);
+  const marginRight = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginRight : 0);
   const pageGap = $derived(layoutMode.type === 'paginated' ? 24 : 0);
 </script>
 
@@ -113,9 +115,10 @@
         ></div>
 
         <div class={css({ overflow: 'hidden' })}>
-          {#if pageWidth && pageMargin}
+          {#if pageWidth && marginLeft}
             <HorizontalRuler
-              margin={pageMargin}
+              {marginLeft}
+              {marginRight}
               padding={contentPadding}
               {pageWidth}
               thickness={rulerThickness}
@@ -128,7 +131,8 @@
         <div class={css({ overflow: 'hidden' })}>
           {#if pageHeights.length > 0}
             <VerticalRuler
-              margin={effectiveMargin}
+              {marginBottom}
+              {marginTop}
               padding={contentPadding}
               {pageGap}
               {pageHeights}

@@ -130,7 +130,7 @@ impl Editor {
 
         let width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width } => max_width,
+            LayoutMode::Continuous { max_width, .. } => max_width,
         };
 
         let root = doc.node(NodeId::ROOT).unwrap();
@@ -157,7 +157,7 @@ impl Editor {
 
         let width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width } => max_width,
+            LayoutMode::Continuous { max_width, .. } => max_width,
         };
 
         let state = State::new(

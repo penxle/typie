@@ -15,7 +15,10 @@
 
   const pageWidth = $derived(editor.layout.pageWidth);
   const pageHeight = $derived(editor.layout.pageHeights[page] ?? 0);
-  const margin = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.pageMargin : 0);
+  const marginTop = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginTop : 0);
+  const marginBottom = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginBottom : 0);
+  const marginLeft = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginLeft : 0);
+  const marginRight = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginRight : 0);
   const layoutMode = $derived(editor.layout.layoutMode);
   const mediaOnPage = $derived(editor.externalElements.filter((el) => el.pageIdx === page));
   const isPaginated = $derived(layoutMode.type === 'paginated');
@@ -107,7 +110,7 @@
           xmlns="http://www.w3.org/2000/svg"
         >
           <path
-            d={`M ${margin} ${margin - CROP_MARKER_SIZE} L ${margin} ${margin} L ${margin - CROP_MARKER_SIZE} ${margin} M ${pageWidth - margin} ${margin - CROP_MARKER_SIZE} L ${pageWidth - margin} ${margin} L ${pageWidth - margin + CROP_MARKER_SIZE} ${margin} M ${margin} ${pageHeight - margin + CROP_MARKER_SIZE} L ${margin} ${pageHeight - margin} L ${margin - CROP_MARKER_SIZE} ${pageHeight - margin} M ${pageWidth - margin} ${pageHeight - margin + CROP_MARKER_SIZE} L ${pageWidth - margin} ${pageHeight - margin} L ${pageWidth - margin + CROP_MARKER_SIZE} ${pageHeight - margin}`}
+            d={`M ${marginLeft} ${marginTop - CROP_MARKER_SIZE} L ${marginLeft} ${marginTop} L ${marginLeft - CROP_MARKER_SIZE} ${marginTop} M ${pageWidth - marginRight} ${marginTop - CROP_MARKER_SIZE} L ${pageWidth - marginRight} ${marginTop} L ${pageWidth - marginRight + CROP_MARKER_SIZE} ${marginTop} M ${marginLeft} ${pageHeight - marginBottom + CROP_MARKER_SIZE} L ${marginLeft} ${pageHeight - marginBottom} L ${marginLeft - CROP_MARKER_SIZE} ${pageHeight - marginBottom} M ${pageWidth - marginRight} ${pageHeight - marginBottom + CROP_MARKER_SIZE} L ${pageWidth - marginRight} ${pageHeight - marginBottom} L ${pageWidth - marginRight + CROP_MARKER_SIZE} ${pageHeight - marginBottom}`}
             fill="none"
             stroke="rgba(0,0,0,0.15)"
           />

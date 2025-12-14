@@ -10,10 +10,13 @@ pub enum LayoutMode {
     Paginated {
         page_width: f32,
         page_height: f32,
-        page_margin: f32,
+        page_margin_top: f32,
+        page_margin_bottom: f32,
+        page_margin_left: f32,
+        page_margin_right: f32,
     },
     #[serde(rename_all = "camelCase")]
-    Continuous { max_width: f32 },
+    Continuous { max_width: f32, page_margin: f32 },
 }
 
 impl Default for LayoutMode {
@@ -21,7 +24,10 @@ impl Default for LayoutMode {
         Self::Paginated {
             page_width: 794.0,
             page_height: 1123.0,
-            page_margin: 96.0,
+            page_margin_top: 96.0,
+            page_margin_bottom: 96.0,
+            page_margin_left: 96.0,
+            page_margin_right: 96.0,
         }
     }
 }
@@ -33,14 +39,24 @@ impl Hash for LayoutMode {
             LayoutMode::Paginated {
                 page_width,
                 page_height,
-                page_margin,
+                page_margin_top,
+                page_margin_bottom,
+                page_margin_left,
+                page_margin_right,
             } => {
                 page_width.to_bits().hash(state);
                 page_height.to_bits().hash(state);
-                page_margin.to_bits().hash(state);
+                page_margin_top.to_bits().hash(state);
+                page_margin_bottom.to_bits().hash(state);
+                page_margin_left.to_bits().hash(state);
+                page_margin_right.to_bits().hash(state);
             }
-            LayoutMode::Continuous { max_width } => {
+            LayoutMode::Continuous {
+                max_width,
+                page_margin,
+            } => {
                 max_width.to_bits().hash(state);
+                page_margin.to_bits().hash(state);
             }
         }
     }

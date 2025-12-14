@@ -39,7 +39,6 @@ pub enum Cmd {
         page_count: usize,
         layout_mode: LayoutMode,
         page_width: f32,
-        page_margin: f32,
         page_heights: Vec<f32>,
     },
 

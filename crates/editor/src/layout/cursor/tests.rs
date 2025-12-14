@@ -1930,7 +1930,10 @@ fn test_pagination_margin_clicks() {
         mode: crate::model::LayoutMode::Paginated {
             page_width: 400.0,
             page_height: 400.0,
-            page_margin: 20.0,
+            page_margin_top: 20.0,
+            page_margin_bottom: 20.0,
+            page_margin_left: 20.0,
+            page_margin_right: 20.0,
         },
     });
 

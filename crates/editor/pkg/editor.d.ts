@@ -92,7 +92,7 @@ export interface ParagraphNode {
 
 export type TextAlign = "left" | "center" | "right" | "justify";
 
-export type LayoutMode = { type: "paginated"; pageWidth: number; pageHeight: number; pageMargin: number } | { type: "continuous"; maxWidth: number };
+export type LayoutMode = { type: "paginated"; pageWidth: number; pageHeight: number; pageMarginTop: number; pageMarginBottom: number; pageMarginLeft: number; pageMarginRight: number } | { type: "continuous"; maxWidth: number; pageMargin: number };
 
 export type WritingSystem = "latin" | "korean" | "japanese" | "chinese";
 
@@ -129,7 +129,7 @@ export interface ExternalElement {
     isSelected: boolean;
 }
 
-export type Cmd = { type: "docChanged" } | { type: "settingsChanged"; paragraphIndent: number; blockGap: number } | { type: "layoutChanged"; pageCount: number; layoutMode: LayoutMode; pageWidth: number; pageMargin: number; pageHeights: number[] } | { type: "cursorChanged"; pageIdx: number | undefined; bounds: Rect | undefined; show: boolean } | { type: "externalElementChanged"; elements: ExternalElement[] } | { type: "pointerStyleChanged"; style: PointerStyle } | { type: "selectionChanged"; stats: SelectionStats } | { type: "activeMarksChanged"; uniformMarks: Mark[]; mixedMarks: MarkType[] } | { type: "fontsRequired"; fonts: [string, number][] } | { type: "writingSystemRequired"; systems: WritingSystem[] } | { type: "renderRequired" } | { type: "enabledActionsChanged"; enabled: string[] };
+export type Cmd = { type: "docChanged" } | { type: "settingsChanged"; paragraphIndent: number; blockGap: number } | { type: "layoutChanged"; pageCount: number; layoutMode: LayoutMode; pageWidth: number; pageHeights: number[] } | { type: "cursorChanged"; pageIdx: number | undefined; bounds: Rect | undefined; show: boolean } | { type: "externalElementChanged"; elements: ExternalElement[] } | { type: "pointerStyleChanged"; style: PointerStyle } | { type: "selectionChanged"; stats: SelectionStats } | { type: "activeMarksChanged"; uniformMarks: Mark[]; mixedMarks: MarkType[] } | { type: "fontsRequired"; fonts: [string, number][] } | { type: "writingSystemRequired"; systems: WritingSystem[] } | { type: "renderRequired" } | { type: "enabledActionsChanged"; enabled: string[] };
 
 export interface SelectionStats {
     blockCount: number;
