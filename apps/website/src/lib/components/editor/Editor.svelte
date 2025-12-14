@@ -115,7 +115,7 @@
         ></div>
 
         <div class={css({ overflow: 'hidden' })}>
-          {#if pageWidth && marginLeft}
+          {#if pageWidth}
             <HorizontalRuler
               {marginLeft}
               {marginRight}
