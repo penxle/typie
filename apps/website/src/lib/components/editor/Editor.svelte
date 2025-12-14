@@ -10,6 +10,7 @@
   import Loading from './ui/Loading.svelte';
   import Scrollbar from './ui/Scrollbar.svelte';
   import VerticalRuler from './ui/VerticalRuler.svelte';
+  import type { Snippet } from 'svelte';
   import type { LayoutMode } from '$lib/editor/types';
 
   type Props = {
@@ -20,6 +21,7 @@
     editor?: Editor;
     onDocChanged?: () => void;
     onEditorReady?: (editor: Editor) => void;
+    header?: Snippet;
   };
 
   let {
@@ -30,6 +32,7 @@
     editor: externalEditor,
     onDocChanged,
     onEditorReady,
+    header,
   }: Props = $props();
 
   const editor = externalEditor ?? new Editor();
@@ -164,6 +167,9 @@
         }}
       >
         <div class={css({ position: 'relative', height: 'full', minWidth: 'max' })}>
+          {#if header}
+            {@render header()}
+          {/if}
           <View />
         </div>
       </div>

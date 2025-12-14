@@ -55,6 +55,11 @@
               id
               title
             }
+
+            ... on Document {
+              id
+              title
+            }
           }
         }
       }
@@ -183,7 +188,9 @@
                           : FileIcon}
                     />
                     <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
-                      {entity.node.__typename === 'Post' || entity.node.__typename === 'Canvas' ? entity.node.title : ''}
+                      {entity.node.__typename === 'Post' || entity.node.__typename === 'Canvas' || entity.node.__typename === 'Document'
+                        ? entity.node.title
+                        : ''}
                     </div>
                   </div>
                   {#if entity.node.__typename === 'Post' && entity.node.excerpt}
