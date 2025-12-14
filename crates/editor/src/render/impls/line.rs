@@ -1,0 +1,936 @@
+use crate::layout::elements::LineElement;
+use crate::model::{FontFamilyMark, SelectionDecor};
+use crate::render::glyph::Glyph;
+use crate::render::{GlyphRenderer, Render, RenderContext};
+use crate::types::Point;
+use tiny_skia::{Color, Paint, PixmapMut, Rect, Transform};
+
+fn create_solid_paint(color: Color) -> Paint<'static> {
+    let mut paint = Paint::default();
+    paint.set_color(color);
+    paint.anti_alias = true;
+    paint
+}
+
+impl LineElement {
+    // drag image 만드는 데 사용함
+    pub fn compute_selection_rects(
+        &self,
+        point: Point,
+        selections: &[SelectionDecor],
+    ) -> Vec<Rect> {
+        self.selection_rects(point, selections)
+    }
+
+    fn selection_rects(&self, point: Point, selections: &[SelectionDecor]) -> Vec<Rect> {
+        const MIN_WIDTH: f32 = 4.0;
+        let mut rects = Vec::new();
+
+        let Some(selection) = self.selection_for_node(selections) else {
+            return rects;
+        };
+
+        if let Some(rect) = self.selection_highlight(selection, MIN_WIDTH, point) {
+            rects.push(rect);
+        }
+
+        if let Some(rect) = self.explicit_break_marker(selection, MIN_WIDTH, point) {
+            rects.push(rect);
+        }
+
+        rects
+    }
+
+    fn render_selection(
+        &self,
+        pixmap: &mut PixmapMut,
+        transform: Transform,
+        point: Point,
+        selections: &[SelectionDecor],
+    ) {
+        let color = Color::from_rgba8(153, 204, 255, 77);
+        let paint = create_solid_paint(color);
+
+        for rect in self.selection_rects(point, selections) {
+            pixmap.fill_rect(rect, &paint, transform, None);
+        }
+
+        if self.has_page_break {
+            if let Some(rect) = self.page_break_indicator(point, selections) {
+                let accent_color = Color::from_rgba8(0, 111, 255, 255);
+                let accent_paint = create_solid_paint(accent_color);
+                pixmap.fill_rect(rect, &accent_paint, transform, None);
+            }
+        }
+    }
+
+    fn selection_for_node<'a>(
+        &self,
+        selections: &'a [SelectionDecor],
+    ) -> Option<&'a SelectionDecor> {
+        selections.iter().find(|s| s.node_id == self.block_id)
+    }
+
+    fn selection_highlight(
+        &self,
+        selection: &SelectionDecor,
+        min_width: f32,
+        point: Point,
+    ) -> Option<Rect> {
+        let (local_start, local_end) = self.intersect_selection_segment(selection)?;
+        let line_is_blank = self.metric.clusters.is_empty();
+
+        if self.is_empty {
+            if self.has_page_break {
+                return None;
+            }
+            return Some(self.empty_paragraph_rect(point, min_width));
+        }
+
+        if line_is_blank {
+            return None;
+        }
+
+        let start_x = self.offset_to_x(local_start);
+        let end_x = self.offset_to_x(local_end);
+        let width = end_x - start_x;
+
+        if width <= 0.0 {
+            return None;
+        }
+
+        Rect::from_xywh(
+            point.x + start_x,
+            point.y,
+            width,
+            self.metric.height + self.metric.leading,
+        )
+    }
+
+    fn empty_paragraph_rect(&self, point: Point, min_width: f32) -> Rect {
+        Rect::from_xywh(
+            point.x + self.metric.left,
+            point.y,
+            min_width,
+            self.metric.height + self.metric.leading,
+        )
+        .unwrap()
+    }
+
+    fn explicit_break_marker(
+        &self,
+        selection: &SelectionDecor,
+        marker_width: f32,
+        point: Point,
+    ) -> Option<Rect> {
+        let (local_start, _) = self.intersect_selection_segment(selection)?;
+        let selection_covers_explicit_break = self.metric.break_reason
+            == parley::layout::BreakReason::Explicit
+            && self.line_idx + 1 < self.layout.len()
+            && local_start <= self.metric.end_offset
+            && selection.end_offset >= self.metric.end_offset;
+
+        if !selection_covers_explicit_break {
+            return None;
+        }
+
+        let break_x = self.offset_to_x(self.metric.end_offset);
+        Rect::from_xywh(
+            point.x + break_x,
+            point.y,
+            marker_width,
+            self.metric.height + self.metric.leading,
+        )
+    }
+
+    fn intersect_selection_segment(&self, selection: &SelectionDecor) -> Option<(usize, usize)> {
+        if selection.start_offset >= self.metric.end_offset
+            || selection.end_offset <= self.metric.start_offset
+        {
+            return None;
+        }
+
+        Some((
+            selection.start_offset.max(self.metric.start_offset),
+            selection.end_offset.min(self.metric.end_offset),
+        ))
+    }
+
+    fn offset_to_x(&self, offset: usize) -> f32 {
+        if self.metric.clusters.is_empty() {
+            return self.metric.left;
+        }
+
+        if let Some(first) = self.metric.clusters.first() {
+            if offset <= first.start_offset {
+                return self.metric.left + first.x;
+            }
+        }
+
+        if let Some(last) = self.metric.clusters.last() {
+            if offset >= last.end_offset {
+                return self.metric.left + last.x + last.width;
+            }
+        }
+
+        for cluster in &self.metric.clusters {
+            if offset < cluster.end_offset {
+                return self.metric.left + cluster.x;
+            }
+        }
+
+        self.metric.left
+    }
+
+    fn page_break_indicator(&self, point: Point, selections: &[SelectionDecor]) -> Option<Rect> {
+        let Some(selection) = self.selection_for_node(selections) else {
+            return None;
+        };
+
+        if !self.is_empty && selection.end_offset <= self.metric.end_offset {
+            return None;
+        }
+
+        let end_x = self.offset_to_x(self.metric.end_offset);
+        Rect::from_xywh(
+            point.x + end_x,
+            point.y + (self.metric.height + self.metric.leading) / 2.0 - 0.75,
+            self.size.width - end_x,
+            1.5,
+        )
+    }
+
+    fn render_preedit(&self, pixmap: &mut PixmapMut, transform: Transform, point: Point) {
+        let Some(preedit) = &self.preedit else {
+            return;
+        };
+
+        if preedit.node_id != self.block_id {
+            return;
+        }
+
+        let first = self
+            .metric
+            .clusters
+            .iter()
+            .find(|g| g.start_offset >= preedit.offset);
+
+        let last = self.metric.clusters.iter().rev().find(|g| {
+            g.end_offset <= preedit.offset + bytecount::num_chars(preedit.text.as_bytes())
+        });
+
+        let (Some(first), Some(last)) = (first, last) else {
+            return;
+        };
+
+        let Some(rect) = Rect::from_xywh(
+            point.x + self.metric.left + first.x,
+            point.y + self.metric.top + self.metric.height,
+            last.x + last.width - first.x,
+            1.0,
+        ) else {
+            return;
+        };
+
+        let color = Color::from_rgba8(128, 128, 128, 255);
+        let paint = create_solid_paint(color);
+        pixmap.fill_rect(rect, &paint, transform, None);
+    }
+
+    fn render_background_segments(
+        &self,
+        pixmap: &mut PixmapMut,
+        transform: Transform,
+        line_metrics: &parley::layout::LineMetrics,
+        ctx: &RenderContext<'_>,
+    ) {
+        if self.background_segments.is_empty() {
+            return;
+        }
+
+        let line_height = line_metrics.ascent + line_metrics.descent;
+
+        for segment in &self.background_segments {
+            let Some(color) = ctx.theme.highlight_color(&segment.color_key) else {
+                continue;
+            };
+
+            let mut min_x = f32::MAX;
+            let mut max_x = f32::MIN;
+            let mut found_cluster = false;
+
+            for cluster in &self.metric.clusters {
+                if cluster.start_offset < segment.end_offset
+                    && cluster.end_offset > segment.start_offset
+                {
+                    found_cluster = true;
+                    let cluster_x = self.metric.left + cluster.x;
+                    min_x = min_x.min(cluster_x);
+                    max_x = max_x.max(cluster_x + cluster.width);
+                }
+            }
+
+            if !found_cluster {
+                continue;
+            }
+
+            if let Some(rect) = Rect::from_xywh(min_x, self.metric.top, max_x - min_x, line_height)
+            {
+                let paint = create_solid_paint(color);
+                pixmap.fill_rect(rect, &paint, transform, None);
+            }
+        }
+    }
+
+    fn render_ruby_marks(
+        &self,
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        transform: Transform,
+        line_metrics: &parley::layout::LineMetrics,
+        ctx: &RenderContext<'_>,
+    ) {
+        use crate::global::GLOBALS;
+
+        if self.ruby_segments.is_empty() {
+            return;
+        }
+
+        let scale = ctx.scale_factor as f32;
+        let run_y = self.metric.top + line_metrics.ascent;
+
+        GLOBALS.with(|globals| {
+            use parley::style::*;
+
+            let globals = globals.borrow();
+            let mut lcx = globals.parley_layout_context.borrow_mut();
+            let mut fcx = globals.parley_font_context.borrow_mut();
+
+            for ruby_seg in &self.ruby_segments {
+                let mut min_x = f32::MAX;
+                let mut max_x = f32::MIN;
+                let mut found_cluster = false;
+
+                for cluster in &self.metric.clusters {
+                    if cluster.start_offset < ruby_seg.end_offset
+                        && cluster.end_offset > ruby_seg.start_offset
+                    {
+                        found_cluster = true;
+                        let cluster_x = self.metric.left + cluster.x;
+                        min_x = min_x.min(cluster_x);
+                        max_x = max_x.max(cluster_x + cluster.width);
+                    }
+                }
+
+                if !found_cluster {
+                    continue;
+                }
+
+                let base_width = max_x - min_x;
+                let base_x = min_x;
+
+                const RUBY_FONT_SIZE: f32 = 12.0;
+
+                let mut ruby_builder =
+                    lcx.ranged_builder(&mut fcx, &ruby_seg.ruby_text, 1.0, false);
+
+                ruby_builder.push_default(StyleProperty::FontStack(FontStack::Single(
+                    FontFamily::Named(FontFamilyMark::default().family.into()),
+                )));
+                ruby_builder.push_default(StyleProperty::FontSize(RUBY_FONT_SIZE));
+                ruby_builder.push_default(StyleProperty::FontWeight(FontWeight::new(400.0)));
+
+                let mut ruby_layout = ruby_builder.build(&ruby_seg.ruby_text);
+                ruby_layout.break_all_lines(None);
+
+                if let Some(ruby_line) = ruby_layout.lines().next() {
+                    let ruby_metrics = ruby_line.metrics();
+                    let ruby_width = ruby_metrics.advance;
+
+                    let ruby_x_offset = base_x + (base_width - ruby_width) / 2.0;
+
+                    let line_baseline = run_y + line_metrics.ascent;
+                    let ruby_height = ruby_metrics.ascent + ruby_metrics.descent;
+                    let ruby_y_offset = line_baseline - line_metrics.ascent - ruby_height;
+
+                    let color = ctx.theme.text_color(None);
+                    let ruby_paint = create_solid_paint(color);
+
+                    for item in ruby_line.items() {
+                        if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                            let run = glyph_run.run();
+                            let run_x = glyph_run.offset();
+
+                            let mut x_advance = 0.0;
+                            let glyphs: Vec<_> = glyph_run
+                                .glyphs()
+                                .map(|g| {
+                                    let glyph_x = x_advance + g.x;
+                                    x_advance += g.advance;
+                                    Glyph {
+                                        id: g.id,
+                                        x: ruby_x_offset + run_x + glyph_x,
+                                        y: ruby_y_offset + g.y,
+                                    }
+                                })
+                                .collect();
+
+                            glyph_renderer.draw_glyphs(
+                                pixmap,
+                                &run.font(),
+                                RUBY_FONT_SIZE * scale,
+                                &ruby_paint,
+                                transform,
+                                None,
+                                &glyphs,
+                            );
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+impl Render for LineElement {
+    fn render(
+        &self,
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        transform: Transform,
+        ctx: &RenderContext<'_>,
+    ) {
+        let Some(line) = self.layout.lines().nth(self.line_idx) else {
+            return;
+        };
+
+        let point = Point::zero();
+
+        self.render_selection(pixmap, transform, point, ctx.selections);
+
+        let line_metrics = line.metrics();
+
+        self.render_background_segments(pixmap, transform, &line_metrics, ctx);
+
+        let scale = ctx.scale_factor as f32;
+        let run_y = self.metric.top + line_metrics.ascent;
+
+        for item in line.items() {
+            match item {
+                parley::PositionedLayoutItem::InlineBox(_) => {}
+                parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                    let run = glyph_run.run();
+                    let style = glyph_run.style();
+
+                    let color = ctx.theme.text_color(Some(&style.brush));
+                    let text_paint = create_solid_paint(color);
+
+                    let run_x = glyph_run.offset();
+
+                    let synthesis = run.synthesis();
+                    let skew_transform = if synthesis.skew() != Some(0.0) {
+                        synthesis.skew().map(|skew| {
+                            Transform::from_row(
+                                1.0,
+                                0.0,
+                                (skew as f64).to_radians().tan() as f32,
+                                1.0,
+                                0.0,
+                                0.0,
+                            )
+                        })
+                    } else {
+                        None
+                    };
+
+                    let mut x_advance = 0.0;
+                    let glyphs: Vec<_> = glyph_run
+                        .glyphs()
+                        .map(|g| {
+                            let glyph_x = x_advance + g.x;
+                            x_advance += g.advance;
+                            Glyph {
+                                id: g.id,
+                                x: run_x + glyph_x,
+                                y: run_y + g.y,
+                            }
+                        })
+                        .collect();
+
+                    glyph_renderer.draw_glyphs(
+                        pixmap,
+                        &run.font(),
+                        run.font_size() * scale,
+                        &text_paint,
+                        transform,
+                        skew_transform,
+                        &glyphs,
+                    );
+
+                    let run_width = glyph_run.advance();
+
+                    if let Some(underline_style) = &style.underline {
+                        let metrics = line_metrics;
+                        let default_offset = metrics.descent * 0.5;
+                        let offset = underline_style.offset.unwrap_or(default_offset);
+                        let size = underline_style.size.unwrap_or(1.0);
+
+                        if let Some(rect) = Rect::from_xywh(run_x, run_y + offset, run_width, size)
+                        {
+                            pixmap.fill_rect(rect, &text_paint, transform, None);
+                        }
+                    }
+
+                    if let Some(strikethrough_style) = &style.strikethrough {
+                        let metrics = line_metrics;
+                        let default_offset = -metrics.ascent * 0.3;
+                        let offset = strikethrough_style.offset.unwrap_or(default_offset);
+                        let size = strikethrough_style.size.unwrap_or(1.0);
+
+                        if let Some(rect) = Rect::from_xywh(run_x, run_y + offset, run_width, size)
+                        {
+                            pixmap.fill_rect(rect, &text_paint, transform, None);
+                        }
+                    }
+                }
+            }
+        }
+
+        self.render_preedit(pixmap, transform, point);
+        self.render_ruby_marks(pixmap, glyph_renderer, transform, &line_metrics, ctx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::{Element, Layout, LayoutCache, LayoutContext};
+    use crate::model::Decorations;
+    use crate::state::build_selection_decorations;
+    use crate::types::{Affinity, BoxConstraints};
+    use std::cell::RefCell;
+
+    fn selections_from_state(state: &crate::runtime::State) -> Vec<SelectionDecor> {
+        build_selection_decorations(&state.doc, &state.selection, None)
+    }
+
+    fn decorations_from_state(_state: &crate::runtime::State) -> Decorations {
+        Decorations { preedit: None }
+    }
+
+    fn layout_for_paragraph(
+        state: &crate::runtime::State,
+        para_id: crate::model::NodeId,
+    ) -> crate::layout::LayoutNode {
+        let decorations = decorations_from_state(state);
+        let paragraph = state.doc.node(para_id).unwrap();
+        let settings = state.doc.settings();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = crate::runtime::ViewStates::default();
+        let ctx = LayoutContext::new(
+            &paragraph,
+            &settings,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+        let constraints = BoxConstraints::new(0.0, 400.0, 0.0, f32::INFINITY);
+        paragraph.node().layout(&ctx, constraints)
+    }
+
+    fn selection_rects(line: &LineElement, selections: &[SelectionDecor]) -> Vec<Rect> {
+        line.selection_rects(Point::zero(), selections)
+    }
+
+    #[test]
+    fn test_selection_rect_is_drawn_for_hard_break() {
+        let mut p = id!();
+        let hello_len = "Hello".chars().count();
+        let hard_break_end = hello_len + 1;
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                    hard_break {}
+                    text { "World" }
+                }
+            }
+            selection { (p, hello_len) -> (p, hard_break_end) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let line_with_selection = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref()? {
+                        Element::Line(line) => {
+                            let metric = &line.metric;
+                            if metric.start_offset <= hard_break_end
+                                && metric.end_offset >= hello_len
+                            {
+                                Some(line)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    })
+            })
+            .expect("line containing hard break selection");
+
+        let rects = selection_rects(line_with_selection, &selections);
+        assert!(
+            !rects.is_empty(),
+            "hard break selection은 최소한 하나의 사각형을 그려야 함"
+        );
+        assert!(
+            rects.iter().any(|r| r.width() > 0.0),
+            "hard break 선택 영역의 너비는 0보다 커야 함"
+        );
+    }
+
+    #[test]
+    fn test_hard_break_selection_does_not_draw_on_next_line() {
+        let mut p = id!();
+        let hello_len = "Hello".chars().count();
+        let hard_break_end = hello_len + 1;
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                    hard_break {}
+                    text { "World" }
+                }
+            }
+            selection { (p, hello_len) -> (p, hard_break_end) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let mut line_rects = Vec::new();
+        if let Some(children) = layout.children {
+            for child in children {
+                if let Some(Element::Line(line)) = &child.node.element {
+                    line_rects.push(selection_rects(&line, &selections));
+                }
+            }
+        }
+
+        assert_eq!(line_rects.len(), 2, "두 줄이 생성되어야 함");
+        assert!(
+            !line_rects[0].is_empty(),
+            "hard break 선택은 첫 번째 줄에서만 그려져야 함"
+        );
+        assert!(
+            line_rects[1].is_empty(),
+            "hard break 선택은 다음 줄에서 그려지면 안 됨"
+        );
+    }
+
+    #[test]
+    fn test_select_all_draws_selection_across_lines() {
+        let mut p = id!();
+        let text = "Hello\nWorld";
+        let selection_end = text.chars().count();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                    hard_break {}
+                    text { "World" }
+                }
+            }
+            selection { (p, 0) -> (p, selection_end) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let mut drawn = 0;
+        if let Some(children) = layout.children {
+            for child in children {
+                if let Some(Element::Line(line)) = &child.node.element {
+                    if !selection_rects(&line, &selections).is_empty() {
+                        drawn += 1;
+                    }
+                }
+            }
+        }
+
+        assert_eq!(drawn, 2, "전체 선택 시 두 줄 모두에 선택이 그려져야 함");
+    }
+
+    #[test]
+    fn test_empty_paragraph_selection_draws_min_rect_for_first_block_only() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph { }
+                @p2 paragraph { }
+            }
+            selection { (p1, 0) -> (p2, 0) }
+        };
+
+        let layout = layout_for_paragraph(&state, p1);
+        let selections = selections_from_state(&state);
+
+        let line = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref()? {
+                        Element::Line(line) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("첫 번째 빈 문단은 라인을 하나 생성해야 함");
+
+        let rects = selection_rects(line, &selections);
+        assert!(
+            rects.iter().any(|r| r.width() >= 4.0),
+            "빈 문단 선택은 최소 너비 4의 사각형을 첫 문단에서만 그려야 함"
+        );
+    }
+
+    #[test]
+    fn test_blank_line_selection_only_shows_marker_on_second_line() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    hard_break {}
+                    hard_break {}
+                }
+            }
+            selection { (p, 1) -> (p, 2) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let selection_instances = layout
+            .children
+            .as_ref()
+            .expect("라인이 존재해야 함")
+            .iter()
+            .filter_map(|child| match child.node.element.as_ref()? {
+                Element::Line(line) => Some((line.line_idx, selection_rects(line, &selections))),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            selection_instances
+                .iter()
+                .any(|(idx, rects)| *idx == 0 && rects.is_empty()),
+            "첫 번째 빈 줄에는 선택 표시가 없어야 함"
+        );
+
+        let second = selection_instances
+            .iter()
+            .find(|(idx, _)| *idx == 1)
+            .expect("두 번째 줄이 존재해야 함");
+
+        assert!(
+            second.1.len() == 1 && (second.1[0].width() - 4.0).abs() < f32::EPSILON,
+            "두 번째 빈 줄에는 최소 너비의 마커만 하나 그려져야 함"
+        );
+    }
+
+    #[test]
+    fn test_select_all_shows_hard_break_marker() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                    hard_break {}
+                    text { "World" }
+                }
+            }
+            selection { (p, 0) -> (p, 11) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let first_line_rects = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref()? {
+                        Element::Line(line) if line.line_idx == 0 => {
+                            Some(selection_rects(line, &selections))
+                        }
+                        _ => None,
+                    })
+            })
+            .expect("첫 번째 줄 선택이 렌더링되어야 함");
+
+        assert!(
+            first_line_rects
+                .iter()
+                .any(|r| (r.width() - 4.0).abs() < 0.1),
+            "전체 선택 시 hard break 마커(작은 사각형)가 포함되어야 함"
+        );
+    }
+
+    #[test]
+    fn test_consecutive_hard_breaks_render_single_marker_per_empty_line() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "ㅁ" }
+                    hard_break {}
+                    hard_break {}
+                }
+            }
+            selection { (p, 0) -> (p, 3) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+        let blank_line = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref()? {
+                        Element::Line(line) if line.line_idx == 1 => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("두 번째 줄이 존재해야 함");
+
+        let rects = selection_rects(blank_line, &selections);
+        assert_eq!(rects.len(), 1, "빈 줄에는 단일 마커만 그려져야 함");
+        assert!(
+            (rects[0].width() - 4.0).abs() < 0.001,
+            "빈 줄 마커 너비는 최소값과 동일해야 함"
+        );
+    }
+
+    #[test]
+    fn test_page_break_indicator_in_empty_paragraph() {
+        let metric = crate::layout::elements::LineMetric {
+            top: 0.0,
+            left: 0.0,
+            height: 20.0,
+            leading: 0.0,
+            baseline: 14.0,
+            start_offset: 0,
+            end_offset: 3, // \u{200B} length
+            clusters: vec![],
+            break_reason: parley::layout::BreakReason::None,
+            grapheme_offsets: vec![],
+        };
+
+        let line = LineElement::build(
+            id!(),
+            crate::types::Size::new(100.0, 20.0),
+            0,
+            std::rc::Rc::new(parley::Layout::default()),
+            metric,
+            None,
+            true, // is_empty
+            std::rc::Rc::from("\u{200B}"),
+            vec![],
+            vec![],
+            true, // has_page_break
+        );
+
+        let selection = SelectionDecor {
+            node_id: line.block_id,
+            start_offset: 0,
+            end_offset: 1,
+        };
+
+        let selections = [selection];
+        let rects = line.selection_rects(Point::zero(), &selections);
+        let page_break_rect = line.page_break_indicator(Point::zero(), &selections);
+
+        assert_eq!(
+            rects.len(),
+            0,
+            "Should not render empty paragraph rect when page break is selected"
+        );
+        assert!(
+            page_break_rect.is_some(),
+            "Page break indicator should be present"
+        );
+    }
+
+    #[test]
+    fn test_list_selection_decoration() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+        let mut list_p1 = id!();
+        let mut list_p2 = id!();
+
+        let state = state! {
+            doc {
+                @n1 paragraph {
+                    text { "1" }
+                }
+                bullet_list {
+                    list_item {
+                        @list_p1 paragraph {
+                            text { "2" }
+                        }
+                    }
+                    list_item {
+                        @list_p2 paragraph {
+                            text { "3" }
+                        }
+                    }
+                }
+                @n2 paragraph {
+                    text { "4" }
+                }
+                paragraph {}
+            }
+            selection { (n2, 1, Affinity::Upstream) -> (n1, 0) }
+        };
+
+        let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
+        let block_ids = crate::state::collect_blocks_in_range(&state.doc, from, to).unwrap();
+        let selections =
+            build_selection_decorations(&state.doc, &state.selection, Some(&block_ids));
+
+        println!("Selections: {:#?}", selections);
+        println!("list_p1: {:?}", list_p1);
+        println!("list_p2: {:?}", list_p2);
+
+        let list_p1_decor = selections.iter().find(|s| s.node_id == list_p1).unwrap();
+        let list_p2_decor = selections.iter().find(|s| s.node_id == list_p2).unwrap();
+
+        assert_eq!(
+            list_p1_decor.start_offset, 0,
+            "list_p1 start offset mismatch"
+        );
+        assert_eq!(list_p1_decor.end_offset, 1, "list_p1 end offset mismatch");
+
+        assert_eq!(
+            list_p2_decor.start_offset, 0,
+            "list_p2 start offset mismatch"
+        );
+        assert_eq!(list_p2_decor.end_offset, 1, "list_p2 end offset mismatch");
+    }
+}

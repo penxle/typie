@@ -12,6 +12,7 @@ apps/mobile/ios/*
 
 **/build/**
 **/vendor/**
+**/pkg/**
 Dockerfile
 
 **/.dart_tool/**

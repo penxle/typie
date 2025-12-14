@@ -10,7 +10,7 @@ import { ignore } from './eslint-ignore.js';
 
 // eslint-disable-next-line import/no-default-export
 export default defineConfig([
-  { ignores: [ignore, '**/mobile/**', '**/vendor/**'] },
+  { ignores: [ignore, '**/mobile/**', '**/vendor/**', '**/pkg/**'] },
   js.configs.recommended,
   unicorn.configs.recommended,
   typescript.configs.strict,

@@ -1,0 +1,277 @@
+use crate::model::*;
+use crate::runtime::{Effect, Runtime};
+use crate::state::Selection;
+
+impl Runtime {
+    pub(crate) fn handle_toggle_bold(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_bold())
+    }
+
+    pub(crate) fn handle_toggle_italic(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::Italic(ItalicMark)))
+    }
+
+    pub(crate) fn handle_toggle_strikethrough(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::Strikethrough(StrikethroughMark)))
+    }
+
+    pub(crate) fn handle_toggle_underline(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::Underline(UnderlineMark)))
+    }
+
+    pub(crate) fn handle_toggle_ruby(&mut self, text: String) -> Vec<Effect> {
+        self.transact(|tr| {
+            let selection = tr.selection().clone();
+
+            if selection.is_collapsed() {
+                let base_text = "하단 텍스트";
+                tr.insert_text(base_text)?;
+
+                let new_selection = tr.selection().clone();
+                tr.set_selection(Selection::new(selection.anchor, new_selection.head));
+            }
+
+            tr.toggle_mark(Mark::Ruby(RubyMark { text }))
+        })
+    }
+
+    pub(crate) fn handle_toggle_blockquote(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_blockquote())
+    }
+
+    pub(crate) fn handle_toggle_callout(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_callout())
+    }
+
+    pub(crate) fn handle_toggle_bullet_list(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_bullet_list())
+    }
+
+    pub(crate) fn handle_toggle_ordered_list(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_ordered_list())
+    }
+
+    pub(crate) fn handle_set_font_family(&mut self, family: String) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::FontFamily(FontFamilyMark { family })))
+    }
+
+    pub(crate) fn handle_set_font_size(&mut self, size: f32) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::FontSize(FontSizeMark { size })))
+    }
+
+    pub(crate) fn handle_set_font_weight(&mut self, weight: u16) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::FontWeight(FontWeightMark { weight })))
+    }
+
+    pub(crate) fn handle_set_line_height(&mut self, height: f32) -> Vec<Effect> {
+        self.transact(|tr| tr.set_line_height(height))
+    }
+
+    pub(crate) fn handle_set_letter_spacing(&mut self, spacing: f32) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::LetterSpacing(LetterSpacingMark { spacing })))
+    }
+
+    pub(crate) fn handle_set_text_align(&mut self, align: TextAlign) -> Vec<Effect> {
+        self.transact(|tr| tr.set_text_align(align))
+    }
+
+    pub(crate) fn handle_set_block_gap(&mut self, gap: f32) -> Vec<Effect> {
+        self.transact(|tr| tr.set_block_gap(gap))
+    }
+
+    pub(crate) fn handle_set_paragraph_indent(&mut self, indent: f32) -> Vec<Effect> {
+        self.transact(|tr| tr.set_paragraph_indent(indent))
+    }
+
+    pub(crate) fn handle_toggle_text_color(&mut self, key: String) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::TextColor(TextColorMark { key })))
+    }
+
+    pub(crate) fn handle_toggle_background_color(&mut self, key: String) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_mark(Mark::BackgroundColor(BackgroundColorMark { key })))
+    }
+
+    pub(crate) fn handle_insert_image(
+        &mut self,
+        src: String,
+        width: f32,
+        height: f32,
+    ) -> Vec<Effect> {
+        self.transact(|tr| tr.insert_node(Node::Image(ImageNode { src, width, height })))
+    }
+
+    pub(crate) fn handle_insert_horizontal_rule(
+        &mut self,
+        variant: crate::model::HorizontalRuleVariant,
+    ) -> Vec<Effect> {
+        self.transact(|tr| tr.insert_horizontal_rule(variant))
+    }
+
+    pub(crate) fn handle_clear_formatting(&mut self) -> Vec<Effect> {
+        self.transact(|tr| {
+            let selection = tr.selection().clone();
+            if selection.is_collapsed() {
+                tr.clear_pending_marks()
+            } else {
+                let mut changed = false;
+
+                if tr.unset_all_marks()? {
+                    changed = true;
+                }
+
+                if tr.reset_fully_selected_paragraphs()? {
+                    changed = true;
+                }
+
+                Ok(changed)
+            }
+        })
+    }
+
+    pub(crate) fn handle_indent(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.sink_list_item())
+    }
+
+    pub(crate) fn handle_outdent(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.lift_list_item())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::*;
+    use crate::runtime::Message;
+
+    #[test]
+    fn test_clear_formatting_collapsed_clears_pending_marks() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(FontFamilyMark::default().family, vec![400, 700]);
+        let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.update(Message::ToggleBold);
+        assert!(runtime.state().pending_marks.is_some());
+
+        runtime.update(Message::ClearFormatting);
+        assert!(runtime.state().pending_marks.is_none());
+    }
+
+    #[test]
+    fn test_clear_formatting_range_clears_marks() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text(marks: [bold(), italic()]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        runtime.update(Message::ClearFormatting);
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        assert_state_eq!(runtime.state(), expected);
+    }
+
+    #[test]
+    fn test_clear_formatting_full_paragraph_resets_alignment() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph(align: TextAlign::Center,) {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        runtime.update(Message::ClearFormatting);
+
+        let expected = state! {
+            doc {
+                @p paragraph(align: TextAlign::Left,) {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        assert_state_eq!(runtime.state(), expected);
+    }
+
+    #[test]
+    fn test_clear_formatting_partial_paragraph_does_not_reset_alignment() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph(align: TextAlign::Center,) {
+                    text { "hello world" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        runtime.update(Message::ClearFormatting);
+
+        let expected = state! {
+            doc {
+                @p paragraph(align: TextAlign::Center,) {
+                    text { "hello world" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        assert_state_eq!(runtime.state(), expected);
+    }
+
+    #[test]
+    fn test_clear_formatting_range_clears_marks_and_alignment_if_full() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph(align: TextAlign::Right,) {
+                    text(marks: [bold()]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        runtime.update(Message::ClearFormatting);
+
+        let expected = state! {
+            doc {
+                @p paragraph(align: TextAlign::Left,) {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        assert_state_eq!(runtime.state(), expected);
+    }
+}
