@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { dropCursor } from '@tiptap/pm/dropcursor';
+import type { Plugin } from '@tiptap/pm/state';
 
 export const DropCursor = Extension.create({
   name: 'drop_cursor',
@@ -10,7 +11,7 @@ export const DropCursor = Extension.create({
         class: 'ProseMirror-dropcursor',
         color: false,
         width: 4,
-      }),
+      }) as unknown as Plugin,
     ];
   },
 });

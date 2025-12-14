@@ -1,4 +1,4 @@
-import type { Application } from '@penxle/editor';
+import type { Application } from '@typie/editor';
 import type { WritingSystem } from './types';
 
 export type FontInfo = {
