@@ -225,7 +225,7 @@ fn add_ancestor_decorations(
             continue;
         };
 
-        if from_idx == 0 && to_idx == 0 {
+        if from_idx == 0 && to_idx == 0 && from.offset == to.offset {
             break;
         }
 
@@ -267,7 +267,7 @@ fn add_ancestor_decorations(
             }
         };
 
-        if start_child_id == end_child_id {
+        if start_child_id == end_child_id && (from_idx != 0 || to_idx != 0) {
             break;
         }
 
@@ -624,5 +624,34 @@ mod tests {
         );
         assert_eq!(fold_content_decor.unwrap().start_offset, 0);
         assert_eq!(fold_content_decor.unwrap().end_offset, 1);
+    }
+
+    #[test]
+    fn test_build_selection_decorations_single_horizontal_rule() {
+        let state = state! {
+            doc {
+                paragraph { text { "before" } }
+                horizontal_rule {}
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        let root_decor = decorations.iter().find(|d| d.node_id == NodeId::ROOT);
+        assert!(
+            root_decor.is_some(),
+            "ROOT should have a selection decoration when selecting a single HR"
+        );
+        let decor = root_decor.unwrap();
+        assert_eq!(
+            decor.start_offset, 1,
+            "decoration should start at offset 1 (before HR)"
+        );
+        assert_eq!(
+            decor.end_offset, 2,
+            "decoration should end at offset 2 (after HR)"
+        );
     }
 }
