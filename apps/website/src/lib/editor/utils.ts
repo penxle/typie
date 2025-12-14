@@ -45,3 +45,69 @@ export const idleCallback = (callback: () => void): void => {
     requestIdleCallback(callback);
   }
 };
+
+export type ExtensionAreaCoordinate = {
+  pageIdx: number;
+  x: number;
+  y: number;
+  pageElement: HTMLElement;
+};
+
+export const findNearestPageCoordinate = (
+  e: MouseEvent | PointerEvent,
+  pageElements: HTMLElement[],
+  pageWidth: number,
+): ExtensionAreaCoordinate | null => {
+  if (pageElements.length === 0) return null;
+
+  const eventY = e.clientY;
+
+  let nearestPageIdx = 0;
+  let nearestPageEl = pageElements[0];
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (const [i, pageEl] of pageElements.entries()) {
+    if (!pageEl) continue;
+
+    const pageRect = pageEl.getBoundingClientRect();
+    const pageTop = pageRect.top;
+    const pageBottom = pageRect.bottom;
+
+    if (eventY >= pageTop && eventY <= pageBottom) {
+      nearestPageIdx = i;
+      nearestPageEl = pageEl;
+      minDistance = 0;
+      break;
+    }
+
+    const distanceToTop = Math.abs(eventY - pageTop);
+    const distanceToBottom = Math.abs(eventY - pageBottom);
+    const distance = Math.min(distanceToTop, distanceToBottom);
+
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearestPageIdx = i;
+      nearestPageEl = pageEl;
+    }
+  }
+
+  const pageRect = nearestPageEl.getBoundingClientRect();
+
+  const relativeX = Math.max(0, Math.min(pageWidth, e.clientX - pageRect.left));
+
+  let relativeY: number;
+  if (eventY < pageRect.top) {
+    relativeY = 0;
+  } else if (eventY > pageRect.bottom) {
+    relativeY = pageRect.height;
+  } else {
+    relativeY = eventY - pageRect.top;
+  }
+
+  return {
+    pageIdx: nearestPageIdx,
+    x: relativeX,
+    y: relativeY,
+    pageElement: nearestPageEl,
+  };
+};

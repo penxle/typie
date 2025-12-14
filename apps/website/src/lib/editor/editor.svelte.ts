@@ -4,7 +4,7 @@ import notoPhantomUrl from '@penxle/editor/pkg/Noto-Phantom.ttf?url';
 import { SvelteMap } from 'svelte/reactivity';
 import { FRAGMENT_MIME } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
-import { calculateRelativePosition, findScroller, getPageIndex, idleCallback } from './utils';
+import { calculateRelativePosition, findNearestPageCoordinate, findScroller, getPageIndex, idleCallback } from './utils';
 import type { Editor as WasmEditor } from '@penxle/editor';
 import type { ThemeColors } from './theme';
 import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, SelectionStats, WritingSystem } from './types';
@@ -80,6 +80,11 @@ export class Editor {
   });
 
   pageVisibility = new SvelteMap<number, number>();
+
+  extensionArea = $state({
+    containerEl: null as HTMLElement | null,
+    pageElements: [] as HTMLElement[],
+  });
 
   #lastClickTime = 0;
   #lastClickPos: { x: number; y: number } | null = null;
@@ -362,29 +367,61 @@ export class Editor {
     return this.#clickCount;
   }
 
+  #resolvePointerCoordinate(
+    e: MouseEvent | PointerEvent,
+    targetEl: HTMLElement,
+  ): { pageIdx: number; x: number; y: number; pageElement: HTMLElement; isExtensionArea: boolean } | null {
+    const pageIdx = getPageIndex(targetEl);
+
+    if (pageIdx !== -1) {
+      let pageElement: HTMLElement | null = targetEl;
+      while (pageElement && pageElement.dataset && !pageElement.dataset.pageIndex) {
+        pageElement = pageElement.parentElement;
+      }
+      const point = calculateRelativePosition(targetEl, e);
+      return {
+        pageIdx,
+        x: point.x,
+        y: point.y,
+        pageElement: pageElement ?? targetEl,
+        isExtensionArea: false,
+      };
+    }
+
+    if (this.layout.layoutMode.type === 'continuous') {
+      const { containerEl, pageElements } = this.extensionArea;
+      if (containerEl && pageElements.length > 0) {
+        const coord = findNearestPageCoordinate(e, pageElements, this.layout.pageWidth);
+        if (coord) {
+          return {
+            pageIdx: coord.pageIdx,
+            x: coord.x,
+            y: coord.y,
+            pageElement: coord.pageElement,
+            isExtensionArea: true,
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
   handlePointerDown(e: PointerEvent): void {
     if (!(e.target instanceof HTMLElement)) return;
 
-    const index = getPageIndex(e.target);
-
-    if (index === -1) {
+    const resolved = this.#resolvePointerCoordinate(e, e.target);
+    if (!resolved) {
       this.isDraggable = false;
       return;
     }
 
-    let pageElement: HTMLElement | null = e.target;
-    while (pageElement && pageElement.dataset && !pageElement.dataset.pageIndex) {
-      pageElement = pageElement.parentElement;
-    }
+    const { pageIdx, x, y, pageElement } = resolved;
 
-    if (pageElement) {
-      const rect = pageElement.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      this.isDraggable = this.canDragAt(index, x, y);
-    } else {
-      this.isDraggable = false;
-    }
+    const rect = pageElement.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    const relY = e.clientY - rect.top;
+    this.isDraggable = this.canDragAt(pageIdx, relX, relY);
 
     if (e.button === 0) {
       if (!this.isDraggable) {
@@ -393,14 +430,13 @@ export class Editor {
       this.pointer.isPressed = true;
     }
 
-    const point = calculateRelativePosition(e.target, e);
     const count = e.button === 0 ? this.#getClickCount(e.clientX, e.clientY, e.timeStamp) : 1;
 
     this.dispatch({
       type: 'pointerDown',
-      pageIdx: index,
-      x: point.x,
-      y: point.y,
+      pageIdx,
+      x,
+      y,
       clickCount: count,
       shiftKey: e.shiftKey,
       isPrimary: e.button === 0,
@@ -411,17 +447,18 @@ export class Editor {
     const targetEl = document.elementFromPoint(e.clientX, e.clientY);
     if (!(targetEl instanceof HTMLElement)) return;
 
-    const index = getPageIndex(targetEl);
-    if (index === -1) return;
+    const resolved = this.#resolvePointerCoordinate(e, targetEl);
+    if (!resolved) return;
 
-    const point = calculateRelativePosition(targetEl, e);
-    this.pointer.currentHoverTarget = targetEl;
+    const { pageIdx, x, y, isExtensionArea } = resolved;
+
+    this.pointer.currentHoverTarget = isExtensionArea ? (this.extensionArea.containerEl ?? targetEl) : targetEl;
 
     this.dispatch({
       type: 'pointerMove',
-      pageIdx: index,
-      x: point.x,
-      y: point.y,
+      pageIdx,
+      x,
+      y,
       isPressed: this.pointer.isPressed,
     });
   }
@@ -434,18 +471,22 @@ export class Editor {
     e.target.releasePointerCapture(e.pointerId);
 
     const targetEl = document.elementFromPoint(e.clientX, e.clientY);
-    if (targetEl instanceof HTMLElement) {
-      const index = getPageIndex(targetEl);
-      if (index !== -1) {
-        const point = calculateRelativePosition(targetEl, e);
-        this.dispatch({
-          type: 'pointerUp',
-          pageIdx: index,
-          x: point.x,
-          y: point.y,
-        });
-      }
+    if (!(targetEl instanceof HTMLElement)) return;
+
+    const resolved = this.#resolvePointerCoordinate(e, targetEl);
+    if (!resolved) {
+      this.pointer.isPressed = false;
+      return;
     }
+
+    const { pageIdx, x, y } = resolved;
+
+    this.dispatch({
+      type: 'pointerUp',
+      pageIdx,
+      x,
+      y,
+    });
 
     this.pointer.isPressed = false;
   }

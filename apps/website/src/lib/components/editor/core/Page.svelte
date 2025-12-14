@@ -7,10 +7,9 @@
   type Props = {
     page: number;
     containerEl?: HTMLDivElement;
-    onCanvasClick: () => void;
   };
 
-  let { page, containerEl = $bindable(), onCanvasClick }: Props = $props();
+  let { page, containerEl = $bindable() }: Props = $props();
 
   const editor = getEditor();
 
@@ -82,7 +81,6 @@
             renderer = null;
           };
         }}
-        onclick={onCanvasClick}
       ></canvas>
 
       {#each mediaOnPage as el (el.nodeId)}
