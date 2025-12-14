@@ -77,6 +77,7 @@ const TRACKED_ACTIONS: &[&str] = &[
     "ToggleUnderline",
     "ToggleTextColor",
     "ToggleBackgroundColor",
+    "ToggleRuby",
     "SetTextAlign",
     "SetLineHeight",
     "SetLetterSpacing",

@@ -27,6 +27,7 @@
   import ToolbarFontSize from './ToolbarFontSize.svelte';
   import ToolbarFontWeight from './ToolbarFontWeight.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
+  import ToolbarRuby from './ToolbarRuby.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Mark, MarkType, TextAlign } from '$lib/editor/types';
 
@@ -332,13 +333,13 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton active={isRubyActive} disabled={true} label="루비" size="small">
+    <ToolbarDropdownButton active={isRubyActive} disabled={!editor.can('toggleRuby')} label="루비" size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={RubyIcon} />
       {/snippet}
 
-      {#snippet floating()}
-        <div class={css({ padding: '8px' })}>루비 기능 준비 중</div>
+      {#snippet floating({ close })}
+        <ToolbarRuby {close} />
       {/snippet}
     </ToolbarDropdownButton>
   </div>

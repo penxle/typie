@@ -41,8 +41,8 @@
     if (extensionAreaEl?.contains(e.target as Node)) {
       e.preventDefault();
       focusInput();
+      editor.handlePointerDown(e);
     }
-    editor.handlePointerDown(e);
   };
 
   const handlePointerMove = (e: PointerEvent) => {
