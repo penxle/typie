@@ -430,7 +430,10 @@ impl Layout for ParagraphNode {
                         builder.push(StyleProperty::Strikethrough(true), range)
                     }
                     Mark::Underline(_) => builder.push(StyleProperty::Underline(true), range),
-                    Mark::TextColor(m) => builder.push(StyleProperty::Brush(m.key.clone()), range),
+                    Mark::TextColor(m) => builder.push(
+                        StyleProperty::Brush(format!("text.{}", m.key.clone())),
+                        range,
+                    ),
                     Mark::Ruby(_) => {
                         // Parley가 아직 ruby를 지원하지 않으므로 layout 단계가 아닌 rendering 단계에서 처리
                         // https://github.com/linebender/parley/issues/255

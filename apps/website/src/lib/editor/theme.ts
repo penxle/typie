@@ -1,47 +1,174 @@
 import type { EffectiveTheme } from '@typie/ui/context';
 
 export type ThemeColors = {
-  background: number;
-  text: number;
   colors: Map<string, number>;
 };
 
-export const LIGHT_THEME: ThemeColors = {
-  background: 0xff_ff_ff_ff,
-  text: 0x00_00_00_ff,
-  colors: new Map([
-    ['inverted', 0xff_ff_ff_ff],
-    ['text.subtle', 0x66_66_66_ff],
-    ['red', 0xff_00_00_ff],
-    ['green', 0x00_ff_00_ff],
-    ['blue', 0x00_00_ff_ff],
-    ['highlight.yellow', 0xff_f1_76_cc],
-    ['highlight.green', 0xa5_d6_a7_cc],
-    ['highlight.blue', 0x90_ca_f9_cc],
-    ['highlight.pink', 0xf4_8f_b1_cc],
-    ['highlight.orange', 0xff_cc_80_cc],
-  ]),
+const colorToU32 = (color: string, alpha = 0xff): number => {
+  const clean = color.replace('#', '').replace(/^var\(.+\)$/, '');
+  if (clean.length < 6) {
+    console.warn(`Invalid color format: ${color}, falling back to black`);
+    return 0x00_00_00_ff;
+  }
+  const r = Number.parseInt(clean.slice(0, 2), 16);
+  const g = Number.parseInt(clean.slice(2, 4), 16);
+  const b = Number.parseInt(clean.slice(4, 6), 16);
+  return ((r << 24) | (g << 16) | (b << 8) | alpha) >>> 0;
 };
 
-export const DARK_THEME: ThemeColors = {
-  background: 0x1e_1e_1e_ff,
-  text: 0xff_ff_ff_ff,
-  colors: new Map([
-    ['inverted', 0x1e_1e_1e_ff],
-    ['text.subtle', 0x99_99_99_ff],
-    ['red', 0xbb_00_00_ff],
-    ['green', 0x00_bb_00_ff],
-    ['blue', 0x00_00_bb_ff],
-    ['highlight.yellow', 0xff_f1_76_aa],
-    ['highlight.green', 0xa5_d6_a7_aa],
-    ['highlight.blue', 0x90_ca_f9_aa],
-    ['highlight.pink', 0xf4_8f_b1_aa],
-    ['highlight.orange', 0xff_cc_80_aa],
-  ]),
+const LIGHT_RAW_COLORS: Record<string, string> = {
+  'ui.surface.default': '#ffffff',
+  'ui.surface.subtle': '#fafafa',
+  'ui.surface.muted': '#f4f4f5',
+  'ui.surface.dark': '#3f3f46',
+  'ui.text.default': '#18181b',
+  'ui.text.subtle': '#3f3f46',
+  'ui.text.muted': '#52525c',
+  'ui.text.faint': '#71717b',
+  'ui.text.disabled': '#9f9fa9',
+  'ui.text.bright': '#ffffff',
+  'ui.text.danger': '#fb2c36',
+  'ui.text.success': '#008236',
+  'ui.text.link': '#006cff',
+  'ui.text.brand': '#fd9a00',
+  'ui.interactive.hover': '#e4e4e7',
+  'ui.interactive.disabled': '#e4e4e7',
+  'ui.accent.brand.default': '#fd9a00',
+  'ui.accent.brand.hover': '#e17100',
+  'ui.accent.brand.active': '#bb4d00',
+  'ui.accent.brand.subtle': '#fef3c6',
+  'ui.accent.danger.default': '#e7000b',
+  'ui.accent.danger.hover': '#fb2c36',
+  'ui.accent.danger.active': '#c10007',
+  'ui.accent.danger.subtle': '#fef2f2',
+  'ui.accent.success.subtle': '#f0fdf4',
+  'ui.border.default': '#e4e4e7',
+  'ui.border.strong': '#d4d4d8',
+  'ui.border.subtle': '#f4f4f5',
+  'ui.border.brand': '#e17100',
+  'ui.border.danger': '#e7000b',
+  'ui.shadow.default': '#09090b',
+  'ui.control.scrollbar.default': '#e4e4e7',
+  'ui.control.scrollbar.hover': '#d4d4d8',
+  'ui.decoration.grid.default': '#f4f4f5',
+  'ui.decoration.grid.subtle': '#fafafa',
+  'ui.decoration.grid.brand': '#fef3c6',
+  'ui.decoration.grid.brand.subtle': '#fffbeb',
+  'ui.callout.info': '#3b82f6',
+  'ui.callout.success': '#22c55e',
+  'ui.callout.warning': '#f97316',
+  'ui.callout.danger': '#dc2626',
+  'text.black': '#18181b',
+  'text.darkgray': '#52525c',
+  'text.gray': '#71717a',
+  'text.lightgray': '#d4d4d8',
+  'text.white': '#ffffff',
+  'text.red': '#ef4444',
+  'text.orange': '#f97316',
+  'text.amber': '#f59e0b',
+  'text.yellow': '#eab308',
+  'text.lime': '#84cc16',
+  'text.green': '#22c55e',
+  'text.emerald': '#10b981',
+  'text.teal': '#14b8a6',
+  'text.cyan': '#06b6d4',
+  'text.sky': '#0ea5e9',
+  'text.blue': '#3b82f6',
+  'text.indigo': '#6366f1',
+  'text.violet': '#8b5cf6',
+  'text.purple': '#a855f7',
+  'text.fuchsia': '#d946ef',
+  'text.pink': '#ec4899',
+  'text.rose': '#f43f5e',
+  'bg.gray': '#f1f1f2',
+  'bg.red': '#fdebec',
+  'bg.orange': '#ffecd5',
+  'bg.yellow': '#fef3c7',
+  'bg.green': '#dff3e3',
+  'bg.blue': '#e7f3f8',
+  'bg.purple': '#f0e7fe',
 };
+
+const DARK_RAW_COLORS: Record<string, string> = {
+  'ui.surface.default': '#1c1d1f',
+  'ui.surface.subtle': '#252628',
+  'ui.surface.muted': '#2f3032',
+  'ui.surface.dark': '#2f3032',
+  'ui.text.default': '#e4e4e6',
+  'ui.text.subtle': '#d3d4d5',
+  'ui.text.muted': '#b6b7b9',
+  'ui.text.faint': '#949597',
+  'ui.text.disabled': '#707174',
+  'ui.text.bright': '#e4e4e6',
+  'ui.text.danger': '#d5584f',
+  'ui.text.success': '#0ea053',
+  'ui.text.link': '#106ed7',
+  'ui.text.brand': '#d18239',
+  'ui.interactive.hover': '#3f4042',
+  'ui.interactive.disabled': '#252628',
+  'ui.accent.brand.default': '#bd6922',
+  'ui.accent.brand.hover': '#a5540f',
+  'ui.accent.brand.active': '#8a4308',
+  'ui.accent.brand.subtle': '#361b00',
+  'ui.accent.danger.default': '#c53732',
+  'ui.accent.danger.hover': '#b3000d',
+  'ui.accent.danger.active': '#9b0000',
+  'ui.accent.danger.subtle': '#400405',
+  'ui.accent.success.subtle': '#002909',
+  'ui.border.default': '#2f3032',
+  'ui.border.strong': '#3f4042',
+  'ui.border.subtle': '#252628',
+  'ui.border.brand': '#bd6922',
+  'ui.border.danger': '#c53732',
+  'ui.shadow.default': '#131416',
+  'ui.control.scrollbar.default': '#3f4042',
+  'ui.control.scrollbar.hover': '#545557',
+  'ui.decoration.grid.default': '#2f3032',
+  'ui.decoration.grid.subtle': '#252628',
+  'ui.decoration.grid.brand': '#2f3032',
+  'ui.decoration.grid.brand.subtle': '#252628',
+  'ui.callout.info': '#4c6ef5',
+  'ui.callout.success': '#3fc380',
+  'ui.callout.warning': '#f4a934',
+  'ui.callout.danger': '#f04444',
+  'text.black': '#e4e4e6',
+  'text.darkgray': '#949597',
+  'text.gray': '#71717a',
+  'text.lightgray': '#3f4042',
+  'text.white': '#1c1d1f',
+  'text.red': '#ef4444',
+  'text.orange': '#f97316',
+  'text.amber': '#f59e0b',
+  'text.yellow': '#eab308',
+  'text.lime': '#84cc16',
+  'text.green': '#22c55e',
+  'text.emerald': '#10b981',
+  'text.teal': '#14b8a6',
+  'text.cyan': '#06b6d4',
+  'text.sky': '#0ea5e9',
+  'text.blue': '#3b82f6',
+  'text.indigo': '#6366f1',
+  'text.violet': '#8b5cf6',
+  'text.purple': '#a855f7',
+  'text.fuchsia': '#d946ef',
+  'text.pink': '#ec4899',
+  'text.rose': '#f43f5e',
+  'bg.gray': '#38393b',
+  'bg.red': '#532f2b',
+  'bg.orange': '#54341a',
+  'bg.yellow': '#4e3e1b',
+  'bg.green': '#2c4331',
+  'bg.blue': '#153b4f',
+  'bg.purple': '#3f2e50',
+};
+
+const buildTheme = (rawColors: Record<string, string>): ThemeColors => ({
+  colors: new Map(Object.entries(rawColors).map(([k, v]) => [k, colorToU32(v)] as [string, number])),
+});
+
+export const LIGHT_THEME: ThemeColors = buildTheme(LIGHT_RAW_COLORS);
+export const DARK_THEME: ThemeColors = buildTheme(DARK_RAW_COLORS);
 
 export const getEditorTheme = (effective: EffectiveTheme): ThemeColors => {
   return effective === 'dark' ? DARK_THEME : LIGHT_THEME;
 };
-
-export const formatColor = (color: number) => '#' + color.toString(16).padStart(8, '0').slice(0, 6);

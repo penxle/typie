@@ -7,7 +7,6 @@ use crate::layout::{Element, Page, PositionedNode};
 use crate::model::{Doc, SelectionDecor};
 use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
-use crate::utils::rgba_from_u32;
 use tiny_skia::{Color, Pixmap, PixmapMut, Rect, Transform};
 
 pub struct RenderContext<'a> {
@@ -110,7 +109,7 @@ impl Renderer {
         drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
     ) -> RenderResult {
-        let rgba = rgba_from_u32(self.theme.background);
+        let rgba = self.theme.color_rgba("ui.surface.default");
         let pixel = u32::from_ne_bytes(rgba);
         let pixels: &mut [u32] = bytemuck::cast_slice_mut(self.pixmap.data_mut());
         pixels.fill(pixel);

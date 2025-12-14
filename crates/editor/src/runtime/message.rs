@@ -283,7 +283,7 @@ define_messages! {
     => when When::key(ContextKey::ReadOnly).not()
     => handle(rt) { rt.handle_toggle_text_color(key) },
 
-    ToggleBackgroundColor { key: String }
+    ToggleBackgroundColor { key: Option<String> }
     => when When::key(ContextKey::ReadOnly).not()
     => handle(rt) { rt.handle_toggle_background_color(key) },
 
