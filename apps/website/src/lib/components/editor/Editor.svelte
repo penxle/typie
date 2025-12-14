@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { getThemeContext } from '@typie/ui/context';
+  import { untrack } from 'svelte';
   import { setEditor } from '$lib/editor/context';
   import { Editor } from '$lib/editor/editor.svelte';
   import { getEditorTheme } from '$lib/editor/theme';
@@ -50,7 +51,9 @@
   let initialized = $state(false);
 
   $effect(() => {
-    editor.initialize({ theme: getEditorTheme(theme.effective), snapshot, onDocChanged });
+    untrack(() => {
+      editor.initialize({ theme: getEditorTheme(theme.effective), snapshot, onDocChanged });
+    });
 
     return () => {
       editor.destroy();
