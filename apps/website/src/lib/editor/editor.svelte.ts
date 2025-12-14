@@ -1,11 +1,11 @@
-import { Application, getMemory } from '@penxle/editor';
-import icuPostcardUrl from '@penxle/editor/pkg/icu_data.postcard?url';
-import notoPhantomUrl from '@penxle/editor/pkg/Noto-Phantom.ttf?url';
+import { Application, getMemory } from '@typie/editor';
+import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
+import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
 import { SvelteMap } from 'svelte/reactivity';
 import { FRAGMENT_MIME } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
 import { calculateRelativePosition, findNearestPageCoordinate, findScroller, getPageIndex, idleCallback } from './utils';
-import type { Editor as WasmEditor } from '@penxle/editor';
+import type { Editor as WasmEditor } from '@typie/editor';
 import type { ThemeColors } from './theme';
 import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, SelectionStats, WritingSystem } from './types';
 

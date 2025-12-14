@@ -1,4 +1,4 @@
-import { getMemory } from '@penxle/editor';
+import { getMemory } from '@typie/editor';
 
 const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;

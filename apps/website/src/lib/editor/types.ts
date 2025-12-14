@@ -16,4 +16,4 @@ export type {
   TextAlign,
   Theme,
   WritingSystem,
-} from '@penxle/editor';
+} from '@typie/editor';

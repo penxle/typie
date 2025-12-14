@@ -3,6 +3,9 @@ import { node } from '@typie/adapter-node';
 
 /** @type {import('@sveltejs/kit').Config} */
 export default {
+  compilerOptions: {
+    warningFilter: (warning) => !warning.code.startsWith('state_referenced_locally'),
+  },
   preprocess: vitePreprocess(),
 
   kit: {
