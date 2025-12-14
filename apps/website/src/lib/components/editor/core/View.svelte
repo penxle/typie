@@ -19,8 +19,11 @@
   const editor = getEditor();
 
   $effect(() => {
-    const inputEl = inputComponent?.getElement();
-    editor.updateCursorElement(containerEls, inputEl);
+    editor.inputElement = inputComponent?.getElement() ?? null;
+  });
+
+  $effect(() => {
+    editor.pageContainerEls = containerEls;
   });
 
   $effect(() => {
@@ -34,7 +37,7 @@
   });
 
   const focusInput = () => {
-    inputComponent?.focus();
+    editor.focus();
   };
 
   const handlePointerDown = (e: PointerEvent) => {
@@ -130,5 +133,13 @@
 </div>
 
 <Cursor />
-<Input bind:this={inputComponent} />
+<Input
+  bind:this={inputComponent}
+  onBlur={() => {
+    editor.isFocused = false;
+  }}
+  onFocus={() => {
+    editor.isFocused = true;
+  }}
+/>
 <ContextMenu />
