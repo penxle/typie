@@ -185,25 +185,19 @@ function debugString(val) {
     // TODO we could test for more things here, like `Set`s and `Map`s.
     return className;
 }
-
-function passArray8ToWasm0(arg, malloc) {
-    const ptr = malloc(arg.length * 1, 1) >>> 0;
-    getUint8ArrayMemory0().set(arg, ptr / 1);
-    WASM_VECTOR_LEN = arg.length;
-    return ptr;
-}
-
-function takeFromExternrefTable0(idx) {
-    const value = wasm.__wbindgen_export_2.get(idx);
-    wasm.__externref_table_dealloc(idx);
-    return value;
-}
 /**
  * @returns {any}
  */
 export function getMemory() {
     const ret = wasm.getMemory();
     return ret;
+}
+
+function passArray8ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 1, 1) >>> 0;
+    getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 let cachedUint32ArrayMemory0 = null;
@@ -220,6 +214,12 @@ function passArray32ToWasm0(arg, malloc) {
     getUint32ArrayMemory0().set(arg, ptr / 4);
     WASM_VECTOR_LEN = arg.length;
     return ptr;
+}
+
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_export_2.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
 }
 
 const ApplicationFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -510,6 +510,15 @@ export class Editor {
         return ret !== 0;
     }
     /**
+     * @returns {Uint8Array}
+     */
+    getVersion() {
+        const ret = wasm.editor_getVersion(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
      * @param {number} page_index
      * @returns {RenderInfo | undefined}
      */
@@ -542,6 +551,14 @@ export class Editor {
         }
     }
     /**
+     * @param {Uint8Array} updates
+     */
+    importUpdates(updates) {
+        const ptr0 = passArray8ToWasm0(updates, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.editor_importUpdates(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
      * @param {any} val
      */
     enqueueMessage(val) {
@@ -559,11 +576,38 @@ export class Editor {
         return ret === 0 ? undefined : DragImageInfo.__wrap(ret);
     }
     /**
+     * @returns {Uint8Array}
+     */
+    exportAllUpdates() {
+        const ret = wasm.editor_exportAllUpdates(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
      * @returns {ClipboardData | undefined}
      */
     getClipboardData() {
         const ret = wasm.editor_getClipboardData(this.__wbg_ptr);
         return ret === 0 ? undefined : ClipboardData.__wrap(ret);
+    }
+    /**
+     * @param {Uint8Array} version
+     * @returns {Uint8Array}
+     */
+    exportUpdatesFrom(version) {
+        const ptr0 = passArray8ToWasm0(version, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.editor_exportUpdatesFrom(this.__wbg_ptr, ptr0, len0);
+        var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v2;
+    }
+    /**
+     * @param {Array<any>} updates_batch
+     */
+    importUpdatesBatch(updates_batch) {
+        wasm.editor_importUpdatesBatch(this.__wbg_ptr, updates_batch);
     }
     /**
      * @param {number} page_idx

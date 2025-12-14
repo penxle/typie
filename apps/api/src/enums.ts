@@ -131,6 +131,15 @@ export const CanvasSyncType = {
   PRESENCE: 'PRESENCE',
 } as const;
 
+export type DocumentSyncType = keyof typeof DocumentSyncType;
+export const DocumentSyncType = {
+  HEARTBEAT: 'HEARTBEAT',
+  UPDATE: 'UPDATE',
+  VECTOR: 'VECTOR',
+  AWARENESS: 'AWARENESS',
+  PRESENCE: 'PRESENCE',
+} as const;
+
 export type PostViewBodyUnavailableReason = keyof typeof PostViewBodyUnavailableReason;
 export const PostViewBodyUnavailableReason = {
   REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',

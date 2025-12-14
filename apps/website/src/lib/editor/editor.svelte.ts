@@ -28,6 +28,14 @@ export class Editor {
   #rafId: number | null = null;
   #pendingFontLoad = false;
   #onDocChanged?: () => void;
+  #readyResolve?: () => void;
+  ready: Promise<void>;
+
+  constructor() {
+    this.ready = new Promise((resolve) => {
+      this.#readyResolve = resolve;
+    });
+  }
 
   renderVersion = $state(0);
 
@@ -106,7 +114,9 @@ export class Editor {
   #clickCount = 0;
 
   async initialize(options: EditorOptions): Promise<void> {
-    if (this.#wasmEditor) return;
+    if (this.#wasmEditor) {
+      return;
+    }
 
     this.#onDocChanged = options.onDocChanged;
 
@@ -133,6 +143,7 @@ export class Editor {
     this.dispatch({ type: 'navigate', direction: 'documentStart', extend: false });
 
     this.#start();
+    this.#readyResolve?.();
 
     Promise.all([loadInitialFonts(app), loadEmojiFallback(app)]).then(() => {
       this.dispatch({ type: 'fontsLoaded' });
@@ -291,6 +302,26 @@ export class Editor {
 
   getSnapshot(): Uint8Array | undefined {
     return this.#wasmEditor?.getSnapshot();
+  }
+
+  getVersion(): Uint8Array | undefined {
+    return this.#wasmEditor?.getVersion();
+  }
+
+  exportAllUpdates(): Uint8Array | undefined {
+    return this.#wasmEditor?.exportAllUpdates();
+  }
+
+  exportUpdatesFrom(version: Uint8Array): Uint8Array | undefined {
+    return this.#wasmEditor?.exportUpdatesFrom(version);
+  }
+
+  importUpdates(updates: Uint8Array): void {
+    this.#wasmEditor?.importUpdates(updates);
+  }
+
+  importUpdatesBatch(updatesBatch: Uint8Array[]): void {
+    this.#wasmEditor?.importUpdatesBatch(updatesBatch);
   }
 
   inspectState(): string | undefined {

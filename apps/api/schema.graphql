@@ -179,6 +179,20 @@ type Document implements IDocument {
   view: DocumentView!
 }
 
+type DocumentSyncStreamPayload {
+  data: String!
+  documentId: ID!
+  type: DocumentSyncType!
+}
+
+enum DocumentSyncType {
+  AWARENESS
+  HEARTBEAT
+  PRESENCE
+  UPDATE
+  VECTOR
+}
+
 type DocumentView implements IDocument {
   createdAt: DateTime!
   entity: EntityView!
@@ -540,7 +554,6 @@ type Mutation {
   reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
-  saveDocumentSnapshot(input: SaveDocumentSnapshotInput!): Boolean!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
   scheduleSubscriptionCancellation: Subscription_!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
@@ -549,6 +562,7 @@ type Mutation {
   subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   syncCanvas(input: SyncCanvasInput!): Boolean!
+  syncDocument(input: SyncDocumentInput!): Boolean!
   syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
@@ -842,11 +856,6 @@ input ResetPasswordInput {
   password: String!
 }
 
-input SaveDocumentSnapshotInput {
-  documentId: ID!
-  snapshot: Binary!
-}
-
 input SchedulePlanChangeInput {
   planId: ID!
 }
@@ -956,6 +965,7 @@ input SubscribePlanWithBillingKeyInput {
 
 type Subscription {
   canvasSyncStream(canvasId: ID!, clientId: String!): CanvasSyncStreamPayload!
+  documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
@@ -983,6 +993,13 @@ input SyncCanvasInput {
   clientId: String!
   data: String!
   type: CanvasSyncType!
+}
+
+input SyncDocumentInput {
+  clientId: String!
+  data: String!
+  documentId: ID!
+  type: DocumentSyncType!
 }
 
 input SyncPostInput {
