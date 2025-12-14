@@ -14,6 +14,7 @@
 
   let containerEls = $state<HTMLDivElement[]>([]);
   let inputComponent = $state<Input>();
+  let extensionAreaEl = $state<HTMLDivElement>();
 
   const editor = getEditor();
 
@@ -22,7 +23,25 @@
     editor.updateCursorElement(containerEls, inputEl);
   });
 
+  $effect(() => {
+    if (extensionAreaEl) {
+      editor.extensionArea.containerEl = extensionAreaEl;
+    }
+  });
+
+  $effect(() => {
+    editor.extensionArea.pageElements = containerEls.filter((el): el is HTMLDivElement => el != null);
+  });
+
+  const focusInput = () => {
+    inputComponent?.focus();
+  };
+
   const handlePointerDown = (e: PointerEvent) => {
+    if (extensionAreaEl?.contains(e.target as Node)) {
+      e.preventDefault();
+      focusInput();
+    }
     editor.handlePointerDown(e);
   };
 
@@ -36,10 +55,6 @@
 
   const handleContextMenu = (e: MouseEvent) => {
     editor.handleContextMenu(e);
-  };
-
-  const focusInput = () => {
-    inputComponent?.focus();
   };
 
   const handleDragStart = (e: DragEvent) => {
@@ -78,6 +93,7 @@
 />
 
 <div
+  bind:this={extensionAreaEl}
   style:padding-top="{contentPadding}px"
   style:padding-bottom="{contentPadding}px"
   style:padding-left="{contentPadding}px"
@@ -95,10 +111,10 @@
   ondragover={handleDragOver}
   ondragstart={handleDragStart}
   ondrop={handleDrop}
-  role="region"
+  role="application"
 >
   {#each editor.layout.pageHeights, i}
-    <Page onCanvasClick={focusInput} page={i} bind:containerEl={containerEls[i]} />
+    <Page page={i} bind:containerEl={containerEls[i]} />
   {/each}
 </div>
 
