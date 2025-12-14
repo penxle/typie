@@ -56,8 +56,42 @@ macro_rules! define_messages {
                     )*
                 }
             }
+
+            pub fn all_actions_with_when() -> Vec<(&'static str, When)> {
+                vec![
+                    $(
+                        (stringify!($name), $when),
+                    )*
+                ]
+            }
         }
     };
+}
+
+const TRACKED_ACTIONS: &[&str] = &[
+    "Undo",
+    "Redo",
+    "ToggleBold",
+    "ToggleItalic",
+    "ToggleStrikethrough",
+    "ToggleUnderline",
+    "ToggleTextColor",
+    "ToggleBackgroundColor",
+    "SetTextAlign",
+    "SetLineHeight",
+    "SetLetterSpacing",
+    "SetFontFamily",
+    "SetFontSize",
+    "SetFontWeight",
+    "ClearFormatting",
+];
+
+/// Toolbar에서 추적할 action들의 목록과 when 조건
+pub fn tracked_actions_with_when() -> Vec<(&'static str, When)> {
+    Message::all_actions_with_when()
+        .into_iter()
+        .filter(|(name, _)| TRACKED_ACTIONS.contains(name))
+        .collect()
 }
 
 define_messages! {
@@ -66,7 +100,7 @@ define_messages! {
     => handle(rt) { rt.handle_initialize(theme) },
 
     Input { text: String }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_input(&text) },
 
     Paste {
@@ -74,19 +108,19 @@ define_messages! {
         html: Option<String>,
         text: String,
     }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_paste(fragment, html, text) },
 
     CompositionStart { text: String }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_composition_update(&text) },
 
     CompositionUpdate { text: String }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_composition_update(&text) },
 
     CompositionEnd
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
         .and(When::key(ContextKey::InComposition))
     => handle(rt) { rt.handle_composition_end() },
 
@@ -119,7 +153,7 @@ define_messages! {
     => handle(rt) { rt.handle_pointer_up(page_idx, x, y) },
 
     DragStart { page_idx: usize, x: f32, y: f32 }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_drag_start(page_idx, x, y) },
 
     DragOver {
@@ -127,15 +161,15 @@ define_messages! {
         x: f32,
         y: f32,
     }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_drag_over(page_idx, x, y) },
 
     DragEnter
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_drag_enter() },
 
     DragLeave
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_drag_leave() },
 
     Drop {
@@ -146,7 +180,7 @@ define_messages! {
         html: Option<String>,
         fragment: Option<String>,
     }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_drop(page_idx, x, y, text, html, fragment) },
 
     DragEnd
@@ -165,142 +199,156 @@ define_messages! {
     => handle(rt) { rt.handle_select_all() },
 
     DeleteSelection
-    => when When::key(ContextKey::HasSelection)
-        .and(When::key(ContextKey::ReadOnly).not())
+    => when When::key(ContextKey::RangeSelection)
+        .and(When::key(ContextKey::CanEdit))
     => handle(rt) { rt.transact(|tr| tr.delete_selection()) },
 
     DeleteBackward
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_backward() },
 
     DeleteForward
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_forward() },
 
     DeleteWordBackward
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_word_backward() },
 
     DeleteWordForward
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_word_forward() },
 
     DeleteToLineStart
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_to_line_start() },
 
     InsertNewline
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_newline() },
 
     InsertHardBreak
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_hard_break() },
 
     InsertPageBreak
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_page_break() },
 
     ToggleBold
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_toggle_bold() },
 
     ToggleItalic
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_toggle_italic() },
 
     ToggleStrikethrough
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_toggle_strikethrough() },
 
     ToggleUnderline
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_toggle_underline() },
 
     ToggleRuby { text: String }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection))
     => handle(rt) { rt.handle_toggle_ruby(text) },
 
     ToggleBlockquote
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_toggle_blockquote() },
 
     ToggleCallout
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_toggle_callout() },
 
     ToggleBulletList
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_toggle_bullet_list() },
 
     ToggleOrderedList
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_toggle_ordered_list() },
 
     Undo
     => when When::key(ContextKey::CanUndo)
-        .and(When::key(ContextKey::ReadOnly).not())
+        .and(When::key(ContextKey::CanEdit))
     => handle(rt) { rt.handle_undo() },
 
     Redo
     => when When::key(ContextKey::CanRedo)
-        .and(When::key(ContextKey::ReadOnly).not())
+        .and(When::key(ContextKey::CanEdit))
     => handle(rt) { rt.handle_redo() },
 
     SetFontFamily { family: String }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_font_family(family) },
 
     SetFontSize { size: f32 }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_font_size(size) },
 
     SetFontWeight { weight: u16 }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_font_weight(weight) },
 
     SetLineHeight { height: f32 }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_line_height(height) },
 
     SetLetterSpacing { spacing: f32 }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_letter_spacing(spacing) },
 
     SetTextAlign { align: TextAlign }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_text_align(align) },
 
     SetBlockGap { gap: f32 }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_block_gap(gap) },
 
     SetParagraphIndent { indent: f32 }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_paragraph_indent(indent) },
 
     ToggleTextColor { key: String }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_toggle_text_color(key) },
 
     ToggleBackgroundColor { key: Option<String> }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_toggle_background_color(key) },
 
     ClearFormatting
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_clear_formatting() },
 
     Indent
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_indent() },
 
     Outdent
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_outdent() },
 
     ExtendMarkRange { mark: Mark }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_extend_mark_range(mark) },
 
     InsertImage {
@@ -308,11 +356,11 @@ define_messages! {
         width: f32,
         height: f32,
     }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_image(src, width, height) },
 
     InsertHorizontalRule { variant: HorizontalRuleVariant }
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_horizontal_rule(variant) },
 
     SetLayoutMode { mode: LayoutMode }
@@ -340,6 +388,6 @@ define_messages! {
     => handle(rt) { rt.handle_toggle_fold_expansion(node_id) },
 
     InsertFold
-    => when When::key(ContextKey::ReadOnly).not()
+    => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_fold() },
 }

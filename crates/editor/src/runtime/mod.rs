@@ -50,6 +50,7 @@ struct PendingUpdates {
     writing_systems: Vec<WritingSystem>,
     render: bool,
     drop_indicator: Option<DropIndicator>,
+    enabled_actions: bool,
 }
 
 #[derive(Clone)]
@@ -121,6 +122,7 @@ impl Runtime {
                 writing_systems: Vec::new(),
                 render: true,
                 drop_indicator: None,
+                enabled_actions: true,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -601,7 +603,29 @@ impl Runtime {
             cmds.push(Cmd::RenderRequired);
         }
 
+        if self.pending.enabled_actions {
+            let enabled = self.evaluate_enabled_actions();
+            cmds.push(Cmd::EnabledActionsChanged { enabled });
+            self.pending.enabled_actions = false;
+        }
+
         cmds
+    }
+
+    fn evaluate_enabled_actions(&self) -> Vec<String> {
+        let ctx = Context::new(&self.state, &self.undo_manager);
+        tracked_actions_with_when()
+            .into_iter()
+            .filter(|(_, when)| when.evaluate(&ctx))
+            .map(|(name, _)| {
+                // PascalCase -> camelCase
+                let mut chars = name.chars();
+                match chars.next() {
+                    Some(first) => first.to_lowercase().chain(chars).collect(),
+                    None => String::new(),
+                }
+            })
+            .collect()
     }
 
     fn build_external_elements(&mut self) -> Vec<ExternalElement> {
@@ -696,12 +720,6 @@ impl Runtime {
             .unwrap_or(false)
     }
 
-    // TODO: fixme
-    pub fn can_action(&self, msg: &Message) -> bool {
-        let ctx = Context::new(&self.state, &self.undo_manager);
-        msg.when().evaluate(&ctx)
-    }
-
     pub fn update(&mut self, msg: Message) {
         let effects = msg.handle(self);
         self.process_effects(effects);
@@ -734,6 +752,7 @@ impl Runtime {
                     self.pending.selection = true;
                     self.pending.active_marks = true;
                     self.pending.external_elements = true;
+                    self.pending.enabled_actions = true;
                 }
                 Effect::NodeChanged { node_id } => {
                     if let Some(node) = self.doc().node(node_id) {
@@ -759,6 +778,7 @@ impl Runtime {
                     self.pending.active_marks = true;
                     self.pending.render = true;
                     self.pending.external_elements = true;
+                    self.pending.enabled_actions = true;
                 }
                 Effect::PendingMarksChanged => {
                     self.pending.active_marks = true;

@@ -171,6 +171,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarButton
       style={css.raw({ borderRightRadius: '0' })}
+      disabled={!editor.can('undo')}
       icon={UndoIcon}
       label="실행 취소"
       onclick={() => {
@@ -181,6 +182,7 @@
 
     <ToolbarButton
       style={css.raw({ borderLeftRadius: '0' })}
+      disabled={!editor.can('redo')}
       icon={RedoIcon}
       label="다시 실행"
       onclick={() => {
@@ -193,7 +195,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton chevron label="글씨 색" placement="bottom-start" size="small">
+    <ToolbarDropdownButton chevron disabled={!editor.can('toggleTextColor')} label="글씨 색" placement="bottom-start" size="small">
       {#snippet anchor()}
         <div class={center({ size: '20px' })}>
           <div
@@ -215,7 +217,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton chevron label="배경색" placement="bottom-start" size="small">
+    <ToolbarDropdownButton chevron disabled={!editor.can('toggleBackgroundColor')} label="배경색" placement="bottom-start" size="small">
       {#snippet anchor()}
         {@const selectedValue = currentTextBackgroundColor}
         {@const selectedItem = textBackgroundColors.find(({ value }) => value === selectedValue)}
@@ -270,6 +272,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarButton
       active={isBoldActive}
+      disabled={!editor.can('toggleBold')}
       icon={BoldIcon}
       keys={['Mod', 'B']}
       label="굵게"
@@ -281,6 +284,7 @@
 
     <ToolbarButton
       active={isItalicActive}
+      disabled={!editor.can('toggleItalic')}
       icon={ItalicIcon}
       keys={['Mod', 'I']}
       label="기울임"
@@ -292,6 +296,7 @@
 
     <ToolbarButton
       active={isStrikethroughActive}
+      disabled={!editor.can('toggleStrikethrough')}
       icon={StrikethroughIcon}
       keys={['Mod', 'Shift', 'S']}
       label="취소선"
@@ -303,6 +308,7 @@
 
     <ToolbarButton
       active={isUnderlineActive}
+      disabled={!editor.can('toggleUnderline')}
       icon={UnderlineIcon}
       keys={['Mod', 'U']}
       label="밑줄"
@@ -340,7 +346,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton label="문단 정렬" size="small">
+    <ToolbarDropdownButton disabled={!editor.can('setTextAlign')} label="문단 정렬" size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={currentTextAlignIcon} />
       {/snippet}
@@ -363,7 +369,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton label="문단 행간" size="small">
+    <ToolbarDropdownButton disabled={!editor.can('setLineHeight')} label="문단 행간" size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LineHeightIcon} />
       {/snippet}
@@ -386,7 +392,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton label="문단 자간" size="small">
+    <ToolbarDropdownButton disabled={!editor.can('setLetterSpacing')} label="문단 자간" size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LetterSpacingIcon} />
       {/snippet}
@@ -413,6 +419,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <ToolbarButton
+    disabled={!editor.can('clearFormatting')}
     icon={RemoveFormattingIcon}
     keys={['Mod', '\\']}
     label="서식 해제"

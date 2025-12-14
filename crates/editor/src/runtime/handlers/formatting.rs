@@ -24,11 +24,7 @@ impl Runtime {
             let selection = tr.selection().clone();
 
             if selection.is_collapsed() {
-                let base_text = "하단 텍스트";
-                tr.insert_text(base_text)?;
-
-                let new_selection = tr.selection().clone();
-                tr.set_selection(Selection::new(selection.anchor, new_selection.head));
+                return Ok(false);
             }
 
             tr.toggle_mark(Mark::Ruby(RubyMark { text }))

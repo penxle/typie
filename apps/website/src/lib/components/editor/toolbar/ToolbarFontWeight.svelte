@@ -69,6 +69,7 @@
 
 <SearchableDropdown
   style={css.raw({ width: '100px' })}
+  disabled={!editor.can('setFontWeight')}
   getLabel={(value) => {
     const item = weightItems.find((w) => w.value === value);
     return item?.label ?? '(알 수 없는 굵기)';

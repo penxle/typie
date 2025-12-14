@@ -608,14 +608,6 @@ export class Editor {
         return v1;
     }
     /**
-     * @param {any} val
-     * @returns {boolean}
-     */
-    can(val) {
-        const ret = wasm.editor_can(this.__wbg_ptr, val);
-        return ret !== 0;
-    }
-    /**
      * @returns {any}
      */
     tick() {
@@ -624,14 +616,6 @@ export class Editor {
     }
     flush() {
         wasm.editor_flush(this.__wbg_ptr);
-    }
-    /**
-     * @param {any} val
-     * @returns {any}
-     */
-    canAll(val) {
-        const ret = wasm.editor_canAll(this.__wbg_ptr, val);
-        return ret;
     }
     /**
      * @param {any} val
