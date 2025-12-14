@@ -47,6 +47,7 @@ pub enum Cmd {
     CursorChanged {
         page_idx: Option<usize>,
         bounds: Option<Rect>,
+        show: bool,
     },
 
     ExternalElementChanged {

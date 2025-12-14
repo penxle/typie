@@ -545,15 +545,15 @@ impl Runtime {
         if self.pending.cursor {
             let selection = self.selection();
             let ctx = NavigationContext::new(&self.state.doc);
-            let (page_idx, bounds) = if selection.is_collapsed() {
-                Cursor::bounds(&ctx, &self.pages, selection.head)
-                    .map(|(idx, rect)| (Some(idx), Some(rect)))
-                    .unwrap_or((None, None))
-            } else {
-                (None, None)
-            };
+            let (page_idx, bounds, show) = Cursor::bounds(&ctx, &self.pages, selection.head)
+                .map(|(idx, rect)| (Some(idx), Some(rect), true))
+                .unwrap_or((None, None, false));
 
-            cmds.push(Cmd::CursorChanged { page_idx, bounds });
+            cmds.push(Cmd::CursorChanged {
+                page_idx,
+                bounds,
+                show,
+            });
             self.pending.cursor = false;
         }
 
