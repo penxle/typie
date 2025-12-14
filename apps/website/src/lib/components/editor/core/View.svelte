@@ -38,11 +38,16 @@
   };
 
   const handlePointerDown = (e: PointerEvent) => {
-    if (extensionAreaEl?.contains(e.target as Node)) {
-      e.preventDefault();
-      focusInput();
-      editor.handlePointerDown(e);
+    if (!extensionAreaEl?.contains(e.target as Node)) {
+      return;
     }
+
+    // tabindex가 있으면 draggable이어도 drag보다 포커스 이동이 우선됨
+    extensionAreaEl?.removeAttribute('tabindex');
+    editor.handlePointerDown(e);
+    setTimeout(() => {
+      extensionAreaEl?.setAttribute('tabindex', '0');
+    }, 0);
   };
 
   const handlePointerMove = (e: PointerEvent) => {
@@ -104,14 +109,20 @@
     minHeight: 'full',
     ...(isPaginated && { backgroundColor: 'surface.muted', gap: '24px' }),
   })}
+  aria-label="Editor"
+  aria-multiline="true"
   draggable={editor.isDraggable}
+  onclick={focusInput}
   ondragend={handleDragEnd}
   ondragenter={handleDragEnter}
   ondragleave={handleDragLeave}
   ondragover={handleDragOver}
   ondragstart={handleDragStart}
   ondrop={handleDrop}
-  role="application"
+  onfocus={focusInput}
+  onkeydown={focusInput}
+  role="textbox"
+  tabindex="0"
 >
   {#each editor.layout.pageHeights, i}
     <Page page={i} bind:containerEl={containerEls[i]} />
