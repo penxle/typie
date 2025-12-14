@@ -1,6 +1,6 @@
 use crate::runtime::Effect;
-use crate::state::Position;
 use crate::state::position_helpers::find_child_at_offset;
+use crate::state::{Position, block_content_len, calculate_block_offsets, collect_blocks_in_range};
 use crate::transaction::Transaction;
 use crate::{model::*, state::Selection};
 use anyhow::{Context, Result};
@@ -142,46 +142,28 @@ fn collect_text_ranges_in_selection(
     from: Position,
     to: Position,
 ) -> Result<Vec<(NodeId, usize, usize)>> {
-    let root = tr
-        .doc()
-        .node(NodeId::ROOT)
-        .context("collect_text_ranges_in_selection: root not found")?;
-
-    let mut paragraph_ids = Vec::new();
-    collect_paragraphs_in_order(&root, &mut paragraph_ids);
-
-    let from_idx = paragraph_ids
-        .iter()
-        .position(|id| *id == from.node_id)
-        .context("from paragraph not found in document order")?;
-    let to_idx = paragraph_ids
-        .iter()
-        .position(|id| *id == to.node_id)
-        .context("to paragraph not found in document order")?;
-
+    let block_ids = collect_blocks_in_range(tr.doc(), from, to)?;
     let mut ranges = Vec::new();
 
-    for (idx, para_id) in paragraph_ids
-        .iter()
-        .enumerate()
-        .take(to_idx + 1)
-        .skip(from_idx)
-    {
-        let paragraph = tr
-            .node(*para_id)
-            .with_context(|| format!("Paragraph {para_id} not found"))?;
-        let text_len = calculate_total_text_length(&paragraph);
+    for block_id in block_ids {
+        let block = tr
+            .node(block_id)
+            .with_context(|| format!("Block {block_id} not found"))?;
 
-        let start = if idx == from_idx { from.offset } else { 0 };
-        let end = if idx == to_idx { to.offset } else { text_len };
+        if !block.spec().is_textblock(tr.doc().schema()) {
+            continue;
+        }
 
-        collect_ranges_in_paragraph(&paragraph, start, end, &mut ranges)?;
+        let block_len = block_content_len(&block);
+        let (start, end) = calculate_block_offsets(block_id, block_len, from, to);
+
+        collect_ranges_in_textblock(&block, start, end, &mut ranges)?;
     }
 
     Ok(ranges)
 }
 
-fn collect_ranges_in_paragraph(
+fn collect_ranges_in_textblock(
     parent: &NodeRef,
     start_offset: usize,
     end_offset: usize,
@@ -214,32 +196,6 @@ fn collect_ranges_in_paragraph(
     }
 
     Ok(())
-}
-
-fn calculate_total_text_length(node: &NodeRef) -> usize {
-    let mut total = 0;
-    for child in node.children() {
-        match child.node() {
-            Node::Text(text_node) => {
-                total += text_node.text.char_len();
-            }
-            Node::HardBreak(_) => {
-                total += 1;
-            }
-            _ => {}
-        }
-    }
-    total
-}
-
-fn collect_paragraphs_in_order(node: &NodeRef, acc: &mut Vec<NodeId>) {
-    if matches!(node.node(), Node::Paragraph(_)) {
-        acc.push(node.node_id());
-    }
-
-    for child in node.children() {
-        collect_paragraphs_in_order(&child, acc);
-    }
 }
 
 impl Transaction {
@@ -2157,5 +2113,30 @@ mod tests {
             !pending.contains(&Mark::FontWeight(FontWeightMark { weight: 900 })),
             "Should have removed 900"
         );
+    }
+
+    #[test]
+    fn select_all_and_toggle_italic() {
+        let mut p = id!();
+        let mut rt = runtime! {
+          doc {
+            @p paragraph { text { "hello" } }
+            paragraph { text { "world" } }
+          }
+          selection { (p, 0) }
+        };
+
+        rt.update(Message::SelectAll);
+        rt.update(Message::ToggleItalic);
+
+        let expected = state! {
+          doc {
+            paragraph { text(marks: [italic()]) { "hello" } }
+            paragraph { text(marks: [italic()]) { "world" } }
+          }
+          selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 2) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
     }
 }
