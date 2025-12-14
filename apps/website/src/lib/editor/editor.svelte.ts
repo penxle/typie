@@ -1,7 +1,7 @@
 import { Application, getMemory } from '@typie/editor';
 import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
 import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
 import { calculateRelativePosition, findNearestPageCoordinate, findScroller, getPageIndex, idleCallback } from './utils';
@@ -59,6 +59,8 @@ export class Editor {
   });
 
   externalElements = $state<ExternalElement[]>([]);
+
+  enabledActions = $state(new SvelteSet<string>());
 
   cursor = $state({
     pageIdx: -1,
@@ -225,6 +227,11 @@ export class Editor {
           this.renderVersion++;
           break;
         }
+
+        case 'enabledActionsChanged': {
+          this.enabledActions = new SvelteSet(cmd.enabled);
+          break;
+        }
       }
     }
   }
@@ -281,10 +288,6 @@ export class Editor {
 
   inspectSelectionAsFragmentMacro(): string | undefined {
     return this.#wasmEditor?.inspectSelectionAsFragmentMacro();
-  }
-
-  canAll(actions: { type: string; [key: string]: unknown }[]): boolean[] {
-    return this.#wasmEditor?.canAll(actions) ?? [];
   }
 
   updateCursorElement(containerEls: HTMLDivElement[], inputEl: HTMLInputElement | undefined): void {
@@ -816,8 +819,8 @@ export class Editor {
     this.dispatch({ type: 'dragEnd' });
   }
 
-  can(message: { type: string; [key: string]: unknown }): boolean {
-    return this.#wasmEditor?.can(message) ?? false;
+  can(messageType: string): boolean {
+    return this.enabledActions.has(messageType);
   }
 
   canDragAt(pageIdx: number, x: number, y: number): boolean {

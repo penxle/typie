@@ -4,11 +4,13 @@ use loro::UndoManager;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum ContextKey {
-    HasSelection,
+    RangeSelection,
     CanUndo,
     CanRedo,
-    ReadOnly,
+    CanEdit,
     InComposition,
+    HasParagraphTextInSelection,
+    InParagraph,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,12 +97,54 @@ impl<'a> Context<'a> {
 
     pub fn get(&self, key: ContextKey) -> bool {
         match key {
-            ContextKey::HasSelection => !self.state.selection.is_collapsed(),
+            ContextKey::RangeSelection => !self.state.selection.is_collapsed(),
             ContextKey::CanUndo => self.undo_manager.can_undo(),
             ContextKey::CanRedo => self.undo_manager.can_redo(),
-            ContextKey::ReadOnly => false, // TODO: 읽기 전용 구현
+            ContextKey::CanEdit => true, // TODO: 읽기 전용 구현
             ContextKey::InComposition => self.state.preedit.is_some(),
+            ContextKey::HasParagraphTextInSelection => self.has_paragraph_text_in_selection(),
+            ContextKey::InParagraph => self.in_paragraph(),
         }
+    }
+
+    fn has_paragraph_text_in_selection(&self) -> bool {
+        use crate::state::collect_blocks_in_range;
+
+        let selection = &self.state.selection;
+        if selection.is_collapsed() {
+            return false;
+        }
+
+        let Ok((from, to)) = selection.as_sorted(&self.state.doc) else {
+            return false;
+        };
+
+        let Ok(block_ids) = collect_blocks_in_range(&self.state.doc, from, to) else {
+            return false;
+        };
+
+        for block_id in block_ids {
+            if let Some(block) = self.state.doc.node(block_id) {
+                if block.spec().is_textblock(self.state.doc.schema()) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    fn in_paragraph(&self) -> bool {
+        let selection = &self.state.selection;
+        if !selection.is_collapsed() {
+            return false;
+        }
+
+        if let Some(container) = self.state.doc.node(selection.head.node_id) {
+            return container.spec().is_textblock(self.state.doc.schema());
+        }
+
+        false
     }
 }
 

@@ -56,6 +56,7 @@
 
 <SearchableDropdown
   style={css.raw({ width: '120px' })}
+  disabled={!editor.can('setFontFamily')}
   getLabel={(value) => {
     const item = allFontFamilies.find((f) => f.value === value);
     return item?.label ?? '(알 수 없는 폰트)';

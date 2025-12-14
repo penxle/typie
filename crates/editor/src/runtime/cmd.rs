@@ -77,4 +77,8 @@ pub enum Cmd {
     },
 
     RenderRequired,
+
+    EnabledActionsChanged {
+        enabled: Vec<String>,
+    },
 }

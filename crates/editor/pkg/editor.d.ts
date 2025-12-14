@@ -129,7 +129,7 @@ export interface ExternalElement {
     isSelected: boolean;
 }
 
-export type Cmd = { type: "docChanged" } | { type: "settingsChanged"; paragraphIndent: number; blockGap: number } | { type: "layoutChanged"; pageCount: number; layoutMode: LayoutMode; pageWidth: number; pageMargin: number; pageHeights: number[] } | { type: "cursorChanged"; pageIdx: number | undefined; bounds: Rect | undefined } | { type: "externalElementChanged"; elements: ExternalElement[] } | { type: "pointerStyleChanged"; style: PointerStyle } | { type: "selectionChanged"; stats: SelectionStats } | { type: "activeMarksChanged"; uniformMarks: Mark[]; mixedMarks: MarkType[] } | { type: "fontsRequired"; fonts: [string, number][] } | { type: "writingSystemRequired"; systems: WritingSystem[] } | { type: "renderRequired" };
+export type Cmd = { type: "docChanged" } | { type: "settingsChanged"; paragraphIndent: number; blockGap: number } | { type: "layoutChanged"; pageCount: number; layoutMode: LayoutMode; pageWidth: number; pageMargin: number; pageHeights: number[] } | { type: "cursorChanged"; pageIdx: number | undefined; bounds: Rect | undefined } | { type: "externalElementChanged"; elements: ExternalElement[] } | { type: "pointerStyleChanged"; style: PointerStyle } | { type: "selectionChanged"; stats: SelectionStats } | { type: "activeMarksChanged"; uniformMarks: Mark[]; mixedMarks: MarkType[] } | { type: "fontsRequired"; fonts: [string, number][] } | { type: "writingSystemRequired"; systems: WritingSystem[] } | { type: "renderRequired" } | { type: "enabledActionsChanged"; enabled: string[] };
 
 export interface SelectionStats {
     blockCount: number;
@@ -188,10 +188,8 @@ export class Editor {
   inspectPageElement(page_idx: number, x: number, y: number): string | undefined;
   inspectStateAsMacro(): string;
   inspectSelectionAsFragmentMacro(): string | undefined;
-  can(val: any): boolean;
   tick(): any;
   flush(): void;
-  canAll(val: any): any;
   dispatch(val: any): any;
 }
 export class RenderInfo {

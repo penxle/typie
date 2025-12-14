@@ -192,6 +192,7 @@
         border: 'none',
         outline: 'none',
       })}
+      disabled={!editor.can('setFontSize')}
       onblur={handleBlur}
       onfocus={handleFocus}
       onkeydown={handleKeydown}
@@ -206,6 +207,7 @@
         pointerEvents: opened ? 'auto' : 'none',
         cursor: 'pointer',
       })}
+      disabled={!editor.can('setFontSize')}
       onclick={() => {
         applyFontSize(true);
         inputElement?.blur();

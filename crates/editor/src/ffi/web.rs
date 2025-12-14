@@ -206,29 +206,6 @@ impl Editor {
         Some(DragImageInfo { drag_image })
     }
 
-    #[wasm_bindgen(js_name = can)]
-    pub fn can(&self, val: JsValue) -> bool {
-        serde_wasm_bindgen::from_value::<Message>(val)
-            .ok()
-            .map(|msg| self.runtime.can_action(&msg))
-            .unwrap_or(false)
-    }
-
-    #[wasm_bindgen(js_name = canAll)]
-    pub fn can_all(&self, val: JsValue) -> JsValue {
-        let results: Vec<bool> = serde_wasm_bindgen::from_value::<Vec<Message>>(val)
-            .ok()
-            .map(|messages| {
-                messages
-                    .iter()
-                    .map(|msg| self.runtime.can_action(msg))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        to_js_value(&results)
-    }
-
     #[wasm_bindgen(js_name = dispatch)]
     pub fn dispatch(&mut self, val: JsValue) -> JsValue {
         if let Ok(msg) = serde_wasm_bindgen::from_value::<Message>(val) {
