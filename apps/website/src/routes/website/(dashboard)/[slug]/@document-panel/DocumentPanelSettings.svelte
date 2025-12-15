@@ -13,7 +13,6 @@
   import InfoIcon from '~icons/lucide/info';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import TypeIcon from '~icons/lucide/type';
-  import { CONTINUOUS_PAGE_MARGIN } from '$lib/editor/constants';
   import type { Editor } from '$lib/editor/editor.svelte';
 
   type Props = {
@@ -70,7 +69,7 @@
     } else {
       editor.dispatch({
         type: 'setLayoutMode',
-        mode: { type: 'continuous', maxWidth: 800, pageMargin: CONTINUOUS_PAGE_MARGIN },
+        mode: { type: 'continuous', maxWidth: 800 },
       });
     }
     mixpanel.track('toggle_document_layout_mode', { mode });
@@ -155,10 +154,9 @@
   };
 
   const handleMaxWidthChange = (value: number) => {
-    const currentMargin = layoutMode.type === 'continuous' ? layoutMode.pageMargin : CONTINUOUS_PAGE_MARGIN;
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: { type: 'continuous', maxWidth: value, pageMargin: currentMargin },
+      mode: { type: 'continuous', maxWidth: value },
     });
     mixpanel.track('change_document_max_width', { maxWidth: value });
   };

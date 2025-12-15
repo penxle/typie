@@ -258,10 +258,8 @@ impl Runtime {
                     page_margin_left,
                     page_margin_right,
                 ),
-                LayoutMode::Continuous {
-                    max_width,
-                    page_margin,
-                } => {
+                LayoutMode::Continuous { max_width } => {
+                    let page_margin = CONTINUOUS_PAGE_MARGIN;
                     let page_width = self.width.min(max_width + 2.0 * page_margin);
                     (
                         page_width,
@@ -535,10 +533,10 @@ impl Runtime {
             let layout_mode = self.doc().settings().layout_mode;
             let page_width = match layout_mode {
                 LayoutMode::Paginated { page_width, .. } => page_width.ceil(),
-                LayoutMode::Continuous {
-                    max_width,
-                    page_margin,
-                } => self.width.min(max_width + 2.0 * page_margin).ceil(),
+                LayoutMode::Continuous { max_width } => self
+                    .width
+                    .min(max_width + 2.0 * CONTINUOUS_PAGE_MARGIN)
+                    .ceil(),
             };
 
             let page_heights: Vec<f32> = match layout_mode {
