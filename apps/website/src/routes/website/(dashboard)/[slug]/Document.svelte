@@ -137,11 +137,7 @@
   setEditor(editor);
 
   const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
-  const contentWidth = $derived(
-    editor.layout.layoutMode.type === 'paginated'
-      ? editor.layout.pageWidth - editor.layout.layoutMode.pageMarginLeft - editor.layout.layoutMode.pageMarginRight
-      : editor.layout.pageWidth - 24 * 2, // TODO: fixme 24
-  );
+  const contentWidth = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.pageWidth : editor.layout.pageWidth - 24 * 2);
 
   const clientId = nanoid();
   let syncUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -585,47 +581,49 @@
                     backgroundColor: isPaginated ? 'surface.muted' : 'surface.default',
                   })}
                 >
-                  <textarea
-                    style:width={`${contentWidth}px`}
-                    class={css({
-                      fontSize: '20px',
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      overflow: 'hidden',
-                      resize: 'none',
-                      color: 'text.default',
-                      _placeholder: { color: 'text.disabled' },
-                    })}
-                    maxlength={100}
-                    oninput={handleTitleChanged}
-                    onkeydown={handleTitleKeydown}
-                    placeholder="제목"
-                    rows={1}
-                    bind:value={localTitle}
-                    use:autosize
-                  ></textarea>
+                  <div style:width={`${contentWidth}px`} class={flex({ flexDirection: 'column' })}>
+                    <textarea
+                      class={css({
+                        width: 'full',
+                        fontSize: '20px',
+                        fontWeight: 'bold',
+                        overflow: 'hidden',
+                        resize: 'none',
+                        color: 'text.default',
+                        _placeholder: { color: 'text.disabled' },
+                      })}
+                      maxlength={100}
+                      oninput={handleTitleChanged}
+                      onkeydown={handleTitleKeydown}
+                      placeholder="제목"
+                      rows={1}
+                      bind:value={localTitle}
+                      use:autosize
+                    ></textarea>
 
-                  <textarea
-                    bind:this={subtitleEl}
-                    style:width={`${contentWidth}px`}
-                    class={css({
-                      marginTop: '4px',
-                      fontSize: '16px',
-                      fontWeight: 'medium',
-                      textAlign: 'center',
-                      overflow: 'hidden',
-                      resize: 'none',
-                      color: 'text.subtle',
-                      _placeholder: { color: 'text.disabled' },
-                    })}
-                    maxlength={100}
-                    oninput={handleSubtitleChanged}
-                    onkeydown={handleSubtitleKeydown}
-                    placeholder="부제목"
-                    rows={1}
-                    bind:value={localSubtitle}
-                    use:autosize
-                  ></textarea>
+                    <textarea
+                      bind:this={subtitleEl}
+                      class={css({
+                        marginTop: '4px',
+                        width: 'full',
+                        fontSize: '16px',
+                        fontWeight: 'medium',
+                        overflow: 'hidden',
+                        resize: 'none',
+                        color: 'text.subtle',
+                        _placeholder: { color: 'text.disabled' },
+                      })}
+                      maxlength={100}
+                      oninput={handleSubtitleChanged}
+                      onkeydown={handleSubtitleKeydown}
+                      placeholder="부제목"
+                      rows={1}
+                      bind:value={localSubtitle}
+                      use:autosize
+                    ></textarea>
+
+                    <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: isPaginated ? '24px' : '0' })} />
+                  </div>
                 </div>
               {/snippet}
             </EditorComponent>
