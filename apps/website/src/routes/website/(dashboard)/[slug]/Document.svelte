@@ -555,7 +555,13 @@
               backgroundColor: 'surface.default',
             })}
           >
-            <EditorComponent {editor} onDocChanged={handleDocChanged} {snapshot} unit="cm">
+            <EditorComponent
+              {editor}
+              onDocChanged={handleDocChanged}
+              onExitedDocumentStart={() => subtitleEl?.focus()}
+              {snapshot}
+              unit="cm"
+            >
               {#snippet header()}
                 <div
                   class={flex({
@@ -623,7 +629,7 @@
 
                         if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
                           e.preventDefault();
-                          editor.focus();
+                          editor.focus().dispatch({ type: 'navigate', direction: 'documentStart', extend: false });
                         }
                       }}
                       placeholder="부제목을 입력하세요"

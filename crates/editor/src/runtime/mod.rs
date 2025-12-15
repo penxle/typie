@@ -49,6 +49,7 @@ struct PendingUpdates {
     render: bool,
     drop_indicator: Option<DropIndicator>,
     enabled_actions: bool,
+    exited_document_start: bool,
 }
 
 #[derive(Clone)]
@@ -121,6 +122,7 @@ impl Runtime {
                 render: true,
                 drop_indicator: None,
                 enabled_actions: true,
+                exited_document_start: false,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -626,6 +628,11 @@ impl Runtime {
             self.pending.enabled_actions = false;
         }
 
+        if self.pending.exited_document_start {
+            cmds.push(Cmd::ExitedDocumentStart);
+            self.pending.exited_document_start = false;
+        }
+
         cmds
     }
 
@@ -851,6 +858,9 @@ impl Runtime {
                         DropIndicator::from_position(&ctx, &self.pages, position)
                     });
                     self.pending.render = true;
+                }
+                Effect::ExitedDocumentStart => {
+                    self.pending.exited_document_start = true;
                 }
             }
         }
