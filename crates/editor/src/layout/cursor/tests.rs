@@ -2527,3 +2527,50 @@ fn test_hit_test_on_selected_image_preserves_selection() {
         "Selection should remain unchanged"
     );
 }
+
+#[test]
+fn test_hit_test_below_wrapped_text_goes_to_document_end() {
+    let mut p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 200.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            @p paragraph {
+                text { "This is a long paragraph that will wrap into multiple lines when the viewport is narrow enough. We need enough text to ensure multiple lines." }
+            }
+        }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let lines = collect_lines_for_block(&pages, p);
+    assert!(
+        lines.len() >= 2,
+        "Text should wrap into at least 2 lines, got {}",
+        lines.len()
+    );
+
+    let last_line = lines.last().unwrap();
+    let expected_end_offset = last_line.metric.end_offset;
+
+    let mut last_line_bottom = 0.0f32;
+    for entry in pages[0].spatial_index().iter() {
+        if let Element::Line(line) = entry.element() {
+            if line.block_id == p {
+                let bottom = entry.pos.y + entry.size.height;
+                last_line_bottom = last_line_bottom.max(bottom);
+            }
+        }
+    }
+
+    let click_x = 100.0;
+    let click_y = last_line_bottom + 50.0;
+
+    let selection = Cursor::hit_test(&ctx(&rt.state()), &pages[0], click_x, click_y).unwrap();
+
+    assert_eq!(selection.head.node_id, p);
+    assert_eq!(
+        selection.head.offset, expected_end_offset,
+        "Clicking below wrapped text should place cursor at document end (offset {}), not at an earlier line's end",
+        expected_end_offset
+    );
+}
