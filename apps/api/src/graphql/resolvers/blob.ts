@@ -165,6 +165,8 @@ builder.mutationFields((t) => ({
 
       let img = sharp(buffer, { failOn: 'none' });
 
+      img = img.rotate();
+
       if (input.modification) {
         if (input.modification.ensureAlpha) {
           img = img.ensureAlpha();
@@ -179,18 +181,9 @@ builder.mutationFields((t) => ({
         }
       }
 
-      let data;
-      let info;
-
-      if (input.modification) {
-        const res = await img.toBuffer({ resolveWithObject: true });
-        data = res.data;
-        info = res.info;
-      } else {
-        const res = await img.metadata();
-        data = buffer;
-        info = res;
-      }
+      const res = await img.toBuffer({ resolveWithObject: true });
+      const data = res.data;
+      const info = res.info;
 
       const mimetype = info.format === 'svg' ? 'image/svg+xml' : `image/${info.format}`;
 
