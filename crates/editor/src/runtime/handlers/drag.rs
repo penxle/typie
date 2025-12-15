@@ -132,7 +132,7 @@ impl Runtime {
         text: Option<String>,
         _html: Option<String>,
         fragment: Option<String>,
-        _modifier: Modifier,
+        modifier: Modifier,
     ) -> Vec<Effect> {
         let Some(drop_position) = self.resolve_drop_position(page_idx, x, y) else {
             return self.handle_drag_end_internal();
@@ -144,7 +144,11 @@ impl Runtime {
         self.pointer.mode = PointerMode::Idle;
 
         let mut effects = if is_internal_drag {
-            self.transact(move |tr| tr.drag_and_drop(drop_position))
+            if modifier.alt {
+                self.transact(move |tr| tr.drag_and_copy(drop_position))
+            } else {
+                self.transact(move |tr| tr.drag_and_drop(drop_position))
+            }
         } else if let Some(text) = text {
             self.transact(move |tr| {
                 let fragment = if let Some(json) = fragment {
@@ -389,6 +393,39 @@ mod tests {
         let expected = state! {
             doc {
                 @p1 paragraph { text { "WorldHello " } }
+            }
+            selection { (p1, 0) -> (p1, 5) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn test_dnd_alt_drag_copies_instead_of_moving() {
+        let mut p1 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "Hello World" } }
+            }
+            selection { (p1, 6) -> (p1, 11) }
+        };
+        rt.layout();
+
+        drag_and_drop_with_modifier(
+            &mut rt,
+            Position::new(p1, 8, Affinity::default()),
+            Position::new(p1, 0, Affinity::default()),
+            Modifier {
+                alt: true,
+                ..Default::default()
+            },
+        );
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "WorldHello World" } }
             }
             selection { (p1, 0) -> (p1, 5) }
         };
