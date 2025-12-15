@@ -1030,8 +1030,8 @@ mod tests {
             x: click_x,
             y: click_y,
             click_count: 1,
-            shift_key: false,
-            is_primary: true,
+            modifier: Modifier::default(),
+            button: PointerButton::Primary,
         });
 
         let selection = runtime.state().selection.clone();
@@ -1082,8 +1082,8 @@ mod tests {
             x: click_x,
             y: click_y,
             click_count: 2,
-            shift_key: false,
-            is_primary: true,
+            modifier: Modifier::default(),
+            button: PointerButton::Primary,
         });
 
         let state = runtime.state();
@@ -1196,8 +1196,8 @@ mod tests {
             x: click_x,
             y: click_y,
             click_count: 1,
-            shift_key: false,
-            is_primary: true,
+            modifier: Modifier::default(),
+            button: PointerButton::Primary,
         });
 
         let sel = rt.state().selection;

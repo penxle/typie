@@ -7,6 +7,29 @@ use tsify::Tsify;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
+pub enum PointerButton {
+    Primary,
+    Auxiliary,
+    Secondary,
+}
+
+impl PointerButton {
+    pub fn is_primary(&self) -> bool {
+        matches!(self, Self::Primary)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Modifier {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub meta: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
 pub enum Direction {
     Left,
     Right,
@@ -130,28 +153,31 @@ define_messages! {
         x: f32,
         y: f32,
         click_count: u32,
-        shift_key: bool,
-        is_primary: bool,
+        button: PointerButton,
+        modifier: Modifier,
     }
     => when When::True
-    => handle(rt) { rt.handle_pointer_down(page_idx, x, y, click_count, shift_key, is_primary) },
+    => handle(rt) { rt.handle_pointer_down(page_idx, x, y, click_count, button, modifier) },
 
     PointerMove {
         page_idx: usize,
         x: f32,
         y: f32,
-        is_pressed: bool,
+        buttons: u16,
+        modifier: Modifier,
     }
     => when When::True
-    => handle(rt) { rt.handle_pointer_move(page_idx, x, y, is_pressed) },
+    => handle(rt) { rt.handle_pointer_move(page_idx, x, y, buttons, modifier) },
 
     PointerUp {
         page_idx: usize,
         x: f32,
         y: f32,
+        button: PointerButton,
+        modifier: Modifier,
     }
     => when When::True
-    => handle(rt) { rt.handle_pointer_up(page_idx, x, y) },
+    => handle(rt) { rt.handle_pointer_up(page_idx, x, y, button, modifier) },
 
     DragStart { page_idx: usize, x: f32, y: f32 }
     => when When::key(ContextKey::CanEdit)
@@ -180,9 +206,10 @@ define_messages! {
         text: Option<String>,
         html: Option<String>,
         fragment: Option<String>,
+        modifier: Modifier,
     }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_drop(page_idx, x, y, text, html, fragment) },
+    => handle(rt) { rt.handle_drop(page_idx, x, y, text, html, fragment, modifier) },
 
     DragEnd
     => when When::True

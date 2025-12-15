@@ -2,6 +2,7 @@ use super::super::{Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::Fragment;
 use crate::runtime::PointerMode;
+use crate::runtime::message::Modifier;
 use crate::state::Position;
 use crate::transaction::Transaction;
 
@@ -131,9 +132,10 @@ impl Runtime {
         text: Option<String>,
         _html: Option<String>,
         fragment: Option<String>,
+        _modifier: Modifier,
     ) -> Vec<Effect> {
         let Some(drop_position) = self.resolve_drop_position(page_idx, x, y) else {
-            return self.handle_drag_end();
+            return self.handle_drag_end_internal();
         };
 
         let is_internal_drag = self.pointer.is_dragging_content();
@@ -154,11 +156,11 @@ impl Runtime {
                 tr.drop_external(drop_position, fragment)
             })
         } else {
-            return self.handle_drag_end();
+            return self.handle_drag_end_internal();
         };
 
         if effects.is_empty() {
-            return self.handle_drag_end();
+            return self.handle_drag_end_internal();
         }
 
         effects.push(Effect::DropTargetChanged { target: None });
@@ -166,6 +168,10 @@ impl Runtime {
     }
 
     pub(crate) fn handle_drag_end(&mut self) -> Vec<Effect> {
+        self.handle_drag_end_internal()
+    }
+
+    fn handle_drag_end_internal(&mut self) -> Vec<Effect> {
         self.pointer.mode = PointerMode::Idle;
         self.pointer.drop_target = None;
         vec![Effect::DropTargetChanged { target: None }]
@@ -178,6 +184,7 @@ mod tests {
 
     use crate::model::NodeId;
     use crate::runtime::DropIndicator;
+    use crate::runtime::message::{Modifier, PointerButton};
     use crate::state::Position;
     use crate::types::Affinity;
 
@@ -233,6 +240,15 @@ mod tests {
     }
 
     fn drag_and_drop(rt: &mut crate::runtime::Runtime, from: Position, to: Position) {
+        drag_and_drop_with_modifier(rt, from, to, Modifier::default());
+    }
+
+    fn drag_and_drop_with_modifier(
+        rt: &mut crate::runtime::Runtime,
+        from: Position,
+        to: Position,
+        modifier: Modifier,
+    ) {
         let (from_page, from_x, from_y) = find_position_coordinates(rt, from);
         let (to_page, to_x, to_y) = find_position_coordinates(rt, to);
 
@@ -241,15 +257,16 @@ mod tests {
             x: from_x,
             y: from_y,
             click_count: 1,
-            shift_key: false,
-            is_primary: true,
+            button: PointerButton::Primary,
+            modifier: Modifier::default(),
         });
 
         rt.update(crate::runtime::Message::PointerMove {
             page_idx: from_page,
             x: from_x,
             y: from_y,
-            is_pressed: true,
+            buttons: 1,
+            modifier: Modifier::default(),
         });
 
         rt.update(crate::runtime::Message::DragStart {
@@ -273,6 +290,7 @@ mod tests {
             text: None,
             html: None,
             fragment: None,
+            modifier,
         });
     }
 
@@ -285,15 +303,16 @@ mod tests {
             x: from_x,
             y: from_y,
             click_count: 1,
-            shift_key: false,
-            is_primary: true,
+            button: PointerButton::Primary,
+            modifier: Modifier::default(),
         });
 
         rt.update(crate::runtime::Message::PointerMove {
             page_idx: from_page,
             x: from_x,
             y: from_y,
-            is_pressed: true,
+            buttons: 1,
+            modifier: Modifier::default(),
         });
 
         rt.update(crate::runtime::Message::DragStart {
@@ -317,6 +336,7 @@ mod tests {
             text: None,
             html: None,
             fragment: None,
+            modifier: Modifier::default(),
         });
     }
 
@@ -343,6 +363,7 @@ mod tests {
             text,
             html,
             fragment,
+            modifier: Modifier::default(),
         });
     }
 
@@ -554,14 +575,16 @@ mod tests {
             x: img_x,
             y: img_y,
             click_count: 1,
-            shift_key: false,
-            is_primary: true,
+            button: PointerButton::Primary,
+            modifier: Modifier::default(),
         });
 
         rt.update(crate::runtime::Message::PointerUp {
             page_idx: 0,
             x: img_x,
             y: img_y,
+            button: PointerButton::Primary,
+            modifier: Modifier::default(),
         });
 
         let expected = state! {

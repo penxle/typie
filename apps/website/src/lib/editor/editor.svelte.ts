@@ -5,7 +5,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
 import { calculateRelativePosition, findNearestPageCoordinate, getPageIndex, idleCallback } from './utils';
-import type { Editor as WasmEditor } from '@typie/editor';
+import type { Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ThemeColors } from './theme';
 import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, SelectionStats, WritingSystem } from './types';
 
@@ -422,8 +422,8 @@ export class Editor {
       x,
       y,
       clickCount: count,
-      shiftKey: e.shiftKey,
-      isPrimary: e.button === 0,
+      button: this.#toPointerButton(e.button),
+      modifier: this.#toModifier(e),
     });
   }
 
@@ -443,7 +443,8 @@ export class Editor {
       pageIdx,
       x,
       y,
-      isPressed: this.pointer.isPressed,
+      buttons: e.buttons,
+      modifier: this.#toModifier(e),
     });
   }
 
@@ -470,6 +471,8 @@ export class Editor {
       pageIdx,
       x,
       y,
+      button: this.#toPointerButton(e.button),
+      modifier: this.#toModifier(e),
     });
 
     this.pointer.isPressed = false;
@@ -490,8 +493,8 @@ export class Editor {
       x: point.x,
       y: point.y,
       clickCount: 1,
-      shiftKey: e.shiftKey,
-      isPrimary: false,
+      button: 'secondary',
+      modifier: this.#toModifier(e),
     });
 
     this.contextMenu.x = e.clientX;
@@ -518,8 +521,8 @@ export class Editor {
       x: point.x,
       y: point.y,
       clickCount: 1,
-      shiftKey: e.shiftKey,
-      isPrimary: false,
+      button: 'secondary',
+      modifier: this.#toModifier(e),
     });
 
     this.contextMenu.x = e.clientX;
@@ -792,6 +795,7 @@ export class Editor {
       text,
       html,
       fragment,
+      modifier: this.#toModifier(e),
     } as unknown as Message);
   }
 
@@ -822,5 +826,31 @@ export class Editor {
     this.#stop();
     this.#wasmEditor = null;
     this.#application = null;
+  }
+
+  #toPointerButton(button: number): PointerButton {
+    switch (button) {
+      case 0: {
+        return 'primary';
+      }
+      case 1: {
+        return 'auxiliary';
+      }
+      case 2: {
+        return 'secondary';
+      }
+      default: {
+        return 'primary';
+      }
+    }
+  }
+
+  #toModifier(e: MouseEvent | PointerEvent): Modifier {
+    return {
+      shift: e.shiftKey,
+      ctrl: e.ctrlKey,
+      alt: e.altKey,
+      meta: e.metaKey,
+    };
   }
 }

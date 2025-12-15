@@ -1213,7 +1213,10 @@ mod tests {
     fn test_paginator_continuous_mode_ignores_page_break() {
         let page_height = 100.0;
         let page_margin = 10.0;
-        let layout_mode = LayoutMode::Continuous { max_width: 100.0 };
+        let layout_mode = LayoutMode::Continuous {
+            max_width: 100.0,
+            page_margin: 24.0,
+        };
 
         let node1 = Rc::new(LayoutNode {
             size: Size::new(80.0, 20.0),
