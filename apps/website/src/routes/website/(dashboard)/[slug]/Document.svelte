@@ -412,6 +412,9 @@
               _hover: { color: 'text.default' },
               transition: 'common',
             })}
+            onclick={() => {
+              titleEl?.focus();
+            }}
             type="button"
           >
             {title || '(제목 없음)'}
