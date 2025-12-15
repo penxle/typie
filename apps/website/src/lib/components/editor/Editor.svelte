@@ -45,6 +45,7 @@
 
   let width = $state(0);
   let scaleFactor = $state(1);
+  let headerHeight = $state(0);
   let horizontalRulerEl: HTMLDivElement | null = $state(null);
   let verticalRulerEl: HTMLDivElement | null = $state(null);
   let scrollContainerEl: HTMLElement | null = $state(null);
@@ -133,7 +134,7 @@
             <VerticalRuler
               {marginBottom}
               {marginTop}
-              padding={contentPadding}
+              padding={headerHeight}
               {pageGap}
               {pageHeights}
               thickness={rulerThickness}
@@ -175,9 +176,23 @@
       >
         <div class={css({ position: 'relative', height: 'full', minWidth: 'max' })}>
           {#if header}
-            {@render header()}
+            <div
+              {@attach (el) => {
+                const observer = new ResizeObserver((entries) => {
+                  const entry = entries[0];
+                  if (entry) {
+                    headerHeight = entry.contentRect.height;
+                  }
+                });
+
+                observer.observe(el);
+                return () => observer.disconnect();
+              }}
+            >
+              {@render header()}
+            </div>
           {/if}
-          <View />
+          <View {contentPadding} />
         </div>
       </div>
       <Scrollbar scrollContainer={scrollContainerEl} />

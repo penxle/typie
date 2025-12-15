@@ -104,7 +104,6 @@
 
 <div
   bind:this={extensionAreaEl}
-  style:padding-top="{contentPadding}px"
   style:padding-left="{contentPadding}px"
   style:padding-right="{contentPadding}px"
   style:gap={isPaginated ? `${PAGE_GAP}px` : '0'}
