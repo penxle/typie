@@ -279,12 +279,10 @@ fn navigate_word(
 
 pub fn move_to_document_start(ctx: &NavigationContext, pages: &[Page]) -> Option<Selection> {
     for page in pages {
-        if let Some(first_pos) = page.first_element_pos() {
-            if let Some((_, element)) = page.find_element_at_point(first_pos) {
-                let navigable = element.as_cursor_navigable()?;
-                if let Some(selection) = navigable.find_selection_at_point(ctx, 0.0, 0.0) {
-                    return Some(selection);
-                }
+        if let Some((_, element)) = page.first_element() {
+            let navigable = element.as_cursor_navigable()?;
+            if let Some(selection) = navigable.find_selection_at_point(ctx, 0.0, 0.0) {
+                return Some(selection);
             }
         }
     }

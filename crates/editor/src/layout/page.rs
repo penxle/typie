@@ -63,8 +63,8 @@ impl PointDistance for ElementEntry {
 pub struct Page {
     pub root: PositionedNode,
     spatial_index: RTree<ElementEntry>,
-    first_pos: Option<Point>,
-    last_pos: Option<Point>,
+    first_element: Option<(Point, *const Element)>,
+    last_element: Option<(Point, *const Element)>,
 }
 
 impl Page {
@@ -72,33 +72,38 @@ impl Page {
         let mut elements = Vec::new();
         Self::collect_navigable_from_tree(&root, Point::zero(), &mut elements);
 
-        let (first_pos, last_pos) = Self::find_boundary_positions(&elements);
+        let (first_element, last_element) = Self::find_boundary_elements(&elements);
         let spatial_index = Self::build_spatial_index(elements);
 
         Self {
             root,
             spatial_index,
-            first_pos,
-            last_pos,
+            first_element,
+            last_element,
         }
     }
 
-    fn find_boundary_positions(elements: &[(Point, &Element)]) -> (Option<Point>, Option<Point>) {
-        let first_pos = elements
+    fn find_boundary_elements(
+        elements: &[(Point, &Element)],
+    ) -> (
+        Option<(Point, *const Element)>,
+        Option<(Point, *const Element)>,
+    ) {
+        let first = elements
             .iter()
             .min_by(|a, b| a.0.y.partial_cmp(&b.0.y).unwrap())
-            .map(|(pos, _)| *pos);
+            .map(|(pos, elem)| (*pos, *elem as *const Element));
 
-        let last_pos = elements
+        let last = elements
             .iter()
             .max_by(|a, b| {
                 let a_bottom = a.0.y + a.1.size().height;
                 let b_bottom = b.0.y + b.1.size().height;
                 a_bottom.partial_cmp(&b_bottom).unwrap()
             })
-            .map(|(pos, _)| *pos);
+            .map(|(pos, elem)| (*pos, *elem as *const Element));
 
-        (first_pos, last_pos)
+        (first, last)
     }
 
     fn build_spatial_index(elements: Vec<(Point, &Element)>) -> RTree<ElementEntry> {
@@ -113,12 +118,12 @@ impl Page {
         &self.spatial_index
     }
 
-    pub fn first_element_pos(&self) -> Option<Point> {
-        self.first_pos
+    pub fn first_element(&self) -> Option<(Point, &Element)> {
+        self.first_element.map(|(pos, ptr)| (pos, unsafe { &*ptr }))
     }
 
-    pub fn last_element_pos(&self) -> Option<Point> {
-        self.last_pos
+    pub fn last_element(&self) -> Option<(Point, &Element)> {
+        self.last_element.map(|(pos, ptr)| (pos, unsafe { &*ptr }))
     }
 
     pub fn find_element_at_point(&self, point: Point) -> Option<(Point, &Element)> {

@@ -79,33 +79,29 @@ fn find_block_gap_position(
     x: f32,
     y: f32,
 ) -> Option<Selection> {
-    if let Some(first_pos) = page.first_element_pos() {
+    if let Some((first_pos, first_elem)) = page.first_element() {
         if y < first_pos.y {
-            if let Some((_, first_elem)) = page.find_element_at_point(first_pos) {
-                let first_block = ctx.doc.node(first_elem.block_id()?)?;
-                let root_child_id = find_root_child(ctx, &first_block)?;
-                let root_child = ctx.doc.node(root_child_id)?;
-                return Some(Selection::collapsed(crate::state::Position::new(
-                    crate::model::NodeId::ROOT,
-                    root_child.index()?,
-                    crate::types::Affinity::Downstream,
-                )));
-            }
+            let first_block = ctx.doc.node(first_elem.block_id()?)?;
+            let root_child_id = find_root_child(ctx, &first_block)?;
+            let root_child = ctx.doc.node(root_child_id)?;
+            return Some(Selection::collapsed(crate::state::Position::new(
+                crate::model::NodeId::ROOT,
+                root_child.index()?,
+                crate::types::Affinity::Downstream,
+            )));
         }
     }
 
-    if let Some(last_pos) = page.last_element_pos() {
-        if let Some((_, last_elem)) = page.find_element_at_point(last_pos) {
-            if y > last_pos.y + last_elem.size().height {
-                let last_block = ctx.doc.node(last_elem.block_id()?)?;
-                let root_child_id = find_root_child(ctx, &last_block)?;
-                let root_child = ctx.doc.node(root_child_id)?;
-                return Some(Selection::collapsed(crate::state::Position::new(
-                    crate::model::NodeId::ROOT,
-                    root_child.index()? + 1,
-                    crate::types::Affinity::Downstream,
-                )));
-            }
+    if let Some((last_pos, last_elem)) = page.last_element() {
+        if y > last_pos.y + last_elem.size().height {
+            let last_block = ctx.doc.node(last_elem.block_id()?)?;
+            let root_child_id = find_root_child(ctx, &last_block)?;
+            let root_child = ctx.doc.node(root_child_id)?;
+            return Some(Selection::collapsed(crate::state::Position::new(
+                crate::model::NodeId::ROOT,
+                root_child.index()? + 1,
+                crate::types::Affinity::Downstream,
+            )));
         }
     }
 
@@ -278,11 +274,8 @@ fn find_closest_navigable_node<'a>(
     let closest_entry = page.spatial_index().nearest_neighbor(&[x, y])?;
     let closest = (closest_entry.pos, closest_entry.element());
 
-    let first_pos = page.first_element_pos()?;
-    let first = page.find_element_at_point(first_pos)?;
-
-    let last_pos = page.last_element_pos()?;
-    let last = page.find_element_at_point(last_pos)?;
+    let first = page.first_element()?;
+    let last = page.last_element()?;
 
     Some((closest, first, last))
 }
