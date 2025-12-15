@@ -92,7 +92,7 @@ export interface ParagraphNode {
 
 export type TextAlign = "left" | "center" | "right" | "justify";
 
-export type LayoutMode = { type: "paginated"; pageWidth: number; pageHeight: number; pageMarginTop: number; pageMarginBottom: number; pageMarginLeft: number; pageMarginRight: number } | { type: "continuous"; maxWidth: number; pageMargin: number };
+export type LayoutMode = { type: "paginated"; pageWidth: number; pageHeight: number; pageMarginTop: number; pageMarginBottom: number; pageMarginLeft: number; pageMarginRight: number } | { type: "continuous"; maxWidth: number };
 
 export type WritingSystem = "latin" | "korean" | "japanese" | "chinese";
 

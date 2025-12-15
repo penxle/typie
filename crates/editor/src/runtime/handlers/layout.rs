@@ -84,10 +84,9 @@ impl Runtime {
 
         let width = match mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous {
-                max_width,
-                page_margin,
-            } => max_width + 2.0 * page_margin,
+            LayoutMode::Continuous { max_width } => {
+                max_width + 2.0 * crate::model::CONTINUOUS_PAGE_MARGIN
+            }
         };
 
         self.set_width(width);
@@ -103,10 +102,9 @@ impl Runtime {
         let layout_mode = self.doc().settings().layout_mode;
         let new_width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous {
-                max_width,
-                page_margin,
-            } => width.min(max_width + 2.0 * page_margin),
+            LayoutMode::Continuous { max_width } => {
+                width.min(max_width + 2.0 * crate::model::CONTINUOUS_PAGE_MARGIN)
+            }
         };
 
         self.set_width(new_width);

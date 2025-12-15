@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use tsify::Tsify;
 
+pub const CONTINUOUS_PAGE_MARGIN: f32 = 24.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Codec, Tsify)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum LayoutMode {
@@ -16,7 +18,7 @@ pub enum LayoutMode {
         page_margin_right: f32,
     },
     #[serde(rename_all = "camelCase")]
-    Continuous { max_width: f32, page_margin: f32 },
+    Continuous { max_width: f32 },
 }
 
 impl Default for LayoutMode {
@@ -51,12 +53,8 @@ impl Hash for LayoutMode {
                 page_margin_left.to_bits().hash(state);
                 page_margin_right.to_bits().hash(state);
             }
-            LayoutMode::Continuous {
-                max_width,
-                page_margin,
-            } => {
+            LayoutMode::Continuous { max_width } => {
                 max_width.to_bits().hash(state);
-                page_margin.to_bits().hash(state);
             }
         }
     }

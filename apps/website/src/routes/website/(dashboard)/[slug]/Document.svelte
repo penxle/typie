@@ -140,7 +140,7 @@
   const contentWidth = $derived(
     editor.layout.layoutMode.type === 'paginated'
       ? editor.layout.pageWidth - editor.layout.layoutMode.pageMarginLeft - editor.layout.layoutMode.pageMarginRight
-      : editor.layout.pageWidth - editor.layout.layoutMode.pageMargin * 2,
+      : editor.layout.pageWidth - 24 * 2, // TODO: fixme 24
   );
 
   const clientId = nanoid();
