@@ -1,8 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
+  import ConstructionIcon from '~icons/lucide/construction';
   import { getViewContext } from '../@split-view/context.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import type { Editor } from '$lib/editor/editor.svelte';
@@ -111,6 +113,21 @@
   {#if isExpanded}
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
       <DocumentPanelSettings {editor} />
+    {:else}
+      <div
+        class={flex({
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          height: 'full',
+          color: 'text.faint',
+          fontSize: '12px',
+        })}
+      >
+        <Icon style={css.raw({ color: 'text.faint' })} icon={ConstructionIcon} size={24} />
+        아직 준비중인 기능이에요
+      </div>
     {/if}
   {/if}
 </aside>

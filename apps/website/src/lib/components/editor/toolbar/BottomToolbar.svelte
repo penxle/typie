@@ -341,7 +341,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton active={isLinkActive} disabled={true} label="링크" onEscape={() => editor.focus()} size="small">
+    <ToolbarDropdownButton active={isLinkActive} disabled={true} label="링크 (준비중)" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LinkIcon} />
       {/snippet}

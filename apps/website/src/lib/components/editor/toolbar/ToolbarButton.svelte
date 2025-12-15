@@ -46,6 +46,11 @@
     {disabled}
     {onclick}
     type="button"
+    use:tooltip={{
+      message: disabled ? '(준비중)' : undefined,
+      delay: 200,
+      arrow: false,
+    }}
   >
     <ToolbarIcon {icon} />
     <span class={css({ fontSize: '11px', whiteSpace: 'nowrap' })}>{label}</span>
@@ -75,7 +80,12 @@
     {disabled}
     {onclick}
     type="button"
-    use:tooltip={{ message: label, keys, delay: 200, arrow: false }}
+    use:tooltip={{
+      message: disabled ? `${label} (준비중)` : label,
+      keys,
+      delay: 200,
+      arrow: false,
+    }}
   >
     <ToolbarIcon {icon} />
   </button>
@@ -103,7 +113,12 @@
     {disabled}
     {onclick}
     type="button"
-    use:tooltip={{ message: label, keys, delay: 1000, arrow: false }}
+    use:tooltip={{
+      message: disabled ? `${label} (준비중)` : label,
+      keys,
+      delay: 1000,
+      arrow: false,
+    }}
   >
     <ToolbarIcon {icon} />
   </button>
