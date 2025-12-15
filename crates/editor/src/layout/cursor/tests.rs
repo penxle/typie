@@ -2,7 +2,7 @@ use super::*;
 use crate::layout::Element;
 use crate::layout::elements::line::LineElement;
 use crate::model::NodeId;
-use crate::runtime::Message;
+use crate::runtime::{Message, Modifier, PointerButton};
 use crate::state::Selection;
 use crate::types::Affinity;
 use crate::utils::{byte_to_char_offset, char_to_byte_offset};
@@ -1941,13 +1941,27 @@ fn test_pagination_margin_clicks() {
     let pages = runtime.pages();
     assert!(pages.len() >= 2);
 
-    let effects = runtime.handle_pointer_down(0, 100.0, 390.0, 1, false, true);
+    let effects = runtime.handle_pointer_down(
+        0,
+        100.0,
+        390.0,
+        1,
+        PointerButton::Primary,
+        Modifier::default(),
+    );
     assert!(effects.contains(&Effect::SelectionChanged));
 
     let sel1 = runtime.state().selection;
     assert_eq!(sel1.head.affinity, Affinity::Upstream);
 
-    let effects = runtime.handle_pointer_down(1, 100.0, 10.0, 1, false, true);
+    let effects = runtime.handle_pointer_down(
+        1,
+        100.0,
+        10.0,
+        1,
+        PointerButton::Primary,
+        Modifier::default(),
+    );
     assert!(effects.contains(&Effect::SelectionChanged));
 
     let sel2 = runtime.state().selection;
@@ -2492,14 +2506,16 @@ fn test_hit_test_on_selected_image_preserves_selection() {
         x: click_x,
         y: click_y,
         click_count: 1,
-        shift_key: false,
-        is_primary: true,
+        modifier: Modifier::default(),
+        button: PointerButton::Primary,
     });
 
     rt.update(Message::PointerUp {
         page_idx,
         x: click_x,
         y: click_y,
+        modifier: Modifier::default(),
+        button: PointerButton::Primary,
     });
 
     assert_eq!(

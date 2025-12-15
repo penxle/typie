@@ -1,5 +1,6 @@
 use super::super::{Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
+use crate::runtime::message::{Modifier, PointerButton};
 use crate::runtime::pointer::{PointerMode, PressContext};
 use crate::state::position_helpers::compare_positions;
 use crate::state::{Position, Selection};
@@ -11,14 +12,14 @@ impl Runtime {
         x: f32,
         y: f32,
         click_count: u32,
-        shift_key: bool,
-        is_primary: bool,
+        button: PointerButton,
+        modifier: Modifier,
     ) -> Vec<Effect> {
         let Some(page) = self.pages.get(page_idx) else {
             return vec![];
         };
 
-        if is_primary && !shift_key {
+        if button.is_primary() && !modifier.shift {
             if let Some(kind) = page.find_interactive_at(x, y) {
                 self.pointer.mode = PointerMode::Pressed {
                     page_idx,
@@ -38,11 +39,11 @@ impl Runtime {
 
         let position = hit_selection.head;
 
-        if !is_primary {
+        if !button.is_primary() {
             return self.handle_secondary_pointer_down(hit_selection, position);
         }
 
-        if shift_key {
+        if modifier.shift {
             return self.handle_shift_click(position);
         }
 
@@ -196,14 +197,15 @@ impl Runtime {
         page_idx: usize,
         x: f32,
         y: f32,
-        is_pressed: bool,
+        buttons: u16,
+        _modifier: Modifier,
     ) -> Vec<Effect> {
         let mut effects = Vec::new();
 
         let style = self.get_pointer_style(page_idx, x, y);
         effects.push(Effect::PointerStyleChanged { style });
 
-        if !is_pressed {
+        if buttons == 0 {
             self.pointer.reset();
             return effects;
         }
@@ -276,7 +278,14 @@ impl Runtime {
         }
     }
 
-    pub(crate) fn handle_pointer_up(&mut self, _page_idx: usize, _x: f32, _y: f32) -> Vec<Effect> {
+    pub(crate) fn handle_pointer_up(
+        &mut self,
+        _page_idx: usize,
+        _x: f32,
+        _y: f32,
+        _button: PointerButton,
+        _modifier: Modifier,
+    ) -> Vec<Effect> {
         let mut effects = Vec::new();
 
         match &self.pointer.mode {
