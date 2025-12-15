@@ -1,6 +1,5 @@
 use crate::model::*;
 use crate::runtime::{Effect, Runtime};
-use crate::state::Selection;
 
 impl Runtime {
     pub(crate) fn handle_toggle_bold(&mut self) -> Vec<Effect> {
