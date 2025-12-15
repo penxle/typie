@@ -1,8 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { getAppContext } from '@typie/ui/context';
   import { getEditor } from '$lib/editor/context';
   import { findScroller } from '$lib/editor/utils';
 
+  const app = getAppContext();
   const editor = getEditor();
 
   let element = $state<HTMLDivElement>();
@@ -23,10 +25,23 @@
     if (!element) return;
 
     const scroller = findScroller(element);
-    const margin = 40;
     const scrollerRect = scroller.getBoundingClientRect();
     const cursorRect = element.getBoundingClientRect();
 
+    if (app.preference.current.typewriterEnabled && app.preference.current.typewriterPosition !== undefined) {
+      const position = app.preference.current.typewriterPosition;
+      const cursorHeight = cursorRect.height;
+
+      const availableRange = scrollerRect.height - cursorHeight;
+      const targetY = scrollerRect.top + availableRange * position;
+      const delta = cursorRect.top - targetY;
+      if (Math.abs(delta) > 1) {
+        scroller.scrollBy({ top: delta, behavior: 'instant' });
+      }
+      return;
+    }
+
+    const margin = 40;
     const scrollerTop = scrollerRect.top + margin;
     const scrollerBottom = scrollerRect.bottom - margin;
 

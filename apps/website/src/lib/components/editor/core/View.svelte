@@ -1,6 +1,8 @@
 <script lang="ts">
   import { flex } from '@typie/styled-system/patterns';
+  import { PAGE_GAP } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
+  import { typewriterPadding } from '$lib/editor/typewriter.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import Cursor from './Cursor.svelte';
   import Input from './Input.svelte';
@@ -103,14 +105,14 @@
 <div
   bind:this={extensionAreaEl}
   style:padding-top="{contentPadding}px"
-  style:padding-bottom="{contentPadding}px"
   style:padding-left="{contentPadding}px"
   style:padding-right="{contentPadding}px"
+  style:gap={isPaginated ? `${PAGE_GAP}px` : '0'}
   class={flex({
     direction: 'column',
     align: 'center',
     minHeight: 'full',
-    ...(isPaginated && { backgroundColor: 'surface.muted', gap: '24px' }),
+    ...(isPaginated && { backgroundColor: 'surface.muted' }),
   })}
   aria-label="Editor"
   aria-multiline="true"
@@ -126,6 +128,7 @@
   onkeydown={focusInput}
   role="textbox"
   tabindex="0"
+  use:typewriterPadding={contentPadding}
 >
   {#each editor.layout.pageHeights, i}
     <Page page={i} bind:containerEl={containerEls[i]} />
