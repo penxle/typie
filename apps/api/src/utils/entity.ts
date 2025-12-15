@@ -74,7 +74,10 @@ export const makeLoroDoc = () => {
   layoutMode.set('type', 'paginated');
   layoutMode.set('page_width', 794);
   layoutMode.set('page_height', 1123);
-  layoutMode.set('page_margin', 96);
+  layoutMode.set('page_margin_top', 96);
+  layoutMode.set('page_margin_bottom', 96);
+  layoutMode.set('page_margin_left', 96);
+  layoutMode.set('page_margin_right', 96);
 
   const ROOT_ID = '00000000000000000000000000000000';
   const paragraphId = faker.string.uuid().replaceAll('-', '');
