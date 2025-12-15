@@ -63,8 +63,6 @@ impl PointDistance for ElementEntry {
 pub struct Page {
     pub root: PositionedNode,
     spatial_index: RTree<ElementEntry>,
-    first_element: Option<(Point, *const Element)>,
-    last_element: Option<(Point, *const Element)>,
 }
 
 impl Page {
@@ -72,38 +70,12 @@ impl Page {
         let mut elements = Vec::new();
         Self::collect_navigable_from_tree(&root, Point::zero(), &mut elements);
 
-        let (first_element, last_element) = Self::find_boundary_elements(&elements);
         let spatial_index = Self::build_spatial_index(elements);
 
         Self {
             root,
             spatial_index,
-            first_element,
-            last_element,
         }
-    }
-
-    fn find_boundary_elements(
-        elements: &[(Point, &Element)],
-    ) -> (
-        Option<(Point, *const Element)>,
-        Option<(Point, *const Element)>,
-    ) {
-        let first = elements
-            .iter()
-            .min_by(|a, b| a.0.y.partial_cmp(&b.0.y).unwrap())
-            .map(|(pos, elem)| (*pos, *elem as *const Element));
-
-        let last = elements
-            .iter()
-            .max_by(|a, b| {
-                let a_bottom = a.0.y + a.1.size().height;
-                let b_bottom = b.0.y + b.1.size().height;
-                a_bottom.partial_cmp(&b_bottom).unwrap()
-            })
-            .map(|(pos, elem)| (*pos, *elem as *const Element));
-
-        (first, last)
     }
 
     fn build_spatial_index(elements: Vec<(Point, &Element)>) -> RTree<ElementEntry> {
@@ -119,11 +91,21 @@ impl Page {
     }
 
     pub fn first_element(&self) -> Option<(Point, &Element)> {
-        self.first_element.map(|(pos, ptr)| (pos, unsafe { &*ptr }))
+        self.spatial_index
+            .iter()
+            .min_by(|a, b| a.pos.y.total_cmp(&b.pos.y))
+            .map(|entry| (entry.pos, entry.element()))
     }
 
     pub fn last_element(&self) -> Option<(Point, &Element)> {
-        self.last_element.map(|(pos, ptr)| (pos, unsafe { &*ptr }))
+        self.spatial_index
+            .iter()
+            .max_by(|a, b| {
+                let a_bottom = a.pos.y + a.size.height;
+                let b_bottom = b.pos.y + b.size.height;
+                a_bottom.total_cmp(&b_bottom)
+            })
+            .map(|entry| (entry.pos, entry.element()))
     }
 
     pub fn find_element_at_point(&self, point: Point) -> Option<(Point, &Element)> {
