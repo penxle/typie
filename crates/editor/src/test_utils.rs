@@ -176,7 +176,7 @@ macro_rules! runtime {
             let state = state! { $($rest)* };
             let mut runtime = $crate::runtime::Runtime::new($width as f32, 1.0, state);
             runtime.doc().update_settings(|s| {
-                s.layout_mode = $crate::model::LayoutMode::Continuous { max_width: $width as f32, page_margin: 24.0 };
+                s.layout_mode = $crate::model::LayoutMode::Continuous { max_width: $width as f32 };
             }).unwrap();
             runtime.layout();
             runtime
