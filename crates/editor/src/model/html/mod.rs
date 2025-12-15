@@ -4,7 +4,7 @@ mod utils;
 
 pub use builder::DomSpec;
 pub use codec::{HtmlContext, MarkHtmlCodec, MarkParseRule, NodeHtmlCodec, NodeParseRule};
-pub use utils::{parse_font_size, parse_length, parse_styles};
+pub use utils::{parse_as, parse_font_size, parse_styles, LengthUnit};
 
 use builder::HtmlBuilder;
 use codec::{

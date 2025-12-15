@@ -5,7 +5,7 @@ use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
 use crate::model::{FontFamilyMark, Mark, Node, PreeditDecor};
 use crate::schema::Expand;
 use crate::types::{BoxConstraints, Point, Size};
-use crate::utils::char_to_byte_offset;
+use crate::utils::{LengthUnit, char_to_byte_offset, convert_length};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -405,7 +405,8 @@ impl Layout for ParagraphNode {
 
             let apply_mark = |builder: &mut parley::RangedBuilder<'_, String>,
                               mark: &Mark,
-                              range: std::ops::Range<usize>| {
+                              range: std::ops::Range<usize>,
+                              font_size: f32| {
                 match mark {
                     Mark::FontFamily(m) => builder.push(
                         StyleProperty::FontStack(FontStack::Single(FontFamily::Named(
@@ -413,15 +414,25 @@ impl Layout for ParagraphNode {
                         ))),
                         range,
                     ),
-                    Mark::FontSize(m) => {
-                        builder.push(StyleProperty::FontSize(m.size * (96.0 / 72.0)), range)
-                    }
+                    Mark::FontSize(m) => builder.push(
+                        StyleProperty::FontSize(convert_length(
+                            m.size,
+                            LengthUnit::Pt,
+                            LengthUnit::Px,
+                        )),
+                        range,
+                    ),
                     Mark::FontWeight(m) => builder.push(
                         StyleProperty::FontWeight(FontWeight::new(m.weight as f32)),
                         range,
                     ),
                     Mark::LetterSpacing(m) => {
-                        builder.push(StyleProperty::LetterSpacing(m.spacing), range)
+                        let font_size_px =
+                            convert_length(font_size, LengthUnit::Pt, LengthUnit::Px);
+                        builder.push(
+                            StyleProperty::LetterSpacing(m.spacing * font_size_px),
+                            range,
+                        )
                     }
                     Mark::Italic(_) => {
                         builder.push(StyleProperty::FontStyle(FontStyle::Italic), range)
@@ -488,6 +499,17 @@ impl Layout for ParagraphNode {
                             let base_start = offset + segment_offset;
                             let base_end = base_start + segment_len;
 
+                            let segment_font_size = segment_marks
+                                .iter()
+                                .find_map(|m| {
+                                    if let Mark::FontSize(fs) = m {
+                                        Some(fs.size)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or(12.0);
+
                             for mark in &segment_marks {
                                 let expand = if preedit_has_explicit_marks {
                                     &Expand::None
@@ -502,7 +524,7 @@ impl Layout for ParagraphNode {
                                 let range = char_to_byte_offset(&text, start)
                                     ..char_to_byte_offset(&text, end);
 
-                                apply_mark(&mut builder, mark, range);
+                                apply_mark(&mut builder, mark, range, segment_font_size);
                             }
 
                             segment_offset += segment_len;
@@ -524,8 +546,19 @@ impl Layout for ParagraphNode {
                     let range = char_to_byte_offset(&text, preedit_start)
                         ..char_to_byte_offset(&text, preedit_end);
 
+                    let preedit_font_size = marks
+                        .iter()
+                        .find_map(|m| {
+                            if let Mark::FontSize(fs) = m {
+                                Some(fs.size)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(12.0);
+
                     for mark in marks {
-                        apply_mark(&mut builder, mark, range.clone());
+                        apply_mark(&mut builder, mark, range.clone(), preedit_font_size);
                     }
                 }
             }

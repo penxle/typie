@@ -179,3 +179,31 @@ pub fn detect_writing_systems(s: &str) -> Vec<crate::types::WritingSystem> {
 
     writing_systems.into_iter().collect()
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum LengthUnit {
+    Px,
+    Pt,
+    Em,
+}
+
+pub fn convert_length(value: f32, from: LengthUnit, to: LengthUnit) -> f32 {
+    if from == to {
+        return value;
+    }
+
+    const PT_TO_PX: f32 = 96.0 / 72.0;
+    const DEFAULT_FONT_SIZE_PX: f32 = 16.0;
+
+    let px = match from {
+        LengthUnit::Px => value,
+        LengthUnit::Pt => value * PT_TO_PX,
+        LengthUnit::Em => value * DEFAULT_FONT_SIZE_PX,
+    };
+
+    match to {
+        LengthUnit::Px => px,
+        LengthUnit::Pt => px / PT_TO_PX,
+        LengthUnit::Em => px / DEFAULT_FONT_SIZE_PX,
+    }
+}
