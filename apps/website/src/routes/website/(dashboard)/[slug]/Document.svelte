@@ -136,9 +136,6 @@
   const editor = new Editor();
   setEditor(editor);
 
-  const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
-  const contentWidth = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.pageWidth : editor.layout.pageWidth - 24 * 2);
-
   const clientId = nanoid();
   let syncUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let lastSyncedVersion: Uint8Array | null = null;
@@ -146,6 +143,7 @@
   let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');
   let planUpgradeModalOpen = $state(false);
 
+  let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
   let localTitle = $state('');
   let localSubtitle = $state('');
@@ -191,22 +189,6 @@
       documentId,
       subtitle: localSubtitle || null,
     });
-  }
-
-  function handleTitleKeydown(e: KeyboardEvent) {
-    if (e.isComposing) return;
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      subtitleEl?.focus();
-    }
-  }
-
-  function handleSubtitleKeydown(e: KeyboardEvent) {
-    if (e.isComposing) return;
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      // TODO: focus editor
-    }
   }
 
   const currentViewZenModeEnabled = $derived(
@@ -576,27 +558,38 @@
                   class={flex({
                     flexDirection: 'column',
                     alignItems: 'center',
-                    paddingTop: '40px',
-                    paddingX: '48px',
-                    backgroundColor: isPaginated ? 'surface.muted' : 'surface.default',
+                    paddingTop: '60px',
+                    width: 'full',
+                    ...(editor.layout.layoutMode.type === 'paginated' && { paddingBottom: '20px' }),
                   })}
                 >
-                  <div style:width={`${contentWidth}px`} class={flex({ flexDirection: 'column' })}>
+                  <div
+                    class={flex({
+                      flexDirection: 'column',
+                      flexShrink: '0',
+                      width: 'full',
+                    })}
+                  >
                     <textarea
-                      class={css({
-                        width: 'full',
-                        fontSize: '20px',
-                        fontWeight: 'bold',
-                        overflow: 'hidden',
-                        resize: 'none',
-                        color: 'text.default',
-                        _placeholder: { color: 'text.disabled' },
-                      })}
+                      bind:this={titleEl}
+                      class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                      autocapitalize="off"
+                      autocomplete="off"
                       maxlength={100}
                       oninput={handleTitleChanged}
-                      onkeydown={handleTitleKeydown}
-                      placeholder="제목"
+                      onkeydown={(e) => {
+                        if (e.isComposing) {
+                          return;
+                        }
+
+                        if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
+                          e.preventDefault();
+                          subtitleEl?.focus();
+                        }
+                      }}
+                      placeholder="제목을 입력하세요"
                       rows={1}
+                      spellcheck="false"
                       bind:value={localTitle}
                       use:autosize
                     ></textarea>
@@ -610,19 +603,34 @@
                         fontWeight: 'medium',
                         overflow: 'hidden',
                         resize: 'none',
-                        color: 'text.subtle',
-                        _placeholder: { color: 'text.disabled' },
                       })}
+                      autocapitalize="off"
+                      autocomplete="off"
                       maxlength={100}
                       oninput={handleSubtitleChanged}
-                      onkeydown={handleSubtitleKeydown}
-                      placeholder="부제목"
+                      onkeydown={(e) => {
+                        if (e.isComposing) {
+                          return;
+                        }
+
+                        if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !localSubtitle)) {
+                          e.preventDefault();
+                          titleEl?.focus();
+                        }
+
+                        if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
+                          e.preventDefault();
+                          editor.focus();
+                        }
+                      }}
+                      placeholder="부제목을 입력하세요"
                       rows={1}
+                      spellcheck="false"
                       bind:value={localSubtitle}
                       use:autosize
                     ></textarea>
 
-                    <HorizontalDivider style={css.raw({ marginTop: '10px', marginBottom: isPaginated ? '24px' : '0' })} />
+                    <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
                   </div>
                 </div>
               {/snippet}

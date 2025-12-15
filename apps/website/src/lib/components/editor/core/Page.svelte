@@ -42,7 +42,7 @@
   });
 </script>
 
-<div class={css({ position: 'relative' })}>
+<div class={css({ position: 'relative', maxWidth: 'full' })}>
   <div
     bind:this={containerEl}
     style:width={`${pageWidth}px`}
