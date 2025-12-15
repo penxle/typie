@@ -29,6 +29,43 @@ impl Transaction {
         Ok(true)
     }
 
+    pub fn drag_and_copy(&mut self, target: Position) -> Result<bool> {
+        if !self.can_drop(target) {
+            return Ok(false);
+        }
+
+        let selection = *self.selection();
+        let selection_kind = selection.classify(self.doc())?;
+        let anchor_before_head = selection.anchor_before_head(self.doc());
+
+        let fragment = Fragment::new_from_selection(self.doc(), &selection)?;
+        if fragment.is_empty() {
+            return Ok(false);
+        }
+
+        let is_block_drop = is_block_position(self.doc(), target);
+        let fragment = prepare_fragment(fragment, self.doc().schema(), is_block_drop);
+
+        self.set_selection(Selection::collapsed(target));
+        let result = self.insert_fragment(target, fragment)?;
+
+        let selection = match selection_kind {
+            SelectionKind::InlineRange => result.as_inline_range_selection(self.doc()),
+            _ => result.as_range_selection(),
+        };
+
+        if let Some(selection) = selection {
+            let selection = if anchor_before_head {
+                selection
+            } else {
+                Selection::new(selection.head, selection.anchor)
+            };
+            self.set_selection(selection);
+        }
+
+        Ok(result.inserted())
+    }
+
     fn selection_contains_page_break(&self) -> bool {
         let Ok(fragment) = self.selection().extract_fragment(self.doc()) else {
             return false;
