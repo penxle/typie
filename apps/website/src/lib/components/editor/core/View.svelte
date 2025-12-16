@@ -119,7 +119,7 @@
   class={flex({
     direction: 'column',
     align: 'center',
-    minHeight: 'full',
+    grow: '1',
   })}
   aria-label="Editor"
   aria-multiline="true"

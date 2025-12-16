@@ -184,7 +184,14 @@
           }
         }}
       >
-        <div class={css({ position: 'relative', height: 'full', ...(layoutMode.type === 'paginated' && { minWidth: 'max' }) })}>
+        <div
+          class={flex({
+            direction: 'column',
+            position: 'relative',
+            height: 'full',
+            ...(layoutMode.type === 'paginated' && { minWidth: 'max' }),
+          })}
+        >
           {#if header}
             <div
               style:width={layoutMode.type === 'paginated' ? `${pageWidth + contentPadding * 2}px` : '100%'}
