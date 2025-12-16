@@ -413,7 +413,7 @@
               transition: 'common',
             })}
             onclick={() => {
-              titleEl?.focus();
+              titleEl?.select();
             }}
             type="button"
           >
