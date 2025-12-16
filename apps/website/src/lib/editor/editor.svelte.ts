@@ -19,6 +19,7 @@ export type EditorOptions = {
   theme: ThemeColors;
   snapshot?: Uint8Array;
   onDocChanged?: () => void;
+  onExitedDocumentStart?: () => void;
 };
 
 export class Editor {
@@ -28,6 +29,7 @@ export class Editor {
   #rafId: number | null = null;
   #pendingFontLoad = false;
   #onDocChanged?: () => void;
+  #onExitedDocumentStart?: () => void;
   #readyResolve?: () => void;
   ready: Promise<void>;
 
@@ -119,6 +121,7 @@ export class Editor {
     }
 
     this.#onDocChanged = options.onDocChanged;
+    this.#onExitedDocumentStart = options.onExitedDocumentStart;
 
     const app = new Application();
     this.#application = app;
@@ -254,6 +257,11 @@ export class Editor {
 
         case 'enabledActionsChanged': {
           this.enabledActions = new SvelteSet(cmd.enabled);
+          break;
+        }
+
+        case 'exitedDocumentStart': {
+          this.#onExitedDocumentStart?.();
           break;
         }
       }

@@ -29,7 +29,7 @@ export class WebGLRenderer {
   private vao: WebGLVertexArrayObject;
 
   constructor(canvas: HTMLCanvasElement) {
-    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false });
+    const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false });
     if (!gl) throw new Error('WebGL2 not supported');
 
     this.gl = gl;
@@ -129,6 +129,11 @@ export class WebGLRenderer {
 
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.useProgram(program);
     gl.bindVertexArray(vao);

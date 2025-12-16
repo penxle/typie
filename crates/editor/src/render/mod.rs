@@ -109,10 +109,7 @@ impl Renderer {
         drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
     ) -> RenderResult {
-        let rgba = self.theme.color_rgba("ui.surface.default");
-        let pixel = u32::from_ne_bytes(rgba);
-        let pixels: &mut [u32] = bytemuck::cast_slice_mut(self.pixmap.data_mut());
-        pixels.fill(pixel);
+        self.pixmap.data_mut().fill(0);
 
         let scale = self.scale_factor as f32;
         let transform = Transform::from_scale(scale, scale);
@@ -157,28 +154,22 @@ impl Renderer {
             &ctx,
         );
 
-        // 페이지 여백 안쪽만 클리핑
+        // 페이지 여백 안쪽만 클리핑 (투명하게 마스킹)
         if let Some(clip) = clip_bounds {
-            let bg_color = Color::from_rgba8(rgba[0], rgba[1], rgba[2], rgba[3]);
-            let mut paint = tiny_skia::Paint::default();
-            paint.set_color(bg_color);
-
-            let page_width = page.root.node.size.width * scale;
-            let page_height = match settings.layout_mode {
-                crate::model::LayoutMode::Paginated { page_height, .. } => page_height * scale,
-                _ => page.root.node.size.height * scale,
-            };
             let scaled_top = clip.y() * scale;
             let scaled_bottom = (clip.y() + clip.height()) * scale;
 
-            if let Some(rect) = Rect::from_xywh(0.0, 0.0, page_width, scaled_top) {
-                pixmap.fill_rect(rect, &paint, Transform::identity(), None);
-            }
-            if let Some(rect) =
-                Rect::from_xywh(0.0, scaled_bottom, page_width, page_height - scaled_bottom)
-            {
-                pixmap.fill_rect(rect, &paint, Transform::identity(), None);
-            }
+            let width = pixmap.width() as usize;
+            let height = pixmap.height() as usize;
+            let data = pixmap.data_mut();
+
+            let top_end_row = (scaled_top.ceil() as usize).min(height);
+            let top_bytes = top_end_row * width * 4;
+            data[..top_bytes].fill(0);
+
+            let bottom_start_row = (scaled_bottom.floor() as usize).min(height);
+            let bottom_start_byte = bottom_start_row * width * 4;
+            data[bottom_start_byte..].fill(0);
         }
 
         if let Some(indicator) = drop_indicator {
