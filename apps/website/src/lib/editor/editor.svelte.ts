@@ -4,7 +4,7 @@ import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME, PAGE_GAP } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
-import { calculateRelativePosition, findNearestPageCoordinate, getPageIndex, idleCallback } from './utils';
+import { calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import type { Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ThemeColors } from './theme';
 import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, SelectionStats, WritingSystem } from './types';
@@ -363,21 +363,16 @@ export class Editor {
     e: MouseEvent | PointerEvent,
     targetEl: HTMLElement,
   ): { pageIdx: number; x: number; y: number; pageElement: HTMLElement; isExtensionArea: boolean } | null {
-    const pageIdx = getPageIndex(targetEl);
+    const fromTarget = this.#resolvePageCoordinateFromElement(e, targetEl);
+    if (fromTarget) {
+      return fromTarget;
+    }
 
-    if (pageIdx !== -1) {
-      let pageElement: HTMLElement | null = targetEl;
-      while (pageElement && pageElement.dataset && !pageElement.dataset.pageIndex) {
-        pageElement = pageElement.parentElement;
+    if (this.layout.layoutMode.type === 'paginated') {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (el instanceof HTMLElement) {
+        return this.#resolvePageCoordinateFromElement(e, el);
       }
-      const point = calculateRelativePosition(targetEl, e);
-      return {
-        pageIdx,
-        x: point.x,
-        y: point.y,
-        pageElement: pageElement ?? targetEl,
-        isExtensionArea: false,
-      };
     }
 
     if (this.layout.layoutMode.type === 'continuous') {
@@ -397,6 +392,25 @@ export class Editor {
     }
 
     return null;
+  }
+
+  #resolvePageCoordinateFromElement(
+    e: MouseEvent | PointerEvent,
+    element: HTMLElement,
+  ): { pageIdx: number; x: number; y: number; pageElement: HTMLElement; isExtensionArea: boolean } | null {
+    const pageElement = getPageElement(element);
+    if (!pageElement) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const pageIdx = Number.parseInt(pageElement.dataset.pageIndex!);
+    const point = calculateRelativePosition(pageElement, e);
+    return {
+      pageIdx,
+      x: point.x,
+      y: point.y,
+      pageElement,
+      isExtensionArea: false,
+    };
   }
 
   handlePointerDown(e: PointerEvent): void {
