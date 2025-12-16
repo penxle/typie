@@ -4,6 +4,6 @@ export const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
 
 export const FRAGMENT_MIME = 'application/x-typ-fragment';
 
-export const CONTINUOUS_PAGE_MARGIN = 24;
+export const CONTINUOUS_PAGE_MARGIN = 20;
 
 export const PAGE_GAP = 24;

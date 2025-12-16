@@ -2,7 +2,7 @@ import { Application, getMemory } from '@typie/editor';
 import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
 import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { FRAGMENT_MIME } from './constants';
+import { FRAGMENT_MIME, PAGE_GAP } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
 import { calculateRelativePosition, findNearestPageCoordinate, getPageIndex, idleCallback } from './utils';
 import type { Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
@@ -481,17 +481,18 @@ export class Editor {
   handleContextMenu(e: MouseEvent): void {
     if (!(e.target instanceof HTMLElement)) return;
 
-    const index = getPageIndex(e.target);
-    if (index === -1) return;
+    const resolved = this.#resolvePointerCoordinate(e, e.target);
+    if (!resolved) return;
+
+    const { pageIdx, x, y } = resolved;
 
     e.preventDefault();
 
-    const point = calculateRelativePosition(e.target, e);
     this.dispatch({
       type: 'pointerDown',
-      pageIdx: index,
-      x: point.x,
-      y: point.y,
+      pageIdx,
+      x,
+      y,
       clickCount: 1,
       button: 'secondary',
       modifier: this.#toModifier(e),
@@ -511,15 +512,16 @@ export class Editor {
 
     if (!(targetEl instanceof HTMLElement)) return;
 
-    const index = getPageIndex(targetEl);
-    if (index === -1) return;
+    const resolved = this.#resolvePointerCoordinate(e, targetEl);
+    if (!resolved) return;
 
-    const point = calculateRelativePosition(targetEl, e);
+    const { pageIdx, x, y } = resolved;
+
     this.dispatch({
       type: 'pointerDown',
-      pageIdx: index,
-      x: point.x,
-      y: point.y,
+      pageIdx,
+      x,
+      y,
       clickCount: 1,
       button: 'secondary',
       modifier: this.#toModifier(e),
@@ -600,22 +602,14 @@ export class Editor {
   }
 
   handleDragStart(e: DragEvent): void {
-    const targetEl = document.elementFromPoint(e.clientX, e.clientY);
-    if (!(targetEl instanceof HTMLElement)) return;
+    if (!(e.target instanceof HTMLElement)) return;
 
-    let pageElement: HTMLElement | null = targetEl;
-    while (pageElement && pageElement.dataset && !pageElement.dataset.pageIndex) {
-      pageElement = pageElement.parentElement;
-    }
+    const resolved = this.#resolvePointerCoordinate(e, e.target);
+    if (!resolved) return;
 
-    if (!pageElement || !pageElement.dataset.pageIndex) {
-      return;
-    }
+    const { pageIdx, x, y, pageElement } = resolved;
 
-    const pageIdx = Number.parseInt(pageElement.dataset.pageIndex);
     const rect = pageElement.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
 
     if (!this.canDragAt(pageIdx, x, y)) {
       e.preventDefault();
@@ -686,8 +680,6 @@ export class Editor {
 
     ctx.drawImage(tempCanvas, 0, 0);
 
-    const GAP = 24;
-
     for (const el of this.externalElements) {
       if (!el.isSelected || el.data.type !== 'image' || !visiblePages.includes(el.pageIdx)) {
         continue;
@@ -699,7 +691,7 @@ export class Editor {
         const end = Math.max(pageIdx, el.pageIdx);
         let dist = 0;
         for (let i = start; i < end; i++) {
-          dist += (this.layout.pageHeights[i] ?? 0) + GAP;
+          dist += (this.layout.pageHeights[i] ?? 0) + PAGE_GAP;
         }
         relativePageY = el.pageIdx < pageIdx ? -dist : dist;
       }
@@ -727,17 +719,10 @@ export class Editor {
     e.preventDefault();
     if (!(e.target instanceof HTMLElement)) return;
 
-    let pageElement: HTMLElement | null = e.target;
-    while (pageElement && pageElement.dataset && !pageElement.dataset.pageIndex) {
-      pageElement = pageElement.parentElement;
-    }
+    const resolved = this.#resolvePointerCoordinate(e, e.target);
+    if (!resolved) return;
 
-    if (!pageElement || !pageElement.dataset.pageIndex) return;
-
-    const pageIdx = Number.parseInt(pageElement.dataset.pageIndex);
-    const rect = pageElement.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const { pageIdx, x, y } = resolved;
 
     this.dispatch({ type: 'dragOver', pageIdx, x, y });
   }
@@ -759,17 +744,10 @@ export class Editor {
     e.preventDefault();
     if (!(e.target instanceof HTMLElement)) return;
 
-    let pageElement: HTMLElement | null = e.target;
-    while (pageElement && pageElement.dataset && !pageElement.dataset.pageIndex) {
-      pageElement = pageElement.parentElement;
-    }
+    const resolved = this.#resolvePointerCoordinate(e, e.target);
+    if (!resolved) return;
 
-    if (!pageElement || !pageElement.dataset.pageIndex) return;
-
-    const pageIdx = Number.parseInt(pageElement.dataset.pageIndex);
-    const rect = pageElement.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const { pageIdx, x, y } = resolved;
 
     let fragment: string | undefined;
     let html: string | undefined;

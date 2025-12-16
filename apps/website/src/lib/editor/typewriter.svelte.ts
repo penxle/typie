@@ -3,7 +3,7 @@ import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from './constants';
 import { getEditor } from './context';
 import { findScroller } from './utils';
 
-export function typewriterPadding(node: HTMLElement, contentPadding: number) {
+export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
   const editor = getEditor();
   const app = getAppContext();
 
@@ -21,7 +21,7 @@ export function typewriterPadding(node: HTMLElement, contentPadding: number) {
 
   function calculatePadding(): number {
     if (!app.preference.current.typewriterEnabled || scrollContainerHeight <= 0) {
-      return contentPadding;
+      return defaultPadding;
     }
 
     const isPaginated = editor.layout.layoutMode.type === 'paginated';
@@ -39,10 +39,10 @@ export function typewriterPadding(node: HTMLElement, contentPadding: number) {
         if (isPaginated) cursorTopInDocument += PAGE_GAP;
       }
       cursorTopInDocument += bounds.y;
-      if (!isPaginated) cursorTopInDocument += contentPadding;
+      if (!isPaginated) cursorTopInDocument += defaultPadding;
     }
 
-    const totalScrollableContentHeight = totalContentHeight + (isPaginated ? 0 : contentPadding);
+    const totalScrollableContentHeight = totalContentHeight + (isPaginated ? 0 : defaultPadding);
 
     const position = app.preference.current.typewriterPosition;
     const availableRange = scrollContainerHeight - cursorHeight;
@@ -51,7 +51,7 @@ export function typewriterPadding(node: HTMLElement, contentPadding: number) {
     const contentBelowCursorTop = totalScrollableContentHeight - cursorTopInDocument + CONTINUOUS_PAGE_MARGIN;
 
     const extraPaddingNeeded = spaceNeededBelowCursorTop - contentBelowCursorTop;
-    return Math.max(contentPadding, extraPaddingNeeded);
+    return Math.max(defaultPadding, extraPaddingNeeded);
   }
 
   function updatePadding() {
@@ -72,8 +72,8 @@ export function typewriterPadding(node: HTMLElement, contentPadding: number) {
   });
 
   return {
-    update(newContentPadding: number) {
-      contentPadding = newContentPadding;
+    update(newDefaultPadding: number) {
+      defaultPadding = newDefaultPadding;
       updatePadding();
     },
     destroy() {

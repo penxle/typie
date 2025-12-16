@@ -3,6 +3,7 @@
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { getThemeContext } from '@typie/ui/context';
   import { untrack } from 'svelte';
+  import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from '$lib/editor/constants';
   import { setEditor } from '$lib/editor/context';
   import { Editor } from '$lib/editor/editor.svelte';
   import { getEditorTheme } from '$lib/editor/theme';
@@ -28,7 +29,7 @@
   let {
     unit = 'px',
     rulerThickness = 24,
-    contentPadding = 48,
+    contentPadding = 40,
     snapshot,
     editor: externalEditor,
     onDocChanged,
@@ -91,7 +92,9 @@
   const marginBottom = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginBottom : 0);
   const marginLeft = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginLeft : 0);
   const marginRight = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginRight : 0);
-  const pageGap = $derived(layoutMode.type === 'paginated' ? 24 : 0);
+
+  const pageGap = $derived(layoutMode.type === 'paginated' ? PAGE_GAP : 0);
+  const continuousPageMargin = $derived(layoutMode.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
 </script>
 
 <div class={flex({ direction: 'column', height: 'full', width: 'full' })}>
@@ -103,7 +106,12 @@
     <div
       style:grid-template-columns={layoutMode.type === 'paginated' ? `${rulerThickness}px 1fr` : '1fr'}
       style:grid-template-rows={layoutMode.type === 'paginated' ? `${rulerThickness}px 1fr` : '1fr'}
-      class={grid({ flex: '1', gap: '0', overflow: 'hidden' })}
+      class={grid({
+        flex: '1',
+        gap: '0',
+        overflow: 'hidden',
+        ...(layoutMode.type === 'paginated' && { backgroundColor: 'surface.subtle' }),
+      })}
     >
       {#if layoutMode.type === 'paginated'}
         <div
@@ -157,7 +165,7 @@
           const observer = new ResizeObserver((entries) => {
             const entry = entries[0];
             if (entry) {
-              width = Math.max(0, Math.round(entry.contentRect.width) - contentPadding * 2);
+              width = Math.max(0, Math.round(entry.contentRect.width) - contentPadding * 2 + continuousPageMargin * 2);
             }
           });
 
@@ -174,9 +182,18 @@
           }
         }}
       >
-        <div class={css({ position: 'relative', height: 'full', minWidth: 'max' })}>
+        <div class={css({ position: 'relative', height: 'full', ...(layoutMode.type === 'paginated' && { minWidth: 'max' }) })}>
           {#if header}
             <div
+              style:width={layoutMode.type === 'paginated' ? `${pageWidth + contentPadding * 2}px` : '100%'}
+              style:max-width={layoutMode.type === 'paginated' ? 'none' : `${layoutMode.maxWidth + contentPadding * 2}px`}
+              style:padding-inline={`${contentPadding}px`}
+              class={flex({
+                flexDirection: 'column',
+                flexShrink: '0',
+                width: 'full',
+                marginX: 'auto',
+              })}
               {@attach (el) => {
                 const observer = new ResizeObserver((entries) => {
                   const entry = entries[0];
@@ -192,7 +209,7 @@
               {@render header()}
             </div>
           {/if}
-          <View {contentPadding} />
+          <View {contentPadding} {continuousPageMargin} />
         </div>
       </div>
       <Scrollbar scrollContainer={scrollContainerEl} />
