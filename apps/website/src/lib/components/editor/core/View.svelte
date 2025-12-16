@@ -50,14 +50,11 @@
       return;
     }
 
+    editor.handlePointerDown(e);
+
     // tabindex가 있으면 draggable이어도 drag보다 포커스 이동이 우선됨
     if (editor.isDraggable) {
       extensionAreaEl?.removeAttribute('tabindex');
-    }
-
-    editor.handlePointerDown(e);
-
-    if (editor.isDraggable) {
       setTimeout(() => {
         extensionAreaEl?.setAttribute('tabindex', '0');
       }, 0);
