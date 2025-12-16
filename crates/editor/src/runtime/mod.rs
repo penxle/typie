@@ -585,7 +585,10 @@ impl Runtime {
                 .map(|s| s.stats.clone())
                 .unwrap_or_default();
 
-            cmds.push(Cmd::SelectionChanged { stats });
+            cmds.push(Cmd::SelectionChanged {
+                stats,
+                collapsed: self.selection().is_collapsed(),
+            });
             self.pending.selection = false;
         }
 
