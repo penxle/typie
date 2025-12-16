@@ -49,8 +49,12 @@
     style:height={`${pageHeight}px`}
     class={css({
       position: 'relative',
-      backgroundColor: 'surface.default',
-      ...(isPaginated && { boxShadow: '[0_2px_8px_rgba(0,0,0,0.1)]', ringWidth: '1px', ringColor: 'black/5' }),
+      ...(isPaginated && {
+        backgroundColor: 'surface.default',
+        boxShadow: '[0_2px_8px_rgba(0,0,0,0.1)]',
+        ringWidth: '1px',
+        ringColor: 'black/5',
+      }),
     })}
     {@attach (node) => {
       const observer = new IntersectionObserver(

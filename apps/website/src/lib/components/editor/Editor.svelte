@@ -22,6 +22,7 @@
     snapshot?: Uint8Array;
     editor?: Editor;
     onDocChanged?: () => void;
+    onExitedDocumentStart?: () => void;
     onEditorReady?: (editor: Editor) => void;
     header?: Snippet;
   };
@@ -33,6 +34,7 @@
     snapshot,
     editor: externalEditor,
     onDocChanged,
+    onExitedDocumentStart,
     onEditorReady,
     header,
   }: Props = $props();
@@ -54,7 +56,7 @@
 
   $effect(() => {
     untrack(() => {
-      editor.initialize({ theme: getEditorTheme(theme.effective), snapshot, onDocChanged });
+      editor.initialize({ theme: getEditorTheme(theme.effective), snapshot, onDocChanged, onExitedDocumentStart });
     });
 
     return () => {

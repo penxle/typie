@@ -11,6 +11,15 @@ impl Runtime {
         direction: Direction,
         extend_selection: bool,
     ) -> Vec<Effect> {
+        let is_backward = matches!(
+            direction,
+            Direction::Left | Direction::Up | Direction::WordLeft | Direction::LineStart
+        );
+
+        if is_backward && !extend_selection && self.is_at_document_start() {
+            return vec![Effect::ExitedDocumentStart];
+        }
+
         let invalidate_preferred_x = !matches!(direction, Direction::Up | Direction::Down);
 
         let ctx = NavigationContext::new(&self.state.doc);
@@ -43,6 +52,20 @@ impl Runtime {
             tr.set_preferred_x(new_preferred_x);
             Ok(true)
         })
+    }
+
+    pub(crate) fn is_at_document_start(&self) -> bool {
+        let selection = &self.state.selection;
+        if !selection.is_collapsed() {
+            return false;
+        }
+
+        let ctx = NavigationContext::new(&self.state.doc);
+        let Some(doc_start_selection) = Cursor::move_to_document_start(&ctx, &self.pages) else {
+            return false;
+        };
+
+        selection.head == doc_start_selection.head
     }
 
     pub(crate) fn handle_select_all(&mut self) -> Vec<Effect> {

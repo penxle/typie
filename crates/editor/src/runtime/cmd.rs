@@ -81,4 +81,6 @@ pub enum Cmd {
     EnabledActionsChanged {
         enabled: Vec<String>,
     },
+
+    ExitedDocumentStart,
 }
