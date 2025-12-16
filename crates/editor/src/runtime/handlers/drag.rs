@@ -54,20 +54,20 @@ impl Runtime {
     }
 
     pub(crate) fn handle_drag_start(&mut self, _page_idx: usize, _x: f32, _y: f32) -> Vec<Effect> {
-        self.pointer.mode = PointerMode::DraggingContent;
+        self.set_pointer_mode(PointerMode::DraggingContent);
         vec![]
     }
 
     pub(crate) fn handle_drag_enter(&mut self) -> Vec<Effect> {
         if self.pointer.mode == PointerMode::Idle {
-            self.pointer.mode = PointerMode::DraggingExternal;
+            self.set_pointer_mode(PointerMode::DraggingExternal);
         }
         vec![]
     }
 
     pub(crate) fn handle_drag_leave(&mut self) -> Vec<Effect> {
         if self.pointer.is_dragging_external() {
-            self.pointer.mode = PointerMode::Idle;
+            self.set_pointer_mode(PointerMode::Idle);
         }
         self.pointer.drop_target = None;
         vec![Effect::DropTargetChanged { target: None }]
@@ -141,7 +141,7 @@ impl Runtime {
         let is_internal_drag = self.pointer.is_dragging_content();
 
         self.pointer.drop_target = None;
-        self.pointer.mode = PointerMode::Idle;
+        self.set_pointer_mode(PointerMode::Idle);
 
         let mut effects = if is_internal_drag {
             if modifier.alt {
@@ -176,7 +176,7 @@ impl Runtime {
     }
 
     fn handle_drag_end_internal(&mut self) -> Vec<Effect> {
-        self.pointer.mode = PointerMode::Idle;
+        self.set_pointer_mode(PointerMode::Idle);
         self.pointer.drop_target = None;
         vec![Effect::DropTargetChanged { target: None }]
     }

@@ -101,6 +101,7 @@ export class Editor {
   });
 
   isFocused = $state(false);
+  isPointerModeIdle = $state(false);
 
   typewriter = $state({
     needsScroll: false,
@@ -267,6 +268,11 @@ export class Editor {
 
         case 'exitedDocumentStart': {
           this.#onExitedDocumentStart?.();
+          break;
+        }
+
+        case 'pointerModeChanged': {
+          this.isPointerModeIdle = cmd.is_idle;
           break;
         }
       }

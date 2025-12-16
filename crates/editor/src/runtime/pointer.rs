@@ -30,6 +30,12 @@ pub(crate) enum PointerMode {
     DraggingSelection,
 }
 
+impl PointerMode {
+    pub fn is_idle(&self) -> bool {
+        matches!(self, Self::Idle)
+    }
+}
+
 impl Default for PointerMode {
     fn default() -> Self {
         Self::Idle

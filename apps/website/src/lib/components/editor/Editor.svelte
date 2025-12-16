@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { getThemeContext } from '@typie/ui/context';
+  import { handleDragScroll } from '@typie/ui/utils';
   import { untrack } from 'svelte';
   import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from '$lib/editor/constants';
   import { setEditor } from '$lib/editor/context';
@@ -102,6 +103,10 @@
 
   const pageGap = $derived(layoutMode.type === 'paginated' ? PAGE_GAP : 0);
   const continuousPageMargin = $derived(layoutMode.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
+
+  $effect(() => {
+    return handleDragScroll(scrollContainerEl, !editor.isPointerModeIdle);
+  });
 </script>
 
 <div class={flex({ direction: 'column', height: 'full', width: 'full' })}>

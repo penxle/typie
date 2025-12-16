@@ -50,6 +50,7 @@ struct PendingUpdates {
     drop_indicator: Option<DropIndicator>,
     enabled_actions: bool,
     exited_document_start: bool,
+    pointer_mode_changed: bool,
 }
 
 #[derive(Clone)]
@@ -123,6 +124,7 @@ impl Runtime {
                 drop_indicator: None,
                 enabled_actions: true,
                 exited_document_start: false,
+                pointer_mode_changed: true,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -631,6 +633,13 @@ impl Runtime {
         if self.pending.exited_document_start {
             cmds.push(Cmd::ExitedDocumentStart);
             self.pending.exited_document_start = false;
+        }
+
+        if self.pending.pointer_mode_changed {
+            cmds.push(Cmd::PointerModeChanged {
+                is_idle: self.pointer.mode.is_idle(),
+            });
+            self.pending.pointer_mode_changed = false;
         }
 
         cmds

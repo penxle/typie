@@ -21,6 +21,7 @@
 
   function scrollIntoView() {
     if (!element) return;
+    if (!editor.isPointerModeIdle) return;
 
     const scroller = findScroller(element);
     const scrollerRect = scroller.getBoundingClientRect();
