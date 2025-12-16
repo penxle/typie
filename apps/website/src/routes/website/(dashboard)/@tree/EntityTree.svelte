@@ -325,10 +325,10 @@
         const entityType = dragging.element.dataset.type;
         const entitySlug = dragging.element.dataset.slug;
 
-        if (entitySlug && entityType && ['post', 'canvas'].includes(entityType)) {
+        if (entitySlug && entityType && ['post', 'canvas', 'document'].includes(entityType)) {
           dragDropContext.startDrag({
             slug: entitySlug,
-            type: entityType as 'post' | 'canvas',
+            type: entityType as 'post' | 'canvas' | 'document',
           });
         }
       }
