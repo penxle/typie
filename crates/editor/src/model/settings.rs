@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use tsify::Tsify;
 
-pub const CONTINUOUS_PAGE_MARGIN: f32 = 24.0;
+pub const CONTINUOUS_PAGE_MARGIN: f32 = 20.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Codec, Tsify)]
 #[serde(rename_all = "camelCase", tag = "type")]
