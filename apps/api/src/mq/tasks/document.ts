@@ -19,6 +19,7 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
   }
 
   let updates: string[] = [];
+  let parsedUpdates: { userId: string; data: string; retryCount?: number }[] = [];
   let updated = false;
 
   try {
@@ -40,10 +41,9 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
       .where(eq(Documents.id, documentId))
       .then(firstOrThrow);
 
-    const pendingUpdates = R.groupBy(
-      updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
-      ({ userId }) => userId,
-    );
+    parsedUpdates = updates.map((update) => JSON.parse(update) as { userId: string; data: string; retryCount?: number });
+
+    const pendingUpdates = R.groupBy(parsedUpdates, ({ userId }) => userId);
 
     const doc = new LoroDoc();
     doc.import(document.snapshot);
@@ -129,8 +129,14 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
   } catch (err) {
     Sentry.captureException(err);
 
-    if (updates.length > 0) {
-      await redis.rpush(`document:sync:updates:${documentId}`, ...updates.toReversed());
+    if (parsedUpdates.length > 0) {
+      const retriableUpdates = parsedUpdates
+        .filter((update) => (update.retryCount ?? 0) < 10)
+        .map((update) => JSON.stringify({ ...update, retryCount: (update.retryCount ?? 0) + 1 }));
+
+      if (retriableUpdates.length > 0) {
+        await redis.rpush(`document:sync:updates:${documentId}`, ...retriableUpdates.toReversed());
+      }
     }
   } finally {
     await lock.release();

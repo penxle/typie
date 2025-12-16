@@ -82,6 +82,7 @@ rabbitmq
 remeda
 resizer
 resvg
+retriable
 ridi
 rlib
 roughjs
