@@ -49,6 +49,7 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
   }
 
   let updates: string[] = [];
+  let parsedUpdates: { userId: string; data: string; retryCount?: number }[] = [];
   let updated = false;
 
   try {
@@ -70,10 +71,9 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
       .where(eq(Posts.id, postId))
       .then(firstOrThrow);
 
-    const pendingUpdates = R.groupBy(
-      updates.map((update) => JSON.parse(update) as { userId: string; data: string }),
-      ({ userId }) => userId,
-    );
+    parsedUpdates = updates.map((update) => JSON.parse(update) as { userId: string; data: string; retryCount?: number });
+
+    const pendingUpdates = R.groupBy(parsedUpdates, ({ userId }) => userId);
 
     const doc = new Y.Doc({ gc: false });
     Y.applyUpdateV2(doc, post.update);
@@ -240,8 +240,14 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
   } catch (err) {
     Sentry.captureException(err);
 
-    if (updates.length > 0) {
-      await redis.rpush(`post:sync:updates:${postId}`, ...updates.toReversed());
+    if (parsedUpdates.length > 0) {
+      const retriableUpdates = parsedUpdates
+        .filter((update) => (update.retryCount ?? 0) < 10)
+        .map((update) => JSON.stringify({ ...update, retryCount: (update.retryCount ?? 0) + 1 }));
+
+      if (retriableUpdates.length > 0) {
+        await redis.rpush(`post:sync:updates:${postId}`, ...retriableUpdates.toReversed());
+      }
     }
   } finally {
     await lock.release();
