@@ -5,8 +5,8 @@
   import { getActionFromKeyEvent } from '$lib/editor/keyboard';
 
   type Props = {
-    onFocus?: () => void;
-    onBlur?: () => void;
+    onFocus?: (e: FocusEvent) => void;
+    onBlur?: (e: FocusEvent) => void;
   };
 
   let { onFocus, onBlur }: Props = $props();
