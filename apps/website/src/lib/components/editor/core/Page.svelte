@@ -55,6 +55,7 @@
         ringWidth: '1px',
         ringColor: 'black/5',
       }),
+      isolation: 'isolate',
     })}
     {@attach (node) => {
       const observer = new IntersectionObserver(
