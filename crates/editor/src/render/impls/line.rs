@@ -345,7 +345,8 @@ impl LineElement {
                     let ruby_metrics = ruby_line.metrics();
                     let ruby_width = ruby_metrics.advance;
 
-                    let ruby_x_offset = base_x + (base_width - ruby_width) / 2.0;
+                    let ruby_x_offset = (base_x + (base_width - ruby_width) / 2.0)
+                        .clamp(0.0, (self.size.width - ruby_width).max(0.0));
 
                     let line_baseline = run_y + line_metrics.ascent;
                     let ruby_height = ruby_metrics.ascent + ruby_metrics.descent;
