@@ -6,6 +6,7 @@
   import ContextMenu from './ContextMenu.svelte';
   import Cursor from './Cursor.svelte';
   import Input from './Input.svelte';
+  import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
 
   type Props = {
@@ -135,6 +136,7 @@
   {/each}
 </div>
 
+<LineHighlight />
 <Cursor />
 <Input
   bind:this={inputComponent}
