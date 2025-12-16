@@ -66,7 +66,7 @@
 
   $effect(() => {
     if (!opened && document.activeElement !== inputElement) {
-      inputValue = String(currentFontSize ?? defaultFontSize);
+      inputValue = currentFontSize === undefined ? '' : String(currentFontSize);
     }
   });
 
@@ -81,11 +81,13 @@
   const handleFocus = () => {
     isFocused = true;
     open();
-    inputValue = String(currentFontSize ?? defaultFontSize);
+    inputValue = currentFontSize === undefined ? '' : String(currentFontSize);
     inputElement?.select();
   };
 
   const applyFontSize = (shouldFocus = false) => {
+    if (!inputValue) return;
+
     const parsed = Number.parseFloat(inputValue);
     if (!Number.isNaN(parsed) && parsed !== currentFontSize) {
       const clamped = clamp(parsed, MIN_FONT_SIZE, MAX_FONT_SIZE);
@@ -198,7 +200,7 @@
       onblur={handleBlur}
       onfocus={handleFocus}
       onkeydown={handleKeydown}
-      placeholder={String(currentFontSize ?? defaultFontSize)}
+      placeholder={currentFontSize === undefined ? '-' : String(currentFontSize)}
       type="text"
       bind:value={inputValue}
     />

@@ -80,7 +80,8 @@
   onchange={(weight) => {
     editor.dispatch({ type: 'setFontWeight', weight });
   }}
-  value={currentWeight ?? defaultFontWeight}
+  placeholder="-"
+  value={currentWeight}
 >
   {#snippet renderItem(item)}
     <div style:font-family={currentFontFamilyAndWeights.family} style:font-weight={item.value}>
