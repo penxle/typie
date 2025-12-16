@@ -51,11 +51,17 @@
     }
 
     // tabindex가 있으면 draggable이어도 drag보다 포커스 이동이 우선됨
-    extensionAreaEl?.removeAttribute('tabindex');
+    if (editor.isDraggable) {
+      extensionAreaEl?.removeAttribute('tabindex');
+    }
+
     editor.handlePointerDown(e);
-    setTimeout(() => {
-      extensionAreaEl?.setAttribute('tabindex', '0');
-    }, 0);
+
+    if (editor.isDraggable) {
+      setTimeout(() => {
+        extensionAreaEl?.setAttribute('tabindex', '0');
+      }, 0);
+    }
   };
 
   const handlePointerMove = (e: PointerEvent) => {
@@ -126,6 +132,16 @@
   ondragstart={handleDragStart}
   ondrop={handleDrop}
   onfocus={focusInput}
+  onfocusin={() => {
+    // 클릭 중 input에서 포커스가 벗어나도 커서가 표시될 수 있도록 함
+    editor.isFocused = true;
+  }}
+  onfocusout={(e) => {
+    if (editor.inputElement?.contains(e.relatedTarget as Node) || e.relatedTarget === editor.inputElement) {
+      return;
+    }
+    editor.isFocused = false;
+  }}
   onkeydown={focusInput}
   role="textbox"
   tabindex="0"
@@ -140,7 +156,10 @@
 <Cursor />
 <Input
   bind:this={inputComponent}
-  onBlur={() => {
+  onBlur={(e) => {
+    if (extensionAreaEl?.contains(e.relatedTarget as Node) || e.relatedTarget === extensionAreaEl) {
+      return;
+    }
     editor.isFocused = false;
   }}
   onFocus={() => {
