@@ -76,6 +76,12 @@
   });
 
   $effect(() => {
+    if (initialized) {
+      editor.dispatch({ type: 'setTheme', theme: getEditorTheme(theme.effective) });
+    }
+  });
+
+  $effect(() => {
     const handleResize = () => {
       scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale || 1);
     };
