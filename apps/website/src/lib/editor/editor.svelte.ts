@@ -597,7 +597,15 @@ export class Editor {
       });
       await navigator.clipboard.write([items]);
     } catch {
-      await navigator.clipboard.writeText(text);
+      try {
+        const items = new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+        });
+        await navigator.clipboard.write([items]);
+      } catch {
+        await navigator.clipboard.writeText(text);
+      }
     }
   }
 
