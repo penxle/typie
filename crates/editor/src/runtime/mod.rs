@@ -565,7 +565,7 @@ impl Runtime {
             let selection = self.selection();
             let ctx = NavigationContext::new(&self.state.doc);
             let (page_idx, bounds, show) = Cursor::bounds(&ctx, &self.pages, selection.head)
-                .map(|(idx, rect)| (Some(idx), Some(rect), true))
+                .map(|(idx, rect)| (Some(idx), Some(rect), selection.is_collapsed()))
                 .unwrap_or((None, None, false));
 
             cmds.push(Cmd::CursorChanged {
