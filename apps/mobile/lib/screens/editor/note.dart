@@ -40,11 +40,11 @@ class Note extends HookWidget {
     final data = useValueListenable(scope.data);
     final entityId = data?.post.entity.id;
 
+    final refreshNotifier = useMemoized(RefreshNotifier.new, []);
+
     if (entityId == null) {
       return const AppErrorWidget();
     }
-
-    final refreshNotifier = useMemoized(RefreshNotifier.new, []);
 
     return GraphQLOperation(
       operation: GPostRelatedNotesScreen_QueryReq((b) => b..vars.entityId = entityId),
