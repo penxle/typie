@@ -1,109 +1,93 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
+  import { HorizontalDivider, Menu, MenuItem } from '@typie/ui/components';
+  import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
+  import CopyIcon from '~icons/lucide/copy';
+  import ScissorsIcon from '~icons/lucide/scissors';
+  import SquareDashedIcon from '~icons/lucide/square-dashed';
+  import { IS_MAC } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
 
   const editor = getEditor();
 
-  let overlayEl = $state<HTMLDivElement>();
+  let open = $state(false);
 
-  const handleOverlayContextMenu = (e: MouseEvent) => {
-    if (!overlayEl) return;
-    editor.handleOverlayContextMenu(e, overlayEl);
-  };
+  $effect(() => {
+    open = editor.contextMenu.isOpen;
+  });
+
+  const contextMenuPosition = $derived(editor.contextMenu.isOpen ? { x: editor.contextMenu.x, y: editor.contextMenu.y } : null);
+
+  const modKey = IS_MAC ? '⌘' : 'Ctrl+';
+  const modKeyStyle = IS_MAC ? css.raw({ fontSize: '14px' }) : undefined;
+  const shortcutStyle = flex.raw({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '12px' });
 </script>
 
-{#if editor.contextMenu.isOpen}
-  <div
-    bind:this={overlayEl}
-    class={css({ position: 'fixed', inset: '0', zIndex: '50' })}
-    onclick={() => editor.closeContextMenu()}
-    oncontextmenu={handleOverlayContextMenu}
-    role="presentation"
-  >
-    <div
-      style="left: {editor.contextMenu.x}px; top: {editor.contextMenu.y}px;"
-      class={css({
-        position: 'absolute',
-        borderRadius: '6px',
-        borderWidth: '1px',
-        borderColor: 'border.default',
-        backgroundColor: 'surface.default',
-        paddingY: '2px',
-        boxShadow: 'small',
-      })}
-      oncontextmenu={(e) => e.stopPropagation()}
-      role="menu"
-      tabindex="-1"
+<Menu
+  {contextMenuPosition}
+  onclose={() => {
+    editor.closeContextMenu();
+    editor.focus();
+  }}
+  placement="bottom-start"
+  bind:open
+>
+  {#snippet children({ close })}
+    <MenuItem
+      disabled={editor.selection.collapsed}
+      icon={CopyIcon}
+      onclick={() => {
+        editor.handleCopy();
+        close();
+      }}
     >
-      <button
-        class={css({
-          width: 'full',
-          paddingX: '12px',
-          paddingY: '6px',
-          textAlign: 'left',
-          fontSize: '12px',
-          color: 'text.subtle',
-          transition: 'colors',
-          cursor: 'pointer',
-          _hover: { backgroundColor: 'interactive.hover' },
-        })}
-        onclick={() => editor.handleCopy()}
-        type="button"
-      >
-        복사
-      </button>
-      <button
-        class={css({
-          width: 'full',
-          paddingX: '12px',
-          paddingY: '6px',
-          textAlign: 'left',
-          fontSize: '12px',
-          color: 'text.subtle',
-          transition: 'colors',
-          cursor: 'pointer',
-          _hover: { backgroundColor: 'interactive.hover' },
-        })}
-        onclick={() => editor.handleCut()}
-        type="button"
-      >
-        잘라내기
-      </button>
-      <button
-        class={css({
-          width: 'full',
-          paddingX: '12px',
-          paddingY: '6px',
-          textAlign: 'left',
-          fontSize: '12px',
-          color: 'text.subtle',
-          transition: 'colors',
-          cursor: 'pointer',
-          _hover: { backgroundColor: 'interactive.hover' },
-        })}
-        onclick={() => editor.handlePaste()}
-        type="button"
-      >
-        붙여넣기
-      </button>
-      <div class={css({ marginY: '2px', height: '1px', backgroundColor: 'border.default' })}></div>
-      <button
-        class={css({
-          width: 'full',
-          paddingX: '12px',
-          paddingY: '6px',
-          textAlign: 'left',
-          fontSize: '12px',
-          color: 'text.subtle',
-          transition: 'colors',
-          cursor: 'pointer',
-          _hover: { backgroundColor: 'interactive.hover' },
-        })}
-        onclick={() => editor.handleSelectAll()}
-        type="button"
-      >
-        전체 선택
-      </button>
-    </div>
-  </div>
-{/if}
+      {#snippet suffix()}<span class={css(shortcutStyle)}>
+          <span class={css(modKeyStyle)}>{modKey}</span>
+          C
+        </span>{/snippet}
+      복사
+    </MenuItem>
+    <MenuItem
+      disabled={editor.selection.collapsed}
+      icon={ScissorsIcon}
+      onclick={() => {
+        editor.handleCut();
+        close();
+      }}
+    >
+      {#snippet suffix()}<span class={css(shortcutStyle)}>
+          <span class={css(modKeyStyle)}>{modKey}</span>
+          X
+        </span>{/snippet}
+      잘라내기
+    </MenuItem>
+    <MenuItem
+      icon={ClipboardPasteIcon}
+      onclick={() => {
+        editor.handlePaste();
+        close();
+      }}
+    >
+      {#snippet suffix()}<span class={css(shortcutStyle)}>
+          <span class={css(modKeyStyle)}>{modKey}</span>
+          V
+        </span>{/snippet}
+      붙여넣기
+    </MenuItem>
+    <HorizontalDivider color="secondary" />
+    <MenuItem
+      icon={SquareDashedIcon}
+      onclick={() => {
+        editor.handleSelectAll();
+        close();
+      }}
+    >
+      {#snippet suffix()}<span class={css(shortcutStyle)}>
+          <span class={css(modKeyStyle)}>{modKey}</span>
+          A
+        </span>{/snippet}
+      전체 선택
+    </MenuItem>
+  {/snippet}
+</Menu>

@@ -63,6 +63,7 @@ export class Editor {
       uniformAlign: undefined,
       uniformLineHeight: undefined,
     } as SelectionStats,
+    collapsed: true,
   });
 
   activeMarks = $state({
@@ -225,6 +226,7 @@ export class Editor {
 
         case 'selectionChanged': {
           this.selection.stats = cmd.stats;
+          this.selection.collapsed = cmd.collapsed;
           break;
         }
 

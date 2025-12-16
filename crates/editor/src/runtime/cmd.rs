@@ -60,6 +60,7 @@ pub enum Cmd {
     #[serde(rename_all = "camelCase")]
     SelectionChanged {
         stats: SelectionStats,
+        collapsed: bool,
     },
 
     #[serde(rename_all = "camelCase")]
