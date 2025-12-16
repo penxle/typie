@@ -10,7 +10,6 @@
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import FileIcon from '~icons/lucide/file';
-  import FileTextIcon from '~icons/lucide/file-text';
   import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GlobeIcon from '~icons/lucide/globe';
@@ -73,19 +72,6 @@
   const createPost = graphql(`
     mutation FolderMenu_CreatePost_Mutation($input: CreatePostInput!) {
       createPost(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
-  const createDocument = graphql(`
-    mutation FolderMenu_CreateDocument_Mutation($input: CreateDocumentInput!) {
-      createDocument(input: $input) {
         id
 
         entity {
@@ -169,33 +155,26 @@
 <MenuItem
   icon={SquarePenIcon}
   onclick={async () => {
-    const resp = await createPost({
-      siteId: entity.site.id,
-      parentEntityId: entity.id,
-    });
+    if (app.preference.current.experimental_v2EditorEnabled) {
+      app.state.editorSelectContext = {
+        siteId: entity.site.id,
+        parentEntityId: entity.id,
+        via,
+        onComplete: open,
+      };
+    } else {
+      const resp = await createPost({
+        siteId: entity.site.id,
+        parentEntityId: entity.id,
+      });
 
-    mixpanel.track('create_child_post', { via });
-    open();
-    await goto(`/${resp.entity.slug}`);
+      mixpanel.track('create_child_post', { via });
+      open();
+      await goto(`/${resp.entity.slug}`);
+    }
   }}
 >
   하위 포스트 생성
-</MenuItem>
-
-<MenuItem
-  icon={FileTextIcon}
-  onclick={async () => {
-    const resp = await createDocument({
-      siteId: entity.site.id,
-      parentEntityId: entity.id,
-    });
-
-    mixpanel.track('create_child_document', { via });
-    open();
-    await goto(`/${resp.entity.slug}`);
-  }}
->
-  하위 문서 생성
 </MenuItem>
 
 {#if entity.depth < maxDepth - 1}

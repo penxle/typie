@@ -6,9 +6,14 @@
   type Props = {
     open: boolean;
     onselect?: (editor: 'v1' | 'v2') => void;
+    onOpenChange?: (open: boolean) => void;
   };
 
-  let { open = $bindable(), onselect }: Props = $props();
+  let { open = $bindable(), onselect, onOpenChange }: Props = $props();
+
+  $effect(() => {
+    onOpenChange?.(open);
+  });
 </script>
 
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>

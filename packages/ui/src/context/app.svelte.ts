@@ -66,6 +66,13 @@ type AppState = {
   newFolderId?: string;
 
   openMenuCount: number;
+
+  editorSelectContext: {
+    siteId: string;
+    parentEntityId?: string;
+    via: string;
+    onComplete?: () => void;
+  } | null;
 };
 
 type AppTimerState = {
@@ -104,6 +111,8 @@ export const setupAppContext = (userId: string) => {
     },
 
     openMenuCount: 0,
+
+    editorSelectContext: null,
   });
 
   const context: AppContext = {
