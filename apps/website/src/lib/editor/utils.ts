@@ -1,15 +1,21 @@
-export const getPageIndex = (element: HTMLElement): number => {
+export const getPageElement = (element: HTMLElement): HTMLElement | null => {
   let currentElement = element;
   while (true) {
     if (currentElement.dataset.pageIndex) {
-      return Number.parseInt(currentElement.dataset.pageIndex);
+      return currentElement;
     }
     if (!currentElement.parentElement || !(currentElement.parentElement instanceof HTMLElement)) {
       break;
     }
     currentElement = currentElement.parentElement;
   }
-  return -1;
+  return null;
+};
+
+export const getPageIndex = (element: HTMLElement): number => {
+  const pageElement = getPageElement(element);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  return pageElement ? Number.parseInt(pageElement.dataset.pageIndex!) : -1;
 };
 
 export const calculateRelativePosition = (element: HTMLElement, e: MouseEvent | PointerEvent) => {
