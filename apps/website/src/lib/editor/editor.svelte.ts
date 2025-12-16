@@ -102,6 +102,10 @@ export class Editor {
 
   isFocused = $state(false);
 
+  typewriter = $state({
+    needsScroll: false,
+  });
+
   pageVisibility = new SvelteMap<number, number>();
 
   extensionArea = $state({
@@ -187,6 +191,7 @@ export class Editor {
       switch (cmd.type) {
         case 'docChanged': {
           this.#onDocChanged?.();
+          this.typewriter.needsScroll = true;
           break;
         }
 

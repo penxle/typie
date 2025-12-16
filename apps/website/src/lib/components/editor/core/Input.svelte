@@ -106,6 +106,7 @@
   const handleCompositionUpdate = (e: CompositionEvent) => {
     const text = e.data || '';
     editor.dispatch({ type: 'compositionUpdate', text });
+    editor.typewriter.needsScroll = true;
   };
 
   const handleCompositionEnd = (e: CompositionEvent) => {

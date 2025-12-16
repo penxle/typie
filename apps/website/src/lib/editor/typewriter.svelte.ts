@@ -71,6 +71,44 @@ export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
     updatePadding();
   });
 
+  $effect(() => {
+    if (!app.preference.current.typewriterEnabled || app.preference.current.typewriterPosition === undefined) {
+      return;
+    }
+
+    if (!editor.typewriter.needsScroll) {
+      return;
+    }
+
+    const bounds = editor.cursor.bounds;
+    if (!bounds) {
+      return;
+    }
+
+    const pageIdx = editor.cursor.pageIdx;
+    const containerEl = editor.pageContainerEls[pageIdx];
+    if (!containerEl) {
+      return;
+    }
+
+    editor.typewriter.needsScroll = false;
+
+    const containerRect = containerEl.getBoundingClientRect();
+    const cursorTop = containerRect.top + bounds.y;
+    const cursorHeight = bounds.height;
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const position = app.preference.current.typewriterPosition;
+
+    const availableRange = scrollerRect.height - cursorHeight;
+    const targetY = scrollerRect.top + availableRange * position;
+    const delta = cursorTop - targetY;
+
+    if (Math.abs(delta) > 1) {
+      scroller.scrollBy({ top: delta, behavior: 'instant' });
+    }
+  });
+
   return {
     update(newDefaultPadding: number) {
       defaultPadding = newDefaultPadding;
