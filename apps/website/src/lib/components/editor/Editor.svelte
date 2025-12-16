@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { center, flex, grid } from '@typie/styled-system/patterns';
+  import { flex, grid } from '@typie/styled-system/patterns';
   import { getThemeContext } from '@typie/ui/context';
   import { untrack } from 'svelte';
   import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from '$lib/editor/constants';
@@ -9,7 +9,6 @@
   import { getEditorTheme } from '$lib/editor/theme';
   import View from './core/View.svelte';
   import HorizontalRuler from './ui/HorizontalRuler.svelte';
-  import Loading from './ui/Loading.svelte';
   import Scrollbar from './ui/Scrollbar.svelte';
   import VerticalRuler from './ui/VerticalRuler.svelte';
   import type { Snippet } from 'svelte';
@@ -106,11 +105,7 @@
 </script>
 
 <div class={flex({ direction: 'column', height: 'full', width: 'full' })}>
-  {#if !initialized}
-    <div class={center({ height: 'full', width: 'full', backgroundColor: 'surface.muted' })}>
-      <Loading />
-    </div>
-  {:else}
+  {#if initialized}
     <div
       style:grid-template-columns={layoutMode.type === 'paginated' ? `${rulerThickness}px 1fr` : '1fr'}
       style:grid-template-rows={layoutMode.type === 'paginated' ? `${rulerThickness}px 1fr` : '1fr'}
