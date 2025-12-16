@@ -6,6 +6,20 @@ use crate::state::position_helpers::compare_positions;
 use crate::state::{Position, Selection};
 
 impl Runtime {
+    pub(crate) fn set_pointer_mode(&mut self, mode: PointerMode) {
+        if self.pointer.mode != mode {
+            self.pointer.mode = mode;
+            self.pending.pointer_mode_changed = true;
+        }
+    }
+
+    pub(crate) fn reset_pointer(&mut self) {
+        if !self.pointer.mode.is_idle() {
+            self.pending.pointer_mode_changed = true;
+        }
+        self.pointer.reset();
+    }
+
     pub(crate) fn handle_pointer_down(
         &mut self,
         page_idx: usize,
@@ -21,13 +35,13 @@ impl Runtime {
 
         if button.is_primary() && !modifier.shift {
             if let Some(kind) = page.find_interactive_at(x, y) {
-                self.pointer.mode = PointerMode::Pressed {
+                self.set_pointer_mode(PointerMode::Pressed {
                     page_idx,
                     start_x: x,
                     start_y: y,
                     document_position: self.state.selection.head,
                     context: PressContext::Interactive(kind),
-                };
+                });
                 return vec![];
             }
         }
@@ -56,7 +70,7 @@ impl Runtime {
 
     fn handle_shift_click(&mut self, position: Position) -> Vec<Effect> {
         let anchor = self.state.selection.anchor;
-        self.pointer.mode = PointerMode::DraggingSelection;
+        self.set_pointer_mode(PointerMode::DraggingSelection);
 
         self.transact(move |tr| {
             tr.set_selection(Selection::new(anchor, position));
@@ -70,7 +84,7 @@ impl Runtime {
             return None;
         }
 
-        self.pointer.mode = PointerMode::Idle;
+        self.set_pointer_mode(PointerMode::Idle);
 
         let effects = match click_count {
             2 => self.transact(move |tr| {
@@ -105,13 +119,13 @@ impl Runtime {
             _ => false,
         };
 
-        self.pointer.mode = PointerMode::Pressed {
+        self.set_pointer_mode(PointerMode::Pressed {
             page_idx,
             start_x: x,
             start_y: y,
             document_position: position,
             context,
-        };
+        });
 
         if is_in_selection {
             vec![]
@@ -206,7 +220,7 @@ impl Runtime {
         effects.push(Effect::PointerStyleChanged { style });
 
         if buttons == 0 {
-            self.pointer.reset();
+            self.reset_pointer();
             return effects;
         }
 
@@ -222,7 +236,7 @@ impl Runtime {
                 let dy = y - *start_y;
                 if (dx * dx + dy * dy).sqrt() >= DRAG_THRESHOLD {
                     if !context.can_drag_content() {
-                        self.pointer.mode = PointerMode::DraggingSelection;
+                        self.set_pointer_mode(PointerMode::DraggingSelection);
                         effects.extend(self.handle_selection_drag(page_idx, x, y));
                     }
                 }
@@ -300,7 +314,7 @@ impl Runtime {
                     if let Some(page) = self.pages.get(*start_page_idx) {
                         if page.find_interactive_at(*start_x, *start_y).as_ref() == Some(kind) {
                             effects.extend(self.handle_interaction(kind.clone()));
-                            self.pointer.reset();
+                            self.reset_pointer();
                             return effects;
                         }
                     }
@@ -330,7 +344,7 @@ impl Runtime {
             PointerMode::Idle => {}
         }
 
-        self.pointer.reset();
+        self.reset_pointer();
         effects
     }
 }

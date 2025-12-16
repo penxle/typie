@@ -83,4 +83,8 @@ pub enum Cmd {
     },
 
     ExitedDocumentStart,
+
+    PointerModeChanged {
+        is_idle: bool,
+    },
 }
