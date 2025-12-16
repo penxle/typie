@@ -71,7 +71,8 @@
     editor.dispatch({ type: 'setFontFamily', family: fontFamilyValue });
     editor.dispatch({ type: 'setFontWeight', weight: defaultWeight });
   }}
-  value={currentFontFamilyValue ?? defaultFontFamily}
+  placeholder="-"
+  value={currentFontFamilyValue}
 >
   {#snippet renderItem(item)}
     <div style:font-family={item.value}>{item.label}</div>

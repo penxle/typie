@@ -12,10 +12,11 @@
   import type { Snippet } from 'svelte';
 
   type Props = {
-    value: T;
+    value: T | undefined;
     items: { value: T; label: string }[];
     style?: SystemStyleObject;
     label: string;
+    placeholder?: string;
     disabled?: boolean;
     onchange: (value: T, options?: { shouldFocus?: boolean }) => void;
     onEscape?: () => void;
@@ -24,7 +25,19 @@
     extraItems?: { onclick: () => void; content: Snippet }[];
   };
 
-  let { value, items, style, label, disabled = false, onchange, onEscape, getLabel, renderItem, extraItems = [] }: Props = $props();
+  let {
+    value,
+    items,
+    style,
+    label,
+    placeholder,
+    disabled = false,
+    onchange,
+    onEscape,
+    getLabel,
+    renderItem,
+    extraItems = [],
+  }: Props = $props();
 
   let anchorElement: HTMLDivElement | undefined = $state();
   let floatingElement: HTMLDivElement | undefined = $state();
@@ -47,12 +60,17 @@
   let isFocused = $state(false);
 
   const currentLabel = $derived.by(() => {
+    if (value === undefined) {
+      return '';
+    }
     if (getLabel) {
       return getLabel(value);
     }
     const item = items.find((i) => i.value === value);
     return item?.label ?? '';
   });
+
+  const currentPlaceholder = $derived(value === undefined ? (placeholder ?? '') : currentLabel);
 
   $effect(() => {
     if (!isFocused && !opened) {
@@ -102,7 +120,7 @@
 
       // NOTE: 현재 선택된 항목이 필터링된 목록에 있으면 에디터로 포커스, 없으면 첫 번째 항목 선택
       const currentItemInFiltered = filteredItems.find((item) => item.value === value);
-      if (currentItemInFiltered) {
+      if (value && currentItemInFiltered) {
         onchange(value, { shouldFocus: true });
       } else {
         const firstItem = filteredItems[0];
@@ -193,7 +211,7 @@
     onblur={handleBlur}
     onfocus={handleFocus}
     onkeydown={handleKeydown}
-    placeholder={currentLabel}
+    placeholder={currentPlaceholder}
     type="text"
     bind:value={inputValue}
   />
