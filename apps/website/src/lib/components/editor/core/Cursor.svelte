@@ -64,7 +64,7 @@
     if (editor.isFocused && bounds && containerEls[pageIdx]) {
       containerEls[pageIdx].append(element);
 
-      element.style.display = show ? 'block' : 'none';
+      element.style.visibility = show ? 'visible' : 'hidden';
       element.style.left = `${bounds.x}px`;
       element.style.top = `${bounds.y}px`;
       element.style.height = `${bounds.height}px`;
@@ -82,7 +82,7 @@
 
       scrollIntoView();
     } else {
-      element.style.display = 'none';
+      element.style.visibility = 'hidden';
       prevCursorPos = null;
     }
   });
@@ -90,12 +90,10 @@
 
 <div
   bind:this={element}
-  style="display: none;"
   class={css({
     pointerEvents: 'none',
     backgroundColor: 'text.default',
     position: 'absolute',
-    display: 'none',
     width: '1px',
     animation: 'blink 1s step-end infinite',
   })}
