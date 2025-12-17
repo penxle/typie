@@ -84,6 +84,7 @@ export class Editor {
     pageIdx: -1,
     bounds: null as Rect | null,
     show: false,
+    scrollToCursor: false,
   });
 
   inputElement = $state<HTMLInputElement | null>(null);
@@ -216,10 +217,12 @@ export class Editor {
             this.cursor.pageIdx = cmd.pageIdx;
             this.cursor.bounds = cmd.bounds;
             this.cursor.show = cmd.show;
+            this.cursor.scrollToCursor = cmd.scrollToCursor;
           } else {
             this.cursor.pageIdx = -1;
             this.cursor.bounds = null;
             this.cursor.show = false;
+            this.cursor.scrollToCursor = false;
           }
           break;
         }

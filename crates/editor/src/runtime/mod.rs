@@ -40,6 +40,7 @@ struct PendingUpdates {
     selection: bool,
     active_marks: bool,
     cursor: bool,
+    scroll_to_cursor: bool,
     settings: bool,
     layout: bool,
     external_elements: bool,
@@ -112,6 +113,7 @@ impl Runtime {
             pending: PendingUpdates {
                 doc: true,
                 cursor: true,
+                scroll_to_cursor: true,
                 selection: true,
                 active_marks: true,
                 settings: true,
@@ -574,8 +576,10 @@ impl Runtime {
                 page_idx,
                 bounds,
                 show,
+                scroll_to_cursor: self.pending.scroll_to_cursor,
             });
             self.pending.cursor = false;
+            self.pending.scroll_to_cursor = false;
         }
 
         if self.pending.selection {
@@ -785,6 +789,7 @@ impl Runtime {
                     self.pending.layout = true;
                     self.pending.render = true;
                     self.pending.cursor = true;
+                    self.pending.scroll_to_cursor = true;
                     self.pending.selection = true;
                     self.pending.active_marks = true;
                     self.pending.external_elements = true;
@@ -810,6 +815,7 @@ impl Runtime {
                 Effect::SelectionChanged => {
                     self.selection_cache = None;
                     self.pending.cursor = true;
+                    self.pending.scroll_to_cursor = true;
                     self.pending.selection = true;
                     self.pending.active_marks = true;
                     self.pending.render = true;
