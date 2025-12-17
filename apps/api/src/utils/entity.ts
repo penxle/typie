@@ -98,3 +98,43 @@ export const makeLoroDoc = () => {
 
   return doc;
 };
+
+const extractTextFromLoroDoc = (doc: LoroDoc): string => {
+  const nodes = doc.getMap('nodes').toJSON() as Record<string, { text?: string }>;
+  const texts: string[] = [];
+
+  for (const node of Object.values(nodes)) {
+    if (node.text) {
+      texts.push(node.text);
+    }
+  }
+
+  return texts.join('');
+};
+
+const extractBlobSizeFromLoroDoc = (doc: LoroDoc): number => {
+  const nodes = doc.getMap('nodes').toJSON() as Record<string, unknown>;
+
+  let totalSize = 0;
+  for (const node of Object.values(nodes)) {
+    const typedNode = node as { type?: string; size?: number };
+    if (typedNode.type === 'file' || typedNode.type === 'image') {
+      totalSize += typedNode.size ?? 0;
+    }
+  }
+
+  return totalSize;
+};
+
+export const getLoroDocCharacterCount = (text: string) => {
+  return [...text.replaceAll('\u200B', '').replaceAll(/\s+/g, ' ').trim()].length;
+};
+
+export const extractLoroDocContents = (doc: LoroDoc) => {
+  const json = doc.toJSON();
+  const text = extractTextFromLoroDoc(doc);
+  const characterCount = getLoroDocCharacterCount(text);
+  const blobSize = extractBlobSizeFromLoroDoc(doc);
+
+  return { json, text, characterCount, blobSize };
+};

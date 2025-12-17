@@ -7,7 +7,7 @@ import { DocumentSyncType, EntityAvailability, EntityState, EntityType, NoteStat
 import { NotFoundError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
-import { generateFractionalOrder, generatePermalink, generateSlug, makeLoroDoc } from '@/utils';
+import { extractLoroDocContents, generateFractionalOrder, generatePermalink, generateSlug, makeLoroDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { Document, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
@@ -153,9 +153,14 @@ builder.mutationFields((t) => ({
         const emptyDoc = makeLoroDoc();
         const snapshot = emptyDoc.export({ mode: 'snapshot' });
         const version = emptyDoc.version().encode();
+        const { json, text, characterCount, blobSize } = extractLoroDocContents(emptyDoc);
 
         await tx.insert(DocumentContents).values({
           documentId: document.id,
+          json,
+          text,
+          characterCount,
+          blobSize,
           snapshot,
           version,
         });
