@@ -43,7 +43,7 @@
   $effect(() => {
     if (!element) return;
 
-    const { pageIdx, bounds, show } = editor.cursor;
+    const { pageIdx, bounds, show, scrollToCursor } = editor.cursor;
     const containerEls = editor.pageContainerEls;
     const inputEl = editor.inputElement;
 
@@ -66,7 +66,9 @@
         prevCursorPos = { x: bounds.x, y: bounds.y };
       }
 
-      scrollIntoView();
+      if (scrollToCursor) {
+        scrollIntoView();
+      }
     } else {
       element.style.visibility = 'hidden';
       prevCursorPos = null;
