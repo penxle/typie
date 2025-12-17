@@ -7,6 +7,7 @@ import { redis } from '@/cache';
 import { db, DocumentContents, Documents, DocumentVersionContributors, DocumentVersions, Entities, firstOrThrow } from '@/db';
 import { Lock } from '@/lock';
 import { pubsub } from '@/pubsub';
+import { extractLoroDocContents } from '@/utils';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
 
@@ -83,6 +84,7 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
 
     if (versions.length > 0) {
       const updatedAt = dayjs();
+      const { json, text, characterCount, blobSize } = extractLoroDocContents(doc);
 
       await db.transaction(async (tx) => {
         for (const version of versions) {
@@ -105,6 +107,10 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
         await tx
           .update(DocumentContents)
           .set({
+            json,
+            text,
+            characterCount,
+            blobSize,
             snapshot: finalSnapshot,
             version: finalVersion,
             updatedAt,

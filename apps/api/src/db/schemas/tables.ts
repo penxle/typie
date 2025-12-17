@@ -116,6 +116,10 @@ export const DocumentContents = pgTable('document_contents', {
     .notNull()
     .unique()
     .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  json: jsonb('json').notNull(),
+  text: text('text').notNull(),
+  characterCount: integer('character_count').notNull().default(0),
+  blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),
   snapshot: bytea('snapshot').notNull(),
   version: bytea('version').notNull(),
   compactedAt: datetime('compacted_at')

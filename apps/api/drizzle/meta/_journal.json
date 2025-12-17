@@ -267,6 +267,13 @@
       "when": 1765797780804,
       "tag": "0037_cold_shadowcat",
       "breakpoints": false
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1765949150954,
+      "tag": "0038_past_nitro",
+      "breakpoints": false
     }
   ]
 }
