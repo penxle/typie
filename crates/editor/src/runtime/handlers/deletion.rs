@@ -129,10 +129,11 @@ impl Runtime {
 
         self.transact(move |tr| {
             if is_image {
+                // TODO: delete_node_recursive 에서 처리하는 게 맞나..
                 tr.push_effect(Effect::ExternalElementChanged);
             }
 
-            tr.delete_node_recursive(node_id)?;
+            tr.delete_node_with_selection_adjustment(node_id)?;
 
             Ok(true)
         })
@@ -620,5 +621,40 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_delete_selected_image_adjusts_selection() {
+        use crate::model::NodeId;
+
+        let mut p1 = id!();
+        let mut img = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "before" } }
+                @img image(src: Some("test.png".to_string()), width: Some(100.0), height: Some(100.0),) {}
+                @p2 paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        };
+
+        rt.layout();
+
+        let doc = rt.doc();
+        assert!(doc.node(img).is_some());
+
+        rt.handle_delete_node(img.to_string());
+
+        let doc = rt.doc();
+        assert!(doc.node(img).is_none());
+
+        let selection = rt.selection();
+
+        assert_eq!(selection.anchor.node_id, p2);
+        assert_eq!(selection.anchor.offset, 0);
+        assert!(selection.is_collapsed());
     }
 }

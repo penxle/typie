@@ -550,7 +550,7 @@ mod tests {
             viewport { 800, 600, 1.0 }
             doc {
                 @p1 paragraph { text { "Before" } }
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 @p2 paragraph { text { "After" } }
             }
             selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
@@ -571,7 +571,7 @@ mod tests {
             doc {
                 @p1 paragraph { text { "Before" } }
                 @p2 paragraph { text { "After" } }
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 paragraph { }
             }
             selection { (NodeId::ROOT, 2) -> (NodeId::ROOT, 3, Affinity::Upstream) }
@@ -590,7 +590,7 @@ mod tests {
             viewport { 800, 600, 1.0 }
             doc {
                 @p1 paragraph { text { "Before" } }
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 @p2 paragraph { text { "After" } }
             }
             selection { (p1, 0) }
@@ -627,7 +627,7 @@ mod tests {
         let expected = state! {
             doc {
                 @p1 paragraph { text { "Before" } }
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 @p2 paragraph { text { "After" } }
             }
             selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
@@ -644,7 +644,7 @@ mod tests {
             viewport { 800, 600, 1.0 }
             doc {
                 @p1 paragraph { text { "Hello World" } }
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 paragraph {}
             }
             selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
@@ -660,7 +660,7 @@ mod tests {
         let expected = state! {
             doc {
                 @p1 paragraph { text { "Hello " } }
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 paragraph { text { "World" } }
                 paragraph { }
             }
@@ -679,7 +679,7 @@ mod tests {
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 @p paragraph { text { "Hello" } }
             }
             selection { (NodeId::ROOT, 0) -> (p, 2) }
@@ -695,7 +695,7 @@ mod tests {
         let expected = state! {
             doc {
                 paragraph { text { "llo" } }
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 @p paragraph { text { "He" } }
             }
             selection { (NodeId::ROOT, 1) -> (p, 2) }
@@ -714,7 +714,7 @@ mod tests {
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 @p1 paragraph { text { "Hello" } }
                 @p2 paragraph { text { "Target" } }
             }
@@ -732,7 +732,7 @@ mod tests {
             doc {
                 paragraph { text { "llo" } }
                 @p2 paragraph { text { "Tar" } }
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 @last_p paragraph { text { "Heget" } }
             }
             selection { (NodeId::ROOT, 2) -> (last_p, 2) }
@@ -755,7 +755,7 @@ mod tests {
                 @p1 paragraph { text { "1" } }
                 @p2 paragraph { text { "2" } }
                 @p3 paragraph { text { "3" } }
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 @p4 paragraph { text { "4" } }
             }
             selection { (p3, 0) -> (p4, 1) }
@@ -772,7 +772,7 @@ mod tests {
             doc {
                 @p1 paragraph { text { "1" } }
                 @p3 paragraph { text { "3" } }
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 @p4 paragraph { text { "4" } }
                 @p2 paragraph { text { "2" } }
                 paragraph {}
@@ -794,7 +794,7 @@ mod tests {
             viewport { 800, 600, 1.0 }
             doc {
                 @p1 paragraph { text { "1" } }
-                @img image (src: "test.png".to_string(),) {}
+                @img image (src: Some("test.png".to_string()),) {}
                 @p2 paragraph { text { "2" } }
                 @p3 paragraph { text { "3" } }
                 @p4 paragraph { text { "4" } }
@@ -814,7 +814,7 @@ mod tests {
                 paragraph {}
                 @p3 paragraph { text { "3" } }
                 @p1 paragraph { text { "41" } }
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 @p2 paragraph { text { "2" } }
             }
             selection { (p1, 1) -> (p2, 1) }
@@ -836,7 +836,7 @@ mod tests {
                 @p1 paragraph { text { "1" } }
                 @bq blockquote { paragraph { text { "bq" } } }
                 @p2 paragraph { text { "2" } }
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 @p3 paragraph { text { "3" } }
                 @p4 paragraph { text { "4" } }
             }
@@ -853,7 +853,7 @@ mod tests {
         let expected = state! {
             doc {
                 paragraph {}
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 @p1 paragraph { text { "1" } }
                 @bq blockquote { paragraph { text { "bq" } } }
                 @p2 paragraph { text { "2" } }
@@ -1040,7 +1040,7 @@ mod tests {
             viewport { 800, 600, 1.0 }
             doc {
                 @p paragraph { text { "Hello" } }
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 paragraph { text { "World" } }
             }
             selection { (p, 0) -> (NodeId::ROOT, 2) }
@@ -1058,7 +1058,7 @@ mod tests {
                 paragraph {}
                 paragraph { text { "World" } }
                 @p paragraph { text { "Hello" } }
-                image (src: "test.png".to_string(),) {}
+                image (src: Some("test.png".to_string()),) {}
                 paragraph { }
             }
             selection { (p, 0) -> (NodeId::ROOT, 4) }

@@ -1201,6 +1201,38 @@ impl Transaction {
         Ok(pos)
     }
 
+    pub(crate) fn delete_node_with_selection_adjustment(&mut self, node_id: NodeId) -> Result<()> {
+        let (parent_id, node_index) = if let Some(node) = self.doc().node(node_id) {
+            (node.parent_id(), node.path().last().copied())
+        } else {
+            (None, None)
+        };
+
+        self.delete_node_recursive(node_id)?;
+
+        // TODO: 삭제되는 노드 내부에 selection이 있는 경우 삭제되는 노드 start position으로 selection을 이동시키기
+        if let (Some(parent_id), Some(node_index)) = (parent_id, node_index) {
+            let mut selection = *self.selection();
+            let mut changed = false;
+
+            if selection.anchor.node_id == parent_id && selection.anchor.offset > node_index {
+                selection.anchor.offset = selection.anchor.offset.saturating_sub(1);
+                changed = true;
+            }
+
+            if selection.head.node_id == parent_id && selection.head.offset > node_index {
+                selection.head.offset = selection.head.offset.saturating_sub(1);
+                changed = true;
+            }
+
+            if changed {
+                self.set_selection(selection);
+            }
+        }
+
+        Ok(())
+    }
+
     fn split_node_at_index(&mut self, node_id: NodeId, split_index: usize) -> Result<NodeId> {
         let node = self.node(node_id).context("Node not found")?;
         let parent = node.parent().context("Parent not found")?;
