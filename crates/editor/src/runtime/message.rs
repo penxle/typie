@@ -211,6 +211,15 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_drop(page_idx, x, y, text, html, fragment, modifier) },
 
+    DropImages {
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        upload_ids: Vec<String>,
+    }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_drop_images(page_idx, x, y, upload_ids) },
+
     DragEnd
     => when When::True
     => handle(rt) { rt.handle_drag_end() },

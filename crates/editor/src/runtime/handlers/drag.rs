@@ -3,7 +3,7 @@ use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::Fragment;
 use crate::runtime::PointerMode;
 use crate::runtime::message::Modifier;
-use crate::state::Position;
+use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
 
 impl Runtime {
@@ -167,6 +167,37 @@ impl Runtime {
             return self.handle_drag_end_internal();
         }
 
+        effects.push(Effect::DropTargetChanged { target: None });
+        effects
+    }
+
+    pub(crate) fn handle_drop_images(
+        &mut self,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        upload_ids: Vec<String>,
+    ) -> Vec<Effect> {
+        let Some(drop_position) = self.resolve_drop_position(page_idx, x, y) else {
+            return self.handle_drag_end_internal();
+        };
+
+        self.pointer.drop_target = None;
+        self.set_pointer_mode(PointerMode::Idle);
+
+        let mut effects = self.transact(|tr| {
+            tr.set_selection(Selection::collapsed(drop_position));
+            for upload_id in upload_ids {
+                tr.insert_node(crate::model::Node::Image(crate::model::ImageNode {
+                    src: None,
+                    width: None,
+                    height: None,
+                    proportion: 1.0,
+                    upload_id: Some(upload_id),
+                }))?;
+            }
+            Ok(true)
+        });
         effects.push(Effect::DropTargetChanged { target: None });
         effects
     }
