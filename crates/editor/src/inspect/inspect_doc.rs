@@ -89,10 +89,14 @@ fn format_node_info(node: &NodeRef) -> String {
             info
         }
         Node::Image(image_node) => {
-            let src_display = truncate_str(&image_node.src, 30);
+            let src_display = image_node
+                .src
+                .as_deref()
+                .map(|s| truncate_str(s, 30))
+                .unwrap_or_else(|| "(placeholder)".to_string());
             format!(
-                "Image {} src=\"{}\" width={} height={}",
-                id, src_display, image_node.width, image_node.height
+                "Image {} src=\"{}\" width={:?} height={:?} proportion={}",
+                id, src_display, image_node.width, image_node.height, image_node.proportion
             )
         }
         Node::HardBreak(_) => {

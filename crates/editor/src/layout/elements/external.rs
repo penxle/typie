@@ -11,9 +11,10 @@ use tsify::Tsify;
 pub enum ExternalElementData {
     #[serde(rename_all = "camelCase")]
     Image {
-        src: String,
-        original_width: f32,
-        original_height: f32,
+        src: Option<String>,
+        original_width: Option<f32>,
+        original_height: Option<f32>,
+        proportion: f32,
     },
 }
 

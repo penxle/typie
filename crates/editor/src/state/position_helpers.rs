@@ -243,7 +243,7 @@ mod tests {
     fn test_leaf_block_helpers_atomic_node() {
         let mut img = id!();
         let doc = doc! {
-            @img image(src: "test.png".to_string(), width: 100.0, height: 100.0,) {}
+            @img image(src: Some("test.png".to_string()), width: Some(100.0), height: Some(100.0),) {}
         };
 
         let root_id = NodeId::ROOT;
@@ -341,7 +341,7 @@ mod tests {
 
         let doc = doc! {
             @bq blockquote {
-                @img image(src: "test.png".to_string(), width: 10.0, height: 10.0,) {}
+                @img image(src: Some("test.png".to_string()), width: Some(10.0), height: Some(10.0),) {}
             }
         };
 

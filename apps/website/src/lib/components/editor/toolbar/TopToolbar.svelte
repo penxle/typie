@@ -92,24 +92,7 @@
       icon={ImageIcon}
       label="이미지"
       onclick={() => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.addEventListener('change', (e) => {
-          const file = (e.target as HTMLInputElement).files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.addEventListener('load', (event) => {
-            const dataUrl = event.target?.result as string;
-            const img = new Image();
-            img.addEventListener('load', () =>
-              editor.dispatch({ type: 'insertImage', src: dataUrl, width: img.width, height: img.height }),
-            );
-            img.src = dataUrl;
-          });
-          reader.readAsDataURL(file);
-        });
-        input.click();
+        editor.dispatch({ type: 'insertImage' });
         editor.focus();
       }}
       size={toolbarSize}

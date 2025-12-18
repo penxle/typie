@@ -92,15 +92,6 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn handle_insert_image(
-        &mut self,
-        src: String,
-        width: f32,
-        height: f32,
-    ) -> Vec<Effect> {
-        self.transact(|tr| tr.insert_node(Node::Image(ImageNode { src, width, height })))
-    }
-
     pub(crate) fn handle_insert_horizontal_rule(
         &mut self,
         variant: crate::model::HorizontalRuleVariant,
