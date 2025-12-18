@@ -165,6 +165,8 @@ export const colors = defineTokens.colors({
 });
 
 export const semanticColors = defineSemanticTokens.colors({
+  selection: { value: { base: 'rgba(153, 204, 255, 0.3)' } },
+
   'text.default': { value: { base: '{colors.gray.900}', _dark: '{colors.dark.gray.50}' } },
   'text.subtle': { value: { base: '{colors.gray.700}', _dark: '{colors.dark.gray.100}' } },
   'text.muted': { value: { base: '{colors.gray.600}', _dark: '{colors.dark.gray.200}' } },

@@ -418,4 +418,8 @@ define_messages! {
     InsertFold
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_fold() },
+
+    DeleteNode { node_id: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_delete_node(node_id) },
 }

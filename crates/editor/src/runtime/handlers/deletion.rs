@@ -112,6 +112,31 @@ impl Runtime {
             tr.delete_selection()
         })
     }
+
+    pub(crate) fn handle_delete_node(&mut self, node_id: String) -> Vec<Effect> {
+        use crate::model::{Node, NodeId};
+
+        let Some(node_id) = NodeId::from_string(&node_id) else {
+            return vec![];
+        };
+
+        // TODO: 다른 external 추가되면 수정
+        let is_image = self
+            .doc()
+            .node(node_id)
+            .map(|n| matches!(n.node(), Node::Image(_)))
+            .unwrap_or(false);
+
+        self.transact(move |tr| {
+            if is_image {
+                tr.push_effect(Effect::ExternalElementChanged);
+            }
+
+            tr.delete_node_recursive(node_id)?;
+
+            Ok(true)
+        })
+    }
 }
 
 #[cfg(test)]

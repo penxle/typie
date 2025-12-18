@@ -3,6 +3,7 @@
   import { CROP_MARKER_SIZE } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
   import { WebGLRenderer } from '$lib/editor/webgl';
+  import ExternalImage from './ExternalImage.svelte';
 
   type Props = {
     page: number;
@@ -93,19 +94,7 @@
 
       {#each mediaOnPage as el (el.nodeId)}
         {#if el.data.type === 'image'}
-          <div
-            style:left="{el.bounds.x}px"
-            style:top="{el.bounds.y}px"
-            style:width="{el.bounds.width}px"
-            style:height="{el.bounds.height}px"
-            class={css({ pointerEvents: 'none', position: 'absolute', userSelect: 'none' })}
-            data-node-id={el.nodeId}
-          >
-            <img class={css({ height: 'full', width: 'full' })} alt="" src={el.data.src} />
-            {#if el.isSelected}
-              <div style="background-color: rgba(153, 204, 255, 0.3);" class={css({ position: 'absolute', inset: '0' })}></div>
-            {/if}
-          </div>
+          <ExternalImage {el} />
         {/if}
       {/each}
 
