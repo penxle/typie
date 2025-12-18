@@ -9,7 +9,7 @@ use tiny_skia::{
 };
 
 const GAMMA: f64 = 1.8;
-const ALPHA: f64 = 0.6;
+const ALPHA: f64 = 0.85;
 
 const fn generate_alpha_lut() -> [u8; 256] {
     let mut table = [0u8; 256];
