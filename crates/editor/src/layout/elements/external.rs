@@ -15,6 +15,7 @@ pub enum ExternalElementData {
         original_width: Option<f32>,
         original_height: Option<f32>,
         proportion: f32,
+        upload_id: Option<String>,
     },
 }
 

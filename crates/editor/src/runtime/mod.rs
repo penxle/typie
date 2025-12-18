@@ -683,11 +683,13 @@ impl Runtime {
                         original_width,
                         original_height,
                         proportion,
+                        upload_id,
                     } => crate::layout::elements::ExternalElementData::Image {
                         src: src.clone(),
                         original_width: *original_width,
                         original_height: *original_height,
                         proportion: *proportion,
+                        upload_id: upload_id.clone(),
                     },
                 };
 

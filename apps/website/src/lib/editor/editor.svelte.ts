@@ -122,6 +122,26 @@ export class Editor {
   #lastClickPos: { x: number; y: number } | null = null;
   #clickCount = 0;
 
+  uploadQueue = new SvelteMap<string, File>();
+
+  queueUpload(uploadId: string, file: File): void {
+    this.uploadQueue.set(uploadId, file);
+    setTimeout(() => {
+      if (this.uploadQueue.has(uploadId)) {
+        this.uploadQueue.delete(uploadId);
+        console.warn('Upload timed out for', uploadId);
+      }
+    }, 30_000);
+  }
+
+  popUpload(uploadId: string): File | undefined {
+    const file = this.uploadQueue.get(uploadId);
+    if (file) {
+      this.uploadQueue.delete(uploadId);
+    }
+    return file;
+  }
+
   async initialize(options: EditorOptions): Promise<void> {
     if (this.#wasmEditor) {
       return;

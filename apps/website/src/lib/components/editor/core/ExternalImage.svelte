@@ -4,6 +4,7 @@
   import { createFloatingActions } from '@typie/ui/actions';
   import { Icon, Menu, MenuItem, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
+  import { nanoid } from 'nanoid';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ImageIcon from '~icons/lucide/image';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -23,6 +24,7 @@
   const isEditable = true;
 
   let inflightUrl = $state<string>();
+  let processedUploadId = $state<string>();
 
   const hasImage = $derived(!!el.data.src || !!inflightUrl);
   const isUploading = $derived(!!inflightUrl);
@@ -43,6 +45,25 @@
     }
   });
 
+  $effect(() => {
+    const uploadId = el.data.uploadId;
+    if (uploadId && uploadId !== processedUploadId) {
+      const file = editor.popUpload(uploadId);
+      if (file) {
+        processedUploadId = uploadId;
+        void processFile(file);
+      } else {
+        console.warn('Upload file not found for uploadId:', uploadId);
+      }
+    }
+
+    return () => {
+      if (uploadId) {
+        editor.popUpload(uploadId);
+      }
+    };
+  });
+
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
     offset: 4,
@@ -53,27 +74,61 @@
     editor.focus();
   };
 
-  const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
+  const getImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      const url = URL.createObjectURL(file);
       img.addEventListener('load', () => {
-        URL.revokeObjectURL(url);
         resolve({ width: img.naturalWidth, height: img.naturalHeight });
       });
       img.addEventListener('error', () => {
-        URL.revokeObjectURL(url);
         reject(new Error('Failed to load image'));
       });
-      img.src = url;
+      img.src = src;
     });
+  };
+
+  const processFile = async (file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+
+    try {
+      const { width, height } = await getImageDimensions(objectUrl);
+
+      editor.dispatch({
+        type: 'setImageDimensions',
+        nodeId: el.nodeId,
+        width,
+        height,
+      });
+
+      inflightUrl = objectUrl;
+
+      const uploadedImage = await uploadBlobAsImage(file);
+
+      editor.dispatch({
+        type: 'setImageSrc',
+        nodeId: el.nodeId,
+        src: uploadedImage.url,
+        width,
+        height,
+      });
+      inflightUrl = undefined;
+      editor.focus();
+    } catch (err) {
+      console.error('Image upload failed:', err);
+      Toast.error(`${file.name} 이미지 업로드에 실패했습니다.`);
+      inflightUrl = undefined;
+    } finally {
+      if (!inflightUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
   };
 
   const handleUpload = async () => {
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = 'image/*';
-    picker.multiple = false;
+    picker.multiple = true;
 
     picker.addEventListener('change', async () => {
       pickerOpened = false;
@@ -83,39 +138,22 @@
         return;
       }
 
-      const file = files[0];
-      const objectUrl = URL.createObjectURL(file);
+      const [firstFile, ...restFiles] = [...files];
 
-      try {
-        const { width, height } = await getImageDimensions(file);
+      void processFile(firstFile);
 
-        editor.dispatch({
-          type: 'setImageDimensions',
-          nodeId: el.nodeId,
-          width,
-          height,
-        });
-
-        inflightUrl = objectUrl;
-
-        const uploadedImage = await uploadBlobAsImage(file);
-
-        editor.dispatch({
-          type: 'setImageSrc',
-          nodeId: el.nodeId,
-          src: uploadedImage.url,
-          width,
-          height,
-        });
-        inflightUrl = undefined;
-        editor.focus();
-      } catch (err) {
-        console.error('Image upload failed:', err);
-        Toast.error(`${file.name} 이미지 업로드에 실패했습니다.`);
-        inflightUrl = undefined;
-      } finally {
-        if (!inflightUrl) {
-          URL.revokeObjectURL(objectUrl);
+      for (const file of restFiles) {
+        const uploadId = nanoid();
+        editor.queueUpload(uploadId, file);
+        try {
+          editor.dispatch({
+            type: 'insertImage',
+            uploadId,
+          });
+        } catch (err) {
+          console.error('Failed to dispatch insertImage:', err);
+          editor.popUpload(uploadId);
+          Toast.error('이미지 업로드에 실패했습니다.');
         }
       }
     });
