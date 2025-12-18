@@ -10,16 +10,19 @@
       "dependsOn": ["codegen", "^build"],
       "outputs": ["dist/**"]
     },
+    "wasm:build": {
+      "outputs": ["pkg/**"]
+    },
     "dev": {
       "dependsOn": ["codegen"],
       "persistent": true,
       "cache": false
     },
     "lint:svelte": {
-      "dependsOn": ["^codegen", "codegen"]
+      "dependsOn": ["^codegen", "codegen", "^wasm:build"]
     },
     "lint:typecheck": {
-      "dependsOn": ["codegen"]
+      "dependsOn": ["codegen", "^wasm:build"]
     },
     "test": {
       "dependsOn": ["codegen"],

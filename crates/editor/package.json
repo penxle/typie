@@ -10,8 +10,8 @@
   ],
   "scripts": {
     "assets": "scripts/generate_icu_data.sh && scripts/copy_assets.sh",
-    "wasm:build": "RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build --target=bundler --no-pack --dev && rm pkg/.gitignore",
-    "wasm:release": "RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build --target=bundler --no-pack && rm pkg/.gitignore"
+    "wasm:build": "RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build --target=bundler --no-pack --dev",
+    "wasm:release": "RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build --target=bundler --no-pack"
   },
   "devDependencies": {
     "wasm-pack": "^0.13.1"

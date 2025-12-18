@@ -6,6 +6,7 @@ dist/
 target/
 out/
 .turbo/
+pkg/
 
 .env.local
 kubeconfig

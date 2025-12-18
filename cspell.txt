@@ -106,6 +106,7 @@ stibee
 talosctl
 tauri
 tini
+tlsv
 tmpl
 tsup
 twips

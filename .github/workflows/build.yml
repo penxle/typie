@@ -19,7 +19,7 @@ permissions:
 jobs:
   build:
     name: Build
-    runs-on: linux-arm64-4vcpu
+    runs-on: linux-arm64-16vcpu
 
     outputs:
       version: ${{ steps.meta.outputs.version }}
@@ -33,6 +33,10 @@ jobs:
 
       - name: Run turbo prune
         run: bunx turbo prune @typie/${{ inputs.app }} --docker
+
+      - name: Copy Cargo files
+        run: |
+          cp Cargo.toml Cargo.lock out/full/
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -65,5 +69,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          secrets: |
-            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
