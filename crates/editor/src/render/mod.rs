@@ -14,7 +14,6 @@ pub struct RenderContext<'a> {
     pub selections: &'a [SelectionDecor],
     pub theme: &'a Theme,
     pub doc: &'a Doc,
-    pub clip_bounds: Option<Rect>,
 }
 
 pub trait Render {
@@ -113,34 +112,12 @@ impl Renderer {
 
         let scale = self.scale_factor as f32;
         let transform = Transform::from_scale(scale, scale);
-        let settings = doc.settings();
-
-        let clip_bounds = match settings.layout_mode {
-            crate::model::LayoutMode::Paginated {
-                page_margin_top,
-                page_margin_bottom,
-                page_margin_left,
-                page_margin_right,
-                page_height,
-                ..
-            } => {
-                let page_width = page.root.node.size.width;
-                Rect::from_xywh(
-                    page_margin_left,
-                    page_margin_top,
-                    page_width - page_margin_left - page_margin_right,
-                    page_height - page_margin_top - page_margin_bottom,
-                )
-            }
-            crate::model::LayoutMode::Continuous { .. } => None,
-        };
 
         let ctx = RenderContext {
             scale_factor: self.scale_factor,
             selections,
             theme: &self.theme,
             doc,
-            clip_bounds,
         };
 
         let mut pixmap = self.pixmap.as_mut();
@@ -153,24 +130,6 @@ impl Renderer {
             transform,
             &ctx,
         );
-
-        // 페이지 여백 안쪽만 클리핑 (투명하게 마스킹)
-        if let Some(clip) = clip_bounds {
-            let scaled_top = clip.y() * scale;
-            let scaled_bottom = (clip.y() + clip.height()) * scale;
-
-            let width = pixmap.width() as usize;
-            let height = pixmap.height() as usize;
-            let data = pixmap.data_mut();
-
-            let top_end_row = (scaled_top.ceil() as usize).min(height);
-            let top_bytes = top_end_row * width * 4;
-            data[..top_bytes].fill(0);
-
-            let bottom_start_row = (scaled_bottom.floor() as usize).min(height);
-            let bottom_start_byte = bottom_start_row * width * 4;
-            data[bottom_start_byte..].fill(0);
-        }
 
         if let Some(indicator) = drop_indicator {
             Self::render_drop_indicator(&mut pixmap, indicator, page_idx, transform);
@@ -291,7 +250,6 @@ impl Renderer {
                 selections: &[],
                 theme: &self.theme,
                 doc,
-                clip_bounds: None,
             };
 
             Self::render_page_part_inner(

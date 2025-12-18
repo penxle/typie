@@ -1,4 +1,4 @@
-use crate::layout::elements::WrapperPadding;
+use crate::layout::elements::{SplitEdges, WrapperPadding};
 use crate::layout::interactive::{InteractionKind, Interactive};
 use crate::model::CalloutType;
 use crate::model::NodeId;
@@ -12,14 +12,16 @@ pub struct CalloutBackgroundElement {
     pub size: Size,
     pub callout_type: CalloutType,
     pub node_id: NodeId,
+    pub split_edges: SplitEdges,
 }
 
 impl CalloutBackgroundElement {
-    pub fn new(size: Size, callout_type: CalloutType, node_id: NodeId) -> Self {
+    pub fn new(size: Size, callout_type: CalloutType, node_id: NodeId, split_edges: SplitEdges) -> Self {
         Self {
             size,
             callout_type,
             node_id,
+            split_edges,
         }
     }
 }

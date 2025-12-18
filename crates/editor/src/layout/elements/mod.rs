@@ -33,6 +33,12 @@ impl WrapperPadding {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SplitEdges {
+    pub top: bool,
+    pub bottom: bool,
+}
+
 pub trait Wrapper {
     fn padding(&self) -> WrapperPadding;
 

@@ -1,4 +1,4 @@
-use crate::layout::{Element, LayoutNode, Page, PageBreakPolicy, PositionedNode};
+use crate::layout::{Element, LayoutNode, Page, PageBreakPolicy, PositionedNode, SplitEdges};
 use crate::model::LayoutMode;
 use crate::types::{Point, Size};
 use std::rc::Rc;
@@ -134,7 +134,8 @@ impl PaginationState {
             }
         };
 
-        self.extend_wrappers_to_page_bottom(page_height);
+        let content_area_bottom = page_height - bottom;
+        self.extend_wrappers_to_page_bottom(content_area_bottom);
 
         let page_root = PositionedNode {
             position: Point::zero(),
@@ -149,8 +150,7 @@ impl PaginationState {
         self.pages.push(Page::from_root(page_root));
     }
 
-    // 이 페이지에 혼자 남은 wrapper 노드를 페이지 하단까지 연장
-    fn extend_wrappers_to_page_bottom(&mut self, page_height: f32) {
+    fn extend_wrappers_to_page_bottom(&mut self, content_area_bottom: f32) {
         for parent in &self.parent_stack {
             let Some(idx) = parent.index_in_current_page else {
                 continue;
@@ -166,13 +166,18 @@ impl PaginationState {
             }
 
             let node_top = old_node.position.y;
-            let new_height = page_height - node_top;
+            let new_height = content_area_bottom - node_top;
 
-            if new_height <= old_node.node.size.height {
+            if (new_height - old_node.node.size.height).abs() < 0.01 {
                 continue;
             }
 
-            let Some(new_element) = element.with_adjusted_height(new_height) else {
+            let split_edges = SplitEdges {
+                top: false,
+                bottom: true,
+            };
+
+            let Some(new_element) = element.with_adjusted_bounds(new_height, split_edges) else {
                 continue;
             };
 
@@ -200,11 +205,32 @@ impl PaginationState {
             let adjusted_y = parent.absolute_position.y - page_start_y + top;
             let adjusted_x = parent.absolute_position.x + margin_x;
 
+            let (final_y, final_height, final_element) = if adjusted_y < top
+                && parent
+                    .element
+                    .as_ref()
+                    .is_some_and(|e| e.as_wrapper().is_some())
+            {
+                let overflow = top - adjusted_y;
+                let new_height = parent.size.height - overflow;
+                let split_edges = SplitEdges {
+                    top: true,
+                    bottom: false,
+                };
+                let new_element = parent
+                    .element
+                    .as_ref()
+                    .and_then(|e| e.with_adjusted_bounds(new_height, split_edges));
+                (top, new_height, new_element)
+            } else {
+                (adjusted_y, parent.size.height, parent.element.clone())
+            };
+
             let replicated = PositionedNode {
-                position: Point::new(adjusted_x, adjusted_y),
+                position: Point::new(adjusted_x, final_y),
                 node: Rc::new(LayoutNode {
-                    size: parent.size,
-                    element: parent.element.clone(),
+                    size: Size::new(parent.size.width, final_height),
+                    element: final_element,
                     children: None,
                     page_break_policy: parent.page_break_policy,
                 }),
@@ -422,7 +448,7 @@ impl Paginator {
 #[cfg(test)]
 mod tests {
     use crate::layout::elements::{LineElement, LineMetric};
-    use crate::layout::{Element, LayoutNode, Paginator, PositionedNode};
+    use crate::layout::{Element, LayoutNode, Paginator, PositionedNode, SplitEdges};
     use crate::model::{LayoutMode, NodeId};
     use crate::types::{Point, Size};
     use crate::{id, runtime};
@@ -912,7 +938,10 @@ mod tests {
         let wrapper_node = Rc::new(LayoutNode {
             size: Size::new(80.0, 170.0), // Content + Padding
             element: Some(Element::FoldContent(
-                crate::layout::elements::FoldContentElement::new(Size::new(80.0, 170.0)),
+                crate::layout::elements::FoldContentElement::new(
+                    Size::new(80.0, 170.0),
+                    SplitEdges::default(),
+                ),
             )),
             children: Some(vec![PositionedNode {
                 position: Point::new(10.0, 10.0), // Padding
@@ -1286,7 +1315,10 @@ mod tests {
             page_margin_right: page_margin,
         };
 
-        let parent_element = Element::FoldContent(FoldContentElement::new(Size::new(80.0, 150.0)));
+        let parent_element = Element::FoldContent(FoldContentElement::new(
+            Size::new(80.0, 150.0),
+            SplitEdges::default(),
+        ));
 
         let node1 = Rc::new(LayoutNode {
             size: Size::new(80.0, 50.0),

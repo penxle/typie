@@ -149,24 +149,36 @@ impl Render for FoldContentElement {
         };
 
         let mb = FOLD_BORDER_WIDTH / 2.0;
-
         let mut pb = PathBuilder::new();
-        pb.move_to(mb, 0.0);
-        pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
-        pb.quad_to(
-            mb,
-            self.size.height - mb,
-            FOLD_BORDER_RADIUS,
-            self.size.height - mb,
-        );
-        pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
-        pb.quad_to(
-            self.size.width - mb,
-            self.size.height - mb,
-            self.size.width - mb,
-            self.size.height - FOLD_BORDER_RADIUS,
-        );
-        pb.line_to(self.size.width - mb, 0.0);
+
+        if self.split_edges.top && self.split_edges.bottom {
+            pb.move_to(mb, 0.0);
+            pb.line_to(mb, self.size.height);
+            pb.move_to(self.size.width - mb, 0.0);
+            pb.line_to(self.size.width - mb, self.size.height);
+        } else if self.split_edges.bottom {
+            pb.move_to(mb, 0.0);
+            pb.line_to(mb, self.size.height);
+            pb.move_to(self.size.width - mb, 0.0);
+            pb.line_to(self.size.width - mb, self.size.height);
+        } else {
+            pb.move_to(mb, 0.0);
+            pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
+            pb.quad_to(
+                mb,
+                self.size.height - mb,
+                FOLD_BORDER_RADIUS,
+                self.size.height - mb,
+            );
+            pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
+            pb.quad_to(
+                self.size.width - mb,
+                self.size.height - mb,
+                self.size.width - mb,
+                self.size.height - FOLD_BORDER_RADIUS,
+            );
+            pb.line_to(self.size.width - mb, 0.0);
+        }
 
         if let Some(path) = pb.finish() {
             pixmap.stroke_path(&path, &paint, &stroke, transform, None);
