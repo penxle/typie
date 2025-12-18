@@ -16,16 +16,8 @@
 
   let open = $state(false);
 
-  const cleanDoc = $derived(editor.text.all.replaceAll('\u200B', ''));
-  const cleanSelection = $derived(editor.text.selection.replaceAll('\u200B', ''));
-
-  const docCountWithWhitespace = $derived([...cleanDoc.replaceAll(/\s+/g, ' ').trim()].length);
-  const docCountWithoutWhitespace = $derived([...cleanDoc.replaceAll(/\s/g, '').trim()].length);
-  const docCountWithoutWhitespaceAndPunctuation = $derived([...cleanDoc.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
-
-  const selectionCountWithWhitespace = $derived([...cleanSelection.replaceAll(/\s+/g, ' ').trim()].length);
-  const selectionCountWithoutWhitespace = $derived([...cleanSelection.replaceAll(/\s/g, '').trim()].length);
-  const selectionCountWithoutWhitespaceAndPunctuation = $derived([...cleanSelection.replaceAll(/[\s\p{P}]/gu, '').trim()].length);
+  const counts = $derived(editor.characterCounts);
+  const hasSelection = $derived(counts.selectionWithWhitespace > 0);
 </script>
 
 <details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '8px' })} bind:open>
@@ -36,10 +28,10 @@
     <div class={css({ flexGrow: '1' })}></div>
     {#if !open}
       <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })} in:fly={{ y: 2, duration: 150 }}>
-        {#if cleanSelection}
-          {comma(selectionCountWithWhitespace)}자 /
+        {#if hasSelection}
+          {comma(counts.selectionWithWhitespace)}자 /
         {/if}
-        {comma(docCountWithWhitespace)}자
+        {comma(counts.docWithWhitespace)}자
       </div>
     {/if}
   </summary>
@@ -49,30 +41,30 @@
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>공백 포함</dt>
         <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
-          {#if cleanSelection}
-            {comma(selectionCountWithWhitespace)}자 /
+          {#if hasSelection}
+            {comma(counts.selectionWithWhitespace)}자 /
           {/if}
-          {comma(docCountWithWhitespace)}자
+          {comma(counts.docWithWhitespace)}자
         </dd>
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>공백 미포함</dt>
         <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
-          {#if cleanSelection}
-            {comma(selectionCountWithoutWhitespace)}자 /
+          {#if hasSelection}
+            {comma(counts.selectionWithoutWhitespace)}자 /
           {/if}
-          {comma(docCountWithoutWhitespace)}자
+          {comma(counts.docWithoutWhitespace)}자
         </dd>
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>공백/부호 미포함</dt>
         <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
-          {#if cleanSelection}
-            {comma(selectionCountWithoutWhitespaceAndPunctuation)}자 /
+          {#if hasSelection}
+            {comma(counts.selectionWithoutWhitespaceAndPunctuation)}자 /
           {/if}
-          {comma(docCountWithoutWhitespaceAndPunctuation)}자
+          {comma(counts.docWithoutWhitespaceAndPunctuation)}자
         </dd>
       </dl>
     </div>

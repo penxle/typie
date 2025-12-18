@@ -67,7 +67,14 @@ export class Editor {
     collapsed: true,
   });
 
-  text = $state({ all: '', selection: '' });
+  characterCounts = $state({
+    docWithWhitespace: 0,
+    docWithoutWhitespace: 0,
+    docWithoutWhitespaceAndPunctuation: 0,
+    selectionWithWhitespace: 0,
+    selectionWithoutWhitespace: 0,
+    selectionWithoutWhitespaceAndPunctuation: 0,
+  });
 
   activeMarks = $state({
     uniformMarks: [] as Mark[],
@@ -218,7 +225,7 @@ export class Editor {
         case 'docChanged': {
           this.#onDocChanged?.();
           this.typewriter.needsScroll = true;
-          this.#updateText();
+          this.#updateCharacterCounts();
           break;
         }
 
@@ -254,7 +261,7 @@ export class Editor {
         case 'selectionChanged': {
           this.selection.stats = cmd.stats;
           this.selection.collapsed = cmd.collapsed;
-          this.#updateText();
+          this.#updateCharacterCounts();
           break;
         }
 
@@ -889,15 +896,27 @@ export class Editor {
     return this.#wasmEditor?.getClipboardData() ?? null;
   }
 
-  getText(): { all: string; selection: string } | undefined {
-    return this.#wasmEditor?.getText();
-  }
+  #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  #updateText(): void {
-    const textData = this.#wasmEditor?.getText();
-    if (textData) {
-      this.text = { all: textData.all, selection: textData.selection };
+  #updateCharacterCounts(): void {
+    if (this.#characterCountsDebounceTimer) {
+      clearTimeout(this.#characterCountsDebounceTimer);
     }
+
+    this.#characterCountsDebounceTimer = setTimeout(() => {
+      const counts = this.#wasmEditor?.getCharacterCounts();
+      if (counts) {
+        this.characterCounts = {
+          docWithWhitespace: counts.doc_with_whitespace,
+          docWithoutWhitespace: counts.doc_without_whitespace,
+          docWithoutWhitespaceAndPunctuation: counts.doc_without_whitespace_and_punctuation,
+          selectionWithWhitespace: counts.selection_with_whitespace,
+          selectionWithoutWhitespace: counts.selection_without_whitespace,
+          selectionWithoutWhitespaceAndPunctuation: counts.selection_without_whitespace_and_punctuation,
+        };
+      }
+      this.#characterCountsDebounceTimer = null;
+    }, 150);
   }
 
   focus(): Editor {
