@@ -1,6 +1,7 @@
-use crate::model::{Doc, Fragment};
+use crate::model::{Doc, Fragment, Node, NodeId};
 use crate::state::position::Position;
 use crate::state::position_helpers::{compare_positions, is_block_position};
+use crate::state::BlockTraverser;
 use anyhow::{Context, Result};
 use std::cmp::Ordering;
 
@@ -68,6 +69,84 @@ impl Selection {
             _ => true,
         }
     }
+
+    pub fn to_plain_text(&self, doc: &Doc) -> String {
+        if self.is_collapsed() {
+            return String::new();
+        }
+
+        let Ok((from, to)) = self.as_sorted(doc) else {
+            return String::new();
+        };
+
+        if from.node_id == to.node_id {
+            return extract_block_text_range(doc, from.node_id, from.offset, to.offset);
+        }
+
+        let mut result = String::new();
+
+        result.push_str(&extract_block_text_from(doc, from.node_id, from.offset));
+
+        let Ok(mut traverser) = BlockTraverser::new_after_subtree(doc, from.node_id) else {
+            return result;
+        };
+
+        while let Some(block_id) = traverser.next() {
+            if block_id == to.node_id {
+                break;
+            }
+
+            result.push('\n');
+            result.push_str(&extract_block_text_full(doc, block_id));
+        }
+
+        result.push('\n');
+        result.push_str(&extract_block_text_to(doc, to.node_id, to.offset));
+
+        result
+    }
+}
+
+fn extract_block_text_full(doc: &Doc, block_id: NodeId) -> String {
+    let Some(block) = doc.node(block_id) else {
+        return String::new();
+    };
+
+    let mut result = String::new();
+    for child in block.children() {
+        match child.node() {
+            Node::Text(text_node) => {
+                result.push_str(&text_node.text.as_str());
+            }
+            Node::HardBreak(_) => {
+                result.push('\n');
+            }
+            _ => {}
+        }
+    }
+    result
+}
+
+fn extract_block_text_range(doc: &Doc, block_id: NodeId, from_offset: usize, to_offset: usize) -> String {
+    let full_text = extract_block_text_full(doc, block_id);
+    let chars: Vec<char> = full_text.chars().collect();
+    let from = from_offset.min(chars.len());
+    let to = to_offset.min(chars.len());
+    chars[from..to].iter().collect()
+}
+
+fn extract_block_text_from(doc: &Doc, block_id: NodeId, from_offset: usize) -> String {
+    let full_text = extract_block_text_full(doc, block_id);
+    let chars: Vec<char> = full_text.chars().collect();
+    let from = from_offset.min(chars.len());
+    chars[from..].iter().collect()
+}
+
+fn extract_block_text_to(doc: &Doc, block_id: NodeId, to_offset: usize) -> String {
+    let full_text = extract_block_text_full(doc, block_id);
+    let chars: Vec<char> = full_text.chars().collect();
+    let to = to_offset.min(chars.len());
+    chars[..to].iter().collect()
 }
 
 #[derive(Copy, Clone, Debug)]
