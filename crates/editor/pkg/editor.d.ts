@@ -1,9 +1,9 @@
 /* tslint:disable */
 /* eslint-disable */
 export function getMemory(): any;
-export type Mark = ({ type: "background_color" } & BackgroundColorMark) | ({ type: "text_color" } & TextColorMark) | ({ type: "font_size" } & FontSizeMark) | ({ type: "font_family" } & FontFamilyMark) | ({ type: "font_weight" } & FontWeightMark) | ({ type: "italic" } & ItalicMark) | ({ type: "letter_spacing" } & LetterSpacingMark) | ({ type: "ruby" } & RubyMark) | ({ type: "strikethrough" } & StrikethroughMark) | ({ type: "underline" } & UnderlineMark);
-
 export type MarkType = "background_color" | "text_color" | "font_size" | "font_family" | "font_weight" | "italic" | "letter_spacing" | "ruby" | "strikethrough" | "underline";
+
+export type Mark = ({ type: "background_color" } & BackgroundColorMark) | ({ type: "text_color" } & TextColorMark) | ({ type: "font_size" } & FontSizeMark) | ({ type: "font_family" } & FontFamilyMark) | ({ type: "font_weight" } & FontWeightMark) | ({ type: "italic" } & ItalicMark) | ({ type: "letter_spacing" } & LetterSpacingMark) | ({ type: "ruby" } & RubyMark) | ({ type: "strikethrough" } & StrikethroughMark) | ({ type: "underline" } & UnderlineMark);
 
 export type NodeType = "root" | "paragraph" | "blockquote" | "callout" | "text" | "image" | "hard_break" | "horizontal_rule" | "page_break" | "bullet_list" | "ordered_list" | "list_item" | "fold" | "fold_title" | "fold_content";
 
@@ -77,20 +77,20 @@ export interface ImageNode {
     height: number;
 }
 
+export type CalloutType = "info" | "success" | "warning" | "danger";
+
 export interface CalloutNode {
     callout_type?: CalloutType;
 }
 
-export type CalloutType = "info" | "success" | "warning" | "danger";
-
 export interface ListItemNode {}
+
+export type TextAlign = "left" | "center" | "right" | "justify";
 
 export interface ParagraphNode {
     align?: TextAlign;
     line_height?: number;
 }
-
-export type TextAlign = "left" | "center" | "right" | "justify";
 
 export type LayoutMode = { type: "paginated"; pageWidth: number; pageHeight: number; pageMarginTop: number; pageMarginBottom: number; pageMarginLeft: number; pageMarginRight: number } | { type: "continuous"; maxWidth: number };
 
@@ -102,14 +102,14 @@ export interface Theme {
 
 export type PointerStyle = "default" | "text" | "pointer";
 
-export interface Size {
+export interface Rect {
+    x: number;
+    y: number;
     width: number;
     height: number;
 }
 
-export interface Rect {
-    x: number;
-    y: number;
+export interface Size {
     width: number;
     height: number;
 }
@@ -121,21 +121,21 @@ export interface Point {
 
 export type ExternalElementData = { type: "image"; src: string; originalWidth: number; originalHeight: number };
 
+export interface SelectionStats {
+    blockCount: number;
+    paragraphCount: number;
+    uniformAlign: TextAlign | undefined;
+    uniformLineHeight: number | undefined;
+}
+
+export type Cmd = { type: "docChanged" } | { type: "settingsChanged"; paragraphIndent: number; blockGap: number } | { type: "layoutChanged"; pageCount: number; layoutMode: LayoutMode; pageWidth: number; pageHeights: number[] } | { type: "cursorChanged"; pageIdx: number | undefined; bounds: Rect | undefined; show: boolean; scrollToCursor: boolean } | { type: "externalElementChanged"; elements: ExternalElement[] } | { type: "pointerStyleChanged"; style: PointerStyle } | { type: "selectionChanged"; stats: SelectionStats; collapsed: boolean } | { type: "activeMarksChanged"; uniformMarks: Mark[]; mixedMarks: MarkType[] } | { type: "fontsRequired"; fonts: [string, number][] } | { type: "writingSystemRequired"; systems: WritingSystem[] } | { type: "renderRequired" } | { type: "enabledActionsChanged"; enabled: string[] } | { type: "exitedDocumentStart" } | { type: "pointerModeChanged"; is_idle: boolean };
+
 export interface ExternalElement {
     pageIdx: number;
     nodeId: string;
     bounds: Rect;
     data: ExternalElementData;
     isSelected: boolean;
-}
-
-export type Cmd = { type: "docChanged" } | { type: "settingsChanged"; paragraphIndent: number; blockGap: number } | { type: "layoutChanged"; pageCount: number; layoutMode: LayoutMode; pageWidth: number; pageHeights: number[] } | { type: "cursorChanged"; pageIdx: number | undefined; bounds: Rect | undefined; show: boolean; scrollToCursor: boolean } | { type: "externalElementChanged"; elements: ExternalElement[] } | { type: "pointerStyleChanged"; style: PointerStyle } | { type: "selectionChanged"; stats: SelectionStats; collapsed: boolean } | { type: "activeMarksChanged"; uniformMarks: Mark[]; mixedMarks: MarkType[] } | { type: "fontsRequired"; fonts: [string, number][] } | { type: "writingSystemRequired"; systems: WritingSystem[] } | { type: "renderRequired" } | { type: "enabledActionsChanged"; enabled: string[] } | { type: "exitedDocumentStart" } | { type: "pointerModeChanged"; is_idle: boolean };
-
-export interface SelectionStats {
-    blockCount: number;
-    paragraphCount: number;
-    uniformAlign: TextAlign | undefined;
-    uniformLineHeight: number | undefined;
 }
 
 export type DropIndicator = { type: "inline"; pageIdx: number; x: number; y: number; height: number } | { type: "block"; pageIdx: number; x: number; y: number; width: number };

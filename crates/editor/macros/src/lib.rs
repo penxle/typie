@@ -7,6 +7,20 @@ use syn::{
     parse_macro_input,
 };
 
+mod icon;
+
+#[proc_macro]
+pub fn svg_icon_path(input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(input as icon::SvgIconArgs);
+
+    match icon::generate_svg_icon_path(&args) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => syn::Error::new(args.path.span(), e)
+            .to_compile_error()
+            .into(),
+    }
+}
+
 #[proc_macro_attribute]
 pub fn command(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
