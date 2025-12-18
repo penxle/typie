@@ -323,18 +323,9 @@ impl Editor {
     pub fn get_text(&self) -> TextData {
         let state = self.runtime.state();
 
-        let all = state.doc.to_plain_text();
-
-        let selection = if state.selection.is_collapsed() {
-            String::new()
-        } else {
-            state
-                .selection
-                .extract_fragment(&state.doc)
-                .map(|f| f.to_plain_text())
-                .unwrap_or_default()
-        };
-
-        TextData { all, selection }
+        TextData {
+            all: state.doc.to_plain_text(),
+            selection: state.selection.to_plain_text(&state.doc),
+        }
     }
 }

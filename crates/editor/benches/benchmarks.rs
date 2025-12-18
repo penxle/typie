@@ -226,6 +226,68 @@ fn bench_commit(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_get_text(c: &mut Criterion) {
+    let mut group = c.benchmark_group("get_text");
+    group.sample_size(100);
+
+    group.bench_function("doc_to_plain_text", |b| {
+        b.iter_with_setup(
+            || {
+                let mut runtime = runtime_with_paragraphs(1_000);
+                runtime.layout();
+                runtime
+            },
+            |runtime| {
+                let state = runtime.state();
+                state.doc.to_plain_text()
+            },
+        );
+    });
+
+    group.bench_function("selection_to_plain_text_full", |b| {
+        b.iter_with_setup(
+            || {
+                let mut runtime = runtime_with_paragraphs(1_000);
+                runtime.layout();
+                runtime.update(Message::SelectAll);
+                runtime.tick();
+                runtime
+            },
+            |runtime| {
+                let state = runtime.state();
+                state.selection.to_plain_text(&state.doc)
+            },
+        );
+    });
+
+    group.bench_function("selection_to_plain_text_partial", |b| {
+        b.iter_with_setup(
+            || {
+                let mut runtime = runtime_with_paragraphs(1_000);
+                runtime.layout();
+                runtime.update(Message::Navigate {
+                    direction: Direction::DocumentStart,
+                    extend: false,
+                });
+                for _ in 0..100 {
+                    runtime.update(Message::Navigate {
+                        direction: Direction::Down,
+                        extend: true,
+                    });
+                }
+                runtime.tick();
+                runtime
+            },
+            |runtime| {
+                let state = runtime.state();
+                state.selection.to_plain_text(&state.doc)
+            },
+        );
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_input,
@@ -233,5 +295,6 @@ criterion_group!(
     bench_delete_selection,
     bench_paste,
     bench_commit,
+    bench_get_text,
 );
 criterion_main!(benches);
