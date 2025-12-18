@@ -120,6 +120,11 @@
             ... on Document {
               id
               title
+
+              characterCountChange {
+                additions
+                deletions
+              }
             }
           }
         }

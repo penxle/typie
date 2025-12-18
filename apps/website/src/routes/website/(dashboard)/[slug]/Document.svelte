@@ -84,6 +84,8 @@
               snapshot
               createdAt
               updatedAt
+
+              ...DocumentPanel_document
             }
           }
         }
@@ -647,7 +649,7 @@
           </div>
         </div>
 
-        <DocumentPanel {editor} />
+        <DocumentPanel $document={entity.node} {editor} />
       </div>
 
       {#if currentViewZenModeEnabled}
