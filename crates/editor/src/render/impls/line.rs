@@ -3,7 +3,8 @@ use crate::model::{FontFamilyMark, SelectionDecor};
 use crate::render::glyph::Glyph;
 use crate::render::{GlyphRenderer, Render, RenderContext};
 use crate::types::Point;
-use tiny_skia::{Color, Paint, PixmapMut, Rect, Transform};
+use macros::svg_icon_path;
+use tiny_skia::{Color, Paint, PixmapMut, Rect, Stroke, Transform};
 
 fn create_solid_paint(color: Color) -> Paint<'static> {
     let mut paint = Paint::default();
@@ -57,9 +58,36 @@ impl LineElement {
 
         if self.has_page_break {
             if let Some(rect) = self.page_break_indicator(point, selections) {
+                let selection_color = Color::from_rgba8(153, 204, 255, 77);
+                let selection_paint = create_solid_paint(selection_color);
+                pixmap.fill_rect(rect, &selection_paint, transform, None);
+
                 let accent_color = Color::from_rgba8(0, 111, 255, 255);
                 let accent_paint = create_solid_paint(accent_color);
-                pixmap.fill_rect(rect, &accent_paint, transform, None);
+
+                if let Some(line_rect) = Rect::from_xywh(
+                    rect.left(),
+                    rect.top() + rect.height() / 2.0 - 0.75,
+                    rect.width() - 20.0,
+                    1.5,
+                ) {
+                    pixmap.fill_rect(line_rect, &accent_paint, transform, None);
+                }
+
+                let icon_size = 16.0;
+                let stroke = Stroke {
+                    width: 1.5,
+                    line_cap: tiny_skia::LineCap::Round,
+                    line_join: tiny_skia::LineJoin::Round,
+                    ..Stroke::default()
+                };
+
+                let icon_x = rect.right() - icon_size / 2.0 - 2.0;
+                let icon_y = rect.top() + rect.height() / 2.0;
+
+                if let Some(path) = svg_icon_path!("lucide/file", icon_size, icon_x, icon_y) {
+                    pixmap.stroke_path(&path, &accent_paint, &stroke, transform, None);
+                }
             }
         }
     }
@@ -194,9 +222,9 @@ impl LineElement {
         let end_x = self.offset_to_x(self.metric.end_offset);
         Rect::from_xywh(
             point.x + end_x,
-            point.y + (self.metric.height + self.metric.leading) / 2.0 - 0.75,
-            self.size.width - end_x,
-            1.5,
+            point.y,
+            self.size.width - end_x + 20.0,
+            self.metric.height + self.metric.leading,
         )
     }
 

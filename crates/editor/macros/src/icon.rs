@@ -508,12 +508,19 @@ fn parse_number<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I>) ->
         chars.next();
     }
 
-    while chars
-        .peek()
-        .map(|c| c.is_ascii_digit() || *c == '.')
-        .unwrap_or(false)
-    {
-        s.push(chars.next().unwrap());
+    let mut has_dot = false;
+    while let Some(&c) = chars.peek() {
+        if c.is_ascii_digit() {
+            s.push(chars.next().unwrap());
+        } else if c == '.' {
+            if has_dot {
+                break;
+            }
+            has_dot = true;
+            s.push(chars.next().unwrap());
+        } else {
+            break;
+        }
     }
 
     if chars.peek() == Some(&'e') || chars.peek() == Some(&'E') {
