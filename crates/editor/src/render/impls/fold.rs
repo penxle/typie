@@ -1,9 +1,10 @@
 use crate::layout::elements::{FoldContentElement, FoldTitleBackgroundElement, FoldTitleElement};
 use crate::model::{FOLD_BORDER_RADIUS, FOLD_BORDER_WIDTH};
 use crate::render::{GlyphRenderer, Render, RenderContext};
+use macros::svg_icon_path;
 use tiny_skia::{Color, Paint, Path, PathBuilder, PixmapMut, Stroke, Transform};
 
-const CHEVRON_SIZE: f32 = 5.0;
+const CHEVRON_SIZE: f32 = 20.0;
 const CHEVRON_STROKE_WIDTH: f32 = 1.5;
 
 impl Render for FoldTitleElement {
@@ -26,13 +27,13 @@ impl Render for FoldTitleElement {
             ..Stroke::default()
         };
 
-        let center_x = self.size.width / 2.0;
-        let center_y = self.size.height / 2.0;
+        let cx = self.size.width / 2.0;
+        let cy = self.size.height / 2.0;
 
         let path = if self.expanded {
-            build_down_chevron(center_x, center_y)
+            svg_icon_path!("lucide/chevron-down", CHEVRON_SIZE, cx, cy)
         } else {
-            build_up_chevron(center_x, center_y)
+            svg_icon_path!("lucide/chevron-up", CHEVRON_SIZE, cx, cy)
         };
 
         if let Some(path) = path {
@@ -171,22 +172,6 @@ impl Render for FoldContentElement {
             pixmap.stroke_path(&path, &paint, &stroke, transform, None);
         }
     }
-}
-
-fn build_up_chevron(cx: f32, cy: f32) -> Option<Path> {
-    let mut pb = PathBuilder::new();
-    pb.move_to(cx - CHEVRON_SIZE, cy + CHEVRON_SIZE / 2.0);
-    pb.line_to(cx, cy - CHEVRON_SIZE / 2.0);
-    pb.line_to(cx + CHEVRON_SIZE, cy + CHEVRON_SIZE / 2.0);
-    pb.finish()
-}
-
-fn build_down_chevron(cx: f32, cy: f32) -> Option<Path> {
-    let mut pb = PathBuilder::new();
-    pb.move_to(cx - CHEVRON_SIZE, cy - CHEVRON_SIZE / 2.0);
-    pb.line_to(cx, cy + CHEVRON_SIZE / 2.0);
-    pb.line_to(cx + CHEVRON_SIZE, cy - CHEVRON_SIZE / 2.0);
-    pb.finish()
 }
 
 fn build_rounded_rect(

@@ -2,6 +2,7 @@ use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement};
 use crate::model::CalloutType;
 use crate::model::{CALLOUT_BORDER_RADIUS, CALLOUT_BORDER_WIDTH};
 use crate::render::{GlyphRenderer, Render, RenderContext};
+use macros::svg_icon_path;
 use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
 const ICON_SIZE: f32 = 20.0;
@@ -87,7 +88,14 @@ impl Render for CalloutIconElement {
         let cx = self.size.width / 2.0;
         let cy = self.size.height / 2.0;
 
-        if let Some(path) = build_icon(self.callout_type, cx, cy, ICON_SIZE) {
+        let path = match self.callout_type {
+            CalloutType::Info => svg_icon_path!("lucide/info", ICON_SIZE, cx, cy),
+            CalloutType::Success => svg_icon_path!("lucide/circle-check", ICON_SIZE, cx, cy),
+            CalloutType::Warning => svg_icon_path!("lucide/circle-alert", ICON_SIZE, cx, cy),
+            CalloutType::Danger => svg_icon_path!("lucide/triangle-alert", ICON_SIZE, cx, cy),
+        };
+
+        if let Some(path) = path {
             pixmap.stroke_path(&path, &icon_paint, &icon_stroke, transform, None);
         }
     }
@@ -114,69 +122,4 @@ fn build_rounded_rect(
     pb.close();
 
     pb.finish()
-}
-
-// TODO: svg
-fn build_icon(callout_type: CalloutType, cx: f32, cy: f32, size: f32) -> Option<tiny_skia::Path> {
-    let r = size / 2.0;
-    let mut pb = PathBuilder::new();
-
-    match callout_type {
-        CalloutType::Info => {
-            draw_circle(&mut pb, cx, cy, r);
-
-            // Draw "i" - dot and line
-            pb.move_to(cx, cy - r * 0.4);
-            pb.line_to(cx, cy - r * 0.35);
-            pb.move_to(cx, cy - r * 0.1);
-            pb.line_to(cx, cy + r * 0.4);
-        }
-        CalloutType::Success => {
-            draw_circle(&mut pb, cx, cy, r);
-
-            // Draw checkmark
-            let check_size = r * 0.5;
-            pb.move_to(cx - check_size * 0.6, cy);
-            pb.line_to(cx - check_size * 0.1, cy + check_size * 0.4);
-            pb.line_to(cx + check_size * 0.6, cy - check_size * 0.4);
-        }
-        CalloutType::Warning => {
-            draw_circle(&mut pb, cx, cy, r);
-
-            // Draw "!"
-            pb.move_to(cx, cy - r * 0.4);
-            pb.line_to(cx, cy + r * 0.15);
-            pb.move_to(cx, cy + r * 0.35);
-            pb.line_to(cx, cy + r * 0.4);
-        }
-        CalloutType::Danger => {
-            let tri_h = r * 1.8;
-            let tri_w = tri_h * 1.1;
-
-            pb.move_to(cx, cy - tri_h * 0.45);
-            pb.line_to(cx + tri_w * 0.5, cy + tri_h * 0.45);
-            pb.line_to(cx - tri_w * 0.5, cy + tri_h * 0.45);
-            pb.close();
-
-            // Draw "!"
-            pb.move_to(cx, cy - r * 0.2);
-            pb.line_to(cx, cy + r * 0.15);
-            pb.move_to(cx, cy + r * 0.3);
-            pb.line_to(cx, cy + r * 0.35);
-        }
-    }
-
-    pb.finish()
-}
-
-fn draw_circle(pb: &mut PathBuilder, cx: f32, cy: f32, r: f32) {
-    // Approximate circle with bezier curves
-    let k = 0.5522847498; // Magic number for bezier circle approximation
-    let kr = k * r;
-
-    pb.move_to(cx + r, cy);
-    pb.cubic_to(cx + r, cy + kr, cx + kr, cy + r, cx, cy + r);
-    pb.cubic_to(cx - kr, cy + r, cx - r, cy + kr, cx - r, cy);
-    pb.cubic_to(cx - r, cy - kr, cx - kr, cy - r, cx, cy - r);
-    pb.cubic_to(cx + kr, cy - r, cx + r, cy - kr, cx + r, cy);
 }
