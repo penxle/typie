@@ -1,6 +1,7 @@
 import { Application, getMemory } from '@typie/editor';
 import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
 import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
+import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME, PAGE_GAP } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
@@ -823,6 +824,26 @@ export class Editor {
 
     const { pageIdx, x, y } = resolved;
 
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const imageFiles = [...e.dataTransfer.files].filter((file) => file.type.startsWith('image/'));
+      if (imageFiles.length > 0) {
+        const uploadIds: string[] = [];
+        for (const file of imageFiles) {
+          const uploadId = nanoid();
+          this.queueUpload(uploadId, file);
+          uploadIds.push(uploadId);
+        }
+        this.dispatch({
+          type: 'dropImages',
+          pageIdx,
+          x,
+          y,
+          uploadIds,
+        }).focus();
+        return;
+      }
+    }
+
     let fragment: string | undefined;
     let html: string | undefined;
     let text: string | undefined;
@@ -848,7 +869,7 @@ export class Editor {
       html,
       fragment,
       modifier: this.#toModifier(e),
-    } as unknown as Message);
+    });
   }
 
   handleDragEnd(e: DragEvent): void {
