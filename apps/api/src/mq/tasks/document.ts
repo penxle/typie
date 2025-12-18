@@ -1,10 +1,19 @@
 import * as Sentry from '@sentry/bun';
 import dayjs from 'dayjs';
-import { asc, eq, lt } from 'drizzle-orm';
+import { asc, eq, lt, sql } from 'drizzle-orm';
 import { LoroDoc } from 'loro-crdt';
 import * as R from 'remeda';
 import { redis } from '@/cache';
-import { db, DocumentContents, Documents, DocumentVersionContributors, DocumentVersions, Entities, firstOrThrow } from '@/db';
+import {
+  db,
+  DocumentCharacterCountChanges,
+  DocumentContents,
+  Documents,
+  DocumentVersionContributors,
+  DocumentVersions,
+  Entities,
+  firstOrThrow,
+} from '@/db';
 import { Lock } from '@/lock';
 import { pubsub } from '@/pubsub';
 import { extractLoroDocContents } from '@/utils';
@@ -34,6 +43,7 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
         id: Documents.id,
         snapshot: DocumentContents.snapshot,
         version: DocumentContents.version,
+        characterCount: DocumentContents.characterCount,
         siteId: Entities.siteId,
       })
       .from(Documents)
@@ -53,8 +63,10 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
       userId: string;
       version: Uint8Array;
       order: number;
+      delta: number;
     };
 
+    let prevCharacterCount = document.characterCount;
     const versions: Version[] = [];
     let order = 0;
 
@@ -71,11 +83,17 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
         prevVersionEncoded.length === newVersionEncoded.length && prevVersionEncoded.every((v, i) => v === newVersionEncoded[i]);
 
       if (!versionsEqual) {
+        const { characterCount: currentCharacterCount } = extractLoroDocContents(doc);
+        const delta = currentCharacterCount - prevCharacterCount;
+
         versions.push({
           userId,
           version: newVersionEncoded,
           order: order++,
+          delta,
         });
+
+        prevCharacterCount = currentCharacterCount;
       }
     }
 
@@ -102,6 +120,29 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
             versionId: documentVersion.id,
             userId: version.userId,
           });
+
+          if (version.delta !== 0) {
+            await tx
+              .insert(DocumentCharacterCountChanges)
+              .values({
+                documentId,
+                userId: version.userId,
+                bucket: dayjs().startOf('hour'),
+                additions: Math.max(version.delta, 0),
+                deletions: Math.max(-version.delta, 0),
+              })
+              .onConflictDoUpdate({
+                target: [
+                  DocumentCharacterCountChanges.userId,
+                  DocumentCharacterCountChanges.documentId,
+                  DocumentCharacterCountChanges.bucket,
+                ],
+                set: {
+                  additions: version.delta > 0 ? sql`${DocumentCharacterCountChanges.additions} + ${version.delta}` : undefined,
+                  deletions: version.delta < 0 ? sql`${DocumentCharacterCountChanges.deletions} + ${-version.delta}` : undefined,
+                },
+              });
+          }
         }
 
         await tx

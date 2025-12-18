@@ -170,6 +170,28 @@ export const DocumentVersionContributors = pgTable(
   (t) => [unique().on(t.versionId, t.userId)],
 );
 
+export const DocumentCharacterCountChanges = pgTable(
+  'document_character_count_changes',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_CHARACTER_COUNT_CHANGES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    bucket: datetime('bucket').notNull(),
+    additions: integer('additions').notNull().default(0),
+    deletions: integer('deletions').notNull().default(0),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.userId, t.documentId, t.bucket), index().on(t.userId, t.bucket)],
+);
+
 export const CreditCodes = pgTable('credit_codes', {
   id: text('id')
     .primaryKey()

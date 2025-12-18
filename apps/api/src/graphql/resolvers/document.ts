@@ -1,8 +1,20 @@
 import dayjs from 'dayjs';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { redis } from '@/cache';
-import { db, DocumentContents, Documents, Entities, first, firstOrThrow, firstOrThrowWith, Notes, TableCode, validateDbId } from '@/db';
+import {
+  db,
+  DocumentCharacterCountChanges,
+  DocumentContents,
+  Documents,
+  Entities,
+  first,
+  firstOrThrow,
+  firstOrThrowWith,
+  Notes,
+  TableCode,
+  validateDbId,
+} from '@/db';
 import { DocumentSyncType, EntityAvailability, EntityState, EntityType, NoteState } from '@/enums';
 import { NotFoundError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -10,7 +22,7 @@ import { pubsub } from '@/pubsub';
 import { extractLoroDocContents, generateFractionalOrder, generatePermalink, generateSlug, makeLoroDoc } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Document, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
+import { CharacterCountChange, Document, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
 
 IDocument.implement({
   fields: (t) => ({
@@ -40,6 +52,35 @@ Document.implement({
           .then(first);
 
         return content?.snapshot ?? null;
+      },
+    }),
+
+    characterCountChange: t.withAuth({ session: true }).field({
+      type: CharacterCountChange,
+      resolve: async (document, _, ctx) => {
+        const startOfDay = dayjs().kst().startOf('day');
+
+        const change = await db
+          .select({
+            additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number),
+            deletions: sum(DocumentCharacterCountChanges.deletions).mapWith(Number),
+          })
+          .from(DocumentCharacterCountChanges)
+          .where(
+            and(
+              eq(DocumentCharacterCountChanges.userId, ctx.session.userId),
+              eq(DocumentCharacterCountChanges.documentId, document.id),
+              gte(DocumentCharacterCountChanges.bucket, startOfDay),
+              lt(DocumentCharacterCountChanges.bucket, startOfDay.add(1, 'day')),
+            ),
+          )
+          .then(firstOrThrow);
+
+        return {
+          date: startOfDay,
+          additions: change.additions ?? 0,
+          deletions: change.deletions ?? 0,
+        };
       },
     }),
 
