@@ -1,4 +1,4 @@
-use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement};
+use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement, SplitEdges};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
@@ -184,7 +184,7 @@ impl Layout for CalloutNode {
         }
 
         let background_element =
-            CalloutBackgroundElement::new(total_size, self.callout_type, node_id);
+            CalloutBackgroundElement::new(total_size, self.callout_type, node_id, SplitEdges::default());
 
         let background_wrapper = PositionedNode {
             position: Point::new(0.0, 0.0),

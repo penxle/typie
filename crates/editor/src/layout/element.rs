@@ -6,6 +6,8 @@ use crate::render::Render;
 use crate::types::{BoxConstraints, Point, PointerStyle, Size};
 use std::rc::Rc;
 
+pub use crate::layout::elements::SplitEdges;
+
 pub trait Layout {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode;
 }
@@ -136,17 +138,23 @@ impl Element {
         }
     }
 
-    pub fn with_adjusted_height(&self, new_height: f32) -> Option<Element> {
+    pub fn with_adjusted_bounds(
+        &self,
+        new_height: f32,
+        split_edges: SplitEdges,
+    ) -> Option<Element> {
         match self {
             Element::CalloutBackground(e) => {
                 Some(Element::CalloutBackground(CalloutBackgroundElement::new(
                     Size::new(e.size.width, new_height),
                     e.callout_type,
                     e.node_id,
+                    split_edges,
                 )))
             }
             Element::FoldContent(e) => Some(Element::FoldContent(FoldContentElement::new(
                 Size::new(e.size.width, new_height),
+                split_edges,
             ))),
             _ => None,
         }
@@ -164,8 +172,12 @@ mod tests {
                 Size::new(100.0, 100.0),
                 CalloutType::Info,
                 NodeId::new(),
+                SplitEdges::default(),
             )),
-            Element::FoldContent(FoldContentElement::new(Size::new(100.0, 100.0))),
+            Element::FoldContent(FoldContentElement::new(
+                Size::new(100.0, 100.0),
+                SplitEdges::default(),
+            )),
         ]
     }
 
@@ -178,8 +190,10 @@ mod tests {
                 element
             );
             assert!(
-                element.with_adjusted_height(200.0).is_some(),
-                "{:?} should support with_adjusted_height",
+                element
+                    .with_adjusted_bounds(200.0, SplitEdges::default())
+                    .is_some(),
+                "{:?} should support with_adjusted_bounds",
                 element
             );
         }

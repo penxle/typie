@@ -1,4 +1,4 @@
-use crate::layout::elements::WrapperPadding;
+use crate::layout::elements::{SplitEdges, WrapperPadding};
 use crate::layout::interactive::{InteractionKind, Interactive};
 use crate::model::NodeId;
 use crate::types::Size;
@@ -61,11 +61,12 @@ impl Interactive for FoldTitleBackgroundElement {
 #[derive(Debug, Clone)]
 pub struct FoldContentElement {
     pub size: Size,
+    pub split_edges: SplitEdges,
 }
 
 impl FoldContentElement {
-    pub fn new(size: Size) -> Self {
-        Self { size }
+    pub fn new(size: Size, split_edges: SplitEdges) -> Self {
+        Self { size, split_edges }
     }
 }
 

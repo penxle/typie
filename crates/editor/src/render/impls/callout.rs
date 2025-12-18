@@ -1,3 +1,4 @@
+use crate::layout::elements::SplitEdges;
 use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement};
 use crate::model::CalloutType;
 use crate::model::{CALLOUT_BORDER_RADIUS, CALLOUT_BORDER_WIDTH};
@@ -25,13 +26,11 @@ impl Render for CalloutBackgroundElement {
         bg_paint.set_color(bg_color);
         bg_paint.anti_alias = true;
 
-        if let Some(path) = build_rounded_rect(
-            0.0,
-            0.0,
-            self.size.width,
-            self.size.height,
-            CALLOUT_BORDER_RADIUS,
-        ) {
+        let (tl, tr, br, bl) = corner_radii(CALLOUT_BORDER_RADIUS, &self.split_edges);
+
+        if let Some(path) =
+            build_rounded_rect_corners(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
+        {
             pixmap.fill_path(
                 &path,
                 &bg_paint,
@@ -51,12 +50,20 @@ impl Render for CalloutBackgroundElement {
         };
 
         let mb = CALLOUT_BORDER_WIDTH / 2.0;
-        if let Some(path) = build_rounded_rect(
+        let inner_radius = (CALLOUT_BORDER_RADIUS - mb).max(0.0);
+        let (tl_inner, tr_inner, br_inner, bl_inner) =
+            corner_radii(inner_radius, &self.split_edges);
+
+        if let Some(path) = build_partial_border(
             mb,
             mb,
             self.size.width - CALLOUT_BORDER_WIDTH,
             self.size.height - CALLOUT_BORDER_WIDTH,
-            CALLOUT_BORDER_RADIUS - mb,
+            tl_inner,
+            tr_inner,
+            br_inner,
+            bl_inner,
+            &self.split_edges,
         ) {
             pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
         }
@@ -101,25 +108,98 @@ impl Render for CalloutIconElement {
     }
 }
 
-fn build_rounded_rect(
+fn corner_radii(radius: f32, split: &SplitEdges) -> (f32, f32, f32, f32) {
+    let top_radius = if split.top { 0.0 } else { radius };
+    let bottom_radius = if split.bottom { 0.0 } else { radius };
+    (top_radius, top_radius, bottom_radius, bottom_radius)
+}
+
+fn build_rounded_rect_corners(
     x: f32,
     y: f32,
     width: f32,
     height: f32,
-    radius: f32,
+    top_left: f32,
+    top_right: f32,
+    bottom_right: f32,
+    bottom_left: f32,
 ) -> Option<tiny_skia::Path> {
     let mut pb = PathBuilder::new();
 
-    pb.move_to(x + radius, y);
-    pb.line_to(x + width - radius, y);
-    pb.quad_to(x + width, y, x + width, y + radius);
-    pb.line_to(x + width, y + height - radius);
-    pb.quad_to(x + width, y + height, x + width - radius, y + height);
-    pb.line_to(x + radius, y + height);
-    pb.quad_to(x, y + height, x, y + height - radius);
-    pb.line_to(x, y + radius);
-    pb.quad_to(x, y, x + radius, y);
+    pb.move_to(x + top_left, y);
+    pb.line_to(x + width - top_right, y);
+    if top_right > 0.0 {
+        pb.quad_to(x + width, y, x + width, y + top_right);
+    }
+    pb.line_to(x + width, y + height - bottom_right);
+    if bottom_right > 0.0 {
+        pb.quad_to(x + width, y + height, x + width - bottom_right, y + height);
+    }
+    pb.line_to(x + bottom_left, y + height);
+    if bottom_left > 0.0 {
+        pb.quad_to(x, y + height, x, y + height - bottom_left);
+    }
+    pb.line_to(x, y + top_left);
+    if top_left > 0.0 {
+        pb.quad_to(x, y, x + top_left, y);
+    }
     pb.close();
+
+    pb.finish()
+}
+
+fn build_partial_border(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    top_left: f32,
+    top_right: f32,
+    bottom_right: f32,
+    bottom_left: f32,
+    split: &SplitEdges,
+) -> Option<tiny_skia::Path> {
+    let mut pb = PathBuilder::new();
+
+    if split.top && split.bottom {
+        pb.move_to(x, y);
+        pb.line_to(x, y + height);
+        pb.move_to(x + width, y);
+        pb.line_to(x + width, y + height);
+    } else if split.top {
+        pb.move_to(x, y);
+        pb.line_to(x, y + height - bottom_left);
+        if bottom_left > 0.0 {
+            pb.quad_to(x, y + height, x + bottom_left, y + height);
+        }
+        pb.line_to(x + width - bottom_right, y + height);
+        if bottom_right > 0.0 {
+            pb.quad_to(x + width, y + height, x + width, y + height - bottom_right);
+        }
+        pb.line_to(x + width, y);
+    } else if split.bottom {
+        pb.move_to(x, y + height);
+        pb.line_to(x, y + top_left);
+        if top_left > 0.0 {
+            pb.quad_to(x, y, x + top_left, y);
+        }
+        pb.line_to(x + width - top_right, y);
+        if top_right > 0.0 {
+            pb.quad_to(x + width, y, x + width, y + top_right);
+        }
+        pb.line_to(x + width, y + height);
+    } else {
+        return build_rounded_rect_corners(
+            x,
+            y,
+            width,
+            height,
+            top_left,
+            top_right,
+            bottom_right,
+            bottom_left,
+        );
+    }
 
     pb.finish()
 }
