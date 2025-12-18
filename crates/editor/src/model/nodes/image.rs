@@ -15,6 +15,8 @@ pub struct ImageNode {
     pub height: Option<f32>,
     #[serde(default = "default_proportion")]
     pub proportion: f32,
+    #[serde(skip_serializing, default)]
+    pub upload_id: Option<String>,
 }
 
 fn default_proportion() -> f32 {
@@ -58,6 +60,7 @@ impl NodeHtmlCodec for ImageNode {
                 width,
                 height,
                 proportion,
+                upload_id: None,
             }))
         })]
     }
@@ -70,6 +73,7 @@ impl Default for ImageNode {
             width: None,
             height: None,
             proportion: 1.0,
+            upload_id: None,
         }
     }
 }
@@ -109,6 +113,7 @@ impl Layout for ImageNode {
             original_width: self.width,
             original_height: self.height,
             proportion: self.proportion,
+            upload_id: self.upload_id.clone(),
         };
 
         let parent_block = ctx.node.parent().expect("Image node must have a parent");

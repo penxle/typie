@@ -2,13 +2,14 @@ use crate::model::{ImageNode, Node, NodeId};
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub(crate) fn handle_insert_image(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_insert_image(&mut self, upload_id: Option<String>) -> Vec<Effect> {
         self.transact(|tr| {
             tr.insert_node(Node::Image(ImageNode {
                 src: None,
                 width: None,
                 height: None,
                 proportion: 1.0,
+                upload_id,
             }))
         })
     }

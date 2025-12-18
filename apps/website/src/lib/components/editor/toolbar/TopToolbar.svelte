@@ -92,7 +92,7 @@
       icon={ImageIcon}
       label="이미지"
       onclick={() => {
-        editor.dispatch({ type: 'insertImage' });
+        editor.dispatch({ type: 'insertImage', uploadId: undefined });
         editor.focus();
       }}
       size={toolbarSize}

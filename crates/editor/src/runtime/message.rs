@@ -379,9 +379,9 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_extend_mark_range(mark) },
 
-    InsertImage
+    InsertImage { upload_id: Option<String> }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_insert_image() },
+    => handle(rt) { rt.handle_insert_image(upload_id) },
 
     InsertHorizontalRule { variant: HorizontalRuleVariant }
     => when When::key(ContextKey::CanEdit)
