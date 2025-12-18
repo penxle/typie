@@ -117,3 +117,18 @@ export const findNearestPageCoordinate = (
     pageElement: nearestPageEl,
   };
 };
+
+export function calculateImageDisplaySize(
+  bounds: { width: number; height: number },
+  originalWidth: number,
+  originalHeight: number,
+): { displayWidth: number; xOffset: number } {
+  if (originalWidth > 0 && originalHeight > 0) {
+    const aspectRatio = originalWidth / originalHeight;
+    let displayWidth = bounds.height * aspectRatio;
+    if (displayWidth > bounds.width) displayWidth = bounds.width;
+    const xOffset = (bounds.width - displayWidth) / 2;
+    return { displayWidth, xOffset };
+  }
+  return { displayWidth: bounds.width, xOffset: 0 };
+}
