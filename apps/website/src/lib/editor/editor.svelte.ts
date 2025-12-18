@@ -66,6 +66,8 @@ export class Editor {
     collapsed: true,
   });
 
+  text = $state({ all: '', selection: '' });
+
   activeMarks = $state({
     uniformMarks: [] as Mark[],
     mixedMarks: [] as MarkType[],
@@ -215,6 +217,7 @@ export class Editor {
         case 'docChanged': {
           this.#onDocChanged?.();
           this.typewriter.needsScroll = true;
+          this.#updateText();
           break;
         }
 
@@ -250,6 +253,7 @@ export class Editor {
         case 'selectionChanged': {
           this.selection.stats = cmd.stats;
           this.selection.collapsed = cmd.collapsed;
+          this.#updateText();
           break;
         }
 
@@ -862,6 +866,17 @@ export class Editor {
 
   getClipboardData(): { fragment: string; html: string; text: string } | null {
     return this.#wasmEditor?.getClipboardData() ?? null;
+  }
+
+  getText(): { all: string; selection: string } | undefined {
+    return this.#wasmEditor?.getText();
+  }
+
+  #updateText(): void {
+    const textData = this.#wasmEditor?.getText();
+    if (textData) {
+      this.text = { all: textData.all, selection: textData.selection };
+    }
   }
 
   focus(): Editor {

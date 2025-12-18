@@ -3,14 +3,17 @@
   import { flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import { fragment, graphql } from '$graphql';
+  import DocumentPanelCharacterCount from './DocumentPanelCharacterCount.svelte';
   import DocumentPanelCharacterCountChange from './DocumentPanelCharacterCountChange.svelte';
   import type { DocumentPanel_Info_document } from '$graphql';
+  import type { Editor } from '$lib/editor/editor.svelte';
 
   type Props = {
     $document: DocumentPanel_Info_document;
+    editor: Editor;
   };
 
-  let { $document: _document }: Props = $props();
+  let { $document: _document, editor }: Props = $props();
 
   const document = fragment(
     _document,
@@ -66,6 +69,7 @@
       <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>본문 정보</div>
 
       <div class={flex({ flexDirection: 'column' })}>
+        <DocumentPanelCharacterCount {editor} />
         <DocumentPanelCharacterCountChange {$document} />
       </div>
     </div>
