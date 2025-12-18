@@ -5,18 +5,32 @@
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import ConstructionIcon from '~icons/lucide/construction';
+  import { fragment, graphql } from '$graphql';
   import { getViewContext } from '../@split-view/context.svelte';
+  import DocumentPanelInfo from './DocumentPanelInfo.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
+  import type { DocumentPanel_document } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
 
   type Props = {
     editor: Editor;
+    $document: DocumentPanel_document;
   };
 
   const minWidth = 240;
   const maxWidth = 400;
 
-  let { editor }: Props = $props();
+  let { editor, $document: _document }: Props = $props();
+
+  const document = fragment(
+    _document,
+    graphql(`
+      fragment DocumentPanel_document on Document {
+        id
+        ...DocumentPanel_Info_document
+      }
+    `),
+  );
 
   const app = getAppContext();
 
@@ -113,6 +127,8 @@
   {#if isExpanded}
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
       <DocumentPanelSettings {editor} />
+    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
+      <DocumentPanelInfo {$document} />
     {:else}
       <div
         class={flex({
